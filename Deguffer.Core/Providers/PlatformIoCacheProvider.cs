@@ -52,11 +52,10 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// PlatformIO's core directory when it has not been asked. <c>PLATFORMIO_CORE_DIR</c> moves it,
     /// and on Windows a <c>.platformio</c> at the root of the profile's drive wins over this one, so
     /// this is a last resort rather than an assumption.
+    ///
+    /// Also what the §5.2 protected paths are built from, and what tests assert is never targeted.
     /// </summary>
-    public string DefaultCoreDirectory => Path.Combine(Environment.UserProfile, ".platformio");
-
-    /// <summary>Exposed so tests can assert the core directory is never targeted (§5.2).</summary>
-    public string CoreRoot => DefaultCoreDirectory;
+    public string CoreRoot => Path.Combine(Environment.UserProfile, ".platformio");
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("pio") is not null);
@@ -162,7 +161,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
 
         return _resolvedCacheDirectory =
             (outcome.Succeeded ? ReadCacheDirectory(outcome.StandardOutput) : null)
-            ?? Path.Combine(DefaultCoreDirectory, ".cache");
+            ?? Path.Combine(CoreRoot, ".cache");
     }
 
     /// <summary>

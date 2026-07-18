@@ -134,7 +134,11 @@ public sealed partial class MainViewModel : ObservableObject
 
             if (authorised.Count == 0)
             {
-                Status = "Nothing was cleaned — no selected item was confirmed.";
+                // Distinguish declining from having nothing to decline: reporting a refused
+                // confirmation to someone who was never asked for one describes the wrong event.
+                Status = selected.Any(f => f.Plan is { IsEmpty: false })
+                    ? "Nothing was cleaned — no selected item was confirmed."
+                    : "Nothing was cleaned — the selected items had nothing to remove.";
                 return;
             }
 
@@ -152,11 +156,15 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Status = "Clean cancelled. Anything already removed stays removed.";
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ConfirmationRequiredException)
+        catch (Exception ex) when (ex is IOException
+                                      or UnauthorizedAccessException
+                                      or NotSupportedException
+                                      or ConfirmationRequiredException)
         {
-            // ConfirmationRequiredException means this view-model failed to collect an answer the
-            // planner then demanded. It is a bug rather than a user outcome, but the planner
-            // refusing to delete is the correct half of it — so report it instead of crashing.
+            // NotSupportedException still reaches here from PlanExecutor for an unrecognised step
+            // type. ConfirmationRequiredException means this view-model failed to collect an answer
+            // the planner then demanded: a bug rather than a user outcome, but the planner refusing
+            // to delete is the correct half of it — so report it instead of crashing mid-deletion.
             Status = $"Clean failed: {ex.Message}";
         }
         finally

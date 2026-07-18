@@ -16,10 +16,10 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot) : IConfir
     {
         ArgumentNullException.ThrowIfNull(requirement);
 
-        if (requirement.Level == ConfirmationLevel.None)
-        {
-            return new Confirmation(requirement.ProviderId);
-        }
+        // Checked before the dialog is built rather than only through the registration below: a
+        // token already cancelled would otherwise fire Hide against a dialog ShowAsync has not yet
+        // opened, leaving a modal up that the cancel path can no longer take down.
+        ct.ThrowIfCancellationRequested();
 
         // Tier 4 is not a question. Reaching here means a row was offered that §3 excludes, so the
         // honest response is to refuse rather than to present a dialog the user could say yes to.
