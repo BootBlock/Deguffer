@@ -92,7 +92,26 @@ plus tests". If that turns out not to hold for the fourth and fifth providers, t
 `IDirectoryScanner` seam is wrong, and it is much cheaper to learn that now than after the seam has
 five more callers.
 
-## 3. The §7 confirmation flow — the real fork
+## 3. The §7 confirmation flow — the real fork 🟡 partly done
+
+**Outcome: the seam and Tier 2 landed; Tier 3 and the age column did not, on evidence.**
+
+`ConfirmationRequirement` decides from a plan's tier what must be satisfied before it runs — nothing
+for Tier 1, an acknowledgement for Tier 2, the typed phrase for Tier 3, and for Tier 4 an answer that
+does not exist. It sits in Core for the reason `ElevationOffer` does: the rule is then provable
+without a WinUI host. The planner derives the requirement itself rather than trusting that the caller
+asked, so a shell that forgets fails closed.
+
+PlatformIO is the first Tier 2 provider. It was chosen over Android on evidence rather than size: it
+is the only one of the two with a documented eviction command, so §5.1's preferred path exists at
+all, and its worst outcome is a re-download rather than a destroyed signing key.
+
+**Tier 3 was not attempted, because §8 question 2 resolved badly — see item 5.** The age column was
+not built either: §7 scopes it to per-workspace and per-project data, which is precisely the blocked
+Tier 3 subject. Today's providers are whole-cache, one row each, with nothing per-item to date, so
+building the column now would be a first-class column with nothing to put in it. Both remain open.
+
+### The original reasoning
 
 `CleanupPlanner.ExecuteAsync` throws `NotSupportedException` for anything above Tier 1, deliberately,
 so that the first Tier 2/3 provider cannot silently inherit a deletion path that skips the extra
@@ -139,7 +158,42 @@ meaningfully larger piece of UI than anything the shell does today.
 - **§8 question 4 — undo.** Still likely impossible at these sizes. If so, §7 should say so plainly
   rather than implying reversibility.
 
-## 5. Raised while doing item 2, not yet decided
+## 5. Raised while doing items 2 and 3, not yet decided
+
+### From item 3
+
+- **§8 question 2 is answered, and the answer is "not safely".** The `workspace.json` schema is
+  stable enough — `folder`, then `workspace`, with a pre-2019 `configuration` spelling that may still
+  be on disk — but the *mapping* is not one-to-one and is not a live fact. For a local single-folder
+  workspace the id is `md5(fsPath + birth-time)`, not a function of the path, so deleting and
+  recreating a folder, restoring it from backup or re-cloning it mints a second storage directory
+  with an identical `workspace.json`; a machine surveyed while answering this already had two paths
+  owning two directories each. Several child kinds carry no `workspace.json` at all (`ext-dev`,
+  `empty-window`, timestamp-named ids, and any folder whose un-awaited metadata write lost a race),
+  and one 8-hex-character child was found that no derivation in current editor source accounts for.
+  A per-workspace UI is therefore only safe if the mapping is treated as a best-effort *label* on a
+  storage folder rather than an identity: sizes summed over a group, deletion targeting the group,
+  absence of metadata classified Tier 4, and a missing target path never taken as licence to delete.
+  That is a materially different feature from the one item 3 assumed, which is why it was not built.
+- **The audit's headline sizes are directory totals, not reclaimable amounts.** PlatformIO's 5.7 GB
+  is its whole core directory; the disposable cache within it measured ~72 MB on the audited machine,
+  and the tool's own `prune --dry-run` agreed to within a rounding error. `%LOCALAPPDATA%\Android`'s
+  6.7 GB is almost entirely installed SDK components, and its only true cache — `.android\cache` —
+  is around 3 MB. The "23.7 GB blocked" figure should not be read as 23.7 GB of reclaim; nearly all
+  of what remains is `workspaceStorage`, which is the subject the point above just made hard.
+- **Any future Android provider must never allow-list `cache` alongside its siblings.** The ~3 MB
+  `.android\cache` sits directly beside `debug.keystore`, `adbkey`/`adbkey.pub` and `avd`. Losing the
+  keystore changes the debug signing identity and invalidates every API key registered against its
+  fingerprint; losing `adbkey` revokes every device's trust; an AVD holds user data that cannot be
+  re-downloaded at any price. A one-character slip in a name comparison there costs more than the
+  entire Android reclaim is worth, so the conservative shape is a standalone provider scoped to that
+  one path which never enumerates `.android` at all. `%LOCALAPPDATA%\Android`'s own regenerable
+  children (`.temp`, `.downloadIntermediates`) were both empty at rest.
+- **The §6.3 long-path caveat below was confirmed, not merely suspected.** `LongPathsEnabled` is set
+  on the machine that verified item 3, so the new long-path test in `PlatformIoCacheProviderTests`
+  passes without proving anything there. It is written to fail on a machine without the key.
+
+### From item 2
 
 - **The cpptools workspace databases (~1.8 GB) are unreachable by name.** Recognising them needs
   classification by *content* — a child holding nothing but `*.BROWSE.VC.DB*` — which is a genuine

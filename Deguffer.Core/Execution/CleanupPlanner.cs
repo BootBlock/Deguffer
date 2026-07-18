@@ -15,7 +15,11 @@ public sealed class CleanupPlanner
 
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
-    /// <summary>The Tier 1 sources verified by hand in §4.1 and §4.2.</summary>
+    /// <summary>
+    /// The sources verified by hand in §4.1 and §4.2. Tier 1 throughout except PlatformIO, which is
+    /// Tier 2 and therefore offered but never pre-selected, and never executed without §7's
+    /// confirmation.
+    /// </summary>
     public static CleanupPlanner CreateDefault() => new(
     [
         new NuGetCacheProvider(),
@@ -23,6 +27,7 @@ public sealed class CleanupPlanner
         new NpmCacheProvider(),
         new VsCodeCppToolsCacheProvider(),
         new UvCacheProvider(),
+        new PlatformIoCacheProvider(),
     ]);
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
@@ -87,12 +92,20 @@ public sealed class CleanupPlanner
     /// Execute the given plans in sequence. Sequential is deliberate: two package managers
     /// hammering the same disk at once is slower, not faster, and progress stays meaningful.
     /// </summary>
+    /// <param name="confirmations">
+    /// The answers §7 requires for anything above Tier 1, collected before execution begins because
+    /// §7 makes deleting the deliberate second step. A plan whose requirement is unmet throws rather
+    /// than being skipped: silently dropping it would report success for work not done.
+    /// </param>
     public async Task<IReadOnlyList<CleanupResult>> ExecuteAsync(
         IReadOnlyList<Finding> selected,
+        IReadOnlyList<Confirmation>? confirmations = null,
         IProgress<string>? status = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
+
+        confirmations ??= [];
 
         var results = new List<CleanupResult>(selected.Count);
 
@@ -105,14 +118,14 @@ public sealed class CleanupPlanner
                 continue;
             }
 
-            // Milestone 1 ships Tier 1 only. This guard exists so that the first Tier 2/3
-            // provider cannot silently inherit a path that deletes without the extra
-            // confirmation §7 requires — it has to come here and decide deliberately.
-            if (plan.Tier != SafetyTier.RegenerableCache)
+            // §7's extra confirmation for anything above Tier 1. The requirement is derived here
+            // rather than trusted from the caller: a shell that forgot to ask, or asked for the
+            // wrong subject, must fail closed rather than delete.
+            var requirement = ConfirmationRequirement.For(plan);
+
+            if (!requirement.IsSatisfiedBy(confirmations))
             {
-                throw new NotSupportedException(
-                    $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()}. Only Tier 1 is executable " +
-                    "until the confirmation flow required by §7 exists.");
+                throw new ConfirmationRequiredException(requirement);
             }
 
             status?.Report($"Cleaning {finding.Provider.Name}…");

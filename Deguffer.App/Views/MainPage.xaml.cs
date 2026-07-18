@@ -13,7 +13,10 @@ public sealed partial class MainPage : UserControl
     {
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
         // view-model, whatever the framework's initialisation order does next.
-        ViewModel = new MainViewModel(CleanupPlanner.CreateDefault(), UserEnvironment.Current);
+        ViewModel = new MainViewModel(
+            CleanupPlanner.CreateDefault(),
+            UserEnvironment.Current,
+            () => new ContentDialogConfirmationPrompt(XamlRoot));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         InitializeComponent();
 
