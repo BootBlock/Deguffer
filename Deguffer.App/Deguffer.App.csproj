@@ -24,6 +24,15 @@
         <RootNamespace>Deguffer.App</RootNamespace>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+        <!--
+            Build and publish output land in the repo-root !Distribution folder rather than a
+            per-project bin\. The RID stays in the path in both cases, which is the segment that
+            matters: the app is self-contained and published per-RID, so a win-x64 tree
+            overwriting a win-x86 one would produce a distributable that cannot run.
+        -->
+        <DistributionRoot>$(MSBuildThisFileDirectory)..\!Distribution\</DistributionRoot>
+        <BaseOutputPath>$(DistributionRoot)</BaseOutputPath>
+
         <Platforms>x86;x64;ARM64</Platforms>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>

@@ -34,6 +34,10 @@ bld/
 !.vscode/launch.json
 !.vscode/tasks.json
 
+# Build and publish output for Deguffer.App. The leading "!" is escaped — unescaped it would
+# read as a negation pattern and un-ignore whatever came before it.
+\!Distribution/
+
 # Build artefacts
 *.dll
 *.exe

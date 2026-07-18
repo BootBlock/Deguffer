@@ -1,0 +1,4 @@
+# `dotnet build` already defaults to multi-node, so this changes nothing there. It is here for
+# msbuild.exe, which still defaults to a single node — a contributor building the solution that
+# way would otherwise serialise Core.Tests behind App for no reason.
+-maxCpuCount
