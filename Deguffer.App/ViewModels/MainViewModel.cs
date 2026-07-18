@@ -19,11 +19,20 @@ public sealed partial class MainViewModel : ObservableObject
 {
     private readonly CleanupPlanner _planner;
     private readonly IUserEnvironment _environment;
+    private readonly Func<IConfirmationPrompt> _prompt;
 
-    public MainViewModel(CleanupPlanner planner, IUserEnvironment environment)
+    /// <param name="prompt">
+    /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
+    /// not exist while the view-model is being constructed.
+    /// </param>
+    public MainViewModel(
+        CleanupPlanner planner,
+        IUserEnvironment environment,
+        Func<IConfirmationPrompt> prompt)
     {
         _planner = planner;
         _environment = environment;
+        _prompt = prompt;
         FreeSpaceNow = FreeSpace.ForPath(environment.UserProfile);
     }
 
@@ -117,9 +126,21 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             var selected = Findings.Where(f => f.IsSelected).Select(f => f.Finding).ToList();
+
+            // §7's confirmation is collected here, on the UI thread and before any work starts:
+            // a dialog cannot be raised from the worker below, and asking mid-deletion would be
+            // asking after the point the answer could still change anything.
+            var (authorised, confirmations) = await CollectConfirmationsAsync(selected, ct);
+
+            if (authorised.Count == 0)
+            {
+                Status = "Nothing was cleaned — no selected item was confirmed.";
+                return;
+            }
+
             var progress = new Progress<string>(message => Status = message);
 
-            var results = await Task.Run(() => _planner.ExecuteAsync(selected, progress, ct), ct);
+            var results = await Task.Run(() => _planner.ExecuteAsync(authorised, confirmations, progress, ct), ct);
 
             ReportOutcome(results, freeBefore);
 
@@ -131,8 +152,11 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Status = "Clean cancelled. Anything already removed stays removed.";
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ConfirmationRequiredException)
         {
+            // ConfirmationRequiredException means this view-model failed to collect an answer the
+            // planner then demanded. It is a bug rather than a user outcome, but the planner
+            // refusing to delete is the correct half of it — so report it instead of crashing.
             Status = $"Clean failed: {ex.Message}";
         }
         finally
@@ -140,6 +164,51 @@ public sealed partial class MainViewModel : ObservableObject
             IsBusy = false;
             FreeSpaceNow = FreeSpace.ForPath(_environment.UserProfile);
         }
+    }
+
+    /// <summary>
+    /// Ask for whatever §7 requires of each selection, and return only the ones that got an answer.
+    ///
+    /// Declining is a decision rather than a failure: that provider is dropped and the rest of the
+    /// run continues, the same way a dismissed UAC prompt leaves the app running unelevated.
+    /// </summary>
+    private async Task<(List<Finding> Authorised, List<Confirmation> Confirmations)>
+        CollectConfirmationsAsync(IReadOnlyList<Finding> selected, CancellationToken ct)
+    {
+        List<Finding> authorised = [];
+        List<Confirmation> confirmations = [];
+        IConfirmationPrompt? prompt = null;
+
+        foreach (var finding in selected)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (finding.Plan is not { IsEmpty: false } plan)
+            {
+                continue;
+            }
+
+            var requirement = ConfirmationRequirement.For(plan);
+
+            if (requirement.Level == ConfirmationLevel.None)
+            {
+                authorised.Add(finding);
+                continue;
+            }
+
+            // Built on first need, so a Tier 1 run never constructs a dialog it will not show.
+            prompt ??= _prompt();
+
+            if (await prompt.AskAsync(requirement, ct) is not { } answer)
+            {
+                continue;
+            }
+
+            authorised.Add(finding);
+            confirmations.Add(answer);
+        }
+
+        return (authorised, confirmations);
     }
 
     /// <summary>
