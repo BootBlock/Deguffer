@@ -25,13 +25,21 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
         <!--
-            Build and publish output land in the repo-root !Distribution folder rather than a
-            per-project bin\. The RID stays in the path in both cases, which is the segment that
-            matters: the app is self-contained and published per-RID, so a win-x64 tree
-            overwriting a win-x86 one would produce a distributable that cannot run.
+            Build and publish output land flat in the repo-root !Distribution folder: the exe is
+            !Distribution\Deguffer.App.exe, not buried under platform/configuration/framework/RID.
+            OutputPath is set outright rather than BaseOutputPath, and the framework and RID
+            suffixes are suppressed, because MSBuild appends those to BaseOutputPath.
+
+            The tradeoff is deliberate: with no platform/configuration/RID segment, every build
+            reuses the one folder, and a file written by a previous build is only replaced if the
+            next one writes that same name. Since the app is self-contained the folder holds a
+            whole native runtime, so clear it when switching RID rather than trusting the
+            overwrite to be complete.
         -->
         <DistributionRoot>$(MSBuildThisFileDirectory)..\!Distribution\</DistributionRoot>
-        <BaseOutputPath>$(DistributionRoot)</BaseOutputPath>
+        <OutputPath>$(DistributionRoot)</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 
         <Platforms>x86;x64;ARM64</Platforms>
         <ApplicationManifest>app.manifest</ApplicationManifest>
