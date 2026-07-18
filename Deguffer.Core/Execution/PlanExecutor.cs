@@ -8,7 +8,7 @@ namespace Deguffer.Core.Execution;
 /// Carries out a plan. Holds no knowledge of any cache — it dispatches the steps a provider
 /// already decided on, and reports what happened.
 /// </summary>
-public sealed class PlanExecutor(IProcessRunner runner)
+public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanner)
 {
     public async Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
@@ -54,6 +54,11 @@ public sealed class PlanExecutor(IProcessRunner runner)
     {
         // The "before" size was measured when the plan was built; re-walking a multi-gigabyte
         // tree to learn it again would double the cost of the operation.
+        //
+        // This is sound only because a plan-time figure is always freshly measured. Remembered
+        // sizes exist (ScanEstimateCache) but are never returned from a measurement — they only
+        // reach the screen while the real scan runs. Were a stale one to arrive here it would not
+        // merely look wrong: it would inflate the reclaimed total reported below.
         var before = step.EstimatedBytes;
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
@@ -95,14 +100,16 @@ public sealed class PlanExecutor(IProcessRunner runner)
         return new StepOutcome(step.Description, succeeded, removal.BytesReclaimed, removal.Skipped, message);
     }
 
-    private static async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
+    private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {
-        long total = 0;
+        var total = ScanSize.Zero;
+
         foreach (var path in paths)
         {
-            total += await DirectorySizer.MeasureAsync(path, ct).ConfigureAwait(false);
+            var measured = await scanner.MeasureAsync(path, progress: null, ct).ConfigureAwait(false);
+            total += measured.Size;
         }
 
-        return total;
+        return total.Reclaimable;
     }
 }

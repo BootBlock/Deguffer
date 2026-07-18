@@ -31,9 +31,14 @@ public sealed class CleanupPlanner
     /// Deliberately sequential. Each provider fans out internally to measure its tree, so running
     /// providers concurrently as well would multiply into dozens of simultaneous enumerations
     /// against one disk — slower, not faster, for the same reason execution is sequential.
+    ///
+    /// <paramref name="found"/> receives each finding the moment it is ready, so the preview can
+    /// fill in as it goes rather than staying blank until the slowest provider finishes (§5.5:
+    /// never block on a complete scan). The returned list is the same findings, sorted.
     /// </summary>
     public async Task<IReadOnlyList<Finding>> PlanAllAsync(
         IProgress<string>? status = null,
+        IProgress<Finding>? found = null,
         CancellationToken ct = default)
     {
         // Every provider drops its cached view of the machine before any of them plans. Doing
@@ -50,7 +55,11 @@ public sealed class CleanupPlanner
         foreach (var provider in _providers)
         {
             ct.ThrowIfCancellationRequested();
-            findings.Add(await PlanOneAsync(provider, status, ct).ConfigureAwait(false));
+
+            var finding = await PlanOneAsync(provider, status, ct).ConfigureAwait(false);
+
+            findings.Add(finding);
+            found?.Report(finding);
         }
 
         findings.Sort((a, b) => b.EstimatedBytes.CompareTo(a.EstimatedBytes));

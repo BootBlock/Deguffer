@@ -18,11 +18,13 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     public NpmCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
-        IProcessInspector? inspector = null)
+        IProcessInspector? inspector = null,
+        IDirectoryScanner? scanner = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
-            inspector ?? ProcessInspector.Default)
+            inspector ?? ProcessInspector.Default,
+            scanner ?? DirectoryScanner.Default)
     {
     }
 
@@ -63,17 +65,22 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             return EmptyPlan($"npm is installed but its cache directory does not exist yet ({cacheDirectory}).");
         }
 
-        var bytes = await DirectorySizer.MeasureAsync(cacheDirectory, ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
 
         steps.Add(new RunCommandStep(npm, "cache clean --force", "Clear the npm cache using npm's own command")
         {
-            EstimatedBytes = bytes,
+            Estimated = measured.Total,
             MeasuredPaths = [cacheDirectory],
         });
 
         notes.Add(new PlanNote(
             PlanNoteSeverity.Information,
             $"npm reports its cache directory as {cacheDirectory}."));
+
+        if (measured.Note is not null)
+        {
+            notes.Add(measured.Note);
+        }
 
         if (BuildRunningProcessNote() is { } warning)
         {

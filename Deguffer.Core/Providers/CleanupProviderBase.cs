@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -13,11 +14,16 @@ public abstract class CleanupProviderBase : ICleanupProvider
 {
     private readonly PlanExecutor _executor;
 
-    protected CleanupProviderBase(IUserEnvironment environment, IProcessRunner runner, IProcessInspector inspector)
+    protected CleanupProviderBase(
+        IUserEnvironment environment,
+        IProcessRunner runner,
+        IProcessInspector inspector,
+        IDirectoryScanner scanner)
     {
         Environment = environment;
         Inspector = inspector;
-        _executor = new PlanExecutor(runner);
+        Scanner = scanner;
+        _executor = new PlanExecutor(runner, scanner);
         Runner = runner;
     }
 
@@ -26,6 +32,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
     protected IProcessRunner Runner { get; }
 
     protected IProcessInspector Inspector { get; }
+
+    /// <summary>
+    /// How this provider learns sizes. §5.5's choice between reading the MFT and walking the tree
+    /// lives entirely behind this interface: a provider states which paths it cares about and is
+    /// told how big they are, and nothing here knows there are two strategies.
+    /// </summary>
+    protected IDirectoryScanner Scanner { get; }
 
     public abstract string Id { get; }
 
@@ -47,6 +60,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         Environment.Invalidate();
         Inspector.Invalidate();
+        Scanner.Invalidate();
     }
 
     public abstract Task<CleanupPlan> PlanAsync(CancellationToken ct = default);
@@ -95,4 +109,39 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
     protected PlanNote? BuildRunningProcessNote() =>
         RunningProcessNotice.For(Inspector, ConflictingProcessNames);
+
+    /// <summary>
+    /// Measure every path a plan cares about, and produce the note that goes with them.
+    ///
+    /// The note is not optional: §5.5 requires the fallback to be observable, and a slow scan is
+    /// otherwise indistinguishable from a large directory — the user is never told that elevating
+    /// would make it quick. Bundling it with the measurement is what stops a new provider silently
+    /// losing that by forgetting a separate call.
+    /// </summary>
+    protected async Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
+    {
+        var sizes = new List<ScanSize>(paths.Count);
+        var fallback = FallbackReason.None;
+
+        foreach (var path in paths)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var measured = await Scanner.MeasureAsync(path, progress: null, ct).ConfigureAwait(false);
+            sizes.Add(measured.Size);
+
+            // Paths in one plan can sit on different volumes and so take different routes; the
+            // first reason to appear is the one the user is shown.
+            if (fallback == FallbackReason.None)
+            {
+                fallback = measured.Fallback;
+            }
+        }
+
+        var note = FallbackReasonText.Describe(fallback) is { } text
+            ? new PlanNote(PlanNoteSeverity.Information, text)
+            : null;
+
+        return new ScanBatch(sizes, note);
+    }
 }

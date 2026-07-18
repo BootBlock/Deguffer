@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -20,6 +21,29 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
 
         Assert.Equal(["large", "medium", "small"], findings.Select(f => f.Provider.Id));
+    }
+
+    /// <summary>
+    /// §5.5: never block on a complete scan. Each finding reaches the caller as it is produced, so
+    /// the preview fills in rather than staying blank until the slowest provider finishes.
+    /// </summary>
+    [Fact]
+    public async Task ReportsEachFindingAsItIsProducedRatherThanOnlyAtTheEnd()
+    {
+        var journal = new List<string>();
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("first", bytes: 1_000, journal: journal),
+            new StubProvider("second", bytes: 9_000, journal: journal),
+        ]);
+
+        var found = new ProgressRecorder<Finding>();
+
+        var findings = await planner.PlanAllAsync(status: null, found, CancellationToken.None);
+
+        // Reported in the order they were planned, not the order they are finally sorted into.
+        Assert.Equal(["first", "second"], found.Reports.Select(f => f.Provider.Id));
+        Assert.Equal(["second", "first"], findings.Select(f => f.Provider.Id));
     }
 
     [Fact]
@@ -120,7 +144,9 @@ public sealed class CleanupPlannerTests
             ProviderName = id,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
-            Steps = bytes == 0 ? [] : [new RunCommandStep("tool", "clear", "Clear") { EstimatedBytes = bytes }],
+            Steps = bytes == 0
+                ? []
+                : [new RunCommandStep("tool", "clear", "Clear") { Estimated = new ScanSize(bytes, bytes) }],
         };
 
         public Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default)
