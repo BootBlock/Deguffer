@@ -12,12 +12,23 @@
             is placed where it would depend on the backdrop being present.
         -->
         <Border x:Name="TitleBar" Grid.Row="0" Height="40" Padding="16,0">
-            <TextBlock
-                Text="Deguffer"
-                VerticalAlignment="Center"
-                FontSize="13"
-                FontWeight="SemiBold"
-                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <!-- Decoded at the size it is drawn: the source is the 256px master, and without
+                     this the full bitmap is decoded to fill an 18px slot. -->
+                <Image Width="18" Height="18"
+                       AutomationProperties.AccessibilityView="Raw">
+                    <Image.Source>
+                        <BitmapImage UriSource="ms-appx:///Assets/Deguffer-256.png"
+                                     DecodePixelWidth="18" DecodePixelHeight="18" />
+                    </Image.Source>
+                </Image>
+                <TextBlock
+                    Text="Deguffer"
+                    VerticalAlignment="Center"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            </StackPanel>
         </Border>
 
         <views:MainPage Grid.Row="1" />

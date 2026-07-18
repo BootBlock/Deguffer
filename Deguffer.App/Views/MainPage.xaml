@@ -128,7 +128,13 @@
 
         <!-- §7: the primary button previews. Deleting is a separate, deliberate second step. -->
         <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="16,10">
-            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+          <Grid ColumnDefinitions="Auto,*">
+            <Button Grid.Column="0"
+                    Content="About"
+                    Click="OnAboutClick"
+                    VerticalAlignment="Center" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
                 <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                               Width="20" Height="20" VerticalAlignment="Center" />
                 <TextBlock Text="{x:Bind ViewModel.SelectedTotalLabel, Mode=OneWay}"
@@ -151,6 +157,7 @@
                 <Button Content="Clean"
                         Command="{x:Bind ViewModel.CleanCommand}" />
             </StackPanel>
+          </Grid>
         </Border>
     </Grid>
 </UserControl>

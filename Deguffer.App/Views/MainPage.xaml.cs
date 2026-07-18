@@ -27,6 +27,21 @@ public sealed partial class MainPage : UserControl
 
     public MainViewModel ViewModel { get; }
 
+    private AboutWindow? _about;
+
+    private void OnAboutClick(object sender, RoutedEventArgs e)
+    {
+        // One instance, reused: clicking again brings the existing window forward rather than
+        // stacking duplicates.
+        if (_about is null)
+        {
+            _about = new AboutWindow();
+            _about.Closed += (_, _) => _about = null;
+        }
+
+        _about.Activate();
+    }
+
     private void StartRequestedRescan(object sender, RoutedEventArgs e)
     {
         Loaded -= StartRequestedRescan;

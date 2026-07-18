@@ -14,6 +14,7 @@ public sealed partial class MainWindow : Window
         Title = "Deguffer";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
+        WindowIcon.Apply(this);
 
         _backdrop = new WindowBackdrop(this);
         _backdrop.Apply();
