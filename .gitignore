@@ -27,7 +27,12 @@ bld/
 # Rider / VS Code
 .idea/
 *.sln.iml
-.vscode/
+
+# .vscode stays ignored by default — it collects machine-local and credential-bearing files
+# (mcp.json in particular). Share only the shape of the build, never the environment around it.
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 
 # Build artefacts
 *.dll

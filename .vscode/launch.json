@@ -1,0 +1,28 @@
+{
+    // F5 launches the WinUI 3 shell. The app is unpackaged (§6.3), so it debugs as an ordinary
+    // self-contained executable — no MSIX deployment or loopback exemption step.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Deguffer (x64)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build app (x64)",
+            // The RID subfolder is not the usual output path: SelfContained + WindowsAppSDKSelfContained
+            // nest the binaries one level deeper under win-$(RuntimeIdentifier).
+            "program": "${workspaceFolder}/Deguffer.App/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Deguffer.App.exe",
+            "cwd": "${workspaceFolder}/Deguffer.App",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": "Deguffer (x64, no build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/Deguffer.App/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Deguffer.App.exe",
+            "cwd": "${workspaceFolder}/Deguffer.App",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        }
+    ]
+}
