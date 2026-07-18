@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -100,7 +101,24 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.Contains(verification.Checks, c => c.Detail.Contains("Not present before", StringComparison.Ordinal));
     }
 
-    private async Task<CleanupPlan> PlanWithPopulatedCache(int cacheQueryExitCode = 0)
+    /// <summary>
+    /// §5.5: the route reaches the plan as data, not only as a sentence in the notes. The UI decides
+    /// whether to offer elevation from this, so a provider that measured its paths and dropped the
+    /// reason on the floor would silently withdraw the offer with a green test suite.
+    /// </summary>
+    [Fact]
+    public async Task CarriesTheScanRouteOntoThePlanAndNotOnlyIntoItsNotes()
+    {
+        var plan = await PlanWithPopulatedCache(
+            scanner: new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)));
+
+        Assert.Equal(FallbackReason.NotElevated, plan.Fallback);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("administrator", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<CleanupPlan> PlanWithPopulatedCache(
+        int cacheQueryExitCode = 0,
+        IDirectoryScanner? scanner = null)
     {
         var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
         Directory.CreateDirectory(Path.Combine(cache, "_cacache", "content-v2"));
@@ -109,6 +127,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         _environment.WithExecutable("npm");
         var runner = new FakeProcessRunner().Responding("config get cache", cache, cacheQueryExitCode);
 
-        return await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+        return await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, scanner)
+            .PlanAsync();
     }
 }

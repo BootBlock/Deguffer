@@ -138,10 +138,6 @@ public abstract class CleanupProviderBase : ICleanupProvider
             }
         }
 
-        var note = FallbackReasonText.Describe(fallback) is { } text
-            ? new PlanNote(PlanNoteSeverity.Information, text)
-            : null;
-
-        return new ScanBatch(sizes, note);
+        return new ScanBatch(sizes, fallback);
     }
 }

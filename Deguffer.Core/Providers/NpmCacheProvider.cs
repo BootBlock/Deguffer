@@ -77,9 +77,9 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             PlanNoteSeverity.Information,
             $"npm reports its cache directory as {cacheDirectory}."));
 
-        if (measured.Note is not null)
+        if (measured.Note is { } scanNote)
         {
-            notes.Add(measured.Note);
+            notes.Add(scanNote);
         }
 
         if (BuildRunningProcessNote() is { } warning)
@@ -96,6 +96,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = BuildProtectedPaths(),
             Notes = notes,
+            Fallback = measured.Fallback,
         };
     }
 
