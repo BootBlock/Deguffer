@@ -27,9 +27,19 @@ public sealed partial class FindingViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
 
+    /// <summary>
+    /// This row's size as a proportion of the largest finding, for the bar under the row. Owned by
+    /// the parent because it is a fact about the *set*, not about this finding — the row cannot
+    /// know what the biggest one is.
+    /// </summary>
+    [ObservableProperty]
+    public partial double SharePercent { get; set; }
+
     public Finding Finding { get; }
 
     public string Name => Finding.Provider.Name;
+
+    public SafetyTier Tier => Finding.Provider.Tier;
 
     public string TierLabel => Finding.Provider.Tier.ToDisplayName();
 

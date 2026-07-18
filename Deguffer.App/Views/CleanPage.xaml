@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="Deguffer.App.Views.CleanPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    Background="Transparent">
+
+    <Page.Resources>
+        <!--
+            The per-row disclosure, stripped back to a line of text and a chevron. In its default
+            form the Expander is a filled, bordered box with a 64px header, which made the least
+            important thing in each row the loudest thing on the screen. These are the standard
+            Expander theme resources, overridden here so every disclosure on the page is quiet
+            without restyling the control.
+        -->
+        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+        <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
+        <Thickness x:Key="ExpanderContentBorderThickness">0</Thickness>
+        <Thickness x:Key="ExpanderHeaderPadding">0,0,8,0</Thickness>
+        <Thickness x:Key="ExpanderContentPadding">0,4,0,4</Thickness>
+        <x:Double x:Key="ExpanderMinHeight">32</x:Double>
+    </Page.Resources>
+
+    <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
+         sits on a Fluent layer brush and reads correctly on a flat solid background too. -->
+    <Grid RowSpacing="16" RowDefinitions="Auto,Auto,*,Auto" Padding="28,8,28,0">
+
+        <StackPanel Grid.Row="0" Spacing="16">
+            <TextBlock Text="Storage" Style="{StaticResource PageTitle}" />
+
+            <!-- §7: free space, prominently. It is the only number the user came for. -->
+            <Border Style="{StaticResource CardStyle}">
+                <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto">
+
+                    <StackPanel Grid.Column="0" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{x:Bind ViewModel.FreeSpaceNowLabel, Mode=OneWay}"
+                                       Style="{StaticResource HeroFigure}" />
+                            <TextBlock Text="{x:Bind ViewModel.CapacityLabel}"
+                                       Style="{StaticResource SecondaryText}"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,0,7" />
+                        </StackPanel>
+
+                        <!-- How full the disk is, at a glance: 40 GB free means nothing until you
+                             know whether the volume is 256 GB or 4 TB. The figures beside it say
+                             the same thing in words, so nothing is lost if the bar cannot be seen. -->
+                        <ProgressBar Value="{x:Bind ViewModel.UsedPercent, Mode=OneWay}"
+                                     Maximum="100"
+                                     Height="6"
+                                     CornerRadius="3"
+                                     IsTabStop="False"
+                                     AutomationProperties.AccessibilityView="Raw" />
+                    </StackPanel>
+
+                    <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
+                         disagree whenever anything else on the machine writes during the run, and
+                         merging them into one figure is how a user stops trusting the tool. -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="28"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+                        <Border Width="1"
+                                Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                VerticalAlignment="Stretch" />
+
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
+                                       Style="{StaticResource Figure}" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="Free space change" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
+                                       Style="{StaticResource Figure}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <!-- This line carries the §5.6 verification headline — the most safety-critical string in
+             the app. An InfoBar rather than plain text so a failed verification is distinguishable
+             from routine progress by icon and severity, not only by reading to the end of it. It
+             sits on its own solid surface because §6.5 forbids text that needs the blur to read. -->
+        <InfoBar Grid.Row="1"
+                 IsOpen="True"
+                 IsClosable="False"
+                 Severity="{x:Bind ViewModel.StatusSeverity, Mode=OneWay}"
+                 Message="{x:Bind ViewModel.Status, Mode=OneWay}" />
+
+        <!-- One row per named cause (§7), largest first, sharing a single surface. Carding every
+             row individually produced a column of identical boxes with no sense of a list;
+             hairline separators inside one card read as one thing to scan down. -->
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0">
+            <Grid>
+                <!-- Says what to do next rather than leaving a blank card that reads as a screen
+                     which has already failed. -->
+                <StackPanel VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Spacing="6"
+                            Padding="40"
+                            Visibility="{x:Bind ViewModel.HasNoFindings, Mode=OneWay}">
+                    <TextBlock Text="Nothing scanned yet"
+                               Style="{StaticResource SectionHeading}"
+                               FontSize="15"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Style="{StaticResource SecondaryText}"
+                               FontSize="13"
+                               TextAlignment="Center"
+                               MaxWidth="380"
+                               Text="Preview looks at the caches your toolchains keep and reports what each one holds. It reads only — nothing is removed until you choose to." />
+                </StackPanel>
+
+                <ScrollViewer Padding="0,4">
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Findings}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FindingViewModel">
+                            <Grid RowDefinitions="Auto,Auto">
+
+                                <Grid Grid.Row="0" ColumnSpacing="14" Padding="16,14" ColumnDefinitions="Auto,*,Auto">
+
+                                    <CheckBox Grid.Column="0"
+                                              VerticalAlignment="Top"
+                                              MinWidth="0"
+                                              Margin="0,2,0,0"
+                                              IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind CanBeSelected}"
+                                              AutomationProperties.Name="{x:Bind Name}" />
+
+                                    <StackPanel Grid.Column="1" Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Text="{x:Bind Name}"
+                                                       Style="{StaticResource SectionHeading}"
+                                                       FontSize="15"
+                                                       VerticalAlignment="Center" />
+
+                                            <!-- Tier is text on a tinted chip, never colour alone:
+                                                 the classification must survive a flat background
+                                                 and a high-contrast theme (§6.5). -->
+                                            <ContentControl Content="{x:Bind TierLabel}"
+                                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
+                                        </StackPanel>
+
+                                        <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   FontSize="13" />
+
+                                        <!-- §7: nothing is deleted without a preview, so the exact
+                                             steps are inspectable before the user confirms. -->
+                                        <Expander Margin="0,2,0,0"
+                                                  Visibility="{x:Bind HasDetail}"
+                                                  HorizontalAlignment="Stretch"
+                                                  HorizontalContentAlignment="Left"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Header="{x:Bind DetailHeader}">
+                                            <StackPanel Spacing="6">
+                                                <ItemsControl ItemsSource="{x:Bind Steps}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <TextBlock Text="{x:Bind}"
+                                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                       TextWrapping="Wrap"
+                                                                       IsTextSelectionEnabled="True"
+                                                                       FontSize="12" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <ItemsControl ItemsSource="{x:Bind Notes}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <TextBlock Text="{x:Bind}"
+                                                                       Style="{StaticResource SecondaryText}"
+                                                                       FontSize="12" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Expander>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
+                                        <TextBlock Text="{x:Bind SizeLabel}"
+                                                   Style="{StaticResource Figure}"
+                                                   HorizontalAlignment="Right" />
+                                        <TextBlock Text="{x:Bind StatusLabel}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   FontSize="11"
+                                                   TextAlignment="Right"
+                                                   HorizontalAlignment="Right" />
+                                        <ProgressBar Style="{StaticResource ShareBar}"
+                                                     Value="{x:Bind SharePercent, Mode=OneWay}"
+                                                     Margin="0,5,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Border Grid.Row="1" Style="{StaticResource Divider}" Margin="16,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- §7: the primary button previews. Deleting is a separate, deliberate second step, so
+             Preview carries the accent and Clean does not. -->
+        <Grid Grid.Row="3" ColumnSpacing="12" Padding="0,4,0,20" ColumnDefinitions="Auto,*,Auto">
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                              Width="18" Height="18" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Selected" Style="{StaticResource FieldLabel}" />
+                    <TextBlock Text="{x:Bind ViewModel.SelectedTotalLabel, Mode=OneWay}"
+                               Style="{StaticResource Figure}"
+                               FontSize="16" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <!-- §5.5's fallback note diagnoses a slow scan; this is the remedy beside it.
+                     Hidden entirely when elevating would not help, so it never offers
+                     administrator rights for a problem they cannot fix. -->
+                <Button Content="Elevate and rescan"
+                        Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
+                        AutomationProperties.HelpText="Restart Deguffer as administrator and scan again using the file table, which is faster." />
+                <Button Content="Cancel"
+                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.CancelCommand}" />
+                <Button Content="Clean"
+                        Command="{x:Bind ViewModel.CleanCommand}" />
+                <Button Content="Preview"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Command="{x:Bind ViewModel.PreviewCommand}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

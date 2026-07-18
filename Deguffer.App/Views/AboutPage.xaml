@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="Deguffer.App.Views.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+
+    <ScrollViewer Padding="28,8,28,28">
+        <StackPanel Spacing="10" MaxWidth="720" HorizontalAlignment="Left">
+
+            <TextBlock Text="About" Style="{StaticResource PageTitle}" Margin="0,0,0,6" />
+
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" />
+                        <TextBlock Text="{x:Bind Version}"
+                                   Style="{StaticResource SecondaryText}"
+                                   VerticalAlignment="Bottom"
+                                   Margin="0,0,0,3" />
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource SecondaryText}"
+                               Text="Reclaims disk space from developer tool caches, and tells you what each one costs to lose before you agree to lose it." />
+                </StackPanel>
+            </Border>
+
+            <!-- Diagnostic, because it is the difference between a scan that takes seconds and one
+                 that takes minutes, and there is otherwise nowhere to find out which one you got. -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Scanning" Style="{StaticResource FieldLabel}" />
+                    <TextBlock Text="{x:Bind ScanMode}"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="The safety tiers" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Style="{StaticResource SecondaryText}"
+                       FontSize="13"
+                       Text="Every finding is classified before it is offered. Sizes are easy to compute; this classification is the part that takes knowledge, and it is what the tool is for." />
+
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="14">
+
+                    <StackPanel Spacing="4">
+                        <ContentControl Content="Regenerable cache"
+                                        Style="{StaticResource TierChipRegenerableCache}"
+                                        HorizontalAlignment="Left" />
+                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                   Text="A tool re-creates it on demand. Deleting costs a slower next build and nothing else, so these are selected for you by default." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <ContentControl Content="Regenerable, with cost"
+                                        Style="{StaticResource TierChipRegenerableWithCost}"
+                                        HorizontalAlignment="Left" />
+                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                   Text="Re-created only by re-downloading gigabytes or re-indexing for minutes. Offered, but never selected for you." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <ContentControl Content="User data"
+                                        Style="{StaticResource TierChipUserData}"
+                                        HorizontalAlignment="Left" />
+                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                   Text="Logs, histories and saved sessions living in a folder called cache. Deleting loses them permanently." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <ContentControl Content="Do not touch"
+                                        Style="{StaticResource TierChipDoNotTouch}"
+                                        HorizontalAlignment="Left" />
+                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                   Text="Config, credentials, live state, and anything Deguffer cannot prove is idle. Never offered — a child a provider does not recognise lands here rather than being assumed safe." />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="What it will not do" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                               Text="Nothing is removed without a preview first, and the exact steps are inspectable on every row before you agree to them." />
+                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                               Text="It asks a tool to clear its own cache wherever the tool offers that, rather than deleting the folder behind its back." />
+                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                               Text="It never targets a tool's root directory — only the children it recognises, because configuration and credentials routinely sit beside the cache." />
+                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                               Text="After every run it checks that the paths it promised to protect are still there, and says so in the status line either way." />
+
+                    <!-- §8: undo is not viable at these sizes. Saying so plainly is the alternative
+                         to a UI that quietly implies it might be. -->
+                    <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               TextWrapping="Wrap"
+                               FontSize="13"
+                               Text="There is no undo. Ten gigabytes will not go through the Recycle Bin, so anything removed is gone." />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}" Margin="0,14,0,0">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                               Text="Open source under the MIT licence." />
+                    <HyperlinkButton Content="github.com/BootBlock/Deguffer"
+                                     NavigateUri="https://github.com/BootBlock/Deguffer"
+                                     Padding="0" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

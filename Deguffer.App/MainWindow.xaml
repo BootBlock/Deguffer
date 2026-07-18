@@ -2,8 +2,7 @@
 <Window
     x:Class="Deguffer.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:views="using:Deguffer.App.Views">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid RowDefinitions="Auto,*">
         <!--
@@ -31,6 +30,46 @@
             </StackPanel>
         </Border>
 
-        <views:MainPage Grid.Row="1" />
+        <!--
+            A rail with permanent labels rather than a collapsible pane: there are three
+            destinations and they will not grow, so nothing has to be opened to find out what is
+            here. The pane toggle is hidden for the same reason — collapsing three items saves no
+            meaningful width and costs the user the labels.
+        -->
+        <NavigationView x:Name="Navigation"
+                        Grid.Row="1"
+                        PaneDisplayMode="Left"
+                        OpenPaneLength="184"
+                        IsSettingsVisible="False"
+                        IsBackButtonVisible="Collapsed"
+                        IsPaneToggleButtonVisible="False"
+                        Background="Transparent"
+                        SelectionChanged="OnDestinationChanged">
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Storage" Tag="Clean" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEDA2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <!-- Settings and About sit at the foot of the rail: they are where you go once, not
+                 part of the task the window exists for. -->
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem Content="Settings" Tag="Settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="About">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
     </Grid>
 </Window>

@@ -10,7 +10,7 @@ namespace Deguffer.App.Shell;
 /// counts as an answer — comes from the <see cref="ConfirmationRequirement"/>; this type chooses
 /// only how it looks.
 /// </summary>
-public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot) : IConfirmationPrompt
+public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTheme theme) : IConfirmationPrompt
 {
     public async Task<Confirmation?> AskAsync(ConfirmationRequirement requirement, CancellationToken ct = default)
     {
@@ -33,6 +33,11 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot) : IConfir
         var dialog = new ContentDialog
         {
             XamlRoot = xamlRoot,
+
+            // It opens in the popup layer rather than inside the page, so it does not inherit the
+            // theme applied to the window root — without this it renders dark over a light window.
+            RequestedTheme = theme,
+
             Title = $"Delete {requirement.ProviderName}?",
             Content = NewBody(requirement, typed),
             PrimaryButtonText = "Delete",
