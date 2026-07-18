@@ -15,12 +15,14 @@ public sealed class CleanupPlanner
 
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
-    /// <summary>The Milestone 1 set: the three Tier 1 sources verified by hand in §4.1.</summary>
+    /// <summary>The Tier 1 sources verified by hand in §4.1 and §4.2.</summary>
     public static CleanupPlanner CreateDefault() => new(
     [
         new NuGetCacheProvider(),
         new GradleCacheProvider(),
         new NpmCacheProvider(),
+        new VsCodeCppToolsCacheProvider(),
+        new UvCacheProvider(),
     ]);
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
