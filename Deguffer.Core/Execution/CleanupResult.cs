@@ -44,13 +44,17 @@ public sealed record VerificationResult
 {
     public IReadOnlyList<VerificationCheck> Checks { get; init; } = [];
 
-    public bool Passed => Checks.All(c => c.Passed);
+    /// <summary>
+    /// Not cached in a backing field — this is a record, and <c>with</c> copies backing fields, so
+    /// a cache would outlive a change to <see cref="Checks"/>.
+    /// </summary>
+    public IReadOnlyList<VerificationCheck> Failures => [.. Checks.Where(c => !c.Passed)];
 
-    public IEnumerable<VerificationCheck> Failures => Checks.Where(c => !c.Passed);
+    public bool Passed => Checks.All(c => c.Passed);
 
     public string Summary => Checks.Count == 0
         ? "Nothing to verify."
         : Passed
             ? $"All {Checks.Count} protected path(s) survived."
-            : $"{Failures.Count()} of {Checks.Count} protected path(s) did not survive.";
+            : $"{Failures.Count} of {Checks.Count} protected path(s) did not survive.";
 }

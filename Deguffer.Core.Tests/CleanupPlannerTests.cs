@@ -1,10 +1,11 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
-public class CleanupPlannerTests
+public sealed class CleanupPlannerTests
 {
     [Fact]
     public async Task SortsFindingsBySizeSoTheBiggestCauseLeads()
@@ -24,7 +25,8 @@ public class CleanupPlannerTests
     [Fact]
     public async Task AnAbsentToolchainYieldsAFindingWithNoPlanRatherThanBeingDropped()
     {
-        var planner = new CleanupPlanner([new StubProvider("absent", bytes: 0, present: false)]);
+        var planner = new CleanupPlanner(
+            [new StubProvider("absent", bytes: 0, present: false)]);
 
         var finding = Assert.Single(await planner.PlanAllAsync());
 
@@ -45,6 +47,23 @@ public class CleanupPlannerTests
         Assert.False(empty.WasExecuted);
     }
 
+    [Theory]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    [InlineData(SafetyTier.DoNotTouch)]
+    public async Task RefusesToExecuteAnythingAboveTier1UntilTheConfirmationFlowExists(SafetyTier tier)
+    {
+        // Milestone 1 ships Tier 1 only. The guard is here so the first Tier 2/3 provider cannot
+        // silently inherit a path that deletes without the extra confirmation §7 requires.
+        var provider = new StubProvider("risky", bytes: 5_000, tier: tier);
+        var planner = new CleanupPlanner([provider]);
+
+        var findings = await planner.PlanAllAsync();
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => planner.ExecuteAsync(findings));
+        Assert.False(provider.WasExecuted);
+    }
+
     [Fact]
     public void TheDefaultSetIsTheThreeVerifiedTier1Sources()
     {
@@ -54,30 +73,55 @@ public class CleanupPlannerTests
         Assert.All(planner.Providers, p => Assert.Equal(SafetyTier.RegenerableCache, p.Tier));
     }
 
-    private sealed class StubProvider(string id, long bytes, bool present = true) : ICleanupProvider
+    [Fact]
+    public async Task InvalidatesEveryProviderBeforeAnyOfThemPlans()
+    {
+        // Ordering matters: invalidating inside the planning loop would throw away the machine
+        // snapshot the previous provider just paid for, since providers share collaborators.
+        List<string> journal = [];
+        var planner = new CleanupPlanner(
+            [new StubProvider("a", 1, journal: journal), new StubProvider("b", 2, journal: journal)]);
+
+        await planner.PlanAllAsync();
+
+        Assert.Equal(["invalidate:a", "invalidate:b", "plan:a", "plan:b"], journal);
+    }
+
+    private sealed class StubProvider(
+        string id,
+        long bytes,
+        bool present = true,
+        SafetyTier tier = SafetyTier.RegenerableCache,
+        List<string>? journal = null) : ICleanupProvider
     {
         public bool WasExecuted { get; private set; }
+
+        public void InvalidateCaches() => journal?.Add($"invalidate:{id}");
 
         public string Id => id;
 
         public string Name => id;
 
-        public SafetyTier Tier => SafetyTier.RegenerableCache;
+        public SafetyTier Tier => tier;
 
         public string WhatHappensOnNextUse => "Nothing.";
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(present);
 
-        public Task<long> EstimateBytesAsync(CancellationToken ct = default) => Task.FromResult(bytes);
+        public Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+        {
+            journal?.Add($"plan:{id}");
+            return Task.FromResult(NewPlan());
+        }
 
-        public Task<CleanupPlan> PlanAsync(CancellationToken ct = default) => Task.FromResult(new CleanupPlan
+        private CleanupPlan NewPlan() => new()
         {
             ProviderId = id,
             ProviderName = id,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = bytes == 0 ? [] : [new RunCommandStep("tool", "clear", "Clear") { EstimatedBytes = bytes }],
-        });
+        };
 
         public Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default)
         {

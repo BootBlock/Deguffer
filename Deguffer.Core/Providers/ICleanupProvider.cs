@@ -23,10 +23,23 @@ public interface ICleanupProvider
     /// <summary>Whether this toolchain is installed at all on this machine.</summary>
     Task<bool> IsPresentAsync(CancellationToken ct = default);
 
-    /// <summary>Reclaimable bytes, measured but not acted on.</summary>
-    Task<long> EstimateBytesAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Discard anything cached about the machine — resolved tool paths, the process snapshot,
+    /// probed cache locations. Called once before a planning pass.
+    ///
+    /// This belongs to the provider because the provider owns those caches. An orchestrator
+    /// holding its own collaborators and invalidating those instead would only appear to work.
+    /// </summary>
+    void InvalidateCaches();
 
-    /// <summary>Exact paths and commands. Never executed here.</summary>
+    /// <summary>
+    /// Exact paths and commands, with sizes measured. Never executed here.
+    ///
+    /// The §6.2 sketch also had an <c>EstimateBytesAsync</c>; it is deliberately absent. Producing
+    /// an estimate means measuring, which means building the plan, so a separate method could only
+    /// duplicate this work to return one number that <see cref="CleanupPlan.EstimatedBytes"/>
+    /// already carries.
+    /// </summary>
     Task<CleanupPlan> PlanAsync(CancellationToken ct = default);
 
     Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default);

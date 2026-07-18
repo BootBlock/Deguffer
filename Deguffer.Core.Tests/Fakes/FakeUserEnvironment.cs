@@ -15,10 +15,12 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         UserProfile = Path.Combine(root, "profile");
         LocalAppData = Path.Combine(root, "profile", "AppData", "Local");
         RoamingAppData = Path.Combine(root, "profile", "AppData", "Roaming");
+        TempPath = Path.Combine(root, "temp");
 
         Directory.CreateDirectory(UserProfile);
         Directory.CreateDirectory(LocalAppData);
         Directory.CreateDirectory(RoamingAppData);
+        Directory.CreateDirectory(TempPath);
     }
 
     public string UserProfile { get; }
@@ -27,6 +29,8 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
     public string RoamingAppData { get; }
 
+    public string TempPath { get; }
+
     /// <summary>Pretend <paramref name="command"/> is installed at a plausible path.</summary>
     public FakeUserEnvironment WithExecutable(string command, string? path = null)
     {
@@ -34,6 +38,10 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
+    public int InvalidateCount { get; private set; }
+
     public string? FindExecutable(string command) =>
         _executables.TryGetValue(command, out var path) ? path : null;
+
+    public void Invalidate() => InvalidateCount++;
 }

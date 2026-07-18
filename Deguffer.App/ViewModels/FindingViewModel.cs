@@ -11,62 +11,53 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class FindingViewModel : ObservableObject
 {
-    private readonly Finding _finding;
-
     public FindingViewModel(Finding finding)
     {
-        _finding = finding;
-        IsSelected = finding.HasReclaimableSpace && finding.Provider.Tier.IsPreSelectedByDefault();
+        Finding = finding;
+
+        // Materialised once. These are bound per row, and rebuilding a list inside a property
+        // getter puts an allocation on every binding evaluation.
+        Notes = [.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
+        Steps = [.. finding.Plan?.Steps.Select(s => s.Description) ?? []];
+
+        IsSelected = finding.IsPreSelectedByDefault;
     }
 
-    /// <summary>Tier 1 is pre-selected; nothing else ever is (§3).</summary>
+    /// <summary>§3's "Default" column decides this; the rule itself lives on <see cref="Finding"/>.</summary>
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
 
-    [ObservableProperty]
-    public partial CleanupResult? Result { get; set; }
+    public Finding Finding { get; }
 
-    public Finding Finding => _finding;
+    public string Name => Finding.Provider.Name;
 
-    public string Name => _finding.Provider.Name;
+    public string TierLabel => Finding.Provider.Tier.ToDisplayName();
 
-    public string TierLabel => _finding.Provider.Tier.ToDisplayName();
+    public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
 
-    public string WhatHappensOnNextUse => _finding.Provider.WhatHappensOnNextUse;
+    public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.EstimatedBytes) : "—";
 
-    public string SizeLabel => _finding.IsPresent
-        ? FreeSpace.Format(_finding.EstimatedBytes)
-        : "—";
-
-    public string StatusLabel => !_finding.IsPresent
+    public string StatusLabel => !Finding.IsPresent
         ? "Not installed on this machine"
-        : _finding.HasReclaimableSpace
+        : Finding.HasReclaimableSpace
             ? "Ready to clean"
             : "Already clear";
 
     /// <summary>Only rows with something to reclaim can be acted on.</summary>
-    public bool CanBeSelected => _finding.HasReclaimableSpace;
+    public bool CanBeSelected => Finding.HasReclaimableSpace;
 
-    public IReadOnlyList<string> Steps =>
-        [.. _finding.Plan?.Steps.Select(s => s.Description) ?? []];
+    /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
+    public IReadOnlyList<string> Steps { get; }
 
-    public IReadOnlyList<string> Notes =>
-        [.. _finding.Plan?.Notes.Select(n => n.Message) ?? []];
+    public IReadOnlyList<string> Notes { get; }
 
-    /// <summary>§5.6, surfaced: the run has to show what it proved, not just what it removed.</summary>
-    public string? VerificationSummary => Result?.Verification?.Summary;
+    /// <summary>
+    /// Shown whenever there is anything to say — including for a tool with nothing to reclaim.
+    /// A provider that decided to leave children alone under §5.2 has recorded *why*, and that
+    /// reasoning is the audit trail; hiding it because the tool happens to be clean would throw
+    /// away the most useful thing Deguffer knows about it.
+    /// </summary>
+    public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
 
-    public bool HasResult => Result is not null;
-
-    partial void OnResultChanged(CleanupResult? value)
-    {
-        OnPropertyChanged(nameof(VerificationSummary));
-        OnPropertyChanged(nameof(HasResult));
-        OnPropertyChanged(nameof(ResultLabel));
-    }
-
-    public string ResultLabel => Result is null
-        ? string.Empty
-        : $"Reclaimed {FreeSpace.Format(Result.BytesReclaimed)}" +
-          (Result.SkippedCount > 0 ? $" · {Result.SkippedCount} item(s) in use were left alone" : string.Empty);
+    public string DetailHeader => Steps.Count > 0 ? "What this will do" : "What was left alone";
 }

@@ -7,38 +7,46 @@
 
     <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
          sits on a Fluent layer brush and reads correctly on a flat solid background too. -->
-    <Grid Padding="16,0,16,16" RowSpacing="16" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Padding="16,0,16,16" RowSpacing="12" RowDefinitions="Auto,Auto,*,Auto">
 
-        <!-- §7: free space before and after, prominently. It is the only number the user came for. -->
+        <!-- §7: free space, prominently. It is the only number the user came for. -->
         <Border Grid.Row="0" Style="{StaticResource CardStyle}">
-            <StackPanel Orientation="Horizontal" Spacing="32">
+            <StackPanel Orientation="Horizontal" Spacing="40">
                 <StackPanel>
                     <TextBlock Text="Free space" Style="{StaticResource SecondaryText}" />
-                    <TextBlock Text="{x:Bind ViewModel.FreeSpaceBeforeLabel, Mode=OneWay}"
+                    <TextBlock Text="{x:Bind ViewModel.FreeSpaceNowLabel, Mode=OneWay}"
                                Style="{StaticResource SectionHeading}" FontSize="28" />
                 </StackPanel>
 
-                <StackPanel>
-                    <TextBlock Text="After cleaning" Style="{StaticResource SecondaryText}" />
-                    <TextBlock Text="{x:Bind ViewModel.FreeSpaceAfterLabel, Mode=OneWay}"
+                <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
+                     disagree whenever anything else on the machine writes during the run, and
+                     merging them into one figure is how a user stops trusting the tool. -->
+                <StackPanel Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+                    <TextBlock Text="Removed by Deguffer" Style="{StaticResource SecondaryText}" />
+                    <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
                                Style="{StaticResource SectionHeading}" FontSize="28" />
                 </StackPanel>
 
-                <TextBlock Text="{x:Bind ViewModel.ReclaimedLabel, Mode=OneWay}"
-                           VerticalAlignment="Bottom"
-                           Margin="0,0,0,6"
-                           FontWeight="SemiBold"
-                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <StackPanel Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+                    <TextBlock Text="Free space change" Style="{StaticResource SecondaryText}" />
+                    <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
+                               Style="{StaticResource SectionHeading}" FontSize="28" />
+                </StackPanel>
             </StackPanel>
         </Border>
 
-        <TextBlock Grid.Row="1"
-                   Text="{x:Bind ViewModel.Status, Mode=OneWay}"
-                   Style="{StaticResource SecondaryText}" />
+        <!-- This line carries the §5.6 verification headline — the most safety-critical string in
+             the app. It sits on a solid surface with primary-contrast text rather than floating
+             on the backdrop, because §6.5 forbids text that needs the blur to be readable. -->
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="16,10">
+            <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                       TextWrapping="Wrap" />
+        </Border>
 
         <!-- One row per named cause (§7), largest first. -->
         <ScrollViewer Grid.Row="2">
-            <ItemsControl ItemsSource="{x:Bind ViewModel.Findings, Mode=OneWay}">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.Findings}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:FindingViewModel">
                         <Border Style="{StaticResource CardStyle}" Margin="0,0,0,8">
@@ -76,25 +84,35 @@
                                                Style="{StaticResource SecondaryText}"
                                                FontSize="13" />
 
-                                    <ItemsControl ItemsSource="{x:Bind Notes}" Margin="0,4,0,0">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="x:String">
-                                                <TextBlock Text="{x:Bind}"
-                                                           Style="{StaticResource SecondaryText}"
-                                                           FontSize="12" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
-                                    <TextBlock Text="{x:Bind ResultLabel, Mode=OneWay}"
-                                               FontWeight="SemiBold"
-                                               FontSize="13"
-                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                               Visibility="{x:Bind HasResult, Mode=OneWay}" />
-                                    <TextBlock Text="{x:Bind VerificationSummary, Mode=OneWay}"
-                                               Style="{StaticResource SecondaryText}"
-                                               FontSize="12"
-                                               Visibility="{x:Bind HasResult, Mode=OneWay}" />
+                                    <!-- §7: nothing is deleted without a preview, so the exact
+                                         steps are inspectable before the user confirms. -->
+                                    <Expander Margin="0,4,0,0"
+                                              Visibility="{x:Bind HasDetail}"
+                                              HorizontalAlignment="Stretch"
+                                              Header="{x:Bind DetailHeader}">
+                                        <StackPanel Spacing="4">
+                                            <ItemsControl ItemsSource="{x:Bind Steps}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <TextBlock Text="{x:Bind}"
+                                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                   TextWrapping="Wrap"
+                                                                   IsTextSelectionEnabled="True"
+                                                                   FontSize="12" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <ItemsControl ItemsSource="{x:Bind Notes}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <TextBlock Text="{x:Bind}"
+                                                                   Style="{StaticResource SecondaryText}"
+                                                                   FontSize="12" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Expander>
                                 </StackPanel>
 
                                 <TextBlock Grid.Column="2"
@@ -109,18 +127,23 @@
         </ScrollViewer>
 
         <!-- §7: the primary button previews. Deleting is a separate, deliberate second step. -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
-            <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                          Width="20" Height="20" VerticalAlignment="Center" />
-            <TextBlock Text="{x:Bind ViewModel.SelectedTotalLabel, Mode=OneWay}"
-                       VerticalAlignment="Center"
-                       FontWeight="SemiBold"
-                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            <Button Content="Preview"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Command="{x:Bind ViewModel.PreviewCommand}" />
-            <Button Content="Clean"
-                    Command="{x:Bind ViewModel.CleanCommand}" />
-        </StackPanel>
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="16,10">
+            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                              Width="20" Height="20" VerticalAlignment="Center" />
+                <TextBlock Text="{x:Bind ViewModel.SelectedTotalLabel, Mode=OneWay}"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Button Content="Cancel"
+                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.CancelCommand}" />
+                <Button Content="Preview"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Command="{x:Bind ViewModel.PreviewCommand}" />
+                <Button Content="Clean"
+                        Command="{x:Bind ViewModel.CleanCommand}" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

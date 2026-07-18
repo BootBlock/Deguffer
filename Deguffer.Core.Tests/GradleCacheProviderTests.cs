@@ -58,14 +58,15 @@ public sealed class GradleCacheProviderTests : IDisposable
     [Fact]
     public async Task NeverTargetsTheGradleRootDirectory()
     {
-        var root = CreateGradleHome();
-        CreateAt(root, "caches", 1024);
+        CreateGradleHome();
+        var provider = CreateProvider();
+        CreateAt(provider.RootPath, "caches", 1024);
 
-        var plan = await CreateProvider().PlanAsync();
+        var plan = await provider.PlanAsync();
 
-        Assert.DoesNotContain(root, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(provider.RootPath, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.All(plan.TargetedPaths, path => Assert.NotEqual(
-            root.TrimEnd(Path.DirectorySeparatorChar),
+            provider.RootPath.TrimEnd(Path.DirectorySeparatorChar),
             path.TrimEnd(Path.DirectorySeparatorChar),
             StringComparer.OrdinalIgnoreCase));
     }

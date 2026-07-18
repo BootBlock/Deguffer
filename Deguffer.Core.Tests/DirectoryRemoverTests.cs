@@ -88,6 +88,46 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     [Fact]
+    public async Task DeletesAJunctionWithoutFollowingItIntoTheTargetTree()
+    {
+        // The highest-consequence branch in the codebase: if this regresses, deleting a cache
+        // escapes through a junction and destroys whatever it points at.
+        var root = _temp.CreateDirectory("cache");
+        var outside = _temp.CreateDirectory("precious");
+        var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+
+        var junction = Path.Combine(root, "link");
+        Directory.CreateSymbolicLink(junction, outside);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.False(Directory.Exists(junction));
+
+        Assert.True(Directory.Exists(outside), "deletion followed the junction out of the target tree");
+        Assert.True(File.Exists(bystander), "a file outside the target tree was destroyed");
+
+        // The linked-to content was never ours to count.
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    [Fact]
+    public async Task StopsWhenCancelled()
+    {
+        var root = _temp.CreateDirectory("cache");
+        for (var i = 0; i < 200; i++)
+        {
+            _temp.CreateFile(64, "cache", $"f{i}.bin");
+        }
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => DirectoryRemover.RemoveAsync(root, progress: null, cts.Token));
+    }
+
+    [Fact]
     public async Task ReportsProgressThroughToCompletion()
     {
         var root = _temp.CreateDirectory("cache");

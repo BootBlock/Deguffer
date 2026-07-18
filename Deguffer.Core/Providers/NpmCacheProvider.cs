@@ -96,22 +96,9 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// §5.6. <c>.npmrc</c> holds registry auth tokens, and <c>%APPDATA%\npm</c> holds globally
     /// installed tools — neither is cache, and both sit close enough to be worth proving.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths()
-    {
-        var candidates = new (string Path, string Reason)[]
-        {
-            (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
-            (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."),
-        };
-
-        return
-        [
-            .. candidates.Select(c => new ProtectedPath(
-                c.Path,
-                c.Reason,
-                LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path))),
-        ];
-    }
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
+        (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
+        (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."));
 
     private async Task<string> ResolveCacheDirectoryAsync(string npm, CancellationToken ct)
     {
@@ -130,13 +117,4 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         return _resolvedCacheDirectory = reported ?? DefaultCacheDirectory;
     }
-
-    private CleanupPlan EmptyPlan(string why) => new()
-    {
-        ProviderId = Id,
-        ProviderName = Name,
-        Tier = Tier,
-        WhatHappensOnNextUse = WhatHappensOnNextUse,
-        Notes = [new PlanNote(PlanNoteSeverity.Information, why)],
-    };
 }

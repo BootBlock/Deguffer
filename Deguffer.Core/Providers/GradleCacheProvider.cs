@@ -120,24 +120,11 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// §5.6. The root itself and the config beside it are the whole reason this provider is
     /// path-based rather than a recursive delete, so they are what the run has to prove.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths()
-    {
-        var candidates = new (string Path, string Reason)[]
-        {
-            (_root, "The .gradle root itself must survive — only its known-disposable children are removed."),
-            (Path.Combine(_root, "gradle.properties"), "User configuration, which may hold signing keys and credentials."),
-            (Path.Combine(_root, "init.d"), "User init scripts."),
-            (Path.Combine(_root, "gradle.encrypted.properties"), "Encrypted user configuration."),
-        };
-
-        return
-        [
-            .. candidates.Select(c => new ProtectedPath(
-                c.Path,
-                c.Reason,
-                LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path))),
-        ];
-    }
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
+        (_root, "The .gradle root itself must survive — only its known-disposable children are removed."),
+        (Path.Combine(_root, "gradle.properties"), "User configuration, which may hold signing keys and credentials."),
+        (Path.Combine(_root, "init.d"), "User init scripts."),
+        (Path.Combine(_root, "gradle.encrypted.properties"), "Encrypted user configuration."));
 
     private IEnumerable<DirectoryInfo> EnumerateChildren()
     {
@@ -153,13 +140,4 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             return [];
         }
     }
-
-    private CleanupPlan EmptyPlan(string why) => new()
-    {
-        ProviderId = Id,
-        ProviderName = Name,
-        Tier = Tier,
-        WhatHappensOnNextUse = WhatHappensOnNextUse,
-        Notes = [new PlanNote(PlanNoteSeverity.Information, why)],
-    };
 }

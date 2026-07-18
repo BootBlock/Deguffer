@@ -67,23 +67,20 @@ public static class DirectoryRemover
             }
         });
 
-        // Deepest first, so a directory is only removed once its children are gone. Directories
-        // that still hold a skipped file simply stay — that is the correct outcome, not an error.
+        // Deepest first, so a directory is only removed once its children are gone. Ordering by
+        // path length is a correct topological order here, not a shortcut: a parent's path is
+        // always a strict prefix of its descendants', so it is always strictly shorter.
+        // Directories still holding a skipped file simply stay — the correct outcome, not an error.
         foreach (var directory in directories.OrderByDescending(d => d.Length))
         {
             ct.ThrowIfCancellationRequested();
             TryDeleteDirectory(directory);
         }
 
-        var rootRemoved = !Directory.Exists(extended);
-        if (!rootRemoved)
-        {
-            TryDeleteDirectory(extended);
-            rootRemoved = !Directory.Exists(extended);
-        }
-
         progress?.Report(1.0);
-        return new RemovalOutcome(reclaimed, skipped, rootRemoved);
+
+        // The root is in `directories`, so the loop above has already attempted it.
+        return new RemovalOutcome(reclaimed, skipped, RootRemoved: !Directory.Exists(extended));
     }
 
     private static void Gather(
@@ -102,6 +99,7 @@ public static class DirectoryRemover
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
+            // Unreadable directory: nothing to gather, and §5.3 says skip rather than fail.
             return;
         }
 
