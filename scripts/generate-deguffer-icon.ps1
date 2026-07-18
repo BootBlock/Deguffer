@@ -13,6 +13,7 @@ param(
     [string]$IcoPath = (Join-Path $PSScriptRoot '..\Deguffer.App\Assets\Deguffer.ico'),
     [string]$PngPath = (Join-Path $PSScriptRoot '..\Deguffer.App\Assets\Deguffer-256.png'),
     [string]$SvgPath = (Join-Path $PSScriptRoot '..\assets\Deguffer.svg'),
+    [string]$SmallSvgPath = (Join-Path $PSScriptRoot '..\assets\Deguffer-small.svg'),
     [string]$BannerPath = (Join-Path $PSScriptRoot '..\assets\banner.svg')
 )
 
@@ -21,20 +22,41 @@ $ErrorActionPreference = 'Stop'
 
 Add-Type -AssemblyName System.Drawing
 
-# The mark, in the 128-unit space of assets/Deguffer.svg. Boxes of unequal size: accumulated
-# cruft rather than a tidy chart. Keep the two files in step — this is the same geometry.
+# The mark, in a 128-unit space. Boxes of unequal size: accumulated cruft rather than a tidy chart.
+#
+# Rows are spaced so the strokes clear each other by 5 units. Stroke is centred on the path, so
+# each edge eats half the stroke either side — at the original spacing the bottom row's stroke ran
+# to 78.25 and the row above started at 77.75, and the two touched at every size.
 $script:MarkUnits = 128.0
-$script:MarkStroke = 6.5
-$script:MarkBoxes = @(
-    @{ X = 16; Y = 81; W = 96; H = 24; R = 7 }
-    @{ X = 28; Y = 51; W = 42; H = 24; R = 7 }
-    @{ X = 78; Y = 51; W = 28; H = 24; R = 7 }
-    @{ X = 28; Y = 23; W = 24; H = 24; R = 6 }
-)
 
-# Where the gradient axis starts and ends, in the same 128-unit space. See New-RainbowBrush.
-$script:AxisStart = -30.2
-$script:AxisEnd = 173.6
+# Each variant carries its own gradient axis. The axis is fitted to the ink, not the canvas, so a
+# variant covering a different area of the canvas needs its own endpoints to land on the same span
+# of the ramp — see New-RainbowBrush.
+$script:MarkFull = @{
+    Stroke = 6.5
+    AxisStart = -36.6
+    AxisEnd = 177.6
+    Boxes = @(
+        @{ X = 16; Y = 87.5; W = 96; H = 24; R = 7 }
+        @{ X = 28; Y = 52;   W = 42; H = 24; R = 7 }
+        @{ X = 78; Y = 52;   W = 28; H = 24; R = 7 }
+        @{ X = 28; Y = 16.5; W = 24; H = 24; R = 6 }
+    )
+}
+
+# Below SmallThreshold the full mark turns to mush: at 16px its rows are ~3px tall, the outlines
+# close up and it reads as a coloured blob. This drops to two boxes with a proportionally heavier
+# stroke and a wider gap — the same idea at a size that cannot carry the detail.
+$script:SmallThreshold = 20
+$script:MarkSmall = @{
+    Stroke = 12.8
+    AxisStart = -49.0
+    AxisEnd = 183.9
+    Boxes = @(
+        @{ X = 16; Y = 76;   W = 96;   H = 37.6; R = 11 }
+        @{ X = 16; Y = 14.4; W = 57.6; H = 37.6; R = 11 }
+    )
+}
 
 # SpectraWrite's stops, as (position, #rrggbb) for the SVG renderings.
 $script:MarkStops = @(
@@ -48,16 +70,16 @@ $script:MarkStops = @(
     @{ At = '1.00'; Colour = '#FF0000' }
 )
 
-function New-RainbowBrush([int]$Size)
+function New-RainbowBrush([int]$Size, [hashtable]$Variant)
 {
-    # Stops and positions are SpectraWrite's. The axis runs from -30.2 to 173.6 in the mark's
-    # 128-unit space rather than corner to corner: SpectraWrite's glyphs are narrow, so a
-    # corner-to-corner ramp leaves their ink spanning only gold #FED401 to blue #2296F1. This
-    # mark is wide and would otherwise cover nearly the whole loop, picking up the red and
-    # purple that set never shows. These endpoints were fitted by sampling both icons' pixels.
+    # Stops and positions are SpectraWrite's. The axis runs beyond the canvas rather than corner
+    # to corner: SpectraWrite's glyphs are narrow, so a corner-to-corner ramp leaves their ink
+    # spanning only gold #FED401 to blue #2296F1. This mark is wide and would otherwise cover
+    # nearly the whole loop, picking up the red and purple that set never shows. The endpoints
+    # were fitted per variant by sampling rendered pixels against that reference span.
     $scale = $Size / $script:MarkUnits
-    $start = [System.Drawing.PointF]::new($script:AxisStart * $scale, $script:AxisStart * $scale)
-    $end = [System.Drawing.PointF]::new($script:AxisEnd * $scale, $script:AxisEnd * $scale)
+    $start = [System.Drawing.PointF]::new($Variant.AxisStart * $scale, $Variant.AxisStart * $scale)
+    $end = [System.Drawing.PointF]::new($Variant.AxisEnd * $scale, $Variant.AxisEnd * $scale)
     $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($start, $end, [System.Drawing.Color]::Red, [System.Drawing.Color]::Blue)
 
     $blend = [System.Drawing.Drawing2D.ColorBlend]::new()
@@ -101,11 +123,12 @@ function New-MarkBitmap([int]$Size)
         $graphics.Clear([System.Drawing.Color]::Transparent)
 
         $scale = $Size / $script:MarkUnits
+        $variant = if ($Size -le $script:SmallThreshold) { $script:MarkSmall } else { $script:MarkFull }
 
         $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
         try
         {
-            foreach ($box in $script:MarkBoxes)
+            foreach ($box in $variant.Boxes)
             {
                 Add-RoundedRect -Path $path `
                     -X ([float]($box.X * $scale)) -Y ([float]($box.Y * $scale)) `
@@ -113,11 +136,11 @@ function New-MarkBitmap([int]$Size)
                     -R ([float]($box.R * $scale))
             }
 
-            # A proportional stroke disappears at 16px, where the outline is the whole design;
-            # hold a floor so the smallest frames stay legible rather than ghosting.
-            $penWidth = [Math]::Max($script:MarkStroke * $scale, 1.4)
+            # A proportional stroke disappears at the smallest sizes, where the outline is the
+            # whole design; hold a floor so those frames stay legible rather than ghosting.
+            $penWidth = [Math]::Max($variant.Stroke * $scale, 1.4)
 
-            $brush = New-RainbowBrush -Size $Size
+            $brush = New-RainbowBrush -Size $Size -Variant $variant
             try
             {
                 $pen = [System.Drawing.Pen]::new($brush, [float]$penWidth)
@@ -175,14 +198,14 @@ function Get-GradientStopMarkup([string]$Indent)
     }) -join "`n"
 }
 
-function Get-BoxMarkup([string]$Indent)
+function Get-BoxMarkup([string]$Indent, [hashtable[]]$Boxes)
 {
-    ($script:MarkBoxes | ForEach-Object {
+    ($Boxes | ForEach-Object {
         "$Indent<rect x=""$($_.X)"" y=""$($_.Y)"" width=""$($_.W)"" height=""$($_.H)"" rx=""$($_.R)""/>"
     }) -join "`n"
 }
 
-function Write-Svg([string]$Path)
+function Write-Svg([string]$Path, [hashtable]$Variant)
 {
     # The gradient axis is expressed in the same coordinate space the boxes live in. Where the
     # mark is nested inside a transform (see the banner), userSpaceOnUse resolves in that nested
@@ -194,13 +217,13 @@ function Write-Svg([string]$Path)
   <!-- Generated by scripts/generate-deguffer-icon.ps1. Edit the mark there, not here. -->
   <defs>
     <linearGradient id="deguffer-rainbow" gradientUnits="userSpaceOnUse"
-                    x1="$($script:AxisStart)" y1="$($script:AxisStart)" x2="$($script:AxisEnd)" y2="$($script:AxisEnd)">
+                    x1="$($Variant.AxisStart)" y1="$($Variant.AxisStart)" x2="$($Variant.AxisEnd)" y2="$($Variant.AxisEnd)">
 $(Get-GradientStopMarkup '      ')
     </linearGradient>
   </defs>
 
-  <g fill="none" stroke="url(#deguffer-rainbow)" stroke-width="$($script:MarkStroke)" stroke-linejoin="round">
-$(Get-BoxMarkup '    ')
+  <g fill="none" stroke="url(#deguffer-rainbow)" stroke-width="$($Variant.Stroke)" stroke-linejoin="round">
+$(Get-BoxMarkup '    ' $Variant.Boxes)
   </g>
 </svg>
 "@
@@ -223,14 +246,14 @@ function Write-Banner([string]$Path)
   <!-- Generated by scripts/generate-deguffer-icon.ps1. Edit the mark there, not here. -->
   <defs>
     <linearGradient id="banner-rainbow" gradientUnits="userSpaceOnUse"
-                    x1="$($script:AxisStart)" y1="$($script:AxisStart)" x2="$($script:AxisEnd)" y2="$($script:AxisEnd)">
+                    x1="$($script:MarkFull.AxisStart)" y1="$($script:MarkFull.AxisStart)" x2="$($script:MarkFull.AxisEnd)" y2="$($script:MarkFull.AxisEnd)">
 $(Get-GradientStopMarkup '      ')
     </linearGradient>
   </defs>
 
   <g transform="translate(50,36)">
-    <g fill="none" stroke="url(#banner-rainbow)" stroke-width="$($script:MarkStroke)" stroke-linejoin="round">
-$(Get-BoxMarkup '      ')
+    <g fill="none" stroke="url(#banner-rainbow)" stroke-width="$($script:MarkFull.Stroke)" stroke-linejoin="round">
+$(Get-BoxMarkup '      ' $script:MarkFull.Boxes)
     </g>
   </g>
 
@@ -352,8 +375,11 @@ finally
 
 Write-Host "Wrote PNG:  $PngPath" -ForegroundColor Green
 
-Write-Svg -Path $SvgPath
+Write-Svg -Path $SvgPath -Variant $script:MarkFull
 Write-Host "Wrote SVG:  $SvgPath" -ForegroundColor Green
+
+Write-Svg -Path $SmallSvgPath -Variant $script:MarkSmall
+Write-Host "Wrote SVG:  $SmallSvgPath (small variant)" -ForegroundColor Green
 
 Write-Banner -Path $BannerPath
 Write-Host "Wrote banner: $BannerPath" -ForegroundColor Green
