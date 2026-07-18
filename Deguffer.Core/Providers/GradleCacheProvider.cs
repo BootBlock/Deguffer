@@ -87,9 +87,13 @@ public sealed class GradleCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            var bytes = await DirectorySizer.MeasureAsync(child.FullName, ct).ConfigureAwait(false);
+            // Enumeration runs in extended form; a plan always holds display paths, and I/O
+            // re-extends at the point of use. Keeping the prefix out of the plan means it never
+            // reaches the UI, a log, or a comparison.
+            var path = LongPath.Display(child.FullName);
+            var bytes = await DirectorySizer.MeasureAsync(path, ct).ConfigureAwait(false);
 
-            steps.Add(new DeleteDirectoryStep(child.FullName, classification.Reason)
+            steps.Add(new DeleteDirectoryStep(path, classification.Reason)
             {
                 EstimatedBytes = bytes,
             });

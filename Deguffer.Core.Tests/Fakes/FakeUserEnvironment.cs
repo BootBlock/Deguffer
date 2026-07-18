@@ -1,0 +1,39 @@
+using Deguffer.Core.Safety;
+
+namespace Deguffer.Core.Tests.Fakes;
+
+/// <summary>
+/// A profile rooted in a temp directory, so provider rules can be asserted against a tree we
+/// build rather than the developer's real caches.
+/// </summary>
+public sealed class FakeUserEnvironment : IUserEnvironment
+{
+    private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
+
+    public FakeUserEnvironment(string root)
+    {
+        UserProfile = Path.Combine(root, "profile");
+        LocalAppData = Path.Combine(root, "profile", "AppData", "Local");
+        RoamingAppData = Path.Combine(root, "profile", "AppData", "Roaming");
+
+        Directory.CreateDirectory(UserProfile);
+        Directory.CreateDirectory(LocalAppData);
+        Directory.CreateDirectory(RoamingAppData);
+    }
+
+    public string UserProfile { get; }
+
+    public string LocalAppData { get; }
+
+    public string RoamingAppData { get; }
+
+    /// <summary>Pretend <paramref name="command"/> is installed at a plausible path.</summary>
+    public FakeUserEnvironment WithExecutable(string command, string? path = null)
+    {
+        _executables[command] = path ?? Path.Combine(@"C:\tools", command + ".exe");
+        return this;
+    }
+
+    public string? FindExecutable(string command) =>
+        _executables.TryGetValue(command, out var path) ? path : null;
+}
