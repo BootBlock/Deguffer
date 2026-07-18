@@ -252,7 +252,34 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
 - Deletion should be genuinely parallel — these trees are hundreds of thousands of small files, and
   wall-clock time is dominated by per-file overhead, not bytes.
 
-### 6.4 Visual style — Acrylic (decided)
+### 6.4 Engineering gates (mandatory)
+
+The safety model is only as good as the code that carries it, and the rules below exist because a
+safety rule buried in a 900-line class stops being enforceable. These are **gates**: a change that
+breaks one is not ready, whether or not it compiles and passes tests. `CLAUDE.md` restates them
+operationally for contributors and agents.
+
+| Gate | Rule |
+| --- | --- |
+| **G1** | No monolithic files or objects. One responsibility per type; SOLID where it earns its keep. Soft ceiling ~250 lines per file. |
+| **G2** | No god objects. Nothing both decides policy and performs I/O; orchestration and cleanup knowledge never live in the same type. |
+| **G3** | No AI-trope or junior-engineer code — no comments restating the code, no ceremonial abstraction, no blanket `catch (Exception)`, no speculative generality. |
+| **G4** | High performance, caching, and object reuse. Bounded parallelism, streaming enumeration, cancellation on every async path. |
+| **G5** | Never recreate objects unnecessarily. Stateless collaborators are injected singletons; derived values are cached, not recomputed. |
+| **G6** | Work in git worktrees — multiple agents may be operating on this repository concurrently. |
+| **G7** | Use sub-agents for fan-out work; keep synthesis and final judgement in the main thread. |
+
+Two of these are load-bearing for the safety model rather than merely stylistic:
+
+- **G1/G2 make §5.2 auditable.** Each provider owns its own `DisposableChildSet` and nothing else
+  owns any part of it, so "which children may this tool delete?" is answerable by reading one
+  declaration. In a god object, that answer is spread across a method body and cannot be tested
+  in isolation.
+- **G4's bounded parallelism is a safety property, not just a speed one.** Unbounded fan-out over
+  a deletion tree makes failure ordering non-deterministic, and §5.6's verification depends on
+  knowing what was attempted.
+
+### 6.5 Visual style — Acrylic (decided)
 
 Deguffer uses a **glass-like Acrylic** backdrop for its windows: `DesktopAcrylicBackdrop` set as the
 window's `SystemBackdrop`, with `ExtendsContentIntoTitleBar` so the material runs the full height of
@@ -290,7 +317,7 @@ Deliberate points, and the traps that come with them:
 - **Show free space before and after**, prominently. It is the only number the user came for.
 - **Age is a first-class column** for per-workspace and per-project data — "last touched 5 months
   ago" drives the decision more than size does.
-- **The Acrylic backdrop (§6.4) is decoration, never information.** Tier, risk and selection state
+- **The Acrylic backdrop (§6.5) is decoration, never information.** Tier, risk and selection state
   must all read correctly on a flat solid background, because on plenty of machines that is exactly
   what the user will see.
 

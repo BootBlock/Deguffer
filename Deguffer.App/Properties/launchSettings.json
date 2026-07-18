@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Deguffer.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Deguffer.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
