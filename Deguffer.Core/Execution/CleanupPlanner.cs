@@ -15,7 +15,11 @@ public sealed class CleanupPlanner
 
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
-    /// <summary>The Tier 1 sources verified by hand in §4.1 and §4.2.</summary>
+    /// <summary>
+    /// The sources verified by hand in §4.1 and §4.2. Tier 1 throughout except PlatformIO, which is
+    /// Tier 2 and therefore offered but never pre-selected, and never executed without §7's
+    /// confirmation.
+    /// </summary>
     public static CleanupPlanner CreateDefault() => new(
     [
         new NuGetCacheProvider(),
@@ -23,6 +27,7 @@ public sealed class CleanupPlanner
         new NpmCacheProvider(),
         new VsCodeCppToolsCacheProvider(),
         new UvCacheProvider(),
+        new PlatformIoCacheProvider(),
     ]);
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
