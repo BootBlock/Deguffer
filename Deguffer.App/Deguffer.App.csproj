@@ -50,6 +50,31 @@
         <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     </PropertyGroup>
 
+    <!--
+        The XAML compiler writes the generated resource index ($(AssemblyName).pri) and the
+        compiled XAML (.xbf) into OutDir, and nothing adds them to the publish item set. The
+        package-provided Microsoft.UI.*.pri files publish correctly; only the project's own
+        generated ones are dropped. A published app therefore cannot load App.xaml and dies at
+        startup with STATUS_STOWED_EXCEPTION (0xC000027B) before any window appears.
+
+        This is masked — not fixed — by the flat !Distribution layout, where OutputPath and
+        PublishDir are the same folder, so the build leaves the files exactly where publish
+        would have put them. Publishing anywhere else, or clearing the folder between build and
+        publish, yields a silently broken exe. Publish the files explicitly so correctness does
+        not depend on that coincidence.
+    -->
+    <Target Name="PublishGeneratedXamlArtefacts" AfterTargets="ComputeResolvedFilesToPublishList">
+        <ItemGroup>
+            <_GeneratedXamlArtefact Include="$(OutDir)$(AssemblyName).pri" />
+            <_GeneratedXamlArtefact Include="$(OutDir)**\*.xbf" />
+
+            <ResolvedFileToPublish Include="@(_GeneratedXamlArtefact)">
+                <RelativePath>%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+            </ResolvedFileToPublish>
+        </ItemGroup>
+    </Target>
+
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
