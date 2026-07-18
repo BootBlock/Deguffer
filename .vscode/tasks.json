@@ -1,0 +1,35 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            // Platform must be explicit: the App project declares x86;x64;ARM64 and no AnyCPU,
+            // so a bare `dotnet build` of the solution cannot resolve a platform for it.
+            "label": "build app (x64)",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/Deguffer.App/Deguffer.App.csproj",
+                "-c",
+                "Debug",
+                "-p:Platform=x64"
+            ],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "test",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "test",
+                "${workspaceFolder}/Deguffer.sln"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}
