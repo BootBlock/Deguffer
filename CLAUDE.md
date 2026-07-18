@@ -1,5 +1,10 @@
 # Deguffer — working agreement
 
+> 🔒 **This repository is public, and Deguffer reads the developer's disk.** Never commit a
+> secret, a real filesystem path, a user profile name, or a machine name. Read
+> [no secrets or personal data](#no-secrets-or-personal-data-mandatory) before adding a fixture,
+> a log line, a screenshot, or a test path.
+
 `docs/todo/_spec.md` is the founding specification and the source of truth for the safety model,
 the audit evidence behind it, and the decided toolchain. Read it before changing behaviour.
 This file governs *how* the code gets written; the spec governs *what* it does.
@@ -85,6 +90,47 @@ Fan-out work belongs in sub-agents: auditing the codebase against these gates, s
 pattern across providers, researching an API. Keep the synthesis and the final judgement in the
 main thread — a sub-agent reports, it does not decide.
 
+### G8 — "Verified" has a definition
+
+A change is **verified** when its new behaviour has been *observed*, not when the build is green.
+A compiler proves the code is well-formed; it proves nothing about whether the tool deletes the
+right directory. Deguffer's failure mode is silent, irreversible data loss on someone else's
+machine, so this gate is stricter than it would be elsewhere.
+
+**The bar, in order of what actually catches bugs:**
+
+- **A behaviour change needs a test that fails without it.** Write it, watch it fail for the right
+  reason, then make it pass. A test authored after the fix and green on first run has proved
+  nothing — it may not be exercising the new path at all.
+- **A change to what gets deleted needs the negative assertion (§5.6).** Asserting the target was
+  removed is half a test. Assert that the protected paths — the tool root, unrecognised siblings,
+  anything Tier 4 — are still there afterwards. A deletion bug that over-reaches passes every
+  positive assertion.
+- **A change to tier classification needs the unrecognised case (§5.2).** Test that a child the
+  provider does *not* recognise lands in Tier 4, not just that the recognised ones classify
+  correctly. The dangerous direction is "unknown thing silently treated as safe".
+- **A change touching path handling needs a long path (§6.3).** Exercise something past
+  `MAX_PATH`. `LongPath` exists because truncation is a silent partial deletion, and a test with
+  short paths cannot distinguish working code from broken code here.
+- **Test through the fakes, never the real machine.** `FakeUserEnvironment` and the
+  `IProcessRunner` / `IProcessInspector` seams exist so the safety rules are provable without npm,
+  NuGet or Gradle installed — that is what G1's dependency inversion buys. A test that only passes
+  on a machine with the real tool present is not a test of the safety rule.
+- **Where the change has a runtime surface, drive it.** Types and unit tests do not exercise the
+  WinUI shell, the preview-first flow, or a real subprocess. Use the `verify` skill and observe the
+  behaviour rather than inferring it.
+
+**Both commands, every time** — `dotnet build Deguffer.sln` *and* `dotnet test Deguffer.sln`. A
+build alone is not verification, and neither is a test run you did not read the output of.
+
+**Never make a test pass by weakening it.** Relaxing an assertion, widening a tolerance, or
+deleting an inconvenient case to get to green converts a real failure into a permanent blind spot.
+If a test is genuinely wrong, say so explicitly and explain why — don't quietly loosen it.
+
+**Report what actually happened.** If tests fail, say so and show the output. If a step was
+skipped, say which and why. "Verified" is a claim about observed behaviour; do not make it about
+work you did not do.
+
 ## Build and test
 
 ```
@@ -105,6 +151,71 @@ From the spec, restated here because they are the things most easily lost in a r
 - **§6.3** Every filesystem path goes through `LongPath`. A `MAX_PATH` truncation is a silent
   partial deletion.
 - **§6.5** The Acrylic backdrop is decoration. The UI must be fully legible without it.
+
+## No secrets or personal data (mandatory)
+
+This is a **public** repository, licensed MIT. Committing a secret is a build-breaking error —
+secrets are effectively permanent once pushed (they live in history and may be scraped within
+seconds), so the only safe rule is to never let one in.
+
+**For most projects the risk is a leaked API key. Here it is a leaked *path*.** Deguffer's entire
+domain is reading the developer's disk, so the material that flows through it — scan output, repro
+steps, log lines, test fixtures, screenshots — is naturally full of real usernames, machine names,
+and directory layouts. That material reaches the repo by reflex, not by carelessness, which is
+exactly why it needs a rule.
+
+**Never commit, in any tracked file — source, tests, fixtures, docs, comments, commit messages:**
+
+- **A real filesystem path from a real machine.** No `C:\Users\<real-name>\…`, no real machine or
+  domain names, no real network share paths. Redact to `C:\Users\<user>\…`, or better, use the
+  synthetic roots the fakes already provide.
+- **Pasted scan or log output.** Provider discovery results, `dotnet nuget locals` output, planner
+  dumps, and crash logs all carry real paths. Redact before pasting anywhere — including into an
+  issue comment or a commit message. Note that `.gitignore` does **not** cover scan output or log
+  files you create ad hoc; keep them outside the working tree entirely.
+- **An API key, token, password, private key, certificate, or connection string.** Use an obvious
+  placeholder (`<YOUR_API_KEY>`) if an example is genuinely needed. Code-signing material
+  (`*.pfx`, `*.cer`) is git-ignored — keep it that way and never force-add it.
+- **Real personal data.** No private email addresses, phone numbers, or real names tied to private
+  accounts. Use the GitHub `noreply` identity (`BootBlock@users.noreply.github.com`),
+  `example.com` / `*.test` domains, and `localhost`.
+- **A screenshot showing any of the above.** A WinUI capture of the preview flow shows the real
+  cache paths and the real profile name of whoever took it. Crop or re-capture against synthetic
+  data; don't ship the real one.
+
+**Test fixtures are synthetic, and the seams are there to make that easy.** `FakeUserEnvironment`
+and the `IProcessRunner` / `IProcessInspector` abstractions exist so tests never touch a real
+profile directory — use them rather than hard-coding a path that happened to work locally. A
+fixture path should be recognisably invented (`C:\Users\testuser\…`), never copied from your
+machine.
+
+**Before every commit, self-audit the diff.** Run `git diff --cached` and scan for anything
+credential-shaped, path-shaped or personal. If something is in doubt, leave it out and ask.
+
+**If a secret is ever committed, stop.** Treat it as compromised: it must be rotated or revoked at
+the source *and* the history scrubbed — removing it in a later commit is **not** sufficient.
+Surface this immediately rather than quietly continuing.
+
+## Public-repository hygiene (mandatory)
+
+Everything here — code, comments, commit messages, branch names, docs, and history — is
+**world-readable and permanent**. Write it as if a stranger will read it tomorrow, because they can.
+
+- **Stay professional and neutral.** No profanity, disparaging remarks, jokes at anyone's expense,
+  or venting in code, comments, or commit messages. No TODOs that name or blame a person.
+- **No internal-only references.** Don't embed private ticket IDs, internal wiki or chat URLs,
+  internal hostnames, or infrastructure details a stranger shouldn't see. Describe the *what* and
+  *why*, not internal plumbing.
+- **Keep agent process out of the repo.** Worktree names, code-review mechanics, and the agent's
+  own reasoning belong in the conversation, not in a commit message, a comment, or a code comment.
+  (Attribution on GitHub bodies is the deliberate exception — see below.)
+- **Dependency & IP hygiene.** Don't paste code from sources with an incompatible or unknown
+  licence; prefer writing it, or a properly-attributed, licence-compatible dependency. Vet new
+  NuGet packages (popularity, maintenance, licence) before adding them, and keep the dependency
+  surface minimal. This repo is **MIT** — don't introduce text implying a different licence.
+- **Keep the ignore rules tight.** Before committing a new kind of generated or local file, confirm
+  it belongs in the repo. If it's a build artefact, a local cache, or could contain real paths, add
+  it to `.gitignore` instead.
 
 ## Agent attribution on GitHub content (mandatory)
 
@@ -140,7 +251,8 @@ request to **action that issue end-to-end** using the workflow below. (Bare `#<i
 The structural steps here (worktree, code review, merge mechanics) are **internal process**. They
 must **never** leak into anything world-readable — not the issue comment, commit messages, branch
 names, or code. Someone reading the issue should see only *what* changed and *why*, never the
-plumbing that produced it.
+plumbing that produced it. This is the
+[public-repository hygiene](#public-repository-hygiene-mandatory) rule applied to issue handling.
 
 **The workflow, in order:**
 
@@ -153,10 +265,9 @@ plumbing that produced it.
    expect `main` to have advanced while you worked.
 3. **Implement the fix under every engineering gate above** — G1–G5 in particular, plus the safety
    rules restated from the spec. A change that lands the issue but breaks a gate is not done.
-4. **Verify it works.** `dotnet build Deguffer.sln` and `dotnet test Deguffer.sln`. A change to the
-   safety model, a provider, or the planner needs a test that would fail without it — especially
-   the §5.6 negative check. Where the change has a runtime surface, drive it (the `verify` skill)
-   rather than trusting a green build.
+4. **Verify it works to the G8 bar** — the failing-first test, the §5.6 negative assertion, the
+   fakes rather than the real machine, and the runtime surface actually driven. An issue is not
+   fixed because the build is green.
 5. **Code review before committing.** Run `/code-review high` on the diff and **fix every confirmed
    finding** before proceeding. Re-verify after fixing, then commit inside the worktree.
 6. **Land it — by default, don't pause for approval.** The maintainer (@BootBlock) has standing
@@ -180,12 +291,11 @@ plumbing that produced it.
      if introducing it — state plainly what changed and why. For an issue filed by anyone else, a
      brief, neutral acknowledgement is fine. (The attribution trailer stays regardless of who
      filed it.)
-   - **No personally identifiable information about anyone — third parties *or* the maintainer.**
-     No real private email addresses, real names tied to private accounts, phone numbers, internal
-     hostnames or IP addresses. Use the public `@BootBlock` handle and `example.com` placeholders.
-     Deguffer's domain makes this sharper than usual: **never paste a real local filesystem path,
-     user profile name, or machine name** from a scan or a repro into an issue. Redact to
-     `C:\Users\<user>\…`.
+   - **No secrets, real paths, or personal data** — the
+     [no secrets or personal data](#no-secrets-or-personal-data-mandatory) rule applies to the
+     comment exactly as it applies to the tree. The trap specific to closing an issue is pasting a
+     repro or a scan result verbatim to show the fix working: redact every path to
+     `C:\Users\<user>\…` first, and check any attached screenshot for the same.
    - **No internal development process, strategy, or tooling.** Keep out worktree / code-review /
      branch / merge mechanics, internal test or file-tool names, CI details, and the agent's own
      reasoning. Describe the *what* and *why*, never the plumbing.
