@@ -135,12 +135,14 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>
     /// Planning enumerates directories synchronously before its first await, so it goes on a
     /// worker — otherwise the window is frozen on a cold volume and the progress ring never spins.
+    ///
+    /// §5.5: rows appear as each provider finishes rather than all at once at the end. Both
+    /// callbacks are <see cref="Progress{T}"/>, so the planner reports from the worker and they
+    /// arrive here on the UI thread; the dispatcher runs them in the order they were posted, which
+    /// is what lets the rows be built here and the totals in the continuation below.
     /// </summary>
     private async Task LoadPreviewAsync(CancellationToken ct)
     {
-        var progress = new Progress<string>(message => Status = message);
-        var findings = await Task.Run(() => _planner.PlanAllAsync(progress, ct), ct);
-
         foreach (var row in Findings)
         {
             row.PropertyChanged -= OnRowChanged;
@@ -148,15 +150,31 @@ public sealed partial class MainViewModel : ObservableObject
 
         Findings.Clear();
 
-        foreach (var finding in findings)
-        {
-            var row = new FindingViewModel(finding);
-            row.PropertyChanged += OnRowChanged;
-            Findings.Add(row);
-        }
+        var progress = new Progress<string>(message => Status = message);
+        var found = new Progress<Finding>(AddRowInSizeOrder);
+
+        await Task.Run(() => _planner.PlanAllAsync(progress, found, ct), ct);
 
         HasPreview = true;
         UpdateSelectionTotal();
+    }
+
+    /// <summary>
+    /// §7: sort by size. Inserting each row where it belongs keeps the list ordered while it is
+    /// still filling, rather than letting it reshuffle under the user once the last provider lands.
+    /// </summary>
+    private void AddRowInSizeOrder(Finding finding)
+    {
+        var row = new FindingViewModel(finding);
+        row.PropertyChanged += OnRowChanged;
+
+        var index = 0;
+        while (index < Findings.Count && Findings[index].Finding.EstimatedBytes >= finding.EstimatedBytes)
+        {
+            index++;
+        }
+
+        Findings.Insert(index, row);
     }
 
     /// <summary>

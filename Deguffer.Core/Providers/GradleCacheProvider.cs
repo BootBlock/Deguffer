@@ -35,11 +35,13 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     public GradleCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
-        IProcessInspector? inspector = null)
+        IProcessInspector? inspector = null,
+        IDirectoryScanner? scanner = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
-            inspector ?? ProcessInspector.Default)
+            inspector ?? ProcessInspector.Default,
+            scanner ?? DirectoryScanner.Default)
     {
         _root = Path.Combine(Environment.UserProfile, ".gradle");
     }
@@ -63,8 +65,8 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
-        var steps = new List<CleanupStep>();
         var notes = new List<PlanNote>();
+        var targets = new List<(string Path, string Reason)>();
 
         if (!LongPath.DirectoryExists(_root))
         {
@@ -90,13 +92,23 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             // Enumeration runs in extended form; a plan always holds display paths, and I/O
             // re-extends at the point of use. Keeping the prefix out of the plan means it never
             // reaches the UI, a log, or a comparison.
-            var path = LongPath.Display(child.FullName);
-            var bytes = await DirectorySizer.MeasureAsync(path, ct).ConfigureAwait(false);
+            targets.Add((LongPath.Display(child.FullName), classification.Reason));
+        }
 
-            steps.Add(new DeleteDirectoryStep(path, classification.Reason)
+        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
+
+        var steps = new List<CleanupStep>(targets.Count);
+        for (var i = 0; i < targets.Count; i++)
+        {
+            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
             {
-                EstimatedBytes = bytes,
+                Estimated = measured.Sizes[i],
             });
+        }
+
+        if (measured.Note is not null)
+        {
+            notes.Add(measured.Note);
         }
 
         if (BuildRunningProcessNote() is { } warning)

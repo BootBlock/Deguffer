@@ -19,11 +19,13 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
     public NuGetCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
-        IProcessInspector? inspector = null)
+        IProcessInspector? inspector = null,
+        IDirectoryScanner? scanner = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
-            inspector ?? ProcessInspector.Default)
+            inspector ?? ProcessInspector.Default,
+            scanner ?? DirectoryScanner.Default)
     {
     }
 
@@ -57,12 +59,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
             return EmptyPlan("The .NET SDK is installed but none of its NuGet cache locations exist yet.");
         }
 
-        long bytes = 0;
-        foreach (var location in present)
-        {
-            ct.ThrowIfCancellationRequested();
-            bytes += await DirectorySizer.MeasureAsync(location, ct).ConfigureAwait(false);
-        }
+        var measured = await MeasureAllAsync(present, ct).ConfigureAwait(false);
 
         var notes = new List<PlanNote>
         {
@@ -70,6 +67,11 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
                 "Cleared by NuGet itself, which reaches locations outside .nuget that a folder delete would miss: " +
                 string.Join(", ", present.Select(LongPath.Display))),
         };
+
+        if (measured.Note is not null)
+        {
+            notes.Add(measured.Note);
+        }
 
         if (BuildRunningProcessNote() is { } warning)
         {
@@ -86,7 +88,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
             [
                 new RunCommandStep(dotnet, "nuget locals all --clear", "Clear all NuGet caches using NuGet's own command")
                 {
-                    EstimatedBytes = bytes,
+                    Estimated = measured.Total,
                     MeasuredPaths = present,
                 },
             ],

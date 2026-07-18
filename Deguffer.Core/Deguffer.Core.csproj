@@ -12,6 +12,12 @@
     <RootNamespace>Deguffer.Core</RootNamespace>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!--
+      Required by [LibraryImport], which generates the marshalling for the one raw volume handle
+      the MFT scanner opens (§5.5). No hand-written unsafe code exists in this project.
+    -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
 </Project>

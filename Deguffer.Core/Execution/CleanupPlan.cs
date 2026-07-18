@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -8,8 +9,18 @@ public abstract record CleanupStep
     /// <summary>What the user is told this step will do.</summary>
     public abstract string Description { get; }
 
-    /// <summary>Bytes this step is expected to reclaim, measured at plan time.</summary>
-    public long EstimatedBytes { get; init; }
+    /// <summary>
+    /// What this step is expected to reclaim, measured at plan time.
+    ///
+    /// A <see cref="ScanSize"/> rather than a bare count because allocated and logical bytes are
+    /// legitimately different numbers on compressed and sparse trees, and because this is where
+    /// §5.4's second pair — reclaimed inside a virtual disk versus on the host — will belong when a
+    /// container provider arrives.
+    /// </summary>
+    public ScanSize Estimated { get; init; }
+
+    /// <summary>The single number to show and to subtract: what the volume actually gives back.</summary>
+    public long EstimatedBytes => Estimated.Reclaimable;
 }
 
 /// <summary>
@@ -82,6 +93,12 @@ public sealed record CleanupPlan
 
     /// <summary>Total reclaim estimated across all steps.</summary>
     public long EstimatedBytes => Steps.Sum(s => s.EstimatedBytes);
+
+    /// <summary>
+    /// The same total with both numbers intact, and with the approximation flag preserved: a plan
+    /// measured wholly or partly by the fallback walk cannot claim exact allocated sizes.
+    /// </summary>
+    public ScanSize Estimated => Steps.Aggregate(ScanSize.Zero, (total, step) => total + step.Estimated);
 
     /// <summary>A plan with no steps is a no-op — the toolchain is absent, or already clean.</summary>
     public bool IsEmpty => Steps.Count == 0;
