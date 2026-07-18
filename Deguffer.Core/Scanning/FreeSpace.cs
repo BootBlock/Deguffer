@@ -5,7 +5,13 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public static class FreeSpace
 {
-    /// <summary>Free bytes on the volume holding <paramref name="path"/>, or null if unknown.</summary>
+    private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB"];
+
+    /// <summary>
+    /// Free bytes on the volume holding <paramref name="path"/>, or null if unknown. Callers
+    /// supply the path from <c>IUserEnvironment</c> rather than this class reading the profile
+    /// location itself — Core does not touch <c>Environment.GetFolderPath</c>.
+    /// </summary>
     public static long? ForPath(string path)
     {
         try
@@ -15,22 +21,19 @@ public static class FreeSpace
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {
+            // An unavailable or disconnected volume is not an error worth surfacing; the UI
+            // shows a dash instead of a number.
             return null;
         }
     }
 
-    /// <summary>Free bytes on the volume holding the user profile — the drive that matters here.</summary>
-    public static long? ForUserProfile() =>
-        ForPath(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-
     /// <summary>Human-readable size, in the binary units a developer expects.</summary>
     public static string Format(long bytes)
     {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
         double value = Math.Abs(bytes);
         var unit = 0;
 
-        while (value >= 1024 && unit < units.Length - 1)
+        while (value >= 1024 && unit < Units.Length - 1)
         {
             value /= 1024;
             unit++;
@@ -39,6 +42,6 @@ public static class FreeSpace
         var sign = bytes < 0 ? "-" : string.Empty;
         var precision = unit >= 2 && value < 100 ? 1 : 0;
 
-        return $"{sign}{value.ToString($"F{precision}")} {units[unit]}";
+        return $"{sign}{value.ToString($"F{precision}")} {Units[unit]}";
     }
 }

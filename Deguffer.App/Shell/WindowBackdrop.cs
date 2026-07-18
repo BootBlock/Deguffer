@@ -15,22 +15,31 @@ namespace Deguffer.App.Shell;
 public sealed class WindowBackdrop
 {
     private readonly Window _window;
+    private readonly DesktopAcrylicBackdrop _acrylic = new();
+    private bool? _applied;
 
     public WindowBackdrop(Window window)
     {
         _window = window;
 
         // XAML raises a theme change when high contrast is switched on or off, which saves
-        // pumping WM_SETTINGCHANGE ourselves.
+        // pumping WM_SETTINGCHANGE ourselves. It also fires on every light/dark switch, hence
+        // the no-op guard in Apply.
         if (window.Content is FrameworkElement root)
         {
             root.ActualThemeChanged += (_, _) => Apply();
         }
     }
 
-    /// <summary>Whether the material is currently in use — decoration only, never information.</summary>
-    public bool IsAcrylicActive => _window.SystemBackdrop is DesktopAcrylicBackdrop;
+    public void Apply()
+    {
+        var wanted = !HighContrast.IsEnabled();
+        if (_applied == wanted)
+        {
+            return;
+        }
 
-    public void Apply() =>
-        _window.SystemBackdrop = HighContrast.IsEnabled() ? null : new DesktopAcrylicBackdrop();
+        _applied = wanted;
+        _window.SystemBackdrop = wanted ? _acrylic : null;
+    }
 }

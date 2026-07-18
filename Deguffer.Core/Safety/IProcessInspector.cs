@@ -13,12 +13,22 @@ public interface IProcessInspector
     /// currently running.
     /// </summary>
     IReadOnlyList<string> FindRunning(IEnumerable<string> names);
+
+    /// <summary>
+    /// Discard any cached snapshot. Called once at the start of a planning pass, so every
+    /// provider in that pass sees a consistent view of the machine without each one paying for
+    /// its own full process-table walk.
+    /// </summary>
+    void Invalidate();
 }
 
 /// <inheritdoc />
 public sealed class ProcessInspector : IProcessInspector
 {
     public static readonly ProcessInspector Default = new();
+
+    private readonly Lock _gate = new();
+    private HashSet<string>? _snapshot;
 
     public IReadOnlyList<string> FindRunning(IEnumerable<string> names)
     {
@@ -28,27 +38,50 @@ public sealed class ProcessInspector : IProcessInspector
             return [];
         }
 
-        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        wanted.IntersectWith(Snapshot());
+        return [.. wanted];
+    }
 
-        foreach (var process in Process.GetProcesses())
+    public void Invalidate()
+    {
+        lock (_gate)
         {
-            try
+            _snapshot = null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Process.GetProcesses"/> is a full-system snapshot and is far too expensive to
+    /// repeat once per provider.
+    /// </summary>
+    private HashSet<string> Snapshot()
+    {
+        lock (_gate)
+        {
+            if (_snapshot is not null)
             {
-                if (wanted.Contains(process.ProcessName))
+                return _snapshot;
+            }
+
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var process in Process.GetProcesses())
+            {
+                try
                 {
-                    found.Add(process.ProcessName);
+                    names.Add(process.ProcessName);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Exited between enumeration and inspection. Normal; skip it.
+                }
+                finally
+                {
+                    process.Dispose();
                 }
             }
-            catch (InvalidOperationException)
-            {
-                // The process exited between enumeration and inspection. Normal; skip it.
-            }
-            finally
-            {
-                process.Dispose();
-            }
-        }
 
-        return [.. found];
+            return _snapshot = names;
+        }
     }
 }

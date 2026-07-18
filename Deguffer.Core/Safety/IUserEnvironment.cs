@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Deguffer.Core.Safety;
 
 /// <summary>
@@ -15,6 +17,9 @@ public interface IUserEnvironment
     /// <summary><c>%APPDATA%</c>.</summary>
     string RoamingAppData { get; }
 
+    /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
+    string TempPath { get; }
+
     /// <summary>Resolve an executable on <c>PATH</c>, or null if it is not installed.</summary>
     string? FindExecutable(string command);
 }
@@ -24,40 +29,52 @@ public sealed class UserEnvironment : IUserEnvironment
 {
     public static readonly UserEnvironment Current = new();
 
+    private static readonly string[] PathExtensions =
+        (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
+        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static readonly string[] PathDirectories =
+        (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+        .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    // Resolving a command probes the filesystem across every PATH directory, and both
+    // IsPresentAsync and PlanAsync ask for the same tools. Memoised for the life of the process.
+    private readonly ConcurrentDictionary<string, string?> _resolved = new(StringComparer.OrdinalIgnoreCase);
+
     public string UserProfile { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     public string LocalAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
     public string RoamingAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
+    public string TempPath { get; } = Path.GetTempPath();
+
     public string? FindExecutable(string command)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
 
-        var extensions = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        var directories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        foreach (var directory in directories)
+        return _resolved.GetOrAdd(command, static name =>
         {
-            foreach (var candidate in Candidates(directory, command, extensions))
+            foreach (var directory in PathDirectories)
             {
-                if (LongPath.FileExists(candidate))
+                foreach (var candidate in Candidates(directory, name))
                 {
-                    return candidate;
+                    if (LongPath.FileExists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
-        }
 
-        return null;
+            return null;
+        });
     }
 
-    private static IEnumerable<string> Candidates(string directory, string command, string[] extensions)
+    private static IEnumerable<string> Candidates(string directory, string command)
     {
-        // A bad PATH entry is normal on a developer machine; skip it rather than failing the scan.
-        string? baseName;
+        // A malformed PATH entry is normal on a developer machine; skip it rather than failing
+        // the whole scan.
+        string baseName;
         try
         {
             baseName = Path.Combine(directory, command);
@@ -73,7 +90,7 @@ public sealed class UserEnvironment : IUserEnvironment
             yield break;
         }
 
-        foreach (var extension in extensions)
+        foreach (var extension in PathExtensions)
         {
             yield return baseName + extension;
         }

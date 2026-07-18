@@ -99,26 +99,13 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
     /// §5.2 and §5.6. NuGet.Config's location cannot be assumed — on the audited machine it lived
     /// under <c>%APPDATA%\NuGet</c> rather than beside the packages folder — so probe both.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths()
-    {
-        var candidates = new (string Path, string Reason)[]
-        {
-            (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
-                "User NuGet configuration, which may hold private feed credentials."),
-            (Path.Combine(Environment.UserProfile, ".nuget", "NuGet.Config"),
-                "The alternative NuGet.Config location — §5.2 says probe both."),
-            (Path.Combine(Environment.UserProfile, ".nuget"),
-                "The .nuget root itself must survive; only its cache contents are cleared."),
-        };
-
-        return
-        [
-            .. candidates.Select(c => new ProtectedPath(
-                c.Path,
-                c.Reason,
-                LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path))),
-        ];
-    }
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
+        (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
+            "User NuGet configuration, which may hold private feed credentials."),
+        (Path.Combine(Environment.UserProfile, ".nuget", "NuGet.Config"),
+            "The alternative NuGet.Config location — §5.2 says probe both."),
+        (Path.Combine(Environment.UserProfile, ".nuget"),
+            "The .nuget root itself must survive; only its cache contents are cleared."));
 
     /// <summary>
     /// Ask NuGet where its caches are. Output lines look like
@@ -161,15 +148,6 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
         Path.Combine(Environment.UserProfile, ".nuget", "packages"),
         Path.Combine(Environment.LocalAppData, "NuGet", "v3-cache"),
         Path.Combine(Environment.LocalAppData, "NuGet", "plugins-cache"),
-        Path.Combine(Path.GetTempPath(), "NuGetScratch"),
+        Path.Combine(Environment.TempPath, "NuGetScratch"),
     ];
-
-    private CleanupPlan EmptyPlan(string why) => new()
-    {
-        ProviderId = Id,
-        ProviderName = Name,
-        Tier = Tier,
-        WhatHappensOnNextUse = WhatHappensOnNextUse,
-        Notes = [new PlanNote(PlanNoteSeverity.Information, why)],
-    };
 }

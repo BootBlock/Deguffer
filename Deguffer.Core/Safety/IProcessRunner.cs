@@ -55,8 +55,14 @@ public sealed class ProcessRunner : IProcessRunner
         {
             process.Start();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
+                                      or InvalidOperationException
+                                      or PlatformNotSupportedException)
         {
+            // The tool is on PATH but could not be launched — a broken shim, a missing
+            // interpreter, a blocked executable. Report it as a failed step rather than taking
+            // the whole run down. Deliberately not a blanket catch: cancellation and
+            // out-of-memory must keep propagating.
             return new CommandOutcome(-1, string.Empty, ex.Message);
         }
 

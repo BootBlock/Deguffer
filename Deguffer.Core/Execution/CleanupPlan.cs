@@ -87,5 +87,6 @@ public sealed record CleanupPlan
     public bool IsEmpty => Steps.Count == 0;
 
     /// <summary>Every directory this plan would delete, for display and for tests.</summary>
-    public IEnumerable<string> TargetedPaths => Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path);
+    public IReadOnlyList<string> TargetedPaths =>
+        field ??= [.. Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path)];
 }

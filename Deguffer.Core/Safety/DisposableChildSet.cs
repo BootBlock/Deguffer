@@ -20,9 +20,6 @@ public sealed class DisposableChildSet
         _known = known.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>The children this set recognises, in declaration order.</summary>
-    public IReadOnlyCollection<ChildClassification> Known => _known.Values;
-
     /// <summary>
     /// Classify a child of the tool root. An unrecognised name is Tier 4 — never a guess,
     /// never a heuristic on the name.

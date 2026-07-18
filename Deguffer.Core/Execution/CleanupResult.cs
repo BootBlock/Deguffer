@@ -44,13 +44,14 @@ public sealed record VerificationResult
 {
     public IReadOnlyList<VerificationCheck> Checks { get; init; } = [];
 
-    public bool Passed => Checks.All(c => c.Passed);
+    /// <summary>Materialised once: every consumer reads it, and <see cref="Summary"/> counts it.</summary>
+    public IReadOnlyList<VerificationCheck> Failures => field ??= [.. Checks.Where(c => !c.Passed)];
 
-    public IEnumerable<VerificationCheck> Failures => Checks.Where(c => !c.Passed);
+    public bool Passed => Failures.Count == 0;
 
     public string Summary => Checks.Count == 0
         ? "Nothing to verify."
         : Passed
             ? $"All {Checks.Count} protected path(s) survived."
-            : $"{Failures.Count()} of {Checks.Count} protected path(s) did not survive.";
+            : $"{Failures.Count} of {Checks.Count} protected path(s) did not survive.";
 }

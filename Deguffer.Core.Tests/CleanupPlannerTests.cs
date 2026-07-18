@@ -1,10 +1,11 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
-public class CleanupPlannerTests
+public sealed class CleanupPlannerTests
 {
     [Fact]
     public async Task SortsFindingsBySizeSoTheBiggestCauseLeads()
@@ -14,7 +15,7 @@ public class CleanupPlannerTests
             new StubProvider("small", bytes: 1_000),
             new StubProvider("large", bytes: 9_000),
             new StubProvider("medium", bytes: 5_000),
-        ]);
+        ], FakeProcessInspector.NothingRunning);
 
         var findings = await planner.PlanAllAsync();
 
@@ -24,7 +25,8 @@ public class CleanupPlannerTests
     [Fact]
     public async Task AnAbsentToolchainYieldsAFindingWithNoPlanRatherThanBeingDropped()
     {
-        var planner = new CleanupPlanner([new StubProvider("absent", bytes: 0, present: false)]);
+        var planner = new CleanupPlanner(
+            [new StubProvider("absent", bytes: 0, present: false)], FakeProcessInspector.NothingRunning);
 
         var finding = Assert.Single(await planner.PlanAllAsync());
 
@@ -37,12 +39,42 @@ public class CleanupPlannerTests
     public async Task ExecuteSkipsFindingsWithNothingToDo()
     {
         var empty = new StubProvider("empty", bytes: 0);
-        var planner = new CleanupPlanner([empty]);
+        var planner = new CleanupPlanner([empty], FakeProcessInspector.NothingRunning);
 
         var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
 
         Assert.Empty(results);
         Assert.False(empty.WasExecuted);
+    }
+
+    [Theory]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    [InlineData(SafetyTier.DoNotTouch)]
+    public async Task RefusesToExecuteAnythingAboveTier1UntilTheConfirmationFlowExists(SafetyTier tier)
+    {
+        // Milestone 1 ships Tier 1 only. The guard is here so the first Tier 2/3 provider cannot
+        // silently inherit a path that deletes without the extra confirmation §7 requires.
+        var provider = new StubProvider("risky", bytes: 5_000, tier: tier);
+        var planner = new CleanupPlanner([provider], FakeProcessInspector.NothingRunning);
+
+        var findings = await planner.PlanAllAsync();
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => planner.ExecuteAsync(findings));
+        Assert.False(provider.WasExecuted);
+    }
+
+    [Fact]
+    public async Task TakesOneProcessSnapshotPerPlanningPassRatherThanOnePerProvider()
+    {
+        var inspector = FakeProcessInspector.NothingRunning;
+        var planner = new CleanupPlanner(
+            [new StubProvider("a", 1), new StubProvider("b", 2), new StubProvider("c", 3)],
+            inspector);
+
+        await planner.PlanAllAsync();
+
+        Assert.Equal(1, inspector.InvalidateCount);
     }
 
     [Fact]
@@ -54,7 +86,11 @@ public class CleanupPlannerTests
         Assert.All(planner.Providers, p => Assert.Equal(SafetyTier.RegenerableCache, p.Tier));
     }
 
-    private sealed class StubProvider(string id, long bytes, bool present = true) : ICleanupProvider
+    private sealed class StubProvider(
+        string id,
+        long bytes,
+        bool present = true,
+        SafetyTier tier = SafetyTier.RegenerableCache) : ICleanupProvider
     {
         public bool WasExecuted { get; private set; }
 
@@ -62,13 +98,11 @@ public class CleanupPlannerTests
 
         public string Name => id;
 
-        public SafetyTier Tier => SafetyTier.RegenerableCache;
+        public SafetyTier Tier => tier;
 
         public string WhatHappensOnNextUse => "Nothing.";
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(present);
-
-        public Task<long> EstimateBytesAsync(CancellationToken ct = default) => Task.FromResult(bytes);
 
         public Task<CleanupPlan> PlanAsync(CancellationToken ct = default) => Task.FromResult(new CleanupPlan
         {
