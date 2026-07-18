@@ -19,6 +19,11 @@
         2) System < Windows 10 Anniversary Update
       -->
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+
+      <!-- §6.3: NuGet and Node trees routinely exceed MAX_PATH, and a truncation there is a
+           silent partial deletion rather than an error. Deguffer.Core also prefixes every path
+           with \\?\ so it behaves correctly under a test host that has no manifest. -->
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
     </windowsSettings>
   </application>
 </assembly>

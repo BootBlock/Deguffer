@@ -91,3 +91,6 @@ Desktop.ini
 $RECYCLE.BIN/
 *.lnk
 .DS_Store
+
+# Drive.NET workspace artifacts
+.drive-net/

@@ -1,38 +1,126 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<Page
+<UserControl
     x:Class="Deguffer.App.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:Deguffer.App"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
-    <Page.Content>
-        <StackPanel
-            HorizontalAlignment="Center"
-            Spacing="25"
-            VerticalAlignment="Center">
-            <TextBlock
-                FontSize="24"
-                HorizontalAlignment="Center"
-                Style="{StaticResource MyLabel}"
-                Text="Hello, World!" />
-            <TextBlock
-                FontSize="20"
-                HorizontalAlignment="Center"
-                Style="{StaticResource MyLabel}"
-                Text="Welcome to WinUI 3!" />
-            <TextBlock
-                x:Name="txtCount"
-                FontSize="16"
-                HorizontalAlignment="Center"
-                Style="{StaticResource MyLabel}"
-                Text="Current count: 0" />
-            <Button
-                Click="OnCountClicked"
-                Content="Click Me"
-                HorizontalAlignment="Center"
-                Style="{StaticResource PrimaryAction}" />
+    xmlns:vm="using:Deguffer.App.ViewModels">
+
+    <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
+         sits on a Fluent layer brush and reads correctly on a flat solid background too. -->
+    <Grid Padding="16,0,16,16" RowSpacing="16" RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- §7: free space before and after, prominently. It is the only number the user came for. -->
+        <Border Grid.Row="0" Style="{StaticResource CardStyle}">
+            <StackPanel Orientation="Horizontal" Spacing="32">
+                <StackPanel>
+                    <TextBlock Text="Free space" Style="{StaticResource SecondaryText}" />
+                    <TextBlock Text="{x:Bind ViewModel.FreeSpaceBeforeLabel, Mode=OneWay}"
+                               Style="{StaticResource SectionHeading}" FontSize="28" />
+                </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="After cleaning" Style="{StaticResource SecondaryText}" />
+                    <TextBlock Text="{x:Bind ViewModel.FreeSpaceAfterLabel, Mode=OneWay}"
+                               Style="{StaticResource SectionHeading}" FontSize="28" />
+                </StackPanel>
+
+                <TextBlock Text="{x:Bind ViewModel.ReclaimedLabel, Mode=OneWay}"
+                           VerticalAlignment="Bottom"
+                           Margin="0,0,0,6"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="1"
+                   Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+                   Style="{StaticResource SecondaryText}" />
+
+        <!-- One row per named cause (§7), largest first. -->
+        <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.Findings, Mode=OneWay}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FindingViewModel">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,8">
+                            <Grid ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto">
+
+                                <CheckBox Grid.Column="0"
+                                          VerticalAlignment="Top"
+                                          MinWidth="0"
+                                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                          IsEnabled="{x:Bind CanBeSelected}"
+                                          AutomationProperties.Name="{x:Bind Name}" />
+
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{x:Bind Name}" Style="{StaticResource SectionHeading}" FontSize="16" />
+
+                                    <!-- Tier is text, never colour alone: it must read on a flat
+                                         background and in high contrast (§6.5). -->
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Border Background="{ThemeResource ControlAltFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,2">
+                                            <TextBlock Text="{x:Bind TierLabel}"
+                                                       FontSize="12"
+                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        </Border>
+                                        <TextBlock Text="{x:Bind StatusLabel}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   FontSize="12"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="13" />
+
+                                    <ItemsControl ItemsSource="{x:Bind Notes}" Margin="0,4,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}"
+                                                           Style="{StaticResource SecondaryText}"
+                                                           FontSize="12" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="{x:Bind ResultLabel, Mode=OneWay}"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                               Visibility="{x:Bind HasResult, Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind VerificationSummary, Mode=OneWay}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12"
+                                               Visibility="{x:Bind HasResult, Mode=OneWay}" />
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="2"
+                                           Text="{x:Bind SizeLabel}"
+                                           Style="{StaticResource SectionHeading}"
+                                           VerticalAlignment="Top" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- §7: the primary button previews. Deleting is a separate, deliberate second step. -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+            <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                          Width="20" Height="20" VerticalAlignment="Center" />
+            <TextBlock Text="{x:Bind ViewModel.SelectedTotalLabel, Mode=OneWay}"
+                       VerticalAlignment="Center"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            <Button Content="Preview"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Command="{x:Bind ViewModel.PreviewCommand}" />
+            <Button Content="Clean"
+                    Command="{x:Bind ViewModel.CleanCommand}" />
         </StackPanel>
-    </Page.Content>
-</Page>
+    </Grid>
+</UserControl>
