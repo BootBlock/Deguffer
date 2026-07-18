@@ -54,7 +54,28 @@ reader only ever fires for someone who happens to right-click the executable.
 - §6.3 already sets the policy — *"request elevation only for the fast scanner and for
   `C:\Windows\Temp`"* — so only the mechanism is missing.
 
-## 2. Two more Tier 1 providers
+## 2. Two more Tier 1 providers ✅ done
+
+**Outcome:** both landed, and §6.2's "one class plus tests" held — neither needed a change to
+`IDirectoryScanner`, `CleanupProviderBase`, or any safety type. The seam is right; the fourth and
+fifth providers cost one file each plus a line in `CleanupPlanner.CreateDefault`.
+
+Two things the audit's framing got wrong, both found before writing code:
+
+- **uv's target is not `%LOCALAPPDATA%\uv`.** That is uv's whole state directory: `tools` (CLI
+  tools installed with `uv tool install`) and `python` (managed interpreters) sit beside `cache`
+  under it. Deleting the root to reclaim the cache would uninstall them, so uv is a §5.1
+  command-based provider — `uv cache dir` to locate, `uv cache clean` to evict — with those
+  siblings named as protected paths. `--force` is deliberately not passed: it tells uv to ignore
+  its own in-use checks, and §5.3 prefers warning over overriding.
+- **cpptools reclaims `ipch` only.** The rest of the directory is one hex-named database directory
+  per workspace ever opened, and a hex name carries nothing that can be checked, so every one of
+  them is Tier 4 by construction. That leaves roughly 1.8 GB of the 6 GB unreachable — see item 5.
+
+`vscode-cpptools` exercised §5.2's `DisposableChildSet` as expected. Observed on the audited
+machine: 4.3 GB targeted for cpptools, 3.6 GB for uv.
+
+### The original reasoning
 
 Both from §4.2, both Tier 1, neither needing new safety machinery:
 
@@ -117,3 +138,22 @@ meaningfully larger piece of UI than anything the shell does today.
   made, which may be a better signal than a directory walk could afford.
 - **§8 question 4 — undo.** Still likely impossible at these sizes. If so, §7 should say so plainly
   rather than implying reversibility.
+
+## 5. Raised while doing item 2, not yet decided
+
+- **The cpptools workspace databases (~1.8 GB) are unreachable by name.** Recognising them needs
+  classification by *content* — a child holding nothing but `*.BROWSE.VC.DB*` — which is a genuine
+  extension to the §5.2 model rather than a wider name list, and so wants deciding rather than
+  assuming. The conservative reading is that it is a stronger check than a name match, not a weaker
+  one: it verifies what a directory *is* instead of trusting what it is called.
+- **`InvalidateCaches` does not clear memoised tool answers in `NpmCacheProvider` or
+  `NuGetCacheProvider`.** `UvCacheProvider` overrides it to drop its resolved cache directory,
+  because `UV_CACHE_DIR` can move between scans; the other two memoise the same way and keep a
+  stale answer across a rescan. Same three-line fix in each, not made here to keep this change to
+  its subject.
+- **The §6.3 long-path tests do not discriminate on a machine with `LongPathsEnabled` set.**
+  Established by removing `LongPath.Extended` from `DirectoryRemover` and watching the suite stay
+  green: .NET accepts >260-character paths without the `\\?\` prefix when that registry key is on,
+  so these tests can only fail on a machine without it. This affects the existing long-path tests
+  as much as the new one. Worth forcing the test process to opt out so the assertions have teeth
+  everywhere.

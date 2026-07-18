@@ -89,11 +89,13 @@ public sealed class CleanupPlannerTests
     }
 
     [Fact]
-    public void TheDefaultSetIsTheThreeVerifiedTier1Sources()
+    public void TheDefaultSetIsTheVerifiedTier1SourcesAndNothingAboveTier1()
     {
         var planner = CleanupPlanner.CreateDefault();
 
-        Assert.Equal(["nuget", "gradle", "npm"], planner.Providers.Select(p => p.Id));
+        Assert.Equal(
+            ["nuget", "gradle", "npm", "vscode-cpptools", "uv"],
+            planner.Providers.Select(p => p.Id));
         Assert.All(planner.Providers, p => Assert.Equal(SafetyTier.RegenerableCache, p.Tier));
     }
 
