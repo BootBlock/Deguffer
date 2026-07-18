@@ -1,6 +1,10 @@
 # Deguffer — specification
 
-> **Status:** 🟢 ACTIVE — the founding specification; no code written yet.
+> **Status:** 🟢 ACTIVE — the founding specification and the source of truth for the safety model.
+> Implementation is underway: `Deguffer.Core` carries the safety model, the planner/executor, and
+> the three Tier 1 providers (NuGet, npm, Gradle); `Deguffer.App` carries the WinUI 3 shell and the
+> preview-first flow. This document describes the intended design in full, not the current state of
+> the code — where they differ, the spec is the target.
 
 **Deguffer** is a small Windows utility — **C# 14 / .NET 10 / WinUI 3** — that finds and reclaims
 wasted disk space on a developer workstation, with a safety model good enough to trust unattended.
