@@ -38,6 +38,10 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
+    public int InvalidateCount { get; private set; }
+
     public string? FindExecutable(string command) =>
         _executables.TryGetValue(command, out var path) ? path : null;
+
+    public void Invalidate() => InvalidateCount++;
 }

@@ -53,19 +53,28 @@ public sealed class PlanExecutor(IProcessRunner runner)
     private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, CancellationToken ct)
     {
         // The "before" size was measured when the plan was built; re-walking a multi-gigabyte
-        // tree to learn the same number would double the cost of the operation.
+        // tree to learn it again would double the cost of the operation.
         var before = step.EstimatedBytes;
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
         var after = await MeasureAllAsync(step.MeasuredPaths, ct).ConfigureAwait(false);
+        var reclaimed = before - after;
+
+        // A negative delta means the tree grew between preview and clean — a build restoring
+        // packages in the background, most likely. Report what is actually still there rather
+        // than clamping to zero and claiming nothing was reclaimed.
+        var message = reclaimed < 0
+            ? $"{outcome.Message} (the cache grew since the preview; " +
+              $"{Scanning.FreeSpace.Format(after)} remains)"
+            : outcome.Message;
 
         return new StepOutcome(
             step.Description,
             outcome.Succeeded,
-            BytesReclaimed: Math.Max(0, before - after),
+            BytesReclaimed: Math.Max(0, reclaimed),
             Skipped: 0,
-            outcome.Message);
+            message);
     }
 
     private static async Task<StepOutcome> DeleteAsync(

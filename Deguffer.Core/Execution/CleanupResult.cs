@@ -44,10 +44,13 @@ public sealed record VerificationResult
 {
     public IReadOnlyList<VerificationCheck> Checks { get; init; } = [];
 
-    /// <summary>Materialised once: every consumer reads it, and <see cref="Summary"/> counts it.</summary>
-    public IReadOnlyList<VerificationCheck> Failures => field ??= [.. Checks.Where(c => !c.Passed)];
+    /// <summary>
+    /// Not cached in a backing field — this is a record, and <c>with</c> copies backing fields, so
+    /// a cache would outlive a change to <see cref="Checks"/>.
+    /// </summary>
+    public IReadOnlyList<VerificationCheck> Failures => [.. Checks.Where(c => !c.Passed)];
 
-    public bool Passed => Failures.Count == 0;
+    public bool Passed => Checks.All(c => c.Passed);
 
     public string Summary => Checks.Count == 0
         ? "Nothing to verify."

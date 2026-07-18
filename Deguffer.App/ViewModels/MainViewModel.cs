@@ -71,6 +71,9 @@ public sealed partial class MainViewModel : ObservableObject
         IsBusy = true;
         HasPreview = false;
 
+        // A previous run's figures describe a machine state this preview is about to replace.
+        ClearRunResult();
+
         try
         {
             await LoadPreviewAsync(ct);
@@ -112,7 +115,6 @@ public sealed partial class MainViewModel : ObservableObject
 
             // Re-plan rather than keeping the old rows: their sizes and "Ready to clean" labels
             // describe a machine that no longer exists.
-            HasPreview = false;
             await LoadPreviewAsync(ct);
         }
         catch (OperationCanceledException)
@@ -202,6 +204,13 @@ public sealed partial class MainViewModel : ObservableObject
         {
             CleanCancelCommand.Execute(null);
         }
+    }
+
+    private void ClearRunResult()
+    {
+        RemovedLabel = string.Empty;
+        FreeSpaceChangeLabel = string.Empty;
+        OnPropertyChanged(nameof(HasRunResult));
     }
 
     private bool CanRun() => !IsBusy;

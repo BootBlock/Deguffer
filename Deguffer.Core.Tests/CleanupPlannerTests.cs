@@ -15,7 +15,7 @@ public sealed class CleanupPlannerTests
             new StubProvider("small", bytes: 1_000),
             new StubProvider("large", bytes: 9_000),
             new StubProvider("medium", bytes: 5_000),
-        ], FakeProcessInspector.NothingRunning);
+        ]);
 
         var findings = await planner.PlanAllAsync();
 
@@ -26,7 +26,7 @@ public sealed class CleanupPlannerTests
     public async Task AnAbsentToolchainYieldsAFindingWithNoPlanRatherThanBeingDropped()
     {
         var planner = new CleanupPlanner(
-            [new StubProvider("absent", bytes: 0, present: false)], FakeProcessInspector.NothingRunning);
+            [new StubProvider("absent", bytes: 0, present: false)]);
 
         var finding = Assert.Single(await planner.PlanAllAsync());
 
@@ -39,7 +39,7 @@ public sealed class CleanupPlannerTests
     public async Task ExecuteSkipsFindingsWithNothingToDo()
     {
         var empty = new StubProvider("empty", bytes: 0);
-        var planner = new CleanupPlanner([empty], FakeProcessInspector.NothingRunning);
+        var planner = new CleanupPlanner([empty]);
 
         var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
 
@@ -56,25 +56,12 @@ public sealed class CleanupPlannerTests
         // Milestone 1 ships Tier 1 only. The guard is here so the first Tier 2/3 provider cannot
         // silently inherit a path that deletes without the extra confirmation §7 requires.
         var provider = new StubProvider("risky", bytes: 5_000, tier: tier);
-        var planner = new CleanupPlanner([provider], FakeProcessInspector.NothingRunning);
+        var planner = new CleanupPlanner([provider]);
 
         var findings = await planner.PlanAllAsync();
 
         await Assert.ThrowsAsync<NotSupportedException>(() => planner.ExecuteAsync(findings));
         Assert.False(provider.WasExecuted);
-    }
-
-    [Fact]
-    public async Task TakesOneProcessSnapshotPerPlanningPassRatherThanOnePerProvider()
-    {
-        var inspector = FakeProcessInspector.NothingRunning;
-        var planner = new CleanupPlanner(
-            [new StubProvider("a", 1), new StubProvider("b", 2), new StubProvider("c", 3)],
-            inspector);
-
-        await planner.PlanAllAsync();
-
-        Assert.Equal(1, inspector.InvalidateCount);
     }
 
     [Fact]
@@ -86,13 +73,30 @@ public sealed class CleanupPlannerTests
         Assert.All(planner.Providers, p => Assert.Equal(SafetyTier.RegenerableCache, p.Tier));
     }
 
+    [Fact]
+    public async Task InvalidatesEveryProviderBeforeAnyOfThemPlans()
+    {
+        // Ordering matters: invalidating inside the planning loop would throw away the machine
+        // snapshot the previous provider just paid for, since providers share collaborators.
+        List<string> journal = [];
+        var planner = new CleanupPlanner(
+            [new StubProvider("a", 1, journal: journal), new StubProvider("b", 2, journal: journal)]);
+
+        await planner.PlanAllAsync();
+
+        Assert.Equal(["invalidate:a", "invalidate:b", "plan:a", "plan:b"], journal);
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,
         bool present = true,
-        SafetyTier tier = SafetyTier.RegenerableCache) : ICleanupProvider
+        SafetyTier tier = SafetyTier.RegenerableCache,
+        List<string>? journal = null) : ICleanupProvider
     {
         public bool WasExecuted { get; private set; }
+
+        public void InvalidateCaches() => journal?.Add($"invalidate:{id}");
 
         public string Id => id;
 
@@ -104,14 +108,20 @@ public sealed class CleanupPlannerTests
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(present);
 
-        public Task<CleanupPlan> PlanAsync(CancellationToken ct = default) => Task.FromResult(new CleanupPlan
+        public Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+        {
+            journal?.Add($"plan:{id}");
+            return Task.FromResult(NewPlan());
+        }
+
+        private CleanupPlan NewPlan() => new()
         {
             ProviderId = id,
             ProviderName = id,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = bytes == 0 ? [] : [new RunCommandStep("tool", "clear", "Clear") { EstimatedBytes = bytes }],
-        });
+        };
 
         public Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default)
         {

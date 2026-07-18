@@ -87,9 +87,9 @@
                                     <!-- §7: nothing is deleted without a preview, so the exact
                                          steps are inspectable before the user confirms. -->
                                     <Expander Margin="0,4,0,0"
-                                              Visibility="{x:Bind CanBeSelected}"
+                                              Visibility="{x:Bind HasDetail}"
                                               HorizontalAlignment="Stretch"
-                                              Header="What this will do">
+                                              Header="{x:Bind DetailHeader}">
                                         <StackPanel Spacing="4">
                                             <ItemsControl ItemsSource="{x:Bind Steps}">
                                                 <ItemsControl.ItemTemplate>

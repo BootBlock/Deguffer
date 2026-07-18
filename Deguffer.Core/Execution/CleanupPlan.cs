@@ -86,7 +86,15 @@ public sealed record CleanupPlan
     /// <summary>A plan with no steps is a no-op — the toolchain is absent, or already clean.</summary>
     public bool IsEmpty => Steps.Count == 0;
 
-    /// <summary>Every directory this plan would delete, for display and for tests.</summary>
+    /// <summary>
+    /// Every directory this plan would delete, for display and for tests.
+    ///
+    /// Deliberately not cached in a backing field: this is a record, and a <c>with</c> expression
+    /// copies backing fields wholesale, so a cached list would survive a change to
+    /// <see cref="Steps"/> and quietly describe the wrong plan. This is the collection the safety
+    /// tests assert against, which makes it the last place a stale value is acceptable. Steps
+    /// number in the low single digits, so recomputing costs nothing.
+    /// </summary>
     public IReadOnlyList<string> TargetedPaths =>
-        field ??= [.. Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path)];
+        [.. Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path)];
 }

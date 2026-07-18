@@ -51,5 +51,13 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public IReadOnlyList<string> Notes { get; }
 
-    public bool HasNotes => Notes.Count > 0;
+    /// <summary>
+    /// Shown whenever there is anything to say — including for a tool with nothing to reclaim.
+    /// A provider that decided to leave children alone under §5.2 has recorded *why*, and that
+    /// reasoning is the audit trail; hiding it because the tool happens to be clean would throw
+    /// away the most useful thing Deguffer knows about it.
+    /// </summary>
+    public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
+
+    public string DetailHeader => Steps.Count > 0 ? "What this will do" : "What was left alone";
 }

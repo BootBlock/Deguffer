@@ -43,6 +43,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public abstract Task<bool> IsPresentAsync(CancellationToken ct = default);
 
+    public virtual void InvalidateCaches()
+    {
+        Environment.Invalidate();
+        Inspector.Invalidate();
+    }
+
     public abstract Task<CleanupPlan> PlanAsync(CancellationToken ct = default);
 
     public Task<CleanupResult> ExecuteAsync(

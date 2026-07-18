@@ -12,13 +12,8 @@ namespace Deguffer.Core.Execution;
 public sealed class CleanupPlanner
 {
     private readonly IReadOnlyList<ICleanupProvider> _providers;
-    private readonly IProcessInspector _inspector;
 
-    public CleanupPlanner(IEnumerable<ICleanupProvider> providers, IProcessInspector? inspector = null)
-    {
-        _providers = [.. providers];
-        _inspector = inspector ?? ProcessInspector.Default;
-    }
+    public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
     /// <summary>The Milestone 1 set: the three Tier 1 sources verified by hand in §4.1.</summary>
     public static CleanupPlanner CreateDefault() => new(
@@ -41,9 +36,14 @@ public sealed class CleanupPlanner
         IProgress<string>? status = null,
         CancellationToken ct = default)
     {
-        // One process-table snapshot for the whole pass, so every provider sees a consistent
-        // machine and only one full walk is paid for.
-        _inspector.Invalidate();
+        // Every provider drops its cached view of the machine before any of them plans. Doing
+        // this up front rather than per-provider matters: the providers share collaborators by
+        // default, so invalidating inside the loop would throw away the snapshot the previous
+        // provider just paid for.
+        foreach (var provider in _providers)
+        {
+            provider.InvalidateCaches();
+        }
 
         var findings = new List<Finding>(_providers.Count);
 

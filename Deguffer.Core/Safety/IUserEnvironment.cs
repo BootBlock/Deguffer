@@ -22,6 +22,12 @@ public interface IUserEnvironment
 
     /// <summary>Resolve an executable on <c>PATH</c>, or null if it is not installed.</summary>
     string? FindExecutable(string command);
+
+    /// <summary>
+    /// Discard cached lookups. Called at the start of a planning pass so a toolchain installed
+    /// while the app was open is picked up on the next preview.
+    /// </summary>
+    void Invalidate();
 }
 
 /// <inheritdoc />
@@ -38,7 +44,9 @@ public sealed class UserEnvironment : IUserEnvironment
         .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     // Resolving a command probes the filesystem across every PATH directory, and both
-    // IsPresentAsync and PlanAsync ask for the same tools. Memoised for the life of the process.
+    // IsPresentAsync and PlanAsync ask for the same tools. Memoised for the life of a planning
+    // pass — including negative results, which is why Invalidate exists: without it, a toolchain
+    // installed while the app is open would stay invisible for the rest of the session.
     private readonly ConcurrentDictionary<string, string?> _resolved = new(StringComparer.OrdinalIgnoreCase);
 
     public string UserProfile { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -48,6 +56,8 @@ public sealed class UserEnvironment : IUserEnvironment
     public string RoamingAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
     public string TempPath { get; } = Path.GetTempPath();
+
+    public void Invalidate() => _resolved.Clear();
 
     public string? FindExecutable(string command)
     {
