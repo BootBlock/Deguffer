@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -35,6 +36,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PreviewCommand))]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     public partial bool IsBusy { get; set; }
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
@@ -44,6 +46,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial long? FreeSpaceNow { get; set; }
+
+    /// <summary>
+    /// Whether to offer a relaunch as administrator. §5.5 made the slow scan observable; without
+    /// this the app diagnoses the problem and leaves the user to solve it by knowing to right-click
+    /// the executable.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanElevate { get; set; }
 
     /// <summary>
     /// §5.4: two different numbers, reported separately. What Deguffer measured itself removing,
@@ -150,13 +160,44 @@ public sealed partial class MainViewModel : ObservableObject
 
         Findings.Clear();
 
+        // Cleared up front, not just reassigned at the end: a preview that is cancelled or fails
+        // never reaches the assignment below, and a stale offer would advertise a speed-up for a
+        // scan whose rows have already been thrown away.
+        CanElevate = false;
+
         var progress = new Progress<string>(message => Status = message);
         var found = new Progress<Finding>(AddRowInSizeOrder);
 
         await Task.Run(() => _planner.PlanAllAsync(progress, found, ct), ct);
 
         HasPreview = true;
+        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));
         UpdateSelectionTotal();
+    }
+
+    /// <summary>
+    /// Raised once a replacement process is running and this one should stand down. An event rather
+    /// than a call to <c>Application.Exit</c> because deciding to elevate and ending the process are
+    /// different jobs (G2), and the second belongs to whoever owns the window.
+    /// </summary>
+    public event EventHandler? ReplacedByElevatedInstance;
+
+    /// <summary>
+    /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
+    /// and stands down. The new instance re-previews on launch — the button says "rescan", and
+    /// landing the user on an empty window to press Preview again would not be that.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRun))]
+    private void ElevateAndRescan()
+    {
+        if (!ElevatedRelaunch.TryRelaunch())
+        {
+            Status = "Deguffer is still running without administrator rights, so scans use the slower "
+                   + "directory walk. Everything else works exactly the same.";
+            return;
+        }
+
+        ReplacedByElevatedInstance?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

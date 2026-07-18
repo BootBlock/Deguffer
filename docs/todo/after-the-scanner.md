@@ -1,8 +1,8 @@
 # After the scanner — sequenced backlog
 
-> **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Nothing here is
-> started. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it
-> with a newer plan.
+> **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 and 1 are
+> done; 2 onwards are not started. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
+> exhausted, or supersede it with a newer plan.
 
 The §5.5 scanner (MFT fast path, observable fallback, cross-run size cache, progressive preview)
 landed on `feature/mft-scanner`. This is what follows, in the order it should be done and with the
@@ -11,7 +11,12 @@ guess at it.
 
 ---
 
-## 0. Blocking — verify the elevated MFT read
+## 0. Blocking — verify the elevated MFT read ✅ done
+
+**Outcome: it passed.** The volume handle opened, the geometry parsed, and the table was fully
+readable rather than refused; the index built over roughly 2.4M records in about five seconds and
+every provider resolved through the fast path with no fallback note and no approximate size. The
+reasoning below stands as the record of why the branch was held.
 
 **The fast path has never been executed.** Reading the MFT needs administrator rights, so every
 test covers it through a synthesised table and the `IMftSource` seam; the only thing exercised
@@ -26,7 +31,14 @@ Everything below assumes this passed. If it did not, fixing it supersedes all of
 
 ---
 
-## 1. Make the fast path reachable
+## 1. Make the fast path reachable ✅ done
+
+**Outcome:** the preview offers "Elevate and rescan" when — and only when — a scan fell back for
+want of rights. The relaunch carries a switch that re-previews on launch, so the button's promise to
+rescan is kept rather than leaving the user on an empty window. The decision itself lives in
+`ElevationOffer` in Core so it is provable without a WinUI host; the plan now carries its
+`FallbackReason` as data, because matching on the display sentence to decide this is how a reworded
+string silently disables the offer.
 
 **The scanner is unreachable on a default run.** §6.3 has the app running unelevated, so
 `VolumeMftSource.TryOpen` returns `NotElevated` and every user takes the slow walk. The UI now

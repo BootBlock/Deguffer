@@ -106,9 +106,9 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             });
         }
 
-        if (measured.Note is not null)
+        if (measured.Note is { } scanNote)
         {
-            notes.Add(measured.Note);
+            notes.Add(scanNote);
         }
 
         if (BuildRunningProcessNote() is { } warning)
@@ -125,6 +125,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = BuildProtectedPaths(),
             Notes = notes,
+            Fallback = measured.Fallback,
         };
     }
 

@@ -91,6 +91,15 @@ public sealed record CleanupPlan
 
     public IReadOnlyList<PlanNote> Notes { get; init; } = [];
 
+    /// <summary>
+    /// Which route measured this plan's paths. <see cref="FallbackReason.None"/> for a plan with
+    /// nothing to measure, which is correct: an empty plan gives the user no reason to elevate.
+    ///
+    /// The matching sentence is already in <see cref="Notes"/>; this is the same fact in a form the
+    /// UI can act on, because "would elevating help here?" is a decision, not a sentence.
+    /// </summary>
+    public FallbackReason Fallback { get; init; } = FallbackReason.None;
+
     /// <summary>Total reclaim estimated across all steps.</summary>
     public long EstimatedBytes => Steps.Sum(s => s.EstimatedBytes);
 

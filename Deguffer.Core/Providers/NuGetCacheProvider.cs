@@ -68,9 +68,9 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
                 string.Join(", ", present.Select(LongPath.Display))),
         };
 
-        if (measured.Note is not null)
+        if (measured.Note is { } scanNote)
         {
-            notes.Add(measured.Note);
+            notes.Add(scanNote);
         }
 
         if (BuildRunningProcessNote() is { } warning)
@@ -94,6 +94,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
             ],
             ProtectedPaths = BuildProtectedPaths(),
             Notes = notes,
+            Fallback = measured.Fallback,
         };
     }
 

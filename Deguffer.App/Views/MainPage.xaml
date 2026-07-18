@@ -135,6 +135,13 @@
                            VerticalAlignment="Center"
                            FontWeight="SemiBold"
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <!-- §5.5's fallback note diagnoses a slow scan; this is the remedy beside it.
+                     Hidden entirely when elevating would not help, so it never offers
+                     administrator rights for a problem they cannot fix. -->
+                <Button Content="Elevate and rescan"
+                        Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
+                        AutomationProperties.HelpText="Restart Deguffer as administrator and scan again using the file table, which is faster." />
                 <Button Content="Cancel"
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                         Command="{x:Bind ViewModel.CancelCommand}" />
