@@ -1,3 +1,5 @@
+<img src="assets/banner.svg" alt="" width="600">
+
 # Deguffer
 
 A Windows utility that finds and reclaims wasted disk space on a developer workstation, with a

@@ -43,6 +43,9 @@
 
         <Platforms>x86;x64;ARM64</Platforms>
         <ApplicationManifest>app.manifest</ApplicationManifest>
+
+        <!-- Regenerate with scripts/generate-deguffer-icon.ps1; assets/Deguffer.svg is the source. -->
+        <ApplicationIcon>Assets\Deguffer.ico</ApplicationIcon>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     </PropertyGroup>
@@ -55,5 +58,9 @@
         <ProjectReference Include="..\Deguffer.Core\Deguffer.Core.csproj" />
 
         <Manifest Include="$(ApplicationManifest)" />
+
+        <!-- The window icon is set from the file at runtime, so it has to reach the output. -->
+        <Content Include="Assets\Deguffer.ico" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets\Deguffer-256.png" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

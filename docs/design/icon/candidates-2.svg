@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 620" width="1120" height="620">
+  <title>Deguffer icon candidates — second sheet</title>
+
+  <defs>
+    <!-- Gradient families taken from the maintainer's existing application icons. -->
+    <linearGradient id="cool" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FCD34D"/><stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+    <linearGradient id="fresh" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A3E635"/><stop offset="1" stop-color="#0D9488"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FB923C"/><stop offset="1" stop-color="#DC2626"/>
+    </linearGradient>
+    <linearGradient id="spectrum" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F43F5E"/><stop offset="0.25" stop-color="#FBBF24"/>
+      <stop offset="0.5" stop-color="#4ADE80"/><stop offset="0.75" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+
+    <pattern id="checker2" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#1b1d23"/>
+      <rect width="12" height="12" fill="#22252d"/>
+      <rect x="12" y="12" width="12" height="12" fill="#22252d"/>
+    </pattern>
+  </defs>
+
+  <rect width="1120" height="620" fill="url(#checker2)"/>
+  <text x="40" y="52" font-family="Segoe UI, sans-serif" font-size="24" font-weight="600" fill="#e8eaf0">Deguffer — icon candidates, sheet 2</text>
+  <text x="40" y="78" font-family="Segoe UI, sans-serif" font-size="14" fill="#9aa1b1">Gradients restricted to the existing icon-set families: cool, warm, fresh, hot, spectrum.</text>
+
+  <!-- ================= Row 1 ================= -->
+
+  <!-- 11. Bin, lid lifting -->
+  <g transform="translate(60,120)">
+    <g fill="url(#hot)">
+      <path d="M30 40 h68 l-7 66 a10 10 0 0 1 -10 9 H47 a10 10 0 0 1 -10 -9 Z"/>
+      <rect x="18" y="18" width="92" height="14" rx="7" transform="rotate(-8 64 25)"/>
+      <rect x="54" y="4" width="22" height="10" rx="5" transform="rotate(-8 65 9)"/>
+    </g>
+    <g fill="#12141a" opacity="0.35">
+      <rect x="50" y="56" width="8" height="42" rx="4"/>
+      <rect x="70" y="56" width="8" height="42" rx="4"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">11 · Bin</text>
+  </g>
+
+  <!-- 12. Dustpan and sweep -->
+  <g transform="translate(272,120)">
+    <g fill="url(#cool)">
+      <path d="M8 58 H104 L92 100 a10 10 0 0 1 -10 8 H30 a10 10 0 0 1 -10 -8 Z"/>
+      <rect x="98" y="34" width="15" height="30" rx="7" transform="rotate(28 105 49)"/>
+    </g>
+    <g stroke="url(#cool)" stroke-width="9" stroke-linecap="round" fill="none">
+      <path d="M24 44 L34 28 M50 38 L58 18 M76 44 L86 30"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">12 · Dustpan</text>
+  </g>
+
+  <!-- 13. Bold broom, simplified for small sizes -->
+  <g transform="translate(484,120)">
+    <g fill="url(#fresh)">
+      <rect x="82" y="4" width="15" height="52" rx="7" transform="rotate(38 89 30)"/>
+      <path d="M62 44 L92 74 L44 116 a10 10 0 0 1 -14 0 L20 106 a10 10 0 0 1 0 -14 Z"/>
+    </g>
+    <g stroke="#12141a" stroke-width="7" opacity="0.35" stroke-linecap="round">
+      <path d="M40 66 L68 92 M28 82 L54 106"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">13 · Broom (bold)</text>
+  </g>
+
+  <!-- 14. Usage ring with a wedge freed -->
+  <g transform="translate(696,120)">
+    <g fill="none" stroke-linecap="round">
+      <path d="M64 16 a48 48 0 1 1 -34 82" stroke="url(#warm)" stroke-width="18"/>
+      <path d="M30 98 a48 48 0 0 1 -6 -60" stroke="url(#warm)" stroke-width="18" opacity="0.28"/>
+      <circle cx="64" cy="64" r="14" fill="url(#warm)" stroke="none"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">14 · Usage ring</text>
+  </g>
+
+  <!-- 15. Layers, top sheet lifting away -->
+  <g transform="translate(908,120)">
+    <g fill="url(#spectrum)">
+      <path d="M64 74 L14 98 L64 122 L114 98 Z"/>
+      <path d="M64 46 L14 70 L64 94 L114 70 Z" opacity="0.85"/>
+      <path d="M64 6 L20 28 L64 50 L108 28 Z" opacity="0.62"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">15 · Layers</text>
+  </g>
+
+  <!-- ================= Row 2 ================= -->
+
+  <!-- 16. Squeegee streak -->
+  <g transform="translate(60,360)">
+    <g fill="url(#cool)" transform="rotate(-16 64 58)">
+      <rect x="14" y="66" width="100" height="20" rx="9"/>
+      <rect x="57" y="16" width="14" height="52" rx="7"/>
+    </g>
+    <g stroke="url(#cool)" stroke-width="9" stroke-linecap="round" opacity="0.5" fill="none">
+      <path d="M20 100 H92 M32 118 H108"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">16 · Squeegee</text>
+  </g>
+
+  <!-- 17. Space returned to a tray -->
+  <g transform="translate(272,360)">
+    <g fill="url(#fresh)">
+      <path d="M12 74 h26 a8 8 0 0 1 8 8 a18 18 0 0 0 36 0 a8 8 0 0 1 8 -8 h26 v26 a12 12 0 0 1 -12 12 H24 a12 12 0 0 1 -12 -12 Z"/>
+      <rect x="55" y="4" width="18" height="34" rx="8"/>
+      <path d="M64 62 L38 34 h52 Z"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">17 · Reclaimed</text>
+  </g>
+
+  <!-- 18. Foam -->
+  <g transform="translate(484,360)">
+    <g fill="url(#cool)">
+      <circle cx="46" cy="84" r="30"/>
+      <circle cx="86" cy="94" r="20" opacity="0.8"/>
+      <circle cx="80" cy="46" r="24" opacity="0.62"/>
+      <circle cx="38" cy="34" r="14" opacity="0.45"/>
+      <circle cx="106" cy="24" r="9" opacity="0.3"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">18 · Foam</text>
+  </g>
+
+  <!-- 19. Size falling away -->
+  <g transform="translate(696,360)">
+    <g fill="none" stroke="url(#warm)" stroke-linecap="round" stroke-linejoin="round" stroke-width="15">
+      <path d="M22 20 L64 58 L106 20"/>
+      <path d="M22 62 L64 100 L106 62" opacity="0.6"/>
+    </g>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">19 · Falling size</text>
+  </g>
+
+  <!-- 20. D cut by a sweep -->
+  <g transform="translate(908,360)">
+    <path d="M20 10 H58 a54 54 0 0 1 0 108 H20 Z M44 34 H58 a30 30 0 0 1 0 60 H44 Z"
+          fill="url(#hot)" fill-rule="evenodd"/>
+    <path d="M104 6 C107 26 112 32 126 34 C112 36 107 42 104 62 C101 42 96 36 82 34 C96 32 101 26 104 6 Z"
+          fill="url(#hot)"/>
+    <text x="64" y="150" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#9aa1b1">20 · D + sweep</text>
+  </g>
+</svg>
