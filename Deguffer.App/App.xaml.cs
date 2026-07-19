@@ -1,5 +1,6 @@
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 
@@ -9,7 +10,17 @@ public partial class App : Application
 {
     private Window? _window;
 
-    public App() => InitializeComponent();
+    public App()
+    {
+        // Before InitializeComponent: XAML parsing runs framework callbacks of its own, and a
+        // fault there is exactly the one with no other record.
+        FaultReporting.Attach(this, Faults);
+
+        InitializeComponent();
+    }
+
+    /// <summary>Where an unhandled exception is recorded before the process ends.</summary>
+    public static CrashLog Faults { get; } = new(UserEnvironment.Current);
 
     /// <summary>
     /// Settings, read once at startup and shared by the window and every page. There is no
