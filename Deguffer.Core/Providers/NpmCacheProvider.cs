@@ -48,6 +48,17 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("npm") is not null);
 
+    /// <summary>
+    /// npm's cache location is configuration, not a constant — <c>npm config set cache</c> and the
+    /// <c>npm_config_cache</c> environment variable both move it. Keeping the resolved answer across
+    /// an invalidation would measure a directory npm has stopped using.
+    /// </summary>
+    public override void InvalidateCaches()
+    {
+        _resolvedCacheDirectory = null;
+        base.InvalidateCaches();
+    }
+
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
         var npm = Environment.FindExecutable("npm");

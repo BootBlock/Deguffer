@@ -43,6 +43,18 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("dotnet") is not null);
 
+    /// <summary>
+    /// The locals NuGet reports are configuration — <c>NUGET_PACKAGES</c>, <c>NUGET_HTTP_CACHE_PATH</c>
+    /// and a <c>NuGet.Config</c> edit all move them, and a globalPackagesFolder can change between one
+    /// scan and the next. Keeping the resolved list across an invalidation would measure locations
+    /// NuGet has stopped using and miss the ones it now does.
+    /// </summary>
+    public override void InvalidateCaches()
+    {
+        _resolvedLocals = null;
+        base.InvalidateCaches();
+    }
+
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
         var dotnet = Environment.FindExecutable("dotnet");
