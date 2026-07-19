@@ -24,6 +24,15 @@ public interface IUserEnvironment
     string? FindExecutable(string command);
 
     /// <summary>
+    /// Read an environment variable, or null if it is unset.
+    ///
+    /// Exists because several tools relocate their cache through one — <c>PLAYWRIGHT_BROWSERS_PATH</c>
+    /// is the first — and §5.2's "never assume a location" applies to the root just as much as to the
+    /// children beneath it.
+    /// </summary>
+    string? GetEnvironmentVariable(string name);
+
+    /// <summary>
     /// Discard cached lookups. Called at the start of a planning pass so a toolchain installed
     /// while the app was open is picked up on the next preview.
     /// </summary>
@@ -58,6 +67,15 @@ public sealed class UserEnvironment : IUserEnvironment
     public string TempPath { get; } = Path.GetTempPath();
 
     public void Invalidate() => _resolved.Clear();
+
+    // Deliberately not memoised: a process environment read is a dictionary lookup, so caching it
+    // would buy nothing and add a second thing for Invalidate to get wrong.
+    public string? GetEnvironmentVariable(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        return Environment.GetEnvironmentVariable(name);
+    }
 
     public string? FindExecutable(string command)
     {

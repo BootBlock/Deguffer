@@ -16,9 +16,12 @@ public sealed class CleanupPlanner
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2. Tier 1 throughout except PlatformIO, which is
-    /// Tier 2 and therefore offered but never pre-selected, and never executed without §7's
-    /// confirmation.
+    /// The sources verified by hand in §4.1 and §4.2, plus pip and Playwright — which the audit did
+    /// not cover, and which were investigated on their own terms before being added. Their reasoning
+    /// and their rejected alternatives are in <c>docs/cache-locations.md</c>.
+    ///
+    /// Tier 1 throughout except PlatformIO and Playwright, which are Tier 2 and therefore offered but
+    /// never pre-selected, and never executed without §7's confirmation.
     /// </summary>
     public static CleanupPlanner CreateDefault() => new(
     [
@@ -27,7 +30,9 @@ public sealed class CleanupPlanner
         new NpmCacheProvider(),
         new VsCodeCppToolsCacheProvider(),
         new UvCacheProvider(),
+        new PipCacheProvider(),
         new PlatformIoCacheProvider(),
+        new PlaywrightBrowsersProvider(),
     ]);
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
