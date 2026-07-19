@@ -16,17 +16,27 @@ public sealed record RemovalOutcome(long BytesReclaimed, int Skipped, bool RootR
 /// </summary>
 public static class DirectoryRemover
 {
+    /// <param name="fileSystem">
+    /// Defaults to the real filesystem. Injectable so a test can assert that every path crossing
+    /// the boundary is in extended-length form — see <see cref="IFileSystem"/> for why the outcome
+    /// of a removal cannot prove that on its own.
+    /// </param>
     public static Task<RemovalOutcome> RemoveAsync(
         string path,
         IProgress<double>? progress = null,
-        CancellationToken ct = default) =>
-        Task.Run(() => Remove(path, progress, ct), ct);
+        CancellationToken ct = default,
+        IFileSystem? fileSystem = null) =>
+        Task.Run(() => Remove(path, progress, fileSystem ?? WindowsFileSystem.Default, ct), ct);
 
-    private static RemovalOutcome Remove(string path, IProgress<double>? progress, CancellationToken ct)
+    private static RemovalOutcome Remove(
+        string path,
+        IProgress<double>? progress,
+        IFileSystem fs,
+        CancellationToken ct)
     {
         var extended = LongPath.Extended(path);
 
-        if (!Directory.Exists(extended))
+        if (!fs.DirectoryExists(extended))
         {
             return new RemovalOutcome(0, 0, RootRemoved: true);
         }
@@ -36,7 +46,7 @@ public static class DirectoryRemover
         // leave us deleting a partially-understood tree.
         var directories = new List<string>();
         var files = new List<(string Path, long Length)>();
-        Gather(extended, directories, files, ct);
+        Gather(extended, directories, files, fs, ct);
 
         long reclaimed = 0;
         var skipped = 0;
@@ -51,7 +61,7 @@ public static class DirectoryRemover
 
         Parallel.ForEach(files, options, file =>
         {
-            if (TryDeleteFile(file.Path))
+            if (TryDeleteFile(file.Path, fs))
             {
                 Interlocked.Add(ref reclaimed, file.Length);
             }
@@ -74,28 +84,29 @@ public static class DirectoryRemover
         foreach (var directory in directories.OrderByDescending(d => d.Length))
         {
             ct.ThrowIfCancellationRequested();
-            TryDeleteDirectory(directory);
+            TryDeleteDirectory(directory, fs);
         }
 
         progress?.Report(1.0);
 
         // The root is in `directories`, so the loop above has already attempted it.
-        return new RemovalOutcome(reclaimed, skipped, RootRemoved: !Directory.Exists(extended));
+        return new RemovalOutcome(reclaimed, skipped, RootRemoved: !fs.DirectoryExists(extended));
     }
 
     private static void Gather(
         string extendedDirectory,
         List<string> directories,
         List<(string, long)> files,
+        IFileSystem fs,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         directories.Add(extendedDirectory);
 
-        IEnumerable<FileSystemInfo> entries;
+        IReadOnlyList<FileSystemEntry> entries;
         try
         {
-            entries = new DirectoryInfo(extendedDirectory).EnumerateFileSystemInfos().ToList();
+            entries = fs.EnumerateEntries(extendedDirectory);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
@@ -105,38 +116,38 @@ public static class DirectoryRemover
 
         foreach (var entry in entries)
         {
-            if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if (entry.IsReparsePoint)
             {
                 // Never follow a junction or symlink: deletion would escape the target tree.
                 // Remove the link itself and stop there.
-                if (entry is DirectoryInfo)
+                if (entry.IsDirectory)
                 {
-                    TryDeleteDirectory(entry.FullName);
+                    TryDeleteDirectory(entry.FullName, fs);
                 }
                 else
                 {
-                    TryDeleteFile(entry.FullName);
+                    TryDeleteFile(entry.FullName, fs);
                 }
 
                 continue;
             }
 
-            if (entry is FileInfo file)
+            if (entry.IsDirectory)
             {
-                files.Add((file.FullName, file.Length));
+                Gather(entry.FullName, directories, files, fs, ct);
             }
             else
             {
-                Gather(entry.FullName, directories, files, ct);
+                files.Add((entry.FullName, entry.Length));
             }
         }
     }
 
-    private static bool TryDeleteFile(string extendedPath)
+    private static bool TryDeleteFile(string extendedPath, IFileSystem fs)
     {
         try
         {
-            File.Delete(extendedPath);
+            fs.DeleteFile(extendedPath);
             return true;
         }
         catch (UnauthorizedAccessException)
@@ -144,8 +155,8 @@ public static class DirectoryRemover
             // Commonly just the read-only bit — package manager caches set it liberally.
             try
             {
-                File.SetAttributes(extendedPath, FileAttributes.Normal);
-                File.Delete(extendedPath);
+                fs.ClearAttributes(extendedPath);
+                fs.DeleteFile(extendedPath);
                 return true;
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
@@ -168,11 +179,11 @@ public static class DirectoryRemover
         }
     }
 
-    private static void TryDeleteDirectory(string extendedPath)
+    private static void TryDeleteDirectory(string extendedPath, IFileSystem fs)
     {
         try
         {
-            Directory.Delete(extendedPath, recursive: false);
+            fs.DeleteDirectory(extendedPath);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
         {
