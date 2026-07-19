@@ -164,18 +164,22 @@
                                             <StackPanel Spacing="6">
                                                 <!-- §4.3 and §7: per-workspace data is pruned one
                                                      item at a time, and age drives that choice more
-                                                     than size does. The age and size columns are
-                                                     fixed-width rather than Auto because WinUI 3
-                                                     has no SharedSizeGroup — each row builds its
-                                                     own Grid, so Auto columns come out ragged
-                                                     between rows once anything sits to their
-                                                     right. -->
+                                                     than size does, so the two figures sit together
+                                                     in one right-hand stack rather than in columns
+                                                     of their own. That stack is fixed-width rather
+                                                     than Auto because WinUI 3 has no
+                                                     SharedSizeGroup — each row builds its own Grid,
+                                                     so Auto columns come out ragged between rows
+                                                     once anything sits to their right. Stacking
+                                                     also means the steps that carry no age (a whole
+                                                     cache has none) cost the description no width
+                                                     for a cell they never fill. -->
                                                 <ItemsControl ItemsSource="{x:Bind Steps}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="vm:StepViewModel">
                                                             <Grid ColumnSpacing="10"
                                                                   Margin="0,1"
-                                                                  ColumnDefinitions="Auto,*,72,80">
+                                                                  ColumnDefinitions="Auto,*,80">
 
                                                                 <!-- Hidden when the finding has only
                                                                      one step: that step is the whole
@@ -198,29 +202,34 @@
                                                                            IsTextSelectionEnabled="True"
                                                                            FontSize="12" />
 
-                                                                <!-- Text, never colour alone (§6.5):
-                                                                     an age indicator reduced to a
-                                                                     coloured dot breaks the same
-                                                                     rule the tier chip exists to
-                                                                     respect. -->
-                                                                <!-- No AutomationProperties.Name here: setting one
-                                                                     replaces what a screen reader announces, so
-                                                                     naming the column "Last written" would read the
-                                                                     heading aloud and never the age itself. The text
-                                                                     is already the value, and it says "ago" — it
-                                                                     carries its own meaning without a label. -->
-                                                                <TextBlock Grid.Column="2"
-                                                                           Text="{x:Bind AgeLabel}"
-                                                                           Visibility="{x:Bind HasAge}"
-                                                                           Style="{StaticResource SecondaryText}"
-                                                                           TextAlignment="Right"
-                                                                           FontSize="12" />
+                                                                <StackPanel Grid.Column="2"
+                                                                            VerticalAlignment="Top">
+                                                                    <!-- Size leads so it lands on the
+                                                                         same line as the first line
+                                                                         of the description on every
+                                                                         row, age or no age. -->
+                                                                    <TextBlock Text="{x:Bind SizeLabel}"
+                                                                               Style="{StaticResource SecondaryText}"
+                                                                               TextAlignment="Right"
+                                                                               FontSize="12" />
 
-                                                                <TextBlock Grid.Column="3"
-                                                                           Text="{x:Bind SizeLabel}"
-                                                                           Style="{StaticResource SecondaryText}"
-                                                                           TextAlignment="Right"
-                                                                           FontSize="12" />
+                                                                    <!-- Text, never colour alone (§6.5):
+                                                                         an age indicator reduced to a
+                                                                         coloured dot breaks the same
+                                                                         rule the tier chip exists to
+                                                                         respect. -->
+                                                                    <!-- No AutomationProperties.Name here: setting one
+                                                                         replaces what a screen reader announces, so
+                                                                         naming the value "Last written" would read the
+                                                                         heading aloud and never the age itself. The text
+                                                                         is already the value, and it says "ago" — it
+                                                                         carries its own meaning without a label. -->
+                                                                    <TextBlock Text="{x:Bind AgeLabel}"
+                                                                               Visibility="{x:Bind HasAge}"
+                                                                               Style="{StaticResource SecondaryText}"
+                                                                               TextAlignment="Right"
+                                                                               FontSize="12" />
+                                                                </StackPanel>
                                                             </Grid>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
