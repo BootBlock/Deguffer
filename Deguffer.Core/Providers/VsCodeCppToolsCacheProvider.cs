@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -13,14 +14,16 @@ namespace Deguffer.Core.Providers;
 /// this is the path-based case, like Gradle.
 ///
 /// The directory holds <c>ipch</c> alongside one hex-named directory per workspace ever opened.
-/// Only <c>ipch</c> is recognised: a hex name carries no meaning that can be checked, and §5.2's
-/// dangerous direction is treating an unknown thing as safe.
+/// <c>ipch</c> is recognised by name. The workspace directories cannot be — a hex name carries no
+/// meaning that can be checked — so they are recognised by their contents instead, which is a
+/// stronger test rather than a wider one. Anything matching neither is Tier 4 by construction,
+/// because §5.2's dangerous direction is treating an unknown thing as safe.
 /// </summary>
-public sealed class VsCodeCppToolsCacheProvider : CleanupProviderBase
+public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
 {
     /// <summary>
-    /// The only child of the cpptools directory this provider recognises. Anything else — every
-    /// hex-named workspace database directory included — is Tier 4 by construction.
+    /// The only child of the cpptools directory recognised <em>by name</em>. Anything else is Tier 4
+    /// unless it can be recognised by its contents instead — see <see cref="WorkspaceDatabase"/>.
     /// </summary>
     public static readonly DisposableChildSet DisposableChildren = new(
     [
@@ -29,6 +32,31 @@ public sealed class VsCodeCppToolsCacheProvider : CleanupProviderBase
             SafetyTier.RegenerableCache,
             "Precompiled headers used only to speed up IntelliSense. The extension rebuilds them."),
     ]);
+
+    /// <summary>
+    /// The browse database and its SQLite sidecars, plus the numbered variant that appears beside
+    /// them (<c>.BROWSE.VC.2.DB</c>). Only the suffix is matched: the leading part of the filename
+    /// derives from the workspace and is user-overridable via
+    /// <c>C_Cpp.default.browse.databaseFilename</c>, so it may be anything at all — including
+    /// empty, which is why the name can begin with the dot.
+    ///
+    /// Anchored with <c>\z</c> rather than <c>$</c>: <c>$</c> also matches before a trailing
+    /// newline, and a check that decides whether a directory may be deleted should admit no such
+    /// reading.
+    /// </summary>
+    [GeneratedRegex(@"\.BROWSE\.VC(\.\d+)?\.DB(-shm|-wal)?\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BrowseDatabaseFile();
+
+    /// <summary>
+    /// Recognises one workspace's IntelliSense database directory. Its name is a hash and proves
+    /// nothing, so what identifies it is that it holds the browse database and nothing else — a
+    /// stronger check than the name match it stands in for, never a wider one.
+    ///
+    /// The contents are regenerable: the extension rebuilds the database the next time that
+    /// workspace is opened, and Microsoft's own guidance is that everything it writes here may be
+    /// deleted safely. A directory holding anything unexpected fails the signature and stays Tier 4.
+    /// </summary>
+    public static readonly ContentSignature WorkspaceDatabase = new(BrowseDatabaseFile());
 
     private readonly string _root;
 
@@ -78,18 +106,20 @@ public sealed class VsCodeCppToolsCacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>();
         var targets = new List<(string Path, string Reason)>();
+        var declined = new List<(string Path, string Reason)>();
 
         foreach (var child in EnumerateChildren())
         {
             ct.ThrowIfCancellationRequested();
 
-            var classification = DisposableChildren.Classify(child.Name);
+            var classification = Classify(child, ct);
 
             if (!classification.Tier.IsOfferable())
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
                     $"Leaving '{child.Name}' alone: {classification.Reason}"));
+                declined.Add((LongPath.Display(child.FullName), classification.Reason));
                 continue;
             }
 
@@ -124,18 +154,48 @@ public sealed class VsCodeCppToolsCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = BuildProtectedPaths(declined),
             Notes = notes,
             Fallback = measured.Fallback,
         };
     }
 
     /// <summary>
-    /// §5.6. The root has to survive so the extension keeps writing where it expects to, and the
-    /// workspace databases beside <c>ipch</c> are what an over-broad rule would take with it.
+    /// §5.6. The root has to survive so the extension keeps writing where it expects to.
+    ///
+    /// Every child that was classified Tier 4 is protected by name as well, because since the
+    /// workspace databases became reachable the deleted and the declined are siblings of the same
+    /// shape, distinguished only by their contents. That is precisely when an over-broad rule takes
+    /// one with the other, so the negative is verified against the specific directories this plan
+    /// decided to spare rather than against the root alone.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
-        (_root, "The cpptools root itself must survive — only its known-disposable children are removed."));
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        IReadOnlyList<(string Path, string Reason)> declined) => Protect(
+    [
+        (_root, "The cpptools root itself must survive — only its known-disposable children are removed."),
+        .. declined,
+    ]);
+
+    /// <summary>
+    /// §5.2 by name first, then by content. The content signature only ever runs on a child the
+    /// name check already rejected, and a child that fails it keeps that Tier 4 — so this widens
+    /// what can be verified, never what is assumed.
+    /// </summary>
+    private static ChildClassification Classify(DirectoryInfo child, CancellationToken ct)
+    {
+        var byName = DisposableChildren.Classify(child.Name);
+
+        if (byName.Tier.IsOfferable() || !WorkspaceDatabase.Matches(child.FullName, ct))
+        {
+            return byName;
+        }
+
+        return new ChildClassification(
+            child.Name,
+            SafetyTier.RegenerableCache,
+            "One workspace's IntelliSense database, holding nothing but the browse database. " +
+            "The extension rebuilds it the next time that workspace is opened.");
+    }
 
     private IEnumerable<DirectoryInfo> EnumerateChildren()
     {
