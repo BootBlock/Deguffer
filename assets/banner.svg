@@ -29,5 +29,5 @@
   <text x="216" y="104" font-family="Segoe UI, Helvetica, Arial, sans-serif"
         font-size="54" font-weight="600" fill="#8b95a7">Deguffer</text>
   <text x="219" y="138" font-family="Segoe UI, Helvetica, Arial, sans-serif"
-        font-size="18" fill="#6b7484">Reclaim the disk space your toolchain forgot about.</text>
+        font-size="18" fill="#6b7484">Reclaim the disk space, knowing what you are about to lose.</text>
 </svg>

@@ -4,7 +4,7 @@ namespace Deguffer.Core.Scanning.Mft;
 /// The parsed table as parallel arrays, indexed by record number.
 ///
 /// Parallel arrays rather than an array of records because this is sized by the volume: a
-/// developer's disk runs to millions of entries, and one object per record would cost more in
+/// real disk runs to millions of entries, and one object per record would cost more in
 /// headers alone than every field here put together.
 /// </summary>
 public sealed class MftVolumeTree(int count)
@@ -22,7 +22,7 @@ public sealed class MftVolumeTree(int count)
     /// <summary>
     /// Names are kept for directories only. Path resolution never needs a file's name — a subtree
     /// total is the sum of its records regardless of what they are called — and skipping them is
-    /// the difference between tens of megabytes of strings and hundreds on a developer's volume.
+    /// the difference between tens of megabytes of strings and hundreds on a full volume.
     /// </summary>
     public string?[] Names { get; } = new string?[count];
 

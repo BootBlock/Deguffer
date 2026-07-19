@@ -2,8 +2,9 @@
 
 # Deguffer
 
-A Windows utility that finds and reclaims wasted disk space on a developer workstation, with a
-safety model good enough to trust.
+A Windows utility that finds and reclaims wasted disk space, with a safety model good enough to
+trust. It knows what specific locations on your disk actually are, and tells you what each one
+costs to lose, so you decide what goes.
 
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
@@ -12,10 +13,14 @@ purpose. **De-** removes it.
 
 ## Why
 
-Windows' own Disk Cleanup and Storage Sense understand Windows' caches. They know nothing about
-what actually fills a developer's drive: package manager caches, toolchain downloads, per-workspace
-editor state, container images, IntelliSense databases. Those are the bulk of the waste, and each
-needs its own knowledge to clear safely.
+Windows' own Disk Cleanup and Storage Sense understand Windows' caches, and stop there. Everything
+else that quietly fills a drive — application and package caches, downloaded toolchains and
+runtimes, per-workspace editor state, container images, search and index databases — is invisible
+to them. Those are the bulk of the waste, and each one needs its own knowledge to clear safely.
+
+Size alone cannot tell you which is which, so Deguffer does not rank folders by size and let you
+guess. It recognises specific locations, says what each holds and what losing it costs, and leaves
+the decision with you.
 
 On the workstation this tool was designed against — Windows 11, ~330 GB system drive, down to
 **5.6 GB free** — targeted cleanup of three package-manager caches recovered **22.9 GB** in a few
@@ -28,7 +33,7 @@ product.
 
 | Tier | Meaning | Deleting it costs | Default |
 | --- | --- | --- | --- |
-| **1 — Regenerable cache** | A tool re-creates it on demand | A slower next build | Offered, pre-selected |
+| **1 — Regenerable cache** | Whatever made it re-creates it on demand | A slower next use | Offered, pre-selected |
 | **2 — Regenerable, with cost** | Re-created by re-downloading gigabytes | Time and bandwidth | Offered, not pre-selected |
 | **3 — User data** | Logs, histories, saved sessions. *Looks* like cache | **Gone permanently** | Never pre-selected |
 | **4 — Do not touch** | Config, credentials, live state | Breakage | Not shown at all |

@@ -7,8 +7,8 @@ namespace Deguffer.Core.Safety;
 public enum SafetyTier
 {
     /// <summary>
-    /// Tier 1 — regenerable cache. A tool re-creates it on demand, byte-for-byte or
-    /// equivalently. Deleting costs a slower next build; nothing is lost.
+    /// Tier 1 — regenerable cache. Whatever produced it re-creates it on demand, byte-for-byte
+    /// or equivalently. Deleting costs a slower next use; nothing is lost.
     /// </summary>
     RegenerableCache = 1,
 

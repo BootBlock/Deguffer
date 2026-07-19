@@ -7,7 +7,9 @@
 > the code — where they differ, the spec is the target.
 
 **Deguffer** is a small Windows utility — **C# 14 / .NET 10 / WinUI 3** — that finds and reclaims
-wasted disk space on a developer workstation, with a safety model good enough to trust unattended.
+wasted disk space, with a safety model good enough to trust unattended. It recognises what specific
+locations on a disk actually are, reports what each one costs to lose, and leaves the decision with
+the user.
 
 ## The name
 
@@ -23,9 +25,12 @@ about the difference.
 ## 1. Why
 
 Windows' built-in Disk Cleanup and Storage Sense understand Windows' own caches. They know nothing
-about the things that actually fill a developer's drive: package manager caches, toolchain
-downloads, per-workspace editor state, container disk images, IntelliSense databases. Those are the
-bulk of the waste, and each needs its own knowledge to clear safely.
+about the things that actually fill a drive: application and package caches, downloaded toolchains
+and runtimes, per-workspace editor state, container disk images, search and index databases. Those
+are the bulk of the waste, and each needs its own knowledge to clear safely.
+
+Size alone cannot distinguish them, so ranking directories by size and letting the user guess is
+not a design this can adopt — §3 is the alternative.
 
 The evidence below comes from auditing one real workstation (Windows 11, ~330 GB system drive) that
 had reached **5.6 GB free**. Targeted cleanup of three package-manager caches recovered **22.9 GB**
@@ -59,7 +64,7 @@ sizes are easy to compute, the classification is the part that takes knowledge.
 
 | Tier | Meaning | Deletion consequence | Default |
 | --- | --- | --- | --- |
-| **1 — Regenerable cache** | Content that a tool re-creates on demand, byte-for-byte or equivalently. | A slower next build. Nothing is lost. | Offered, pre-selected |
+| **1 — Regenerable cache** | Content that whatever produced it re-creates on demand, byte-for-byte or equivalently. | A slower next use. Nothing is lost. | Offered, pre-selected |
 | **2 — Regenerable, with cost** | Re-created, but only by re-downloading gigabytes or re-indexing for minutes. | Time and bandwidth. | Offered, not pre-selected |
 | **3 — User data** | Logs, histories, saved sessions. Looks like cache, *is not*. | **Gone permanently.** | Shown, never pre-selected, explicit warning |
 | **4 — Do not touch** | Config, credentials, live application state, anything the tool cannot prove is idle. | Breakage. | Excluded from the UI entirely |
@@ -346,5 +351,5 @@ Deliberate points, and the traps that come with them:
 Windows component cleanup (`WinSxS`, `Windows\Installer`, installer package caches). These are
 large and tempting — ~35 GB on the audited machine — but the failure modes are severe (broken
 uninstall, unbootable rollback) and the safe operations are already exposed by `DISM` and the
-vendors' own tooling. A tool that is trusted for developer caches should not stake that trust on
-Windows servicing internals.
+vendors' own tooling. A tool that is trusted to clear caches should not stake that trust on Windows
+servicing internals.

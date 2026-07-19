@@ -36,7 +36,7 @@ public static class FreeSpace
         }
     }
 
-    /// <summary>Human-readable size, in the binary units a developer expects.</summary>
+    /// <summary>Human-readable size, in the binary units Windows itself reports.</summary>
     public static string Format(long bytes)
     {
         double value = Math.Abs(bytes);
