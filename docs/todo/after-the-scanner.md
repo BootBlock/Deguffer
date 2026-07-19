@@ -111,6 +111,10 @@ not built either: §7 scopes it to per-workspace and per-project data, which is 
 Tier 3 subject. Today's providers are whole-cache, one row each, with nothing per-item to date, so
 building the column now would be a first-class column with nothing to put in it. Both remain open.
 
+**The age column has since been built** — item 5 gave it a subject by making the cpptools workspace
+databases reachable, which is per-workspace data at regenerable-cache stakes rather than user-data
+stakes. Tier 3 itself is still not attempted.
+
 ### The original reasoning
 
 `CleanupPlanner.ExecuteAsync` throws `NotSupportedException` for anything above Tier 1, deliberately,
@@ -195,16 +199,53 @@ meaningfully larger piece of UI than anything the shell does today.
 
 ### From item 2
 
-- **The cpptools workspace databases (~1.8 GB) are unreachable by name.** Recognising them needs
-  classification by *content* — a child holding nothing but `*.BROWSE.VC.DB*` — which is a genuine
-  extension to the §5.2 model rather than a wider name list, and so wants deciding rather than
-  assuming. The conservative reading is that it is a stronger check than a name match, not a weaker
-  one: it verifies what a directory *is* instead of trusting what it is called.
-- **`InvalidateCaches` does not clear memoised tool answers in `NpmCacheProvider` or
-  `NuGetCacheProvider`.** `UvCacheProvider` overrides it to drop its resolved cache directory,
-  because `UV_CACHE_DIR` can move between scans; the other two memoise the same way and keep a
-  stale answer across a rescan. Same three-line fix in each, not made here to keep this change to
-  its subject.
+- ~~**The cpptools workspace databases (~1.8 GB) are unreachable by name.**~~ **Done.**
+  `ContentSignature` recognises a directory by what it holds rather than what it is called, and
+  the cpptools provider uses it for children the name check rejects. The conservative reading was
+  kept: the match is total — at least one file, no subdirectories, every entry recognised — so one
+  unexpected entry disqualifies the whole directory, and a child that fails keeps its Tier 4.
+  Research corrected two assumptions before any code was written: the numbered variant
+  (`.BROWSE.VC.2.DB`) appears beside the plain one so the pattern needs a digit group, and the
+  filename prefix is user-overridable via `C_Cpp.default.browse.databaseFilename` so only the
+  suffix can be matched. Observed on the audited machine: 12 workspace databases recognised, taking
+  the app's selected total from 2.9 GB to 9.0 GB.
+- ~~**`InvalidateCaches` does not clear memoised tool answers in `NpmCacheProvider` or
+  `NuGetCacheProvider`.**~~ **Done**, and landed on its own ahead of the rest. Every provider that
+  memoises a resolved location now drops it on invalidation.
+### Raised while doing item 5
+
+- **The age column and per-item selection are built, and `workspaceStorage` is now a subject swap
+  rather than a feature.** §7's age column landed against the cpptools workspace databases, which
+  are per-workspace, one row each, at regenerable-cache stakes. Selection is now per *step*:
+  `CleanupPlan.NarrowedTo` produces the plan for the ticked steps and — the reason narrowing lives
+  in Core rather than the shell — turns every deselected deletion into a protected path, so §5.6's
+  negative covers the choice the user actually made. A shell that filtered the step list itself
+  would drop that guarantee silently.
+- **Age comes from the provider at plan time, not from the scanner.** The MFT parser walks past
+  `$STANDARD_INFORMATION` without decoding it, and the fallback walk has no per-directory structure
+  to hang a timestamp on — surfacing age there means giving the fallback a richer return shape.
+  Neither was needed: the newest file inside a workspace directory is a better signal anyway, since
+  SQLite rewrites the database in place and a directory's own mtime only moves when an entry is
+  added or removed. That reading is sound *because* the content signature refuses any child holding
+  a subdirectory, so there is no deeper level whose writes it could miss. Extending the MFT parser
+  remains open and is genuinely cheap — the attribute is already materialised in the record the
+  parser enumerates — but it wants a subject that needs volume-wide timestamps.
+- **`Deguffer.App` has no test project, and that cost a regression the whole suite missed.**
+  Building the step view-models re-entered `FindingViewModel`'s constructor before its `Steps` list
+  was assigned, so every pre-selected provider's row silently failed to appear — an exception in a
+  `Progress<T>` callback has nowhere to surface. 263 Core tests passed throughout; it was only
+  visible by running the app. Either the roll-up rules move to Core where the codebase already puts
+  provable rules (`ElevationOffer`, `ConfirmationRequirement`), or the App gets a test project.
+- **Building `Deguffer.sln` and building `Deguffer.App.csproj` disagree about `!Distribution`.**
+  A solution build leaves the published output throwing `BadImageFormatException` from the Windows
+  App SDK initialiser on launch; rebuilding the App project alone fixes it. Worth settling, since
+  the failure looks like an application bug and appears only when running the built app.
+- **Per-item selection is not yet exposed for a Tier 3 subject.** The mechanism is subject-agnostic,
+  so `workspaceStorage` needs the §8 q2 grouping decision rather than new UI — sizes summed over a
+  group, deletion targeting the group, absent metadata classified Tier 4.
+
+### Still open from item 2
+
 - **The §6.3 long-path tests do not discriminate on a machine with `LongPathsEnabled` set.**
   Established by removing `LongPath.Extended` from `DirectoryRemover` and watching the suite stay
   green: .NET accepts >260-character paths without the `\\?\` prefix when that registry key is on,

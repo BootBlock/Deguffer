@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -143,6 +144,99 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         var directory = _temp.CreateDirectory("signature", "empty");
 
         Assert.False(VsCodeCppToolsCacheProvider.WorkspaceDatabase.Matches(directory));
+    }
+
+    /// <summary>
+    /// §7's age column. The timestamp comes from the newest file inside, not the directory's own:
+    /// SQLite rewrites the database in place, which moves the file's mtime and leaves the
+    /// directory's untouched.
+    /// </summary>
+    [Fact]
+    public async Task DatesEachWorkspaceByItsNewestDatabaseFileRatherThanTheDirectory()
+    {
+        var root = CreateCacheRoot();
+        var workspace = CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+
+        var recently = DateTime.UtcNow.AddDays(-3);
+        File.SetLastWriteTimeUtc(Path.Combine(workspace, ".BROWSE.VC.DB"), recently);
+        File.SetLastWriteTimeUtc(Path.Combine(workspace, ".BROWSE.VC.DB-shm"), DateTime.UtcNow.AddDays(-400));
+
+        // The directory itself was last touched when its entries were created, which is now — the
+        // point being that the answer must not come from here.
+        Directory.SetLastWriteTimeUtc(workspace, DateTime.UtcNow.AddDays(-400));
+
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+
+        Assert.NotNull(step.LastWritten);
+        Assert.Equal(recently, step.LastWritten!.Value, TimeSpan.FromSeconds(5));
+        Assert.Equal("3 days ago", RelativeAge.Describe(step.LastWritten, DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// A whole-cache step has no meaningful single age, and §7 requires that absence stay
+    /// distinguishable from an old one rather than being filled in with a plausible number.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheAgeUnsetForThePrecompiledHeaderCache()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 1024);
+
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+
+        Assert.Null(step.LastWritten);
+        Assert.Equal("Unknown", RelativeAge.Describe(step.LastWritten, DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// §5.6 under per-item selection. Deselecting one workspace must make it a protected path, or
+    /// execution verifies nothing about the choice the user actually made.
+    /// </summary>
+    [Fact]
+    public async Task NarrowingToOneWorkspaceProtectsTheOneLeftBehindAndSparesItOnDisk()
+    {
+        var root = CreateCacheRoot();
+        var chosen = CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        var deselected = CreateWorkspaceDatabase(root, "22223333444455556666777788889999");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        var keep = plan.Steps.OfType<DeleteDirectoryStep>()
+            .Where(s => s.Path.Equals(chosen, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var narrowed = plan.NarrowedTo(keep);
+
+        Assert.Equal([chosen], narrowed.TargetedPaths);
+        Assert.Contains(narrowed.ProtectedPaths, p => p.Path.Equals(deselected, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(narrowed);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(chosen));
+
+        // The negative: the workspace the user did not choose is still there, and verification
+        // asserted it rather than merely happening to leave it alone.
+        Assert.True(Directory.Exists(deselected));
+        Assert.True(File.Exists(Path.Combine(deselected, ".BROWSE.VC.DB")));
+        Assert.True(Directory.Exists(root));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    [Fact]
+    public async Task NarrowingToEveryStepLeavesThePlanExactlyAsItWas()
+    {
+        var root = CreateCacheRoot();
+        CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        CreateAt(root, "ipch", 1024);
+
+        var plan = await CreateProvider().PlanAsync();
+        var narrowed = plan.NarrowedTo(plan.Steps);
+
+        Assert.Same(plan, narrowed);
     }
 
     /// <summary>

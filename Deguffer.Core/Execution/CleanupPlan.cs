@@ -21,6 +21,19 @@ public abstract record CleanupStep
 
     /// <summary>The single number to show and to subtract: what the volume actually gives back.</summary>
     public long EstimatedBytes => Estimated.Reclaimable;
+
+    /// <summary>
+    /// When this step's subject was last written, or null where the provider cannot tell.
+    ///
+    /// §7 makes age a first-class column for per-workspace and per-project data, on the grounds
+    /// that "last touched 5 months ago" drives the decision more than size does. Null is a real
+    /// answer and must stay distinguishable from an old one — <see cref="RelativeAge"/> renders it
+    /// as unknown, never as an age, because an age is what invites the user to delete something.
+    ///
+    /// Whole-cache steps leave this null: a single timestamp across a tool's entire cache would be
+    /// a number with no meaning attached to it.
+    /// </summary>
+    public DateTime? LastWritten { get; init; }
 }
 
 /// <summary>
@@ -123,4 +136,48 @@ public sealed record CleanupPlan
     /// </summary>
     public IReadOnlyList<string> TargetedPaths =>
         [.. Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path)];
+
+    /// <summary>
+    /// This plan narrowed to the steps the user actually chose.
+    ///
+    /// Narrowing lives here rather than in the shell because of what it has to do besides drop
+    /// steps: every deletion the user declined becomes a protected path. §5.6's negative is the
+    /// promise that a step which did not run left its subject standing, and after per-item
+    /// selection the deselected directory is a sibling of the selected one — same parent, same
+    /// shape — which is exactly when an over-broad rule takes both. A shell that narrowed a plan by
+    /// filtering <see cref="Steps"/> itself would silently drop that guarantee, so the only
+    /// narrowing available adds it.
+    ///
+    /// A dropped <see cref="RunCommandStep"/> contributes no protection: its
+    /// <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1), and
+    /// asserting the tool left them alone would be asserting something this plan never controlled.
+    /// </summary>
+    public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> keep)
+    {
+        ArgumentNullException.ThrowIfNull(keep);
+
+        var kept = Steps.Where(keep.Contains).ToList();
+
+        if (kept.Count == Steps.Count)
+        {
+            return this;
+        }
+
+        var declined = Steps
+            .Except(kept)
+            .OfType<DeleteDirectoryStep>()
+            .Select(s => new ProtectedPath(
+                s.Path,
+                "Left alone because it was not selected for this run.",
+                // It was measured during planning, so it was there when the plan was made. That is
+                // the only claim ExistedBefore makes, and re-probing the disk here would let a
+                // directory deleted between planning and execution excuse itself.
+                ExistedBefore: true));
+
+        return this with
+        {
+            Steps = kept,
+            ProtectedPaths = [.. ProtectedPaths, .. declined],
+        };
+    }
 }

@@ -105,14 +105,14 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var targets = new List<(string Path, string Reason)>();
+        var targets = new List<(string Path, string Reason, DateTime? LastWritten)>();
         var declined = new List<(string Path, string Reason)>();
 
         foreach (var child in EnumerateChildren())
         {
             ct.ThrowIfCancellationRequested();
 
-            var classification = Classify(child, ct);
+            var (classification, isPerWorkspace) = Classify(child, ct);
 
             if (!classification.Tier.IsOfferable())
             {
@@ -123,7 +123,10 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            targets.Add((LongPath.Display(child.FullName), classification.Reason));
+            targets.Add((
+                LongPath.Display(child.FullName),
+                classification.Reason,
+                isPerWorkspace ? NewestWrite(child, ct) : null));
         }
 
         var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
@@ -134,6 +137,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
             {
                 Estimated = measured.Sizes[i],
+                LastWritten = targets[i].LastWritten,
             });
         }
 
@@ -181,20 +185,70 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
     /// name check already rejected, and a child that fails it keeps that Tier 4 — so this widens
     /// what can be verified, never what is assumed.
     /// </summary>
-    private static ChildClassification Classify(DirectoryInfo child, CancellationToken ct)
+    private static ChildDecision Classify(DirectoryInfo child, CancellationToken ct)
     {
         var byName = DisposableChildren.Classify(child.Name);
 
         if (byName.Tier.IsOfferable() || !WorkspaceDatabase.Matches(child.FullName, ct))
         {
-            return byName;
+            return new ChildDecision(byName, IsPerWorkspace: false);
         }
 
-        return new ChildClassification(
-            child.Name,
-            SafetyTier.RegenerableCache,
-            "One workspace's IntelliSense database, holding nothing but the browse database. " +
-            "The extension rebuilds it the next time that workspace is opened.");
+        return new ChildDecision(
+            new ChildClassification(
+                child.Name,
+                SafetyTier.RegenerableCache,
+                "One workspace's IntelliSense database, holding nothing but the browse database. " +
+                "The extension rebuilds it the next time that workspace is opened."),
+            IsPerWorkspace: true);
+    }
+
+    /// <summary>
+    /// How a child was recognised, which decides whether it gets an age.
+    /// </summary>
+    /// <param name="IsPerWorkspace">
+    /// True only for a child the content signature vouched for. §7 scopes the age column to
+    /// per-workspace and per-project data, and those are the only children that are one workspace
+    /// each. <c>ipch</c> is a whole-cache directory covering every workspace at once, so a single
+    /// timestamp on it would be a number with nothing to mean — and a number the user might act on.
+    /// </param>
+    private readonly record struct ChildDecision(ChildClassification Classification, bool IsPerWorkspace);
+
+    /// <summary>
+    /// When this child was last written, for §7's age column, or null if it cannot be read.
+    ///
+    /// The newest file inside it, not the directory's own timestamp: SQLite rewrites the database
+    /// in place, and a directory's mtime moves only when an entry is added, removed or renamed. A
+    /// workspace opened daily for a year would otherwise report the age of its first build.
+    ///
+    /// Reading the children is sound precisely because these directories are flat — the content
+    /// signature refuses any child holding a subdirectory — so there is no deeper level whose
+    /// writes this would miss. The enumeration is the same one the signature just made, over at
+    /// most a handful of entries.
+    /// </summary>
+    private static DateTime? NewestWrite(DirectoryInfo child, CancellationToken ct)
+    {
+        try
+        {
+            DateTime? newest = null;
+
+            foreach (var file in child.EnumerateFiles())
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (newest is null || file.LastWriteTimeUtc > newest)
+                {
+                    newest = file.LastWriteTimeUtc;
+                }
+            }
+
+            return newest;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        {
+            // No timestamp is a real answer, and §7 renders it as unknown rather than as an age.
+            return null;
+        }
     }
 
     private IEnumerable<DirectoryInfo> EnumerateChildren()
