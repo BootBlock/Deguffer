@@ -24,6 +24,24 @@ public interface IDirectoryScanner
         CancellationToken ct = default);
 
     /// <summary>
+    /// Every directory named <paramref name="name"/> at or below <paramref name="root"/>, or null
+    /// when this scanner cannot answer without walking.
+    ///
+    /// Null is the observable fallback, in the same spirit as <see cref="FallbackReason"/>: the
+    /// caller walks <paramref name="root"/> itself and says so, rather than being handed an empty
+    /// list it cannot distinguish from "there are none". Only the volume index can answer this, and
+    /// it exists only when Deguffer is elevated, so the walk is the guaranteed route and this is
+    /// strictly an accelerator.
+    ///
+    /// <paramref name="root"/> is a boundary, not a hint. Directories found elsewhere on the volume
+    /// are not returned — the index makes discovery cheap, and that must not make consent implicit.
+    /// </summary>
+    ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
+        string name,
+        string root,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Drop cached volume indexes and sizes. Called before a planning pass, for the same reason
     /// providers drop theirs: a preview must describe the machine as it is now.
     /// </summary>

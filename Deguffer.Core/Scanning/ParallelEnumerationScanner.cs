@@ -41,6 +41,16 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         CancellationToken ct = default) =>
         new(Task.Run(() => ScanResult.Slow(Measure(path, progress, ct), _reason), ct));
 
+    /// <summary>
+    /// Always null: this scanner holds no index, so it has nothing to search. Answering by walking
+    /// here would hide the walk behind the accelerator's signature, and §5.5 requires the slow
+    /// route to be visible to the caller that takes it.
+    /// </summary>
+    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
+        string name,
+        string root,
+        CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
+
     /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
     public void Invalidate()
     {
