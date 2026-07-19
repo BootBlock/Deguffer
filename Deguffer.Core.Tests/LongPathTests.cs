@@ -28,6 +28,11 @@ public class LongPathTests
     public void RoundTripsBackToADisplayablePath(string extended, string expected) =>
         Assert.Equal(expected, LongPath.Display(extended));
 
+    /// <summary>
+    /// A smoke test over the real filesystem. The assertions above carry the actual proof, because
+    /// they check the string form directly — this one would hold even with the prefixing removed,
+    /// since .NET applies <c>\\?\</c> itself at 260 characters.
+    /// </summary>
     [Fact]
     public void HandlesAPathBeyondMaxPathOnARealFilesystem()
     {

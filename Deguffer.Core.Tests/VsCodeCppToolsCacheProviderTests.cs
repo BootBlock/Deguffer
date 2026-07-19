@@ -318,9 +318,10 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
     {
         var root = CreateCacheRoot();
 
-        // §6.3. Caveat as elsewhere in this file: on a machine with LongPathsEnabled set this
-        // passes without proving the \\?\ prefix is what handled it. It discriminates only where
-        // the registry key is absent.
+        // §6.3, as a smoke test only. This cannot prove the \\?\ prefix is what handled the path:
+        // .NET prepends it itself at 260 characters, so the assertion holds on any machine even
+        // with Core's prefixing removed. DirectoryRemoverTests asserts on the form of the path,
+        // which is what actually discriminates.
         var workspace = Path.Combine(root, "ffffeeeeddddccccbbbbaaaa99998888");
         var name = new string('w', 200) + ".BROWSE.VC.DB";
         var target = Path.Combine(workspace, name);
@@ -446,10 +447,10 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         // §6.3: the extension nests per-workspace header directories, and a MAX_PATH truncation
         // here would be a silent partial deletion.
         //
-        // Caveat, established by removing LongPath.Extended and watching this still pass: on a
-        // machine with LongPathsEnabled set, .NET accepts these paths without the \\?\ prefix, so
-        // this asserts the path is handled but cannot prove the prefix is what handled it. It
-        // discriminates only where the registry key is absent — which is the machine that matters.
+        // Caveat, established by removing LongPath.Extended and watching this still pass: .NET's
+        // own normalisation prepends the \\?\ prefix at 260 characters, so this asserts the path
+        // is handled but cannot prove the prefix is what handled it — on any machine, not just one
+        // with LongPathsEnabled set. DirectoryRemoverTests carries the assertion that does.
         var deep = ipch;
         while (deep.Length < 300)
         {

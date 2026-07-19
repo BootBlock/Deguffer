@@ -246,9 +246,20 @@ meaningfully larger piece of UI than anything the shell does today.
 
 ### Still open from item 2
 
-- **The §6.3 long-path tests do not discriminate on a machine with `LongPathsEnabled` set.**
+- **Outcome-based §6.3 long-path tests do not discriminate anywhere — resolved for deletion.**
   Established by removing `LongPath.Extended` from `DirectoryRemover` and watching the suite stay
-  green: .NET accepts >260-character paths without the `\\?\` prefix when that registry key is on,
-  so these tests can only fail on a machine without it. This affects the existing long-path tests
-  as much as the new one. Worth forcing the test process to opt out so the assertions have teeth
-  everywhere.
+  green. The cause is not the `LongPathsEnabled` registry key, as first recorded here: .NET's own
+  path normalisation prepends `\\?\` to any path of 260 characters or more before it calls Win32.
+  Measured with a raw `CreateDirectoryW`, which fails with ERROR_PATH_NOT_FOUND on a path
+  `Directory.CreateDirectory` accepts, in a process where `RtlAreLongPathsEnabled` reports 0. So
+  these tests are unfalsifiable on *every* machine, and a manifest opt-out cannot change that —
+  the prefixing happens in managed code, above the setting a manifest controls.
+
+  `DirectoryRemover` now takes an `IFileSystem`, and `HandsEveryPathToTheFilesystemInExtendedLengthForm`
+  asserts on the form of every path crossing that boundary, which discriminates regardless of
+  machine state. The provider-level long-path tests remain outcome-based and so remain smoke tests;
+  giving them the same treatment needs the seam threaded through measurement as well as deletion.
+
+  Open behind all of this: whether `LongPath.Extended` is still load-bearing for MAX_PATH on
+  .NET 10 at all, or is now defence-in-depth against a case the framework already covers. Note it
+  routes through `Path.GetFullPath`, so it does not help with trailing-dot or trailing-space names.

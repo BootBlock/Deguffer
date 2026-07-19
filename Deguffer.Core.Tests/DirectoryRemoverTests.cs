@@ -67,6 +67,11 @@ public sealed class DirectoryRemoverTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A smoke test, and deliberately no more than that. It cannot prove §6.3 — see
+    /// <see cref="HandsEveryPathToTheFilesystemInExtendedLengthForm"/> for the assertion that can,
+    /// and for why this one stays green with the prefixing removed outright.
+    /// </summary>
     [Fact]
     public async Task ReachesFilesBeyondMaxPath()
     {
@@ -85,6 +90,53 @@ public sealed class DirectoryRemoverTests : IDisposable
 
         Assert.Equal(8192, outcome.BytesReclaimed);
         Assert.True(outcome.RootRemoved);
+    }
+
+    /// <summary>
+    /// §6.3 — the assertion that actually discriminates.
+    ///
+    /// Removing a tree past MAX_PATH and watching it disappear proves nothing about this codebase.
+    /// .NET's own path normalisation prepends <c>\\?\</c> to any path of 260 characters or more
+    /// before it reaches Win32, so the deletion succeeds whether or not Core applied the prefix —
+    /// measured directly: a raw <c>CreateDirectoryW</c> on such a path fails with
+    /// ERROR_PATH_NOT_FOUND while <c>Directory.CreateDirectory</c> on the very same path succeeds,
+    /// in a process where <c>RtlAreLongPathsEnabled</c> reports 0. That makes an outcome-based
+    /// long-path test unfalsifiable on every machine, not merely on one with the
+    /// <c>LongPathsEnabled</c> registry value set.
+    ///
+    /// The form of the path is what remains observable, and it discriminates everywhere. The tree
+    /// below covers each branch that touches the filesystem: enumeration, a plain delete, the
+    /// read-only retry, directory removal, and the reparse point.
+    /// </summary>
+    [Fact]
+    public async Task HandsEveryPathToTheFilesystemInExtendedLengthForm()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(1024, "cache", "a.bin");
+        _temp.CreateFile(2048, "cache", "nested", "b.bin");
+
+        var readOnly = _temp.CreateFile(512, "cache", "read-only.bin");
+        File.SetAttributes(readOnly, FileAttributes.ReadOnly);
+
+        Directory.CreateSymbolicLink(Path.Combine(root, "link"), _temp.CreateDirectory("outside"));
+
+        var deep = root;
+        while (deep.Length < 400)
+        {
+            deep = Path.Combine(deep, new string('n', 40));
+        }
+
+        Directory.CreateDirectory(LongPath.Extended(deep));
+        File.WriteAllBytes(LongPath.Extended(Path.Combine(deep, "payload.bin")), new byte[4096]);
+
+        var recorder = new RecordingFileSystem(WindowsFileSystem.Default);
+        var outcome = await DirectoryRemover.RemoveAsync(root, progress: null, default, recorder);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.NotEmpty(recorder.Paths);
+        Assert.All(
+            recorder.Paths,
+            path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
     }
 
     [Fact]
