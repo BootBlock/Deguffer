@@ -8,10 +8,13 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build app (x64)",
-            // The RID subfolder is not the usual output path: SelfContained + WindowsAppSDKSelfContained
-            // nest the binaries one level deeper under win-$(RuntimeIdentifier).
-            "program": "${workspaceFolder}/Deguffer.App/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Deguffer.App.exe",
-            "cwd": "${workspaceFolder}/Deguffer.App",
+            // Launch out of !Distribution, not bin/: the App project points OutputPath at the
+            // flat !Distribution folder and suppresses the framework and RID subfolders, so it
+            // never writes under bin/ at all. A stale bin/ path does not fail the launch — it
+            // silently starts whatever exe was left there before the layout changed, so every
+            // rebuild appears to have no effect.
+            "program": "${workspaceFolder}/!Distribution/Deguffer.App.exe",
+            "cwd": "${workspaceFolder}/!Distribution",
             "console": "internalConsole",
             "stopAtEntry": false
         },
@@ -19,8 +22,8 @@
             "name": "Deguffer (x64, no build)",
             "type": "coreclr",
             "request": "launch",
-            "program": "${workspaceFolder}/Deguffer.App/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Deguffer.App.exe",
-            "cwd": "${workspaceFolder}/Deguffer.App",
+            "program": "${workspaceFolder}/!Distribution/Deguffer.App.exe",
+            "cwd": "${workspaceFolder}/!Distribution",
             "console": "internalConsole",
             "stopAtEntry": false
         }
