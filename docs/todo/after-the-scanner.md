@@ -204,10 +204,19 @@ process, which Deguffer is not, so there is no correct interpretation available.
   model weights (`huggingface`, `torch`), which can be gated, private, or no longer published. Needs
   a researched per-subfolder allow-list, which is its own effort.
 - **Dart/Flutter pub cache (~451 MB)** — its own `README.md` states the folder must only be modified
-  through `dart pub`, so a path-based provider is out. `dart pub cache clean` exists, but whether it
-  also removes globally activated packages (`bin`, `global_packages`) is undocumented — the uv trap
-  again — and confirming it means running a destructive command. The tier cannot be assigned
-  honestly until that is established.
+  through `dart pub`, so a path-based provider is out. That leaves `dart pub cache clean`, and the
+  question of whether it also removes globally activated packages has since been **answered: it
+  does.** Pub's cache-layout documentation puts `global_packages/` (packages installed with
+  `dart pub global activate`), `bin/` (their binstubs) and `log/` in the same directory as the
+  `hosted/` and `git/` archives, and `clean` empties the lot. Since `PUB_CACHE\bin` is commonly on
+  `PATH`, that silently stops globally installed Dart tools from running. It is a known, open
+  complaint against pub itself — [dart-lang/pub#3783](https://github.com/dart-lang/pub/issues/3783).
+
+  So it is Tier 2 at best, and still not worth shipping: the only available method takes working
+  tooling with it for ~450 MB. The thing that would change the answer is `dart pub cache gc`, which
+  the CLI's help describes as pruning unused packages but which is absent from the published
+  documentation. If it spares `global_packages/` and `bin/`, it is the §5.1 command this provider
+  wants, and it should be established before anyone writes the class.
 
 ---
 

@@ -177,16 +177,43 @@ for each subfolder.
 A provider here is viable, but only as a per-subfolder allow-list where each entry is researched on
 its own. Treating the folder as a unit is exactly the mistake §5.2 exists to prevent.
 
-### Dart/Flutter pub cache — the tool forbids manual edits
+### Dart/Flutter pub cache — `clean` uninstalls your global tools
 
 `%LOCALAPPDATA%\Pub\Cache` measured ~451 MB. It ships a `README.md` stating its contents "should
 only be modified using the `dart pub` and `flutter pub` commands", which rules out a path-based
-provider outright.
+provider outright. That leaves `dart pub cache clean` — and it is the uv trap, confirmed.
 
-`dart pub cache clean` exists, but its documentation does not say whether it also removes globally
-activated packages, which live in the same folder under `bin` and `global_packages`. That is the uv
-trap — a cache directory that is really a state directory — and confirming it means running a
-destructive command. Until that behaviour is established, the tier cannot be assigned honestly.
+**`dart pub cache clean` empties the whole `PUB_CACHE`, not just the cached downloads.** Pub's own
+cache-layout documentation splits the directory in two:
+
+| Child | What it is |
+| --- | --- |
+| `hosted/`, `hosted-hashes/`, `git/` | Downloaded package archives — genuinely cache |
+| `global_packages/` | Packages installed with `dart pub global activate` |
+| `bin/` | Binstubs — the launcher scripts for those packages |
+| `log/` | Crash logs from failed pub runs |
+
+`clean` removes all of it. Because `PUB_CACHE\bin` is commonly on `PATH`, clearing the cache stops
+globally installed Dart command-line tools from running until each is activated again by hand. This
+is a known and *currently unresolved* complaint against pub itself —
+[dart-lang/pub#3783](https://github.com/dart-lang/pub/issues/3783), "`dart pub cache clean` probably
+shouldn't delete globally activated packages", is open.
+
+That makes it **Tier 2 at best**, not Tier 1: the cost is not a slower next build but a set of
+missing commands the user has to notice and restore. It is not offered today because a provider
+whose only available method takes working tooling with it is a poor trade for ~450 MB.
+
+Two things would change that, and both need research before any code:
+
+- **`dart pub cache gc`** appears in the CLI's own help — "Prunes unused packages from the system
+  cache" — but is absent from the published documentation. If it prunes `hosted/` while leaving
+  `global_packages/` and `bin/` intact, it is the §5.1 command this provider actually wants.
+- **`dart pub cache repair`** reinstalls rather than deletes, so it is a recovery path rather than a
+  reclaim, but it bears on how bad a mistake here would be.
+
+One thing that is *no longer* a risk, and would have been on an older SDK: credentials moved out of
+the cache in Dart 2.15, to `%APPDATA%\dart\pub-credentials.json`. A machine on an older SDK still has
+them inside it.
 
 ### Android SDK — small reclaim, catastrophic failure mode
 
