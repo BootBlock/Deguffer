@@ -9,6 +9,7 @@ namespace Deguffer.Core.Tests.Fakes;
 public sealed class FakeUserEnvironment : IUserEnvironment
 {
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
 
     public FakeUserEnvironment(string root)
     {
@@ -37,6 +38,16 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         _executables[command] = path ?? Path.Combine(@"C:\tools", command + ".exe");
         return this;
     }
+
+    /// <summary>Pretend <paramref name="name"/> is set in the environment.</summary>
+    public FakeUserEnvironment WithEnvironmentVariable(string name, string value)
+    {
+        _variables[name] = value;
+        return this;
+    }
+
+    public string? GetEnvironmentVariable(string name) =>
+        _variables.TryGetValue(name, out var value) ? value : null;
 
     public int InvalidateCount { get; private set; }
 

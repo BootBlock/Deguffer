@@ -171,14 +171,17 @@ public sealed class CleanupPlannerTests
         var planner = CleanupPlanner.CreateDefault();
 
         Assert.Equal(
-            ["nuget", "gradle", "npm", "vscode-cpptools", "uv", "platformio"],
+            ["nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip", "platformio", "playwright"],
             planner.Providers.Select(p => p.Id));
 
         // Tier 3 needs the typed-confirmation UI and a subject whose per-item attribution is
         // trustworthy; neither exists yet, so nothing above Tier 2 ships.
         Assert.All(planner.Providers, p =>
             Assert.True(p.Tier <= SafetyTier.RegenerableWithCost, $"{p.Id} is {p.Tier}"));
+        // The Tier 2 members named individually, so demoting one to Tier 1 — which would make it
+        // pre-selected and skip §7's acknowledgement — fails here rather than silently shipping.
         Assert.Equal(SafetyTier.RegenerableWithCost, planner.Providers.Single(p => p.Id == "platformio").Tier);
+        Assert.Equal(SafetyTier.RegenerableWithCost, planner.Providers.Single(p => p.Id == "playwright").Tier);
     }
 
     [Fact]

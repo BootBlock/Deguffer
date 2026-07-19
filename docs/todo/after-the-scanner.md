@@ -162,6 +162,55 @@ meaningfully larger piece of UI than anything the shell does today.
 - **§8 question 4 — undo.** Still likely impossible at these sizes. If so, §7 should say so plainly
   rather than implying reversibility.
 
+## 4b. Two providers beyond the audit — pip and Playwright ✅ done
+
+The audit tables in §4.1/§4.2 were a snapshot of one machine, not the set of caches worth knowing
+about. These two came from surveying the machine directly and researching each candidate before
+writing code; `docs/cache-locations.md` carries the per-location guide and the full list of what was
+rejected and why.
+
+| Source | Observed | Tier | Method |
+| --- | --- | --- | --- |
+| pip cache | 18 MB | 1 | §5.1 — `pip cache purge` |
+| Playwright browsers | 1,016 MB | 2 | §5.2 — recognised versioned children |
+
+Three things the research changed before any code was written:
+
+- **Playwright is Tier 2, not Tier 1**, and it is the clearest example of the distinction so far.
+  A package cache refills itself on next use; a missing browser build makes the next test run fail
+  outright with `Executable doesn't exist` until somebody runs `playwright install`. The cost is a
+  broken run plus a deliberate gigabyte re-download, not a slower run.
+- **`.links` is Tier 4 and looks exactly like cache.** It is Playwright's record of which
+  installations still reference which browser versions, and it drives Playwright's own garbage
+  collection. Deleting the browsers is recoverable; deleting the registry that tracks them is not.
+- **§5.1 was considered for Playwright and rejected on evidence.** `playwright uninstall` is a
+  per-project binary reached through `npx`, and without `--all` it is scoped to the current
+  directory's installation — the wrong scope for a machine-wide cleaner, and unreachable in the
+  common case where Playwright is a project dependency. The deviation is documented on the class.
+
+§5.2 needed no new machinery, but it did need a stricter name test: the disposable children are
+versioned (`chromium-1228`), which an exact-name `DisposableChildSet` cannot express. The answer was
+a *narrower* rule, not a looser one — a known browser name **and** a numeric revision, anchored at
+both ends. Everything else keeps Tier 4.
+
+`IUserEnvironment` grew one member, `GetEnvironmentVariable`, because `PLAYWRIGHT_BROWSERS_PATH`
+moves the cache root and §5.2's "never assume a location" applies to the root as much as to the
+children. A relative value is refused rather than resolved: Playwright reads it relative to the test
+process, which Deguffer is not, so there is no correct interpretation available.
+
+### Rejected, with the reason
+
+- **`%USERPROFILE%\.cache` (~3.8 GB)** — not one cache. Its largest occupants are downloaded ML
+  model weights (`huggingface`, `torch`), which can be gated, private, or no longer published. Needs
+  a researched per-subfolder allow-list, which is its own effort.
+- **Dart/Flutter pub cache (~451 MB)** — its own `README.md` states the folder must only be modified
+  through `dart pub`, so a path-based provider is out. `dart pub cache clean` exists, but whether it
+  also removes globally activated packages (`bin`, `global_packages`) is undocumented — the uv trap
+  again — and confirming it means running a destructive command. The tier cannot be assigned
+  honestly until that is established.
+
+---
+
 ## 5. Raised while doing items 2 and 3, not yet decided
 
 ### From item 3

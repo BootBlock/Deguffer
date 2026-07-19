@@ -167,6 +167,8 @@ public class CrashLogTests
 
         public string? FindExecutable(string command) => null;
 
+        public string? GetEnvironmentVariable(string name) => null;
+
         public void Invalidate()
         {
         }
