@@ -31,9 +31,23 @@ public partial class App : Application
     public static PreferenceService Preferences { get; } =
         new(new PreferenceStore(UserEnvironment.Current));
 
+    /// <summary>
+    /// The approved source folders, shared for the same reason <see cref="Preferences"/> is: a
+    /// second store per page would let the Settings list and the folder actually scanned drift apart.
+    /// </summary>
+    public static SourceRootService SourceRoots { get; } =
+        new(new SourceRootStore(UserEnvironment.Current));
+
+    /// <summary>
+    /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no
+    /// route to its own window, and a picker without an owner handle throws rather than opening.
+    /// </summary>
+    public static Window? MainWindow { get; private set; }
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         _window = new MainWindow();
+        MainWindow = _window;
 
         // Closing the only window ends the session rather than leaving the process resident. This
         // is explicit because a dialog dismissed at the wrong moment has been enough to leave a

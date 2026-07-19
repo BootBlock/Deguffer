@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
@@ -14,8 +15,58 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly PreferenceService _preferences;
+    private readonly SourceRootService _sourceRoots;
 
-    public SettingsViewModel(PreferenceService preferences) => _preferences = preferences;
+    public SettingsViewModel(PreferenceService preferences, SourceRootService sourceRoots)
+    {
+        _preferences = preferences;
+        _sourceRoots = sourceRoots;
+
+        SourceRoots = [.. sourceRoots.Current];
+    }
+
+    /// <summary>
+    /// The folders Deguffer may look for build output in. Unlike everything else on this page these
+    /// change what gets deleted rather than how the window looks, which is why the page states where
+    /// Deguffer will and will not look rather than presenting them as another preference.
+    /// </summary>
+    public ObservableCollection<string> SourceRoots { get; }
+
+    public bool HasNoSourceRoots => SourceRoots.Count == 0;
+
+    /// <summary>Approve a folder. No-op if it was already approved.</summary>
+    public void AddSourceRoot(string root)
+    {
+        if (SourceRoots.Contains(root, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Apply(() => _sourceRoots.Add(root));
+    }
+
+    public void RemoveSourceRoot(string root) => Apply(() => _sourceRoots.Remove(root));
+
+    /// <summary>
+    /// Run a change and re-read the result from the service rather than assuming it took.
+    ///
+    /// The service adopts what the store actually kept, which is not always what was asked for, so
+    /// mirroring the requested value here would let this list drift from the folders Deguffer will
+    /// really search — the one place that drift is invisible to the user.
+    /// </summary>
+    private void Apply(Func<bool> change)
+    {
+        SaveFailed = !change();
+
+        SourceRoots.Clear();
+
+        foreach (var root in _sourceRoots.Current)
+        {
+            SourceRoots.Add(root);
+        }
+
+        OnPropertyChanged(nameof(HasNoSourceRoots));
+    }
 
     /// <summary>Index into the theme combo box, ordered to match <see cref="AppTheme"/>.</summary>
     public int ThemeIndex
