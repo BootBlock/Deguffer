@@ -17,6 +17,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     private readonly MftVolumeIndexCache _volumes;
     private readonly ScanEstimateCache? _estimates;
     private readonly ParallelEnumerationScanner _fallback;
+    private readonly Dictionary<(char Volume, string Name), IReadOnlyList<string>> _searches = [];
+    private readonly Lock _searchGate = new();
 
     public DirectoryScanner(
         IMftSourceFactory? sources = null,
@@ -62,6 +64,90 @@ public sealed class DirectoryScanner : IDirectoryScanner
         return result;
     }
 
+    /// <summary>
+    /// Ask the volume index for directories by name, narrowed to <paramref name="root"/>.
+    ///
+    /// The narrowing is the consent model, not an optimisation. The index knows every directory on
+    /// the volume, and a cheap answer must not turn into permission to act on something the user
+    /// never approved — so anything outside the root is dropped here rather than left for a caller
+    /// to remember.
+    /// </summary>
+    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
+        string name,
+        string root,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+
+        if (!VolumePath.TryParse(root, out var volumeRoot))
+        {
+            return new((IReadOnlyList<string>?)null);
+        }
+
+        var index = _volumes.Get(volumeRoot.DriveLetter, out _, ct);
+
+        if (index is null)
+        {
+            return new((IReadOnlyList<string>?)null);
+        }
+
+        var found = NamedDirectories(index, name, volumeRoot.DriveLetter, ct)
+            .Where(path => IsUnder(path, root))
+            .ToList();
+
+        return new((IReadOnlyList<string>?)found);
+    }
+
+    /// <summary>
+    /// Every directory of this name on the volume, as full paths, memoised for the life of the scan.
+    ///
+    /// The search is a linear pass over every record in the table, and discovery asks once per
+    /// approved root — so without this a user with four source folders on one drive pays four
+    /// complete passes over a multi-million-record array to answer the same question (G4). Cleared
+    /// with the volume indexes it derives from, since a stale answer here is a stale deletion target.
+    /// </summary>
+    private IReadOnlyList<string> NamedDirectories(
+        MftVolumeIndex index,
+        string name,
+        char driveLetter,
+        CancellationToken ct)
+    {
+        var key = (driveLetter, name);
+
+        lock (_searchGate)
+        {
+            if (_searches.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        var prefix = driveLetter + @":\";
+        var found = index.FindDirectoriesNamed(name, ct)
+            .Select(components => prefix + string.Join(Path.DirectorySeparatorChar, components))
+            .ToList();
+
+        lock (_searchGate)
+        {
+            _searches[key] = found;
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> sits at or below <paramref name="root"/>. The separator is
+    /// part of the comparison: without it <c>C:\Source</c> would claim <c>C:\SourceControl</c>.
+    /// </summary>
+    private static bool IsUnder(string path, string root)
+    {
+        var normalised = LongPath.Display(root).TrimEnd(Path.DirectorySeparatorChar);
+
+        return path.Equals(normalised, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(normalised + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
     private ValueTask<ScanResult> MeasureFreshAsync(
         string path,
         IProgress<ScanSize>? progress,
@@ -96,5 +182,16 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// instantly — the entire point of caching them. They need no explicit clearing in any case:
     /// every measurement overwrites its own entry with the fresh figure.
     /// </summary>
-    public void Invalidate() => _volumes.Invalidate();
+    public void Invalidate()
+    {
+        _volumes.Invalidate();
+
+        // Derived from the indexes just dropped, so it goes with them. Unlike the remembered
+        // estimates — which are a display convenience — a stale entry here would name a directory
+        // that may no longer exist, and that is a deletion target rather than a number.
+        lock (_searchGate)
+        {
+            _searches.Clear();
+        }
+    }
 }

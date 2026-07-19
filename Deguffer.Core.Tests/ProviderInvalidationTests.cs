@@ -1,4 +1,5 @@
 using System.Reflection;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -109,23 +110,31 @@ public sealed class ProviderInvalidationTests : IDisposable
     /// </summary>
     private CleanupProviderBase Construct(Type type)
     {
-        object?[] arguments =
-        [
-            _environment,
-            new FakeProcessRunner(),
-            FakeProcessInspector.NothingRunning,
-            new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)),
-        ];
-
         var constructors = type.GetConstructors();
 
         Assert.True(
-            constructors.Length == 1
-                && constructors[0].GetParameters().Select(p => p.ParameterType).SequenceEqual(
-                    [typeof(IUserEnvironment), typeof(IProcessRunner), typeof(IProcessInspector), typeof(IDirectoryScanner)]),
-            $"{type.Name} does not take exactly the four provider collaborators, so this test cannot " +
-            "build it with fakes and its invalidation would go unchecked.");
+            constructors.Length == 1,
+            $"{type.Name} has {constructors.Length} constructors, so this test cannot tell which one " +
+            "to build it with and its invalidation would go unchecked.");
+
+        // Every parameter has to be something this test can supply from a fake. That is the property
+        // worth holding rather than a fixed signature: a provider may legitimately need a dependency
+        // of its own beyond the four shared collaborators — approved source roots are the first —
+        // but one taking something that can only come from the real machine would quietly drop out
+        // of this sweep, which is exactly how the npm and NuGet defect went unnoticed.
+        var arguments = constructors[0].GetParameters().Select(p => Argument(type, p.ParameterType)).ToArray();
 
         return (CleanupProviderBase)constructors[0].Invoke(arguments);
     }
+
+    private object Argument(Type provider, Type parameter) =>
+        parameter == typeof(IUserEnvironment) ? _environment
+        : parameter == typeof(IProcessRunner) ? new FakeProcessRunner()
+        : parameter == typeof(IProcessInspector) ? FakeProcessInspector.NothingRunning
+        : parameter == typeof(IDirectoryScanner)
+            ? new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated))
+        : parameter == typeof(SourceRootStore) ? new SourceRootStore(_environment)
+        : throw new XunitException(
+            $"{provider.Name} takes a {parameter.Name}, which this test cannot fabricate from a fake. " +
+            "Extend Argument so the provider is still covered.");
 }

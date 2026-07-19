@@ -17,7 +17,7 @@
                      IsClosable="False"
                      Severity="Warning"
                      Title="Not saved"
-                     Message="Your choice applies to this session, but could not be written to disk. It will be back to the previous setting next time Deguffer starts." />
+                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
 
             <TextBlock Text="Appearance" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,10,0,0" />
 
@@ -57,6 +57,56 @@
                                   AutomationProperties.Name="Confirm before cleaning" />
                 </views:SettingsRow.Control>
             </views:SettingsRow>
+
+            <!-- The only settings on this page that change what Deguffer will delete rather than
+                 how it looks. Stated as scope rather than as a preference, because an empty list
+                 is not a disabled feature — it is Deguffer having nowhere it is allowed to look. -->
+            <TextBlock Text="Source folders" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <views:SettingsRow Glyph="&#xE8B7;"
+                               Title="Where to look for build output"
+                               Description="Deguffer looks for .NET intermediate build output (obj) inside these folders and nowhere else. Nothing outside them is ever offered, even when it is plainly build output.">
+                <views:SettingsRow.Control>
+                    <Button Content="Add folder…"
+                            Click="OnAddSourceRoot"
+                            AutomationProperties.Name="Add source folder" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <TextBlock Text="No source folders added, so Deguffer will not look for build output anywhere."
+                       Style="{StaticResource SecondaryText}"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Margin="4,0,0,0"
+                       Visibility="{x:Bind ViewModel.HasNoSourceRoots, Mode=OneWay}" />
+
+            <ItemsControl ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
+                              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                              BorderThickness="1"
+                              CornerRadius="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{x:Bind}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTipService.ToolTip="{x:Bind}" />
+
+                            <Button Grid.Column="1"
+                                    Content="Remove"
+                                    Tag="{x:Bind}"
+                                    Click="OnRemoveSourceRoot"
+                                    AutomationProperties.Name="Remove source folder" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <TextBlock Style="{StaticResource SecondaryText}"
                        FontSize="12"

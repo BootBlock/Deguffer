@@ -31,6 +31,91 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             : new ScanSize(tree.Allocated[record], tree.Logical[record]);
     }
 
+    /// <summary>
+    /// Every directory on the volume called <paramref name="name"/>, as components below the volume
+    /// root.
+    ///
+    /// A linear pass rather than a lookup, and deliberately so. <see cref="TryFindChild"/> argues
+    /// against keeping an index keyed by name, and that argument still holds: this walks the array
+    /// once per query, costs nothing to build, and is asked for a single name once per planning
+    /// pass. Building a volume-wide name index to serve that would cost more than it saves.
+    ///
+    /// Only directories are considered, which needs no filtering — <see cref="MftVolumeTree.Names"/>
+    /// is populated for directories alone.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>> FindDirectoriesNamed(string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var matches = new List<IReadOnlyList<string>>();
+
+        for (uint record = 0; record < tree.Count; record++)
+        {
+            // The table runs to millions of records, so the cancellation check is amortised rather
+            // than paid per entry.
+            if ((record & 0xFFFF) == 0)
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+
+            if (tree.Names[record] is { } candidate
+                && candidate.Equals(name, StringComparison.OrdinalIgnoreCase)
+                && TryBuildPath(record) is { } components)
+            {
+                matches.Add(components);
+            }
+        }
+
+        return matches;
+    }
+
+    /// <summary>
+    /// Rebuild one record's path by walking <see cref="MftVolumeTree.Parent"/> up to the root.
+    ///
+    /// Returns null for a record whose chain does not reach the root — an orphan, or a parent
+    /// pointing outside the table. That is a real condition on a live volume rather than a
+    /// corruption check: a directory deleted while the table was being read leaves its children
+    /// briefly unreachable, and a path that cannot be rebuilt must be dropped rather than guessed
+    /// at, because a wrong path here is a wrong deletion target.
+    /// </summary>
+    private IReadOnlyList<string>? TryBuildPath(uint record)
+    {
+        // Deep enough for any real tree, and bounded so a cyclic parent chain terminates instead of
+        // hanging the scan. NTFS itself cannot express a path with this many components.
+        const int MaximumDepth = 512;
+
+        var components = new List<string>();
+        var current = record;
+
+        for (var depth = 0; depth < MaximumDepth; depth++)
+        {
+            if (current == MftRecord.RootRecordNumber)
+            {
+                components.Reverse();
+                return components;
+            }
+
+            if (current >= tree.Count || tree.Names[current] is not { } component)
+            {
+                return null;
+            }
+
+            components.Add(component);
+
+            var parent = tree.Parent[current];
+
+            // Only the root is its own parent; anything else claiming to be would loop forever.
+            if (parent == current)
+            {
+                return null;
+            }
+
+            current = parent;
+        }
+
+        return null;
+    }
+
     private uint? TryResolve(IReadOnlyList<string> relativePath)
     {
         ArgumentNullException.ThrowIfNull(relativePath);
