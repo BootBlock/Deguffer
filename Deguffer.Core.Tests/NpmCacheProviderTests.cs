@@ -116,6 +116,34 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("administrator", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task ReResolvesTheCacheDirectoryAfterInvalidationBecauseItCanMove()
+    {
+        // Both paths are deliberately away from DefaultCacheDirectory, so the first assertion
+        // proves npm was asked rather than passing on the fallback by coincidence.
+        var first = _temp.CreateDirectory("configured", "npm-cache");
+        File.WriteAllBytes(Path.Combine(first, "payload.bin"), new byte[4096]);
+
+        var moved = _temp.CreateDirectory("elsewhere", "npm-cache");
+        File.WriteAllBytes(Path.Combine(moved, "payload.bin"), new byte[2048]);
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding("config get cache", first);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        var before = await provider.PlanAsync();
+        Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
+
+        // npm's cache config moved between scans; the planner invalidates before replanning.
+        runner.Responding("config get cache", moved);
+        provider.InvalidateCaches();
+
+        var after = await provider.PlanAsync();
+
+        Assert.Contains(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(moved));
+        Assert.DoesNotContain(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
+    }
+
     private async Task<CleanupPlan> PlanWithPopulatedCache(
         int cacheQueryExitCode = 0,
         IDirectoryScanner? scanner = null)

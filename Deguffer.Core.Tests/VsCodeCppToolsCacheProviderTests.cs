@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -70,7 +71,284 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task LeavesWorkspaceDatabasesAloneBecauseAHexNameProvesNothing()
+    public async Task ReclaimsAWorkspaceDatabaseRecognisedByItsContents()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 1024);
+        var workspace = CreateWorkspaceDatabase(root, "0123456789abcdef0123456789abcdef");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(workspace, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Leaving", StringComparison.Ordinal)
+            && n.Message.Contains("0123456789abcdef0123456789abcdef", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The sidecars and the numbered variant are part of the signature; a directory holding the
+    /// full set is still nothing but browse database.
+    /// </summary>
+    [Theory]
+    [InlineData(".BROWSE.VC.DB")]
+    [InlineData(".BROWSE.VC.DB-shm")]
+    [InlineData(".BROWSE.VC.DB-wal")]
+    [InlineData(".BROWSE.VC.2.DB")]
+    [InlineData("my-workspace.BROWSE.VC.DB")]
+    [InlineData("MY-WORKSPACE.browse.vc.db")]
+    public void RecognisesEveryShapeOfBrowseDatabaseFilename(string fileName)
+    {
+        var directory = _temp.CreateDirectory("signature", Guid.NewGuid().ToString("N"));
+        File.WriteAllBytes(Path.Combine(directory, fileName), new byte[64]);
+
+        Assert.True(VsCodeCppToolsCacheProvider.WorkspaceDatabase.Matches(directory));
+    }
+
+    /// <summary>
+    /// §5.2's unrecognised case, which is the direction that matters: anything the signature does
+    /// not vouch for stays Tier 4 rather than being quietly treated as safe.
+    /// </summary>
+    [Theory]
+    [InlineData("notes.txt")]
+    [InlineData("BROWSE.VC.DB.bak")]
+    [InlineData(".BROWSE.VC.DB.txt")]
+    [InlineData("source.cpp")]
+    public void ADirectoryHoldingAnythingUnexpectedFailsTheSignature(string intruder)
+    {
+        var directory = _temp.CreateDirectory("signature", Guid.NewGuid().ToString("N"));
+        File.WriteAllBytes(Path.Combine(directory, ".BROWSE.VC.DB"), new byte[64]);
+        File.WriteAllBytes(Path.Combine(directory, intruder), new byte[64]);
+
+        Assert.False(
+            VsCodeCppToolsCacheProvider.WorkspaceDatabase.Matches(directory),
+            $"'{intruder}' beside the database should have disqualified the directory.");
+    }
+
+    /// <summary>
+    /// The subdirectory is deliberately named like a database file. A signature that checked only
+    /// names would wave it through, so this distinguishes "rejects unexpected names" from
+    /// "rejects subdirectories" — the real workspace directories are flat.
+    /// </summary>
+    [Fact]
+    public void ADirectoryHoldingASubdirectoryFailsTheSignatureEvenIfItIsNamedLikeADatabase()
+    {
+        var directory = _temp.CreateDirectory("signature", "with-subdirectory");
+        File.WriteAllBytes(Path.Combine(directory, ".BROWSE.VC.DB"), new byte[64]);
+        Directory.CreateDirectory(Path.Combine(directory, "nested.BROWSE.VC.DB"));
+
+        Assert.False(VsCodeCppToolsCacheProvider.WorkspaceDatabase.Matches(directory));
+    }
+
+    [Fact]
+    public void AnEmptyDirectoryFailsTheSignatureBecauseAbsenceOfEvidenceIsNotEvidence()
+    {
+        var directory = _temp.CreateDirectory("signature", "empty");
+
+        Assert.False(VsCodeCppToolsCacheProvider.WorkspaceDatabase.Matches(directory));
+    }
+
+    /// <summary>
+    /// §7's age column. The timestamp comes from the newest file inside, not the directory's own:
+    /// SQLite rewrites the database in place, which moves the file's mtime and leaves the
+    /// directory's untouched.
+    /// </summary>
+    [Fact]
+    public async Task DatesEachWorkspaceByItsNewestDatabaseFileRatherThanTheDirectory()
+    {
+        var root = CreateCacheRoot();
+        var workspace = CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+
+        var recently = DateTime.UtcNow.AddDays(-3);
+        File.SetLastWriteTimeUtc(Path.Combine(workspace, ".BROWSE.VC.DB"), recently);
+        File.SetLastWriteTimeUtc(Path.Combine(workspace, ".BROWSE.VC.DB-shm"), DateTime.UtcNow.AddDays(-400));
+
+        // The directory itself was last touched when its entries were created, which is now — the
+        // point being that the answer must not come from here.
+        Directory.SetLastWriteTimeUtc(workspace, DateTime.UtcNow.AddDays(-400));
+
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+
+        Assert.NotNull(step.LastWritten);
+        Assert.Equal(recently, step.LastWritten!.Value, TimeSpan.FromSeconds(5));
+        Assert.Equal("3 days ago", RelativeAge.Describe(step.LastWritten, DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// A whole-cache step has no meaningful single age, and §7 requires that absence stay
+    /// distinguishable from an old one rather than being filled in with a plausible number.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheAgeUnsetForThePrecompiledHeaderCache()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 1024);
+
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+
+        Assert.Null(step.LastWritten);
+        Assert.Equal("Unknown", RelativeAge.Describe(step.LastWritten, DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// §5.6 under per-item selection. Deselecting one workspace must make it a protected path, or
+    /// execution verifies nothing about the choice the user actually made.
+    /// </summary>
+    [Fact]
+    public async Task NarrowingToOneWorkspaceProtectsTheOneLeftBehindAndSparesItOnDisk()
+    {
+        var root = CreateCacheRoot();
+        var chosen = CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        var deselected = CreateWorkspaceDatabase(root, "22223333444455556666777788889999");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        var keep = plan.Steps.OfType<DeleteDirectoryStep>()
+            .Where(s => s.Path.Equals(chosen, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var narrowed = plan.NarrowedTo(keep);
+
+        Assert.Equal([chosen], narrowed.TargetedPaths);
+        Assert.Contains(narrowed.ProtectedPaths, p => p.Path.Equals(deselected, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(narrowed);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(chosen));
+
+        // The negative: the workspace the user did not choose is still there, and verification
+        // asserted it rather than merely happening to leave it alone.
+        Assert.True(Directory.Exists(deselected));
+        Assert.True(File.Exists(Path.Combine(deselected, ".BROWSE.VC.DB")));
+        Assert.True(Directory.Exists(root));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    [Fact]
+    public async Task NarrowingToEveryStepLeavesThePlanExactlyAsItWas()
+    {
+        var root = CreateCacheRoot();
+        CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        CreateAt(root, "ipch", 1024);
+
+        var plan = await CreateProvider().PlanAsync();
+        var narrowed = plan.NarrowedTo(plan.Steps);
+
+        Assert.Same(plan, narrowed);
+    }
+
+    /// <summary>
+    /// §5.6. Now that recognised workspace databases are deleted, the ones left alone are siblings
+    /// of the same shape — so the plan has to carry them as protected paths, or execution verifies
+    /// only that the root survived and an over-broad rule that took a Tier 4 sibling would pass.
+    /// </summary>
+    [Fact]
+    public async Task ProtectsEveryChildItDeclinedSoVerificationCanCatchOverReach()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 1024);
+        CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        var unverifiable = CreateAt(root, "22223333444455556666777788889999", 4096);
+        var unknown = CreateAt(root, "TelemetryProfile", 512);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(unverifiable, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(unknown, StringComparison.OrdinalIgnoreCase));
+
+        // The root stays protected, and nothing the plan targets is also claimed as protected.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(root, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(plan.ProtectedPaths.Select(p => p.Path)
+            .Intersect(plan.TargetedPaths, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The §5.6 check has to be a real one: if a protected sibling is removed behind the plan's
+    /// back, verification must fail rather than reporting success because the root survived.
+    /// </summary>
+    [Fact]
+    public async Task VerificationFailsIfADeclinedSiblingIsRemovedBehindThePlansBack()
+    {
+        var root = CreateCacheRoot();
+        CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        var unverifiable = CreateAt(root, "22223333444455556666777788889999", 4096);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Directory.Delete(unverifiable, recursive: true);
+
+        var verification = await provider.VerifyAsync(plan);
+
+        Assert.False(verification.Passed);
+        Assert.Contains(verification.Failures, c => c.Path.Equals(unverifiable, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecutingRemovesARecognisedWorkspaceAndLeavesAnUnverifiableOneStanding()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 8192);
+        var recognised = CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+
+        // Same hex shape, but it holds something the signature cannot vouch for.
+        var unverifiable = CreateWorkspaceDatabase(root, "22223333444455556666777788889999");
+        File.WriteAllBytes(Path.Combine(unverifiable, "unexpected.log"), new byte[512]);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(recognised));
+
+        // §5.6: the negative half. The root, ipch's parent, and the directory whose contents could
+        // not be verified all survive — an over-broad rule would have taken the last of these.
+        Assert.True(Directory.Exists(root));
+        Assert.True(Directory.Exists(unverifiable));
+        Assert.True(File.Exists(Path.Combine(unverifiable, "unexpected.log")));
+        Assert.True(File.Exists(Path.Combine(unverifiable, ".BROWSE.VC.DB")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    [Fact]
+    public async Task MeasuresAndRemovesAWorkspaceDatabaseNestedPastMaxPath()
+    {
+        var root = CreateCacheRoot();
+
+        // §6.3. Caveat as elsewhere in this file: on a machine with LongPathsEnabled set this
+        // passes without proving the \\?\ prefix is what handled it. It discriminates only where
+        // the registry key is absent.
+        var workspace = Path.Combine(root, "ffffeeeeddddccccbbbbaaaa99998888");
+        var name = new string('w', 200) + ".BROWSE.VC.DB";
+        var target = Path.Combine(workspace, name);
+
+        Directory.CreateDirectory(LongPath.Extended(workspace));
+        File.WriteAllBytes(LongPath.Extended(target), new byte[4096]);
+        Assert.True(target.Length > 260, $"Path was only {target.Length} characters.");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(workspace, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.True(plan.EstimatedBytes >= 4096, $"Deep content was not measured: {plan.EstimatedBytes} bytes.");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(LongPath.DirectoryExists(workspace));
+        Assert.True(Directory.Exists(root));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A hex-named child whose contents the signature cannot vouch for. The name alone never
+    /// promotes it out of Tier 4 — that is the whole premise of classifying by content instead.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAHexNamedChildAloneWhenItsContentsAreNotRecognised()
     {
         var root = CreateCacheRoot();
         CreateAt(root, "ipch", 1024);
@@ -138,7 +416,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecutingRemovesTheHeadersAndLeavesEveryWorkspaceDatabaseStanding()
+    public async Task ExecutingRemovesTheHeadersAndLeavesAnUnverifiableChildStanding()
     {
         var root = CreateCacheRoot();
         CreateAt(root, "ipch", 8192);
@@ -194,6 +472,19 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         Assert.False(LongPath.DirectoryExists(deep));
         Assert.True(Directory.Exists(root));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A hex-named child holding nothing but a browse database — the shape the content signature
+    /// recognises. The hex names throughout this file are invented, not taken from a real machine.
+    /// </summary>
+    private static string CreateWorkspaceDatabase(string root, string hexName)
+    {
+        var directory = Path.Combine(root, hexName);
+        Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, ".BROWSE.VC.DB"), new byte[65536]);
+        File.WriteAllBytes(Path.Combine(directory, ".BROWSE.VC.DB-shm"), new byte[32768]);
+        return directory;
     }
 
     private static string CreateAt(string root, string child, int bytes)

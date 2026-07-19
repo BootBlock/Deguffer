@@ -174,7 +174,11 @@ public sealed partial class CleanViewModel : ObservableObject
     private async Task CleanAsync(CancellationToken ct)
     {
         var selectedRows = Findings.Where(f => f.IsSelected).ToList();
-        var selected = selectedRows.Select(f => f.Finding).ToList();
+
+        // Narrowed to the ticked steps, once. SelectedFinding rebuilds the plan on every access, so
+        // reading it again further down would hand the confirmation check a different instance from
+        // the one that executes — equal by value today, but not a property to depend on silently.
+        var selected = selectedRows.Select(f => f.SelectedFinding).ToList();
 
         // The blanket confirmation covers exactly what §7 will not ask about — nothing more, so no
         // deletion is confirmed twice, and nothing less, so no deletion goes unconfirmed. Standing
@@ -184,7 +188,7 @@ public sealed partial class CleanViewModel : ObservableObject
         //
         // Asked before IsBusy is raised, so declining leaves the screen exactly as it was rather
         // than flickering through a busy state for an operation that never started.
-        var unasked = ConfirmationRequirement.NotPromptedFor(selectedRows, f => f.Finding.Plan);
+        var unasked = ConfirmationRequirement.NotPromptedFor(selected, f => f.Plan);
 
         if (ConfirmCleanAsync is { } confirm && unasked.Count > 0 && !await confirm(Describe(unasked)))
         {
@@ -305,7 +309,7 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         foreach (var row in Findings)
         {
-            row.PropertyChanged -= OnRowChanged;
+            row.SelectionChanged -= UpdateSelectionTotal;
         }
 
         Findings.Clear();
@@ -359,7 +363,11 @@ public sealed partial class CleanViewModel : ObservableObject
     private void AddRowInSizeOrder(Finding finding)
     {
         var row = new FindingViewModel(finding);
-        row.PropertyChanged += OnRowChanged;
+
+        // One event for both directions: the row's own checkbox and any step within it. Subscribing
+        // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays
+        // ticked, which is the ordinary case for per-item selection.
+        row.SelectionChanged += UpdateSelectionTotal;
 
         var index = 0;
         while (index < Findings.Count && Findings[index].Finding.EstimatedBytes >= finding.EstimatedBytes)
@@ -399,11 +407,17 @@ public sealed partial class CleanViewModel : ObservableObject
     /// includes the rows §7 asks about separately, and a dialog that quotes a number larger than
     /// the deletions it authorises is describing something the user is not being asked to approve.
     /// </summary>
-    private static string Describe(IReadOnlyList<FindingViewModel> rows)
+    /// <remarks>
+    /// Takes the already-narrowed findings, so its total is the selected bytes by construction —
+    /// with per-item selection a ticked row may be contributing only some of its steps, and the
+    /// reasoning above applies to that too: the dialog must not quote a figure larger than the
+    /// deletions it is authorising.
+    /// </remarks>
+    private static string Describe(IReadOnlyList<Finding> findings)
     {
-        var total = FreeSpace.Format(rows.Sum(f => f.Finding.EstimatedBytes));
+        var total = FreeSpace.Format(findings.Sum(f => f.EstimatedBytes));
 
-        return $"{string.Join(", ", rows.Select(f => f.Name))} — {total} in total. "
+        return $"{string.Join(", ", findings.Select(f => f.Provider.Name))} — {total} in total. "
              + "This cannot be undone.";
     }
 
@@ -473,18 +487,14 @@ public sealed partial class CleanViewModel : ObservableObject
 
     private bool CanRun() => !IsBusy;
 
-    private void OnRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(FindingViewModel.IsSelected))
-        {
-            UpdateSelectionTotal();
-        }
-    }
-
+    /// <summary>
+    /// Sums the selected <em>steps</em> rather than the selected rows. With per-item selection a
+    /// ticked row no longer implies its whole plan will run, so totalling the finding would promise
+    /// back space that the unticked steps within it are not going to release.
+    /// </summary>
     private void UpdateSelectionTotal()
     {
-        SelectedTotalLabel = FreeSpace.Format(
-            Findings.Where(f => f.IsSelected).Sum(f => f.Finding.EstimatedBytes));
+        SelectedTotalLabel = FreeSpace.Format(Findings.Sum(f => f.SelectedBytes));
 
         CleanCommand.NotifyCanExecuteChanged();
     }
