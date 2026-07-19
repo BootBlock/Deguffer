@@ -271,6 +271,11 @@ public sealed class DotNetObjProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(obj, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("tracked in git", StringComparison.Ordinal));
+
+        // Being tracked is its own sentence, and the only one. Recognition confirmed the directory,
+        // so it must not be counted among the ones recognition could not confirm.
+        Assert.DoesNotContain(plan.Notes, n =>
+            n.Message.Contains("could not be confirmed", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -296,6 +301,66 @@ public sealed class DotNetObjProviderTests : IDisposable
 
         Assert.Equal(3, plan.TargetedPaths.Count);
         Assert.Single(runner.Invocations);
+    }
+
+    /// <summary>
+    /// §7's second opinion has to fail closed. Git is installed, is asked, and errors — a broken
+    /// index, a partial clone, a command line it could not be launched with. Nothing was learned
+    /// about the directory, and "nothing learned" must not read as "safe to delete": it is declined
+    /// and protected, exactly as an unrecognised one is.
+    /// </summary>
+    [Fact]
+    public async Task DeclinesARecognisedObjWhenGitIsAskedAndCannotAnswer()
+    {
+        var root = ApproveRoot();
+        var repository = Path.Combine(root, "repo");
+        Directory.CreateDirectory(Path.Combine(repository, ".git"));
+
+        var obj = ProjectFixture.CreateProject(Path.Combine(repository, "Example"), "Example");
+
+        _environment.WithExecutable("git");
+        var runner = new FakeProcessRunner().Responding("ls-files", string.Empty, exitCode: 128);
+
+        var plan = await CreateProvider(runner: runner).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(obj, StringComparison.OrdinalIgnoreCase));
+        Assert.True(LongPath.DirectoryExists(obj));
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("could not be checked against git", StringComparison.Ordinal));
+
+        // Recognition did confirm this directory — git is the reason it was left alone. Counting it
+        // among the unconfirmed as well reports one directory as two, under a reason that is wrong
+        // for it.
+        Assert.DoesNotContain(plan.Notes, n =>
+            n.Message.Contains("could not be confirmed", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The regression guard for the rule above over-reaching. Git absent is a deliberately different
+    /// case from git failing: there is no second opinion to be had, the recognition rule governs
+    /// alone, and that is the same protection every other provider relies on. A recognised project
+    /// still plans.
+    /// </summary>
+    [Fact]
+    public async Task StillPlansARecognisedObjWhenGitIsNotInstalledAtAll()
+    {
+        var root = ApproveRoot();
+        var repository = Path.Combine(root, "repo");
+        Directory.CreateDirectory(Path.Combine(repository, ".git"));
+
+        var obj = ProjectFixture.CreateProject(Path.Combine(repository, "Example"), "Example");
+
+        // No WithExecutable("git") — the check has nothing to ask.
+        var runner = new FakeProcessRunner();
+
+        var plan = await CreateProvider(runner: runner).PlanAsync();
+
+        Assert.Equal([obj], plan.TargetedPaths);
+        Assert.Empty(runner.Invocations);
+        Assert.DoesNotContain(plan.Notes, n =>
+            n.Message.Contains("could not be checked against git", StringComparison.Ordinal));
     }
 
     /// <summary>
