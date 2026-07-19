@@ -252,8 +252,10 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
   virtualised against `%LOCALAPPDATA%` in ways that complicate reading other apps' caches.
 - Ship **self-contained** rather than framework-dependent. A disk-cleanup tool is exactly the thing
   someone reaches for on a machine that is too full to install a runtime, so requiring a separate
-  .NET 10 install would defeat it at the moment of need. (NativeAOT is not an option — WinUI 3 does
-  not support it.)
+  .NET 10 install would defeat it at the moment of need. **NativeAOT** *is* supported by WinUI 3
+  (Windows App SDK 1.6 and later) and would roughly halve the footprint, but it implies trimming
+  and a trimmed build dies at startup inside the XAML runtime — see
+  [the evaluation](aot-and-single-file-evaluation.md) for what was measured and tried.
 - MFT reading requires **administrator**; the app should run unelevated by default, scan what it
   can, and request elevation only for the fast scanner and for `C:\Windows\Temp`.
 - Enable **long path** support (`\\?\` prefixes or the manifest opt-in). Node and NuGet trees

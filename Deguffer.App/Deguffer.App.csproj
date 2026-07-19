@@ -14,7 +14,11 @@
             §6.3: ship self-contained. A disk-cleanup tool is exactly the thing someone reaches
             for on a machine too full to install a runtime, so depending on a separate .NET 10 or
             Windows App SDK install would defeat it at the moment of need.
-            (NativeAOT is not an option — WinUI 3 does not support it.)
+
+            NativeAOT is supported by WinUI 3 (Windows App SDK 1.6+) but is not used here: it
+            implies trimming, and a trimmed build dies at startup inside Microsoft.UI.Xaml.dll
+            with STATUS_STOWED_EXCEPTION before any window appears.
+            docs/todo/aot-and-single-file-evaluation.md has the measurements and what was tried.
         -->
         <SelfContained>true</SelfContained>
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
