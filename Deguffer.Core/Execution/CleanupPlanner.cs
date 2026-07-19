@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 
@@ -25,6 +26,7 @@ public sealed class CleanupPlanner
     /// </summary>
     public static CleanupPlanner CreateDefault() => new(
     [
+        new DotNetObjProvider(new SourceRootStore(UserEnvironment.Current)),
         new NuGetCacheProvider(),
         new GradleCacheProvider(),
         new NpmCacheProvider(),
