@@ -115,7 +115,7 @@
                                FontSize="13"
                                TextAlignment="Center"
                                MaxWidth="380"
-                               Text="Preview looks at the caches your toolchains keep and reports what each one holds. It reads only — nothing is removed until you choose to." />
+                               Text="Preview looks at the locations Deguffer recognises and reports what each one holds. It reads only — nothing is removed until you choose to." />
                 </StackPanel>
 
                 <ScrollViewer Padding="0,4">

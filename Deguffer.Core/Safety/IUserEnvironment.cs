@@ -82,7 +82,7 @@ public sealed class UserEnvironment : IUserEnvironment
 
     private static IEnumerable<string> Candidates(string directory, string command)
     {
-        // A malformed PATH entry is normal on a developer machine; skip it rather than failing
+        // A malformed PATH entry is normal on a long-lived machine; skip it rather than failing
         // the whole scan.
         string baseName;
         try

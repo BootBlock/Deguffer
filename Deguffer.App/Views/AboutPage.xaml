@@ -21,7 +21,7 @@
                     </StackPanel>
 
                     <TextBlock Style="{StaticResource SecondaryText}"
-                               Text="Reclaims disk space from developer tool caches, and tells you what each one costs to lose before you agree to lose it." />
+                               Text="Reclaims disk space by recognising what specific locations on your disk actually are, and telling you what each one costs to lose before you agree to lose it." />
                 </StackPanel>
             </Border>
 
@@ -49,7 +49,7 @@
                                         Style="{StaticResource TierChipRegenerableCache}"
                                         HorizontalAlignment="Left" />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="A tool re-creates it on demand. Deleting costs a slower next build and nothing else, so these are selected for you by default." />
+                                   Text="Whatever made it re-creates it on demand. Deleting costs a slower next use and nothing else, so these are selected for you by default." />
                     </StackPanel>
 
                     <StackPanel Spacing="4">

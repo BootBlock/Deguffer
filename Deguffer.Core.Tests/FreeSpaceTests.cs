@@ -55,7 +55,7 @@ public class FreeSpaceTests
     [InlineData(1023, "1023 B")]
     [InlineData(1024, "1 KB")]
     [InlineData(1536 * 1024, "1.5 MB")]
-    public void FormatsSizesInTheUnitsADeveloperExpects(long bytes, string expected) =>
+    public void FormatsSizesInTheBinaryUnitsWindowsReports(long bytes, string expected) =>
         Assert.Equal(expected, FreeSpace.Format(bytes));
 
     /// <summary>

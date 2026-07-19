@@ -7,7 +7,7 @@ namespace Deguffer.App.Shell;
 /// <summary>
 /// Restarts Deguffer with administrator rights so §5.5's fast path becomes reachable.
 ///
-/// §6.3 deliberately does not elevate at startup — the tool reads the whole of a developer's disk,
+/// §6.3 deliberately does not elevate at startup — the tool reads the whole of the user's disk,
 /// and asking for administrator before the user has been shown anything is exactly the posture it
 /// is trying not to have. Elevation is therefore something the user opts into, once they can see
 /// what it buys them.
