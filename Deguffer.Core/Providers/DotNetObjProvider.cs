@@ -134,10 +134,31 @@ public sealed class DotNetObjProvider : CleanupProviderBase
 
         // §7's second opinion, applied after recognition so it runs over a handful of directories
         // rather than every candidate.
-        var committed = await _tracked.FindTrackedAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
+        var git = await _tracked.FindTrackedAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
 
-        declined.AddRange(targets.Where(t => committed.Contains(t.Path)).Select(t => t.Path));
-        targets.RemoveAll(t => committed.Contains(t.Path));
+        // Counted before the cross-check adds to the list, because each reason gets its own sentence
+        // in the plan. A directory recognition confirmed and git then overruled must not also be
+        // reported as one recognition could not confirm — that states one directory as two, under a
+        // reason that is untrue of it.
+        var unrecognised = declined.Count;
+
+        // A directory the check could not cover is declined alongside one it ruled out. Both are
+        // "the second opinion did not clear this", and only the reason the user is told differs.
+        var cleared = new List<RecognisedObj>(targets.Count);
+
+        foreach (var target in targets)
+        {
+            if (git.Tracked.Contains(target.Path) || git.Unanswered.Contains(target.Path))
+            {
+                declined.Add(target.Path);
+            }
+            else
+            {
+                cleared.Add(target);
+            }
+        }
+
+        targets = cleared;
 
         var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
 
@@ -162,7 +183,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = BuildProtectedPaths(targets, declined),
             Notes = ObjPlanNotes.For(
-                discovered, declined.Count, committed.Count, measured.Note, BuildRunningProcessNote()),
+                discovered, unrecognised, git.Tracked.Count, git.Unanswered.Count,
+                measured.Note, BuildRunningProcessNote()),
             Fallback = measured.Fallback,
         };
     }

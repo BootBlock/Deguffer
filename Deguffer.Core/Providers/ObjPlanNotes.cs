@@ -16,10 +16,11 @@ internal static class ObjPlanNotes
         ObjDiscovery discovered,
         int declinedCount,
         int trackedCount,
+        int uncheckedCount,
         PlanNote? scanNote,
         PlanNote? runningProcesses)
     {
-        var notes = new List<PlanNote>(4);
+        var notes = new List<PlanNote>(5);
 
         if (!discovered.UsedIndex)
         {
@@ -37,6 +38,11 @@ internal static class ObjPlanNotes
         if (trackedCount > 0)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Warning, Tracked(trackedCount)));
+        }
+
+        if (uncheckedCount > 0)
+        {
+            notes.Add(new PlanNote(PlanNoteSeverity.Warning, Unchecked(uncheckedCount)));
         }
 
         if (scanNote is { } scan)
@@ -65,6 +71,17 @@ internal static class ObjPlanNotes
     private static string Declined(int count) => count == 1
         ? "Left 1 directory named 'obj' alone because it could not be confirmed as .NET intermediate build output."
         : $"Left {count} directories named 'obj' alone because they could not be confirmed as .NET intermediate build output.";
+
+    /// <summary>
+    /// Said out loud for the same reason §5.5 makes the discovery fallback observable: a plan
+    /// smaller than expected should carry its own explanation rather than leave the user to infer
+    /// one. Git was installed and asked, and did not answer — so the directories in question were
+    /// left alone, and saying nothing would make a safeguard that could not run look like a
+    /// safeguard that found nothing.
+    /// </summary>
+    private static string Unchecked(int count) => count == 1
+        ? "1 directory could not be checked against git, so it was left alone."
+        : $"{count} directories could not be checked against git, so they were left alone.";
 
     private static string Tracked(int count) => count == 1
         ? "1 directory is tracked in git, so despite looking like build output it holds committed files and was left alone."
