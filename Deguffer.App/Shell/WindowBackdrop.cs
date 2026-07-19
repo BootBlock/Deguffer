@@ -17,6 +17,7 @@ public sealed class WindowBackdrop
     private readonly Window _window;
     private readonly DesktopAcrylicBackdrop _acrylic = new();
     private bool? _applied;
+    private bool _requested = true;
 
     public WindowBackdrop(Window window)
     {
@@ -31,9 +32,24 @@ public sealed class WindowBackdrop
         }
     }
 
+    /// <summary>
+    /// Whether the user wants the material. High contrast still overrides it: §6.5 makes the
+    /// backdrop decoration, and no preference may reinstate translucency over a stated
+    /// accessibility requirement.
+    /// </summary>
+    public bool IsRequested
+    {
+        get => _requested;
+        set
+        {
+            _requested = value;
+            Apply();
+        }
+    }
+
     public void Apply()
     {
-        var wanted = !HighContrast.IsEnabled();
+        var wanted = _requested && !HighContrast.IsEnabled();
         if (_applied == wanted)
         {
             return;

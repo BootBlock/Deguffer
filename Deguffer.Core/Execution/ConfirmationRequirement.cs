@@ -65,6 +65,37 @@ public sealed record ConfirmationRequirement
     /// </summary>
     public string? RequiredPhrase { get; init; }
 
+    /// <summary>
+    /// Whether §7 will put a question to the user about this plan. An empty plan is never executed
+    /// and so is never asked about, which is why emptiness is part of the rule rather than the
+    /// caller's business.
+    ///
+    /// The shell uses this to stand its own blanket confirmation down: asking twice about one
+    /// deletion trains people to dismiss the prompt that carries the §7 consequence.
+    /// </summary>
+    public static bool PromptsUser(CleanupPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        return !plan.IsEmpty && For(plan).Level != ConfirmationLevel.None;
+    }
+
+    /// <summary>
+    /// Of a selection, the items that will be deleted without §7 putting a question of its own —
+    /// what a shell-level "are you sure" must therefore cover to leave nothing unconfirmed.
+    ///
+    /// This is a decision about the whole selection rather than one plan, which is why it is here
+    /// and not left to the caller: treating "does anything here need §7?" as the same question as
+    /// "is everything here covered by §7?" deleted a mixed selection's Tier 1 items silently.
+    /// </summary>
+    public static IReadOnlyList<T> NotPromptedFor<T>(IEnumerable<T> items, Func<T, CleanupPlan?> planOf)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(planOf);
+
+        return [.. items.Where(i => planOf(i) is { IsEmpty: false } plan && !PromptsUser(plan))];
+    }
+
     public static ConfirmationRequirement For(CleanupPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
