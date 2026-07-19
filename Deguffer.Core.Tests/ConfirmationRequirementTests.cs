@@ -110,11 +110,84 @@ public sealed class ConfirmationRequirementTests
         Assert.Null(ConfirmationRequirement.For(PlanFor(tier)).RequiredPhrase);
     }
 
+    /// <summary>
+    /// The shell stands its own blanket confirmation down whenever §7 will ask anyway. Getting this
+    /// backwards for Tier 1 is the dangerous direction: it would suppress the only question asked
+    /// before a deletion that §7 itself never prompts for.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableCache, false)]
+    [InlineData(SafetyTier.RegenerableWithCost, true)]
+    [InlineData(SafetyTier.UserData, true)]
+    [InlineData(SafetyTier.DoNotTouch, true)]
+    public void OnlyTier1PassesWithoutAQuestionOfItsOwn(SafetyTier tier, bool expected)
+    {
+        Assert.Equal(expected, ConfirmationRequirement.PromptsUser(WorkToDo(PlanFor(tier))));
+    }
+
+    /// <summary>
+    /// An empty plan deletes nothing and is never asked about, so it must not be mistaken for a
+    /// tier that §7 covers — otherwise selecting an already-clean Tier 2 row would silence the
+    /// blanket confirmation for everything selected alongside it.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableCache)]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    public void AnEmptyPlanIsNeverAQuestion(SafetyTier tier)
+    {
+        Assert.False(ConfirmationRequirement.PromptsUser(PlanFor(tier)));
+    }
+
+    /// <summary>
+    /// The mixed selection, which is where this went wrong in practice: one Tier 2 row alongside
+    /// Tier 1 rows. The Tier 1 rows are not covered by §7, so they must come back here — a shell
+    /// that concludes "§7 has this selection covered" deletes them having asked nothing at all,
+    /// including when the user declines the single dialog they are shown.
+    /// </summary>
+    [Fact]
+    public void Tier1RowsAlongsideATier2RowStillNeedAsking()
+    {
+        CleanupPlan[] selection =
+        [
+            WorkToDo(PlanFor(SafetyTier.RegenerableCache)) with { ProviderId = "uv" },
+            WorkToDo(PlanFor(SafetyTier.RegenerableCache)) with { ProviderId = "npm" },
+            WorkToDo(PlanFor(SafetyTier.RegenerableWithCost)) with { ProviderId = "platformio" },
+        ];
+
+        var unasked = ConfirmationRequirement.NotPromptedFor(selection, p => p);
+
+        Assert.Equal(["uv", "npm"], unasked.Select(p => p.ProviderId));
+    }
+
+    /// <summary>The negative half: the Tier 2 row must not also be swept into the blanket ask.</summary>
+    [Fact]
+    public void ARowSection7AsksAboutIsNotAskedTwice()
+    {
+        CleanupPlan[] selection = [WorkToDo(PlanFor(SafetyTier.RegenerableWithCost))];
+
+        Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p));
+    }
+
+    /// <summary>An already-clear row deletes nothing, so it is not something to confirm.</summary>
+    [Fact]
+    public void AnAlreadyClearRowIsNotAskedAbout()
+    {
+        CleanupPlan[] selection = [PlanFor(SafetyTier.RegenerableCache)];
+
+        Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p));
+    }
+
     private static CleanupPlan PlanFor(SafetyTier tier) => new()
     {
         ProviderId = "subject",
         ProviderName = "Android SDK",
         Tier = tier,
         WhatHappensOnNextUse = "Re-downloads on next build.",
+    };
+
+    private static CleanupPlan WorkToDo(CleanupPlan plan) => plan with
+    {
+        Steps = [new DeleteDirectoryStep(@"C:\Users\testuser\.cache\subject", "the cache")],
     };
 }
