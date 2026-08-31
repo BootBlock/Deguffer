@@ -61,8 +61,13 @@ public static class LongPath
     /// <see cref="DirectoryExists"/> answers true for a junction and says nothing about it, so a
     /// target reached by name rather than by <see cref="ChildDirectories.Under"/> needs this to
     /// uphold the same rule: a link points at a tree the caller never classified, and deleting
-    /// through it leaves the tree the plan described. A path that is not there is not a reparse
-    /// point, which is the answer a caller wants rather than an exception.
+    /// through it leaves the tree the plan described.
+    ///
+    /// Every caller reads false as "proceed", so this fails closed. A path that is not there is
+    /// genuinely not a reparse point. A path we were refused, or could not read, is not an answer at
+    /// all, and the only safe reading of "I cannot tell" on a predicate guarding a deletion is the
+    /// one that stops it — the same call <see cref="DotNetIntermediateSignature"/> makes when it
+    /// cannot vouch for a directory. The cost of being wrong that way is one unexplained decline.
     /// </summary>
     public static bool IsReparsePoint(string path)
     {
@@ -72,9 +77,13 @@ public static class LongPath
 
             return attributes.HasFlag(FileAttributes.ReparsePoint);
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException or IOException)
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             return false;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return true;
         }
     }
 }

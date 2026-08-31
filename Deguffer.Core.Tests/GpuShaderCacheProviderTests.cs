@@ -158,6 +158,70 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A junctioned vendor root is enumerated straight through if nobody checks, and every survivor
+    /// named for that root resolves through the link and passes. The root is reached by name, so it
+    /// needs the same check the Direct3D cache gets.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedVendorRootIsNeverLookedThrough()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Directory.CreateDirectory(Path.Combine(outside, "DXCache"));
+        File.WriteAllBytes(Path.Combine(outside, "DXCache", "pipeline.bin"), new byte[4096]);
+
+        var link = Path.Combine(_environment.LocalAppData, "NVIDIA");
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("NVIDIA", StringComparison.Ordinal) &&
+            n.Message.Contains("link", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(outside, "DXCache", "pipeline.bin")),
+            "planning looked through a junctioned vendor root and deleted the far side");
+    }
+
+    /// <summary>
+    /// A junctioned cache is a child the user can see, so a plan that neither offers it nor mentions
+    /// it disagrees with the folder. Silently dropping it also made the empty-plan message lie:
+    /// presence resolves through a link, so the provider would report no cache while one existed.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedVendorChildIsNamedRatherThanDroppedSilently()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Directory.CreateDirectory(outside);
+        File.WriteAllBytes(Path.Combine(outside, "pipeline.bin"), new byte[4096]);
+
+        Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "NVIDIA"));
+        var link = Path.Combine(_environment.LocalAppData, "NVIDIA", "DXCache");
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("DXCache", StringComparison.Ordinal) &&
+            n.Message.Contains("link", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(outside, "pipeline.bin")),
+            "a junctioned cache was deleted through");
+    }
+
+    /// <summary>
     /// §5.6 for the whole-directory target, against a real neighbour rather than only against the
     /// profile directory. An over-broad rule that took the parent's contents leaves the parent
     /// standing, so the parent alone is close to unfalsifiable; a sibling is not.

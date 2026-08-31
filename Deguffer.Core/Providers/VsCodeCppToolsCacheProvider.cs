@@ -108,7 +108,16 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
 
-        foreach (var child in ChildDirectories.Under(_root))
+        var scan = ChildDirectories.Under(_root);
+
+        // A link is a child the user can see, so it is named rather than dropped. It is never
+        // followed: what it points at was never classified.
+        notes.AddRange(scan.Links.Select(link => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
+            + "delete through a link.")));
+
+        foreach (var child in scan.Directories)
         {
             ct.ThrowIfCancellationRequested();
 

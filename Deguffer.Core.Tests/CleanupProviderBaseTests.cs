@@ -48,5 +48,11 @@ public sealed class CleanupProviderBaseTests : IDisposable
 
         Assert.True(Directory.Exists(outside), "planning followed a junction out of the tool root");
         Assert.True(File.Exists(bystander), "a file outside the tool root was destroyed");
+
+        // Skipping it silently would leave a plan that disagrees with the folder the user can see:
+        // a child named 'caches' is there, and nothing said why it was not offered.
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("caches", StringComparison.Ordinal) &&
+            n.Message.Contains("link", StringComparison.Ordinal));
     }
 }

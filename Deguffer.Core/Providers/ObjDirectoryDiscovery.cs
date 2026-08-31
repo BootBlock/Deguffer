@@ -83,7 +83,7 @@ public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
         {
             ct.ThrowIfCancellationRequested();
 
-            foreach (var child in ChildDirectories.Under(directory))
+            foreach (var child in ChildDirectories.Under(directory).Directories)
             {
                 if (child.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
@@ -100,5 +100,4 @@ public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
             }
         }
     }
-
 }

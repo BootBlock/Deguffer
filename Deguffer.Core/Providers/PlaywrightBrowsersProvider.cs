@@ -135,7 +135,16 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
 
-        foreach (var child in ChildDirectories.Under(root))
+        var scan = ChildDirectories.Under(root);
+
+        // A link is a child the user can see, so it is named rather than dropped. It is never
+        // followed: what it points at was never classified.
+        notes.AddRange(scan.Links.Select(link => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
+            + "delete through a link.")));
+
+        foreach (var child in scan.Directories)
         {
             ct.ThrowIfCancellationRequested();
 

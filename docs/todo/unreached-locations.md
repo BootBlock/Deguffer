@@ -237,7 +237,7 @@ directory and which child names, and that is data. Each root still carries its o
 `DisposableChildSet`, so §5.2 is answerable from one table, and per-vendor control survives because
 selection is per step.
 
-Three things the work settled that this section did not anticipate:
+Four things the work settled that this section did not anticipate:
 
 - **`accounts` is a file, and that is why each root declares protected names separately.** It was
   first written as a Tier 4 entry in the child set, which classified nothing: child classification

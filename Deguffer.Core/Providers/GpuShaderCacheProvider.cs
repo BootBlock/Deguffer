@@ -87,7 +87,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// §5.2's substance still holds — the parent is never targeted and never enumerated, and it is
     /// what §5.6 asserts survived.
     /// </summary>
-    public const string Direct3DCacheName = "D3DSCache";
+    private const string Direct3DCacheName = "D3DSCache";
 
     private readonly string _direct3DCache;
 
@@ -142,6 +142,20 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             if (!LongPath.DirectoryExists(rootPath))
             {
+                continue;
+            }
+
+            // The root is reached by name too, so it needs the same check the Direct3D cache gets.
+            // Enumerating a junctioned root hands back the far side's ordinary directories, and a
+            // recognised name among them would be targeted while every survivor named below resolves
+            // through the link and passes — the vacuous negative in its other costume.
+            if (LongPath.IsReparsePoint(rootPath))
+            {
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    $"Leaving '{root.DirectoryName}' alone: it is a link to somewhere else, and Deguffer "
+                    + "does not look through a link."));
+                declined.Add((rootPath, "A link rather than a directory, so what it holds was never classified."));
                 continue;
             }
 
@@ -226,7 +240,20 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         List<PlanNote> notes,
         CancellationToken ct)
     {
-        foreach (var child in ChildDirectories.Under(rootPath))
+        var scan = ChildDirectories.Under(rootPath);
+
+        foreach (var link in scan.Links)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Leaving '{root.DirectoryName}\\{link.Name}' alone: it is a link to somewhere else, and "
+                + "Deguffer does not delete through a link."));
+            declined.Add((
+                LongPath.Display(link.FullName),
+                "A link rather than a directory, so what it points at was never classified."));
+        }
+
+        foreach (var child in scan.Directories)
         {
             ct.ThrowIfCancellationRequested();
 
