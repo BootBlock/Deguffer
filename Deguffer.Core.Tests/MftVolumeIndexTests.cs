@@ -118,6 +118,222 @@ public class MftVolumeIndexTests
         Assert.Equal(300, size.Logical);
     }
 
+    /// <summary>
+    /// The file is real and its size is not in the base record, so the table cannot say how big
+    /// this subtree is. Returning a total anyway would report a cache short by whatever that file
+    /// holds — the same failure <see cref="MftVolumeIndexBuilder"/> refuses to commit when it
+    /// cannot read part of the table, arrived at one record later.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileWhoseDataMovedToAnExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// Only the first extent of a split <c>$DATA</c> carries the sizes. A base record holding a
+    /// later one has zeroes in those fields, and reading them as a size turns a large file into an
+    /// empty one.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileDescribingOnlyALaterExtent()
+    {
+        var index = Build(Tree().AddFileDescribingOnlyALaterExtent(20, Cache, "split.tgz"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileWithATruncatedDataHeader()
+    {
+        var index = Build(Tree().AddFileWithATruncatedDataHeader(20, Cache, "corrupt.tgz"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// The refusal has to be local, or one unreadable record anywhere on the volume would send
+    /// every path to the walk and the fast path would exist in name only.
+    /// </summary>
+    [Fact]
+    public void StillTotalsSubtreesThatDoNotHoldTheUnestablishedFile()
+    {
+        var index = Build(Tree()
+            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz")
+            .AddFile(21, Sibling, "settings.json", allocated: 1024, logical: 1000));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.Equal(1024, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The other direction, and the one that decides whether the fast path is usable at all: a file
+    /// that genuinely occupies nothing must total as zero. A symbolic link carries no unnamed
+    /// <c>$DATA</c>, and treating "none" as "unknown" would refuse a total for every tree holding
+    /// one.
+    /// </summary>
+    [Fact]
+    public void CountsAFileWithNoDataStreamAsOccupyingNothing()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithNoDataStream(21, Cache, "link"));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// A directory's own <c>$DATA</c> is never counted, so a directory keeping its attributes
+    /// elsewhere costs nothing to skip. Refusing there would take out every large directory on the
+    /// volume, which is exactly where NTFS puts an attribute list.
+    /// </summary>
+    [Fact]
+    public void StillTotalsADirectoryWhoseOwnAttributesMovedToAnExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddDirectoryWithAttributesInAnExtensionRecord(30, Cache, "many-entries")
+            .AddFile(20, 30, "a.tgz", allocated: 4096, logical: 4096));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// A base record whose names moved into extension records is skipped, not refused. NTFS does
+    /// this once a file has enough hard links to overflow its own record, and a system volume is
+    /// full of them — refusing would take the fast path off the volume that matters most, every
+    /// time, for a shape that is not a fault.
+    /// </summary>
+    [Fact]
+    public void BuildsAnIndexFromATableHoldingRecordsWhoseNamesLiveElsewhere()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddRecordWithNamesInExtensionRecords(21));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The same record without an attribute list is a different thing: in use, holding data,
+    /// claiming no identity and pointing nowhere else for one. Nothing can place it, so the index
+    /// is refused rather than built around it.
+    /// </summary>
+    [Fact]
+    public void RefusesToBuildAnIndexFromARecordThatClaimsNoIdentityAtAll()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddRecordWithNoIdentityAtAll(21)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// A link inside a measured tree contributes nothing, because the walk does not enter one
+    /// either. Its declared size belongs to whatever it points at, which keeps its own place in
+    /// the table and is counted there if it is counted at all.
+    /// </summary>
+    [Fact]
+    public void CountsNothingForALinkInsideAMeasuredTree()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileLink(21, Cache, "elsewhere.tgz", logical: 9_999_999));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(4096, size.Allocated);
+        Assert.Equal(4096, size.Logical);
+    }
+
+    /// <summary>
+    /// Not every reparse point is a link. A file compressed in place by CompactOS carries one, and
+    /// its bytes are genuinely on the volume — the filter driver hides the attribute from an
+    /// ordinary enumeration, so the walk counts the file. An index that read "reparse point" as
+    /// "link" would report those bytes as nothing, which is the under-reporting direction.
+    /// </summary>
+    [Fact]
+    public void CountsAFileThatCarriesAReparsePointButIsNotALink()
+    {
+        var index = Build(Tree()
+            .AddOverlayCompressedFile(20, Cache, "packed.tgz", allocated: 2048, logical: 8192));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(2048, size.Allocated);
+        Assert.Equal(8192, size.Logical);
+    }
+
+    /// <summary>
+    /// The truncation the enumerator lets through: an attribute is admitted at 0x10 bytes, and the
+    /// resident branch reads a length field at 0x10. Reading it unguarded throws out of the index
+    /// build, where <see cref="MftVolumeIndexCache"/> catches only <see cref="IOException"/> and
+    /// the failure escapes into the scan rather than turning into a slow one.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileWithATruncatedResidentDataHeader()
+    {
+        var index = Build(Tree().AddFileWithATruncatedResidentDataHeader(20, Cache, "corrupt.json"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A fragmented file still knows its own size: the extent at VCN 0 carries it and the
+    /// continuation extents do not. Letting a later extent overwrite what the first one established
+    /// would drop a whole tree to the walk for a file that was never in doubt.
+    /// </summary>
+    [Fact]
+    public void TotalsAFileSplitAcrossExtentsFromTheExtentThatCarriesTheSizes()
+    {
+        var index = Build(Tree()
+            .AddFileSplitAcrossExtents(20, Cache, "big.tgz", allocated: 40_960, logical: 40_000));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(40_960, size.Allocated);
+        Assert.Equal(40_000, size.Logical);
+    }
+
+    /// <summary>
+    /// A junction's target keeps its own place in the table, so the link itself has no children
+    /// however much its path appears to hold. Totalling it would report a populated cache as empty,
+    /// which is the one answer §5.5 will not tolerate — the walk follows the link and is right.
+    /// </summary>
+    [Fact]
+    public void RefusesToMeasureAPathReachedThroughALink()
+    {
+        var index = Build(Tree()
+            .AddDirectoryLink(30, Profile, "linked-cache")
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", "linked-cache"]));
+
+        // And the refusal is confined to the path that runs through the link.
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The same refusal for a path that merely passes through a link on its way down. Nothing in a
+    /// healthy table hangs entries below a junction — whatever it stands for keeps its own place —
+    /// so this holds the rule at every level rather than trusting that shape never arrives.
+    /// </summary>
+    [Fact]
+    public void RefusesToMeasureAPathWithALinkPartWayDownIt()
+    {
+        var index = Build(Tree()
+            .AddDirectoryLink(30, Profile, "linked")
+            .AddDirectory(31, 30, "inner")
+            .AddFile(32, 31, "a.tgz", allocated: 4096, logical: 4096));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", "linked", "inner"]));
+    }
+
     [Fact]
     public void FindsDirectoriesRegardlessOfPathCasing()
     {
@@ -165,16 +381,39 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
-    /// A torn write must take the record out entirely. Half-applying the fixup leaves two wrong
-    /// bytes per sector, which lands inside a size field often enough to matter.
+    /// A torn write must take the record out entirely: half-applying the fixup leaves two wrong
+    /// bytes per sector, which lands inside a size field often enough to matter. Taking the record
+    /// out means the table no longer describes a file that exists, so the index goes with it.
+    ///
+    /// This used to keep the rest of the table and answer anyway. That answer was 4096 for a
+    /// directory holding 12288 bytes, with nothing to distinguish it from the truth — the same
+    /// failure <see cref="MftVolumeIndexBuilder"/> already refuses to commit for a region it could
+    /// not read. The cost of refusing is a slow scan, which §5.5 makes visible and §6.3 makes the
+    /// ordinary case anyway.
     /// </summary>
     [Fact]
-    public void RejectsARecordWhoseSectorStampWasTornAndKeepsTheRest()
+    public void RefusesToBuildAnIndexWhenARecordWasTornMidWrite()
     {
-        var index = Build(Tree()
+        using var source = Tree()
             .AddFile(20, Cache, "good.tgz", allocated: 4096, logical: 4096)
             .AddFile(21, Cache, "torn.tgz", allocated: 8192, logical: 8192)
-            .CorruptSectorStamp(21));
+            .CorruptSectorStamp(21)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// The refusal above must not fire on the records a healthy volume is full of. An extension
+    /// record holds attributes belonging to another record's file, and skipping it is correct
+    /// rather than a loss — the base record carries the identity and the size.
+    /// </summary>
+    [Fact]
+    public void BuildsAnIndexFromATableHoldingExtensionRecords()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddExtensionRecord(21, baseRecordNumber: 20));
 
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
@@ -205,17 +444,25 @@ public class MftVolumeIndexTests
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
 
+    /// <summary>
+    /// A parent reference this reader cannot address is a name it could not read, which makes the
+    /// record one that is in use and cannot be placed — so the index is refused rather than built
+    /// without it. Distinct from a record naming a parent the table simply does not hold, which is
+    /// an ordinary live-volume race and is dropped.
+    ///
+    /// The narrowing this guards is still the point. The stray record names parent 0x1_0000_0007;
+    /// truncated to 32 bits that is record 7, the profile directory — so a reader that narrows
+    /// silently attaches it there, builds an index quite happily, and fails this test.
+    /// </summary>
     [Fact]
-    public void DiscardsARecordNamingAParentItCannotAddress()
+    public void RefusesToBuildAnIndexFromARecordNamingAParentItCannotAddress()
     {
-        var index = Build(Tree()
+        using var source = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .AddFileWithUnaddressableParent(21, "stray.tgz", allocated: 1_000_000));
+            .AddFileWithUnaddressableParent(21, "stray.tgz", allocated: 1_000_000)
+            .Build();
 
-        // The stray record names parent 0x1_0000_0007. Truncated to 32 bits that is record 7 —
-        // the profile directory — so a narrowing bug shows up as a megabyte appearing there.
-        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
-        Assert.Equal(4096, index.TryMeasure(["Users", "testuser"])!.Value.Allocated);
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
     }
 
     [Fact]

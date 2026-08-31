@@ -89,7 +89,7 @@ public class DirectoryScannerTests
         var result = await scanner.MeasureAsync(cache);
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
-        Assert.Equal(FallbackReason.MasterFileTableUnreadable, result.Fallback);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
         Assert.Equal(7000, result.Size.Logical);
     }
 
@@ -160,8 +160,25 @@ public class DirectoryScannerTests
         var result = await scanner.MeasureAsync(cache);
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
-        Assert.Equal(FallbackReason.MasterFileTableUnreadable, result.Fallback);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
         Assert.Equal(3000, result.Size.Logical);
+    }
+
+    /// <summary>
+    /// The table resolved the path and then could not say how big it was. That is not an empty
+    /// cache, so the walk answers — the same fail-closed choice as a path the table cannot
+    /// resolve at all.
+    /// </summary>
+    [Fact]
+    public async Task FallsBackWhenTheTableCannotEstablishASizeInTheSubtree()
+    {
+        var volume = Volume().AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz");
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume));
+
+        var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
+
+        Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
     }
 
     [Fact]

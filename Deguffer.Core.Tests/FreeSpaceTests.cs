@@ -65,4 +65,21 @@ public class FreeSpaceTests
     [Fact]
     public void KeepsTheSignOnANegativeChange() =>
         Assert.Equal("-1.5 MB", FreeSpace.Format(-1536 * 1024));
+
+    /// <summary>
+    /// §5.5's fallback sums file lengths and cannot see how many clusters anything occupies, so
+    /// its figure is not the exact reclaim the fast path produces. <see cref="ScanSize"/> has
+    /// carried that distinction since the scanner landed with nothing saying it out loud.
+    /// </summary>
+    [Fact]
+    public void SaysWhenASizeCameFromAMeasurementThatCouldNotSeeAllocatedBytes() =>
+        Assert.Equal("about 1.5 MB", FreeSpace.Format(ScanSize.Approximate(1536 * 1024)));
+
+    /// <summary>
+    /// An exact measurement is stated exactly, and it is the allocated figure — what the volume
+    /// gives back, not what re-downloading would cost.
+    /// </summary>
+    [Fact]
+    public void StatesAnExactlyMeasuredSizeAsTheAllocatedFigure() =>
+        Assert.Equal("1.5 MB", FreeSpace.Format(new ScanSize(1536 * 1024, 9_000_000)));
 }

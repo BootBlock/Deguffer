@@ -80,7 +80,7 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
 
-    public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.EstimatedBytes) : "—";
+    public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Estimated) : "—";
 
     public string StatusLabel => !Finding.IsPresent
         ? "Not installed on this machine"
@@ -109,7 +109,8 @@ public sealed partial class FindingViewModel : ObservableObject
     public IReadOnlyList<StepViewModel> SelectedSteps => [.. Steps.Where(s => s.IsSelected)];
 
     /// <summary>What this row contributes to the selected total, counting only ticked steps.</summary>
-    public long SelectedBytes => SelectedSteps.Sum(s => s.Step.EstimatedBytes);
+    public ScanSize SelectedSize =>
+        SelectedSteps.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
 
     /// <summary>
     /// Whether the steps are individually worth choosing between. A single step <em>is</em> the
@@ -169,7 +170,7 @@ public sealed partial class FindingViewModel : ObservableObject
             _syncingSelection = false;
         }
 
-        OnPropertyChanged(nameof(SelectedBytes));
+        OnPropertyChanged(nameof(SelectedSize));
         SelectionChanged?.Invoke();
     }
 }

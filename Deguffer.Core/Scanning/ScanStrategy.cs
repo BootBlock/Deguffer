@@ -36,11 +36,14 @@ public enum FallbackReason
     VolumeNotAddressable,
 
     /// <summary>
-    /// The volume handle opened but the MFT could not be read or parsed. Distinct from the others
-    /// because it is not expected: it means either an unfamiliar on-disk layout or a genuine bug,
-    /// and it should be visible rather than absorbed.
+    /// The volume handle opened and the table did not answer for this location: it could not be
+    /// read or parsed, or it was read and does not establish a size for everything under the path.
+    ///
+    /// Distinct from the others because nothing the user can do changes it. A fragmented file whose
+    /// sizes live outside its own record is ordinary rather than a fault, so this is not a report
+    /// that anything is wrong — only that this location had to be walked.
     /// </summary>
-    MasterFileTableUnreadable,
+    MasterFileTableIncomplete,
 }
 
 public static class FallbackReasonText
@@ -56,9 +59,9 @@ public static class FallbackReasonText
             "Scanned by walking directories: this volume is not NTFS, so it has no file table to read.",
         FallbackReason.VolumeNotAddressable =>
             "Scanned by walking directories: this location is not on a local volume Deguffer can open.",
-        FallbackReason.MasterFileTableUnreadable =>
-            "Scanned by walking directories: the volume's file table could not be read. Sizes are still "
-            + "correct, but the scan took longer than it should.",
+        FallbackReason.MasterFileTableIncomplete =>
+            "Scanned by walking directories: the volume's file table did not account for everything here. "
+            + "Sizes are still correct, but the scan took longer than it should.",
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
     };
 }

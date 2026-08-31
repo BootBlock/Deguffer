@@ -12,8 +12,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
 {
-    private const uint AttributeList = 0x20;
-
     /// <summary>
     /// Read the extent map out of <paramref name="record0"/>, which is modified in place by the
     /// update sequence fixup.
@@ -22,7 +20,7 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
     {
         map = default!;
 
-        if (!MftRecordHeader.TryRead(record0, bytesPerSector, out var header))
+        if (MftRecordHeader.Read(record0, bytesPerSector, out var header) != MftParseOutcome.Parsed)
         {
             return false;
         }
@@ -36,7 +34,7 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
             // implemented, and reading only the runs that fit here would index part of the volume
             // and report short sizes for everything outside it — a wrong number, silently. Refuse
             // instead, and let the caller take the slow route.
-            if (attributes.CurrentType == AttributeList)
+            if (attributes.CurrentType == MftRecordParser.AttributeList)
             {
                 return false;
             }

@@ -82,6 +82,42 @@ public class MftDirectorySearchTests
         Assert.Equal([["Source", "Example", "OBJ"]], index.FindDirectoriesNamed("obj").Select(c => c.ToArray()));
     }
 
+    /// <summary>
+    /// The walk never enters a reparse point, so a directory only reachable through one is not
+    /// something an unelevated run can offer. The index sees the link as an ordinary directory in
+    /// the tree, so it has to be told.
+    /// </summary>
+    [Fact]
+    public void DoesNotReturnADirectoryReachedThroughALink()
+    {
+        var index = Build(Tree()
+            .AddDirectoryLink(30, Source, "Linked")
+            .AddDirectory(31, 30, "obj"));
+
+        var found = index.FindDirectoriesNamed("obj").Select(c => string.Join('\\', c));
+
+        Assert.DoesNotContain(@"Source\Linked\obj", found);
+        Assert.Contains(@"Source\Example\obj", found);
+    }
+
+    /// <summary>
+    /// And the link itself is not a candidate. It is a name pointing somewhere else; deleting it
+    /// removes the pointer, which is not what a user asked for when they asked to reclaim build
+    /// output.
+    /// </summary>
+    [Fact]
+    public void DoesNotReturnALinkThatCarriesTheName()
+    {
+        // Beside a real one of the same name, so a search that returned both would still look
+        // right by count.
+        var index = Build(Tree().AddDirectoryLink(30, Assets, "obj"));
+
+        var found = index.FindDirectoriesNamed("obj").Select(c => string.Join('\\', c)).ToList();
+
+        Assert.Contains(@"Source\Assets\obj", found);
+        Assert.Equal(3, found.Count);
+    }
+
     [Fact]
     public void FindsNothingWhenNoDirectoryCarriesTheName()
     {

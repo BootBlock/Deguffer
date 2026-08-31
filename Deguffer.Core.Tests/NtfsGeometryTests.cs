@@ -200,7 +200,7 @@ public class MftExtentMapTests
     [Fact]
     public void ReadsTheTablesOwnExtentsFromRecordZero()
     {
-        var record = MftFixture.SelfRecord([new DataRun(786_432, 64), new DataRun(900_000, 32)], dataSize: 98_304);
+        var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64), new DataRun(900_000, 32)], dataSize: 98_304);
 
         Assert.True(MftExtentMap.TryRead(record, bytesPerSector: 512, out var map));
 
@@ -217,7 +217,7 @@ public class MftExtentMapTests
     [Fact]
     public void RefusesATableWhoseRunListSpillsIntoAnAttributeList()
     {
-        var record = MftFixture.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536, withAttributeList: true);
+        var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536, withAttributeList: true);
 
         Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, out _));
     }

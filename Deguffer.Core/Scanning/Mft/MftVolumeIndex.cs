@@ -18,6 +18,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// volume root. Returns null when the path is not in the index, which the caller must treat as
     /// "ask the slow path" rather than "zero" — a path that exists but was missed would otherwise
     /// silently report an empty cache.
+    ///
+    /// Null is also the answer when the table described the path but not the size of everything
+    /// under it. Both cases mean the same thing to the caller, and neither can be answered with a
+    /// number.
     /// </summary>
     public ScanSize? TryMeasure(IReadOnlyList<string> relativePath)
     {
@@ -26,8 +30,13 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             return null;
         }
 
-        return tree.IsDirectory[record]
-            ? SumSubtree(record)
+        if (tree.IsDirectory[record])
+        {
+            return SumSubtree(record);
+        }
+
+        return tree.SizeUnknown[record]
+            ? null
             : new ScanSize(tree.Allocated[record], tree.Logical[record]);
     }
 
@@ -73,10 +82,11 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// Rebuild one record's path by walking <see cref="MftVolumeTree.Parent"/> up to the root.
     ///
     /// Returns null for a record whose chain does not reach the root — an orphan, or a parent
-    /// pointing outside the table. That is a real condition on a live volume rather than a
-    /// corruption check: a directory deleted while the table was being read leaves its children
-    /// briefly unreachable, and a path that cannot be rebuilt must be dropped rather than guessed
-    /// at, because a wrong path here is a wrong deletion target.
+    /// pointing outside the table — and for one whose chain passes through a link. The first is a
+    /// real condition on a live volume rather than a corruption check: a directory deleted while the
+    /// table was being read leaves its children briefly unreachable. Either way a path that cannot
+    /// be rebuilt must be dropped rather than guessed at, because a wrong path here is a wrong
+    /// deletion target.
     /// </summary>
     private IReadOnlyList<string>? TryBuildPath(uint record)
     {
@@ -95,7 +105,15 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 return components;
             }
 
-            if (current >= tree.Count || tree.Names[current] is not { } component)
+            if (current >= tree.Count)
+            {
+                return null;
+            }
+
+            // A link, or anything under one. The walk never enters a reparse point, so a path that
+            // passes through one is not something the guaranteed route could ever have produced —
+            // and the deletion target it names is a pointer, not the thing the user asked about.
+            if (tree.IsReparsePoint[current] || tree.Names[current] is not { } component)
             {
                 return null;
             }
@@ -129,7 +147,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         foreach (var component in relativePath)
         {
-            if (!tree.IsDirectory[current] || TryFindChild(current, component) is not { } next)
+            // A path reached through a link is one this table cannot total: whatever the link
+            // stands for keeps its own place, so the subtree here is empty and would report a
+            // populated cache as clear. The walk follows the link and is right, so the answer is to
+            // send the caller there. Tested at every level rather than only the last, so that the
+            // rule holds whatever the table turns out to contain.
+            if (tree.IsReparsePoint[current]
+                || !tree.IsDirectory[current]
+                || TryFindChild(current, component) is not { } next)
             {
                 return null;
             }
@@ -137,7 +162,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             current = next;
         }
 
-        return current;
+        return tree.IsReparsePoint[current] ? null : current;
     }
 
     /// <summary>
@@ -164,10 +189,17 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     }
 
     /// <summary>
-    /// Iterative depth-first sum. Recursion would be the obvious shape and would overflow the stack
-    /// on a deep node_modules tree, which is exactly the kind of tree this tool exists to measure.
+    /// Iterative depth-first sum, abandoned as soon as one entry's size turns out to be unknown.
+    ///
+    /// Recursion would be the obvious shape and would overflow the stack on a deep node_modules
+    /// tree, which is exactly the kind of tree this tool exists to measure.
+    ///
+    /// Abandoning the whole subtree for one entry is the same trade <see cref="MftVolumeIndexBuilder"/>
+    /// makes for a table it could not fully read: a total missing one file is still a total, and
+    /// nothing downstream can tell it from a correct one. The cost is that this path takes the walk;
+    /// the alternative cost is a cache reported as clear when it is not.
     /// </summary>
-    private ScanSize SumSubtree(uint root)
+    private ScanSize? SumSubtree(uint root)
     {
         long allocated = 0;
         long logical = 0;
@@ -177,6 +209,18 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         while (stack.TryPop(out var node))
         {
+            // A link holds nothing and contributes nothing: whatever it points at keeps its own
+            // place in the table, and the walk does not enter one either.
+            if (tree.IsReparsePoint[node])
+            {
+                continue;
+            }
+
+            if (tree.SizeUnknown[node])
+            {
+                return null;
+            }
+
             allocated += tree.Allocated[node];
             logical += tree.Logical[node];
 

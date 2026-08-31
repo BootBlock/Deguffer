@@ -15,10 +15,16 @@ public static class MftVolumeIndexBuilder
     /// <summary>
     /// Build the index for <paramref name="source"/>.
     ///
-    /// Returns false if any region of the table could not be read. That is deliberately strict: a
-    /// partial index still answers every query, and answers some of them short — the caller is told
-    /// a cache holds 200 MB when it holds 4 GB, with nothing to indicate the difference. Refusing
-    /// costs a slow scan; accepting costs a wrong number in a tool whose numbers decide deletions.
+    /// Returns false if any region of the table could not be read, or if any record in it could not
+    /// be. That is deliberately strict: a partial index still answers every query, and answers some
+    /// of them short — the caller is told a cache holds 200 MB when it holds 4 GB, with nothing to
+    /// indicate the difference. Refusing costs a slow scan; accepting costs a wrong number in a tool
+    /// whose numbers decide deletions.
+    ///
+    /// Records a table is simply full of — free ones, and the extension records that hold the
+    /// attributes of files whose own record ran out of room — are skipped and cost nothing. The
+    /// distinction between those and a record that could not be read is <see cref="MftParseOutcome"/>'s
+    /// whole reason to exist.
     /// </summary>
     public static bool TryBuild(IMftSource source, out MftVolumeIndex index, CancellationToken ct = default)
     {
@@ -63,9 +69,32 @@ public static class MftVolumeIndexBuilder
                 for (var i = 0; i < read; i++)
                 {
                     var slice = buffer.AsSpan(i * source.BytesPerRecord, source.BytesPerRecord);
+                    var outcome = MftRecordParser.Parse(slice, source.BytesPerSector, out var record);
 
-                    if (MftRecordParser.TryParse(slice, source.BytesPerSector, out var record)
-                        && record.ParentRecordNumber < tree.Count)
+                    if (outcome == MftParseOutcome.NotAnEntry)
+                    {
+                        continue;
+                    }
+
+                    // A record in use that this reader cannot place is the same loss as a region it
+                    // could not read: a file exists, the tree cannot hold it, and every directory
+                    // above it would total short with nothing to show for it.
+                    //
+                    // The whole volume goes with it, and on a live read that can be one record
+                    // caught mid-write — the condition the update sequence array exists to detect,
+                    // and one a second read of that record alone would very likely settle. Retrying
+                    // is the improvement this wants; refusing is the answer that is never wrong.
+                    if (outcome == MftParseOutcome.Unreadable)
+                    {
+                        return false;
+                    }
+
+                    // A parent outside the table is a different thing entirely, and an ordinary one
+                    // on a live volume: a directory removed mid-read, or a table that grew after its
+                    // size was measured. Such a record is unreachable from the root, so it cannot be
+                    // inside anything this index will be asked to total, and dropping it costs
+                    // nothing.
+                    if (record.ParentRecordNumber < tree.Count)
                     {
                         tree.Set(next + i, record);
                     }

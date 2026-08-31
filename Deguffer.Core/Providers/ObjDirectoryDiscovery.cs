@@ -23,13 +23,6 @@ public sealed record ObjDiscovery(IReadOnlyList<string> Candidates, bool UsedInd
 /// </summary>
 public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
 {
-    /// <summary>
-    /// Directories that would slow the walk considerably and can never hold a recognised candidate
-    /// beneath them. <c>node_modules</c> is the expensive one — hundreds of thousands of entries in
-    /// a tree that has no .NET intermediate output in it.
-    /// </summary>
-    private static readonly string[] NeverDescended = [".git", "node_modules"];
-
     public async Task<ObjDiscovery> FindAsync(
         string name,
         IReadOnlyList<string> roots,
@@ -61,7 +54,12 @@ public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
             }
             else
             {
-                candidates.AddRange(indexed);
+                // The index answers with every directory of that name on the volume, narrowed to
+                // this root. Narrowing is not the whole of the walk's behaviour, and the difference
+                // is not cosmetic: without this an elevated run offers directories inside .git and
+                // node_modules, and nested ones already covered by their own parent.
+                candidates.AddRange(
+                    indexed.Where(path => SourceTreeBoundary.WouldBeFoundByWalking(path, root, name)));
             }
         }
 
@@ -95,7 +93,7 @@ public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
                     continue;
                 }
 
-                if (!NeverDescended.Contains(child.Name, StringComparer.OrdinalIgnoreCase))
+                if (!SourceTreeBoundary.IsNeverEntered(child.Name))
                 {
                     pending.Push(child.FullName);
                 }
