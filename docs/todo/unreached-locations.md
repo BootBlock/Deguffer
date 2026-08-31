@@ -1,8 +1,9 @@
 # Unreached locations — what the shipped providers do not see
 
-> **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §5's GPU shader
-> caches have shipped; everything else is unstarted. Flip to ✅ COMPLETE and `git mv` into `done/`
-> when the list is exhausted, or supersede it with a newer plan.
+> **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §4's Chromium
+> application caches and §5's GPU shader caches have shipped; everything else is unstarted. Flip to
+> ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a newer
+> plan.
 
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
@@ -41,7 +42,7 @@ form throughout this document.
 | `C:\$WinREAgent` | 1.7 GB | 2 | Disk Cleanup's update pass does not remove it |
 | .NET SDKs, 8 versions, one out of support | 1.8 GB | 4 | An uninstall, not a delete. §2 rules it out |
 | Visual Studio `.vs\` per solution (4 solutions) | 0.8 GB | 1 | Inside source trees, beside the `obj\` already walked |
-| Chromium-shaped caches across 10 desktop apps | 0.8 GB | 1 | Recognisable by shape, not by name |
+| Chromium-shaped caches across 10 desktop apps | 0.8 GB | 1 | Recognisable by shape, not by name. **Shipped — see §4** |
 | Crash dumps, CBS logs, WER archives | 0.2 GB | 1 | Small here; routinely tens of GB after a bugcheck |
 
 That is roughly 39 GB, of which about 25 GB is reclaimable once the Tier 3 and Tier 4 rows come off.
@@ -205,7 +206,53 @@ unpackaged. It never treats `LocalCache` as a licence.
 
 ---
 
-## 4. Chromium-shaped caches, recognised by shape
+## 4. Chromium-shaped caches, recognised by shape ✅ done
+
+**Outcome:** shipped as `ChromiumCacheProvider`, with the discovery walk split out into
+`ChromiumUserDataDiscovery`. The split is the design: one type answers "whose folder is this?" and
+the other answers "what inside it may go", and keeping them apart is what stops the second question
+from ever being asked of a folder that failed the first.
+
+Six things the work settled that this section did not anticipate:
+
+- **A cache name is not identification, and the two judgements had to be separated to say so.**
+  This section framed the signature as the whole rule, but the six names only say what may be
+  deleted — they never establish whose folder it is, and any directory anywhere may be called
+  `GPUCache`. A folder is now looked inside only once Chromium's own `Local State` marker is found
+  in it. An application that has somehow never written that file is invisible here, and reclaiming
+  nothing is the safe direction to be wrong in.
+- **The two nested names needed a level per containing directory, not a wider child set.**
+  A `DisposableChildSet` classifies a flat name against one parent, so `Cache\Cache_Data` cannot be
+  one of its entries. Teaching it relative paths would change the question every provider's §5.2
+  declaration answers from "which children may this tool delete?" into "which paths, at what depth,
+  may it reach?" — strictly harder to check by reading, and being checkable by reading is the whole
+  point. So `Cache` and `Service Worker` became levels of their own, and the rule stayed an
+  exact-name allow-list over one directory's immediate children.
+- **A container had to be *declared* Tier 4 rather than left unrecognised.** `Cache` and
+  `Service Worker` are the one case where the unrecognised-child reason would have been actively
+  false: the directory really is left standing, and something inside it really is being removed.
+  Declaring them is the only way the note says both. The generic "we did not recognise that"
+  wording is right for a sibling and wrong for a parent.
+- **One note per spared child does not survive contact with this folder.** Every provider before
+  this one names each thing it left alone, which is right for a vendor directory holding two
+  children and unusable for a Chromium profile holding fifty, across ten applications. A note
+  nobody reads protects nothing, so the plan carries one sentence per application and §5.6 still
+  asserts every spared directory individually.
+- **The single-profile layout makes the folder its own profile.** An application embedding the
+  engine writes the caches straight into its user-data folder, so that one directory is named both
+  as the folder and as the profile and would have been verified twice, reporting one survivor as
+  two. Protected paths are deduplicated for that reason and no other.
+- **§5.3's warning has no names to declare.** The applications are discovered rather than known, so
+  the folder's name stands in for the process's — which is right far more often than not for an
+  application that named its own data folder. It decides nothing: a miss costs one absent warning,
+  and a hit names a process the user can see and close.
+
+Confirmed and left alone: MSIX redirection. `%LOCALAPPDATA%\Packages` needs no special case here,
+because it holds no `Local State` of its own and the identification check skips it exactly as it
+skips every other directory. Reaching the Chromium caches inside a packaged app is §3's work.
+Scanning one level under the two application-data roots also leaves the browsers themselves out,
+which is intended: Chrome and Edge keep their user data three levels down, and every
+general-purpose cleaner already reaches them.
 
 Cleaners handle browsers. Almost none handle the desktop applications that embed the same engine,
 each carrying the same cache directories under its own vendor name.
