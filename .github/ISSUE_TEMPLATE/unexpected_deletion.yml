@@ -1,0 +1,91 @@
+name: Unexpected deletion
+description: Deguffer removed something it should not have, or offered to.
+labels: ["type: bug", "safety", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the report that matters most. Deguffer's failure mode is silent, irreversible data
+        loss, so a confirmed report here is treated as critical and takes precedence over other
+        work.
+
+        **Redact your paths before you paste anything.** This repository is public and permanent,
+        and the material you are about to describe is full of your user name, your machine name and
+        your directory layout. Replace anything like `C:\Users\yourname\...` with
+        `C:\Users\<user>\...`, and check any screenshot for the same. Describing a path as
+        "my project's build output folder" is more useful than the literal path, and safer.
+
+        **If you have not yet run the cleanup, do not run it.** Report first.
+  - type: dropdown
+    id: stage
+    attributes:
+      label: What stage did this reach?
+      options:
+        - "It was offered in the preview, but I have not run it"
+        - "I ran it, and something was deleted"
+        - "It was deleted, and I have since restored it"
+    validations:
+      required: true
+  - type: textarea
+    id: what-went
+    attributes:
+      label: What was removed, or offered for removal?
+      description: >-
+        Describe it rather than pasting the path: which tool owns the directory, and what it held.
+        Say whether it was the tool's root directory or a child of it.
+      placeholder: >-
+        Deguffer offered the whole package cache root, not just its download subdirectory.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Why should it not have been removed?
+      description: What that directory was needed for, and what broke without it.
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: What safety tier did the preview show for it?
+      description: The tier badge sits on the row in the preview.
+      options:
+        - "Tier 1"
+        - "Tier 2"
+        - "Tier 3"
+        - "Tier 4"
+        - It showed no tier
+        - I did not look
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How you got to that preview, if you can retrace it.
+    validations:
+      required: false
+  - type: dropdown
+    id: elevation
+    attributes:
+      label: Were you running Deguffer elevated?
+      options:
+        - "No: standard user"
+        - "Yes: elevated"
+        - Not sure
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Windows version and app version
+      placeholder: e.g. Windows 11 26100, Deguffer 2026.07.19
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Redact every path first, and crop any screenshot to remove your user name.
+    validations:
+      required: false

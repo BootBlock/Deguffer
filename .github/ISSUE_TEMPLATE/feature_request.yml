@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest an idea or an improvement.
+labels: ["type: enhancement", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Redact your paths.** This repository is public and permanent, so replace anything like
+        `C:\Users\yourname\...` with `C:\Users\<user>\...` before you paste it.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the need or the pain point, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed idea
+      description: What you would like to see happen.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app does this touch?
+      multiple: true
+      options:
+        - Scanning
+        - The preview, or the plan it describes
+        - Executing a cleanup
+        - A new cache source or tool to support
+        - Settings
+        - Storage
+        - Packaging and distribution
+        - Not sure
+    validations:
+      required: false
+  - type: dropdown
+    id: deletes
+    attributes:
+      label: Would this change what Deguffer deletes?
+      description: >-
+        A new cache source, a wider match, or a new tier answer all count. This is not a reason to
+        reject an idea, but it changes how carefully it has to be reviewed.
+      options:
+        - "No: it changes what is shown or how it works"
+        - "Yes: it adds or widens something that would be deleted"
+        - Not sure
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why they fall short.
+    validations:
+      required: false

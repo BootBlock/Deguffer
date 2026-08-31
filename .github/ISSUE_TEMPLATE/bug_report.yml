@@ -1,0 +1,89 @@
+name: Bug report
+description: Report something that is not working correctly.
+labels: ["type: bug", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please fill in enough detail for someone to
+        reproduce it.
+
+        **Redact your paths before you paste anything.** Deguffer reads your disk, so its output
+        contains your user name, your machine name and your directory layout. This repository is
+        public and permanent. Replace anything like `C:\Users\yourname\...` with
+        `C:\Users\<user>\...`, and check any screenshot for the same before you attach it.
+
+        **If Deguffer deleted something it should not have, use the "Unexpected deletion" template
+        instead.** That one is triaged first.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What the app did, and what you expected instead.
+      placeholder: When I..., I expected..., but instead...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps that trigger the problem.
+      placeholder: |
+        1. Open...
+        2. Scan...
+        3. See...
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen?
+      multiple: true
+      options:
+        - Scanning
+        - The preview, or the plan it described
+        - Executing a cleanup
+        - Elevated rescan
+        - Settings
+        - Storage
+        - Starting or installing the app
+        - Somewhere else
+    validations:
+      required: false
+  - type: dropdown
+    id: elevation
+    attributes:
+      label: Were you running Deguffer elevated?
+      options:
+        - "No: standard user"
+        - "Yes: elevated"
+        - Not sure
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Windows version and app version
+      description: The app version is shown on the About screen.
+      placeholder: e.g. Windows 11 26100, Deguffer 2026.07.19
+    validations:
+      required: false
+  - type: textarea
+    id: toolchain
+    attributes:
+      label: Which developer tools are installed?
+      description: >-
+        Only relevant when a cache was found, missed, or measured wrongly. Naming the tool and its
+        version helps a great deal, because each one has its own provider.
+      placeholder: e.g. npm 10.9, .NET SDK 10.0.400, Gradle 8.10
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: >-
+        A screenshot or a crash log helps. Redact every path first, and crop out your user name and
+        machine name.
+    validations:
+      required: false
