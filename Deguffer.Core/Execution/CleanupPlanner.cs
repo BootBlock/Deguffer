@@ -17,10 +17,10 @@ public sealed class CleanupPlanner
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Playwright and the GPU shader
-    /// caches — which the audit did not cover, and which were investigated on their own terms
-    /// before being added. Their reasoning and their rejected alternatives are in
-    /// <c>docs/cache-locations.md</c>.
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, Playwright, the GPU shader caches
+    /// and the Chromium application caches — which the audit did not cover, and which were
+    /// investigated on their own terms before being added. Their reasoning and their rejected
+    /// alternatives are in <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except PlatformIO and Playwright, which are Tier 2 and therefore offered but
     /// never pre-selected, and never executed without §7's confirmation.
@@ -35,6 +35,7 @@ public sealed class CleanupPlanner
         new UvCacheProvider(),
         new PipCacheProvider(),
         new GpuShaderCacheProvider(),
+        new ChromiumCacheProvider(),
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
     ]);
