@@ -465,6 +465,12 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     /// <summary>
     /// The same rule one level down. A profile is reached by enumerating the data folder, so the
     /// link filtering there is what keeps a redirected profile out of the plan.
+    ///
+    /// Unlike its sibling above, this one has two independent guards: removing the enumeration's
+    /// link filtering alone leaves the reparse check in <c>CollectFrom</c> to decline the profile,
+    /// so a mutation of either guard on its own keeps this test green. It fails when both go. That
+    /// is defence in depth rather than a weak assertion, and it is written down because a mutation
+    /// pass on one guard would otherwise read as a test that proves nothing.
     /// </summary>
     [Fact]
     public async Task AJunctionedProfileIsNeverEntered()
