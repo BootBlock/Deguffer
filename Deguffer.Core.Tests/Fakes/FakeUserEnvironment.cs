@@ -64,8 +64,15 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
-    public string? GetEnvironmentVariable(string name) =>
-        _variables.TryGetValue(name, out var value) ? value : null;
+    /// <summary>How many times a provider read the environment. Proves a discovery is memoised.</summary>
+    public int EnvironmentReads { get; private set; }
+
+    public string? GetEnvironmentVariable(string name)
+    {
+        EnvironmentReads++;
+
+        return _variables.TryGetValue(name, out var value) ? value : null;
+    }
 
     public int InvalidateCount { get; private set; }
 

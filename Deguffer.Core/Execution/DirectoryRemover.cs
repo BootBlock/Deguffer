@@ -197,10 +197,67 @@ public static class DirectoryRemover
         try
         {
             fs.DeleteDirectory(extendedPath);
+            return;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
         {
-            // Not empty, or in use. Leave it.
+            // Not empty, in use, already gone — or the read-only bit, which the retry below is for.
+        }
+
+        // Windows refuses to remove a directory carrying the read-only attribute exactly as it
+        // refuses a read-only file, so the file path's retry belongs here too. Without it every
+        // file inside such a directory goes, the directory stays, and the step still reports
+        // success because bytes were reclaimed — leaving a folder the user was told would go.
+        //
+        // Which refusal happened is not readable from the exception: .NET reports the same
+        // read-only directory as UnauthorizedAccessException for a plain path and as a bare
+        // IOException for the extended-length form §6.3 requires, and the HResult goes generic with
+        // it. The attributes are the only honest answer, so they are read rather than guessed at.
+        // Reading them is also what keeps this away from a link: clearing attributes through a
+        // reparse point would act on the far side, which nothing here has classified.
+        if (fs.TryGetAttributes(extendedPath) is not { } attributes || !attributes.HasFlag(FileAttributes.ReadOnly))
+        {
+            return;
+        }
+
+        // Emptiness is asked only of a real directory, and it costs nothing there: clearing the bit
+        // on one that still holds something cannot make the removal succeed, so the only thing it
+        // could achieve is changing the attributes of a path this removal is leaving standing. A
+        // link is the case the question must not be asked of at all — enumerating it reads the far
+        // side, which nothing here has classified. Its own attributes are what get cleared, and
+        // removing the link without following it is what the caller asked for.
+        if (!attributes.HasFlag(FileAttributes.ReparsePoint) && !IsEmpty(extendedPath, fs))
+        {
+            return;
+        }
+
+        try
+        {
+            fs.ClearAttributes(extendedPath);
+            fs.DeleteDirectory(extendedPath);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
+        {
+            // Held open, or something arrived in it between the two calls. The read-only bit is
+            // cleared and the directory stays, which is the same residue TryDeleteFile leaves on the
+            // same path — and it is a directory this plan named for removal either way.
+        }
+    }
+
+    /// <summary>
+    /// Whether the directory holds nothing. Asked only of a directory already known not to be a
+    /// link, so the enumeration cannot resolve through one.
+    /// </summary>
+    private static bool IsEmpty(string extendedPath, IFileSystem fs)
+    {
+        try
+        {
+            return fs.EnumerateEntries(extendedPath).Count == 0;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        {
+            // Unreadable or already gone: neither is a directory to go on clearing attributes on.
+            return false;
         }
     }
 }

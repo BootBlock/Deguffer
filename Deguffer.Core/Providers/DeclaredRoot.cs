@@ -29,10 +29,25 @@ public enum DeclaredLocationKind
 /// </param>
 /// <param name="Reason">Why it is disposable, written for the user.</param>
 /// <param name="Kind">Directory or file. <c>MEMORY.DMP</c> is the reason the second exists.</param>
+/// <param name="ReportsAge">
+/// Whether §7's age column means anything for this location.
+///
+/// The age is read from the location's own immediate children, which is right wherever those
+/// children are the things being written: a dump folder, a log folder, a directory of downloaded
+/// archives. It is wrong wherever the location nests before it reaches its content. A Maven local
+/// repository is keyed by group and then artifact and then version, so its top level moves only
+/// when a whole new group first appears — and a repository somebody builds against every day would
+/// report as years old, which is precisely backwards for the one thing an age is read for. Walking
+/// deeper is not the fix: the correct age would cost a full tree walk at plan time, and
+/// <see cref="DeletionTarget.LastWritten"/> already says that one timestamp spanning everything a
+/// tool ever cached is a number with nothing to mean. So such a location reports no age at all, and
+/// §7's column is then blank rather than carrying a date nobody should act on.
+/// </param>
 public sealed record DeclaredLocation(
     string RelativePath,
     string Reason,
-    DeclaredLocationKind Kind = DeclaredLocationKind.Directory);
+    DeclaredLocationKind Kind = DeclaredLocationKind.Directory,
+    bool ReportsAge = true);
 
 /// <summary>
 /// A directory a provider reaches into by name, and the exact paths under it that it may remove.

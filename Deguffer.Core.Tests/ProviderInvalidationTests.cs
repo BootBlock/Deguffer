@@ -101,6 +101,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         field.FieldType == typeof(string) ? "sentinel"
         : field.FieldType.IsAssignableFrom(typeof(string[])) ? new[] { "sentinel" }
         : EmptyOfElementType(field.FieldType)
+        ?? Constructed(field.FieldType)
         ?? throw new XunitException(
             $"{field.DeclaringType?.Name}.{field.Name} is a {field.FieldType.Name}, which this test " +
             "cannot fabricate a value for. Extend Sentinel so the field is still covered.");
@@ -125,6 +126,29 @@ public sealed class ProviderInvalidationTests : IDisposable
         return fieldType.IsAssignableFrom(element.MakeArrayType())
             ? Array.CreateInstance(element, 0)
             : null;
+    }
+
+    /// <summary>
+    /// An instance of the record a provider memoises when the answer it remembers is several values
+    /// rather than one path — where a tool was found, and whether the tool itself said so.
+    ///
+    /// Built through the type's own constructor with a default for each parameter. The values are
+    /// never read: what this test asserts is that the reference was discarded, so any instance of
+    /// the right type will do.
+    /// </summary>
+    private static object? Constructed(Type fieldType)
+    {
+        if (fieldType.GetConstructors() is not [var constructor])
+        {
+            return null;
+        }
+
+        var arguments = constructor
+            .GetParameters()
+            .Select(p => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null)
+            .ToArray();
+
+        return constructor.Invoke(arguments);
     }
 
     /// <summary>

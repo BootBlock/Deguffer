@@ -48,6 +48,58 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.Equal(512, outcome.BytesReclaimed);
     }
 
+    /// <summary>
+    /// The same bit, on a directory rather than a file.
+    ///
+    /// Windows refuses to remove a directory carrying <c>FILE_ATTRIBUTE_READONLY</c>, exactly as it
+    /// refuses a read-only file — observed directly on this machine, where
+    /// <c>Directory.Delete</c> on one throws <see cref="UnauthorizedAccessException"/>. The file
+    /// path has always cleared the bit and retried; the directory path did not, so every file in
+    /// the tree went and the directory stayed. The step then reports success, because bytes were
+    /// reclaimed, and the folder the user was told would go is still on the disk.
+    /// </summary>
+    [Fact]
+    public async Task RemovesADirectoryWhoseReadOnlyBitWouldOtherwiseBlockIt()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(1024, "cache", "held", "payload.bin");
+
+        var held = Path.Combine(root, "held");
+        File.SetAttributes(held, File.GetAttributes(held) | FileAttributes.ReadOnly);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.Equal(1024, outcome.BytesReclaimed);
+        Assert.False(Directory.Exists(held), "a read-only directory survived the removal");
+        Assert.True(outcome.RootRemoved);
+    }
+
+    /// <summary>
+    /// The other half of the same retry, and the reason it is gated on emptiness. A directory that
+    /// still holds something is one the removal is leaving standing, so its attributes are left
+    /// exactly as they were rather than reset on a path that survives.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAReadOnlyDirectoryUntouchedWhileSomethingInsideItIsStillHeld()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var held = _temp.CreateFile(2048, "cache", "kept", "held.bin");
+        var directory = Path.Combine(root, "kept");
+        File.SetAttributes(directory, File.GetAttributes(directory) | FileAttributes.ReadOnly);
+
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await DirectoryRemover.RemoveAsync(root);
+
+            Assert.True(Directory.Exists(directory));
+            Assert.True(
+                File.GetAttributes(directory).HasFlag(FileAttributes.ReadOnly),
+                "a directory that survived the removal had its attributes reset");
+        }
+
+        File.SetAttributes(directory, FileAttributes.Normal);
+    }
+
     [Fact]
     public async Task LeavesAFileHeldOpenInPlaceRatherThanFailingTheRun()
     {
@@ -65,6 +117,36 @@ public sealed class DirectoryRemoverTests : IDisposable
             Assert.False(outcome.RootRemoved);
             Assert.True(File.Exists(held));
         }
+    }
+
+    /// <summary>
+    /// A read-only link is removed, and the question that would have read through it is never asked.
+    ///
+    /// Windows refuses to remove a link carrying the read-only bit exactly as it refuses a real
+    /// directory, and clearing that bit acts on the link rather than on what it points at — so the
+    /// retry is right here. What must not happen is the emptiness check: enumerating a link reads
+    /// the far side, which nothing in this removal has classified, and the answer would then decide
+    /// the fate of a path in a tree nobody looked at.
+    /// </summary>
+    [Fact]
+    public async Task RemovesAReadOnlyLinkWithoutAskingWhatIsOnTheFarSideOfIt()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var outside = _temp.CreateDirectory("precious");
+        var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+
+        var link = Path.Combine(root, "link");
+        Directory.CreateSymbolicLink(link, outside);
+        File.SetAttributes(link, File.GetAttributes(link) | FileAttributes.ReadOnly);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.False(Directory.Exists(link), "a read-only link survived, so the far side decided its fate");
+
+        Assert.True(Directory.Exists(outside), "removal followed the link it was handed");
+        Assert.True(File.Exists(bystander));
+        Assert.Equal(0, outcome.BytesReclaimed);
     }
 
     /// <summary>

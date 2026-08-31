@@ -52,9 +52,9 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// actively misleading: the directory really is left standing, and something inside it really is
     /// being removed. Declaring them says both.</para>
     /// </summary>
-    public static readonly IReadOnlyList<ChromiumCacheLevel> Levels =
+    public static readonly IReadOnlyList<CacheLevel> Levels =
     [
-        new ChromiumCacheLevel(string.Empty, new DisposableChildSet(
+        new CacheLevel(string.Empty, new DisposableChildSet(
         [
             new ChildClassification(
                 "Code Cache",
@@ -82,14 +82,14 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 SafetyTier.DoNotTouch,
                 "Service-worker registrations and scripts, next to the responses they cached. Only the 'CacheStorage' inside it is removed."),
         ])),
-        new ChromiumCacheLevel("Cache", new DisposableChildSet(
+        new CacheLevel("Cache", new DisposableChildSet(
         [
             new ChildClassification(
                 "Cache_Data",
                 SafetyTier.RegenerableCache,
                 "Web content the application saved so it would not fetch the same thing twice. It is downloaded again when it is next wanted."),
         ])),
-        new ChromiumCacheLevel("Service Worker", new DisposableChildSet(
+        new CacheLevel("Service Worker", new DisposableChildSet(
         [
             new ChildClassification(
                 "CacheStorage",

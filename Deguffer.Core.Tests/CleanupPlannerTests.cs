@@ -181,14 +181,14 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip",
-                "gpu-shader-cache", "chromium-app-cache", "platformio", "playwright", "recycle-bin",
-                "crash-dumps", "windows-servicing-logs",
+                "dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip", "cargo",
+                "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache", "platformio",
+                "playwright", "recycle-bin", "crash-dumps", "windows-servicing-logs",
             ],
             planner.Providers.Select(p => p.Id));
 
         Assert.Equal(
-            ["platformio", "playwright"],
+            ["maven", "vcpkg", "platformio", "playwright"],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(

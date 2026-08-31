@@ -57,4 +57,10 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         _paths.Enqueue(path);
         inner.ClearAttributes(path);
     }
+
+    public FileAttributes? TryGetAttributes(string path)
+    {
+        _paths.Enqueue(path);
+        return inner.TryGetAttributes(path);
+    }
 }

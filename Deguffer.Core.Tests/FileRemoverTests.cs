@@ -174,6 +174,8 @@ public sealed class FileRemoverTests : IDisposable
         public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
 
         public void ClearAttributes(string path) => inner.ClearAttributes(path);
+
+        public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
     }
 
     /// <summary>

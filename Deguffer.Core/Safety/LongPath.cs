@@ -34,6 +34,78 @@ public static class LongPath
             : DevicePrefix + full;
     }
 
+    /// <summary>
+    /// A path the user configured, in the form the rest of the code may rely on: fully qualified,
+    /// fully resolved, and without a trailing separator. Null when the value is not a full path, or
+    /// names something Windows will not accept as one.
+    ///
+    /// <para>Every caller of this is a provider whose root comes from an environment variable or a
+    /// settings file, and two things go wrong when such a value is used as it arrived. A trailing
+    /// separator makes <see cref="Path.GetFileName(string)"/> return nothing, so a provider that
+    /// splits a root from its leaf declares a target that resolves back to the directory it also
+    /// asserts must survive — and §5.6 then reports a correct run as a failure. A value ending in
+    /// <c>..</c> is worse: <see cref="Extended"/> requires an already-normalised path, because the
+    /// Win32 device namespace resolves nothing, so the deletion would land one directory above the
+    /// one the plan named.</para>
+    ///
+    /// <para><see cref="Path.GetFullPath(string)"/> is safe here only because the value is checked
+    /// to be fully qualified first: an unqualified one would resolve against Deguffer's own working
+    /// directory, which is a directory nobody pointed at. It resolves nothing in a value that already
+    /// carries the device prefix, though, so the prefix comes off first — otherwise a configured
+    /// <c>\\?\C:\Users\me\.m2</c> would keep its <c>..</c> segments and would compare equal to
+    /// nothing, walking straight past a caller's check that it is not the tool's own directory.</para>
+    /// </summary>
+    public static string? Configured(string? value)
+    {
+        var trimmed = value?.Trim();
+
+        if (string.IsNullOrEmpty(trimmed) || !Path.IsPathFullyQualified(trimmed))
+        {
+            return null;
+        }
+
+        try
+        {
+            // A drive root keeps its separator, which is correct: "C:\" is the directory. A UNC root
+            // does lose one, and both then have no containing directory at all — which is how the
+            // callers that must refuse a whole volume come to refuse it.
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(Display(trimmed)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // Characters Windows will not accept in a path, so there is nothing here to point at.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> is <paramref name="ancestor"/> itself or sits inside it.
+    ///
+    /// <para>Both providers that accept a configured root need this to refuse one that would swallow
+    /// the tool's own directory, or one of the things inside it the provider promises to leave
+    /// standing. A configured value has been through <see cref="Configured"/>, but the other side of
+    /// the comparison is often a <see cref="Path.Combine(string, string)"/> result that has not, so
+    /// the separator is handled here rather than assumed.</para>
+    ///
+    /// <para>A volume root is the case that makes that matter: <c>C:\</c> keeps its separator, and
+    /// appending another would build a prefix nothing can match — so a caller asking whether
+    /// something is under a whole volume would be told no.</para>
+    /// </summary>
+    public static bool Contains(string ancestor, string candidate)
+    {
+        if (candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var prefix = ancestor.EndsWith(Path.DirectorySeparatorChar)
+            || ancestor.EndsWith(Path.AltDirectorySeparatorChar)
+                ? ancestor
+                : ancestor + Path.DirectorySeparatorChar;
+
+        return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Strip the extended-length prefix, for display and comparison.</summary>
     public static string Display(string path)
     {

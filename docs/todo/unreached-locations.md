@@ -1,9 +1,10 @@
 # Unreached locations — what the shipped providers do not see
 
-> **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §4's Chromium
-> application caches, §5's GPU shader caches, §6's crash dumps and servicing logs, and §7's
-> per-volume recycle bins have shipped; everything else is unstarted. Flip to ✅ COMPLETE and
-> `git mv` into `done/` when the list is exhausted, or supersede it with a newer plan.
+> **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
+> and vcpkg providers, §4's Chromium application caches, §5's GPU shader caches, §6's crash dumps
+> and servicing logs, and §7's per-volume recycle bins have shipped; §1's pnpm and conda and
+> everything else are unstarted. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
+> exhausted, or supersede it with a newer plan.
 
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
@@ -54,13 +55,132 @@ the list. Do not read the table as a ranking.
 
 ---
 
-## 1. Package managers with an official eviction command
+## 1. Package managers with an official eviction command — Cargo, Go, Maven and vcpkg ✅ done
 
 The closest fit to what Deguffer already does. Each has a §5.1 command or a §5.2 child set, so the
 existing provider shape applies almost unchanged. Cleaners miss them because each needs its own
 knowledge and there are a lot of them.
 
-### Cargo — Tier 1, researched
+**Outcome:** four of the six shipped — `CargoCacheProvider`, `GoCacheProvider`,
+`MavenRepositoryProvider` and `VcpkgCacheProvider`, with `VcpkgDiscovery` split out beside the last
+of them. pnpm and conda did not, and the row in the sequencing table was split rather than ticked:
+both are blocked on the link-aware measurement open question 1 records, and neither is a provider
+until that is answered. Every one of the four is **researched rather than measured** — none of these
+toolchains is installed on the machine this was written against, so the sizes here remain vendor
+documentation and community report, and the rules are proved through the fakes rather than against a
+real cache.
+
+Nine things the work settled that this section did not anticipate.
+
+- **The tier held for two and moved for two, and one argument moved both.** "Regenerable" is a claim
+  about somebody else re-serving an artefact, and §9 of this document already makes that argument for
+  model weights. It bites twice here. A Maven local repository is filled from two places: most of it
+  came from a remote, but `mvn install` writes into the same tree in the same layout, and what it
+  writes exists on no remote at all — so losing it does not make the next build slower, it makes it
+  fail until somebody rebuilds the producing project. That is Playwright's shape exactly, and Tier 2
+  is where Playwright already sits. vcpkg is Tier 2 for the other half of Tier 2's own definition:
+  restoring a binary-cache entry is a *compile* rather than a download, and for a large library that
+  is hours.
+
+- **Cargo stayed Tier 1 only because two of the four children came off the list, and the split is
+  the finding.** `git\db` is the bare clone of a git dependency and the only copy of that history on
+  the machine; `git\checkouts` is re-created from it with no network at all. `registry\src` is
+  unpacked from `registry\cache` the same way. Cargo's own documentation draws precisely that line
+  when it says which parts of the home are worth carrying between CI runs — the originals are, the
+  derived directories are not. So the provider takes `registry\cache`, `registry\src` and
+  `git\checkouts`, and declares `git\db` and `registry\index` at Tier 4 with reasons that say why
+  they stay. Where a location *can* be split into the safe half and the unsafe half along a
+  directory boundary, splitting it is better than arguing the tier over the whole.
+
+- **§5.1's answer is "no" three times out of four, and each "no" is different.** Cargo's garbage
+  collector is still unstable and nightly-only; `cargo clean` is a per-project command for a
+  different subject. Maven ships no machine-wide purge at all —
+  `dependency:purge-local-repository` removes one project's dependencies and immediately re-resolves
+  them. vcpkg's own answer is the `--clean-after-build` family of flags, which clean as a build goes
+  rather than afterwards, plus documentation saying outright that `buildtrees`, `downloads` and
+  `packages` are safe to delete. Each position is written into the class, so a reader can tell
+  "considered and absent" from "never asked".
+
+- **Go's commands close a trap rather than merely being preferred.** The module cache is read-only by
+  design, so a path-based provider would meet an access-denied refusal per file, skip each one under
+  §5.3, and reclaim nothing while reporting success. `go clean -modcache` is what knows how to take
+  it apart. One `go env GOCACHE GOMODCACHE GOPATH` answers all three locations, and the third is
+  what tells the provider which neighbours §5.6 has to assert survived.
+
+- **The read-only trap was real, and it was in the remover rather than in any provider.** Windows
+  refuses to remove a directory carrying `FILE_ATTRIBUTE_READONLY` exactly as it refuses a read-only
+  file — observed directly here. `DirectoryRemover.TryDeleteFile` had always cleared the bit and
+  retried; `TryDeleteDirectory` never did, so every file in such a directory went, the directory
+  stayed, and the step reported success because bytes had been reclaimed. Fixed at the seam, with a
+  test that failed first. Two things the fix had to get right: the exception does not discriminate,
+  because .NET reports the same read-only directory as `UnauthorizedAccessException` for a plain path
+  and as a bare `IOException` for the extended-length form §6.3 requires; and the retry is gated on
+  the directory being empty, so a directory still holding a locked file keeps its attributes rather
+  than having them reset on a path the removal is deliberately leaving standing.
+
+- **The nested-child shape got a name rather than a second copy.** §4 answered Chromium's `Cache\Cache_Data`
+  with a level per containing directory, and Cargo's `registry\cache` needed the same answer.
+  `ChromiumCacheLevel` is now `CacheLevel`, in its own file, used by both — each provider still
+  writes its own levels, so §5.2 stays answerable by reading one table. No fourth shape was added.
+
+- **Depth was not the question that chose the shape.** Two of the four name their targets outright
+  through `DeclaredRoot` and never enumerate: everything in `.m2` besides the repository is
+  configuration knowable by name, and listing a vcpkg clone would produce half a dozen "not
+  recognised" notes about `ports`, `triplets` and `scripts` while `installed` is far better served by
+  being a named survivor. Cargo enumerates all three of its levels, because `.cargo` is an ordinary
+  profile directory where listing costs nothing and a child a later Cargo adds should be reported
+  rather than invisible. The deciding question is whether the parent's *other* children have to be
+  classified and reported, exactly as expected — but the answer went the declared way twice, which
+  the section did not.
+
+- **A declared location's age is not always meaningful, and the seam had to say so.**
+  `DeclaredLocations` reads an age from a location's immediate children, which is right for a dump
+  folder or a directory of archives and wrong for a Maven repository: that nests by group, artifact
+  and version, so its top level moves only when a whole new group first appears, and a repository
+  built against daily would report as years old. `DeclaredLocation.ReportsAge` now carries that, and
+  §7's column is then blank rather than carrying a date nobody should act on.
+
+- **vcpkg is the first tool whose main directory is a clone the user placed, and the provider has to
+  say what it could not see.** There is no profile location to fall back on: the clone is knowable
+  only from `VCPKG_ROOT`, from the `vcpkg.path.txt` that `vcpkg integrate install` writes, or from the
+  directory holding `vcpkg` on `PATH`. Where none answers, only the binary cache is covered — a
+  quarter of the subject — and the plan carries a sentence saying so and naming what would fix it. A
+  provider that silently reported a fraction of a cache would be worse than one that names the part
+  it did not reach. Two smaller relocation findings came with it: the binary cache has a documented
+  three-step search order rather than one variable, and `VCPKG_DOWNLOADS` set to the place vcpkg
+  would have used anyway must not declare the same directory twice.
+
+- **A configured root is a claim, and four separate holes came from treating it as a fact.** Review
+  found every one of them, and they are one shape: a string from an environment variable or a
+  settings file, used before anything established what it was. A junctioned Cargo home was declined
+  at the root level and reached through anyway, because the next level resolved its own path through
+  the link that had just been declined. A Maven `localRepository` naming `.m2` itself made the
+  folder holding the credentials the target of the plan that promised they would survive. A stray
+  `vcpkg.exe` would have declared `downloads`, `packages` and `buildtrees` under whatever directory
+  held it. And a trailing separator on any configured path made the declared leaf name empty, which
+  resolves back to the root — so the plan targeted the directory it also asserted must survive, and
+  a `..` segment defeated `LongPath.Extended`'s stated requirement of an already-resolved path.
+  `LongPath.Configured` now normalises such a value once, where it is accepted; each provider
+  refuses one that would swallow the tool's own directory; and vcpkg requires the `.vcpkg-root`
+  marker before it looks inside anything, which is the Chromium identification check in a second
+  costume. **The same hole was already shipped in `PlaywrightBrowsersProvider`**, whose root is also
+  configured and which also enumerated without classifying it, so that is closed here too, and
+  Gradle's fixed root with it.
+
+One defect surfaced that had nothing to do with any of these providers. `XDocument.Load` given a
+path treats it as a URI, and §6.3's extended-length prefix is not one, so reading Maven's
+`settings.xml` threw before it read a byte. It is opened as a stream now. Anything else in the
+codebase that hands an extended path to an API expecting a URI has the same defect, and nothing
+currently does.
+
+Left out deliberately, and each for a reason: pnpm and conda, which are the split row below;
+`%USERPROFILE%\.rustup\toolchains`, which is Tier 2 and its own provider rather than a child of
+Cargo's; `.m2\wrapper`, which is disposable but holds Maven distributions of a few megabytes and is
+named as a survivor instead; `VCPKG_BINARY_SOURCES`, which is a small expression language rather
+than a path and whose remote-cache case leaves nothing local to find; and the rest of the long tail
+below.
+
+### Cargo — Tier 1, researched ✅ done
 
 Four disposable children under `%USERPROFILE%\.cargo`: `registry\cache` (downloaded `.crate`
 archives), `registry\src` (their extracted contents), `git\db` and `git\checkouts`. Reported to
@@ -74,7 +194,7 @@ and is normally on `PATH`. Recognised children only, and the unrecognised case i
 `%USERPROFILE%\.rustup\toolchains` holds a full toolchain per installed channel. Tier 2, and a
 separate provider — not a child of this one.
 
-### Go — Tier 1, researched
+### Go — Tier 1, researched ✅ done
 
 Two locations, two commands, and both must be located rather than assumed: `go env GOCACHE`
 (default `%LOCALAPPDATA%\go-build`) cleared by `go clean -cache`, and `go env GOMODCACHE` cleared by
@@ -114,6 +234,9 @@ uses them, so pnpm's accounting caution applies, and re-creating an environment 
 than a rebuild.
 
 ### The long tail — Tier 1
+
+Maven and vcpkg shipped, at **Tier 2 rather than the Tier 1 this table proposed** — see the outcome
+above. The rest are unstarted.
 
 One class each, on the shape npm and NuGet already use.
 
@@ -775,7 +898,8 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Per-volume recycle bins ✅ | A volume-enumeration seam, which had to be built — the scanner never had one. Tier 3 confirmation already existed | 3.6 GB |
 | Chromium cache signature ✅ | Expected `ContentSignature` to have the shape. It did not — §4 records what the work needed instead | 0.8 GB |
 | Crash dumps and servicing logs ✅ | Expected path-based plus elevation. Elevation turned out to be a claim `CleanupPlan` could not make, and `MEMORY.DMP` a step kind it did not have — §6 records both | 0.2 GB |
-| Cargo, Go, pnpm, conda, Maven, vcpkg | One class each, on the npm and NuGet shape. pnpm needs link-aware measurement | researched |
+| Cargo, Go, Maven, vcpkg ✅ | Expected one class each on the npm and NuGet shape. Two wanted the declared-path shape instead, two moved to Tier 2, and the read-only trap turned out to be in the remover — §1 records all three | researched |
+| pnpm and conda | A link-aware size, which open question 1 leaves unresolved. The MFT record carries the hard-link count; whether the fallback walk can answer at all is not established, and a provider whose number is right only under elevation is a poor citizen | researched |
 | Per-project build output | Extends `SourceRootStore`; needs §5.3's live-tree exclusion generalised beyond `%TEMP%` | 8.6 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
