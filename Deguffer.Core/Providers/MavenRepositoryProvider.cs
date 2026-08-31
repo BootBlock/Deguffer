@@ -169,11 +169,23 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // survives. '${user.home}/.m2' is a plausible typo for the correct
         // '${user.home}/.m2/repository', and a settings file arrives from a dotfiles repository as
         // often as it is typed, so this is refused rather than trusted.
-        if (Contains(repository, Home))
+        if (LongPath.Contains(repository, Home))
         {
             return EmptyPlan(
                 $"Your Maven settings.xml points the local repository at {repository}, which holds "
                 + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.");
+        }
+
+        // The same refusal, one level in. A value naming one of the things this provider promises to
+        // leave standing would otherwise be targeted and asserted to survive by the same plan, which
+        // is the contradiction the check above exists to stop.
+        if (ProtectedNames.FirstOrDefault(n => LongPath.Contains(Path.Combine(Home, n.RelativePath), repository))
+            is { RelativePath.Length: > 0 } named)
+        {
+            return EmptyPlan(
+                $"Your Maven settings.xml points the local repository at {repository}, which is "
+                + $"'{named.RelativePath}' in your Maven home. Deguffer never removes that, so it is "
+                + "leaving it alone.");
         }
 
         if (Declare(repository) is not { } roots)
@@ -270,13 +282,6 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
                 ProtectedNames),
         ];
     }
-
-    /// <summary>Whether <paramref name="candidate"/> is <paramref name="ancestor"/> or sits inside it.</summary>
-    private static bool Contains(string ancestor, string candidate) =>
-        candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase)
-        || candidate.StartsWith(
-            Path.TrimEndingDirectorySeparator(ancestor) + Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The <c>localRepository</c> element of the user's settings file, or null if there is not one.

@@ -73,6 +73,17 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             return EmptyPlan("Gradle is not installed for this user — no .gradle directory.");
         }
 
+        // Moving .gradle onto another drive with a junction is common, and the enumeration below
+        // never classifies the directory it is handed: it would return the far side's ordinary
+        // children, target the recognised ones, and pass every §5.6 assertion, because each survivor
+        // named here resolves through the same link.
+        if (LongPath.IsReparsePoint(_root))
+        {
+            return EmptyPlan(
+                $"Leaving '{_root}' alone: it is a link to somewhere else, and Deguffer does not look "
+                + "through a link.");
+        }
+
         var scan = ChildDirectories.Under(_root);
 
         // A link is a child the user can see, so it is named rather than dropped. It is never

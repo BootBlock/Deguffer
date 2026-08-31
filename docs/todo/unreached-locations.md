@@ -150,6 +150,23 @@ Nine things the work settled that this section did not anticipate.
   three-step search order rather than one variable, and `VCPKG_DOWNLOADS` set to the place vcpkg
   would have used anyway must not declare the same directory twice.
 
+- **A configured root is a claim, and four separate holes came from treating it as a fact.** Review
+  found every one of them, and they are one shape: a string from an environment variable or a
+  settings file, used before anything established what it was. A junctioned Cargo home was declined
+  at the root level and reached through anyway, because the next level resolved its own path through
+  the link that had just been declined. A Maven `localRepository` naming `.m2` itself made the
+  folder holding the credentials the target of the plan that promised they would survive. A stray
+  `vcpkg.exe` would have declared `downloads`, `packages` and `buildtrees` under whatever directory
+  held it. And a trailing separator on any configured path made the declared leaf name empty, which
+  resolves back to the root — so the plan targeted the directory it also asserted must survive, and
+  a `..` segment defeated `LongPath.Extended`'s stated requirement of an already-resolved path.
+  `LongPath.Configured` now normalises such a value once, where it is accepted; each provider
+  refuses one that would swallow the tool's own directory; and vcpkg requires the `.vcpkg-root`
+  marker before it looks inside anything, which is the Chromium identification check in a second
+  costume. **The same hole was already shipped in `PlaywrightBrowsersProvider`**, whose root is also
+  configured and which also enumerated without classifying it, so that is closed here too, and
+  Gradle's fixed root with it.
+
 One defect surfaced that had nothing to do with any of these providers. `XDocument.Load` given a
 path treats it as a URI, and §6.3's extended-length prefix is not one, so reading Maven's
 `settings.xml` threw before it read a byte. It is opened as a stream now. Anything else in the

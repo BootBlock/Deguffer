@@ -107,8 +107,9 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         // the user meant, and enumerating a directory nobody pointed at is exactly the guess §5.2
         // forbids. Playwright resolves it against the test process's directory, which Deguffer is
         // not — so there is no correct interpretation available here, and offering nothing is the
-        // only honest answer.
-        return Path.IsPathFullyQualified(configured) ? configured : null;
+        // only honest answer. LongPath.Configured also normalises what it accepts, so a trailing
+        // separator or a '..' cannot reach the enumeration below.
+        return LongPath.Configured(configured);
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
@@ -130,6 +131,18 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         if (!LongPath.DirectoryExists(root))
         {
             return EmptyPlan($"Playwright has not downloaded any browsers on this machine ({root}).");
+        }
+
+        // The root arrives by name, from an environment variable or a default, so nothing has
+        // classified it. ChildDirectories.Under separates link children and never classifies the
+        // directory it was handed, so a junctioned root hands back the far side's ordinary
+        // directories — a recognised name among them would be targeted while every survivor named
+        // for this root resolved through the same link and passed.
+        if (LongPath.IsReparsePoint(root))
+        {
+            return EmptyPlan(
+                $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "
+                + "through a link.");
         }
 
         var notes = new List<PlanNote>();

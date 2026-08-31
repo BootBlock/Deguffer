@@ -37,6 +37,31 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         return root;
     }
 
+    /// <summary>
+    /// The root is reached by name from an environment variable, and the enumeration below it never
+    /// classifies the directory it is handed — so a junctioned root would hand back the far side's
+    /// ordinary directories, target the ones matching a browser name, and pass every §5.6 assertion,
+    /// because each survivor named here resolves through the same link.
+    /// </summary>
+    [Fact]
+    public async Task DeclinesARootThatIsItselfALink()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var stranger = Path.Combine(outside, "chromium-1228");
+        Directory.CreateDirectory(stranger);
+        File.WriteAllBytes(Path.Combine(stranger, "chrome.exe"), new byte[4096]);
+
+        var linked = Path.Combine(_temp.Path, "linked-browsers");
+        Directory.CreateSymbolicLink(linked, outside);
+        _environment.WithEnvironmentVariable(PlaywrightBrowsersProvider.LocationVariable, linked);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(stranger));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ReportsNotPresentWhenPlaywrightNeverDownloadedABrowser()
     {

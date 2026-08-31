@@ -18,7 +18,18 @@ namespace Deguffer.Core.Providers;
 /// The downloads directory when <c>VCPKG_DOWNLOADS</c> has moved it out of the clone, and null when
 /// it has not. Null therefore means "wherever the clone is", not "there is none".
 /// </param>
-public sealed record VcpkgLocations(string? BinaryCache, string? Root, string? RelocatedDownloads);
+/// <param name="UnmarkedRoot">
+/// A directory something pointed at as the clone which does not carry the marker, and which is
+/// therefore not treated as one. Reported separately from a plain null <paramref name="Root"/>,
+/// because a provider has to tell "nothing said where the clone is" from "something did and Deguffer
+/// declined it" — the second is a refusal the user is owed a sentence about, and telling somebody to
+/// set a variable they have already set sends them looking for a mistake they did not make.
+/// </param>
+public sealed record VcpkgLocations(
+    string? BinaryCache,
+    string? Root,
+    string? RelocatedDownloads,
+    string? UnmarkedRoot = null);
 
 /// <summary>
 /// Finds vcpkg. Separate from the provider for the reason <see cref="ChromiumUserDataDiscovery"/>
@@ -78,9 +89,9 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
 
     public VcpkgLocations Discover()
     {
-        var root = FindRoot();
+        var (root, unmarked) = FindRoot();
 
-        return new VcpkgLocations(FindBinaryCache(), root, FindRelocatedDownloads(root));
+        return new VcpkgLocations(FindBinaryCache(), root, FindRelocatedDownloads(root), unmarked);
     }
 
     /// <summary>
@@ -125,27 +136,43 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     /// name under it and simply will not be there.</item>
     /// </list>
     /// </summary>
-    private string? FindRoot()
+    private (string? Root, string? Unmarked) FindRoot()
     {
+        string? unmarked = null;
+
         foreach (var candidate in Candidates())
         {
+            if (candidate is null)
+            {
+                continue;
+            }
+
             // Every route is a claim about where the clone is, and none of them is evidence that a
             // clone is there. The marker is, so it gates all three rather than only the weakest.
-            if (candidate is not null && LongPath.FileExists(Path.Combine(candidate, RootMarker)))
+            if (LongPath.FileExists(Path.Combine(candidate, RootMarker)))
             {
-                return candidate;
+                return (candidate, null);
             }
+
+            // The first directory that was named and declined, so the provider can say which one it
+            // means. A route naming somewhere that is not there at all is not a refusal worth
+            // reporting, because there is nothing for the user to go and look at.
+            unmarked ??= LongPath.DirectoryExists(candidate) ? candidate : null;
         }
 
-        return null;
+        return (null, unmarked);
     }
 
     private IEnumerable<string?> Candidates()
     {
         yield return FullyQualified(environment.GetEnvironmentVariable(RootVariable));
         yield return ReadIntegrationFile();
+
+        // Normalised like the other two. PATH is not filtered for fully-qualified entries, so a
+        // relative one yields a relative directory here — and every probe under it would then
+        // resolve against Deguffer's own working directory, which is the guess §5.2 forbids.
         yield return environment.FindExecutable("vcpkg") is { } executable
-            ? Path.GetDirectoryName(executable)
+            ? FullyQualified(Path.GetDirectoryName(executable))
             : null;
     }
 

@@ -253,9 +253,10 @@ at all.
 It reads `localRepository` from `%USERPROFILE%\.m2\settings.xml` before falling back to the default,
 because that element genuinely moves the repository. `${user.home}` in that value is resolved; any
 other property, or a relative path, leaves the value unreadable and Deguffer offers nothing rather
-than guessing. A value naming `.m2` itself, or anything above it, is refused outright — that would
-make the folder holding your credentials the thing being deleted, and `${user.home}/.m2` is a
-plausible typo for the correct `${user.home}/.m2/repository`.
+than guessing. A value naming `.m2` itself, anything above it, or one of the things
+Deguffer promises to leave alone inside it, is refused outright — that would make the folder holding
+your credentials the thing being deleted, and `${user.home}/.m2` is a plausible typo for the correct
+`${user.home}/.m2/repository`.
 
 Two other ways of moving it are out of reach, and both fail safe. Maven merges a global
 `settings.xml` from its own installation directory, which your file overrides anyway; and
@@ -335,7 +336,9 @@ the vcpkg clone, which is a git checkout you put wherever you liked, so Deguffer
 what stops a stray copy of `vcpkg.exe` making your `Downloads` folder a target. If none of the three
 answers, the plan says so in as many words rather than quietly reporting a quarter of the subject.
 
-`VCPKG_DOWNLOADS` is honoured where it has moved the downloads directory out of the clone.
+`VCPKG_DOWNLOADS` is honoured where it has moved the downloads directory out of the clone. None of
+the three variables can point Deguffer at the clone itself, or at your own vcpkg folder: those say
+where a cache is, and they are not a way to ask for the directory holding the tool.
 
 vcpkg ships no cache-eviction command. Its own answer to a cache that has grown is the
 `--clean-after-build` family of flags on `vcpkg install`, which cleans as it goes, and its

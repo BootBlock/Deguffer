@@ -136,20 +136,27 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
         if (scan.FoundNothing)
         {
-            return EmptyPlan("vcpkg has cached nothing on this machine.");
+            return EmptyPlan(located.UnmarkedRoot is { } nothingFound
+                ? UnmarkedRootSentence(nothingFound)
+                : "vcpkg has cached nothing on this machine.");
         }
 
         var notes = new List<PlanNote>(scan.Notes);
 
         if (located.Root is null)
         {
-            // Said whenever the clone was not found, not only when something was reclaimed without
-            // it. The user is looking at a number, and the number is a quarter of the subject.
+            // Said whenever the clone was not reached, not only when something was reclaimed without
+            // it. The user is looking at a number, and the number is a quarter of the subject. Which
+            // sentence they get matters: telling somebody to set a variable they have already set
+            // sends them looking for a mistake they did not make.
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                "This covers the binary cache only. vcpkg's own directory is a clone that can be anywhere, "
-                + $"and Deguffer could not find it — set {VcpkgDiscovery.RootVariable}, or put vcpkg on PATH, "
-                + "and the buildtrees, downloads and packages directories inside it are covered too."));
+                located.UnmarkedRoot is { } declined
+                    ? UnmarkedRootSentence(declined)
+                    : "This covers the binary cache only. vcpkg's own directory is a clone that can be "
+                      + $"anywhere, and Deguffer could not find it — set {VcpkgDiscovery.RootVariable}, or "
+                      + "put vcpkg on PATH, and the buildtrees, downloads and packages directories inside "
+                      + "it are covered too."));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(scan.Targets, ct).ConfigureAwait(false);
@@ -178,6 +185,16 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// What the user is told when something named a clone and Deguffer declined it. It names the
+    /// directory and the marker, because "could not find it" would be untrue and the advice that
+    /// sentence goes on to give has already been taken.
+    /// </summary>
+    private static string UnmarkedRootSentence(string declined) =>
+        $"Deguffer found {declined} but it does not hold vcpkg's own '{VcpkgDiscovery.RootMarker}' "
+        + "marker, so it did not look inside it. The buildtrees, downloads and packages directories of "
+        + "a vcpkg clone are not covered here.";
+
+    /// <summary>
     /// The declarations this machine's layout produces: up to three roots, because the binary cache,
     /// the clone and a relocated downloads directory each move independently and may end up in three
     /// different places.
@@ -196,7 +213,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         if (Containing(
                 located.BinaryCache,
                 "Binaries vcpkg built earlier and kept so it would not build them again. Removing one "
-                + "means the next install of that library builds it from source.") is { } binaryCache)
+                + "means the next install of that library builds it from source.",
+                located) is { } binaryCache)
         {
             declared.Add(located.BinaryCache!);
             roots.Add(binaryCache);
@@ -234,7 +252,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             && declared.Add(relocated)
             && Containing(
                 relocated,
-                "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it.")
+                "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it.",
+                located)
                 is { } downloads)
         {
             roots.Add(downloads);
@@ -251,9 +270,23 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// Null when there is no containing directory — a cache pointed at a volume root — because
     /// declaring a volume as the root Deguffer reaches into is not a thing this should do.
     /// </summary>
-    private DeclaredRoot? Containing(string? path, string reason)
+    private DeclaredRoot? Containing(string? path, string reason, VcpkgLocations located)
     {
         if (path is null || Path.GetDirectoryName(path) is not { Length: > 0 } container)
+        {
+            return null;
+        }
+
+        // §5.2, and the same refusal Maven needed. A cache variable pointed at the clone itself, or
+        // at one of the user's own vcpkg directories, would make that directory a whole-tree target,
+        // taking 'installed' and the clone's contents with it while the same plan asserted both
+        // survive. A configured value says where a cache is. It is never a licence to remove the
+        // directory that holds the tool.
+        var toolDirectories = located.Root is { } root
+            ? (IEnumerable<string>)[root, .. _discovery.ProfileDirectories]
+            : _discovery.ProfileDirectories;
+
+        if (toolDirectories.Any(directory => LongPath.Contains(path, directory)))
         {
             return null;
         }

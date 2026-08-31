@@ -50,7 +50,10 @@ public static class LongPath
     ///
     /// <para><see cref="Path.GetFullPath(string)"/> is safe here only because the value is checked
     /// to be fully qualified first: an unqualified one would resolve against Deguffer's own working
-    /// directory, which is a directory nobody pointed at.</para>
+    /// directory, which is a directory nobody pointed at. It resolves nothing in a value that already
+    /// carries the device prefix, though, so the prefix comes off first — otherwise a configured
+    /// <c>\\?\C:\Users\me\.m2</c> would keep its <c>..</c> segments and would compare equal to
+    /// nothing, walking straight past a caller's check that it is not the tool's own directory.</para>
     /// </summary>
     public static string? Configured(string? value)
     {
@@ -63,9 +66,10 @@ public static class LongPath
 
         try
         {
-            // A volume root keeps its separator, which is correct: "C:\" is the directory, and a
-            // caller that must refuse a whole volume refuses it by name rather than by shape.
-            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(trimmed));
+            // A drive root keeps its separator, which is correct: "C:\" is the directory. A UNC root
+            // does lose one, and both then have no containing directory at all — which is how the
+            // callers that must refuse a whole volume come to refuse it.
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(Display(trimmed)));
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -73,6 +77,19 @@ public static class LongPath
             return null;
         }
     }
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> is <paramref name="ancestor"/> itself or sits inside it.
+    ///
+    /// Both providers that accept a configured root need this to refuse one that would swallow the
+    /// tool's own directory, and <see cref="Configured"/> has normalised such a value before it gets
+    /// here, so an ordinal comparison is the whole of it.
+    /// </summary>
+    public static bool Contains(string ancestor, string candidate) =>
+        candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase)
+        || candidate.StartsWith(
+            Path.TrimEndingDirectorySeparator(ancestor) + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Strip the extended-length prefix, for display and comparison.</summary>
     public static string Display(string path)

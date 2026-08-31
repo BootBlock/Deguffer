@@ -260,6 +260,74 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             && p.ExistedBefore);
     }
 
+    /// <summary>
+    /// A configured value says where a cache is. It is never a licence to remove the directory that
+    /// holds the tool — which is what naming the clone itself would do, taking 'installed' with it
+    /// while the same plan asserted that survives.
+    /// </summary>
+    [Theory]
+    [InlineData(VcpkgDiscovery.BinaryCacheVariable)]
+    [InlineData(VcpkgDiscovery.DownloadsVariable)]
+    public async Task RefusesACacheVariableThatNamesTheCloneItself(string variable)
+    {
+        var root = CreateClone();
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(variable, root);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(root, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.All(plan.TargetedPaths, targeted => Assert.False(
+            root.Equals(targeted, StringComparison.OrdinalIgnoreCase),
+            $"{targeted} is the clone itself."));
+
+        var result = await CreateProvider().ExecuteAsync(
+            plan with { Tier = SafetyTier.RegenerableCache });
+
+        Assert.True(Directory.Exists(Path.Combine(root, "installed")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A refusal the user can see the folder for has to be said out loud. "vcpkg has cached nothing"
+    /// contradicts the disk, and "set VCPKG_ROOT" is advice somebody who set it has already taken.
+    /// </summary>
+    [Fact]
+    public async Task SaysWhichDirectoryItDeclinedForWantOfTheMarker()
+    {
+        var root = Path.Combine(_temp.Path, "dev", "vcpkg");
+        Populate(Path.Combine(root, "buildtrees"));
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(root, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains(VcpkgDiscovery.RootMarker, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n =>
+            n.Message.Contains("cached nothing", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Presence and planning ask the same question of the same disk, so the answer is found once
+    /// (G4). Reading the environment is the observable part of doing so.
+    /// </summary>
+    [Fact]
+    public async Task LocatesOnceAcrossAPlanningPass()
+    {
+        Populate(DefaultBinaryCache);
+        var provider = CreateProvider();
+
+        await provider.IsPresentAsync();
+        var afterFirst = _environment.EnvironmentReads;
+        await provider.PlanAsync();
+
+        Assert.True(afterFirst > 0, "discovery never read the environment at all");
+        Assert.Equal(afterFirst, _environment.EnvironmentReads);
+    }
+
     [Fact]
     public async Task HonoursTheConfiguredBinaryCacheLocation()
     {

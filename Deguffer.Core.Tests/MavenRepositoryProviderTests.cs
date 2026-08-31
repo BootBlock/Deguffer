@@ -175,6 +175,38 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// One level in from the guard above, and the same contradiction: the plan would target the
+    /// directory it also names as a survivor, and §5.6 would report a correct run as a failure.
+    /// </summary>
+    [Fact]
+    public async Task RefusesALocalRepositoryThatNamesSomethingItPromisesToLeaveAlone()
+    {
+        Populate(DefaultRepository);
+        Populate(Path.Combine(Home, "wrapper", "dists"));
+        WriteSettings("${user.home}/.m2/wrapper");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("'wrapper'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The device-namespace form of the same value. It is fully qualified, so it reaches the guard,
+    /// and it would compare equal to nothing unless the prefix comes off first.
+    /// </summary>
+    [Fact]
+    public async Task RefusesTheMavenHomeWrittenInTheDeviceNamespace()
+    {
+        Populate(DefaultRepository);
+        WriteSettings(@"\\?\" + Home);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+    }
+
+    /// <summary>
     /// A trailing separator makes the leaf name empty, and a location with an empty relative path
     /// resolves back to the root that holds it — so the plan would target the very directory it also
     /// asserts must survive, and §5.6 would report a correct run as a failure.
