@@ -30,6 +30,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
                 DeleteDirectoryStep delete => await DeleteAsync(delete, stepProgress, ct).ConfigureAwait(false),
+                DeleteFileStep delete => await DeleteAsync(delete, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
@@ -89,16 +90,49 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
     {
         var removal = await DirectoryRemover.RemoveAsync(step.Path, progress, ct).ConfigureAwait(false);
 
-        var message = removal.Skipped == 0
-            ? "Removed."
-            : $"Removed, {removal.Skipped} item(s) left in place because they were in use.";
-
         // Skipped items are not a failure (§5.3). The step only fails if the directory survived
         // intact and nothing at all was reclaimed — that is, we achieved nothing.
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0;
 
+        var message = succeeded
+            ? removal.Skipped == 0
+                ? "Removed."
+                : $"Removed, {removal.Skipped} item(s) left in place because they were in use."
+            : WhyNothingHappened(removal.Skipped);
+
         return new StepOutcome(step.Description, succeeded, removal.BytesReclaimed, removal.Skipped, message);
     }
+
+    private static async Task<StepOutcome> DeleteAsync(
+        DeleteFileStep step,
+        IProgress<double> progress,
+        CancellationToken ct)
+    {
+        var removal = await FileRemover.RemoveAsync(step.Path, ct).ConfigureAwait(false);
+
+        // One file, so there is no fraction to report along the way — only the end of it.
+        progress.Report(1.0);
+
+        var message = removal.Removed ? "Removed." : WhyNothingHappened(removal.Skipped);
+
+        return new StepOutcome(
+            step.Description, removal.Removed, removal.BytesReclaimed, removal.Skipped, message);
+    }
+
+    /// <summary>
+    /// The sentence for a deletion that achieved nothing.
+    ///
+    /// It names no cause, and that is the decision rather than an omission. The two available
+    /// causes are indistinguishable from here — an unelevated delete under the Windows directory is
+    /// refused file by file, which arrives as exactly the skip a locked file produces — and naming
+    /// either would be a guess. Naming <em>both</em> was tried and is worse: the shell does not
+    /// offer a step needing administrator rights to a process that has none, so this is reached
+    /// almost only on an elevated run, where "run as administrator" is advice the reader has
+    /// already taken. The plan carries what needs administrator rights; this reports what happened.
+    /// </summary>
+    private static string WhyNothingHappened(int skipped) => skipped == 0
+        ? "Nothing was removed."
+        : $"Nothing was removed: Windows would not release {skipped} item(s).";
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {

@@ -183,6 +183,7 @@ public sealed class CleanupPlannerTests
             [
                 "dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip",
                 "gpu-shader-cache", "chromium-app-cache", "platformio", "playwright", "recycle-bin",
+                "crash-dumps", "windows-servicing-logs",
             ],
             planner.Providers.Select(p => p.Id));
 
@@ -191,7 +192,7 @@ public sealed class CleanupPlannerTests
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(
-            ["recycle-bin"],
+            ["recycle-bin", "crash-dumps", "windows-servicing-logs"],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 
         // §3 excludes Tier 4 from the UI entirely, so a provider declaring it could only ever

@@ -11,6 +11,19 @@ public enum ScanStrategy
     /// scanner on its own, which is why reaching it is always accompanied by a reason.
     /// </summary>
     ParallelEnumeration,
+
+    /// <summary>
+    /// One file, read directly. Neither of §5.5's routes applies: there is no tree to walk, and
+    /// nothing for the index to save — which is just as well, since the index cannot resolve a file
+    /// path at all (only directories carry names in it, deliberately, because naming every file on a
+    /// volume would cost a string per record).
+    ///
+    /// It matters that this is not <see cref="ParallelEnumeration"/>. The walk always carries a
+    /// <see cref="FallbackReason"/> and the user is shown a sentence about a slow scan; a single
+    /// <c>stat</c> is not slow, and saying so would be a false apology attached to every plan
+    /// naming <c>C:\Windows\MEMORY.DMP</c>.
+    /// </summary>
+    DirectRead,
 }
 
 /// <summary>

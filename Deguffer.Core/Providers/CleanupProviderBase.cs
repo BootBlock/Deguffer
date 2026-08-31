@@ -157,10 +157,17 @@ public abstract class CleanupProviderBase : ICleanupProvider
         var steps = new List<CleanupStep>(targets.Count);
         for (var i = 0; i < targets.Count; i++)
         {
-            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
+            var target = targets[i];
+
+            DeleteStep step = target.Kind == TargetKind.File
+                ? new DeleteFileStep(target.Path, target.Reason)
+                : new DeleteDirectoryStep(target.Path, target.Reason);
+
+            steps.Add(step with
             {
                 Estimated = measured.Sizes[i],
-                LastWritten = targets[i].LastWritten,
+                LastWritten = target.LastWritten,
+                RequiresElevation = target.RequiresElevation,
             });
         }
 

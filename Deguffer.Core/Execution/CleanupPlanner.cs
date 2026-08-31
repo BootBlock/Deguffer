@@ -17,14 +17,16 @@ public sealed class CleanupPlanner
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Playwright, the GPU shader caches
-    /// the Chromium application caches and the per-volume Recycle Bins — which the audit did not
-    /// cover, and which were investigated on their own terms before being added. Their reasoning and
-    /// their rejected alternatives are in <c>docs/cache-locations.md</c>.
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, Playwright, the GPU shader caches,
+    /// the Chromium application caches, the per-volume Recycle Bins, the crash dumps and the Windows
+    /// servicing logs — which the audit did not cover, and which were investigated on their own terms
+    /// before being added. Their reasoning and their rejected alternatives are in
+    /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except PlatformIO and Playwright, which are Tier 2, and the Recycle Bins,
-    /// which are Tier 3. Neither tier is ever pre-selected, and neither is executed without the
-    /// confirmation §7 requires of it — an acknowledgement for Tier 2, the typed phrase for Tier 3.
+    /// the crash dumps and the servicing logs, which are Tier 3. Neither tier is ever pre-selected,
+    /// and neither is executed without the confirmation §7 requires of it — an acknowledgement for
+    /// Tier 2, the typed phrase for Tier 3.
     /// </summary>
     public static CleanupPlanner CreateDefault() => new(
     [
@@ -40,6 +42,8 @@ public sealed class CleanupPlanner
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
         new RecycleBinProvider(),
+        new CrashDumpProvider(),
+        new WindowsServicingLogProvider(),
     ]);
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;

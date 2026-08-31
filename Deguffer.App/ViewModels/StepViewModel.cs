@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 
@@ -13,10 +14,15 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class StepViewModel : ObservableObject
 {
-    public StepViewModel(CleanupStep step, bool isSelected)
+    /// <param name="preSelect">
+    /// What §3's "Default" column says for the owning row. It is honoured only where this step can
+    /// actually be acted on, so the caller states the row's intent and the answer to "may this be
+    /// ticked?" stays in one place — see <see cref="CanBeSelected"/>.
+    /// </param>
+    public StepViewModel(CleanupStep step, bool preSelect)
     {
         Step = step;
-        IsSelected = isSelected;
+        IsSelected = preSelect && CanBeSelected;
     }
 
     public CleanupStep Step { get; }
@@ -41,8 +47,26 @@ public sealed partial class StepViewModel : ObservableObject
     /// </summary>
     public bool HasAge => Step.LastWritten is not null;
 
-    /// <summary>Nothing to reclaim means nothing to choose.</summary>
-    public bool CanBeSelected => Step.EstimatedBytes > 0;
+    /// <summary>
+    /// Nothing to reclaim means nothing to choose, and neither does a step this process has no
+    /// rights to carry out.
+    ///
+    /// Pairing the step's declaration with the token the app is actually running under happens here
+    /// rather than in Core, because the declaration is a fact about the location and the token is a
+    /// fact about this process. A plan that described the disk differently depending on who asked
+    /// would be a worse thing to have than one line of conjunction in the shell.
+    /// </summary>
+    public bool CanBeSelected => Step.EstimatedBytes > 0 && !NeedsElevationFirst;
+
+    /// <summary>
+    /// Whether this step is one Deguffer can see and cannot remove as it is currently running.
+    ///
+    /// Shown beside the step, because the two alternatives are worse: a step that fails at execution
+    /// time explains nothing, and a location dropped from an unelevated preview is a folder the user
+    /// never learns about. "Elevate and rescan" is already on screen whenever this is true —
+    /// <see cref="Deguffer.Core.Execution.ElevationOffer"/> reads the same claim.
+    /// </summary>
+    public bool NeedsElevationFirst => Step.RequiresElevation && !ElevatedRelaunch.IsElevated;
 
     /// <summary>
     /// Whether this step gets a checkbox of its own. Set by the owning row, because it is a fact

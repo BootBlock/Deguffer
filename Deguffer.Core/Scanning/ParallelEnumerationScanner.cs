@@ -35,11 +35,29 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// <summary>Same walk, attributed to whichever reason sent the caller here.</summary>
     public ParallelEnumerationScanner Because(FallbackReason reason) => ByReason[(int)reason];
 
+    /// <summary>
+    /// A file is sized in one read and reported as <see cref="ScanStrategy.DirectRead"/>, dropping
+    /// the reason this instance was built with.
+    ///
+    /// Dropping it is the honest answer rather than a shortcut: a fallback reason explains why a
+    /// walk was necessary, and no walk happened. Carrying it would put "scanned by walking
+    /// directories, which is slower" on every plan naming a single file, and — where the reason was
+    /// <see cref="FallbackReason.NotElevated"/> — offer administrator rights that would change the
+    /// measurement not at all.
+    ///
+    /// This is also the one place a file is measured at all. <see cref="DirectoryScanner"/> reaches
+    /// it the ordinary way, because its index cannot resolve a file path and so hands every one of
+    /// them here.
+    /// </summary>
     public ValueTask<ScanResult> MeasureAsync(
         string path,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(() => ScanResult.Slow(Measure(path, progress, ct), _reason), ct));
+        new(Task.Run(
+            () => TryMeasureFile(path) is { } file
+                ? ScanResult.Direct(file)
+                : ScanResult.Slow(Measure(path, progress, ct), _reason),
+            ct));
 
     /// <summary>
     /// Always null: this scanner holds no index, so it has nothing to search. Answering by walking
@@ -105,6 +123,35 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         }
 
         return ScanSize.Approximate(Interlocked.Read(ref total));
+    }
+
+    /// <summary>
+    /// The length of <paramref name="path"/> if it is a file, or null for anything else — a
+    /// directory, an absent path, or one we were refused. §5.3 makes the refusal ordinary rather
+    /// than an error, and a null then leaves the caller to measure the path as a directory, which
+    /// answers zero for something that is not there.
+    ///
+    /// Deguffer measured only directories until <c>C:\Windows\MEMORY.DMP</c>, which is a single
+    /// file and the largest reclaim it knows about. Answering zero for it — which is what this
+    /// scanner did — produces a step nobody can select, because a step with nothing to reclaim is
+    /// not offerable.
+    /// </summary>
+    private static ScanSize? TryMeasureFile(string path)
+    {
+        try
+        {
+            var file = new FileInfo(LongPath.Extended(path));
+
+            // A link's length is its own, not its target's, and following one would count a tree
+            // this scanner never looked inside — the same rule EnumerateSafely applies below.
+            return file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint)
+                ? ScanSize.Approximate(file.Length)
+                : null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
     }
 
     private readonly record struct Entry(string Path, bool IsDirectory, long Length);

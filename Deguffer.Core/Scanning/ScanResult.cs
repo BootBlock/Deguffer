@@ -12,6 +12,13 @@ public sealed record ScanResult(ScanSize Size, ScanStrategy Strategy, FallbackRe
     public static ScanResult Slow(ScanSize size, FallbackReason reason) =>
         new(size, ScanStrategy.ParallelEnumeration, reason);
 
+    /// <summary>
+    /// One file, sized in a single read. No fallback reason, because nothing was fallen back from —
+    /// see <see cref="ScanStrategy.DirectRead"/>.
+    /// </summary>
+    public static ScanResult Direct(ScanSize size) =>
+        new(size, ScanStrategy.DirectRead, FallbackReason.None);
+
     /// <summary>The sentence to show beside the number, or null when the fast path was used.</summary>
     public string? FallbackNote => FallbackReasonText.Describe(Fallback);
 }

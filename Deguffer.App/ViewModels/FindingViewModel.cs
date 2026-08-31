@@ -27,10 +27,15 @@ public sealed partial class FindingViewModel : ObservableObject
         Notes = [.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
         Steps =
         [
-            // A step with nothing to reclaim starts unticked whatever the finding's default is:
+            // A step that cannot be acted on starts unticked whatever the finding's default is:
             // its checkbox is disabled, so ticking it would leave the user a selection they have
             // no way to clear, and the row-level toggle skips it for the same reason.
-            .. finding.Plan?.Steps.Select(s => new StepViewModel(s, finding.IsPreSelectedByDefault && s.EstimatedBytes > 0)
+            //
+            // The condition is StepViewModel's own rather than a copy of it. Written out here it
+            // was a copy, and it went stale the moment a second reason to disable a checkbox
+            // arrived — a step needing administrator rights would have started ticked, rendered
+            // disabled, and been skipped by the loop that clears the row.
+            .. finding.Plan?.Steps.Select(s => new StepViewModel(s, finding.IsPreSelectedByDefault)
             {
                 // Only meaningful once the whole set is known, and a single step is the whole row.
                 IsIndividuallySelectable = finding.Plan.Steps.Count > 1,
@@ -84,12 +89,24 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string StatusLabel => !Finding.IsPresent
         ? "Not installed on this machine"
-        : Finding.HasReclaimableSpace
-            ? "Ready to clean"
-            : "Already clear";
+        : !Finding.HasReclaimableSpace
+            ? "Already clear"
+            : CanBeSelected
+                ? "Ready to clean"
+                // Nothing in the row can be acted on as Deguffer is running, so "Ready to clean"
+                // beside a disabled checkbox would contradict itself. The Windows servicing logs are
+                // the whole row of this kind: every step of them sits under the Windows directory.
+                : "Needs administrator rights";
 
-    /// <summary>Only rows with something to reclaim can be acted on.</summary>
-    public bool CanBeSelected => Finding.HasReclaimableSpace;
+    /// <summary>
+    /// Only rows with a step that can actually be acted on.
+    ///
+    /// Asked of the steps rather than of the finding's total, because the row checkbox is a shorthand
+    /// for ticking every step in it: where nothing in the row is selectable, ticking it would tick
+    /// nothing and leave a row that says it is selected and removes nothing. That case arrived with
+    /// the Windows servicing logs, every step of which needs administrator rights.
+    /// </summary>
+    public bool CanBeSelected => Finding.HasReclaimableSpace && Steps.Any(s => s.CanBeSelected);
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }

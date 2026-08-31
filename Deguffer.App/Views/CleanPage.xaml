@@ -195,12 +195,27 @@
                                                                           IsEnabled="{x:Bind CanBeSelected}"
                                                                           AutomationProperties.Name="{x:Bind Description}" />
 
-                                                                <TextBlock Grid.Column="1"
-                                                                           Text="{x:Bind Description}"
-                                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                                           TextWrapping="Wrap"
-                                                                           IsTextSelectionEnabled="True"
-                                                                           FontSize="12" />
+                                                                <StackPanel Grid.Column="1" Spacing="2">
+                                                                    <TextBlock Text="{x:Bind Description}"
+                                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                               TextWrapping="Wrap"
+                                                                               IsTextSelectionEnabled="True"
+                                                                               FontSize="12" />
+
+                                                                    <!-- Shown when Deguffer can see the
+                                                                         location and cannot remove it as
+                                                                         it is running. Text rather than a
+                                                                         disabled checkbox alone (§6.5): a
+                                                                         control that is simply greyed out
+                                                                         states no reason, and the reason
+                                                                         is the whole of what the user
+                                                                         needs in order to act. -->
+                                                                    <TextBlock Text="Needs administrator rights — use Elevate and rescan"
+                                                                               Visibility="{x:Bind NeedsElevationFirst}"
+                                                                               Style="{StaticResource SecondaryText}"
+                                                                               TextWrapping="Wrap"
+                                                                               FontSize="12" />
+                                                                </StackPanel>
 
                                                                 <StackPanel Grid.Column="2"
                                                                             VerticalAlignment="Top">
