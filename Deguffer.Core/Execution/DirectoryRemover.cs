@@ -197,10 +197,51 @@ public static class DirectoryRemover
         try
         {
             fs.DeleteDirectory(extendedPath);
+            return;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
         {
-            // Not empty, or in use. Leave it.
+            // Not empty, in use, already gone — or the read-only bit, which the retry below is for.
+        }
+
+        // Windows refuses to remove a directory carrying the read-only attribute exactly as it
+        // refuses a read-only file, so the file path's retry belongs here too. Without it every
+        // file inside such a directory goes, the directory stays, and the step still reports
+        // success because bytes were reclaimed — leaving a folder the user was told would go.
+        //
+        // Which refusal happened is not readable from the exception. .NET reports the same
+        // read-only directory as UnauthorizedAccessException for a plain path and as a bare
+        // IOException for the extended-length form §6.3 requires, and the HResult goes generic
+        // with it, so neither the type nor the code discriminates. Emptiness does, and it is the
+        // distinction that matters: a directory still holding something is one this removal is
+        // meant to leave standing, and clearing the attributes of a survivor would change a path
+        // we decided not to remove.
+        if (!IsEmpty(extendedPath, fs))
+        {
+            return;
+        }
+
+        try
+        {
+            fs.ClearAttributes(extendedPath);
+            fs.DeleteDirectory(extendedPath);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
+        {
+            // Refused for a reason the read-only bit was not. Leave it.
+        }
+    }
+
+    private static bool IsEmpty(string extendedPath, IFileSystem fs)
+    {
+        try
+        {
+            return fs.EnumerateEntries(extendedPath).Count == 0;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        {
+            // Unreadable or already gone: neither is a directory to go on clearing attributes on.
+            return false;
         }
     }
 }

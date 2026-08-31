@@ -168,7 +168,7 @@ public static class DeclaredLocations
         targets.Add(new DeletionTarget(
             path,
             location.Reason,
-            LastWritten(path, isFile),
+            location.ReportsAge ? LastWritten(path, isFile) : null,
             isFile ? TargetKind.File : TargetKind.Directory,
             root.RequiresElevation));
     }
@@ -208,9 +208,10 @@ public static class DeclaredLocations
     /// The Recycle Bin could use a directory's own timestamp because nothing in a bin is ever
     /// rewritten in place. These are logs, and a log is appended to — which moves the file and
     /// leaves the parent untouched, so the directory alone would report a servicing log being
-    /// written right now as months old. One level is enough for every location declared here: the
-    /// logs and dumps sit directly inside, and where a report is a directory of its own its arrival
-    /// moves the parent anyway.
+    /// written right now as months old. One level is enough wherever a location's own children are
+    /// the things being written: the logs and dumps sit directly inside, and where a report is a
+    /// directory of its own its arrival moves the parent anyway. Where that does not hold, the
+    /// location says so and is never asked — see <see cref="DeclaredLocation.ReportsAge"/>.
     /// </summary>
     private static DateTime? LastWritten(string path, bool isFile)
     {

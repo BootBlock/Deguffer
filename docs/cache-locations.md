@@ -90,6 +90,283 @@ about compilation rather than promising a uniformly cheap refill — but the cos
 
 ---
 
+## Cargo crate cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.cargo`, or wherever `CARGO_HOME` points |
+| **Method** | Delete `registry\cache`, `registry\src` and `git\checkouts` |
+| **Typical size** | Reported to reach 50 GB on a working Rust machine |
+
+### What it is
+
+Cargo is Rust's package manager, and everything it downloads for every project on the machine lands
+in one shared home. Five directories inside it matter, and they come in pairs of *original* and
+*derived*:
+
+- **`registry\cache`** — the `.crate` archives exactly as crates.io served them.
+- **`registry\src`** — those archives unpacked, which is what the compiler actually reads.
+- **`registry\index`** — the metadata for every published crate, used to resolve versions.
+- **`git\db`** — a bare clone of each dependency you pulled straight from a git repository.
+- **`git\checkouts`** — a working copy of one revision, checked out from that clone.
+
+`registry\src` is unpacked from `registry\cache`, and `git\checkouts` is checked out from `git\db`.
+That relationship is the whole design of what Deguffer removes.
+
+### What Deguffer does
+
+It removes the two derived directories and the archives: `registry\cache`, `registry\src` and
+`git\checkouts`. It resolves the home through `CARGO_HOME` before falling back to the default, and
+if that variable holds a relative path it offers nothing, because Cargo would resolve it against a
+working directory Deguffer is not.
+
+Cargo has no eviction command to call. Its garbage collector is still unstable and reachable only
+through a nightly toolchain, and `cargo clean` is a different thing entirely — it empties one
+project's `target` directory and never touches the shared home.
+
+### What is protected
+
+**`credentials.toml`**, which holds the registry tokens `cargo login` wrote, and **`config.toml`**,
+which is your Cargo configuration and may name private registries. Both sit in the same folder as
+the caches. Deguffer asserts both survived the run, along with the home itself.
+
+**`bin`** is left alone. It holds every binary you installed with `cargo install` or rustup, it is
+normally on your `PATH`, and nothing re-creates what is in it.
+
+Two more are left alone deliberately, and both are the *originals* the removed directories were
+derived from:
+
+- **`git\db`** is the only copy of a git dependency's history on your machine. The checkout beside
+  it is rebuilt from it with no network at all, and it can only be fetched again while the remote
+  repository still exists, is still reachable, and still carries the revision your lock file names.
+- **`registry\index`** can be fetched again, but it is what lets a build resolve versions offline,
+  and it is small next to the archives. The reclaim is not worth the cost.
+
+Anything else in the home, at any of the three levels Deguffer looks at, stays in Tier 4 and is
+reported as left alone.
+
+### What it costs you
+
+The next `cargo build` downloads the crate archives it needs again and unpacks them, so it spends
+longer fetching before it compiles. Nothing has to be re-configured and no command has to be run.
+
+Your git dependencies do not need re-cloning, because their clones stay.
+
+### Why Tier 1
+
+Everything removed comes back on its own the next time Cargo needs it. Cargo's own documentation
+draws the same line when it says which parts of the home are worth carrying between CI runs:
+`registry\index`, `registry\cache` and `git\db` are, and `registry\src` and `git\checkouts` are not,
+precisely because those two are re-derived locally.
+
+The uncomfortable half of the tier is the git clones, and the answer was to *not remove them* rather
+than to argue the tier. "Regenerable" is a claim about somebody else's server still being there,
+and for a git remote that claim is often false. Splitting the two halves is possible here because
+the split runs along a directory boundary, so it was split.
+
+---
+
+## Go build and module caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Whatever `go env GOCACHE` and `go env GOMODCACHE` report |
+| **Method** | `go clean -cache` and `go clean -modcache` (the tool's own commands) |
+| **Typical size** | Several GB each on a machine building regularly |
+
+### What it is
+
+Go keeps two separate caches, and they hold different kinds of thing:
+
+- **The build cache** holds compiled packages and test results, keyed by content. It is what makes a
+  second `go build` fast.
+- **The module cache** holds the source of every module version any project on the machine has
+  depended on, extracted and read-only.
+
+### What Deguffer does
+
+It asks Go where both are, and clears each with the command Go ships for it. Deguffer deletes no
+path here at all.
+
+That matters more than usual for the module cache. Go marks every extracted file read-only so that a
+build cannot modify a dependency in place, and a cleaner that deleted the path would be refused file
+by file — reclaiming nothing while reporting that it had finished. `go clean -modcache` is what
+knows how to take the cache apart.
+
+Each location is a separate row you can tick on its own, so you can clear the build cache and keep
+the downloaded modules, or the other way round.
+
+### What is protected
+
+The Go workspace, `GOPATH\bin` and `GOPATH\src`. The module cache is `pkg\mod` *inside* the
+workspace by default, so what the command empties has the binaries you installed with `go install`
+and your own source as its siblings. Deguffer asserts all three survived.
+
+### What it costs you
+
+The next `go build` downloads the modules it needs again and recompiles every package from source,
+so it takes noticeably longer once and then behaves exactly as before. Your own code and the Go
+toolchain are untouched.
+
+**One caveat is worth knowing.** A module from a private host — anything matching `GOPRIVATE`, or
+behind a proxy that happens to be down — comes back only while that host is available. Nothing on
+disk distinguishes those entries from public ones, so Deguffer states the caveat rather than
+pretending to sort them.
+
+### Why Tier 1
+
+Both caches refill themselves the next time Go needs them, with no command from you and nothing to
+re-configure. The private-module caveat is a reason to say so plainly, not a reason to treat a
+regular Go build as a risk.
+
+---
+
+## Maven local repository
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.m2\repository`, or the `localRepository` in your `settings.xml` |
+| **Method** | Delete the local repository directory |
+| **Typical size** | Several GB on a machine with a few Java projects on it |
+
+### What it is
+
+Maven copies every dependency it resolves into one local repository, laid out by group, artifact and
+version. It is the folder every Maven build reads from and writes to.
+
+**It is filled from two different places, and that is the whole reason this is Tier 2.** Most of what
+is in there was downloaded from Maven Central or another remote. But `mvn install` writes into the
+same tree, in the same layout — and what it writes was built on your machine and exists on no remote
+at all.
+
+### What Deguffer does
+
+It reads `localRepository` from `%USERPROFILE%\.m2\settings.xml` before falling back to the default,
+because that element genuinely moves the repository. `${user.home}` in that value is resolved; any
+other property, or a relative path, leaves the value unreadable and Deguffer offers nothing rather
+than guessing.
+
+Two other ways of moving it are out of reach, and both fail safe. Maven merges a global
+`settings.xml` from its own installation directory, which your file overrides anyway; and
+`-Dmaven.repo.local` is chosen per command and is written down nowhere. Where either is in use,
+Deguffer measures the directory your user settings name, so the failure is a smaller reclaim rather
+than a wrong target.
+
+Maven ships no machine-wide purge. `dependency:purge-local-repository` is a per-project goal that
+removes one project's dependencies and immediately resolves them again, which is neither the scope
+nor the effect wanted here.
+
+### What is protected
+
+**`settings.xml`**, which holds your server credentials and private repository URLs, and
+**`settings-security.xml`**, which holds the master password those are encrypted against. Both sit
+in `.m2` beside the repository. Deguffer names the one directory it removes rather than listing the
+root that contains them, and asserts both files survived.
+
+`toolchains.xml` and `.m2\wrapper` are protected too. The wrapper folder holds Maven distributions
+the wrapper downloaded; they are small, and this provider does not remove them.
+
+### What it costs you
+
+The next Maven build downloads every dependency it needs again, which for a large project is
+gigabytes over the network.
+
+**Anything you installed locally with `mvn install` was never on a remote.** A build that depends on
+one of those fails to resolve it until you rebuild the project that produced it. If you work on a
+multi-module codebase, or on libraries that other local projects consume, that is the cost to weigh.
+
+### Why Tier 2, not Tier 1
+
+Because the two halves cannot be told apart. A downloaded artefact usually carries a
+`_remote.repositories` marker naming where it came from, and a locally installed one usually does
+not — but that file is a Maven implementation detail rather than a promise, it is missing from older
+trees, and a rule that deleted a version directory on the strength of it would be guessing about
+exactly the case that cannot be undone.
+
+So the whole is offered at the more cautious tier: never pre-selected, and needing an
+acknowledgement. That is the honest form of "some of this is a slower build and some of it is a
+broken one".
+
+---
+
+## vcpkg build caches
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\vcpkg\archives`, plus `buildtrees`, `downloads` and `packages` under the vcpkg clone |
+| **Method** | Delete the recognised directories |
+| **Typical size** | Several GB, and much more on a machine building large libraries |
+
+### What it is
+
+vcpkg builds C and C++ libraries from source. Four directories accumulate as it does:
+
+- **`archives`** — the binary cache. After each port is built, vcpkg keeps the result here so it does
+  not have to build it again.
+- **`downloads`** — the source archives and the tools it downloaded to build with.
+- **`buildtrees`** — intermediate build output, one directory per port.
+- **`packages`** — the staging area a built port is assembled in before it is installed.
+
+### What Deguffer does
+
+It removes all four where it can find them, as separate rows you can tick individually.
+
+**It may see one location or four, and it says which.** The binary cache is in your profile, so it is
+always findable — Deguffer follows vcpkg's documented search order of `VCPKG_DEFAULT_BINARY_CACHE`,
+then `%LOCALAPPDATA%\vcpkg\archives`, then `%APPDATA%\vcpkg\archives`. The other three live inside
+the vcpkg clone, which is a git checkout you put wherever you liked, so Deguffer looks for it in
+`VCPKG_ROOT`, then in the file `vcpkg integrate install` wrote into your profile, then beside the
+`vcpkg` executable on your `PATH`. If none of those answers, the plan says so in as many words
+rather than quietly reporting a quarter of the subject.
+
+`VCPKG_DOWNLOADS` is honoured where it has moved the downloads directory out of the clone.
+
+vcpkg ships no cache-eviction command. Its own answer to a cache that has grown is the
+`--clean-after-build` family of flags on `vcpkg install`, which cleans as it goes, and its
+documentation says outright that `buildtrees`, `downloads` and `packages` under the root are safe to
+delete.
+
+### What is protected
+
+**`installed`** — the libraries vcpkg has actually installed, which every project on the machine
+links against. It sits in the same folder as the three scratch directories and it is refilled by
+exactly the same command, so it looks disposable and is not. `ports`, `triplets`, `versions`,
+`scripts` and `vcpkg.exe` are protected beside it, and the clone itself is never a target.
+
+In your profile, `vcpkg.path.txt` and `registries` are protected: one records which clone is
+integrated with Visual Studio, and the other holds the registry clones your manifests resolve
+against.
+
+### What it costs you
+
+The next `vcpkg install` rebuilds the affected libraries from source instead of unpacking a cached
+binary, and downloads their source archives again as it goes. For something the size of Boost or Qt
+that is tens of minutes to hours.
+
+Libraries already installed stay installed. Nothing you have already built against stops working.
+
+### Why Tier 2, not Tier 1
+
+Because restoring one of these is a compile rather than a download. Tier 2's definition covers
+"re-created, but only by re-downloading gigabytes or re-indexing for minutes", and a from-source
+rebuild of a large C++ library is the same cost with the clock running the other way.
+
+Two of the four — `buildtrees` and `packages` — are genuinely scratch and would be Tier 1 on their
+own. A plan carries one tier, and the more cautious of the two governs it. You are not denied them:
+each directory is its own row, so you can take the scratch and leave the binary cache.
+
+---
+
 ## GPU shader caches
 
 **Tier 1 — regenerable cache.** Pre-selected.
