@@ -32,6 +32,18 @@ namespace Deguffer.Core.Providers;
 /// and §7's age column wants a row a reader can act on — "you last deleted something on this drive
 /// eight months ago" — not ten thousand of them.</para>
 ///
+/// <para><b>§5.1 is answered rather than skipped.</b> Windows ships <c>SHEmptyRecycleBin</c>, which
+/// takes a volume root — the grain this provider already works at — and it is deliberately not used.
+/// §7 makes the preview the primary action, and a plan has to name what it will remove: this one
+/// names one directory per volume, sized and dated, and §5.6 asserts what survived beside it. A
+/// shell call names a volume, reports nothing back, and would leave both of those with nothing to
+/// say. The second reason is §5.2 itself — the safety property here is "this account's directory,
+/// never a sibling", and handing a whole volume to the shell puts that decision outside the code the
+/// rule is checkable in. The cost is accepted rather than dismissed: a path deletion does not tell
+/// the shell what changed, so a Recycle Bin window left open may show a stale picture until it
+/// refreshes. That is a stale picture rather than a stale deletion, and it has not been observed
+/// here.</para>
+///
 /// <para>The bin root was observed holding nothing but per-account directories, so unlike NVIDIA's
 /// <c>accounts</c> there is no file beside the target to name explicitly. The children that
 /// <em>are</em> there are asserted individually, which is the same protection by a different
@@ -100,6 +112,18 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// The bin roots this provider looks at. Exposed so tests can assert none of them is targeted.
     /// </summary>
     public IReadOnlyList<string> BinRoots => [.. CandidateBins()];
+
+    /// <summary>
+    /// What this provider recognises inside a bin root.
+    ///
+    /// Exposed so a test can hold the declaration to the tier the provider claims. A plan carries
+    /// the provider's tier rather than the child's, and <see cref="SafetyTierExtensions.IsOfferable"/>
+    /// admits Tier 1, 2 and 3 alike — so a child declared at Tier 1 would still be targeted, under a
+    /// plan still marked Tier 3, with nothing downstream noticing that the declaration and the stakes
+    /// it records disagree. <see cref="DisposableChildSet"/> says a provider whose own tier is
+    /// narrower than what it offers owes itself exactly that test.
+    /// </summary>
+    public DisposableChildSet RecognisedChildren => _children;
 
     /// <summary>
     /// Presence is this user's own bin existing on some volume, never a bin root existing: every

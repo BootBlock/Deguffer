@@ -96,7 +96,7 @@
                     <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                TextWrapping="Wrap"
                                FontSize="13"
-                               Text="There is no undo. Ten gigabytes will not go through the Recycle Bin, so anything removed is gone." />
+                               Text="There is no undo. What you agree to is removed outright rather than moved anywhere first, so it is gone." />
                 </StackPanel>
             </Border>
 

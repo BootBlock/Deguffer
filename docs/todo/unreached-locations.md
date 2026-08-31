@@ -359,7 +359,18 @@ no call to `DriveInfo.GetDrives` existed anywhere. The MFT scanner never needed 
 list because it is only ever asked about a path somebody already chose. So this cost a new seam,
 `IVolumeInventory`, rather than being nearly free.
 
-Three further things the work settled that this section did not anticipate:
+Four further things the work settled that this section did not anticipate:
+
+- **§5.1 has an answer here, and it is "no".** Windows ships `SHEmptyRecycleBin`, which takes a
+  volume root — the grain this provider already works at — so the §5.1 question is live rather than
+  vacuous, and every other provider in the product records its position on it. The position is that
+  the preview outranks it: §7 makes the dry run the primary action, this plan names one directory
+  per volume with a size and a date, and §5.6 asserts what survived beside it, none of which a call
+  that names a volume and reports nothing back could support. §5.2 is the second reason, because the
+  safety property is "this account's directory, never a sibling" and handing a whole volume to the
+  shell puts that decision outside the code the rule is checkable in. The accepted cost is that the
+  shell is not told what changed, so a Recycle Bin window left open may show a stale picture until
+  it refreshes — not observed, and a stale picture rather than a stale deletion.
 
 - **The seam is its own interface rather than a member on `IUserEnvironment`.** That interface is
   the signed-in user — their profile directories, their `PATH`, their environment — and the mounted

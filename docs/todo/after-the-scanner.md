@@ -1,8 +1,9 @@
 # After the scanner — sequenced backlog
 
-> **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 and 1 are
-> done; 2 onwards are not started. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
-> exhausted, or supersede it with a newer plan.
+> **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
+> are done; item 4 records what was deferred and why, and item 5 what is still undecided. Flip to
+> ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a newer
+> plan.
 
 The §5.5 scanner (MFT fast path, observable fallback, cross-run size cache, progressive preview)
 landed on `feature/mft-scanner`. This is what follows, in the order it should be done and with the
@@ -100,8 +101,7 @@ five more callers.
 
 ## 3. The §7 confirmation flow — the real fork ✅ done
 
-**Outcome: the seam and Tier 2 landed first; Tier 3 and the age column followed, each once it had a
-subject.**
+**Outcome: the seam and Tier 2 landed; Tier 3 and the age column did not, on evidence.**
 
 `ConfirmationRequirement` decides from a plan's tier what must be satisfied before it runs — nothing
 for Tier 1, an acknowledgement for Tier 2, the typed phrase for Tier 3, and for Tier 4 an answer that

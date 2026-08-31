@@ -109,12 +109,17 @@ public sealed class RecycleBinProviderTests : IDisposable
     public async Task EveryStepCarriesAnAgeBecauseTheRowIsOneVolume()
     {
         var bin = CreateBin(CreateVolume("D"), Sid);
-        Directory.SetLastWriteTimeUtc(bin, DateTime.UtcNow.AddDays(-200));
+        var written = DateTime.UtcNow.AddDays(-200);
+        Directory.SetLastWriteTimeUtc(bin, written);
 
         var step = Assert.Single((await CreateProvider().PlanAsync()).Steps);
 
         Assert.NotNull(step.LastWritten);
-        Assert.InRange(step.LastWritten!.Value, DateTime.UtcNow.AddDays(-201), DateTime.UtcNow.AddDays(-199));
+
+        // Against the value written, rather than a window around "about 200 days ago" that any
+        // roughly-right timestamp would satisfy. The comparison normalises to UTC, as
+        // RelativeAge.Describe does, so which Kind the provider hands back is not what this pins.
+        Assert.Equal(written, step.LastWritten!.Value, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -286,12 +291,32 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The tier is the whole product here (§3), and a plan carries the provider's tier rather than
-    /// the child's — so a child declared below Tier 3 would be pre-selected under a sentence that
-    /// promises permanence.
+    /// The tier is the whole product here (§3), and the declaration has to agree with the tier the
+    /// provider claims. A plan carries the provider's tier rather than the child's, and
+    /// <see cref="SafetyTierExtensions.IsOfferable"/> admits Tier 1, 2 and 3 alike — so a child
+    /// declared at Tier 1 would still be targeted, under a plan still marked Tier 3, and nothing
+    /// downstream would notice the declaration disagreeing with the stakes it records.
     /// </summary>
     [Fact]
-    public async Task TheProviderAndItsOnlyRecognisedChildAreBothTier3()
+    public void EveryDeclaredChildIsTheTierTheProviderClaims()
+    {
+        var provider = CreateProvider();
+        var declared = provider.RecognisedChildren.DisposableNames.ToList();
+
+        // One entry, and it is this account's own identifier. A second would mean the provider had
+        // learned to empty something it never decided to.
+        Assert.Equal([Sid], declared);
+        Assert.All(declared, name =>
+            Assert.Equal(provider.Tier, provider.RecognisedChildren.Classify(name).Tier));
+    }
+
+    /// <summary>
+    /// §7: Tier 3 requires typed confirmation. This is the first provider to reach that path, so
+    /// the wiring from the provider's tier through to the phrase the shell asks for is worth
+    /// pinning end to end.
+    /// </summary>
+    [Fact]
+    public async Task ATier3PlanDemandsTheTypedPhrase()
     {
         CreateBin(CreateVolume("D"), Sid);
 
@@ -300,10 +325,13 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.Equal(SafetyTier.UserData, provider.Tier);
 
         var plan = await provider.PlanAsync();
+        var requirement = ConfirmationRequirement.For(plan);
 
         Assert.Equal(SafetyTier.UserData, plan.Tier);
-        Assert.Equal(ConfirmationLevel.TypedPhrase, ConfirmationRequirement.For(plan).Level);
-        Assert.Equal(provider.Name, ConfirmationRequirement.For(plan).RequiredPhrase);
+        Assert.Equal(ConfirmationLevel.TypedPhrase, requirement.Level);
+        Assert.Equal(provider.Name, requirement.RequiredPhrase);
+        Assert.False(requirement.IsSatisfiedBy([new Confirmation(provider.Id)]));
+        Assert.True(requirement.IsSatisfiedBy([new Confirmation(provider.Id, provider.Name)]));
     }
 
     [Fact]
@@ -352,7 +380,11 @@ public sealed class RecycleBinProviderTests : IDisposable
     [Fact]
     public async Task MeasuresAndRemovesContentPastMaxPath()
     {
-        var bin = CreateBin(CreateVolume("D"), Sid);
+        // Built without CreateBin's shallow entries, so the measured size is evidence about the deep
+        // tree alone. With 4 KB of ordinary content beside it, a threshold this assertion could
+        // clear on those bytes would pass even if everything past MAX_PATH went unmeasured.
+        var bin = Path.Combine(CreateVolume("D"), BinName, Sid);
+        Directory.CreateDirectory(bin);
 
         var deep = Path.Combine(bin, "$RDEEP01");
         while (deep.Length < 300)
@@ -370,7 +402,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Contains(bin, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.True(plan.EstimatedBytes > 4096, "a deleted tree past MAX_PATH was not measured.");
+        Assert.True(plan.EstimatedBytes > 0, "a deleted tree past MAX_PATH was not measured.");
 
         var result = await provider.ExecuteAsync(plan);
 

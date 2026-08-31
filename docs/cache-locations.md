@@ -236,7 +236,7 @@ words the dialog asks for.
 
 | | |
 | --- | --- |
-| **Location** | `$Recycle.Bin` at the root of every fixed drive |
+| **Location** | `$Recycle.Bin` at the root of every fixed drive Deguffer can read |
 | **Method** | Delete this account's own bin inside each one |
 | **Typical size** | Whatever you have deleted and not yet purged. 3.6 GB across two drives was measured on one workstation, with the system drive holding nothing at all |
 
@@ -267,7 +267,18 @@ clearing out this morning, and the two are indistinguishable by size.
 Drives that are not fixed are left out entirely. A network drive has no Recycle Bin — Windows
 deletes across one outright — so a `$RECYCLE.BIN` sitting on a share belongs to the server's users
 rather than to you. Removable media can be swapped between the preview and the clean, which would
-put a plan you approved for one disk in front of another.
+put a plan you approved for one disk in front of another. A fixed drive that is not ready to be
+read, which is unusual but possible, is skipped as well.
+
+**Windows has a command for this, and Deguffer does not use it.** §5.1 says to prefer a tool's own
+eviction command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name. The reason
+it is not used is the preview. Deguffer's plan tells you the exact folder it will remove on each
+drive, how large it is and when you last used it, and then checks afterwards that everything it
+promised to keep is still there. A command that takes a drive and reports nothing back leaves both
+of those with nothing to say — and it would move the decision about *whose* bin gets emptied out of
+the code where that rule can be checked. The one thing given up is that Windows is not told what
+changed, so a Recycle Bin window you already had open may keep showing the old contents until you
+refresh it. That is a stale picture rather than a stale deletion.
 
 ### What is protected
 
