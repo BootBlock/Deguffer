@@ -199,10 +199,11 @@ so you can clear one application and keep another. Where an application keeps se
 `Default`, `Profile 1` and so on — each profile's caches are their own steps too, so you can clear a
 dormant profile and leave the one you use signed in and warm.
 
-`Cache` and `Service Worker` are **not** removed, only the one directory inside each. `Cache` keeps
-Chromium's own index next to the data, and `Service Worker` keeps the registrations and scripts next
-to the responses they cached. Deguffer says so rather than leaving you to wonder why the folder is
-still there.
+`Cache` and `Service Worker` are **not** removed, only the one directory inside each. `Service
+Worker` keeps its registrations and scripts next to the responses they cached, and `Cache` is left
+standing for the same reason any unrecognised folder is: Deguffer takes the directory it recognises,
+never the one holding it. The plan says so, so you are not left wondering why those two folders are
+still there afterwards.
 
 ### What is protected
 
@@ -215,12 +216,13 @@ beside the caches, in the same naming style, are:
 | `IndexedDB` | Offline application data |
 | `Cookies`, `Network\Cookies` | Your sign-in cookies |
 | `Login Data` | Saved usernames and passwords |
-| `Local State` | Application settings, and the key that decrypts the two above |
+| `Web Data` | Saved addresses and payment cards |
+| `Local State` | Application settings, and the key that decrypts the three above |
 
 Nothing outside the six names is ever a candidate, whatever it is called — a directory named
 `SuperCache` stays exactly where it is. Deguffer asserts afterwards that every one of these
-survived, including the three that are files rather than folders and so would otherwise never be
-checked at all.
+survived, the ones that are files rather than folders included — those would otherwise never be
+checked at all, because the rule that classifies a folder never sees a file.
 
 Deguffer also refuses to delete through a link. If you have redirected an application's cache to
 another drive with a junction, it removes nothing there and tells you why.

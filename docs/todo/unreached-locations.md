@@ -231,8 +231,14 @@ Six things the work settled that this section did not anticipate:
 - **A container had to be *declared* Tier 4 rather than left unrecognised.** `Cache` and
   `Service Worker` are the one case where the unrecognised-child reason would have been actively
   false: the directory really is left standing, and something inside it really is being removed.
-  Declaring them is the only way the note says both. The generic "we did not recognise that"
-  wording is right for a sibling and wrong for a parent.
+  The generic "we did not recognise that" wording is right for a sibling and wrong for a parent, so
+  each carries its own reason, and the per-application note gains a sentence saying it — but only on
+  a plan that actually emptied one. A user who sees `Cache` still there afterwards would otherwise
+  have no way to tell that anything inside it went.
+  A related correction the work forced: `Cache` holds nothing but `Cache_Data`. The index lives
+  *inside* `Cache_Data`, not beside it, so the first reason written for that entry described a
+  layout Chromium does not produce. It is kept because §5.2 never targets a directory whose
+  children have not been classified, which is the honest reason and the one now written down.
 - **One note per spared child does not survive contact with this folder.** Every provider before
   this one names each thing it left alone, which is right for a vendor directory holding two
   children and unusable for a Chromium profile holding fifty, across ten applications. A note
@@ -544,7 +550,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | --- | --- | ---: |
 | GPU shader caches ✅ | Nothing new. Path-based, recognised children, pure Tier 1 | 3.2 GB |
 | Per-volume recycle bins | Volume enumeration the scanner already does, plus Tier 3 confirmation, which exists | 3.6 GB |
-| Chromium cache signature | A signature match over app-data folders; `ContentSignature` has the shape | 0.8 GB |
+| Chromium cache signature ✅ | Expected `ContentSignature` to have the shape. It did not — §4 records what the work needed instead | 0.8 GB |
 | Crash dumps and servicing logs | Path-based, plus elevation for the `C:\Windows` paths, which §6.3 already permits | 0.2 GB |
 | Cargo, Go, pnpm, conda, Maven, vcpkg | One class each, on the npm and NuGet shape. pnpm needs link-aware measurement | researched |
 | Per-project build output | Extends `SourceRootStore`; needs §5.3's live-tree exclusion generalised beyond `%TEMP%` | 8.6 GB |

@@ -137,8 +137,9 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.2. The user-data folder is a tool root in every sense that matters, and so are the two
-    /// containers this provider descends into: <c>Cache</c> holds Chromium's index beside the data,
-    /// and <c>Service Worker</c> holds registrations and scripts beside the cached responses.
+    /// containers this provider descends into: <c>Service Worker</c> holds registrations and scripts
+    /// beside the cached responses, and <c>Cache</c> is spared for the reason any unclassified
+    /// parent is — the rule takes the child it recognises, never the directory holding it.
     /// </summary>
     [Fact]
     public async Task NeverTargetsTheUserDataFolderOrTheContainersItDescendsInto()
@@ -198,9 +199,12 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The same rule one level down, where it is easiest to get wrong: <c>index</c> is what makes
-    /// <c>Cache_Data</c> readable, and <c>ScriptCache</c> holds the service worker's own scripts.
-    /// Both live inside a directory this provider deliberately reaches into.
+    /// The same rule one level down, inside the two directories this provider deliberately reaches
+    /// into. <c>ScriptCache</c> and <c>Database</c> are the real neighbours of <c>CacheStorage</c>,
+    /// observed in a live <c>Service Worker</c> directory. <c>Cache</c> was observed holding nothing
+    /// but <c>Cache_Data</c>, so the third subject is an invented name: what has to hold is that
+    /// anything appearing there in a future Chromium version is spared, and there is no way to test
+    /// that against a name that exists today.
     /// </summary>
     [Fact]
     public async Task AnUnrecognisedChildInsideAContainerIsTier4AndSurvives()
@@ -209,14 +213,14 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         CreateDirectory(Path.Combine(app, "Cache", "Cache_Data"));
         CreateDirectory(Path.Combine(app, "Service Worker", "CacheStorage"));
 
-        var index = CreateDirectory(Path.Combine(app, "Cache", "index-dir"));
+        var unexpected = CreateDirectory(Path.Combine(app, "Cache", "Something_New"));
         var scripts = CreateDirectory(Path.Combine(app, "Service Worker", "ScriptCache"));
         var database = CreateDirectory(Path.Combine(app, "Service Worker", "Database"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        foreach (var spared in new[] { index, scripts, database })
+        foreach (var spared in new[] { unexpected, scripts, database })
         {
             Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
@@ -226,7 +230,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.All(new[] { index, scripts, database }, path => Assert.True(Directory.Exists(path)));
+        Assert.All(new[] { unexpected, scripts, database }, path => Assert.True(Directory.Exists(path)));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -244,14 +248,16 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         var cookies = Path.Combine(app, "Cookies");
         var logins = Path.Combine(app, "Login Data");
+        var cards = Path.Combine(app, "Web Data");
         var localState = Path.Combine(app, "Local State");
         File.WriteAllText(cookies, "<REDACTED>");
         File.WriteAllText(logins, "<REDACTED>");
+        File.WriteAllText(cards, "<REDACTED>");
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        foreach (var file in new[] { cookies, logins, localState })
+        foreach (var file in new[] { cookies, logins, cards, localState })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
@@ -260,7 +266,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.All(new[] { cookies, logins, localState }, file => Assert.True(File.Exists(file)));
+        Assert.All(new[] { cookies, logins, cards, localState }, file => Assert.True(File.Exists(file)));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -336,9 +342,22 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         CreateDirectory(Path.Combine(app, "GPUCache"));
         var backup = CreateDirectory(Path.Combine(app, "Profile backup", "Code Cache"));
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
         Assert.DoesNotContain(backup, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        // The folder is a spared sibling of the profiles that are entered, so §5.6 asserts it
+        // rather than merely leaving it out.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(Path.Combine(app, "Profile backup"), StringComparison.OrdinalIgnoreCase) &&
+            p.ExistedBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(Directory.Exists(backup), "a hand-made profile copy was cleared.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -391,6 +410,110 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
             "planning looked through a junctioned container and deleted the far side.");
+    }
+
+    /// <summary>
+    /// A junctioned container is met twice — once as a link child of the profile, once as a level
+    /// whose own directory turns out to be one — and both times it is the same path. Saying it
+    /// twice is a plan that reads as though two things were skipped.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedContainerIsReportedOnceRatherThanOncePerLevel()
+    {
+        var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
+
+        var app = CreateApplication("Chatter");
+        CreateDirectory(Path.Combine(app, "GPUCache"));
+        Directory.CreateSymbolicLink(Path.Combine(app, "Cache"), outside);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Single(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The discovery walk is the only thing standing between a junctioned data folder and a
+    /// deletion on the far side of it, and it was the only link case with no test. A profile
+    /// reached through such a folder is a real directory, so every later reparse check answers
+    /// false and every §5.6 survivor resolves through the link and passes.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedApplicationDataFolderIsNeverIdentified()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var bystander = CreateDirectory(Path.Combine(outside, "Default", "Code Cache"));
+        File.WriteAllText(Path.Combine(outside, "Local State"), "{}");
+
+        Directory.CreateSymbolicLink(Path.Combine(_environment.RoamingAppData, "Chatter"), outside);
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.Empty(provider.Applications());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(bystander, "entry.bin")),
+            "discovery looked through a junctioned data folder and deleted the far side.");
+    }
+
+    /// <summary>
+    /// The same rule one level down. A profile is reached by enumerating the data folder, so the
+    /// link filtering there is what keeps a redirected profile out of the plan.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedProfileIsNeverEntered()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var bystander = CreateDirectory(Path.Combine(outside, "Code Cache"));
+
+        var app = CreateApplication("Browserish");
+        CreateDirectory(Path.Combine(app, "GPUCache"));
+        Directory.CreateSymbolicLink(Path.Combine(app, "Default"), outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(
+            Path.Combine(app, "Default", "Code Cache"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(bystander, "entry.bin")),
+            "a junctioned profile was entered and the far side deleted.");
+    }
+
+    /// <summary>
+    /// Two of the six sit inside a directory that is kept, so a user who sees that directory still
+    /// standing has no way to tell the cache inside it went. The sentence is said only when it
+    /// happened, so a plan that emptied no container must not carry it.
+    /// </summary>
+    [Fact]
+    public async Task TheContainerSentenceAppearsOnlyWhenACacheInsideOneWasRemoved()
+    {
+        var flat = CreateApplication("Flat");
+        CreateDirectory(Path.Combine(flat, "GPUCache"));
+        CreateDirectory(Path.Combine(flat, "Local Storage"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Service Worker", StringComparison.Ordinal));
+
+        var nested = CreateApplication("Nested");
+        CreateDirectory(Path.Combine(nested, "Cache", "Cache_Data"));
+
+        var provider = CreateProvider();
+        var second = await provider.PlanAsync();
+
+        Assert.Contains(second.Notes, n =>
+            n.Message.Contains("'Nested'", StringComparison.Ordinal) &&
+            n.Message.Contains("Service Worker", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -535,6 +658,10 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         Assert.True(result.Succeeded);
         Assert.False(LongPath.FileExists(entry), "An entry past MAX_PATH survived the removal.");
         Assert.False(Directory.Exists(cache));
+
+        // §6.3's failure mode is a silent *partial* deletion, which is exactly the case where the
+        // §5.6 negative earns its place: a truncated path can take the wrong tree with it.
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     private static bool IsAtOrUnder(string candidate, string ancestor) =>

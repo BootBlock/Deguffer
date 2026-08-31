@@ -17,8 +17,9 @@ namespace Deguffer.Core.Providers;
 /// <para><b>The signature is an exact allow-list of six names, and that is the whole safety
 /// argument.</b> What sits beside them is Tier 3 and looks identical: <c>Local Storage</c>,
 /// <c>Session Storage</c> and <c>IndexedDB</c> are directories in the same folder in the same
-/// naming style, and <c>Local State</c>, <c>Cookies</c> and <c>Login Data</c> are files among them.
-/// Between them they hold sign-in tokens, saved passwords, drafts and offline application data. So
+/// naming style, and <c>Local State</c>, <c>Cookies</c>, <c>Login Data</c> and <c>Web Data</c> are
+/// files among them. Between them they hold sign-in tokens, saved passwords, saved payment cards,
+/// drafts and offline application data. So
 /// this is §5.2 applied to a signature instead of to a root — a name the table does not carry is
 /// Tier 4 by construction, and everything spared that is actually on disk is asserted to survive.
 /// </para>
@@ -74,7 +75,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             new ChildClassification(
                 "Cache",
                 SafetyTier.DoNotTouch,
-                "The web cache directory. Its index sits beside the data, so only the 'Cache_Data' inside it is removed."),
+                "The directory the web cache sits in. Only the 'Cache_Data' inside it is removed, and the directory "
+                + "holding it stays, so anything that ever appears beside the cache is left alone."),
             new ChildClassification(
                 "Service Worker",
                 SafetyTier.DoNotTouch,
@@ -109,15 +111,19 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
-    /// The same, per profile. <c>Cookies</c> is listed at both paths because Chromium moved it under
-    /// <c>Network</c> and older profiles still keep it at the top level. Whichever is absent records
-    /// itself as nothing to preserve rather than as a pass.
+    /// The same, per profile: the credential surface, named in full rather than sampled. Anything
+    /// less makes the §5.6 evidence weaker than the claim it supports.
+    ///
+    /// <c>Cookies</c> is listed at both paths because Chromium moved it under <c>Network</c> and
+    /// older profiles still keep it at the top level. Whichever is absent records itself as nothing
+    /// to preserve rather than as a pass.
     /// </summary>
     private static readonly (string Name, string Reason)[] ProtectedProfileFiles =
     [
         ("Cookies", "Sign-in cookies. Removing them signs the user out of everything."),
         (@"Network\Cookies", "Sign-in cookies. Removing them signs the user out of everything."),
         ("Login Data", "Saved usernames and passwords."),
+        ("Web Data", "Saved addresses and payment cards."),
     ];
 
     private readonly ChromiumUserDataDiscovery _discovery;
@@ -194,6 +200,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             survivors.AddRange(ProtectedRootFiles.Select(f => (Path.Combine(application.Path, f.Name), f.Reason)));
 
             var spared = 0;
+            var emptiedAContainer = false;
 
             foreach (var profile in application.Profiles)
             {
@@ -202,20 +209,31 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                     "The profile directory itself must survive — only recognised cache directories inside it are removed."));
                 survivors.AddRange(ProtectedProfileFiles.Select(f => (Path.Combine(profile, f.Name), f.Reason)));
 
-                spared += CollectFrom(profile, targets, declined, survivors, notes, ct);
+                var outcome = CollectFrom(profile, targets, declined, survivors, notes, ct);
+
+                spared += outcome.Spared;
+                emptiedAContainer |= outcome.EmptiedAContainer;
             }
 
             // One note per application rather than one per spared child. A Chromium profile holds
             // dozens of directories, so naming each of them across ten applications would produce a
             // plan nobody reads — and a note nobody reads protects nothing. Each of them is still
             // asserted individually by §5.6, and this is the sentence that says so.
+            //
+            // The second sentence is not decoration. Two of the six caches sit inside a directory
+            // that is itself kept, so a user who sees that directory still standing after a clean
+            // has no way to tell that anything inside it went. It is said only when it happened.
             if (spared > 0)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
                     $"In '{application.Name}', {spared} other {(spared == 1 ? "item is" : "items are")} left alone "
                     + "beside the caches. Sign-in state, saved passwords and offline data all live in that folder, "
-                    + "so only the recognised cache directories are removed."));
+                    + "so only the recognised cache directories are removed."
+                    + (emptiedAContainer
+                        ? " Two of those caches sit inside a directory of their own — 'Cache' and 'Service Worker' — "
+                          + "and that directory stays: only the one recognised cache inside it is removed."
+                        : string.Empty)));
             }
         }
 
@@ -252,9 +270,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             // as two.
             ProtectedPaths = Protect(
                 [.. survivors.Concat(declined).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
-            // A container that is a link is met twice — once as a child of the profile, once as a
-            // level of its own — and says the same sentence about the same path both times.
-            Notes = [.. notes.DistinctBy(n => n.Message, StringComparer.Ordinal)],
+            Notes = notes,
             Fallback = measured.Fallback,
         };
     }
@@ -265,13 +281,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// is exactly when an over-broad rule takes both — so it is asserted to survive rather than
     /// merely left out of the plan.
     /// </summary>
-    /// <returns>
-    /// How many children were spared, which is what the per-application note reports. Counted here
-    /// rather than from the length of <paramref name="survivors"/>, which also carries the folder,
-    /// the profile and the named files — a total including those would tell the user that items
-    /// were left alone in a folder that may not hold them.
-    /// </returns>
-    private static int CollectFrom(
+    private static ProfileOutcome CollectFrom(
         string profile,
         List<DeletionTarget> targets,
         List<(string Path, string Reason)> declined,
@@ -280,6 +290,13 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         CancellationToken ct)
     {
         var spared = 0;
+        var emptiedAContainer = false;
+
+        // A container that is a link is met twice: once as a link child of the profile, and once as
+        // a level whose own directory turns out to be one. Both times it is the same path and the
+        // same sentence. Deduplicating here rather than over the finished note list is what keeps
+        // two applications that happen to share a folder name from collapsing into one note.
+        var reportedLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var level in Levels)
         {
@@ -299,8 +316,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             // as every target happened to arrive the same way.
             if (LongPath.IsReparsePoint(directory))
             {
-                notes.Add(LinkNote(directory));
-                declined.Add((directory, LinkReason));
+                Decline(directory);
                 continue;
             }
 
@@ -308,8 +324,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
             foreach (var link in scan.Links)
             {
-                notes.Add(LinkNote(LongPath.Display(link.FullName)));
-                declined.Add((LongPath.Display(link.FullName), LinkReason));
+                Decline(LongPath.Display(link.FullName));
             }
 
             foreach (var child in scan.Directories)
@@ -320,6 +335,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 if (classification.Tier.IsOfferable())
                 {
                     targets.Add(new DeletionTarget(path, classification.Reason));
+                    emptiedAContainer |= level.ContainerName.Length > 0;
                 }
                 else
                 {
@@ -329,8 +345,32 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             }
         }
 
-        return spared;
+        return new ProfileOutcome(spared, emptiedAContainer);
+
+        void Decline(string path)
+        {
+            if (!reportedLinks.Add(path))
+            {
+                return;
+            }
+
+            notes.Add(LinkNote(path));
+            declined.Add((path, LinkReason));
+        }
     }
+
+    /// <summary>What one profile's levels came to, for the sentences the plan carries.</summary>
+    /// <param name="Spared">
+    /// How many children were spared. Counted here rather than from the length of the survivor
+    /// list, which also carries the folder, the profile and the named files — a total including
+    /// those would tell the user that items were left alone in a folder that may not hold them.
+    /// </param>
+    /// <param name="EmptiedAContainer">
+    /// Whether a target came from inside <c>Cache</c> or <c>Service Worker</c>. Those directories
+    /// are kept, so without this the user sees one still standing and cannot tell that the cache
+    /// inside it went.
+    /// </param>
+    private readonly record struct ProfileOutcome(int Spared, bool EmptiedAContainer);
 
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
@@ -344,6 +384,12 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// Whether any of the six declared names is on disk for this application, by probing the table
     /// rather than by enumerating (G4). Six existence checks per profile, and not one of them can
     /// reach a path the table does not name.
+    ///
+    /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so an
+    /// application whose only cache is a link reports as present here and then yields no target,
+    /// because <see cref="CollectFrom"/> declines it. That is the intended outcome — a plan naming
+    /// the link beats an empty plan that claims no cache exists — but a future edit must not read
+    /// a true from this as licence to delete anything.</para>
     /// </summary>
     private static bool HasRecognisedCache(ChromiumUserData application, CancellationToken ct)
     {
