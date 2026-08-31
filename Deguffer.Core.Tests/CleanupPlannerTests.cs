@@ -182,7 +182,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip",
-                "gpu-shader-cache", "platformio", "playwright", "recycle-bin",
+                "gpu-shader-cache", "chromium-app-cache", "platformio", "playwright", "recycle-bin",
             ],
             planner.Providers.Select(p => p.Id));
 

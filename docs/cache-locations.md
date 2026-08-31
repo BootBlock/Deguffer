@@ -158,6 +158,102 @@ measured in seconds and there is no path by which anything is lost.
 
 ---
 
+## Chromium application caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%` |
+| **Method** | Delete the six cache directories Chromium writes, per profile |
+| **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB |
+
+### What it is
+
+A great many desktop applications are a web application with the Chromium browser engine wrapped
+around it — chat clients, editors, note-takers, package-manager front ends. Each one runs a full
+browser inside itself, and each one therefore keeps a full browser's caches: downloaded web content,
+compiled JavaScript, and compiled graphics pipelines.
+
+Because the engine is the same in all of them, the cache directories have the same six names in all
+of them, sitting in whatever data folder the vendor chose. That is what Deguffer recognises. It does
+not need to know the application.
+
+| Directory | What it holds |
+| --- | --- |
+| `Cache\Cache_Data` | Web content saved so the same thing is not fetched twice |
+| `Code Cache` | JavaScript and WebAssembly compiled ahead of time |
+| `GPUCache` | Compiled graphics pipelines |
+| `DawnGraphiteCache`, `DawnWebGPUCache` | Compiled WebGPU pipelines |
+| `Service Worker\CacheStorage` | Responses a service worker stored for offline use |
+
+### What Deguffer does
+
+**It identifies the folder before it looks inside it.** Any directory on your disk may happen to be
+called `GPUCache`, so a cache name is never on its own a reason to go in. Deguffer looks for
+`Local State`, the file Chromium writes into the user-data folder it owns, and only a folder holding
+that file is examined at all.
+
+Within such a folder it removes exactly the six directories above and nothing else, one step each,
+so you can clear one application and keep another. Where an application keeps several profiles —
+`Default`, `Profile 1` and so on — each profile's caches are their own steps too, so you can clear a
+dormant profile and leave the one you use signed in and warm.
+
+`Cache` and `Service Worker` are **not** removed, only the one directory inside each. `Service
+Worker` keeps its registrations and scripts next to the responses they cached, and `Cache` is left
+standing for the same reason any unrecognised folder is: Deguffer takes the directory it recognises,
+never the one holding it. The plan says so, so you are not left wondering why those two folders are
+still there afterwards.
+
+### What is protected
+
+**Everything else in the folder, and this is the folder where that matters most.** Sitting directly
+beside the caches, in the same naming style, are:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Local Storage`, `Session Storage` | Application state and drafts |
+| `IndexedDB` | Offline application data |
+| `Cookies`, `Network\Cookies` | Your sign-in cookies |
+| `Login Data` | Saved usernames and passwords |
+| `Web Data` | Saved addresses and payment cards |
+| `Local State` | Application settings, and the key that decrypts the three above |
+
+Nothing outside the six names is ever a candidate, whatever it is called — a directory named
+`SuperCache` stays exactly where it is. Deguffer asserts afterwards that every one of these
+survived, the ones that are files rather than folders included — those would otherwise never be
+checked at all, because the rule that classifies a folder never sees a file.
+
+Deguffer also refuses to delete through a link. If you have redirected an application's cache to
+another drive with a junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+Each application starts more slowly once. It fetches the web content it had cached, recompiles its
+scripts, and then behaves exactly as before.
+
+**You stay signed in.** Sign-ins, saved passwords, settings and offline data are all in the
+neighbouring directories, not in the six. An application that works offline needs to be online once
+to refill what its service worker had stored.
+
+Close the applications first if you can. A running one keeps its cache files open, and anything held
+open is left in place rather than removed.
+
+### Why Tier 1
+
+Every one of the six is derived content with an authoritative source elsewhere: web content the
+server still has, and compiled output of scripts that are still on your disk. The engine refills all
+of it without being asked, and the cost is a slower first launch.
+
+### Not reached: packaged applications
+
+An application installed from the Microsoft Store does not write to `%APPDATA%`. Windows redirects
+it under `%LOCALAPPDATA%\Packages`, and reaching a Chromium cache there is a separate piece of work
+that is not done yet. If one of your Store applications embeds Chromium, Deguffer does not currently
+see its cache.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
