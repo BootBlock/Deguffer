@@ -229,6 +229,85 @@ rather than a global install.
 
 ---
 
+## Recycle Bin
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and released only once you have typed the
+words the dialog asks for.
+
+| | |
+| --- | --- |
+| **Location** | `$Recycle.Bin` at the root of every fixed drive |
+| **Method** | Delete this account's own bin inside each one |
+| **Typical size** | Whatever you have deleted and not yet purged. 3.6 GB across two drives was measured on one workstation, with the system drive holding nothing at all |
+
+### What it is
+
+Every drive keeps its own Recycle Bin. Deleting a file on `D:` fills `D:`'s bin, not `C:`'s, and
+the bin on each drive holds those files at full size until something empties it.
+
+**This is why the space is easy to miss.** Emptying the Recycle Bin from the desktop clears every
+drive at once, but tools that go looking for the folder almost always look on the system drive
+alone — where, on a machine whose work lives elsewhere, there is frequently nothing to find.
+
+Inside a drive's `$Recycle.Bin` is one folder per Windows account, named after that account's
+security identifier: a string like `S-1-5-21-…` that identifies exactly one person on exactly one
+machine. Your deleted files are in yours, another user's are in theirs, and Windows itself keeps
+one under `S-1-5-18`.
+
+### What Deguffer does
+
+It takes **your own** bin from each fixed drive, one row per drive, and it does not touch the
+`$Recycle.Bin` folder that contains them. Windows re-creates your folder the next time you delete
+something to that drive, so the bin keeps working exactly as it did.
+
+Each row carries the date that bin last changed, because that is what the decision turns on. A
+drive you last deleted something on eight months ago is a different proposition from one you were
+clearing out this morning, and the two are indistinguishable by size.
+
+Drives that are not fixed are left out entirely. A network drive has no Recycle Bin — Windows
+deletes across one outright — so a `$RECYCLE.BIN` sitting on a share belongs to the server's users
+rather than to you. Removable media can be swapped between the preview and the clean, which would
+put a plan you approved for one disk in front of another.
+
+### What is protected
+
+The `$Recycle.Bin` folder on each drive, and **every account folder inside it that is not yours**.
+Both are asserted to have survived the run.
+
+That protection is the whole of the design here. The folder Deguffer removes and the folders it
+must not touch are siblings under one parent, identical in every respect except the identifier they
+carry — so a rule that was even slightly too broad would take another person's deleted files with
+yours. Deguffer matches your identifier exactly, treats everything else as untouchable, and tells
+you what it is leaving behind.
+
+**If Deguffer cannot establish which account it is running as, it offers nothing at all.** With no
+identifier to match, every bin on the machine belongs to somebody it cannot name, and guessing is
+not available.
+
+It also refuses to delete through a link. If a drive's `$Recycle.Bin` has been redirected
+elsewhere, that drive is skipped and the reason is stated.
+
+### What it costs you
+
+**Everything in those bins stops being restorable.** The files are not moved anywhere: they are
+removed, and no undo exists at any level. Anything you deleted meaning to think again about is gone
+at that point.
+
+Nothing else changes. Deleting a file afterwards still sends it to the Recycle Bin, and restoring
+that file still works.
+
+### Why Tier 3
+
+The contents of a Recycle Bin are, by definition, files you deleted and can still get back. That is
+recoverable user data, which is §3's Tier 3 exactly — and it is the one place where the "cache
+costume" the tier model was built for is not even a disguise. The folder is full of things whose
+only remaining purpose is to be restorable.
+
+So it is never pre-selected, and it is the first location in Deguffer that asks you to type before
+it will run.
+
+---
+
 ## Locations deliberately not offered
 
 Being large is not a reason to clean something. These were investigated and left out, and the

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Principal;
 
 namespace Deguffer.Core.Safety;
 
@@ -19,6 +20,16 @@ public interface IUserEnvironment
 
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
+
+    /// <summary>
+    /// This user's Windows security identifier, or null if it cannot be established.
+    ///
+    /// Exists because a per-volume <c>$Recycle.Bin</c> is divided into one directory per account,
+    /// named by SID, and telling this user's from another's is the whole of §5.2 there. Null is a
+    /// real answer and must stay one: a provider that cannot identify the user recognises no child
+    /// at all, which is the direction §5.2 requires the unknown case to fail in.
+    /// </summary>
+    string? UserSecurityIdentifier { get; }
 
     /// <summary>Resolve an executable on <c>PATH</c>, or null if it is not installed.</summary>
     string? FindExecutable(string command);
@@ -65,6 +76,10 @@ public sealed class UserEnvironment : IUserEnvironment
     public string RoamingAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
     public string TempPath { get; } = Path.GetTempPath();
+
+    // Read once rather than through Invalidate: a process cannot change the account it runs as,
+    // and relaunching elevated makes a new process with the same identity.
+    public string? UserSecurityIdentifier { get; } = WindowsIdentity.GetCurrent().User?.Value;
 
     public void Invalidate() => _resolved.Clear();
 

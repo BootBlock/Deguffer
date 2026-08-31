@@ -32,6 +32,24 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
     public string TempPath { get; }
 
+    /// <summary>
+    /// A recognisably invented identifier. Real enough in shape for a provider that matches on it,
+    /// and nobody's actual SID.
+    /// </summary>
+    public string? UserSecurityIdentifier { get; private set; } =
+        "S-1-5-21-1111111111-2222222222-3333333333-1001";
+
+    /// <summary>
+    /// Pretend the account is unidentifiable, which is how a provider that keys on the SID is shown
+    /// to fail closed. Set before the provider is constructed: providers read the identity once,
+    /// because a process cannot change the account it runs as.
+    /// </summary>
+    public FakeUserEnvironment WithNoSecurityIdentifier()
+    {
+        UserSecurityIdentifier = null;
+        return this;
+    }
+
     /// <summary>Pretend <paramref name="command"/> is installed at a plausible path.</summary>
     public FakeUserEnvironment WithExecutable(string command, string? path = null)
     {
