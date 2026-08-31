@@ -139,6 +139,33 @@ public sealed class DirectoryRemoverTests : IDisposable
             path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The same rule applied to the root itself, which is the one entry no enumeration classifies.
+    /// <see cref="DeletesAJunctionWithoutFollowingItIntoTheTargetTree"/> covers a junction found
+    /// below the root; a junction handed in *as* the root took the other branch, where enumerating
+    /// it transparently returns the link target's ordinary children and deletes them.
+    /// </summary>
+    [Fact]
+    public async Task RemovesAJunctionGivenAsTheRootWithoutEmptyingWhatItPointsAt()
+    {
+        var outside = _temp.CreateDirectory("precious");
+        var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+
+        var junction = Path.Combine(_temp.Path, "cache");
+        Directory.CreateSymbolicLink(junction, outside);
+
+        var outcome = await DirectoryRemover.RemoveAsync(junction);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.False(Directory.Exists(junction));
+
+        Assert.True(Directory.Exists(outside), "removal followed the junction it was handed");
+        Assert.True(File.Exists(bystander), "a file outside the target tree was destroyed");
+
+        // The linked-to content was never ours to count.
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
     [Fact]
     public async Task DeletesAJunctionWithoutFollowingItIntoTheTargetTree()
     {

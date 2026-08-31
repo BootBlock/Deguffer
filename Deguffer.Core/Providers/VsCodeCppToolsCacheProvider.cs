@@ -105,10 +105,29 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var targets = new List<(string Path, string Reason, DateTime? LastWritten)>();
+        var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
 
-        foreach (var child in EnumerateChildren())
+        var scan = ChildDirectories.Under(_root);
+
+        // A link is a child the user can see, so it is named rather than dropped. It is never
+        // followed: what it points at was never classified.
+        foreach (var link in scan.Links)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
+                + "delete through a link."));
+
+            // Into declined as well as noted. A link here is a spared sibling of the targeted
+            // workspace directories, indistinguishable from them by name, which is exactly the
+            // case BuildProtectedPaths exists to cover.
+            declined.Add((
+                LongPath.Display(link.FullName),
+                "A link rather than a directory, so what it points at was never classified."));
+        }
+
+        foreach (var child in scan.Directories)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -123,23 +142,13 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            targets.Add((
+            targets.Add(new DeletionTarget(
                 LongPath.Display(child.FullName),
                 classification.Reason,
                 isPerWorkspace ? NewestWrite(child, ct) : null));
         }
 
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
-
-        var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
-        {
-            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
-            {
-                Estimated = measured.Sizes[i],
-                LastWritten = targets[i].LastWritten,
-            });
-        }
+        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -248,21 +257,6 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         {
             // No timestamp is a real answer, and §7 renders it as unknown rather than as an age.
             return null;
-        }
-    }
-
-    private IEnumerable<DirectoryInfo> EnumerateChildren()
-    {
-        try
-        {
-            return new DirectoryInfo(LongPath.Extended(_root))
-                .EnumerateDirectories()
-                .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                .ToList();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            return [];
         }
     }
 }

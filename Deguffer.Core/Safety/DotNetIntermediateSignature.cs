@@ -79,7 +79,7 @@ public static class DotNetIntermediateSignature
 
         var parent = Path.GetDirectoryName(objDirectory.TrimEnd(Path.DirectorySeparatorChar));
 
-        if (string.IsNullOrEmpty(parent) || IsReparsePoint(objDirectory) || IsReparsePoint(parent))
+        if (string.IsNullOrEmpty(parent) || LongPath.IsReparsePoint(objDirectory) || LongPath.IsReparsePoint(parent))
         {
             // A junction here would let deletion escape the directory that was examined.
             return null;
@@ -174,17 +174,4 @@ public static class DotNetIntermediateSignature
             ? value
             : null;
 
-    private static bool IsReparsePoint(string directory)
-    {
-        try
-        {
-            var info = new DirectoryInfo(LongPath.Extended(directory));
-            return info.Exists && info.Attributes.HasFlag(FileAttributes.ReparsePoint);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            // Cannot tell what it is, so cannot vouch for it.
-            return true;
-        }
-    }
 }

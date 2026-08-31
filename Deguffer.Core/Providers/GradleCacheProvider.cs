@@ -66,14 +66,23 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
         var notes = new List<PlanNote>();
-        var targets = new List<(string Path, string Reason)>();
+        var targets = new List<DeletionTarget>();
 
         if (!LongPath.DirectoryExists(_root))
         {
             return EmptyPlan("Gradle is not installed for this user — no .gradle directory.");
         }
 
-        foreach (var child in EnumerateChildren())
+        var scan = ChildDirectories.Under(_root);
+
+        // A link is a child the user can see, so it is named rather than dropped. It is never
+        // followed: what it points at was never classified.
+        notes.AddRange(scan.Links.Select(link => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
+            + "delete through a link.")));
+
+        foreach (var child in scan.Directories)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -92,19 +101,10 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             // Enumeration runs in extended form; a plan always holds display paths, and I/O
             // re-extends at the point of use. Keeping the prefix out of the plan means it never
             // reaches the UI, a log, or a comparison.
-            targets.Add((LongPath.Display(child.FullName), classification.Reason));
+            targets.Add(new DeletionTarget(LongPath.Display(child.FullName), classification.Reason));
         }
 
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
-
-        var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
-        {
-            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
-            {
-                Estimated = measured.Sizes[i],
-            });
-        }
+        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -138,19 +138,4 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         (Path.Combine(_root, "gradle.properties"), "User configuration, which may hold signing keys and credentials."),
         (Path.Combine(_root, "init.d"), "User init scripts."),
         (Path.Combine(_root, "gradle.encrypted.properties"), "Encrypted user configuration."));
-
-    private IEnumerable<DirectoryInfo> EnumerateChildren()
-    {
-        try
-        {
-            return new DirectoryInfo(LongPath.Extended(_root))
-                .EnumerateDirectories()
-                .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                .ToList();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            return [];
-        }
-    }
 }

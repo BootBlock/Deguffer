@@ -160,19 +160,14 @@ public sealed class DotNetObjProvider : CleanupProviderBase
 
         targets = cleared;
 
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
-
-        var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
-        {
-            steps.Add(new DeleteDirectoryStep(
-                targets[i].Path,
-                $"Intermediate build output for {targets[i].Project.ProjectName}")
-            {
-                Estimated = measured.Sizes[i],
-                LastWritten = LastBuilt(targets[i].Path, ct),
-            });
-        }
+        var (steps, measured) = await PlanDeletionsAsync(
+            [
+                .. targets.Select(t => new DeletionTarget(
+                    t.Path,
+                    $"Intermediate build output for {t.Project.ProjectName}",
+                    LastBuilt(t.Path, ct))),
+            ],
+            ct).ConfigureAwait(false);
 
         return new CleanupPlan
         {

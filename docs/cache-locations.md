@@ -90,6 +90,74 @@ about compilation rather than promising a uniformly cheap refill — but the cos
 
 ---
 
+## GPU shader caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Method** | Delete the recognised cache directories |
+| **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache` |
+
+### What it is
+
+A shader is a small program that runs on the graphics card, and it arrives as source that has to be
+compiled for the exact card and driver in front of it. Compiling is slow, so the driver keeps the
+result. The next time the same shader is wanted it is loaded rather than rebuilt.
+
+These caches are therefore a pure by-product. The driver keys every entry to its own version and
+throws the lot away itself whenever it is updated, which is why a folder that has been growing for
+a year can vanish on a Tuesday without anybody noticing.
+
+Windows keeps one of its own beside the vendors': `%LOCALAPPDATA%\D3DSCache` is Direct3D's system
+shader cache, holding one opaque container per application that has used it.
+
+### What Deguffer does
+
+It deletes the cache directories it recognises, one step each, so you can keep one vendor's and
+clear another's. There is no eviction command to prefer here — no vendor ships one, and deleting
+the directory is what every published instruction says to do.
+
+`%LOCALAPPDATA%\D3DSCache` is the one entry removed whole rather than child by child. It has no
+configuration to sit beside: everything in it belongs to Direct3D, arriving as opaque per-application
+containers whose names could not be checked against anything. Its parent is your profile's local
+application data, which Deguffer never enumerates and never touches.
+
+### What is protected
+
+Each vendor's folder itself, and everything in it Deguffer does not recognise.
+
+**`%LOCALAPPDATA%\NVIDIA\accounts` is the one to know about.** It sits directly beside the two
+NVIDIA caches and holds account and sign-in state, not shader blobs — and it is a file rather than a
+folder, so the rule that classifies folders never sees it at all. Deguffer names it explicitly and
+asserts it survived the run, the same treatment `gradle.properties` gets.
+
+Any other **folder** you find in there gets the same treatment: unrecognised means untouched, and
+Deguffer says so and asserts it survived. `%LOCALAPPDATA%\Intel` in particular is a shared Intel
+folder holding several unrelated products; Deguffer takes `ShaderCache` from it and tells you what
+it is leaving behind. A **file** sitting loose in one of these folders is never a candidate either —
+nothing Deguffer deletes here is a file — but only `accounts` is named, so only `accounts` gets the
+explicit survival check.
+
+Deguffer also refuses to delete through a link. If you have redirected `%LOCALAPPDATA%\D3DSCache` to
+another drive with a junction, it removes nothing and tells you why: what the link points at is a
+folder it never looked inside.
+
+### What it costs you
+
+A few seconds of stutter. The first time a game or 3D application draws a scene after the cache has
+gone, the driver compiles those shaders again and then behaves exactly as before.
+
+### Why Tier 1
+
+Nothing here originated with you, and nothing has to be fetched to replace it. The content is
+derived from shaders that are still on your disk, by a compiler that is still installed, and the
+driver does the work without being asked. It is the clearest Tier 1 case Deguffer has: the cost is
+measured in seconds and there is no path by which anything is lost.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an

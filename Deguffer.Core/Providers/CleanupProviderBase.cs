@@ -140,4 +140,30 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
         return new ScanBatch(sizes, fallback);
     }
+
+    /// <summary>
+    /// Measure every target and turn it into the step that will delete it.
+    ///
+    /// The pairing of a target with its size is positional, so it lives here rather than being
+    /// rewritten per provider: a loop that indexes two lists in step is exactly the shape that
+    /// silently attributes one directory's size to another.
+    /// </summary>
+    protected async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured)> PlanDeletionsAsync(
+        IReadOnlyList<DeletionTarget> targets,
+        CancellationToken ct)
+    {
+        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
+
+        var steps = new List<CleanupStep>(targets.Count);
+        for (var i = 0; i < targets.Count; i++)
+        {
+            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
+            {
+                Estimated = measured.Sizes[i],
+                LastWritten = targets[i].LastWritten,
+            });
+        }
+
+        return (steps, measured);
+    }
 }

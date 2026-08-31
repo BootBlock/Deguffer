@@ -38,4 +38,21 @@ public sealed class DisposableChildSet
 
     /// <summary>Whether this child may ever appear in a cleanup plan.</summary>
     public bool IsDisposable(string name) => Classify(name).Tier.IsOfferable();
+
+    /// <summary>
+    /// The children declared as disposable, so a provider can ask whether any of them is actually
+    /// on disk without enumerating the root first.
+    ///
+    /// A root existing is not evidence that the cache inside it does — a vendor directory holding
+    /// only unrelated products would otherwise report a toolchain as present and then plan nothing.
+    ///
+    /// Listed by <see cref="SafetyTierExtensions.IsOfferable"/>, so a name declared here at Tier 4
+    /// is excluded: it is a documented trap, and treating it as a reason to claim presence would
+    /// invert that. Tier 2 and Tier 3 names are included, because those are offered to the user and
+    /// so are genuinely something to report. A provider whose own tier is narrower than that owes
+    /// itself a test over its declarations — see
+    /// <c>GpuShaderCacheProviderTests.EveryDeclaredChildIsTheTierTheProviderClaims</c>.
+    /// </summary>
+    public IEnumerable<string> DisposableNames =>
+        _known.Values.Where(c => c.Tier.IsOfferable()).Select(c => c.Name);
 }
