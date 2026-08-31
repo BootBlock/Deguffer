@@ -85,7 +85,43 @@ public sealed class ElevationOfferTests
             [new Finding(new StubProvider(), IsPresent: false, Plan: null)]));
     }
 
-    private static Finding FindingWith(FallbackReason reason) =>
+    /// <summary>
+    /// The second claim, and it is independent of the first. A plan whose sizes came straight off
+    /// the file table can still hold a step under <c>C:\Windows</c> that nobody unelevated may
+    /// perform, and the fallback reason says nothing about that — so reading only the fallback would
+    /// leave the user looking at a row with no way to act on it and no button to fix that.
+    /// </summary>
+    [Fact]
+    public void OffersWhenAPlanHoldsAStepOnlyAnAdministratorMayCarryOut()
+    {
+        Assert.True(ElevationOffer.ShouldOffer(
+            isElevated: false,
+            [FindingWith(FallbackReason.None, requiresElevation: true)]));
+    }
+
+    /// <summary>
+    /// A non-NTFS volume takes the walk whoever asks, so the fallback alone would refuse — but a
+    /// step under the Windows directory on that volume still needs the rights. The two conditions
+    /// are read separately rather than one gating the other.
+    /// </summary>
+    [Fact]
+    public void OffersForAnUnperformableStepEvenWhereTheFallbackCannotBeFixed()
+    {
+        Assert.True(ElevationOffer.ShouldOffer(
+            isElevated: false,
+            [FindingWith(FallbackReason.NotNtfsVolume, requiresElevation: true)]));
+    }
+
+    /// <summary>Elevated already, so the step can run and a relaunch would buy a second UAC prompt.</summary>
+    [Fact]
+    public void DoesNotOfferForSuchAStepWhenAlreadyElevated()
+    {
+        Assert.False(ElevationOffer.ShouldOffer(
+            isElevated: true,
+            [FindingWith(FallbackReason.None, requiresElevation: true)]));
+    }
+
+    private static Finding FindingWith(FallbackReason reason, bool requiresElevation = false) =>
         new(new StubProvider(), IsPresent: true, new CleanupPlan
         {
             ProviderId = "stub",
@@ -93,6 +129,9 @@ public sealed class ElevationOfferTests
             Tier = SafetyTier.RegenerableCache,
             WhatHappensOnNextUse = "Nothing.",
             Fallback = reason,
+            Steps = requiresElevation
+                ? [new DeleteDirectoryStep(@"C:\Windows\Minidump", "Stop error dumps.") { RequiresElevation = true }]
+                : [],
         });
 
     private sealed class StubProvider : ICleanupProvider

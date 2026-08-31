@@ -47,6 +47,15 @@ public interface IFileSystem
     /// </summary>
     IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory);
 
+    /// <summary>
+    /// The length of the file at <paramref name="path"/>, or null when no file is there.
+    ///
+    /// Asked by <see cref="FileRemover"/>, which deletes a path it was named rather than one it
+    /// enumerated, so nothing has told it how large the file is. Null covers both "already gone"
+    /// and "something that is not a file has that name", because neither is a thing to delete.
+    /// </summary>
+    long? TryGetFileLength(string path);
+
     void DeleteFile(string path);
 
     /// <summary>Removes an empty directory; never recursive, so ordering stays the caller's.</summary>
@@ -81,6 +90,13 @@ public sealed class WindowsFileSystem : IFileSystem
                 entry.Attributes.HasFlag(FileAttributes.ReparsePoint),
                 entry is FileInfo file ? file.Length : 0))
             .ToList();
+
+    public long? TryGetFileLength(string path)
+    {
+        var file = new FileInfo(path);
+
+        return file.Exists ? file.Length : null;
+    }
 
     public void DeleteFile(string path) => File.Delete(path);
 

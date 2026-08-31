@@ -88,8 +88,15 @@ public sealed partial class FindingViewModel : ObservableObject
             ? "Ready to clean"
             : "Already clear";
 
-    /// <summary>Only rows with something to reclaim can be acted on.</summary>
-    public bool CanBeSelected => Finding.HasReclaimableSpace;
+    /// <summary>
+    /// Only rows with a step that can actually be acted on.
+    ///
+    /// Asked of the steps rather than of the finding's total, because the row checkbox is a shorthand
+    /// for ticking every step in it: where nothing in the row is selectable, ticking it would tick
+    /// nothing and leave a row that says it is selected and removes nothing. That case arrived with
+    /// the Windows servicing logs, every step of which needs administrator rights.
+    /// </summary>
+    public bool CanBeSelected => Finding.HasReclaimableSpace && Steps.Any(s => s.CanBeSelected);
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }

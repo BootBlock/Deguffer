@@ -3,64 +3,6 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
-/// <summary>One action in a plan. Nothing here has been executed.</summary>
-public abstract record CleanupStep
-{
-    /// <summary>What the user is told this step will do.</summary>
-    public abstract string Description { get; }
-
-    /// <summary>
-    /// What this step is expected to reclaim, measured at plan time.
-    ///
-    /// A <see cref="ScanSize"/> rather than a bare count because allocated and logical bytes are
-    /// legitimately different numbers on compressed and sparse trees, and because this is where
-    /// §5.4's second pair — reclaimed inside a virtual disk versus on the host — will belong when a
-    /// container provider arrives.
-    /// </summary>
-    public ScanSize Estimated { get; init; }
-
-    /// <summary>The single number to show and to subtract: what the volume actually gives back.</summary>
-    public long EstimatedBytes => Estimated.Reclaimable;
-
-    /// <summary>
-    /// When this step's subject was last written, or null where the provider cannot tell.
-    ///
-    /// §7 makes age a first-class column for per-workspace and per-project data, on the grounds
-    /// that "last touched 5 months ago" drives the decision more than size does. Null is a real
-    /// answer and must stay distinguishable from an old one — <see cref="RelativeAge"/> renders it
-    /// as unknown, never as an age, because an age is what invites the user to delete something.
-    ///
-    /// Whole-cache steps leave this null: a single timestamp across a tool's entire cache would be
-    /// a number with no meaning attached to it.
-    /// </summary>
-    public DateTime? LastWritten { get; init; }
-}
-
-/// <summary>
-/// Invoke a tool's own eviction command (§5.1) — always preferred over deleting paths, because
-/// the tool knows about locations we do not.
-/// </summary>
-public sealed record RunCommandStep(string FileName, string Arguments, string What) : CleanupStep
-{
-    /// <summary>
-    /// The locations we expect the command to clear. Used only to measure what it actually
-    /// reclaimed — the command remains the authority on *what* gets removed, which is the whole
-    /// point of §5.1. NuGet's own clear reached two locations that were not under <c>.nuget</c>
-    /// at all, so this list is a probe, never a target.
-    /// </summary>
-    public IReadOnlyList<string> MeasuredPaths { get; init; } = [];
-
-    public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
-}
-
-/// <summary>
-/// Delete one explicitly recognised directory. Never a tool root — see <see cref="DisposableChildSet"/>.
-/// </summary>
-public sealed record DeleteDirectoryStep(string Path, string What) : CleanupStep
-{
-    public override string Description => $"{What} — {LongPath.Display(Path)}";
-}
-
 /// <summary>
 /// A path the plan asserts will still be there afterwards (§5.6). Verifying the negative is
 /// cheap, and it catches an over-broad rule on the first run rather than the hundredth.
@@ -113,6 +55,15 @@ public sealed record CleanupPlan
     /// </summary>
     public FallbackReason Fallback { get; init; } = FallbackReason.None;
 
+    /// <summary>
+    /// Whether any step here cannot be carried out without administrator rights.
+    ///
+    /// Separate from <see cref="Fallback"/> on purpose: that one is about how a size was arrived at,
+    /// and this one is about whether the removal can happen at all. A plan whose sizes came off the
+    /// file table quickly can still hold a step nobody unelevated may perform.
+    /// </summary>
+    public bool RequiresElevation => Steps.Any(s => s.RequiresElevation);
+
     /// <summary>Total reclaim estimated across all steps.</summary>
     public long EstimatedBytes => Steps.Sum(s => s.EstimatedBytes);
 
@@ -126,7 +77,12 @@ public sealed record CleanupPlan
     public bool IsEmpty => Steps.Count == 0;
 
     /// <summary>
-    /// Every directory this plan would delete, for display and for tests.
+    /// Every path this plan would destroy, for display and for tests.
+    ///
+    /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
+    /// single file both count and a future deletion kind counts without an edit here. A step that
+    /// frees space without destroying anything contributes nothing, which is what §10's dehydration
+    /// will need.
     ///
     /// Deliberately not cached in a backing field: this is a record, and a <c>with</c> expression
     /// copies backing fields wholesale, so a cached list would survive a change to
@@ -134,8 +90,7 @@ public sealed record CleanupPlan
     /// tests assert against, which makes it the last place a stale value is acceptable. Steps
     /// number in the low single digits, so recomputing costs nothing.
     /// </summary>
-    public IReadOnlyList<string> TargetedPaths =>
-        [.. Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path)];
+    public IReadOnlyList<string> TargetedPaths => [.. Steps.OfType<DeleteStep>().Select(s => s.Path)];
 
     /// <summary>
     /// This plan narrowed to the steps the user actually chose.
@@ -165,7 +120,7 @@ public sealed record CleanupPlan
 
         var declined = Steps
             .Except(kept)
-            .OfType<DeleteDirectoryStep>()
+            .OfType<DeleteStep>()
             .Select(s => new ProtectedPath(
                 s.Path,
                 "Left alone because it was not selected for this run.",

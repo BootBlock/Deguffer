@@ -49,6 +49,49 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// A single file, which is what <c>C:\Windows\MEMORY.DMP</c> is, and where the two routes turn
+    /// out to be one.
+    ///
+    /// The index cannot resolve a file path — only directories carry names in it, deliberately —
+    /// so an elevated run reaches the same code an unelevated one does. What made that worth pinning
+    /// is that the code answered <em>zero</em> for anything that was not a directory, on both routes,
+    /// which for the largest reclaim Deguffer knows about produces a step nobody can select.
+    ///
+    /// It is also why a file is reported as <see cref="ScanStrategy.DirectRead"/> rather than as the
+    /// walk. A fallback reason explains a slow scan, one <c>stat</c> is not slow, and the elevated
+    /// run would otherwise carry a sentence apologising for a walk that never happened.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesAgreeOnASingleFileAndNeitherApologisesForIt()
+    {
+        using var temp = new TempDirectory();
+
+        var (directory, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "dumps", new TreeFile("MEMORY.DMP", 65536)));
+
+        var file = Path.Combine(directory, "MEMORY.DMP");
+
+        var walked = await Walking().MeasureAsync(file);
+        var indexed = await Indexing(file, fixture).MeasureAsync(file);
+
+        Assert.Equal(65536, walked.Size.Reclaimable);
+        Assert.Equal(walked.Size.Reclaimable, indexed.Size.Reclaimable);
+        Assert.Equal(walked.Size.Logical, indexed.Size.Logical);
+
+        foreach (var result in new[] { walked, indexed })
+        {
+            Assert.Equal(ScanStrategy.DirectRead, result.Strategy);
+            Assert.Equal(FallbackReason.None, result.Fallback);
+            Assert.Null(result.FallbackNote);
+        }
+
+        // The containing directory still goes the two separate ways, so the fixture really does
+        // serve the index and the comparison above is not two identical code paths by accident.
+        Assert.Equal(ScanStrategy.ParallelEnumeration, (await Walking().MeasureAsync(directory)).Strategy);
+        Assert.Equal(ScanStrategy.MasterFileTable, (await Indexing(directory, fixture).MeasureAsync(directory)).Strategy);
+    }
+
+    /// <summary>
     /// The one disagreement that is meant to be there. A file small enough to live inside its own
     /// MFT record occupies no clusters, so deleting it frees none — the walk cannot see that and
     /// reports its length. Pinned rather than left to be discovered: it is the reason an elevated

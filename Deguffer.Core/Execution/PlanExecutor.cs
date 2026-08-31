@@ -30,6 +30,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
                 DeleteDirectoryStep delete => await DeleteAsync(delete, stepProgress, ct).ConfigureAwait(false),
+                DeleteFileStep delete => await DeleteAsync(delete, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
@@ -89,16 +90,50 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
     {
         var removal = await DirectoryRemover.RemoveAsync(step.Path, progress, ct).ConfigureAwait(false);
 
-        var message = removal.Skipped == 0
-            ? "Removed."
-            : $"Removed, {removal.Skipped} item(s) left in place because they were in use.";
-
         // Skipped items are not a failure (§5.3). The step only fails if the directory survived
         // intact and nothing at all was reclaimed — that is, we achieved nothing.
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0;
 
+        var message = succeeded
+            ? removal.Skipped == 0
+                ? "Removed."
+                : $"Removed, {removal.Skipped} item(s) left in place because they were in use."
+            : WhyNothingHappened(step, removal.Skipped);
+
         return new StepOutcome(step.Description, succeeded, removal.BytesReclaimed, removal.Skipped, message);
     }
+
+    private static async Task<StepOutcome> DeleteAsync(
+        DeleteFileStep step,
+        IProgress<double> progress,
+        CancellationToken ct)
+    {
+        var removal = await FileRemover.RemoveAsync(step.Path, ct).ConfigureAwait(false);
+
+        // One file, so there is no fraction to report along the way — only the end of it.
+        progress.Report(1.0);
+
+        var message = removal.Removed ? "Removed." : WhyNothingHappened(step, removal.Skipped);
+
+        return new StepOutcome(
+            step.Description, removal.Removed, removal.BytesReclaimed, removal.Skipped, message);
+    }
+
+    /// <summary>
+    /// The sentence for a deletion that achieved nothing.
+    ///
+    /// A step declared as needing administrator rights gets told so by name. Without this the
+    /// unelevated attempt reports the §5.3 wording — "left in place because they were in use" —
+    /// which is the wrong reason and sends the user looking for a process to close that does not
+    /// exist. The shell does not offer such a step unelevated, so reaching here means something
+    /// bypassed that, and an outcome nobody can act on is the worst thing to report.
+    /// </summary>
+    private static string WhyNothingHappened(DeleteStep step, int skipped) => step.RequiresElevation
+        ? "Nothing was removed. This location needs administrator rights, so run Deguffer as "
+          + "administrator to clear it."
+        : skipped == 0
+            ? "Nothing was removed."
+            : $"Nothing was removed: {skipped} item(s) were in use.";
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {

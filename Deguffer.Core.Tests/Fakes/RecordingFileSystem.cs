@@ -34,6 +34,12 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         return inner.EnumerateEntries(directory);
     }
 
+    public long? TryGetFileLength(string path)
+    {
+        _paths.Enqueue(path);
+        return inner.TryGetFileLength(path);
+    }
+
     public void DeleteFile(string path)
     {
         _paths.Enqueue(path);
