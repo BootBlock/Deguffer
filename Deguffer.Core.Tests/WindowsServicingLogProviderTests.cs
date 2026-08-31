@@ -244,6 +244,35 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A step that achieved nothing names administrator rights as a possible cause.
+    ///
+    /// The outcome cannot tell the two apart: an unelevated delete under the Windows directory is
+    /// refused file by file, which arrives as the same skip a locked file produces. Reporting only
+    /// §5.3's "in use" would send the user looking for a process to close that is not there, and
+    /// that is the whole of what an unelevated run of this provider would say for itself.
+    /// </summary>
+    [Fact]
+    public async Task AStepThatAchievedNothingNamesAdministratorRightsAsACause()
+    {
+        var cbs = Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        using var held = new FileStream(
+            Path.Combine(cbs, "CBS.log"), FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.Contains("administrator", outcome.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(cbs));
+    }
+
+    /// <summary>
     /// A junction at a level the declaration only passes through. <c>Logs</c> is a container for two
     /// targets, so a check on the final path alone would walk straight through a junctioned one and
     /// delete in a tree the plan never named.

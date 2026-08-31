@@ -122,18 +122,24 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
     /// <summary>
     /// The sentence for a deletion that achieved nothing.
     ///
-    /// A step declared as needing administrator rights gets told so by name. Without this the
-    /// unelevated attempt reports the §5.3 wording — "left in place because they were in use" —
-    /// which is the wrong reason and sends the user looking for a process to close that does not
-    /// exist. The shell does not offer such a step unelevated, so reaching here means something
-    /// bypassed that, and an outcome nobody can act on is the worst thing to report.
+    /// A step declared as needing administrator rights says so, because from the outcome alone the
+    /// two causes are the same thing: an unelevated delete is refused per file, and that arrives as
+    /// exactly the skip a locked file produces. The §5.3 wording on its own would send the user
+    /// looking for a process to close that does not exist, so both are named and neither is
+    /// asserted. The shell does not offer such a step unelevated, so reaching here means something
+    /// went round that — and an outcome nobody can act on is the worst thing to report.
     /// </summary>
-    private static string WhyNothingHappened(DeleteStep step, int skipped) => step.RequiresElevation
-        ? "Nothing was removed. This location needs administrator rights, so run Deguffer as "
-          + "administrator to clear it."
-        : skipped == 0
+    private static string WhyNothingHappened(DeleteStep step, int skipped)
+    {
+        var what = skipped == 0
             ? "Nothing was removed."
-            : $"Nothing was removed: {skipped} item(s) were in use.";
+            : $"Nothing was removed: {skipped} item(s) were left in place.";
+
+        return step.RequiresElevation
+            ? what + " This location needs administrator rights, and without them every item is "
+                   + "refused — which looks exactly like something holding them open."
+            : what;
+    }
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {
