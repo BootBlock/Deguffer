@@ -415,6 +415,143 @@ it will run.
 
 ---
 
+## Crash dumps and error reports
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and released only once you have typed the
+words the dialog asks for.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\CrashDumps`, `%PROGRAMDATA%\Microsoft\Windows\WER\ReportArchive` and `ReportQueue`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP` |
+| **Method** | Delete each of those six, one row each |
+| **Typical size** | Usually tens of megabytes. `MEMORY.DMP` is the exception: on a machine set to write a complete dump it is the size of your installed memory, so one stop error leaves 32 or 64 GB behind |
+
+### What it is
+
+When a program crashes, Windows writes down what it was doing at the time. There are three kinds
+here and they come from different places:
+
+- **`CrashDumps`** in your own profile holds dumps of ordinary applications that stopped working.
+- **`WER`** — Windows Error Reporting — holds the reports Windows prepares to send to Microsoft.
+  `ReportQueue` is what has not been sent yet, and `ReportArchive` is the record of what has.
+- **`Minidump`, `LiveKernelReports` and `MEMORY.DMP`** are the kernel's own. A minidump is written
+  for each blue screen; a live kernel report is written when a driver was reset without stopping the
+  machine; and `MEMORY.DMP` is the full dump from the most recent stop error.
+
+### What Deguffer does
+
+It removes the six locations above, one row each, so you can clear the application dumps and keep
+the kernel ones — or the reverse.
+
+**`C:\Windows` itself is never listed and never touched.** This is the strictest rule in Deguffer,
+and it works differently from every other location in this document. Elsewhere Deguffer looks inside
+a folder and decides what each thing in it is. Here it does not look inside at all: it holds a list
+of exact paths, and nothing else under the Windows directory is reachable, whatever it is called.
+`WinSxS` and `Windows\Installer` — the two large folders Deguffer refuses to go near, and the two
+that break Windows if you get them wrong — are named as things that must still be there when the run
+finishes, and Deguffer checks that they are.
+
+**Most of it needs administrator rights.** Only `%LOCALAPPDATA%\CrashDumps` is yours to clear.
+Deguffer shows the rest either way, tells you which they are, and leaves them unticked until you
+restart it as administrator with **Elevate and rescan**. It does not hide them, because a folder you
+are never told about is one you can never decide about.
+
+Each row carries the date something last wrote to it. For `MEMORY.DMP` that date is the moment the
+machine stopped.
+
+### What is protected
+
+`C:\Windows`, `%PROGRAMDATA%`, your profile's local application data, and everything Deguffer never
+named — which is everything else in those folders. `WinSxS`, `Windows\Installer` and
+`%PROGRAMDATA%\Package Cache` are checked explicitly afterwards.
+
+Deguffer also refuses to delete through a link, at any level. If one of these folders, or any folder
+on the way down to it, has been redirected elsewhere, it removes nothing there and says so.
+
+### What it costs you
+
+**The record of every crash on this list stops existing.** If you are in the middle of a bug report,
+or somebody has asked you for a dump, this is the copy — nothing re-creates it, and no undo exists at
+any level.
+
+Nothing that is running is affected, and Windows keeps writing new dumps exactly as before.
+
+### Why Tier 3
+
+A crash dump is a record of something that already happened, and the crash will not happen again to
+order. That is the whole of the argument. Tier 1 means "whatever produced it makes it again on
+demand, so nothing is lost", and nothing here meets that: what Windows re-creates is the *next*
+dump, never the ones you removed.
+
+It is worth being blunt about this because the obvious reading is the other one. These folders are
+full of files nobody has looked at, in a location that sounds like scratch space, and every disk
+cleaner treats them as disposable. They usually are. But "usually disposable" and "regenerable" are
+not the same claim, and the tier model exists to keep them apart.
+
+---
+
+## Windows servicing logs
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and released only once you have typed the
+words the dialog asks for.
+
+| | |
+| --- | --- |
+| **Location** | `C:\Windows\Logs\CBS`, `C:\Windows\Logs\WindowsUpdate`, `C:\Windows\Panther`, and `C:\Windows\System32\LogFiles\WMI\RtBackup` |
+| **Method** | Delete each of those four, one row each |
+| **Typical size** | 64 MB was measured on one workstation. Machines with a long update history are regularly reported in the gigabytes |
+
+### What it is
+
+The trail Windows leaves while maintaining itself.
+
+| Folder | What wrote it |
+| --- | --- |
+| `Logs\CBS` | Component servicing — what Windows added, removed or repaired. `sfc /scannow` writes here too |
+| `Logs\WindowsUpdate` | Windows Update's own trace files |
+| `Panther` | Setup logs, from the original installation and from every in-place upgrade since |
+| `System32\LogFiles\WMI\RtBackup` | Backup trace files for the event sessions the WMI service runs |
+
+### What Deguffer does
+
+It removes those four, one row each. `C:\Windows`, `C:\Windows\Logs` and the three folders above
+`RtBackup` are all left standing — Deguffer takes the folder it named, never the one holding it, and
+it never lists the Windows directory to find out what else is in there. The rule and the protections
+are the same ones described under **Crash dumps and error reports** above.
+
+All four need administrator rights, so on an ordinary run every row is shown, sized, and left
+unticked with the reason on it.
+
+**Windows holds some of these files open, and that is normal.** The WMI service keeps its current
+trace files locked, and the servicing stack keeps whatever log it is writing. Anything held open is
+left exactly where it is, so reclaiming less than the size shown is the expected result here rather
+than a failure.
+
+### What is protected
+
+The same as above: the Windows directory, every folder passed through on the way down, `WinSxS`,
+`Windows\Installer`, and everything Deguffer never named. All of it is checked after the run.
+
+### What it costs you
+
+**You lose the history of what this machine has already done to itself.** The next update writes a
+fresh log, so nothing stops working — but if an update failed and you wanted to find out why, the
+answer was in these files.
+
+That is the case worth pausing on. Each row shows when something last wrote to it, taken from the
+newest file inside rather than the folder's own date, so a log being written right now reads as
+minutes old rather than months.
+
+### Why Tier 3, and not Tier 1
+
+The same reasoning as the crash dumps, and it is the less obvious of the two. Every guide on the
+internet treats these as free space, and most of the time they are. But a log is a record of an
+operation that has finished, the operation does not run again on request, and what Windows re-creates
+is the next log rather than the ones that went. That is Tier 3's definition and not Tier 1's, so
+Deguffer offers them without ticking them and asks you to type before it acts.
+
+---
+
 ## Locations deliberately not offered
 
 Being large is not a reason to clean something. These were investigated and left out, and the

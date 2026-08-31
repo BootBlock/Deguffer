@@ -1,9 +1,9 @@
 # Unreached locations — what the shipped providers do not see
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §4's Chromium
-> application caches, §5's GPU shader caches and §7's per-volume recycle bins have shipped;
-> everything else is unstarted. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
-> exhausted, or supersede it with a newer plan.
+> application caches, §5's GPU shader caches, §6's crash dumps and servicing logs, and §7's
+> per-volume recycle bins have shipped; everything else is unstarted. Flip to ✅ COMPLETE and
+> `git mv` into `done/` when the list is exhausted, or supersede it with a newer plan.
 
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
@@ -43,7 +43,7 @@ form throughout this document.
 | .NET SDKs, 8 versions, one out of support | 1.8 GB | 4 | An uninstall, not a delete. §2 rules it out |
 | Visual Studio `.vs\` per solution (4 solutions) | 0.8 GB | 1 | Inside source trees, beside the `obj\` already walked |
 | Chromium-shaped caches across 10 desktop apps | 0.8 GB | 1 | Recognisable by shape, not by name. **Shipped — see §4** |
-| Crash dumps, CBS logs, WER archives | 0.2 GB | 1 | Small here; routinely tens of GB after a bugcheck |
+| Crash dumps, CBS logs, WER archives | 0.2 GB | 3 | Small here; routinely tens of GB after a bugcheck. **Shipped — see §6**, and the tier is a correction |
 
 That is roughly 39 GB, of which about 25 GB is reclaimable once the Tier 3 and Tier 4 rows come off.
 
@@ -343,7 +343,90 @@ them.
 should hold. Everything below is a log, a crash artefact or a completed upgrade's scaffolding — a
 different kind of thing with a different failure mode.
 
-### Crash dumps and error reports — Tier 1, measured at 0.15 GB
+### Crash dumps and error reports — Tier 3, measured at 0.15 GB ✅ done
+
+**Outcome:** shipped as `CrashDumpProvider`, at **Tier 3 rather than the Tier 1 this section
+proposed**. That correction is the first of the things the work settled, and the rest follow from
+reaching into `C:\Windows` at all.
+
+- **The tier was wrong here, and the argument that fixes it is the one this section already made
+  without noticing.** "Records of something that already happened" is not a description of a cache;
+  it is §3's Tier 3 in so many words, and §3's Tier 3 row lists logs explicitly. Tier 1 requires that
+  whatever produced the content re-creates it, so that nothing is lost — and nothing re-creates a
+  crash dump, because the crash does not happen again to order. What Windows re-creates is the *next*
+  dump. The reading is uncomfortable because these folders really are disposable most of the time,
+  and every general-purpose cleaner treats them so; but "usually disposable" and "regenerable" are
+  different claims, and telling them apart is what the tier model is for.
+
+- **§5.2 could not be applied here in the form every other provider uses, and the replacement is
+  stricter.** A `DisposableChildSet` answers "of the children I just enumerated, which may I
+  delete?", which presupposes enumerating the parent — and listing `C:\Windows` is already the first
+  step towards classifying something in it by a rule. So this provider names absolute paths and never
+  enumerates anything: `DeclaredRoot` holds a root plus exact relative paths, and the unrecognised
+  case cannot arise, because there is no enumeration through which an unnamed sibling could be
+  reached. A consequence worth stating: a declared location carries **no tier of its own**, since
+  there is no classification to disagree with the provider's, so the test every child-set provider
+  owes itself has no subject here.
+
+- **§9's exclusions had to become assertions rather than omissions.** Not naming `WinSxS` and
+  `Windows\Installer` as targets proves nothing, because §5.6's whole point is that an over-broad
+  rule passes every positive assertion. They are now named survivors on the declaration itself —
+  `WindowsSystemRoot.Holding` carries them, so any future provider reaching into that directory gets
+  them by construction rather than by remembering — and both provider test classes execute a plan and
+  assert the exclusions, the installer package cache and an unnamed neighbour all still standing.
+
+- **`MEMORY.DMP` needed a second kind of deletion, and the shape §10 inherits is the split rather
+  than the step.** `DeleteFileStep` is trivial; what mattered was where it sits. Both deletions now
+  derive from a `DeleteStep` base, and `CleanupPlan.TargetedPaths` and `NarrowedTo` select on *that*
+  — so "everything this plan would destroy" stays one question with one answer, and a third deletion
+  kind joins the §5.2 assertions and the §5.6 negative without an edit. §10's dehydration is
+  precisely the case that must **not** be a `DeleteStep`: it frees space while leaving the file
+  present, so it belongs beside `DeleteStep` and `RunCommandStep`, contributing no targeted path and
+  a §5.6 negative that asserts survival. That distinction is what this work put in place; the step
+  itself is four lines.
+
+- **"I can see this and cannot remove it" was a claim the plan had no way to make, and it is not the
+  one `FallbackReason` carries.** `NotElevated` describes a measurement that took the slow route.
+  This is a different operation with a different answer, and the two are independent — a size read
+  straight off the file table can still belong to a step nobody unelevated may perform. A step now
+  carries `RequiresElevation` as a **declaration about the location**, not about the run, so it stays
+  true on an elevated process; `ElevationOffer` reads both claims; and the shell pairs the
+  declaration with the token it is actually running under. Deriving elevation from the path was
+  rejected for the same reason §5.2 refuses every other guess: declared, it is checkable by reading.
+  Driving the app showed the intended shape — five of the six rows marked, unticked and explained,
+  the profile's own folder still selectable, and "Elevate and rescan" on screen.
+
+- **The machine-wide directories are a third seam, on `IVolumeInventory`'s own test.**
+  `%PROGRAMDATA%` and `C:\Windows` belong to the operating system and are shared by every account, so
+  they are not the signed-in user and not the mounted volumes. `ISystemDirectories` exists so §5.2
+  against `C:\Windows` can be proved on a machine where nobody may delete anything in it — which is
+  the only way that proof can ever be run. It carries no `Invalidate`, unlike both older seams:
+  neither directory can move while a process is running, so the method would exist to be symmetrical
+  and to be forgotten.
+
+- **§5.3 turned out not to want an age filter, and the reason generalises.** `%TEMP%` needs one
+  because live working files sit among dead ones and look identical. Nothing in a dump folder is live
+  except a dump being written, and that one is held open and skipped — so the lock *is* the
+  live-state guard, and a cut-off would only be a guess about evidence value. What the hazard really
+  wants is for the user to see it: Tier 3 leaves the row unticked, and each row carries the newest
+  write inside it, which for `MEMORY.DMP` is the moment the machine stopped. A filter would also have
+  had to change the grain from one directory to one dump, which §7's age column is not asking for and
+  which `RecycleBinProvider` already rejected on its own subject.
+
+Two defects surfaced that had nothing to do with this section, and both were seams rather than
+providers. The fallback scanner answered zero for any path that was not a directory, so the largest
+single reclaim in the product would have produced a step nobody could select — a single file is now
+measured directly and reported as `ScanStrategy.DirectRead`, because a `stat` is not a slow scan and
+should not carry a sentence apologising for one. And a plan whose every target turned out to be a
+link collapsed to "nothing found", dropping the note that explained the refusal, which is the
+"quietly disagrees with the folder" failure `RecycleBinProvider` guards against and this one did not.
+
+Left out deliberately: `C:\$WinREAgent` and its siblings, which need the pending-restart check
+established first and are still where this section left them; the Windows Search index, which needs
+the service-control policy decided; and finding dumps by shape anywhere on the disk. On the last, one
+thing the work adds: the *provider* shape here is a declared-path one, and a by-shape search is a
+discovery one, so the two share nothing but the tier. Whoever builds it should read
+`ChromiumUserDataDiscovery` rather than this.
 
 Five locations, all of them records of something that already happened: `%LOCALAPPDATA%\CrashDumps`
 (84 MB), `%PROGRAMDATA%\Microsoft\Windows\WER\ReportArchive` and `ReportQueue`,
@@ -366,7 +449,49 @@ assume it — getting it wrong interrupts a servicing operation mid-flight. **If
 made reliable, this entry belongs in §9 beside `WinSxS` rather than in the product.** Establish the
 check before writing the provider.
 
-### Servicing and update logs — Tier 1, measured at 64 MB
+### Servicing and update logs — Tier 3, measured at 64 MB ✅ done
+
+**Outcome:** shipped as `WindowsServicingLogProvider`, sharing the declared-path machinery above and
+almost nothing else. Four things this section did not anticipate:
+
+- **It is a second provider rather than four more rows on the first.** "Crash dumps and servicing
+  logs" needs the word "and" to describe it, which is G1's own test for two types — and more
+  practically, a plan carries one tier and one `WhatHappensOnNextUse`, so a mixed provider could not
+  have said two different things about two different consequences. Splitting also lets somebody clear
+  the update logs without emptying the evidence of a crash, which is the likelier of the two wants.
+
+- **Tier 3 here is the less comfortable half of the same correction.** A crash dump is obviously a
+  record; a servicing log looks like scratch, every guide on the internet says to delete it, and the
+  reclaim is routine. The argument does not change: the operation that wrote the log has finished and
+  will not run again on request, so what Windows re-creates is the next log rather than the ones
+  removed. The case where it bites is narrow and real — somebody diagnosing a failed update, or
+  reading what `sfc` just wrote — and it is answered by the row being unticked and dated rather than
+  by a tier that says nothing was lost.
+
+- **The age had to come from inside the directory, and this is the first subject where that
+  differs.** `RecycleBinProvider` could use a directory's own timestamp because nothing in a bin is
+  ever rewritten in place. A log is appended to, which moves the file and leaves the parent
+  untouched — so the directory alone would report a log being written at this moment as months old,
+  which is exactly backwards for the one case the tier exists to surface. One level of children is
+  enough for every location declared here.
+
+- **§5.3's warning had to become unconditional, which no provider before this needed.** Every other
+  §5.3 note is conditional on a named process being up. The WMI service holds `RtBackup` open and is
+  always running, and it lives inside a shared `svchost` so there is no name worth giving the user.
+  Reclaiming less than the size shown is therefore the *expected* outcome here, and a user who was
+  not told that reads it as a failure. The plan says it outright, and `ConflictingProcessNames` still
+  names `TiWorker` and `TrustedInstaller` for the servicing stack, which does have names.
+
+One more thing the executor needed, and it is a general point rather than a local one. An unelevated
+delete under `C:\Windows` is refused file by file, which arrives as exactly the skip a locked file
+produces — so from the outcome the two causes are indistinguishable. Reporting only §5.3's "in use"
+wording sends the user looking for a process to close that is not there, and asserting the elevation
+cause would be wrong on an elevated run that hit a real lock. Both are named and neither is asserted.
+
+`RtBackup` is the weakest member of the set and worth flagging for whoever revisits this. It is a
+rotating runtime buffer rather than a historical record, which is the one entry here with a genuine
+Tier 1 case; it is included because it is declared, sized and never pre-selected, so being
+over-cautious about it costs the user a tick and nothing else.
 
 `C:\Windows\Logs\CBS` held 64 MB and is regularly reported in the gigabytes on a machine with a long
 update history. `C:\Windows\Logs\WindowsUpdate`, `C:\Windows\Panther` (setup logs from every
@@ -514,8 +639,13 @@ a machine syncing a large shared drive it is tens of gigabytes.
 
 **It does not fit `CleanupPlan`.** Every step Deguffer models today is a deletion or a tool's
 eviction command. This is neither: the file survives, and the correct §5.6 negative asserts that the
-file **still exists and is still readable**. Building it means a third kind of step. That is a real
-design decision, and it should be taken deliberately rather than discovered while writing a
+file **still exists and is still readable**.
+
+§6's work has since made the *place* for it, without building any of it. Deletions now share a
+`DeleteStep` base, and `CleanupPlan.TargetedPaths` and `NarrowedTo` select on that rather than on one
+concrete kind — so this belongs beside `DeleteStep` and `RunCommandStep`, contributing no targeted
+path and a §5.6 negative that asserts survival instead of removal. What remains is the design
+decision itself, which should still be taken deliberately rather than discovered while writing a
 provider.
 
 ---
@@ -593,7 +723,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | GPU shader caches ✅ | Nothing new. Path-based, recognised children, pure Tier 1 | 3.2 GB |
 | Per-volume recycle bins ✅ | A volume-enumeration seam, which had to be built — the scanner never had one. Tier 3 confirmation already existed | 3.6 GB |
 | Chromium cache signature ✅ | Expected `ContentSignature` to have the shape. It did not — §4 records what the work needed instead | 0.8 GB |
-| Crash dumps and servicing logs | Path-based, plus elevation for the `C:\Windows` paths, which §6.3 already permits | 0.2 GB |
+| Crash dumps and servicing logs ✅ | Expected path-based plus elevation. Elevation turned out to be a claim `CleanupPlan` could not make, and `MEMORY.DMP` a step kind it did not have — §6 records both | 0.2 GB |
 | Cargo, Go, pnpm, conda, Maven, vcpkg | One class each, on the npm and NuGet shape. pnpm needs link-aware measurement | researched |
 | Per-project build output | Extends `SourceRootStore`; needs §5.3's live-tree exclusion generalised beyond `%TEMP%` | 8.6 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
@@ -617,6 +747,10 @@ reason about. The tier model handles them. The plan and execution types do not, 
 3. **Is the pending-reboot check reliable enough to ship?** It gates `C:\$WinREAgent` entirely.
 4. **Should Deguffer control services at all?** It gates the search index, and possibly nothing else.
    If nothing else, the answer is probably no, and the index belongs in §9.
-5. **What does a non-deleting step look like in `CleanupPlan`?** Cloud-sync dehydration is the only
-   known subject today, so building the abstraction now would be speculative generality under G3.
-   The question is whether a second subject exists.
+5. **What does a non-deleting step look like in `CleanupPlan`?** Still open, and narrowed rather
+   than answered. §6 added a second *deletion* kind for `C:\Windows\MEMORY.DMP`, and what that
+   settled is where the boundary runs: everything that destroys a path derives from `DeleteStep` and
+   is picked up by §5.2's assertions and §5.6's negative by construction, so a non-deleting step is
+   a sibling of that rather than a variety of it. Cloud-sync dehydration is still the only known
+   subject, so building it now would be the speculative generality G3 bans — the question is whether
+   a second subject exists.

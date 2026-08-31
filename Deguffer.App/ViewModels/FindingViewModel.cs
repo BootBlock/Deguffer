@@ -84,9 +84,14 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string StatusLabel => !Finding.IsPresent
         ? "Not installed on this machine"
-        : Finding.HasReclaimableSpace
-            ? "Ready to clean"
-            : "Already clear";
+        : !Finding.HasReclaimableSpace
+            ? "Already clear"
+            : CanBeSelected
+                ? "Ready to clean"
+                // Nothing in the row can be acted on as Deguffer is running, so "Ready to clean"
+                // beside a disabled checkbox would contradict itself. The Windows servicing logs are
+                // the whole row of this kind: every step of them sits under the Windows directory.
+                : "Needs administrator rights";
 
     /// <summary>
     /// Only rows with a step that can actually be acted on.
