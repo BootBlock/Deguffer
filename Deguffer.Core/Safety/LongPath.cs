@@ -64,10 +64,13 @@ public static class LongPath
     /// through it leaves the tree the plan described.
     ///
     /// Every caller reads false as "proceed", so this fails closed. A path that is not there is
-    /// genuinely not a reparse point. A path we were refused, or could not read, is not an answer at
-    /// all, and the only safe reading of "I cannot tell" on a predicate guarding a deletion is the
-    /// one that stops it — the same call <see cref="DotNetIntermediateSignature"/> makes when it
-    /// cannot vouch for a directory. The cost of being wrong that way is one unexplained decline.
+    /// genuinely not a reparse point. A path we were refused, could not read, or could not even
+    /// parse is not an answer at all, and the only safe reading of "I cannot tell" on a predicate
+    /// guarding a deletion is the one that stops it. The cost of being wrong that way is one
+    /// unexplained decline.
+    ///
+    /// <see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now calls
+    /// here instead. A safety predicate written twice is one that gets changed once.
     /// </summary>
     public static bool IsReparsePoint(string path)
     {
@@ -81,7 +84,7 @@ public static class LongPath
         {
             return false;
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
         {
             return true;
         }

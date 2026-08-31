@@ -30,6 +30,40 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         return root;
     }
 
+    /// <summary>
+    /// §5.6. A link under this root is a spared sibling of the workspace directories that <em>are</em>
+    /// targeted, indistinguishable from them by name, which is the case this provider's protected
+    /// set exists to cover. Naming it in a note without asserting it survived would be half the job.
+    /// </summary>
+    [Fact]
+    public async Task ALinkUnderTheRootIsNamedAndAssertedToSurvive()
+    {
+        var root = CreateCacheRoot();
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Directory.CreateDirectory(outside);
+        var bystander = Path.Combine(outside, "irreplaceable.bin");
+        File.WriteAllBytes(bystander, new byte[4096]);
+
+        var link = Path.Combine(root, "ipch");
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(link, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("ipch", StringComparison.Ordinal) &&
+            n.Message.Contains("link", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(link, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(File.Exists(bystander), "a file outside the tool root was destroyed");
+    }
+
     [Fact]
     public async Task ReportsNotPresentWhenTheExtensionWasNeverUsed()
     {

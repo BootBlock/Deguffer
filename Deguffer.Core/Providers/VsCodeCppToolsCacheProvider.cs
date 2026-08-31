@@ -112,10 +112,20 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
 
         // A link is a child the user can see, so it is named rather than dropped. It is never
         // followed: what it points at was never classified.
-        notes.AddRange(scan.Links.Select(link => new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
-            + "delete through a link.")));
+        foreach (var link in scan.Links)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
+                + "delete through a link."));
+
+            // Into declined as well as noted. A link here is a spared sibling of the targeted
+            // workspace directories, indistinguishable from them by name, which is exactly the
+            // case BuildProtectedPaths exists to cover.
+            declined.Add((
+                LongPath.Display(link.FullName),
+                "A link rather than a directory, so what it points at was never classified."));
+        }
 
         foreach (var child in scan.Directories)
         {
