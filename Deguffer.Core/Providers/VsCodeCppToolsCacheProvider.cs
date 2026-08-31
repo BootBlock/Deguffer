@@ -105,10 +105,10 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var targets = new List<(string Path, string Reason, DateTime? LastWritten)>();
+        var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
 
-        foreach (var child in EnumerateChildren())
+        foreach (var child in EnumerateChildDirectories(_root))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -123,23 +123,13 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            targets.Add((
+            targets.Add(new DeletionTarget(
                 LongPath.Display(child.FullName),
                 classification.Reason,
                 isPerWorkspace ? NewestWrite(child, ct) : null));
         }
 
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
-
-        var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
-        {
-            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
-            {
-                Estimated = measured.Sizes[i],
-                LastWritten = targets[i].LastWritten,
-            });
-        }
+        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -248,21 +238,6 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         {
             // No timestamp is a real answer, and §7 renders it as unknown rather than as an age.
             return null;
-        }
-    }
-
-    private IEnumerable<DirectoryInfo> EnumerateChildren()
-    {
-        try
-        {
-            return new DirectoryInfo(LongPath.Extended(_root))
-                .EnumerateDirectories()
-                .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                .ToList();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            return [];
         }
     }
 }

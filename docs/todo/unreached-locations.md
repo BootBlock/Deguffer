@@ -1,8 +1,8 @@
 # Unreached locations — what the nine providers do not see
 
-> **Status:** 🟢 ACTIVE — a researched candidate set, sequenced but not started. No code written
-> against any of it. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or
-> supersede it with a newer plan.
+> **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §5's GPU shader
+> caches have shipped; everything else is unstarted. Flip to ✅ COMPLETE and `git mv` into `done/`
+> when the list is exhausted, or supersede it with a newer plan.
 
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
@@ -228,7 +228,35 @@ instead of a root.
 
 ---
 
-## 5. GPU shader caches — the purest Tier 1 on the disk
+## 5. GPU shader caches — the purest Tier 1 on the disk ✅ done
+
+**Outcome:** shipped as `GpuShaderCacheProvider`, one provider over four locations rather than one
+per vendor. Every vendor's cache is the same fact — driver-version-keyed pipeline blobs, rebuilt on
+demand — so the tier, the consequence and the reasoning are identical; what differs is only which
+directory and which child names, and that is data. Each root still carries its own
+`DisposableChildSet`, so §5.2 is answerable from one table, and per-vendor control survives because
+selection is per step.
+
+Three things the work settled that this section did not anticipate:
+
+- **`accounts` is a file, and that is why each root declares protected names separately.** It was
+  first written as a Tier 4 entry in the child set, which classified nothing: child classification
+  enumerates *directories*, so a file in a tool root is never seen, never classified and never
+  asserted. Driving the app is what found it — the plan showed the Intel notes and no NVIDIA one.
+  Gradle already had the answer in `gradle.properties`, and the lesson generalises: for every root a
+  provider enumerates, ask what non-directories are sitting in it.
+- **`%LOCALAPPDATA%\D3DSCache` is the first whole-directory target**, because it has no tool root to
+  enumerate: its parent is the profile, and its children are opaque per-application containers a
+  name rule could recognise none of. §5.2's substance holds — the parent is never enumerated or
+  targeted, and it is what §5.6 asserts survived.
+- **A vendor root existing is not presence.** `%LOCALAPPDATA%\Intel` is present on machines with no
+  Intel graphics cache at all, so `IsPresentAsync` probes the declared cache paths rather than the
+  roots. This is §8's Unreal lesson arriving in a second costume.
+
+Left out deliberately, and still open: AMD's other children beyond `DxCache`, which no available
+machine could establish; Steam's `steamapps\shadercache`, which is per-game under a library root
+rather than under `%LOCALAPPDATA%`; and the extracted driver installers below, which are leftover
+installers rather than shader caches and want their own provider.
 
 Compiled shader pipelines, keyed by driver version and discarded by the driver itself whenever that
 version changes. Regenerated transparently. The only cost of deleting one is a few seconds of
@@ -458,7 +486,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 
 | Candidate | What it needs | Observed |
 | --- | --- | ---: |
-| GPU shader caches | Nothing new. Path-based, recognised children, pure Tier 1 | 3.2 GB |
+| GPU shader caches ✅ | Nothing new. Path-based, recognised children, pure Tier 1 | 3.2 GB |
 | Per-volume recycle bins | Volume enumeration the scanner already does, plus Tier 3 confirmation, which exists | 3.6 GB |
 | Chromium cache signature | A signature match over app-data folders; `ContentSignature` has the shape | 0.8 GB |
 | Crash dumps and servicing logs | Path-based, plus elevation for the `C:\Windows` paths, which §6.3 already permits | 0.2 GB |

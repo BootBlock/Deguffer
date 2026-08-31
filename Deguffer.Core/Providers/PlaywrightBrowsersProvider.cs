@@ -133,9 +133,9 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var targets = new List<(string Path, string Reason)>();
+        var targets = new List<DeletionTarget>();
 
-        foreach (var child in EnumerateChildren(root))
+        foreach (var child in EnumerateChildDirectories(root))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -151,21 +151,12 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
             // Enumeration runs in extended form; a plan always holds display paths, and I/O
             // re-extends at the point of use.
-            targets.Add((
+            targets.Add(new DeletionTarget(
                 LongPath.Display(child.FullName),
                 $"Playwright browser build '{child.Name}', re-downloaded by 'playwright install'."));
         }
 
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
-
-        var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
-        {
-            steps.Add(new DeleteDirectoryStep(targets[i].Path, targets[i].Reason)
-            {
-                Estimated = measured.Sizes[i],
-            });
-        }
+        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -200,19 +191,4 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string root) => Protect(
         (root, "The browser cache root itself must survive — only recognised browser builds are removed."),
         (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."));
-
-    private static IEnumerable<DirectoryInfo> EnumerateChildren(string root)
-    {
-        try
-        {
-            return new DirectoryInfo(LongPath.Extended(root))
-                .EnumerateDirectories()
-                .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                .ToList();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            return [];
-        }
-    }
 }

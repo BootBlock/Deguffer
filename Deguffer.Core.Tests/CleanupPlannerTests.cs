@@ -171,7 +171,10 @@ public sealed class CleanupPlannerTests
         var planner = CleanupPlanner.CreateDefault();
 
         Assert.Equal(
-            ["dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip", "platformio", "playwright"],
+            [
+                "dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip",
+                "gpu-shader-cache", "platformio", "playwright",
+            ],
             planner.Providers.Select(p => p.Id));
 
         // Tier 3 needs the typed-confirmation UI and a subject whose per-item attribution is

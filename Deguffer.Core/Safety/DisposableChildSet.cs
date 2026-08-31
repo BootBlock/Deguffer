@@ -38,4 +38,16 @@ public sealed class DisposableChildSet
 
     /// <summary>Whether this child may ever appear in a cleanup plan.</summary>
     public bool IsDisposable(string name) => Classify(name).Tier.IsOfferable();
+
+    /// <summary>
+    /// The children declared as disposable, so a provider can ask whether any of them is actually
+    /// on disk without enumerating the root first.
+    ///
+    /// A root existing is not evidence that the cache inside it does — a vendor directory holding
+    /// only unrelated products would otherwise report a toolchain as present and then plan nothing.
+    /// Only the offerable entries are listed: a name declared here at Tier 3 or 4 is a documented
+    /// trap, and treating it as a reason to claim presence would invert that.
+    /// </summary>
+    public IEnumerable<string> DisposableNames =>
+        _known.Values.Where(c => c.Tier.IsOfferable()).Select(c => c.Name);
 }
