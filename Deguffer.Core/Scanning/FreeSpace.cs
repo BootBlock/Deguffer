@@ -36,6 +36,16 @@ public static class FreeSpace
         }
     }
 
+    /// <summary>
+    /// The same figure, qualified where the measurement could not establish it exactly.
+    ///
+    /// §5.5's fallback route sums file lengths, which is the right number on most trees and wrong
+    /// on a compressed or sparse one. Saying "about" is the difference between reporting a
+    /// measurement and making a promise about what a deletion will return.
+    /// </summary>
+    public static string Format(ScanSize size) =>
+        size.IsApproximate ? $"about {Format(size.Reclaimable)}" : Format(size.Reclaimable);
+
     /// <summary>Human-readable size, in the binary units Windows itself reports.</summary>
     public static string Format(long bytes)
     {

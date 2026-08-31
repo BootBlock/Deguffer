@@ -36,7 +36,7 @@ public sealed class MftFixture
 
         // The root is its own parent — the shape the index has to detect to avoid a cyclic walk.
         _records.Add(BuildRecord(
-            MftRecord.RootRecordNumber, ".", isDirectory: true, DirectoryStreamBytes, DirectoryStreamBytes, resident: false));
+            MftRecord.RootRecordNumber, ".", isDirectory: true, DirectoryStreamBytes, DirectoryStreamBytes, DataPlacement.NonResident));
     }
 
     /// <summary>
@@ -47,7 +47,7 @@ public sealed class MftFixture
     public const long DirectoryStreamBytes = 512;
 
     public MftFixture AddDirectory(uint number, uint parent, string name) =>
-        Add(number, BuildRecord(Reference(parent), name, isDirectory: true, DirectoryStreamBytes, DirectoryStreamBytes, resident: false));
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: true, DirectoryStreamBytes, DirectoryStreamBytes, DataPlacement.NonResident));
 
     /// <summary>
     /// A parent as NTFS stores it: record number in the low 48 bits, reuse sequence above. The
@@ -61,21 +61,70 @@ public sealed class MftFixture
     /// silently would wrap it onto an unrelated record and graft a subtree somewhere it never was.
     /// </summary>
     public MftFixture AddFileWithUnaddressableParent(uint number, string name, long allocated) =>
-        Add(number, BuildRecord(0x1_0000_0007UL | (1UL << 48), name, isDirectory: false, allocated, allocated, resident: false));
+        Add(number, BuildRecord(0x1_0000_0007UL | (1UL << 48), name, isDirectory: false, allocated, allocated, DataPlacement.NonResident));
 
     /// <summary>
     /// A file whose allocated and logical sizes may differ — the compressed or sparse case that a
     /// <c>FileInfo.Length</c> walk cannot see.
     /// </summary>
     public MftFixture AddFile(uint number, uint parent, string name, long allocated, long logical) =>
-        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated, logical, resident: false));
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident));
 
     /// <summary>
     /// A file small enough to live inside its own MFT record. It occupies no clusters, so deleting
     /// it frees no extents — allocated is genuinely zero.
     /// </summary>
     public MftFixture AddResidentFile(uint number, uint parent, string name, int length) =>
-        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated: 0, logical: length, resident: true));
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated: 0, logical: length, DataPlacement.Resident));
+
+    /// <summary>
+    /// A file whose <c>$DATA</c> no longer fits in its base record. NTFS moves the attribute into an
+    /// extension record and leaves an <c>$ATTRIBUTE_LIST</c> behind pointing at it, so the base
+    /// record carries a name and no size at all — which is not the same as a size of zero.
+    /// </summary>
+    public MftFixture AddFileWithDataInAnExtensionRecord(uint number, uint parent, string name) =>
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.InExtensionRecord));
+
+    /// <summary>
+    /// A file whose base record holds a later extent of a split <c>$DATA</c> rather than the first.
+    /// Only the extent starting at VCN 0 carries the sizes; the rest leave those fields zero, so a
+    /// reader that trusts them reads a real file as empty.
+    /// </summary>
+    public MftFixture AddFileDescribingOnlyALaterExtent(uint number, uint parent, string name) =>
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.LaterExtent));
+
+    /// <summary>
+    /// A non-resident <c>$DATA</c> whose declared length stops before the size fields — a corrupt
+    /// record, and one whose sizes cannot be read rather than being zero.
+    /// </summary>
+    public MftFixture AddFileWithATruncatedDataHeader(uint number, uint parent, string name) =>
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.TruncatedHeader));
+
+    /// <summary>
+    /// A file with no unnamed <c>$DATA</c> at all, as a symbolic link has: its content is somewhere
+    /// else entirely. Occupying nothing is the true answer here, and it has to stay distinguishable
+    /// from a size the reader failed to establish.
+    /// </summary>
+    public MftFixture AddFileWithNoDataStream(uint number, uint parent, string name) =>
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.NoData));
+
+    /// <summary>
+    /// A directory big enough that NTFS moved its index attributes out of the base record. Common
+    /// on any real volume, and carrying no size of its own that anything counts.
+    /// </summary>
+    public MftFixture AddDirectoryWithAttributesInAnExtensionRecord(uint number, uint parent, string name) =>
+        Add(number, BuildRecord(Reference(parent), name, isDirectory: true, allocated: 0, logical: 0, DataPlacement.InExtensionRecord));
+
+    /// <summary>Where a record keeps the bytes of its unnamed <c>$DATA</c>, and whether they can be read.</summary>
+    private enum DataPlacement
+    {
+        NonResident,
+        Resident,
+        NoData,
+        InExtensionRecord,
+        LaterExtent,
+        TruncatedHeader,
+    }
 
     /// <summary>
     /// A file whose name is sized so that its <c>$DATA</c> allocated-size field lies across the
@@ -90,7 +139,7 @@ public sealed class MftFixture
     public MftFixture AddFileWithSizeAcrossSectorBoundary(uint number, uint parent, long allocated, long logical)
     {
         var name = new string('n', NameLengthPuttingSizeFieldAcrossBoundary());
-        return Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated, logical, resident: false));
+        return Add(number, BuildRecord(Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident));
     }
 
     /// <summary>
@@ -235,7 +284,7 @@ public sealed class MftFixture
         bool isDirectory,
         long allocated,
         long logical,
-        bool resident)
+        DataPlacement placement)
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
@@ -255,9 +304,15 @@ public sealed class MftFixture
 
         var offset = firstAttribute;
         offset += WriteFileName(span[offset..], parentReference, name, allocated, logical);
-        offset += resident
-            ? WriteResidentData(span[offset..], (int)logical)
-            : WriteNonResidentData(span[offset..], allocated, logical);
+        offset += placement switch
+        {
+            DataPlacement.Resident => WriteResidentData(span[offset..], (int)logical),
+            DataPlacement.NoData => 0,
+            DataPlacement.InExtensionRecord => WriteAttributeList(span[offset..]),
+            DataPlacement.LaterExtent => WriteNonResidentData(span[offset..], allocated, logical, startVirtualCluster: 4),
+            DataPlacement.TruncatedHeader => WriteTruncatedData(span[offset..]),
+            _ => WriteNonResidentData(span[offset..], allocated, logical, startVirtualCluster: 0),
+        };
 
         BinaryPrimitives.WriteUInt32LittleEndian(span[offset..], 0xFFFF_FFFF);
         BinaryPrimitives.WriteUInt32LittleEndian(span[0x18..], (uint)(offset + 8));
@@ -310,17 +365,48 @@ public sealed class MftFixture
         return length;
     }
 
-    private static int WriteNonResidentData(Span<byte> target, long allocated, long logical)
+    private static int WriteNonResidentData(Span<byte> target, long allocated, long logical, long startVirtualCluster)
     {
         const int Length = 0x48;
 
         BinaryPrimitives.WriteUInt32LittleEndian(target, 0x80);
         BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], Length);
         target[0x08] = 1;
+        BinaryPrimitives.WriteUInt64LittleEndian(target[0x10..], (ulong)startVirtualCluster);
         BinaryPrimitives.WriteUInt16LittleEndian(target[0x20..], 0x40);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], allocated);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], logical);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], logical);
+
+        return Length;
+    }
+
+    /// <summary>
+    /// A resident <c>$ATTRIBUTE_LIST</c>, standing in for the index NTFS writes when a record's
+    /// attributes no longer fit in it. Its contents are not read — what the reader has to notice is
+    /// that the record has one at all, and so may be describing itself somewhere else.
+    /// </summary>
+    private static int WriteAttributeList(Span<byte> target)
+    {
+        const int Length = 0x28;
+
+        BinaryPrimitives.WriteUInt32LittleEndian(target, 0x20);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], Length);
+        target[0x08] = 0;
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x10..], Length - 0x18);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x14..], 0x18);
+
+        return Length;
+    }
+
+    /// <summary>A non-resident <c>$DATA</c> whose declared length stops before its size fields.</summary>
+    private static int WriteTruncatedData(Span<byte> target)
+    {
+        const int Length = 0x30;
+
+        BinaryPrimitives.WriteUInt32LittleEndian(target, 0x80);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], Length);
+        target[0x08] = 1;
 
         return Length;
     }

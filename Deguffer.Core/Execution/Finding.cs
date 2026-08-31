@@ -1,5 +1,6 @@
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -10,6 +11,12 @@ namespace Deguffer.Core.Execution;
 public sealed record Finding(ICleanupProvider Provider, bool IsPresent, CleanupPlan? Plan)
 {
     public long EstimatedBytes => Plan?.EstimatedBytes ?? 0;
+
+    /// <summary>
+    /// The same total with both numbers and the approximation flag intact, for the label the user
+    /// reads. <see cref="EstimatedBytes"/> stays the number to sort and compare by.
+    /// </summary>
+    public ScanSize Estimated => Plan?.Estimated ?? ScanSize.Zero;
 
     /// <summary>Whether there is anything here worth showing the user as reclaimable.</summary>
     public bool HasReclaimableSpace => EstimatedBytes > 0;

@@ -18,6 +18,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// volume root. Returns null when the path is not in the index, which the caller must treat as
     /// "ask the slow path" rather than "zero" — a path that exists but was missed would otherwise
     /// silently report an empty cache.
+    ///
+    /// Null is also the answer when the table described the path but not the size of everything
+    /// under it. Both cases mean the same thing to the caller, and neither can be answered with a
+    /// number.
     /// </summary>
     public ScanSize? TryMeasure(IReadOnlyList<string> relativePath)
     {
@@ -26,8 +30,13 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             return null;
         }
 
-        return tree.IsDirectory[record]
-            ? SumSubtree(record)
+        if (tree.IsDirectory[record])
+        {
+            return SumSubtree(record);
+        }
+
+        return tree.SizeUnknown[record]
+            ? null
             : new ScanSize(tree.Allocated[record], tree.Logical[record]);
     }
 
@@ -164,10 +173,17 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     }
 
     /// <summary>
-    /// Iterative depth-first sum. Recursion would be the obvious shape and would overflow the stack
-    /// on a deep node_modules tree, which is exactly the kind of tree this tool exists to measure.
+    /// Iterative depth-first sum, abandoned as soon as one entry's size turns out to be unknown.
+    ///
+    /// Recursion would be the obvious shape and would overflow the stack on a deep node_modules
+    /// tree, which is exactly the kind of tree this tool exists to measure.
+    ///
+    /// Abandoning the whole subtree for one entry is the same trade <see cref="MftVolumeIndexBuilder"/>
+    /// makes for a table it could not fully read: a total missing one file is still a total, and
+    /// nothing downstream can tell it from a correct one. The cost is that this path takes the walk;
+    /// the alternative cost is a cache reported as clear when it is not.
     /// </summary>
-    private ScanSize SumSubtree(uint root)
+    private ScanSize? SumSubtree(uint root)
     {
         long allocated = 0;
         long logical = 0;
@@ -177,6 +193,11 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         while (stack.TryPop(out var node))
         {
+            if (tree.SizeUnknown[node])
+            {
+                return null;
+            }
+
             allocated += tree.Allocated[node];
             logical += tree.Logical[node];
 

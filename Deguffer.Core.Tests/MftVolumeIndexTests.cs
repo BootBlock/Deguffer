@@ -118,6 +118,89 @@ public class MftVolumeIndexTests
         Assert.Equal(300, size.Logical);
     }
 
+    /// <summary>
+    /// The file is real and its size is not in the base record, so the table cannot say how big
+    /// this subtree is. Returning a total anyway would report a cache short by whatever that file
+    /// holds — the same failure <see cref="MftVolumeIndexBuilder"/> refuses to commit when it
+    /// cannot read part of the table, arrived at one record later.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileWhoseDataMovedToAnExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// Only the first extent of a split <c>$DATA</c> carries the sizes. A base record holding a
+    /// later one has zeroes in those fields, and reading them as a size turns a large file into an
+    /// empty one.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileDescribingOnlyALaterExtent()
+    {
+        var index = Build(Tree().AddFileDescribingOnlyALaterExtent(20, Cache, "split.tgz"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileWithATruncatedDataHeader()
+    {
+        var index = Build(Tree().AddFileWithATruncatedDataHeader(20, Cache, "corrupt.tgz"));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// The refusal has to be local, or one unreadable record anywhere on the volume would send
+    /// every path to the walk and the fast path would exist in name only.
+    /// </summary>
+    [Fact]
+    public void StillTotalsSubtreesThatDoNotHoldTheUnestablishedFile()
+    {
+        var index = Build(Tree()
+            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz")
+            .AddFile(21, Sibling, "settings.json", allocated: 1024, logical: 1000));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.Equal(1024, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The other direction, and the one that decides whether the fast path is usable at all: a file
+    /// that genuinely occupies nothing must total as zero. A symbolic link carries no unnamed
+    /// <c>$DATA</c>, and treating "none" as "unknown" would refuse a total for every tree holding
+    /// one.
+    /// </summary>
+    [Fact]
+    public void CountsAFileWithNoDataStreamAsOccupyingNothing()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithNoDataStream(21, Cache, "link"));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// A directory's own <c>$DATA</c> is never counted, so a directory keeping its attributes
+    /// elsewhere costs nothing to skip. Refusing there would take out every large directory on the
+    /// volume, which is exactly where NTFS puts an attribute list.
+    /// </summary>
+    [Fact]
+    public void StillTotalsADirectoryWhoseOwnAttributesMovedToAnExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddDirectoryWithAttributesInAnExtensionRecord(30, Cache, "many-entries")
+            .AddFile(20, 30, "a.tgz", allocated: 4096, logical: 4096));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
     [Fact]
     public void FindsDirectoriesRegardlessOfPathCasing()
     {

@@ -14,6 +14,7 @@ namespace Deguffer.Core.Scanning.Mft;
 public static class MftRecordParser
 {
     internal const uint AttributeFileName = 0x30;
+    internal const uint AttributeList = 0x20;
     internal const uint AttributeData = 0x80;
 
     /// <summary>
@@ -43,6 +44,9 @@ public static class MftRecordParser
 
         // A directory's own $DATA is not the size of its contents — the contents are counted
         // through their own records — so attributing anything here would double-count them.
+        // Nothing is read from it, so a directory that keeps its attributes elsewhere is still a
+        // known quantity: zero. Refusing there would give up on every large directory on the volume,
+        // which is precisely where NTFS runs out of room in a record.
         result = new MftRecord(
             parsed.Parent,
             parsed.Name,
@@ -55,13 +59,15 @@ public static class MftRecordParser
     private static bool TryReadAttributes(
         ReadOnlySpan<byte> record,
         int firstAttributeOffset,
-        out (uint Parent, string Name, ScanSize Size) result)
+        out (uint Parent, string Name, ScanSize? Size) result)
     {
         result = default;
 
         uint parent = 0;
         var name = string.Empty;
-        var size = ScanSize.Zero;
+        ScanSize? size = null;
+        var sawData = false;
+        var sawAttributeList = false;
         var bestRank = int.MaxValue;
 
         var attributes = new MftAttributeEnumerator(record, firstAttributeOffset);
@@ -82,7 +88,12 @@ public static class MftRecordParser
 
                     break;
 
+                case AttributeList:
+                    sawAttributeList = true;
+                    break;
+
                 case AttributeData when IsUnnamed(attributes.Current):
+                    sawData = true;
                     size = ReadDataSize(attributes.Current);
                     break;
             }
@@ -91,6 +102,14 @@ public static class MftRecordParser
         if (attributes.IsMalformed || bestRank == int.MaxValue)
         {
             return false;
+        }
+
+        if (!sawData)
+        {
+            // No unnamed $DATA here. With an $ATTRIBUTE_LIST present it is in an extension record
+            // and this record cannot say how large the file is; with no list at all there is
+            // genuinely no unnamed stream — a symbolic link, say — and zero is the true answer.
+            size = sawAttributeList ? null : ScanSize.Zero;
         }
 
         result = (parent, name, size);
@@ -104,7 +123,12 @@ public static class MftRecordParser
     /// </summary>
     private static bool IsUnnamed(ReadOnlySpan<byte> attribute) => attribute[0x09] == 0;
 
-    internal static ScanSize ReadDataSize(ReadOnlySpan<byte> attribute)
+    /// <summary>
+    /// The sizes an unnamed <c>$DATA</c> declares, or null where this attribute does not declare
+    /// them. Every null here is a file whose real size is somewhere the base record does not reach,
+    /// so returning zero would silently subtract it from whatever subtree it belongs to.
+    /// </summary>
+    internal static ScanSize? ReadDataSize(ReadOnlySpan<byte> attribute)
     {
         if (attribute[0x08] == 0)
         {
@@ -115,20 +139,20 @@ public static class MftRecordParser
 
         if (attribute.Length < 0x38)
         {
-            return ScanSize.Zero;
+            return null;
         }
 
         // Only the first extent of a split attribute carries the sizes; later extents continue the
         // run list from a non-zero starting VCN and leave these fields zero.
         if (BinaryPrimitives.ReadUInt64LittleEndian(attribute[0x10..]) != 0)
         {
-            return ScanSize.Zero;
+            return null;
         }
 
         var allocated = BinaryPrimitives.ReadInt64LittleEndian(attribute[0x28..]);
         var logical = BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]);
 
-        return allocated < 0 || logical < 0 ? ScanSize.Zero : new ScanSize(allocated, logical);
+        return allocated < 0 || logical < 0 ? null : new ScanSize(allocated, logical);
     }
 
     private static bool TryReadFileName(

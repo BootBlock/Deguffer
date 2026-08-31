@@ -10,12 +10,17 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 /// <param name="ParentRecordNumber">Record number of the containing directory.</param>
 /// <param name="Name">The file or directory name, without any path.</param>
-/// <param name="Size">Allocated and logical bytes of the unnamed <c>$DATA</c> stream.</param>
+/// <param name="Size">
+/// Allocated and logical bytes of the unnamed <c>$DATA</c> stream, or null where the record does
+/// not establish them — the attribute lives in an extension record, or describes only a later
+/// extent, or is malformed. Null is not zero: a subtree holding one of these cannot be totalled,
+/// and saying so is what sends the caller to the walk instead of reporting a cache short.
+/// </param>
 /// <param name="IsDirectory">Whether this entry contains other entries.</param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
     string Name,
-    ScanSize Size,
+    ScanSize? Size,
     bool IsDirectory)
 {
     /// <summary>

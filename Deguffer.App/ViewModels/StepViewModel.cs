@@ -26,7 +26,7 @@ public sealed partial class StepViewModel : ObservableObject
 
     public string Description => Step.Description;
 
-    public string SizeLabel => FreeSpace.Format(Step.EstimatedBytes);
+    public string SizeLabel => FreeSpace.Format(Step.Estimated);
 
     /// <summary>
     /// §7's age column. Rendered as text rather than as a colour-coded indicator: §6.5 requires the

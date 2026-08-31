@@ -415,7 +415,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </remarks>
     private static string Describe(IReadOnlyList<Finding> findings)
     {
-        var total = FreeSpace.Format(findings.Sum(f => f.EstimatedBytes));
+        var total = FreeSpace.Format(findings.Aggregate(ScanSize.Zero, (sum, f) => sum + f.Estimated));
 
         return $"{string.Join(", ", findings.Select(f => f.Provider.Name))} — {total} in total. "
              + "This cannot be undone.";
@@ -494,7 +494,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private void UpdateSelectionTotal()
     {
-        SelectedTotalLabel = FreeSpace.Format(Findings.Sum(f => f.SelectedBytes));
+        SelectedTotalLabel = FreeSpace.Format(
+            Findings.Aggregate(ScanSize.Zero, (total, row) => total + row.SelectedSize));
 
         CleanCommand.NotifyCanExecuteChanged();
     }
