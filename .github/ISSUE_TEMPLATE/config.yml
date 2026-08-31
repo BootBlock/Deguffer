@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/BootBlock/Deguffer/security/advisories/new
+    about: Report privately here, not as a public issue. Deguffer removing the wrong directory with no attacker involved is an ordinary bug, so use the "Unexpected deletion" template for that.
   - name: How Deguffer decides what is safe to delete
     url: https://github.com/BootBlock/Deguffer/blob/main/docs/todo/_spec.md
     about: The safety model, the tier system, and why a directory is or is not offered. Read this before reporting that something was not offered for cleanup.
