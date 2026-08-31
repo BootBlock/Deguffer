@@ -16,9 +16,7 @@ internal static class MftRecordParser
     internal const uint AttributeFileName = 0x30;
     internal const uint AttributeList = 0x20;
     internal const uint AttributeData = 0x80;
-
-    /// <summary>The attribute flag NTFS sets on a junction or a symbolic link.</summary>
-    private const uint FileAttributeReparsePoint = 0x0400;
+    internal const uint AttributeReparsePoint = 0xC0;
 
     /// <summary>
     /// Parse one record. <paramref name="record"/> is modified in place by the update sequence
@@ -41,11 +39,10 @@ internal static class MftRecordParser
             return outcome;
         }
 
-        if (!TryReadAttributes(record[..header.UsedLength], header.FirstAttributeOffset, out var parsed))
+        var attributes = ReadAttributes(record[..header.UsedLength], header.FirstAttributeOffset, out var parsed);
+        if (attributes != MftParseOutcome.Parsed)
         {
-            // In use, and either its attribute run is malformed or it carries no name this reader
-            // can decode. Either way a real entry is here and the tree cannot place it.
-            return MftParseOutcome.Unreadable;
+            return attributes;
         }
 
         // A directory's own $DATA is not the size of its contents — the contents are counted
@@ -63,7 +60,12 @@ internal static class MftRecordParser
         return MftParseOutcome.Parsed;
     }
 
-    private static bool TryReadAttributes(
+    /// <summary>
+    /// Read what the tree needs from one record's attributes, saying which of the three things this
+    /// record turned out to be. A record can be in use and hold nothing placeable, and that is not
+    /// the same as one this reader failed on.
+    /// </summary>
+    private static MftParseOutcome ReadAttributes(
         ReadOnlySpan<byte> record,
         int firstAttributeOffset,
         out (uint Parent, string Name, ScanSize? Size, bool IsReparsePoint) result)
@@ -72,10 +74,10 @@ internal static class MftRecordParser
 
         uint parent = 0;
         var name = string.Empty;
-        var attributes = default(uint);
         ScanSize? size = null;
         var sawData = false;
         var sawAttributeList = false;
+        var sawReparsePoint = false;
         var bestRank = int.MaxValue;
 
         var walk = new MftAttributeEnumerator(record, firstAttributeOffset);
@@ -91,8 +93,7 @@ internal static class MftRecordParser
                     var rank = RankOf(candidate.Namespace);
                     if (rank < bestRank)
                     {
-                        (parent, name, attributes, bestRank) =
-                            (candidate.Parent, candidate.Name, candidate.Attributes, rank);
+                        (parent, name, bestRank) = (candidate.Parent, candidate.Name, rank);
                     }
 
                     break;
@@ -101,21 +102,39 @@ internal static class MftRecordParser
                     sawAttributeList = true;
                     break;
 
+                // The structure that makes an entry a junction or a link, rather than the flag for
+                // it kept beside the name: NTFS refreshes those flags when the name changes rather
+                // than when the file does, so a junction made over an existing directory can still
+                // read as an ordinary one there. The attribute is the thing itself.
+                case AttributeReparsePoint:
+                    sawReparsePoint = true;
+                    break;
+
                 case AttributeData when IsUnnamed(walk.Current):
                     sawData = true;
 
-                    // First answer wins. A file split across extents lists the one starting at VCN
-                    // 0 first — that is the only extent carrying the sizes — and the continuations
-                    // after it declare nothing. Assigning each in turn would let a continuation
-                    // erase a size the record had already established.
+                    // The first extent that establishes a size is the one to keep. A file split
+                    // across extents lists the one starting at VCN 0 first — the only one carrying
+                    // the sizes — and the continuations after it declare nothing. Assigning each in
+                    // turn would let a continuation erase what the record had already established.
                     size ??= ReadDataSize(walk.Current);
                     break;
             }
         }
 
-        if (walk.IsMalformed || bestRank == int.MaxValue)
+        if (walk.IsMalformed)
         {
-            return false;
+            return MftParseOutcome.Unreadable;
+        }
+
+        if (bestRank == int.MaxValue)
+        {
+            // No name in this record. With an $ATTRIBUTE_LIST the names are in extension records —
+            // what NTFS does once a file has enough hard links to overflow its own record, which a
+            // system volume is full of. The tree cannot place such a record and nothing is wrong
+            // with it. Without a list, a record in use claims no identity and points nowhere else
+            // for one, which no healthy volume produces.
+            return sawAttributeList ? MftParseOutcome.NotAnEntry : MftParseOutcome.Unreadable;
         }
 
         if (!sawData)
@@ -126,8 +145,8 @@ internal static class MftRecordParser
             size = sawAttributeList ? null : ScanSize.Zero;
         }
 
-        result = (parent, name, size, (attributes & FileAttributeReparsePoint) != 0);
-        return true;
+        result = (parent, name, size, sawReparsePoint);
+        return MftParseOutcome.Parsed;
     }
 
     /// <summary>
@@ -177,7 +196,7 @@ internal static class MftRecordParser
 
     private static bool TryReadFileName(
         ReadOnlySpan<byte> attribute,
-        out (uint Parent, string Name, uint Attributes, FileNameNamespace Namespace) result)
+        out (uint Parent, string Name, FileNameNamespace Namespace) result)
     {
         result = default;
 
@@ -215,16 +234,9 @@ internal static class MftRecordParser
             return false;
         }
 
-        // The attribute flags kept alongside the name. This is the copy the containing directory's
-        // index holds, which is the right one for a reader modelling the directory tree: it is what
-        // an enumeration of the parent would report. $STANDARD_INFORMATION holds the authoritative
-        // copy, and reading it would mean parsing a second attribute to learn the same bit.
-        var attributes = BinaryPrimitives.ReadUInt32LittleEndian(value[0x38..]);
-
         result = (
             parent,
             Encoding.Unicode.GetString(value.Slice(0x42, nameLength)),
-            attributes,
             (FileNameNamespace)value[0x41]);
 
         return true;

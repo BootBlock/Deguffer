@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -22,10 +23,10 @@ internal static class SourceTreeBoundary
     /// beneath them. <c>node_modules</c> is the expensive one — hundreds of thousands of entries in
     /// a tree that has no .NET intermediate output in it.
     /// </summary>
-    private static readonly string[] NeverEntered = [".git", "node_modules"];
+    private static readonly FrozenSet<string> NeverEntered =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".git", "node_modules");
 
-    public static bool IsNeverEntered(string name) =>
-        NeverEntered.Contains(name, StringComparer.OrdinalIgnoreCase);
+    public static bool IsNeverEntered(string name) => NeverEntered.Contains(name);
 
     /// <summary>
     /// Whether the walk would also have offered <paramref name="candidate"/>. The walk is the
@@ -37,13 +38,16 @@ internal static class SourceTreeBoundary
     /// </summary>
     public static bool WouldBeFoundByWalking(string candidate, string root, string name)
     {
-        var normalised = LongPath.Display(root).TrimEnd(Path.DirectorySeparatorChar);
-        var relative = LongPath.Display(candidate)[normalised.Length..]
+        // Asked for rather than derived by slicing the candidate at the root's length: that
+        // arithmetic is only correct while this and the scanner's own narrowing spell a path the
+        // same way, and a mis-slice would quietly start offering directories outside the root.
+        var relative = Path.GetRelativePath(LongPath.Display(root), LongPath.Display(candidate))
             .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
 
-        // The root is where the search starts, so it is never one of the search's answers. The user
-        // approved that folder as a place to look inside, which is not the same as offering it up.
-        if (relative.Length == 0)
+        // The root is where the search starts, so it is never one of the search's answers — it
+        // answers "." here. The user approved that folder as a place to look inside, which is not
+        // the same as offering it up.
+        if (relative.Length == 0 || (relative.Length == 1 && relative[0] == "."))
         {
             return false;
         }

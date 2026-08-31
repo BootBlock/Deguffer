@@ -89,7 +89,7 @@ public class DirectoryScannerTests
         var result = await scanner.MeasureAsync(cache);
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
-        Assert.Equal(FallbackReason.MasterFileTableUnreadable, result.Fallback);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
         Assert.Equal(7000, result.Size.Logical);
     }
 
@@ -160,7 +160,7 @@ public class DirectoryScannerTests
         var result = await scanner.MeasureAsync(cache);
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
-        Assert.Equal(FallbackReason.MasterFileTableUnreadable, result.Fallback);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
         Assert.Equal(3000, result.Size.Logical);
     }
 
@@ -178,7 +178,7 @@ public class DirectoryScannerTests
         var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
-        Assert.Equal(FallbackReason.MasterFileTableUnreadable, result.Fallback);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
     }
 
     [Fact]

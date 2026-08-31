@@ -56,13 +56,13 @@ public sealed class MftVolumeIndexCache(IMftSourceFactory factory)
             {
                 return MftVolumeIndexBuilder.TryBuild(source, out var index, ct)
                     ? new Entry(index, FallbackReason.None)
-                    : new Entry(null, FallbackReason.MasterFileTableUnreadable);
+                    : new Entry(null, FallbackReason.MasterFileTableIncomplete);
             }
             catch (IOException)
             {
                 // The volume went away mid-scan, or the driver refused a read. Both mean this
                 // volume takes the slow route; neither should take the preview down.
-                return new Entry(null, FallbackReason.MasterFileTableUnreadable);
+                return new Entry(null, FallbackReason.MasterFileTableIncomplete);
             }
         }
     }

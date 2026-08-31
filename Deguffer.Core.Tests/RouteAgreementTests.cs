@@ -107,6 +107,36 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// §6.3: the same agreement past MAX_PATH, because the index route decides what to keep by
+    /// taking a path apart. A truncation there is not a crash — it is a candidate list quietly
+    /// disagreeing with the walk's, which is the one thing these tests exist to rule out.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesAgreeOnDirectoriesPastMaxPath()
+    {
+        const string Deep = "a-source-directory-with-a-name-long-enough-to-push-past-max-path";
+
+        using var temp = new TempDirectory();
+
+        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "src",
+            new TreeDirectory(
+                Deep,
+                new TreeDirectory(
+                    Deep,
+                    new TreeDirectory(Deep, new TreeDirectory("obj", new TreeFile("Example.dll", 64))),
+                    new TreeDirectory("node_modules", new TreeDirectory("obj"))))));
+
+        Assert.True(Path.Combine(root, Deep, Deep, Deep, "obj").Length > 260, "the tree is not long enough to test anything");
+
+        var walked = await new ObjDirectoryDiscovery(Walking()).FindAsync("obj", [root]);
+        var indexed = await new ObjDirectoryDiscovery(Indexing(root, fixture)).FindAsync("obj", [root]);
+
+        Assert.Equal([Path.Combine(root, Deep, Deep, Deep, "obj")], walked.Candidates);
+        Assert.Equal(walked.Candidates, indexed.Candidates);
+    }
+
+    /// <summary>
     /// An approved root that is itself called <c>obj</c> is not a candidate. The walk cannot return
     /// it — it starts inside it — and the index must not either: the user approved that folder as a
     /// place to search, which is not the same as offering it up for deletion.

@@ -202,6 +202,56 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
+    /// A base record whose names moved into extension records is skipped, not refused. NTFS does
+    /// this once a file has enough hard links to overflow its own record, and a system volume is
+    /// full of them — refusing would take the fast path off the volume that matters most, every
+    /// time, for a shape that is not a fault.
+    /// </summary>
+    [Fact]
+    public void BuildsAnIndexFromATableHoldingRecordsWhoseNamesLiveElsewhere()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddRecordWithNamesInExtensionRecords(21));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The same record without an attribute list is a different thing: in use, holding data,
+    /// claiming no identity and pointing nowhere else for one. Nothing can place it, so the index
+    /// is refused rather than built around it.
+    /// </summary>
+    [Fact]
+    public void RefusesToBuildAnIndexFromARecordThatClaimsNoIdentityAtAll()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddRecordWithNoIdentityAtAll(21)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// A link inside a measured tree contributes nothing, because the walk does not enter one
+    /// either. Its declared size belongs to whatever it points at, which keeps its own place in
+    /// the table and is counted there if it is counted at all.
+    /// </summary>
+    [Fact]
+    public void CountsNothingForALinkInsideAMeasuredTree()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileLink(21, Cache, "elsewhere.tgz", logical: 9_999_999));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(4096, size.Allocated);
+        Assert.Equal(4096, size.Logical);
+    }
+
+    /// <summary>
     /// The truncation the enumerator lets through: an attribute is admitted at 0x10 bytes, and the
     /// resident branch reads a length field at 0x10. Reading it unguarded throws out of the index
     /// build, where <see cref="MftVolumeIndexCache"/> catches only <see cref="IOException"/> and
@@ -245,6 +295,9 @@ public class MftVolumeIndexTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", "linked-cache"]));
+
+        // And the refusal is confined to the path that runs through the link.
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
 
     [Fact]

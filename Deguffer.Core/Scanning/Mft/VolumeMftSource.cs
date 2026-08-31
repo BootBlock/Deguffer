@@ -36,7 +36,7 @@ public sealed partial class VolumeMftSource : IMftSource
     /// </summary>
     public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason)
     {
-        reason = FallbackReason.MasterFileTableUnreadable;
+        reason = FallbackReason.MasterFileTableIncomplete;
 
         // FILE_SHARE_WRITE is not optional: the system volume is always open for writing by other
         // processes, and omitting it makes the open fail on exactly the drive that matters.
@@ -95,7 +95,7 @@ public sealed partial class VolumeMftSource : IMftSource
             || !MftExtentMap.TryRead(record0, geometry.BytesPerSector, out var extents))
         {
             handle.Dispose();
-            reason = FallbackReason.MasterFileTableUnreadable;
+            reason = FallbackReason.MasterFileTableIncomplete;
             return null;
         }
 

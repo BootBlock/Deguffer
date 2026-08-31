@@ -64,6 +64,16 @@ public sealed class MftFixture
             isReparsePoint: true));
 
     /// <summary>
+    /// A file that is a link rather than the thing it names — a symbolic link, or a placeholder a
+    /// storage tier left behind. It declares a size and occupies none of it here, so a reader that
+    /// counts it disagrees with a walk, which does not enter reparse points at all.
+    /// </summary>
+    public MftFixture AddFileLink(uint number, uint parent, string name, long logical) =>
+        Add(number, MftRecordBytes.Build(
+            Reference(parent), name, isDirectory: false, allocated: 0, logical, DataPlacement.NonResident,
+            isReparsePoint: true));
+
+    /// <summary>
     /// A file whose allocated and logical sizes may differ — the compressed or sparse case that a
     /// <c>FileInfo.Length</c> walk cannot see.
     /// </summary>
@@ -142,6 +152,21 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture AddExtensionRecord(uint number, uint baseRecordNumber) =>
         Add(number, MftRecordBytes.ExtensionRecord(baseRecordNumber));
+
+    /// <summary>
+    /// A base record whose names live in extension records, which is what NTFS does once a file has
+    /// enough hard links to overflow its own record. A system volume is full of these, so a reader
+    /// that treats one as corruption gives up on the volume that matters most.
+    /// </summary>
+    public MftFixture AddRecordWithNamesInExtensionRecords(uint number) =>
+        Add(number, MftRecordBytes.RecordWithoutAName(withAttributeList: true));
+
+    /// <summary>
+    /// The same shape without the attribute list: a record in use, holding data, claiming no
+    /// identity and pointing nowhere else for one. No healthy volume produces this.
+    /// </summary>
+    public MftFixture AddRecordWithNoIdentityAtAll(uint number) =>
+        Add(number, MftRecordBytes.RecordWithoutAName(withAttributeList: false));
 
     /// <summary>
     /// A record naming a parent beyond the 32-bit range the index addresses. Narrowing this

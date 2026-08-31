@@ -94,7 +94,10 @@ public class MftDirectorySearchTests
             .AddDirectoryLink(30, Source, "Linked")
             .AddDirectory(31, 30, "obj"));
 
-        Assert.Equal(3, index.FindDirectoriesNamed("obj").Count);
+        var found = index.FindDirectoriesNamed("obj").Select(c => string.Join('\\', c));
+
+        Assert.DoesNotContain(@"Source\Linked\obj", found);
+        Assert.Contains(@"Source\Example\obj", found);
     }
 
     /// <summary>
@@ -105,9 +108,14 @@ public class MftDirectorySearchTests
     [Fact]
     public void DoesNotReturnALinkThatCarriesTheName()
     {
+        // Beside a real one of the same name, so a search that returned both would still look
+        // right by count.
         var index = Build(Tree().AddDirectoryLink(30, Assets, "obj"));
 
-        Assert.Equal(3, index.FindDirectoriesNamed("obj").Count);
+        var found = index.FindDirectoriesNamed("obj").Select(c => string.Join('\\', c)).ToList();
+
+        Assert.Contains(@"Source\Assets\obj", found);
+        Assert.Equal(3, found.Count);
     }
 
     [Fact]

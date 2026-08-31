@@ -42,7 +42,7 @@ public sealed class ElevationOfferTests
     [Theory]
     [InlineData(FallbackReason.NotNtfsVolume)]
     [InlineData(FallbackReason.VolumeNotAddressable)]
-    [InlineData(FallbackReason.MasterFileTableUnreadable)]
+    [InlineData(FallbackReason.MasterFileTableIncomplete)]
     public void DoesNotOfferForAFallbackElevationCannotFix(FallbackReason reason)
     {
         Assert.False(ElevationOffer.ShouldOffer(isElevated: false, [FindingWith(reason)]));

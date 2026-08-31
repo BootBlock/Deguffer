@@ -160,17 +160,17 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         var index = _volumes.Get(volumePath.DriveLetter, out var reason, ct);
 
-        // A path the index cannot resolve is not the same as an empty one. It means the tree
-        // changed under the index, or a component sits behind something the walk models and the
-        // table does not — so ask the slow path rather than reporting zero, which would render as
-        // "this cache is already clear" and quietly hide gigabytes.
+        // A path the index cannot answer for is not the same as an empty one. The tree changed
+        // under the index, or the path runs through a link, or something below it does not
+        // establish its own size — so ask the slow path rather than reporting zero, which would
+        // render as "this cache is already clear" and quietly hide gigabytes.
         if (index?.TryMeasure(volumePath.Components) is { } size)
         {
             progress?.Report(size);
             return ValueTask.FromResult(ScanResult.Fast(size));
         }
 
-        var fallbackReason = reason == FallbackReason.None ? FallbackReason.MasterFileTableUnreadable : reason;
+        var fallbackReason = reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : reason;
         return _fallback.Because(fallbackReason).MeasureAsync(path, progress, ct);
     }
 

@@ -105,15 +105,15 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 return components;
             }
 
-            // A link, or anything under one. The walk never enters a reparse point, so a path that
-            // passes through one is not something the guaranteed route could ever have produced —
-            // and the deletion target it names is a pointer, not the thing the user asked about.
-            if (current < tree.Count && tree.IsReparsePoint[current])
+            if (current >= tree.Count)
             {
                 return null;
             }
 
-            if (current >= tree.Count || tree.Names[current] is not { } component)
+            // A link, or anything under one. The walk never enters a reparse point, so a path that
+            // passes through one is not something the guaranteed route could ever have produced —
+            // and the deletion target it names is a pointer, not the thing the user asked about.
+            if (tree.IsReparsePoint[current] || tree.Names[current] is not { } component)
             {
                 return null;
             }
@@ -205,6 +205,13 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         while (stack.TryPop(out var node))
         {
+            // A link holds nothing and contributes nothing: whatever it points at keeps its own
+            // place in the table, and the walk does not enter one either.
+            if (tree.IsReparsePoint[node])
+            {
+                continue;
+            }
+
             if (tree.SizeUnknown[node])
             {
                 return null;

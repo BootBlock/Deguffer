@@ -35,9 +35,6 @@ public static class MirroredTree
     /// </summary>
     public static (string Path, MftFixture Fixture) Realise(TempDirectory temp, TreeDirectory root)
     {
-        ArgumentNullException.ThrowIfNull(temp);
-        ArgumentNullException.ThrowIfNull(root);
-
         var builder = new Builder();
         var scratch = Path.GetFullPath(temp.Path);
 
