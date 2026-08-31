@@ -40,8 +40,8 @@ public enum DeclaredLocationKind
 /// report as years old, which is precisely backwards for the one thing an age is read for. Walking
 /// deeper is not the fix: the correct age would cost a full tree walk at plan time, and
 /// <see cref="DeletionTarget.LastWritten"/> already says that one timestamp spanning everything a
-/// tool ever cached is a number with nothing to mean. So such a location reports no age, and the
-/// UI renders that as unknown rather than as a date nobody should act on.
+/// tool ever cached is a number with nothing to mean. So such a location reports no age at all, and
+/// §7's column is then blank rather than carrying a date nobody should act on.
 /// </param>
 public sealed record DeclaredLocation(
     string RelativePath,

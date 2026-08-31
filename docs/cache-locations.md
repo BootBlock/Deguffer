@@ -120,7 +120,9 @@ That relationship is the whole design of what Deguffer removes.
 It removes the two derived directories and the archives: `registry\cache`, `registry\src` and
 `git\checkouts`. It resolves the home through `CARGO_HOME` before falling back to the default, and
 if that variable holds a relative path it offers nothing, because Cargo would resolve it against a
-working directory Deguffer is not.
+working directory Deguffer is not. If the home turns out to be a link to somewhere else — a common
+way to move Cargo off the system drive — Deguffer says so and leaves it alone, because nothing on
+the far side of a link has been classified.
 
 Cargo has no eviction command to call. Its garbage collector is still unstable and reachable only
 through a nightly toolchain, and `cargo clean` is a different thing entirely — it empties one
@@ -251,7 +253,9 @@ at all.
 It reads `localRepository` from `%USERPROFILE%\.m2\settings.xml` before falling back to the default,
 because that element genuinely moves the repository. `${user.home}` in that value is resolved; any
 other property, or a relative path, leaves the value unreadable and Deguffer offers nothing rather
-than guessing.
+than guessing. A value naming `.m2` itself, or anything above it, is refused outright — that would
+make the folder holding your credentials the thing being deleted, and `${user.home}/.m2` is a
+plausible typo for the correct `${user.home}/.m2/repository`.
 
 Two other ways of moving it are out of reach, and both fail safe. Maven merges a global
 `settings.xml` from its own installation directory, which your file overrides anyway; and
@@ -326,8 +330,10 @@ always findable — Deguffer follows vcpkg's documented search order of `VCPKG_D
 then `%LOCALAPPDATA%\vcpkg\archives`, then `%APPDATA%\vcpkg\archives`. The other three live inside
 the vcpkg clone, which is a git checkout you put wherever you liked, so Deguffer looks for it in
 `VCPKG_ROOT`, then in the file `vcpkg integrate install` wrote into your profile, then beside the
-`vcpkg` executable on your `PATH`. If none of those answers, the plan says so in as many words
-rather than quietly reporting a quarter of the subject.
+`vcpkg` executable on your `PATH`. Whichever route answers, the directory has to carry
+`.vcpkg-root` — vcpkg's own marker for its root — before Deguffer looks inside it. That check is
+what stops a stray copy of `vcpkg.exe` making your `Downloads` folder a target. If none of the three
+answers, the plan says so in as many words rather than quietly reporting a quarter of the subject.
 
 `VCPKG_DOWNLOADS` is honoured where it has moved the downloads directory out of the clone.
 

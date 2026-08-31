@@ -250,6 +250,52 @@ public sealed class CargoCacheProviderTests : IDisposable
             plan.Notes.Count(n => n.Message.StartsWith("Leaving 'git' alone: A link", StringComparison.Ordinal)));
     }
 
+    /// <summary>
+    /// The home is reached by name, so nothing has classified it, and the level walk cannot catch
+    /// this on its own: it declines the level it is looking at and returns, while the next level
+    /// resolves its own path through the very link that was declined. Everything on the far side
+    /// would then be targeted, and every survivor named for this home would resolve through the same
+    /// link and pass.
+    /// </summary>
+    [Fact]
+    public async Task DeclinesAHomeThatIsItselfALink()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var stranger = Populate(Path.Combine(outside, "registry", "cache"));
+        Populate(Path.Combine(outside, "git", "checkouts"));
+        Directory.CreateSymbolicLink(Home, outside);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(stranger));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A configured home is normalised before anything is derived from it. A trailing separator
+    /// would otherwise leave the home with no name of its own to put in a note, and a value spelled
+    /// with forward slashes would not match what the enumeration returns — which is the comparison
+    /// that stops one directory being reported twice.
+    /// </summary>
+    [Fact]
+    public async Task NormalisesAConfiguredHomeBeforeDerivingAnythingFromIt()
+    {
+        var moved = Path.Combine(_temp.Path, "elsewhere", ".cargo");
+        Populate(Path.Combine(moved, "registry", "cache"));
+        Populate(Path.Combine(moved, "bin"));
+
+        _environment.WithEnvironmentVariable(
+            CargoCacheProvider.HomeVariable,
+            moved.Replace(Path.DirectorySeparatorChar, '/') + "/");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([Path.Combine(moved, "registry", "cache")], plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Leaving 'bin' alone", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(moved, StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task HonoursCargoHomeWhenItIsSetToAFullPath()
     {

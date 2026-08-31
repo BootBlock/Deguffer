@@ -38,10 +38,16 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         return directory;
     }
 
-    /// <summary>A clone with all three scratch directories and the payload that must survive.</summary>
+    /// <summary>
+    /// A clone with all three scratch directories, the payload that must survive, and the marker
+    /// file vcpkg's own tooling identifies a root by.
+    /// </summary>
     private string CreateClone(string? at = null)
     {
         var root = at ?? Path.Combine(_temp.Path, "dev", "vcpkg");
+
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, VcpkgDiscovery.RootMarker), string.Empty);
 
         Populate(Path.Combine(root, "buildtrees"));
         Populate(Path.Combine(root, "downloads"));
@@ -193,6 +199,67 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Assert.Contains(Path.Combine(root, "packages"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Recognising a name is not the same as establishing what a directory is. Without vcpkg's own
+    /// marker, a <c>vcpkg.exe</c> copied into the profile would have this provider declare
+    /// <c>downloads</c>, <c>packages</c> and <c>buildtrees</c> under it — and <c>Downloads</c> is a
+    /// folder most machines have and nobody wants removed.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotTreatADirectoryWithoutTheMarkerAsTheClone()
+    {
+        var downloads = Populate(Path.Combine(_environment.UserProfile, "downloads"));
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, _environment.UserProfile)
+            .WithExecutable("vcpkg", Path.Combine(_environment.UserProfile, "vcpkg.exe"));
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(downloads, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.True(plan.IsEmpty);
+    }
+
+    /// <summary>
+    /// The three locations move independently and nothing stops two of them arriving at one
+    /// directory. Declared twice it would become two steps over one path: its size counted twice in
+    /// the total the user reads, and §5.6 reporting one survivor as two.
+    /// </summary>
+    [Fact]
+    public async Task DeclaresOneDirectoryOnceWhenTwoVariablesNameIt()
+    {
+        var root = CreateClone();
+        var shared = Path.Combine(root, "downloads");
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, shared);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Single(plan.TargetedPaths, p => p.Equals(shared, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The documented search order falls through to the roaming profile, and a cache found there
+    /// still has that directory's own records sitting beside it.
+    /// </summary>
+    [Fact]
+    public async Task AssertsTheRoamingProfilesRecordsSurviveWhenTheCacheIsFoundThere()
+    {
+        var roamingProfile = Path.Combine(_environment.RoamingAppData, "vcpkg");
+        Populate(Path.Combine(roamingProfile, "archives"));
+        Populate(Path.Combine(roamingProfile, "registries"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(Path.Combine(roamingProfile, "registries"), StringComparison.OrdinalIgnoreCase)
+            && p.ExistedBefore);
+    }
+
     [Fact]
     public async Task HonoursTheConfiguredBinaryCacheLocation()
     {
@@ -294,6 +361,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         var root = Path.Combine(_temp.Path, "dev", "vcpkg");
         var buildtrees = Path.Combine(root, "buildtrees");
         Directory.CreateDirectory(buildtrees);
+        File.WriteAllText(Path.Combine(root, VcpkgDiscovery.RootMarker), string.Empty);
         _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);
 
         var deep = buildtrees;

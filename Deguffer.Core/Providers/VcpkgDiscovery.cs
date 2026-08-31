@@ -49,8 +49,32 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     /// </summary>
     public const string IntegrationFile = "vcpkg.path.txt";
 
-    /// <summary>The user's vcpkg directory, which holds the default binary cache and the integration file.</summary>
-    public string ProfileDirectory => Path.Combine(environment.LocalAppData, "vcpkg");
+    /// <summary>
+    /// vcpkg's own marker for its root, a file the repository itself carries and which vcpkg's
+    /// scripts walk up the tree to find.
+    ///
+    /// Requiring it is the identification check the Chromium caches taught: recognising a name is
+    /// not the same as establishing what a directory is. Without it, a <c>vcpkg.exe</c> copied to a
+    /// volume root or into the profile would have this provider declare <c>downloads</c>,
+    /// <c>packages</c> and <c>buildtrees</c> under that directory — and
+    /// <c>%USERPROFILE%\Downloads</c> is a folder most machines have and nobody wants removed.
+    /// It also makes a volume-root guard unnecessary rather than merely omitted: a clone genuinely
+    /// bootstrapped at <c>C:\</c> carries the marker and its directories really are vcpkg's.
+    /// </summary>
+    public const string RootMarker = ".vcpkg-root";
+
+    /// <summary>
+    /// The user's vcpkg directories, which hold the default binary cache and the integration file.
+    ///
+    /// Both, because the documented search order for the binary cache falls through from the local
+    /// profile to the roaming one — and a cache found under the second still needs the second's
+    /// <c>vcpkg.path.txt</c> and <c>registries</c> named as survivors.
+    /// </summary>
+    public IReadOnlyList<string> ProfileDirectories =>
+    [
+        Path.Combine(environment.LocalAppData, "vcpkg"),
+        Path.Combine(environment.RoamingAppData, "vcpkg"),
+    ];
 
     public VcpkgLocations Discover()
     {
@@ -75,9 +99,9 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
             return configured;
         }
 
-        foreach (var profile in (string[])[environment.LocalAppData, environment.RoamingAppData])
+        foreach (var profile in ProfileDirectories)
         {
-            var archives = Path.Combine(profile, "vcpkg", "archives");
+            var archives = Path.Combine(profile, "archives");
 
             if (LongPath.DirectoryExists(archives))
             {
@@ -103,17 +127,24 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     /// </summary>
     private string? FindRoot()
     {
-        if (FullyQualified(environment.GetEnvironmentVariable(RootVariable)) is { } configured)
+        foreach (var candidate in Candidates())
         {
-            return configured;
+            // Every route is a claim about where the clone is, and none of them is evidence that a
+            // clone is there. The marker is, so it gates all three rather than only the weakest.
+            if (candidate is not null && LongPath.FileExists(Path.Combine(candidate, RootMarker)))
+            {
+                return candidate;
+            }
         }
 
-        if (ReadIntegrationFile() is { } integrated)
-        {
-            return integrated;
-        }
+        return null;
+    }
 
-        return environment.FindExecutable("vcpkg") is { } executable
+    private IEnumerable<string?> Candidates()
+    {
+        yield return FullyQualified(environment.GetEnvironmentVariable(RootVariable));
+        yield return ReadIntegrationFile();
+        yield return environment.FindExecutable("vcpkg") is { } executable
             ? Path.GetDirectoryName(executable)
             : null;
     }
@@ -136,7 +167,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
 
     private string? ReadIntegrationFile()
     {
-        var file = Path.Combine(ProfileDirectory, IntegrationFile);
+        var file = Path.Combine(ProfileDirectories[0], IntegrationFile);
 
         if (!LongPath.FileExists(file))
         {
@@ -157,15 +188,12 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     }
 
     /// <summary>
-    /// A configured value only counts when it is a full path. Every one of these is resolved by
-    /// vcpkg against a working directory Deguffer is not, so a relative value has no correct
-    /// interpretation here — and reaching into a directory nobody pointed at is exactly the guess
-    /// §5.2 forbids.
+    /// A configured value only counts when it is a full path, and it is normalised before anything
+    /// splits it. Every one of these is resolved by vcpkg against a working directory Deguffer is
+    /// not, so a relative value has no correct interpretation here — and reaching into a directory
+    /// nobody pointed at is exactly the guess §5.2 forbids. See
+    /// <see cref="LongPath.Configured"/> for what a trailing separator would otherwise do to a
+    /// declared target.
     /// </summary>
-    private static string? FullyQualified(string? value)
-    {
-        var trimmed = value?.Trim();
-
-        return !string.IsNullOrEmpty(trimmed) && Path.IsPathFullyQualified(trimmed) ? trimmed : null;
-    }
+    private static string? FullyQualified(string? value) => LongPath.Configured(value);
 }

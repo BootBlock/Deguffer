@@ -126,7 +126,13 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             return _localRepository = DefaultLocalRepository;
         }
 
-        return Path.IsPathFullyQualified(configured) ? _localRepository = configured : null;
+        // Normalised rather than used as it arrived. A trailing separator would make the leaf name
+        // empty, and a location with an empty relative path resolves back to the root that holds it
+        // — so the plan would target the very directory it also asserts must survive, and §5.6 would
+        // report a correct run as a failure. A value ending in '..' is worse: LongPath.Extended
+        // requires an already-resolved path, so the removal would land a directory higher than the
+        // plan named.
+        return _localRepository = LongPath.Configured(configured);
     }
 
     /// <summary>
@@ -155,6 +161,19 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             return EmptyPlan(
                 "The localRepository in your Maven settings.xml is not a full path, so Deguffer cannot "
                 + "tell which directory it means and is leaving it alone.");
+        }
+
+        // §5.2, and the reason this check is here rather than trusted to the declaration. A
+        // configured value naming the Maven home, or anything above it, would make the tool root the
+        // target: the same plan would delete .m2 while asserting that the settings.xml inside it
+        // survives. '${user.home}/.m2' is a plausible typo for the correct
+        // '${user.home}/.m2/repository', and a settings file arrives from a dotfiles repository as
+        // often as it is typed, so this is refused rather than trusted.
+        if (Contains(repository, Home))
+        {
+            return EmptyPlan(
+                $"Your Maven settings.xml points the local repository at {repository}, which holds "
+                + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.");
         }
 
         if (Declare(repository) is not { } roots)
@@ -251,6 +270,13 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
                 ProtectedNames),
         ];
     }
+
+    /// <summary>Whether <paramref name="candidate"/> is <paramref name="ancestor"/> or sits inside it.</summary>
+    private static bool Contains(string ancestor, string candidate) =>
+        candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase)
+        || candidate.StartsWith(
+            Path.TrimEndingDirectorySeparator(ancestor) + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The <c>localRepository</c> element of the user's settings file, or null if there is not one.

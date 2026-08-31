@@ -68,6 +68,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     private readonly VcpkgDiscovery _discovery;
 
+    private VcpkgLocations? _located;
+
     public VcpkgCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
@@ -99,8 +101,25 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// </summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => ["vcpkg"];
 
-    /// <summary>Where vcpkg's directories are on this machine. Exposed so tests can assert what is reached.</summary>
-    public VcpkgLocations Locate() => _discovery.Discover();
+    /// <summary>
+    /// Where vcpkg's directories are on this machine, memoised for the life of a planning pass (G4).
+    /// Presence and planning ask the same question of the same disk, and answering it reads an
+    /// environment, probes two directories and may open a file.
+    ///
+    /// Exposed so tests can assert what is reached.
+    /// </summary>
+    public VcpkgLocations Locate() => _located ??= _discovery.Discover();
+
+    /// <summary>
+    /// Every one of those answers is configuration — three environment variables, a file vcpkg
+    /// writes, and what is on <c>PATH</c> — so a remembered location would measure a directory
+    /// vcpkg has stopped using.
+    /// </summary>
+    public override void InvalidateCaches()
+    {
+        _located = null;
+        base.InvalidateCaches();
+    }
 
     /// <summary>
     /// Presence is a declared path actually being there. The user's vcpkg directory exists on any
@@ -167,11 +186,19 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     {
         var roots = new List<DeclaredRoot>(3);
 
+        // The three locations move independently and nothing stops two of them arriving at one
+        // directory — a binary cache pointed at the clone's own downloads, or both variables set to
+        // one "put all the vcpkg junk here" folder. Declared twice, that directory becomes two steps
+        // over one path: its size is counted twice in the total the user reads, and §5.6 reports one
+        // survivor as two.
+        var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         if (Containing(
                 located.BinaryCache,
                 "Binaries vcpkg built earlier and kept so it would not build them again. Removing one "
                 + "means the next install of that library builds it from source.") is { } binaryCache)
         {
+            declared.Add(located.BinaryCache!);
             roots.Add(binaryCache);
         }
 
@@ -192,6 +219,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                     "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it."));
             }
 
+            locations.RemoveAll(l => !declared.Add(Path.Combine(root, l.RelativePath)));
+
             roots.Add(new DeclaredRoot(
                 root,
                 "The vcpkg directory itself must survive — it is never listed and never a target, and only "
@@ -201,10 +230,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 ProtectedInRoot));
         }
 
-        if (Containing(
-                located.RelocatedDownloads,
+        if (located.RelocatedDownloads is { } relocated
+            && declared.Add(relocated)
+            && Containing(
+                relocated,
                 "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it.")
-            is { } downloads)
+                is { } downloads)
         {
             roots.Add(downloads);
         }
@@ -227,7 +258,10 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             return null;
         }
 
-        var inProfile = container.Equals(_discovery.ProfileDirectory, StringComparison.OrdinalIgnoreCase);
+        // Either of the user's vcpkg directories, because the documented search order falls through
+        // from the local profile to the roaming one — and a cache found under the second still has
+        // that second directory's own records sitting beside it.
+        var inProfile = _discovery.ProfileDirectories.Contains(container, StringComparer.OrdinalIgnoreCase);
 
         return new DeclaredRoot(
             container,

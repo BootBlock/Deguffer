@@ -149,6 +149,23 @@ public sealed class GoCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// "Go reports its build cache as X" is a claim about a subprocess that may never have spoken.
+    /// When it did not, X is Deguffer's guess, and a machine whose caches have been moved will not
+    /// match it — so the plan says which of the two it is holding.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheLocationsAreDefaultsWhenGoDidNotReportThem()
+    {
+        Populate(Path.Combine(_environment.LocalAppData, "go-build"));
+
+        var plan = await CreateProvider(new FakeProcessRunner().Responding("env", string.Empty, exitCode: 1))
+            .PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Go did not say where", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Go reports", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// §5.6. The module cache is <c>pkg\mod</c> inside the workspace, so what the command empties
     /// has the user's installed binaries and their own source as siblings.
     /// </summary>

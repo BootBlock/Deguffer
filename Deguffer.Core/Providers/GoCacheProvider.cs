@@ -38,9 +38,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// </summary>
     private static readonly string[] QueriedVariables = ["GOCACHE", "GOMODCACHE", "GOPATH"];
 
-    private string? _buildCache;
-    private string? _moduleCache;
-    private string? _goPath;
+    private GoLocations? _locations;
 
     public GoCacheProvider(
         IUserEnvironment? environment = null,
@@ -79,15 +77,13 @@ public sealed class GoCacheProvider : CleanupProviderBase
         Task.FromResult(Environment.FindExecutable("go") is not null);
 
     /// <summary>
-    /// All three answers are configuration — <c>go env -w</c> writes them to a file Go reads on
-    /// every run — so a remembered location would measure a directory Go has stopped using and
-    /// would hand the command a stale neighbour to protect.
+    /// Every answer here is configuration — <c>go env -w</c> writes them to a file Go reads on every
+    /// run — so a remembered location would measure a directory Go has stopped using and would hand
+    /// the command a stale neighbour to protect.
     /// </summary>
     public override void InvalidateCaches()
     {
-        _buildCache = null;
-        _moduleCache = null;
-        _goPath = null;
+        _locations = null;
         base.InvalidateCaches();
     }
 
@@ -98,7 +94,8 @@ public sealed class GoCacheProvider : CleanupProviderBase
             return EmptyPlan("Go is not installed on this machine.");
         }
 
-        var (buildCache, moduleCache, goPath) = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
+        var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
+        var (buildCache, moduleCache) = (located.BuildCache, located.ModuleCache);
 
         // One entry per location Go actually has on disk, so a machine that has built but never
         // downloaded a module gets one step rather than a second that would reclaim nothing.
@@ -140,8 +137,14 @@ public sealed class GoCacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>
         {
-            new(PlanNoteSeverity.Information,
-                $"Go reports its build cache as {buildCache} and its module cache as {moduleCache}."),
+            new(PlanNoteSeverity.Information, located.Answered
+                // Said two ways, because they are two different claims. The first reports this
+                // machine's configuration; the second admits to a guess, which matters because a
+                // machine whose caches have been moved will not match it and the user is the only
+                // one who can tell.
+                ? $"Go reports its build cache as {buildCache} and its module cache as {moduleCache}."
+                : "Go did not say where its caches are, so these are the documented defaults rather "
+                  + $"than this machine's settings: {buildCache} and {moduleCache}."),
         };
 
         if (measured.Note is { } scanNote)
@@ -161,7 +164,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(goPath),
+            ProtectedPaths = BuildProtectedPaths(located.GoPath),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -184,13 +187,11 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// rooted path is treated as no answer at all, which is what an unset or disabled value looks
     /// like.
     /// </summary>
-    private async Task<(string BuildCache, string ModuleCache, string GoPath)> ResolveLocationsAsync(
-        string go,
-        CancellationToken ct)
+    private async Task<GoLocations> ResolveLocationsAsync(string go, CancellationToken ct)
     {
-        if (_buildCache is not null && _moduleCache is not null && _goPath is not null)
+        if (_locations is not null)
         {
-            return (_buildCache, _moduleCache, _goPath);
+            return _locations;
         }
 
         var outcome = await Runner
@@ -201,12 +202,26 @@ public sealed class GoCacheProvider : CleanupProviderBase
             ? outcome.StandardOutput.Split('\n', StringSplitOptions.TrimEntries)
             : [];
 
-        _buildCache = Reported(reported, 0) ?? DefaultBuildCache;
-        _goPath = Reported(reported, 2) ?? DefaultGoPath;
-        _moduleCache = Reported(reported, 1) ?? Path.Combine(_goPath, "pkg", "mod");
+        var buildCache = Reported(reported, 0);
+        var moduleCache = Reported(reported, 1);
+        var goPath = Reported(reported, 2) ?? DefaultGoPath;
 
-        return (_buildCache, _moduleCache, _goPath);
+        return _locations = new GoLocations(
+            buildCache ?? DefaultBuildCache,
+            moduleCache ?? Path.Combine(goPath, "pkg", "mod"),
+            goPath,
+            Answered: buildCache is not null && moduleCache is not null);
     }
+
+    /// <summary>Where Go keeps things, and whether Go itself is what said so.</summary>
+    /// <param name="Answered">
+    /// False when <c>go env</c> did not run, or answered with nothing usable, in which case these
+    /// are Deguffer's documented defaults rather than this machine's configuration. The plan says
+    /// which of the two it is holding, because "Go reports its build cache as X" is a claim about a
+    /// subprocess that may never have spoken — and if it did not, X is a guess that a machine with a
+    /// moved cache will not match.
+    /// </param>
+    private sealed record GoLocations(string BuildCache, string ModuleCache, string GoPath, bool Answered);
 
     private static string? Reported(string[] lines, int index) =>
         index < lines.Length && Path.IsPathRooted(lines[index]) ? lines[index] : null;

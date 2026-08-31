@@ -153,6 +153,46 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.2. A configured value naming the Maven home, or anything above it, would make the tool
+    /// root the target — and the same plan would delete <c>.m2</c> while asserting that the
+    /// <c>settings.xml</c> inside it survives. Both of these are a plausible typo for the correct
+    /// <c>${user.home}/.m2/repository</c>, and a settings file arrives from a dotfiles repository as
+    /// often as it is typed.
+    /// </summary>
+    [Theory]
+    [InlineData("${user.home}")]
+    [InlineData("${user.home}/.m2")]
+    public async Task RefusesALocalRepositoryThatWouldTakeTheMavenHomeWithIt(string configured)
+    {
+        Populate(DefaultRepository);
+        WriteSettings(configured);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("holds your Maven configuration", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A trailing separator makes the leaf name empty, and a location with an empty relative path
+    /// resolves back to the root that holds it — so the plan would target the very directory it also
+    /// asserts must survive, and §5.6 would report a correct run as a failure.
+    /// </summary>
+    [Fact]
+    public async Task NormalisesAConfiguredRepositoryThatEndsInASeparator()
+    {
+        var moved = Populate(Path.Combine(_temp.Path, "shared", "m2-repository"));
+        WriteSettings(moved + Path.DirectorySeparatorChar);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([moved], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.ProtectedPaths, p =>
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// A relative or otherwise unresolvable value names a directory Deguffer cannot place, and
     /// reaching into one nobody pointed at is the guess §5.2 forbids.
     /// </summary>

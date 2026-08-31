@@ -35,8 +35,9 @@ namespace Deguffer.Core.Providers;
 /// the unsafe half are split rather than shipped together, and the split runs along a directory
 /// boundary the provider can draw with certainty.</para>
 ///
-/// <para><c>%USERPROFILE%\.rustup\toolchains</c> holds a full toolchain per installed channel. It is
-/// Tier 2, it is a separate provider, and it is not a child of this one.</para>
+/// <para><c>%USERPROFILE%\.rustup\toolchains</c> holds a full toolchain per installed
+/// channel. Nothing reaches it today, and when something does it belongs at Tier 2 in a provider of
+/// its own rather than as a child of this one.</para>
 /// </summary>
 public sealed class CargoCacheProvider : CleanupProviderBase
 {
@@ -162,18 +163,16 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     /// something this cannot resolve: Cargo resolves a relative value against the invoking shell's
     /// working directory, which Deguffer is not, so there is no correct interpretation available and
     /// enumerating a directory nobody pointed at is exactly the guess §5.2 forbids.
+    ///
+    /// Normalised through <see cref="LongPath.Configured"/> rather than used as it arrived, so every
+    /// path derived from it is canonical. A trailing separator would otherwise leave the home with no
+    /// name of its own to put in a note, and a value spelled differently from what the enumeration
+    /// returns would defeat the comparison that stops one directory being reported twice.
     /// </summary>
-    public string? ResolveHome()
-    {
-        var configured = Environment.GetEnvironmentVariable(HomeVariable)?.Trim();
-
-        if (string.IsNullOrEmpty(configured))
-        {
-            return DefaultHome;
-        }
-
-        return Path.IsPathFullyQualified(configured) ? configured : null;
-    }
+    public string? ResolveHome() =>
+        Environment.GetEnvironmentVariable(HomeVariable) is { } configured && configured.Trim().Length > 0
+            ? LongPath.Configured(configured)
+            : DefaultHome;
 
     /// <summary>
     /// Presence is a cache actually on disk, never the home existing. Installing rustup creates
@@ -195,6 +194,19 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         if (!LongPath.DirectoryExists(home))
         {
             return EmptyPlan($"Cargo is not installed for this user — no {home} directory.");
+        }
+
+        // The home arrives by name, from an environment variable or a default, so nothing has
+        // classified it. The level walk below cannot catch a junctioned home on its own: it declines
+        // the level it is looking at and returns, and the next level then resolves its own path
+        // through the very link that was declined, finding ordinary directories on the far side.
+        // Those would be targeted while every survivor named for this home resolves through the same
+        // link and passes — §5.6's negative made vacuous, in the worst of its forms.
+        if (LongPath.IsReparsePoint(home))
+        {
+            return EmptyPlan(
+                $"Leaving '{home}' alone: it is a link to somewhere else, and Deguffer does not look "
+                + "through a link.");
         }
 
         var notes = new List<PlanNote>();

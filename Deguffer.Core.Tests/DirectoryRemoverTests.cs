@@ -120,6 +120,36 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A read-only link is removed, and the question that would have read through it is never asked.
+    ///
+    /// Windows refuses to remove a link carrying the read-only bit exactly as it refuses a real
+    /// directory, and clearing that bit acts on the link rather than on what it points at — so the
+    /// retry is right here. What must not happen is the emptiness check: enumerating a link reads
+    /// the far side, which nothing in this removal has classified, and the answer would then decide
+    /// the fate of a path in a tree nobody looked at.
+    /// </summary>
+    [Fact]
+    public async Task RemovesAReadOnlyLinkWithoutAskingWhatIsOnTheFarSideOfIt()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var outside = _temp.CreateDirectory("precious");
+        var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+
+        var link = Path.Combine(root, "link");
+        Directory.CreateSymbolicLink(link, outside);
+        File.SetAttributes(link, File.GetAttributes(link) | FileAttributes.ReadOnly);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.False(Directory.Exists(link), "a read-only link survived, so the far side decided its fate");
+
+        Assert.True(Directory.Exists(outside), "removal followed the link it was handed");
+        Assert.True(File.Exists(bystander));
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    /// <summary>
     /// A smoke test, and deliberately no more than that. It cannot prove §6.3 — see
     /// <see cref="HandsEveryPathToTheFilesystemInExtendedLengthForm"/> for the assertion that can,
     /// and for why this one stays green with the prefixing removed outright.

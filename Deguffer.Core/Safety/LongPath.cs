@@ -34,6 +34,46 @@ public static class LongPath
             : DevicePrefix + full;
     }
 
+    /// <summary>
+    /// A path the user configured, in the form the rest of the code may rely on: fully qualified,
+    /// fully resolved, and without a trailing separator. Null when the value is not a full path, or
+    /// names something Windows will not accept as one.
+    ///
+    /// <para>Every caller of this is a provider whose root comes from an environment variable or a
+    /// settings file, and two things go wrong when such a value is used as it arrived. A trailing
+    /// separator makes <see cref="Path.GetFileName(string)"/> return nothing, so a provider that
+    /// splits a root from its leaf declares a target that resolves back to the directory it also
+    /// asserts must survive — and §5.6 then reports a correct run as a failure. A value ending in
+    /// <c>..</c> is worse: <see cref="Extended"/> requires an already-normalised path, because the
+    /// Win32 device namespace resolves nothing, so the deletion would land one directory above the
+    /// one the plan named.</para>
+    ///
+    /// <para><see cref="Path.GetFullPath(string)"/> is safe here only because the value is checked
+    /// to be fully qualified first: an unqualified one would resolve against Deguffer's own working
+    /// directory, which is a directory nobody pointed at.</para>
+    /// </summary>
+    public static string? Configured(string? value)
+    {
+        var trimmed = value?.Trim();
+
+        if (string.IsNullOrEmpty(trimmed) || !Path.IsPathFullyQualified(trimmed))
+        {
+            return null;
+        }
+
+        try
+        {
+            // A volume root keeps its separator, which is correct: "C:\" is the directory, and a
+            // caller that must refuse a whole volume refuses it by name rather than by shape.
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(trimmed));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // Characters Windows will not accept in a path, so there is nothing here to point at.
+            return null;
+        }
+    }
+
     /// <summary>Strip the extended-length prefix, for display and comparison.</summary>
     public static string Display(string path)
     {

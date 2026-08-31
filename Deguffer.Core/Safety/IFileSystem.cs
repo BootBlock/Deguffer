@@ -66,6 +66,17 @@ public interface IFileSystem
     /// package manager caches set it liberally and it is what blocks a delete.
     /// </summary>
     void ClearAttributes(string path);
+
+    /// <summary>
+    /// The entry's attributes, or null when nothing is there.
+    ///
+    /// Asked before clearing them, so a directory whose removal was refused for some other reason
+    /// keeps the attributes it had. Windows reports a read-only directory's refusal as
+    /// <see cref="UnauthorizedAccessException"/> for a plain path and as a bare
+    /// <see cref="IOException"/> for the extended-length form §6.3 requires, so the exception
+    /// discriminates nothing and the attributes themselves are the only honest answer.
+    /// </summary>
+    FileAttributes? TryGetAttributes(string path);
 }
 
 /// <summary>The real filesystem. Stateless, so a single instance serves the process (G5).</summary>
@@ -103,4 +114,17 @@ public sealed class WindowsFileSystem : IFileSystem
     public void DeleteDirectory(string path) => Directory.Delete(path, recursive: false);
 
     public void ClearAttributes(string path) => File.SetAttributes(path, FileAttributes.Normal);
+
+    public FileAttributes? TryGetAttributes(string path)
+    {
+        try
+        {
+            return File.GetAttributes(path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            // Gone, or unreadable. Either way there is nothing here to decide about.
+            return null;
+        }
+    }
 }

@@ -118,7 +118,7 @@ Nine things the work settled that this section did not anticipate.
   the directory being empty, so a directory still holding a locked file keeps its attributes rather
   than having them reset on a path the removal is deliberately leaving standing.
 
-- **The nested-child shape got a name rather than a second copy.** §4 answered `Cargo\Cache_Data`
+- **The nested-child shape got a name rather than a second copy.** §4 answered Chromium's `Cache\Cache_Data`
   with a level per containing directory, and Cargo's `registry\cache` needed the same answer.
   `ChromiumCacheLevel` is now `CacheLevel`, in its own file, used by both — each provider still
   writes its own levels, so §5.2 stays answerable by reading one table. No fourth shape was added.
@@ -138,7 +138,7 @@ Nine things the work settled that this section did not anticipate.
   folder or a directory of archives and wrong for a Maven repository: that nests by group, artifact
   and version, so its top level moves only when a whole new group first appears, and a repository
   built against daily would report as years old. `DeclaredLocation.ReportsAge` now carries that, and
-  §7's column renders the absence as unknown rather than as a date nobody should act on.
+  §7's column is then blank rather than carrying a date nobody should act on.
 
 - **vcpkg is the first tool whose main directory is a clone the user placed, and the provider has to
   say what it could not see.** There is no profile location to fall back on: the clone is knowable
