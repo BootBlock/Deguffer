@@ -83,7 +83,7 @@ public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
         {
             ct.ThrowIfCancellationRequested();
 
-            foreach (var child in EnumerateSafely(directory))
+            foreach (var child in ChildDirectories.Under(directory))
             {
                 if (child.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
@@ -101,25 +101,4 @@ public sealed class ObjDirectoryDiscovery(IDirectoryScanner scanner)
         }
     }
 
-    /// <summary>
-    /// §5.3: a directory we cannot read is skipped rather than being a reason to abandon the scan.
-    /// Reparse points are never followed — a symlinked source folder must not walk discovery out of
-    /// the root the user approved and into a system directory.
-    /// </summary>
-    private static List<DirectoryInfo> EnumerateSafely(string extendedDirectory)
-    {
-        try
-        {
-            return
-            [
-                .. new DirectoryInfo(extendedDirectory)
-                    .EnumerateDirectories()
-                    .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint)),
-            ];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            return [];
-        }
-    }
 }

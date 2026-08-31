@@ -11,11 +11,14 @@ namespace Deguffer.Core.Providers;
 /// on the provider. Each row still carries its own <see cref="DisposableChildSet"/>, so §5.2's
 /// question — which children may this tool delete? — is answered by reading one table.
 /// </summary>
-/// <param name="Vendor">The name the user is shown, and the one the notes are written against.</param>
 /// <param name="DirectoryName">
 /// The root's name under <c>%LOCALAPPDATA%</c>, not a full path: the profile location comes from
 /// <see cref="IUserEnvironment"/>, so this declaration stays static and testable against a
 /// synthetic profile.
+///
+/// It is also the name the user is shown, because each vendor's directory is named after the
+/// vendor. A separate display field would be two same-typed strings that are equal in every row,
+/// which is a transposition waiting to happen and a distinction no vendor has yet needed.
 /// </param>
 /// <param name="Children">
 /// What may be deleted under that root. Anything absent from it is Tier 4 by construction, which
@@ -34,7 +37,6 @@ namespace Deguffer.Core.Providers;
 /// as worth naming.
 /// </param>
 public sealed record ShaderCacheRoot(
-    string Vendor,
     string DirectoryName,
     DisposableChildSet Children,
     IReadOnlyList<(string Name, string Reason)> ProtectedNames);

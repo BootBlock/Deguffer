@@ -108,7 +108,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
 
-        foreach (var child in EnumerateChildDirectories(_root))
+        foreach (var child in ChildDirectories.Under(_root))
         {
             ct.ThrowIfCancellationRequested();
 

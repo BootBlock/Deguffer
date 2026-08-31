@@ -1,4 +1,4 @@
-# Unreached locations — what the nine providers do not see
+# Unreached locations — what the shipped providers do not see
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §5's GPU shader
 > caches have shipped; everything else is unstarted. Flip to ✅ COMPLETE and `git mv` into `done/`
@@ -7,7 +7,7 @@
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
 machine on one day, so it is a description of where the space went, not a survey of where space
-goes. This document is the survey: the locations Deguffer's nine providers do not reach, researched
+goes. This document is the survey: the locations Deguffer's shipped providers do not reach, researched
 against vendor documentation and measured on one Windows 11 workstation.
 
 [../cache-locations.md](../cache-locations.md) is the shipped, user-facing guide to what Deguffer
@@ -36,7 +36,7 @@ form throughout this document.
 | Unity per-project `Library\` (7 projects) | 5.4 GB | 2 | Per-project build output; only `obj\` has a provider |
 | Store-Python `LocalCache\local-packages` | 5.4 GB | 3 | Same redirection blind spot; it is installed packages, not cache |
 | `$Recycle.Bin` on non-system volumes | 3.6 GB | 3 | Cleaners empty `C:` only. `C:` held 0 bytes here |
-| `%LOCALAPPDATA%\NVIDIA\DXCache` + `GLCache` | 3.2 GB | 1 | GPU shader cache; no provider category exists |
+| `%LOCALAPPDATA%\NVIDIA\DXCache` + `GLCache` | 3.2 GB | 1 | GPU shader cache; no provider category existed. **Shipped — see §5** |
 | Windows Search index (`Windows.db`) | 2.2 GB | 2 | Needs a service stop, so no cleaner attempts it |
 | `C:\$WinREAgent` | 1.7 GB | 2 | Disk Cleanup's update pass does not remove it |
 | .NET SDKs, 8 versions, one out of support | 1.8 GB | 4 | An uninstall, not a delete. §2 rules it out |
@@ -251,7 +251,16 @@ Three things the work settled that this section did not anticipate:
   targeted, and it is what §5.6 asserts survived.
 - **A vendor root existing is not presence.** `%LOCALAPPDATA%\Intel` is present on machines with no
   Intel graphics cache at all, so `IsPresentAsync` probes the declared cache paths rather than the
-  roots. This is §8's Unreal lesson arriving in a second costume.
+  roots. This is the Unreal lesson from §8 of this document arriving in a second costume.
+- **A target reached by name needs the reparse check that enumeration was giving away for free.**
+  `D3DSCache` is the first target that does not come from a child enumeration, and the enumeration
+  is where every other target had its junctions filtered out. Worse, `DirectoryRemover` guarded
+  *entries* and never the root handed to it, so a junctioned target would have been enumerated
+  through and the link's contents deleted — with the §5.6 negative passing, because every path it
+  asserts lives inside the profile the deletion had already left. Both ends are now closed and both
+  are tested. The general lesson is the one the review surfaced: **the safety property was riding on
+  a filter nobody had named**, and it held only for as long as every target happened to arrive the
+  same way.
 
 Left out deliberately, and still open: AMD's other children beyond `DxCache`, which no available
 machine could establish; Steam's `steamapps\shadercache`, which is per-game under a library root

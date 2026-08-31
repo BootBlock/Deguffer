@@ -54,4 +54,27 @@ public static class LongPath
 
     /// <summary>Whether the file exists, tolerating paths beyond MAX_PATH.</summary>
     public static bool FileExists(string path) => File.Exists(Extended(path));
+
+    /// <summary>
+    /// Whether this path is a junction or symbolic link rather than a real directory.
+    ///
+    /// <see cref="DirectoryExists"/> answers true for a junction and says nothing about it, so a
+    /// target reached by name rather than by <see cref="ChildDirectories.Under"/> needs this to
+    /// uphold the same rule: a link points at a tree the caller never classified, and deleting
+    /// through it leaves the tree the plan described. A path that is not there is not a reparse
+    /// point, which is the answer a caller wants rather than an exception.
+    /// </summary>
+    public static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            var attributes = File.GetAttributes(Extended(path));
+
+            return attributes.HasFlag(FileAttributes.ReparsePoint);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
 }

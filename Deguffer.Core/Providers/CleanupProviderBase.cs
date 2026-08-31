@@ -166,31 +166,4 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
         return (steps, measured);
     }
-
-    /// <summary>
-    /// The directory children of a tool root, for §5.2's recognised-child classification.
-    ///
-    /// A reparse point is never returned. A junction under a tool root points at a tree this
-    /// provider has never classified, so deleting through it escapes the plan the user approved.
-    /// An unreadable root yields nothing, which §5.3 makes the normal answer rather than an error.
-    ///
-    /// Shared rather than per-provider because both of those are safety facts, and the third
-    /// hand-written copy is where one of them goes missing.
-    /// </summary>
-    protected static IReadOnlyList<DirectoryInfo> EnumerateChildDirectories(string root)
-    {
-        try
-        {
-            return
-            [
-                .. new DirectoryInfo(LongPath.Extended(root))
-                    .EnumerateDirectories()
-                    .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint)),
-            ];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            return [];
-        }
-    }
 }

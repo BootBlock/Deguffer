@@ -33,6 +33,15 @@ public interface IFileSystem
     bool DirectoryExists(string path);
 
     /// <summary>
+    /// Whether <paramref name="path"/> is a junction or symbolic link.
+    ///
+    /// Asked of the removal root, which is the one entry no enumeration ever classifies: every
+    /// other entry arrives through <see cref="EnumerateEntries"/> carrying
+    /// <see cref="FileSystemEntry.IsReparsePoint"/> already.
+    /// </summary>
+    bool IsReparsePoint(string path);
+
+    /// <summary>
     /// The immediate children of <paramref name="directory"/>, materialised so that an enumeration
     /// failure surfaces here rather than part-way through a deletion.
     /// </summary>
@@ -60,6 +69,8 @@ public sealed class WindowsFileSystem : IFileSystem
     }
 
     public bool DirectoryExists(string path) => Directory.Exists(path);
+
+    public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
 
     public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) =>
         new DirectoryInfo(directory)

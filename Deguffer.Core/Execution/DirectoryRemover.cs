@@ -41,6 +41,19 @@ public static class DirectoryRemover
             return new RemovalOutcome(0, 0, RootRemoved: true);
         }
 
+        // The root is the one entry no enumeration classified, so it is the one place a link can
+        // still be walked through. Enumerating a junction returns the target's children, which are
+        // ordinary directories and files, so Gather would delete a tree nobody looked at and the
+        // §5.6 negative — written against paths inside the profile — would pass. Remove the link
+        // and stop, exactly as Gather does for a link it finds below.
+        if (fs.IsReparsePoint(extended))
+        {
+            TryDeleteDirectory(extended, fs);
+            progress?.Report(1.0);
+
+            return new RemovalOutcome(0, 0, RootRemoved: !fs.DirectoryExists(extended));
+        }
+
         // Two passes: gather the tree first so progress is a real fraction rather than a guess,
         // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
         // leave us deleting a partially-understood tree.

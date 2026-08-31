@@ -133,9 +133,16 @@ NVIDIA caches and holds account and sign-in state, not shader blobs — and it i
 folder, so the rule that classifies folders never sees it at all. Deguffer names it explicitly and
 asserts it survived the run, the same treatment `gradle.properties` gets.
 
-The same applies to anything else you find in there. `%LOCALAPPDATA%\Intel` in particular is a
-shared Intel folder holding several unrelated products; Deguffer takes `ShaderCache` from it and
-tells you what it is leaving behind.
+Any other **folder** you find in there gets the same treatment: unrecognised means untouched, and
+Deguffer says so and asserts it survived. `%LOCALAPPDATA%\Intel` in particular is a shared Intel
+folder holding several unrelated products; Deguffer takes `ShaderCache` from it and tells you what
+it is leaving behind. A **file** sitting loose in one of these folders is never a candidate either —
+nothing Deguffer deletes here is a file — but only `accounts` is named, so only `accounts` gets the
+explicit survival check.
+
+Deguffer also refuses to delete through a link. If you have redirected `%LOCALAPPDATA%\D3DSCache` to
+another drive with a junction, it removes nothing and tells you why: what the link points at is a
+folder it never looked inside.
 
 ### What it costs you
 

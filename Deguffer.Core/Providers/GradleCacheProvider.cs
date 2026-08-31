@@ -73,7 +73,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             return EmptyPlan("Gradle is not installed for this user — no .gradle directory.");
         }
 
-        foreach (var child in EnumerateChildDirectories(_root))
+        foreach (var child in ChildDirectories.Under(_root))
         {
             ct.ThrowIfCancellationRequested();
 

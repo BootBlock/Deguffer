@@ -22,6 +22,12 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         return inner.DirectoryExists(path);
     }
 
+    public bool IsReparsePoint(string path)
+    {
+        _paths.Enqueue(path);
+        return inner.IsReparsePoint(path);
+    }
+
     public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory)
     {
         _paths.Enqueue(directory);

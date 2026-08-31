@@ -49,7 +49,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// </summary>
     public static readonly IReadOnlyList<ShaderCacheRoot> Roots =
     [
-        new ShaderCacheRoot("NVIDIA", "NVIDIA", new DisposableChildSet(
+        new ShaderCacheRoot("NVIDIA", new DisposableChildSet(
         [
             new ChildClassification(
                 "DXCache",
@@ -61,14 +61,14 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 "Compiled OpenGL and Vulkan program binaries. The driver rebuilds them on demand."),
         ]),
         [("accounts", "NVIDIA account and sign-in state. It sits beside the caches and is not one.")]),
-        new ShaderCacheRoot("AMD", "AMD", new DisposableChildSet(
+        new ShaderCacheRoot("AMD", new DisposableChildSet(
         [
             new ChildClassification(
                 "DxCache",
                 SafetyTier.RegenerableCache,
                 "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
         ]), []),
-        new ShaderCacheRoot("Intel", "Intel", new DisposableChildSet(
+        new ShaderCacheRoot("Intel", new DisposableChildSet(
         [
             new ChildClassification(
                 "ShaderCache",
@@ -119,9 +119,6 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     public IReadOnlyList<string> RootPaths =>
         [.. Roots.Select(r => Path.Combine(Environment.LocalAppData, r.DirectoryName))];
 
-    /// <summary>The Direct3D system cache path on this machine.</summary>
-    public string Direct3DCachePath => _direct3DCache;
-
     /// <summary>
     /// Presence is a cache actually on disk, never a vendor directory existing.
     /// <c>%LOCALAPPDATA%\Intel</c> is present on machines with no Intel graphics cache at all, and
@@ -150,7 +147,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             survivors.Add((
                 rootPath,
-                $"The {root.Vendor} directory itself must survive — only its known-disposable children are removed."));
+                $"The {root.DirectoryName} directory itself must survive — only its known-disposable children are removed."));
 
             survivors.AddRange(root.ProtectedNames.Select(p => (Path.Combine(rootPath, p.Name), p.Reason)));
 
@@ -159,9 +156,27 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
         if (LongPath.DirectoryExists(_direct3DCache))
         {
-            targets.Add(new DeletionTarget(
-                _direct3DCache,
-                "Direct3D's own compiled shader cache. Windows re-creates it and the driver refills it on demand."));
+            // Reached by name rather than through ChildDirectories.Under, so the reparse check that
+            // protects every other target has to be made here. Redirecting a shader cache to another
+            // volume with a junction is common, and a plan naming this path while deleting whatever
+            // it points at is the §5.2 failure in its worst form: the user approved one tree and
+            // another went.
+            if (LongPath.IsReparsePoint(_direct3DCache))
+            {
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    $"Leaving '{Direct3DCacheName}' alone: it is a link to somewhere else, and Deguffer " +
+                    "does not delete through a link."));
+                declined.Add((
+                    _direct3DCache,
+                    "A link rather than a directory, so what it points at was never classified."));
+            }
+            else
+            {
+                targets.Add(new DeletionTarget(
+                    _direct3DCache,
+                    "Direct3D's own compiled shader cache. Windows re-creates it and the driver refills it on demand."));
+            }
         }
 
         if (targets.Count == 0 && declined.Count == 0)
@@ -169,8 +184,10 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             return EmptyPlan("No graphics driver has written a shader cache for this user.");
         }
 
-        // The profile's local app data is the parent of every target, and the only §5.6 assertion
-        // available for the one target that is a whole directory rather than a recognised child.
+        // The parent of every target. A weak assertion on its own — an over-broad rule that emptied
+        // the profile would leave the directory standing — but it is the only one a whole-directory
+        // target under a shared parent admits, and the vendor roots above are its siblings, so on
+        // any machine with a vendor cache the negative has real subjects too.
         survivors.Add((
             Environment.LocalAppData,
             "The profile's local application data must survive — only named shader caches inside it are removed."));
@@ -209,7 +226,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         List<PlanNote> notes,
         CancellationToken ct)
     {
-        foreach (var child in EnumerateChildDirectories(rootPath))
+        foreach (var child in ChildDirectories.Under(rootPath))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -222,7 +239,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 // unqualified note would leave the user unable to tell which one it meant.
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"Leaving '{root.Vendor}\\{child.Name}' alone: {classification.Reason}"));
+                    $"Leaving '{root.DirectoryName}\\{child.Name}' alone: {classification.Reason}"));
                 declined.Add((path, classification.Reason));
                 continue;
             }

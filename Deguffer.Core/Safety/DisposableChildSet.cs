@@ -45,8 +45,13 @@ public sealed class DisposableChildSet
     ///
     /// A root existing is not evidence that the cache inside it does — a vendor directory holding
     /// only unrelated products would otherwise report a toolchain as present and then plan nothing.
-    /// Only the offerable entries are listed: a name declared here at Tier 3 or 4 is a documented
-    /// trap, and treating it as a reason to claim presence would invert that.
+    ///
+    /// Listed by <see cref="SafetyTierExtensions.IsOfferable"/>, so a name declared here at Tier 4
+    /// is excluded: it is a documented trap, and treating it as a reason to claim presence would
+    /// invert that. Tier 2 and Tier 3 names are included, because those are offered to the user and
+    /// so are genuinely something to report. A provider whose own tier is narrower than that owes
+    /// itself a test over its declarations — see
+    /// <c>GpuShaderCacheProviderTests.EveryDeclaredChildIsTheTierTheProviderClaims</c>.
     /// </summary>
     public IEnumerable<string> DisposableNames =>
         _known.Values.Where(c => c.Tier.IsOfferable()).Select(c => c.Name);

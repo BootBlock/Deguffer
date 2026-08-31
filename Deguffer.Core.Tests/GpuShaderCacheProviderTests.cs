@@ -45,8 +45,9 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §8's lesson from the Unreal cache, applied before it could bite: a vendor directory exists on
-    /// machines with no graphics cache in it at all, so existence of the root proves nothing.
+    /// The lesson from the Unreal cache in <c>docs/todo/unreached-locations.md</c> §8, applied before
+    /// it could bite: a vendor directory exists on machines with no graphics cache in it at all, so
+    /// existence of the root proves nothing.
     /// </summary>
     [Fact]
     public async Task AVendorDirectoryHoldingNoCacheIsNotPresence()
@@ -127,6 +128,75 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The Direct3D cache is reached by name, so it is the one target no enumeration filtered. A
+    /// junction there is the §5.2 failure in its worst form: the plan names a path inside the
+    /// profile and the deletion lands wherever the link points, which the §5.6 negative — written
+    /// against paths inside the profile — cannot detect. Redirecting a shader cache to another
+    /// volume this way is common.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedDirect3DCacheIsNeverATargetAndIsNotDeletedThrough()
+    {
+        var outside = Path.Combine(_temp.Path, "precious");
+        Directory.CreateDirectory(outside);
+        var bystander = Path.Combine(outside, "irreplaceable.bin");
+        File.WriteAllBytes(bystander, new byte[4096]);
+
+        var link = Path.Combine(_environment.LocalAppData, "D3DSCache");
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(link, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("D3DSCache", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(outside), "planning followed a link out of the profile");
+        Assert.True(File.Exists(bystander), "a file outside the profile was destroyed");
+    }
+
+    /// <summary>
+    /// §5.6 for the whole-directory target, against a real neighbour rather than only against the
+    /// profile directory. An over-broad rule that took the parent's contents leaves the parent
+    /// standing, so the parent alone is close to unfalsifiable; a sibling is not.
+    /// </summary>
+    [Fact]
+    public async Task ASiblingOfTheDirect3DCacheSurvivesTheRun()
+    {
+        CreateCache("D3DSCache");
+        var neighbour = CreateCache("SomeOtherApplication");
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(Path.Combine(_environment.LocalAppData, "D3DSCache")));
+        Assert.True(Directory.Exists(neighbour), "a neighbour of the Direct3D cache was removed with it.");
+    }
+
+    /// <summary>
+    /// The table is designed to grow, and a child declared above Tier 1 would be planned under this
+    /// provider's Tier 1 sentence and pre-selected, because a plan carries the provider's tier
+    /// rather than the child's. <see cref="DisposableChildSet"/> offers Tier 2 and Tier 3 names, so
+    /// nothing below this test would catch it.
+    /// </summary>
+    [Fact]
+    public void EveryDeclaredChildIsTheTierTheProviderClaims()
+    {
+        var provider = CreateProvider();
+
+        foreach (var root in GpuShaderCacheProvider.Roots)
+        {
+            foreach (var name in root.Children.DisposableNames)
+            {
+                Assert.Equal(provider.Tier, root.Children.Classify(name).Tier);
+            }
+        }
+    }
+
+    /// <summary>
     /// §5.2's dangerous direction is an unknown child treated as safe, so a directory the table does
     /// not name must land in Tier 4 and be asserted to survive rather than merely omitted.
     /// </summary>
@@ -136,7 +206,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateCache(Path.Combine("NVIDIA", "DXCache"));
         var sibling = CreateCache(Path.Combine("NVIDIA", "Telemetry"));
 
-        var nvidia = GpuShaderCacheProvider.Roots.Single(r => r.Vendor == "NVIDIA");
+        var nvidia = GpuShaderCacheProvider.Roots.Single(r => r.DirectoryName == "NVIDIA");
         Assert.Equal(SafetyTier.DoNotTouch, nvidia.Children.Classify("Telemetry").Tier);
 
         var provider = CreateProvider();
@@ -194,7 +264,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var amdGlCache = CreateCache(Path.Combine("AMD", "GLCache"));
         CreateCache(Path.Combine("AMD", "DxCache"));
 
-        var amd = GpuShaderCacheProvider.Roots.Single(r => r.Vendor == "AMD");
+        var amd = GpuShaderCacheProvider.Roots.Single(r => r.DirectoryName == "AMD");
         Assert.Equal(SafetyTier.DoNotTouch, amd.Children.Classify("GLCache").Tier);
 
         var plan = await CreateProvider().PlanAsync();
@@ -245,7 +315,15 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     /// <summary>
     /// §6.3: a shader cache is a flat store of thousands of blobs, but the profile it sits in can
     /// already be deep. Measurement and deletion must both survive a target whose contents run past
-    /// MAX_PATH. This assertion is weaker on a machine with <c>LongPathsEnabled</c> set.
+    /// MAX_PATH.
+    ///
+    /// A smoke test, and knowingly so. <c>docs/todo/after-the-scanner.md</c> establishes that an
+    /// outcome-based long-path test discriminates on no machine at all: .NET prepends <c>\\?\</c>
+    /// itself to any path of 260 characters or more before calling Win32, so this passes with
+    /// <see cref="LongPath.Extended"/> deleted outright. What actually proves Core applies the
+    /// prefix is <c>DirectoryRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm</c>,
+    /// which asserts on the form of every path crossing <see cref="IFileSystem"/>. This one still
+    /// earns its place as a crash guard over a deep tree.
     /// </summary>
     [Fact]
     public async Task MeasuresAndRemovesContentPastMaxPath()

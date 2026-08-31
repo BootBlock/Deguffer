@@ -135,7 +135,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
 
-        foreach (var child in EnumerateChildDirectories(root))
+        foreach (var child in ChildDirectories.Under(root))
         {
             ct.ThrowIfCancellationRequested();
 
