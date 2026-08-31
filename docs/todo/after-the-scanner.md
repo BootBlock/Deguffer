@@ -9,6 +9,12 @@ landed on `feature/mft-scanner`. This is what follows, in the order it should be
 reasoning that produced that order, so a later reader can disagree with the reasoning rather than
 guess at it.
 
+The items below are drawn from the founding audit's own tables, which describe one machine on one
+day. [unreached-locations.md](unreached-locations.md) is the wider survey: what the shipped
+providers do not reach, researched against vendor documentation and measured. Item 4b already
+observed that the audit tables are not the set of caches worth knowing about; that document is the
+set.
+
 ---
 
 ## 0. Blocking — verify the elevated MFT read ✅ done
