@@ -41,8 +41,8 @@ public abstract record CleanupStep
     /// A different claim from <see cref="FallbackReason.NotElevated"/>, which says a *measurement*
     /// took the slow route. This one says the step can be seen and cannot be performed, and the two
     /// are independent: a location under <c>C:\Windows</c> needs elevation to remove however its
-    /// size was arrived at. Both are answered by the same offer, which is why
-    /// <see cref="ElevationOffer"/> now reads both.
+    /// size was arrived at. Both are answered by the same offer, and
+    /// <see cref="ElevationOffer"/> reads both.
     ///
     /// A declaration by the provider rather than something derived from the path. Deriving it would
     /// mean a rule about which directories Windows protects, which is exactly the kind of guess §5.2
@@ -80,9 +80,10 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 /// this type, so a new kind of deletion joins the §5.2 assertions and the §5.6 negative by
 /// construction rather than by somebody remembering to update two <c>OfType</c> clauses.
 ///
-/// It is deliberately narrower than "a new kind of step". §10's cloud-sync dehydration frees space
-/// while leaving the file present and readable, so it will be a sibling of this and of
-/// <see cref="RunCommandStep"/> under <see cref="CleanupStep"/> — and it must *not* appear in
+/// It is deliberately narrower than "a new kind of step". The cloud-sync dehydration in
+/// <c>docs/todo/unreached-locations.md</c> §10 frees space while leaving the file present and
+/// readable, so it will be a sibling of this and of <see cref="RunCommandStep"/> under
+/// <see cref="CleanupStep"/> — and it must *not* appear in
 /// <see cref="CleanupPlan.TargetedPaths"/>, because it destroys nothing.
 /// </summary>
 /// <param name="Path">The path that will be removed, in display form.</param>

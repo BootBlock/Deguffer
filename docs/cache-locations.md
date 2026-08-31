@@ -529,8 +529,13 @@ than a failure.
 
 ### What is protected
 
-The same as above: the Windows directory, every folder passed through on the way down, `WinSxS`,
-`Windows\Installer`, and everything Deguffer never named. All of it is checked after the run.
+The Windows directory, every folder passed through on the way down, `WinSxS` and
+`Windows\Installer` — all of those are named in the plan and checked after the run.
+
+Everything else in there is protected differently, and the difference is worth knowing: it is never
+reached, rather than reached and then spared. Deguffer holds a list of exact paths and never asks
+what else is in the folder, so a folder it does not name is not something it decided to keep — it is
+something it never looked at.
 
 ### What it costs you
 

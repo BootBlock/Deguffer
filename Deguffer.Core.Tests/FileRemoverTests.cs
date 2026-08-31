@@ -80,6 +80,30 @@ public sealed class FileRemoverTests : IDisposable
         Assert.True(File.Exists(bystander), "a file was deleted through a link");
     }
 
+    /// <summary>
+    /// A link whose target has gone — a redirected dump location whose far side was cleaned up.
+    ///
+    /// This pins the outcome and not the mechanism, and it is worth saying which. Windows reports a
+    /// dangling link as an existing file of zero length, so the removal reaches the same answer
+    /// whether or not <see cref="FileRemover"/> checks for a link first. The case is pinned because
+    /// it is a real one and its correct answer is not obvious, not because it discriminates.
+    /// </summary>
+    [Fact]
+    public async Task ALinkWhoseTargetHasGoneIsStillRemoved()
+    {
+        var target = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+        var link = Path.Combine(_temp.CreateDirectory("dumps"), "MEMORY.DMP");
+
+        File.CreateSymbolicLink(link, target);
+        File.Delete(target);
+
+        var outcome = await FileRemover.RemoveAsync(link);
+
+        Assert.True(outcome.Removed);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.False(LongPath.IsReparsePoint(link), "a dangling link was reported removed and left in place");
+    }
+
     /// <summary>§5.3: something holding the file open is the OS protecting live state, not a fault.</summary>
     [Fact]
     public async Task AFileHeldOpenIsSkippedRatherThanFailing()
@@ -107,6 +131,49 @@ public sealed class FileRemoverTests : IDisposable
 
         Assert.True(outcome.Removed);
         Assert.Equal(1024, outcome.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// The file goes between the probe and the delete — a dump WER tidied up, or an update
+    /// finishing. <see cref="DirectoryRemover"/> treats the identical race as a success, and
+    /// <see cref="DirectoryNotFoundException"/> derives from <see cref="IOException"/>, so without
+    /// its own arm the skip path would claim Windows would not release a file that is not there.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(FileNotFoundException))]
+    [InlineData(typeof(DirectoryNotFoundException))]
+    public async Task AFileThatVanishesDuringTheDeleteIsRemovedRatherThanSkipped(Type thrown)
+    {
+        var file = _temp.CreateFile(2048, "dumps", "MEMORY.DMP");
+
+        var outcome = await FileRemover.RemoveAsync(
+            file, default, new VanishingFileSystem(WindowsFileSystem.Default, thrown));
+
+        Assert.True(outcome.Removed);
+        Assert.Equal(0, outcome.Skipped);
+    }
+
+    /// <summary>
+    /// The real filesystem, except that the delete finds the path already gone. The race cannot be
+    /// staged against a real disk, and <see cref="IFileSystem"/> exists precisely so a removal's
+    /// behaviour is provable without one.
+    /// </summary>
+    private sealed class VanishingFileSystem(IFileSystem inner, Type thrown) : IFileSystem
+    {
+        public bool DirectoryExists(string path) => inner.DirectoryExists(path);
+
+        public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+
+        public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) =>
+            inner.EnumerateEntries(directory);
+
+        public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
+
+        public void DeleteFile(string path) => throw (Exception)Activator.CreateInstance(thrown)!;
+
+        public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
+
+        public void ClearAttributes(string path) => inner.ClearAttributes(path);
     }
 
     /// <summary>

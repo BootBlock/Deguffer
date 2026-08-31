@@ -3,7 +3,11 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Execution;
 
 /// <param name="BytesReclaimed">The file's length, or zero if it was left in place.</param>
-/// <param name="Skipped">1 when something held the file open (§5.3), 0 otherwise.</param>
+/// <param name="Skipped">
+/// 1 when the file was left in place, 0 otherwise. §5.3 makes that ordinary rather than a fault,
+/// and it names no cause: a file held open and one this process may not touch are the same answer
+/// from here, which is the distinction <see cref="PlanExecutor"/> is careful not to assert either.
+/// </param>
 /// <param name="Removed">Whether the file is gone.</param>
 public sealed record FileRemovalOutcome(long BytesReclaimed, int Skipped, bool Removed);
 
@@ -37,27 +41,38 @@ public static class FileRemover
     {
         var extended = LongPath.Extended(path);
 
-        // Measured before the deletion, because afterwards there is nothing to ask. Zero for a file
-        // that has already gone, which is then reported as removed rather than as skipped: the
-        // post-condition the caller cares about holds either way.
-        var length = fs.TryGetFileLength(extended);
-
-        if (length is null)
-        {
-            // Either it went between planning and now, or something that is not a file has taken
-            // the name. Neither is this step's to act on, and only the first counts as removed.
-            return new FileRemovalOutcome(0, 0, Removed: !fs.DirectoryExists(extended));
-        }
-
-        // A link is deleted as a link by File.Delete, so what it points at is untouched — but the
-        // length above is the link's own, not the target's, and reporting the target's size as
-        // reclaimed would overstate the run.
+        // A link is removed as a link, and nothing on the far side counts as reclaimed.
+        //
+        // This changes no outcome on Windows today, which is worth saying rather than implying:
+        // File.Delete already removes a link instead of what it points at, and FileInfo.Length
+        // already reports the link's own zero rather than the target's — measured here for a live
+        // link and a dangling one alike. The branch is kept because both of those are the
+        // platform's behaviour and not this code's, and a safety property riding on an unstated one
+        // is exactly how the shader caches came to enumerate through a junction. Stated here, the
+        // zero and the link-not-target removal are decisions a reader can check.
         if (fs.IsReparsePoint(extended))
         {
-            fs.DeleteFile(extended);
-            return new FileRemovalOutcome(0, 0, Removed: true);
+            return Delete(extended, fs, reclaimed: 0);
         }
 
+        // Something that is not a file has taken the name. Not this step's to remove, and the
+        // read-only retry below would otherwise clear a directory's own attributes on the way to
+        // failing anyway.
+        if (fs.DirectoryExists(extended))
+        {
+            return new FileRemovalOutcome(0, 0, Removed: false);
+        }
+
+        // Measured before the deletion, because afterwards there is nothing to ask. An unknown
+        // length covers both "already gone" and "we were refused", and the deletion is what
+        // separates them: removing a path that is not there succeeds silently, and one we may not
+        // touch throws. Deciding it here from an existence check instead reported "Removed." for a
+        // file that was still on the disk, because a refusal and an absence look the same to one.
+        return Delete(extended, fs, fs.TryGetFileLength(extended) ?? 0);
+    }
+
+    private static FileRemovalOutcome Delete(string extended, IFileSystem fs, long reclaimed)
+    {
         try
         {
             fs.DeleteFile(extended);
@@ -75,12 +90,20 @@ public static class FileRemover
                 return new FileRemovalOutcome(0, 1, Removed: false);
             }
         }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // It went between the probe and the delete. The post-condition holds, so this is the
+            // same success DirectoryRemover.TryDeleteFile reports for the identical race — and
+            // DirectoryNotFoundException derives from IOException, so without this arm the catch
+            // below would call a file that is gone "left in place".
+            return new FileRemovalOutcome(0, 0, Removed: true);
+        }
         catch (IOException)
         {
             // Held open — a dump still being written, most likely. §5.3: skip it.
             return new FileRemovalOutcome(0, 1, Removed: false);
         }
 
-        return new FileRemovalOutcome(length.Value, 0, Removed: true);
+        return new FileRemovalOutcome(reclaimed, 0, Removed: true);
     }
 }

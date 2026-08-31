@@ -14,10 +14,15 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class StepViewModel : ObservableObject
 {
-    public StepViewModel(CleanupStep step, bool isSelected)
+    /// <param name="preSelect">
+    /// What §3's "Default" column says for the owning row. It is honoured only where this step can
+    /// actually be acted on, so the caller states the row's intent and the answer to "may this be
+    /// ticked?" stays in one place — see <see cref="CanBeSelected"/>.
+    /// </param>
+    public StepViewModel(CleanupStep step, bool preSelect)
     {
         Step = step;
-        IsSelected = isSelected;
+        IsSelected = preSelect && CanBeSelected;
     }
 
     public CleanupStep Step { get; }

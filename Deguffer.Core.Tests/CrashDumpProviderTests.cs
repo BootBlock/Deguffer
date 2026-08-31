@@ -377,25 +377,45 @@ public sealed class CrashDumpProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The declaration itself, held to §5.2's shape: no root is ever among the paths this provider
-    /// could target, and every root reaching into the Windows directory carries §9's exclusions.
+    /// The declaration itself, pinned by name rather than by shape.
+    ///
+    /// Asserting that a root is absent from its own targets proves nothing: a target is built by
+    /// combining the root with a relative path, so only an empty relative path could make the two
+    /// equal. What has to hold is that the declared set is exactly these six, since a seventh entry
+    /// added without a test is a path nobody decided to delete — and that only <c>MEMORY.DMP</c> is
+    /// a file, since a directory declared as a file would be measured and removed by the wrong code.
     /// </summary>
     [Fact]
-    public void NoDeclaredRootIsEverAmongTheDeclaredTargets()
+    public void TheDeclarationIsTheSixPathsAndNothingElse()
     {
         var provider = CreateProvider();
 
-        var targets = provider.Roots
-            .SelectMany(r => r.Locations.Select(l => Path.Combine(r.Path, l.RelativePath)))
-            .ToList();
+        Assert.Equal(
+            [
+                Path.Combine(_environment.LocalAppData, "CrashDumps"),
+                Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportArchive"),
+                Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportQueue"),
+                Path.Combine(Windows, "LiveKernelReports"),
+                Path.Combine(Windows, "Minidump"),
+                Path.Combine(Windows, "MEMORY.DMP"),
+            ],
+            provider.Roots.SelectMany(r => r.Locations.Select(l => Path.Combine(r.Path, l.RelativePath))));
 
-        Assert.All(provider.Roots, root =>
-            Assert.DoesNotContain(root.Path, targets, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(
+            ["MEMORY.DMP"],
+            provider.Roots
+                .SelectMany(r => r.Locations)
+                .Where(l => l.Kind == DeclaredLocationKind.File)
+                .Select(l => l.RelativePath));
 
         var windowsRoot = Assert.Single(provider.Roots, r =>
             r.Path.Equals(Windows, StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(WindowsSystemRoot.Exclusions, windowsRoot.ProtectedNames);
         Assert.True(windowsRoot.RequiresElevation);
+
+        // The profile's own folder is the one root that does not, which is what makes the
+        // per-step elevation claim a real distinction rather than a constant.
+        Assert.Contains(provider.Roots, r => !r.RequiresElevation);
     }
 }

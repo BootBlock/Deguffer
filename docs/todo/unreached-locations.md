@@ -372,8 +372,10 @@ reaching into `C:\Windows` at all.
   `Windows\Installer` as targets proves nothing, because §5.6's whole point is that an over-broad
   rule passes every positive assertion. They are now named survivors on the declaration itself —
   `WindowsSystemRoot.Holding` carries them, so any future provider reaching into that directory gets
-  them by construction rather than by remembering — and both provider test classes execute a plan and
-  assert the exclusions, the installer package cache and an unnamed neighbour all still standing.
+  them by construction rather than by remembering. Both provider test classes execute a plan and
+  assert `WinSxS`, `Windows\Installer` and an unnamed neighbour still standing afterwards; the
+  installer package cache sits under `%PROGRAMDATA%` and so is asserted by the crash-dump class
+  alone, which is the only one declaring that root.
 
 - **`MEMORY.DMP` needed a second kind of deletion, and the shape §10 inherits is the split rather
   than the step.** `DeleteFileStep` is trivial; what mattered was where it sits. Both deletions now
@@ -420,6 +422,55 @@ measured directly and reported as `ScanStrategy.DirectRead`, because a `stat` is
 should not carry a sentence apologising for one. And a plan whose every target turned out to be a
 link collapsed to "nothing found", dropping the note that explained the refusal, which is the
 "quietly disagrees with the folder" failure `RecycleBinProvider` guards against and this one did not.
+
+Four residuals the work leaves behind, each documented rather than fixed and each for a stated
+reason. They are recorded here because the next person reaching into a system directory meets all
+four, and none of them is visible from the code alone.
+
+- **The reparse predicate reports "I could not tell" as "it is a link".** `LongPath.IsReparsePoint`
+  answers true for three outcomes — it is a link, we were refused, or the path could not be read —
+  and fails closed deliberately, which is right for a predicate guarding a deletion. What is new is
+  that this is the first caller to turn the answer into *prose*: the plan tells the user the folder
+  "is a link to somewhere else", and §5.6's report records the same as the reason it survived. On a
+  hardened machine an ACL on `%PROGRAMDATA%\Microsoft\Windows\WER` produces that sentence about an
+  ordinary directory. The decline is correct either way, so nothing is at risk; the wording is
+  wrong. **It is not fixed here because it is not this provider's wording.** The GPU shader caches
+  and the Recycle Bin say the same thing from the same predicate, so the fix is a three-way answer
+  from the seam and three providers updated together, and doing it in one would leave the three
+  disagreeing about the same fact.
+
+- **The ancestor check is made at plan time, and only the target is re-checked at execution.** Every
+  directory between a declared root and a nested target is tested for being a link while the plan is
+  built, and `DirectoryRemover` and `FileRemover` re-test the target itself before removing it — but
+  not the path above it. A container that becomes a junction between the preview and the clean is
+  therefore walked through, and the §5.6 negative still passes, because every survivor named for
+  that root resolves through the link. This is the first provider with targets several levels below
+  their root, so the exposure is new in degree rather than in kind. It is admin-to-admin — the only
+  nested targets are under `C:\Windows` and `%PROGRAMDATA%\Microsoft`, both of which need
+  administrator rights to write *and* to clean — and the correct fix is at the `DeleteStep`
+  execution seam for every provider, which needs a boundary the remover is not currently given.
+
+- **§9's closing sentence and this provider's name collide, and the position should be explicit.**
+  §9 excludes "Windows component cleanup" and names `WinSxS`, `Windows\Installer` and the installer
+  package caches, then generalises to "should not stake that trust on Windows servicing internals".
+  A provider called *Windows servicing logs*, targeting `Logs\CBS`, is close enough to that sentence
+  to deserve a stated reading rather than an inferred one. The reading taken: §9's subject is the
+  component store and the installer database, whose failure modes are a broken uninstall and an
+  unbootable rollback; a log is a record of servicing rather than a part of it, and removing one
+  cannot break either. §3 places logs in Tier 3, which is where they landed, and that is the
+  treatment §9's caution asks for short of exclusion. **If the maintainer reads §9 more broadly,
+  this provider belongs beside `WinSxS` and the entry moves to §9 rather than shipping.**
+
+- **Each target is removed whole, and the directory coming back is an assumption rather than an
+  observation.** `DirectoryRemover` removes the root once it is empty, so `Logs\CBS`, `Minidump`,
+  `RtBackup` and the rest go rather than being emptied. Every one of them is re-created by whatever
+  writes into it — the servicing stack, the kernel's dump writer, the WMI autologger — which is the
+  same shape `RecycleBinProvider` and `D3DSCache` already rely on, and which is what
+  `WhatHappensOnNextUse` tells the user. **It has not been observed here**, because observing it
+  means causing a bugcheck or an update. Nothing turns on it that a wrong answer would make
+  dangerous: the failure would be a folder that stays missing until the next writer creates it, not
+  a loss. Worth confirming on a machine that takes an update, and worth knowing that a
+  keep-the-directory removal mode does not exist and would be the fix if the assumption is wrong.
 
 Left out deliberately: `C:\$WinREAgent` and its siblings, which need the pending-restart check
 established first and are still where this section left them; the Windows Search index, which needs

@@ -27,10 +27,15 @@ public sealed partial class FindingViewModel : ObservableObject
         Notes = [.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
         Steps =
         [
-            // A step with nothing to reclaim starts unticked whatever the finding's default is:
+            // A step that cannot be acted on starts unticked whatever the finding's default is:
             // its checkbox is disabled, so ticking it would leave the user a selection they have
             // no way to clear, and the row-level toggle skips it for the same reason.
-            .. finding.Plan?.Steps.Select(s => new StepViewModel(s, finding.IsPreSelectedByDefault && s.EstimatedBytes > 0)
+            //
+            // The condition is StepViewModel's own rather than a copy of it. Written out here it
+            // was a copy, and it went stale the moment a second reason to disable a checkbox
+            // arrived — a step needing administrator rights would have started ticked, rendered
+            // disabled, and been skipped by the loop that clears the row.
+            .. finding.Plan?.Steps.Select(s => new StepViewModel(s, finding.IsPreSelectedByDefault)
             {
                 // Only meaningful once the whole set is known, and a single step is the whole row.
                 IsIndividuallySelectable = finding.Plan.Steps.Count > 1,

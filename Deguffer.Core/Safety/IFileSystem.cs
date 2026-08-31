@@ -50,7 +50,7 @@ public interface IFileSystem
     /// <summary>
     /// The length of the file at <paramref name="path"/>, or null when no file is there.
     ///
-    /// Asked by <see cref="FileRemover"/>, which deletes a path it was named rather than one it
+    /// Asked by <see cref="Execution.FileRemover"/>, which deletes a path it was named rather than one it
     /// enumerated, so nothing has told it how large the file is. Null covers both "already gone"
     /// and "something that is not a file has that name", because neither is a thing to delete.
     /// </summary>

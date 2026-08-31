@@ -45,6 +45,9 @@ public static class DeclaredLocations
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
+    private static readonly char[] Separators =
+        [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+
     public static DeclaredLocationScan Examine(IReadOnlyList<DeclaredRoot> roots, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(roots);
@@ -114,8 +117,12 @@ public static class DeclaredLocations
         List<string> declined,
         List<PlanNote> notes)
     {
+        // Both separators, because Windows accepts both and the cost of missing one is silent. A
+        // declaration written as "Logs/CBS" would otherwise split into a single segment, skip the
+        // ancestor walk entirely, and still resolve to a valid path through Path.Combine — which is
+        // precisely the junctioned-container case the walk exists to catch.
         var segments = location.RelativePath.Split(
-            Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+            Separators, StringSplitOptions.RemoveEmptyEntries);
 
         var current = root.Path;
         var ancestors = new List<(string Path, string Reason)>(segments.Length);
@@ -169,6 +176,11 @@ public static class DeclaredLocations
     /// <summary>
     /// Leave a path alone because it is a link, and say so three ways: named to the user, asserted
     /// to have survived, and counted so the provider can tell this from an empty machine.
+    ///
+    /// Once per path, however many declarations run through it. Two locations under one container
+    /// each walk the whole chain down from the root, so a junctioned container is met once per
+    /// location — and the plan would carry the same sentence twice, which reads as two folders
+    /// rather than one.
     /// </summary>
     private static void Decline(
         string path,
@@ -176,6 +188,11 @@ public static class DeclaredLocations
         List<(string Path, string Reason)> protectedPaths,
         List<PlanNote> notes)
     {
+        if (declined.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         declined.Add(path);
         protectedPaths.Add((path, LinkReason));
         notes.Add(new PlanNote(

@@ -33,6 +33,17 @@ namespace Deguffer.Core.Providers;
 /// and this one says the removal cannot happen. Silently failing at execution time and quietly
 /// omitting the location are both worse than showing it and naming what it needs.</para>
 ///
+/// <para><b>§5.1 is answered rather than skipped, and the answer is "no".</b> Windows does ship a
+/// route: Disk Cleanup registers <c>VolumeCaches</c> handlers for the memory dump, the minidumps
+/// and the error reports, and <c>cleanmgr /sagerun</c> drives them. It is not used for the reason
+/// the Recycle Bin reached first — the preview outranks it. A handler cannot be selected without
+/// first writing <c>StateFlags</c> into the machine's own registry, which is a change to the user's
+/// Disk Cleanup configuration made on their behalf, and the run then reports nothing back. This
+/// plan names each location with a size and a date, and §5.6 asserts what survived beside it, none
+/// of which a call that returns a number for the volume could support. The second reason is §5.2:
+/// the whole safety property here is which paths under <c>C:\Windows</c> are reached, and handing
+/// that decision to a shell component puts it outside the code the rule is checkable in.</para>
+///
 /// <para><b>No age filter, deliberately.</b> A dump written this morning may be the only evidence in
 /// a bug report somebody is still writing, which is a real hazard — but the answer to it is the tier
 /// and the age column, not a cut-off. §5.3's exclusion for <c>%TEMP%</c> exists because live working

@@ -31,6 +31,20 @@ namespace Deguffer.Core.Providers;
 /// every directory passed through on the way down is checked for being a link and asserted to have
 /// survived.</para>
 ///
+/// <para><b>§5.1 does not apply, and it was checked rather than assumed.</b> Windows ships no
+/// eviction command for these. <c>DISM /StartComponentCleanup</c> addresses <c>WinSxS</c>, which §9
+/// excludes outright, and <c>wevtutil</c> addresses the <c>.evtx</c> event logs, which are a
+/// different location this provider does not touch. Disk Cleanup registers no handler for any of
+/// the four. Every published instruction is to delete the directory.</para>
+///
+/// <para><b>No age filter, for the reason <see cref="CrashDumpProvider"/> records, and the live
+/// case here is the sharper one.</b> Somebody diagnosing a failed update is reading exactly these
+/// files while Windows is writing them. A cut-off would be a guess about that, so the answer is the
+/// same: Tier 3 leaves the row unticked, and each row carries the newest write <em>inside</em> it
+/// rather than the directory's own timestamp — because a log is appended to, which moves the file
+/// and leaves the parent alone, and the directory alone would report a log being written this
+/// minute as months old.</para>
+///
 /// <para><b>Every one of these needs administrator rights</b>, so each step says so and the plan
 /// carries the sentence. §5.3 is also unusually live: the WMI service holds its own trace files
 /// open, and the servicing stack holds the log it is currently writing, so an access denial here is

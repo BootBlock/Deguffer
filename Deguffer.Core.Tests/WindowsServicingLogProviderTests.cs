@@ -244,15 +244,17 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A step that achieved nothing names administrator rights as a possible cause.
+    /// A step that achieved nothing reports that, without guessing why.
     ///
-    /// The outcome cannot tell the two apart: an unelevated delete under the Windows directory is
-    /// refused file by file, which arrives as the same skip a locked file produces. Reporting only
-    /// §5.3's "in use" would send the user looking for a process to close that is not there, and
-    /// that is the whole of what an unelevated run of this provider would say for itself.
+    /// The outcome cannot tell the two causes apart: an unelevated delete under the Windows
+    /// directory is refused file by file, which arrives as the same skip a locked file produces.
+    /// §5.3's "in use" wording would send the user looking for a process to close that is not there,
+    /// and naming administrator rights instead is advice the reader has already taken, because the
+    /// shell does not offer such a step to a process without them. So the message states what
+    /// happened, the plan states what needs administrator rights, and neither asserts the other.
     /// </summary>
     [Fact]
-    public async Task AStepThatAchievedNothingNamesAdministratorRightsAsACause()
+    public async Task AStepThatAchievedNothingSaysSoWithoutGuessingWhy()
     {
         var cbs = Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
 
@@ -268,7 +270,8 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         Assert.False(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);
-        Assert.Contains("administrator", outcome.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Removed", outcome.Message!, StringComparison.Ordinal);
+        Assert.Contains("1 item(s)", outcome.Message!, StringComparison.Ordinal);
         Assert.True(Directory.Exists(cbs));
     }
 
@@ -292,9 +295,16 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
-        Assert.Contains(plan.Notes, n =>
-            n.Message.Contains("Logs", StringComparison.Ordinal) &&
-            n.Message.Contains("link", StringComparison.Ordinal));
+
+        // Once, not twice. Two declarations sit under Logs and each walks the whole chain down from
+        // the root, so the container is met once per declaration — and one folder described twice
+        // reads as two folders.
+        var declines = plan.Notes
+            .Where(n => n.Message.Contains("link", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Single(declines);
+        Assert.Contains("Logs", declines[0].Message, StringComparison.Ordinal);
 
         await provider.ExecuteAsync(plan);
 
@@ -381,16 +391,30 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
             n.Message.Contains("TiWorker", StringComparison.Ordinal));
     }
 
-    /// <summary>The declaration itself: the Windows directory is never among its own targets.</summary>
+    /// <summary>
+    /// The declaration itself, pinned by name rather than by shape.
+    ///
+    /// Asserting that the root is absent from its own targets proves nothing on its own: a target is
+    /// built by combining the root with a relative path, so only an empty relative path could ever
+    /// make the two equal. What has to hold is that the declared set is exactly these four, since a
+    /// fifth entry added without a test is a path nobody decided to delete.
+    /// </summary>
     [Fact]
-    public void TheWindowsDirectoryIsNeverAmongTheDeclaredTargets()
+    public void TheDeclarationIsTheFourPathsAndNothingElse()
     {
         var root = Assert.Single(CreateProvider().Roots);
 
-        var targets = root.Locations.Select(l => Path.Combine(root.Path, l.RelativePath)).ToList();
-
         Assert.Equal(Windows, root.Path);
-        Assert.DoesNotContain(root.Path, targets, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            [
+                Path.Combine("Logs", "CBS"),
+                Path.Combine("Logs", "WindowsUpdate"),
+                "Panther",
+                Path.Combine("System32", "LogFiles", "WMI", "RtBackup"),
+            ],
+            root.Locations.Select(l => l.RelativePath));
+
+        Assert.All(root.Locations, l => Assert.Equal(DeclaredLocationKind.Directory, l.Kind));
         Assert.Equal(WindowsSystemRoot.Exclusions, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
     }

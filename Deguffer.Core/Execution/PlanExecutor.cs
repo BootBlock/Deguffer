@@ -98,7 +98,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
             ? removal.Skipped == 0
                 ? "Removed."
                 : $"Removed, {removal.Skipped} item(s) left in place because they were in use."
-            : WhyNothingHappened(step, removal.Skipped);
+            : WhyNothingHappened(removal.Skipped);
 
         return new StepOutcome(step.Description, succeeded, removal.BytesReclaimed, removal.Skipped, message);
     }
@@ -113,7 +113,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
         // One file, so there is no fraction to report along the way — only the end of it.
         progress.Report(1.0);
 
-        var message = removal.Removed ? "Removed." : WhyNothingHappened(step, removal.Skipped);
+        var message = removal.Removed ? "Removed." : WhyNothingHappened(removal.Skipped);
 
         return new StepOutcome(
             step.Description, removal.Removed, removal.BytesReclaimed, removal.Skipped, message);
@@ -122,24 +122,17 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
     /// <summary>
     /// The sentence for a deletion that achieved nothing.
     ///
-    /// A step declared as needing administrator rights says so, because from the outcome alone the
-    /// two causes are the same thing: an unelevated delete is refused per file, and that arrives as
-    /// exactly the skip a locked file produces. The §5.3 wording on its own would send the user
-    /// looking for a process to close that does not exist, so both are named and neither is
-    /// asserted. The shell does not offer such a step unelevated, so reaching here means something
-    /// went round that — and an outcome nobody can act on is the worst thing to report.
+    /// It names no cause, and that is the decision rather than an omission. The two available
+    /// causes are indistinguishable from here — an unelevated delete under the Windows directory is
+    /// refused file by file, which arrives as exactly the skip a locked file produces — and naming
+    /// either would be a guess. Naming <em>both</em> was tried and is worse: the shell does not
+    /// offer a step needing administrator rights to a process that has none, so this is reached
+    /// almost only on an elevated run, where "run as administrator" is advice the reader has
+    /// already taken. The plan carries what needs administrator rights; this reports what happened.
     /// </summary>
-    private static string WhyNothingHappened(DeleteStep step, int skipped)
-    {
-        var what = skipped == 0
-            ? "Nothing was removed."
-            : $"Nothing was removed: {skipped} item(s) were left in place.";
-
-        return step.RequiresElevation
-            ? what + " This location needs administrator rights, and without them every item is "
-                   + "refused — which looks exactly like something holding them open."
-            : what;
-    }
+    private static string WhyNothingHappened(int skipped) => skipped == 0
+        ? "Nothing was removed."
+        : $"Nothing was removed: Windows would not release {skipped} item(s).";
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {

@@ -176,8 +176,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         {
             var child = links.Children[i];
 
-            // Only directories carry names, so a file component never matches. That is correct for
-            // the caller's purpose: every path Deguffer measures is a directory.
+            // Only directories carry names, so a file component never matches. Deguffer does measure
+            // one file — C:\Windows\MEMORY.DMP — and this is why that measurement takes the walk:
+            // naming every file on a volume would cost a string per record, which is a poor trade
+            // for a single stat. See ScanStrategy.DirectRead, which is how the walk reports it.
             if (tree.Names[child] is { } candidate
                 && candidate.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
