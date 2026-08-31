@@ -61,7 +61,7 @@ public sealed class MftFixture
             MftRecordBytes.DirectoryStreamBytes,
             MftRecordBytes.DirectoryStreamBytes,
             DataPlacement.NonResident,
-            isReparsePoint: true));
+            MftRecordBytes.MountPointTag));
 
     /// <summary>
     /// A file that is a link rather than the thing it names — a symbolic link, or a placeholder a
@@ -71,7 +71,17 @@ public sealed class MftFixture
     public MftFixture AddFileLink(uint number, uint parent, string name, long logical) =>
         Add(number, MftRecordBytes.Build(
             Reference(parent), name, isDirectory: false, allocated: 0, logical, DataPlacement.NonResident,
-            isReparsePoint: true));
+            MftRecordBytes.SymbolicLinkTag));
+
+    /// <summary>
+    /// A file compressed in place by the Windows Overlay Filter. It carries a reparse point and is
+    /// not a link: the content is there, and a walk counts it because the filter hides the reparse
+    /// attribute from an ordinary enumeration.
+    /// </summary>
+    public MftFixture AddOverlayCompressedFile(uint number, uint parent, string name, long allocated, long logical) =>
+        Add(number, MftRecordBytes.Build(
+            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident,
+            MftRecordBytes.WindowsOverlayFilterTag));
 
     /// <summary>
     /// A file whose allocated and logical sizes may differ — the compressed or sparse case that a

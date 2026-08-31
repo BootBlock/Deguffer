@@ -79,6 +79,11 @@ public static class MftVolumeIndexBuilder
                     // A record in use that this reader cannot place is the same loss as a region it
                     // could not read: a file exists, the tree cannot hold it, and every directory
                     // above it would total short with nothing to show for it.
+                    //
+                    // The whole volume goes with it, and on a live read that can be one record
+                    // caught mid-write — the condition the update sequence array exists to detect,
+                    // and one a second read of that record alone would very likely settle. Retrying
+                    // is the improvement this wants; refusing is the answer that is never wrong.
                     if (outcome == MftParseOutcome.Unreadable)
                     {
                         return false;

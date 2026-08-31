@@ -29,6 +29,18 @@ internal static class MftRecordBytes
 
     private const int UsaOffset = 0x30;
 
+    /// <summary>Windows' own tags: the two that stand for another name, and one that does not.</summary>
+    public const uint MountPointTag = 0xA000_0003;
+
+    public const uint SymbolicLinkTag = 0xA000_000C;
+
+    /// <summary>
+    /// A file whose content is compressed in place by the Windows Overlay Filter — CompactOS, or
+    /// <c>compact /c /exe</c>. Its bytes are genuinely there and the filter hides the reparse point
+    /// from an ordinary enumeration, so a walk counts such a file like any other.
+    /// </summary>
+    public const uint WindowsOverlayFilterTag = 0x8000_0017;
+
     public static byte[] Build(
         ulong parentReference,
         string name,
@@ -36,7 +48,7 @@ internal static class MftRecordBytes
         long allocated,
         long logical,
         DataPlacement placement,
-        bool isReparsePoint = false)
+        uint reparseTag = 0)
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
@@ -44,9 +56,9 @@ internal static class MftRecordBytes
 
         offset += MftAttributeBytes.WriteFileName(span[offset..], parentReference, name, allocated, logical);
 
-        if (isReparsePoint)
+        if (reparseTag != 0)
         {
-            offset += MftAttributeBytes.WriteReparsePoint(span[offset..]);
+            offset += MftAttributeBytes.WriteReparsePoint(span[offset..], reparseTag);
         }
 
         offset += MftAttributeBytes.WriteData(span[offset..], allocated, logical, placement);

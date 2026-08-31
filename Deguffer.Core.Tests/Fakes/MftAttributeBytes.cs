@@ -77,17 +77,16 @@ internal static class MftAttributeBytes
     /// copy NTFS refreshes when the name changes rather than when the file does, so a fixture that
     /// set one there would be agreeing with a reader that looked in the same wrong place.
     /// </summary>
-    public static int WriteReparsePoint(Span<byte> target)
+    public static int WriteReparsePoint(Span<byte> target, uint tag)
     {
         const int Length = 0x28;
-        const uint MountPointTag = 0xA000_0003;
 
         BinaryPrimitives.WriteUInt32LittleEndian(target, 0xC0);
         BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], Length);
         target[0x08] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(target[0x10..], Length - 0x18);
         BinaryPrimitives.WriteUInt16LittleEndian(target[0x14..], 0x18);
-        BinaryPrimitives.WriteUInt32LittleEndian(target[0x18..], MountPointTag);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x18..], tag);
 
         return Length;
     }

@@ -147,7 +147,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         foreach (var component in relativePath)
         {
-            if (!tree.IsDirectory[current] || TryFindChild(current, component) is not { } next)
+            // A path reached through a link is one this table cannot total: whatever the link
+            // stands for keeps its own place, so the subtree here is empty and would report a
+            // populated cache as clear. The walk follows the link and is right, so the answer is to
+            // send the caller there. Tested at every level rather than only the last, so that the
+            // rule holds whatever the table turns out to contain.
+            if (tree.IsReparsePoint[current]
+                || !tree.IsDirectory[current]
+                || TryFindChild(current, component) is not { } next)
             {
                 return null;
             }
@@ -155,9 +162,6 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             current = next;
         }
 
-        // A path reached through a link is one this table cannot total: the link's target keeps its
-        // own place, so the subtree here is empty and would report a populated cache as clear. The
-        // walk follows the link and is right, so the answer is to send the caller there.
         return tree.IsReparsePoint[current] ? null : current;
     }
 

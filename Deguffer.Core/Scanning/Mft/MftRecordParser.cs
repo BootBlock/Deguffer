@@ -107,7 +107,7 @@ internal static class MftRecordParser
                 // than when the file does, so a junction made over an existing directory can still
                 // read as an ordinary one there. The attribute is the thing itself.
                 case AttributeReparsePoint:
-                    sawReparsePoint = true;
+                    sawReparsePoint = IsNameSurrogate(walk.Current);
                     break;
 
                 case AttributeData when IsUnnamed(walk.Current):
@@ -131,9 +131,17 @@ internal static class MftRecordParser
         {
             // No name in this record. With an $ATTRIBUTE_LIST the names are in extension records —
             // what NTFS does once a file has enough hard links to overflow its own record, which a
-            // system volume is full of. The tree cannot place such a record and nothing is wrong
-            // with it. Without a list, a record in use claims no identity and points nowhere else
-            // for one, which no healthy volume produces.
+            // system volume is full of.
+            //
+            // Skipping such a record is a compromise rather than a clean answer: the file is real,
+            // so the directory holding it totals short by however much it occupies, and the total
+            // is not marked approximate. Refusing instead would take the fast path off any volume
+            // holding one, which on C: means always. Following the attribute list to the extension
+            // record that holds the name is the answer that costs nothing, and it is a larger piece
+            // of work than the one this rule sits in.
+            //
+            // Without a list, a record in use claims no identity and points nowhere else for one,
+            // which no healthy volume produces.
             return sawAttributeList ? MftParseOutcome.NotAnEntry : MftParseOutcome.Unreadable;
         }
 
@@ -147,6 +155,37 @@ internal static class MftRecordParser
 
         result = (parent, name, size, sawReparsePoint);
         return MftParseOutcome.Parsed;
+    }
+
+    /// <summary>
+    /// Whether a <c>$REPARSE_POINT</c> means this entry stands for another name, which is the only
+    /// kind of reparse point that makes an entry a link.
+    ///
+    /// The distinction decides a number. A file compressed with CompactOS carries a reparse point
+    /// too, and its content is genuinely there: the filter driver hides the attribute from an
+    /// ordinary enumeration, so the walk counts such a file, and an index that treated every
+    /// reparse point as a link would report those bytes as nothing. The name-surrogate bit is what
+    /// Windows itself uses to separate the two.
+    ///
+    /// An attribute too short to state a tag is not a link under any reading, and saying so keeps
+    /// the two routes agreeing on it.
+    /// </summary>
+    private static bool IsNameSurrogate(ReadOnlySpan<byte> attribute)
+    {
+        const uint NameSurrogateBit = 0x2000_0000;
+
+        if (attribute.Length < 0x18)
+        {
+            return false;
+        }
+
+        var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
+        if (valueOffset + 4 > attribute.Length)
+        {
+            return false;
+        }
+
+        return (BinaryPrimitives.ReadUInt32LittleEndian(attribute[valueOffset..]) & NameSurrogateBit) != 0;
     }
 
     /// <summary>

@@ -252,6 +252,24 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
+    /// Not every reparse point is a link. A file compressed in place by CompactOS carries one, and
+    /// its bytes are genuinely on the volume — the filter driver hides the attribute from an
+    /// ordinary enumeration, so the walk counts the file. An index that read "reparse point" as
+    /// "link" would report those bytes as nothing, which is the under-reporting direction.
+    /// </summary>
+    [Fact]
+    public void CountsAFileThatCarriesAReparsePointButIsNotALink()
+    {
+        var index = Build(Tree()
+            .AddOverlayCompressedFile(20, Cache, "packed.tgz", allocated: 2048, logical: 8192));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(2048, size.Allocated);
+        Assert.Equal(8192, size.Logical);
+    }
+
+    /// <summary>
     /// The truncation the enumerator lets through: an attribute is admitted at 0x10 bytes, and the
     /// resident branch reads a length field at 0x10. Reading it unguarded throws out of the index
     /// build, where <see cref="MftVolumeIndexCache"/> catches only <see cref="IOException"/> and
@@ -298,6 +316,22 @@ public class MftVolumeIndexTests
 
         // And the refusal is confined to the path that runs through the link.
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The same refusal for a path that merely passes through a link on its way down. Nothing in a
+    /// healthy table hangs entries below a junction — whatever it stands for keeps its own place —
+    /// so this holds the rule at every level rather than trusting that shape never arrives.
+    /// </summary>
+    [Fact]
+    public void RefusesToMeasureAPathWithALinkPartWayDownIt()
+    {
+        var index = Build(Tree()
+            .AddDirectoryLink(30, Profile, "linked")
+            .AddDirectory(31, 30, "inner")
+            .AddFile(32, 31, "a.tgz", allocated: 4096, logical: 4096));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", "linked", "inner"]));
     }
 
     [Fact]
