@@ -290,6 +290,51 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// One level in from the guard above, and worse in a quieter way: the same plan would target the
+    /// directory and assert it survived, which is the contradiction §5.6 exists to catch rather than
+    /// to produce.
+    /// </summary>
+    [Theory]
+    [InlineData("installed")]
+    [InlineData("ports")]
+    public async Task RefusesACacheVariableThatNamesSomethingItPromisesToLeaveAlone(string name)
+    {
+        var root = CreateClone();
+        var kept = Path.Combine(root, name);
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, kept);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(kept, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(kept, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The same refusal for the clone Deguffer declined to look inside. Without the marker there is
+    /// no declaration naming 'installed' a survivor either, so §5.6 would have passed vacuously
+    /// while it went — which is the worst version of this failure rather than a lesser one.
+    /// </summary>
+    [Fact]
+    public async Task RefusesACacheVariableThatNamesACloneItWouldNotLookInside()
+    {
+        var root = Path.Combine(_temp.Path, "dev", "vcpkg");
+        var installed = Populate(Path.Combine(root, "installed"));
+        Populate(Path.Combine(root, "buildtrees"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, root);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(installed));
+    }
+
+    /// <summary>
     /// A refusal the user can see the folder for has to be said out loud. "vcpkg has cached nothing"
     /// contradicts the disk, and "set VCPKG_ROOT" is advice somebody who set it has already taken.
     /// </summary>

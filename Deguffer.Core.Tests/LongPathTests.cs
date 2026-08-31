@@ -9,6 +9,25 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public class LongPathTests
 {
+    /// <summary>
+    /// <see cref="LongPath.Contains"/> is what two providers refuse a configured root with, so the
+    /// answer it gives for a volume root is not academic: a caller asking whether something sits
+    /// under a whole volume must not be told no.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\", @"C:\Users", true)]
+    [InlineData(@"C:\", @"C:\", true)]
+    [InlineData(@"C:\Users\me", @"C:\Users\me\.m2", true)]
+    [InlineData(@"C:\Users\me\", @"C:\Users\me\.m2", true)]
+    [InlineData(@"C:\Users\me", @"C:\Users\me", true)]
+    [InlineData(@"C:\Users\me", @"C:\USERS\ME\.m2", true)]
+    [InlineData(@"\\server\share", @"\\server\share\a", true)]
+    [InlineData(@"C:\a\bc", @"C:\a\bcd", false)]
+    [InlineData(@"C:\Users\me\.m2", @"C:\Users\me", false)]
+    public void ContainsAnswersForTheRootsAProviderIsActuallyHanded(
+        string ancestor, string candidate, bool expected) =>
+        Assert.Equal(expected, LongPath.Contains(ancestor, candidate));
+
     [Fact]
     public void PrefixesALocalPathForTheWin32DeviceNamespace() =>
         Assert.Equal(@"\\?\C:\Users\me\.gradle", LongPath.Extended(@"C:\Users\me\.gradle"));

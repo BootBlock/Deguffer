@@ -132,16 +132,24 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
         var located = Locate();
-        var scan = DeclaredLocations.Examine(Declare(located), ct);
+        var refused = new List<string>();
+        var scan = DeclaredLocations.Examine(Declare(located, refused), ct);
 
         if (scan.FoundNothing)
         {
-            return EmptyPlan(located.UnmarkedRoot is { } nothingFound
-                ? UnmarkedRootSentence(nothingFound)
+            return EmptyPlan(
+                refused.Count > 0 ? RefusedSentence(refused[0])
+                : located.UnmarkedRoot is { } nothingFound ? UnmarkedRootSentence(nothingFound)
                 : "vcpkg has cached nothing on this machine.");
         }
 
         var notes = new List<PlanNote>(scan.Notes);
+
+        // A refusal is said out loud, for the reason the unmarked root is: the user pointed a
+        // variable at a directory and it is not in the plan, and a number with nothing explaining it
+        // is how a user concludes Deguffer is broken rather than careful.
+        notes.AddRange(refused.Select(path =>
+            new PlanNote(PlanNoteSeverity.Information, RefusedSentence(path))));
 
         if (located.Root is null)
         {
@@ -189,6 +197,14 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// directory and the marker, because "could not find it" would be untrue and the advice that
     /// sentence goes on to give has already been taken.
     /// </summary>
+    /// <summary>
+    /// What the user is told when a variable named something that is not a cache to remove.
+    /// </summary>
+    private static string RefusedSentence(string path) =>
+        $"Leaving '{path}' alone: that is vcpkg's own directory, or something inside it Deguffer "
+        + "never removes, rather than a cache. A variable can say where a cache is. It cannot ask "
+        + "for the directory holding the tool.";
+
     private static string UnmarkedRootSentence(string declined) =>
         $"Deguffer found {declined} but it does not hold vcpkg's own '{VcpkgDiscovery.RootMarker}' "
         + "marker, so it did not look inside it. The buildtrees, downloads and packages directories of "
@@ -199,7 +215,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// the clone and a relocated downloads directory each move independently and may end up in three
     /// different places.
     /// </summary>
-    private IReadOnlyList<DeclaredRoot> Declare(VcpkgLocations located)
+    private IReadOnlyList<DeclaredRoot> Declare(VcpkgLocations located, List<string>? refused = null)
     {
         var roots = new List<DeclaredRoot>(3);
 
@@ -214,7 +230,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 located.BinaryCache,
                 "Binaries vcpkg built earlier and kept so it would not build them again. Removing one "
                 + "means the next install of that library builds it from source.",
-                located) is { } binaryCache)
+                located,
+                refused) is { } binaryCache)
         {
             declared.Add(located.BinaryCache!);
             roots.Add(binaryCache);
@@ -253,7 +270,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             && Containing(
                 relocated,
                 "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it.",
-                located)
+                located,
+                refused)
                 is { } downloads)
         {
             roots.Add(downloads);
@@ -270,24 +288,21 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// Null when there is no containing directory — a cache pointed at a volume root — because
     /// declaring a volume as the root Deguffer reaches into is not a thing this should do.
     /// </summary>
-    private DeclaredRoot? Containing(string? path, string reason, VcpkgLocations located)
+    private DeclaredRoot? Containing(
+        string? path,
+        string reason,
+        VcpkgLocations located,
+        List<string>? refused)
     {
-        if (path is null || Path.GetDirectoryName(path) is not { Length: > 0 } container)
+        if (path is null)
         {
             return null;
         }
 
-        // §5.2, and the same refusal Maven needed. A cache variable pointed at the clone itself, or
-        // at one of the user's own vcpkg directories, would make that directory a whole-tree target,
-        // taking 'installed' and the clone's contents with it while the same plan asserted both
-        // survive. A configured value says where a cache is. It is never a licence to remove the
-        // directory that holds the tool.
-        var toolDirectories = located.Root is { } root
-            ? (IEnumerable<string>)[root, .. _discovery.ProfileDirectories]
-            : _discovery.ProfileDirectories;
-
-        if (toolDirectories.Any(directory => LongPath.Contains(path, directory)))
+        if (Path.GetDirectoryName(path) is not { Length: > 0 } container || IsToolsOwn(path, located))
         {
+            refused?.Add(path);
+
             return null;
         }
 
@@ -304,6 +319,49 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             RequiresElevation: false,
             [new DeclaredLocation(Path.GetFileName(path), reason)],
             inProfile ? ProtectedInProfile : []);
+    }
+
+    /// <summary>
+    /// Whether a configured cache path is really part of vcpkg rather than a cache of it.
+    ///
+    /// <para>§5.2, in the two forms Maven needed. A variable pointed <em>at</em> the clone or at one
+    /// of the user's own vcpkg directories would make that directory a whole-tree target, taking
+    /// <c>installed</c> with it. A variable pointed <em>inside</em> one, at something this provider
+    /// names as a survivor, is worse in a quieter way: the same plan would target it and assert it
+    /// survived, which is the contradiction §5.6 exists to catch rather than to produce.</para>
+    ///
+    /// <para>The unmarked candidate counts as the clone too. Declining the marker is a reason to
+    /// reach less far into a directory somebody named as vcpkg's, never a licence to remove the
+    /// whole of it — and with no marker there is no declaration naming <c>installed</c> a survivor,
+    /// so §5.6 would pass while it went.</para>
+    /// </summary>
+    private bool IsToolsOwn(string path, VcpkgLocations located)
+    {
+        foreach (var (directory, protectedNames) in ToolDirectories(located))
+        {
+            if (LongPath.Contains(path, directory)
+                || protectedNames.Any(n => LongPath.Contains(Path.Combine(directory, n.RelativePath), path)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>vcpkg's own directories on this machine, each with what it holds that must survive.</summary>
+    private IEnumerable<(string Directory, (string RelativePath, string Reason)[] Protected)> ToolDirectories(
+        VcpkgLocations located)
+    {
+        if ((located.Root ?? located.UnmarkedRoot) is { } clone)
+        {
+            yield return (clone, ProtectedInRoot);
+        }
+
+        foreach (var profile in _discovery.ProfileDirectories)
+        {
+            yield return (profile, ProtectedInProfile);
+        }
     }
 
     /// <summary>

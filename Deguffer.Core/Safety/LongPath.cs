@@ -81,15 +81,30 @@ public static class LongPath
     /// <summary>
     /// Whether <paramref name="candidate"/> is <paramref name="ancestor"/> itself or sits inside it.
     ///
-    /// Both providers that accept a configured root need this to refuse one that would swallow the
-    /// tool's own directory, and <see cref="Configured"/> has normalised such a value before it gets
-    /// here, so an ordinal comparison is the whole of it.
+    /// <para>Both providers that accept a configured root need this to refuse one that would swallow
+    /// the tool's own directory, or one of the things inside it the provider promises to leave
+    /// standing. A configured value has been through <see cref="Configured"/>, but the other side of
+    /// the comparison is often a <see cref="Path.Combine(string, string)"/> result that has not, so
+    /// the separator is handled here rather than assumed.</para>
+    ///
+    /// <para>A volume root is the case that makes that matter: <c>C:\</c> keeps its separator, and
+    /// appending another would build a prefix nothing can match — so a caller asking whether
+    /// something is under a whole volume would be told no.</para>
     /// </summary>
-    public static bool Contains(string ancestor, string candidate) =>
-        candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase)
-        || candidate.StartsWith(
-            Path.TrimEndingDirectorySeparator(ancestor) + Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
+    public static bool Contains(string ancestor, string candidate)
+    {
+        if (candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var prefix = ancestor.EndsWith(Path.DirectorySeparatorChar)
+            || ancestor.EndsWith(Path.AltDirectorySeparatorChar)
+                ? ancestor
+                : ancestor + Path.DirectorySeparatorChar;
+
+        return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Strip the extended-length prefix, for display and comparison.</summary>
     public static string Display(string path)
