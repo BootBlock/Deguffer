@@ -1,8 +1,9 @@
 # After the scanner — sequenced backlog
 
-> **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 and 1 are
-> done; 2 onwards are not started. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
-> exhausted, or supersede it with a newer plan.
+> **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
+> are done; item 4 records what was deferred and why, and item 5 what is still undecided. Flip to
+> ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a newer
+> plan.
 
 The §5.5 scanner (MFT fast path, observable fallback, cross-run size cache, progressive preview)
 landed on `feature/mft-scanner`. This is what follows, in the order it should be done and with the
@@ -98,7 +99,7 @@ plus tests". If that turns out not to hold for the fourth and fifth providers, t
 `IDirectoryScanner` seam is wrong, and it is much cheaper to learn that now than after the seam has
 five more callers.
 
-## 3. The §7 confirmation flow — the real fork 🟡 partly done
+## 3. The §7 confirmation flow — the real fork ✅ done
 
 **Outcome: the seam and Tier 2 landed; Tier 3 and the age column did not, on evidence.**
 
@@ -119,7 +120,13 @@ building the column now would be a first-class column with nothing to put in it.
 
 **The age column has since been built** — item 5 gave it a subject by making the cpptools workspace
 databases reachable, which is per-workspace data at regenerable-cache stakes rather than user-data
-stakes. Tier 3 itself is still not attempted.
+stakes.
+
+**Tier 3 has since shipped too.** The per-volume Recycle Bins are the first subject, and they were
+chosen over `workspaceStorage` precisely on the constraint below: they need no per-item attribution
+at all, because the row is one volume. That closed this item — the typed-phrase path has now been
+driven against a real plan rather than only unit-tested. See
+[unreached-locations.md](unreached-locations.md) §7.
 
 ### The original reasoning
 

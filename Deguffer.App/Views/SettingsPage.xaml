@@ -51,7 +51,7 @@
 
             <views:SettingsRow Glyph="&#xE730;"
                                Title="Confirm before cleaning"
-                               Description="Lists what is about to be removed and asks once more. Deleting cannot be undone — these sizes are far past what the Recycle Bin will hold.">
+                               Description="Lists what is about to be removed and asks once more. Deleting cannot be undone — what Deguffer removes is gone outright.">
                 <views:SettingsRow.Control>
                     <ToggleSwitch IsOn="{x:Bind ViewModel.ConfirmBeforeCleaning, Mode=TwoWay}"
                                   AutomationProperties.Name="Confirm before cleaning" />

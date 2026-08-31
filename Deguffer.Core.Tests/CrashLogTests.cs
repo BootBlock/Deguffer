@@ -165,6 +165,8 @@ public class CrashLogTests
 
         public string TempPath => string.Empty;
 
+        public string? UserSecurityIdentifier => null;
+
         public string? FindExecutable(string command) => null;
 
         public string? GetEnvironmentVariable(string name) => null;

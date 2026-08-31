@@ -1,9 +1,9 @@
 # Unreached locations — what the shipped providers do not see
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §4's Chromium
-> application caches and §5's GPU shader caches have shipped; everything else is unstarted. Flip to
-> ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a newer
-> plan.
+> application caches, §5's GPU shader caches and §7's per-volume recycle bins have shipped;
+> everything else is unstarted. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
+> exhausted, or supersede it with a newer plan.
 
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
@@ -36,7 +36,7 @@ form throughout this document.
 | Container data disk (`*.vhdx`) | 8.5 GB | 2 | Known (§5.4), still unbuilt. Needs the two-number report |
 | Unity per-project `Library\` (7 projects) | 5.4 GB | 2 | Per-project build output; only `obj\` has a provider |
 | Store-Python `LocalCache\local-packages` | 5.4 GB | 3 | Same redirection blind spot; it is installed packages, not cache |
-| `$Recycle.Bin` on non-system volumes | 3.6 GB | 3 | Cleaners empty `C:` only. `C:` held 0 bytes here |
+| `$Recycle.Bin` on non-system volumes | 3.6 GB | 3 | Cleaners empty `C:` only. `C:` held 0 bytes here. **Shipped — see §7** |
 | `%LOCALAPPDATA%\NVIDIA\DXCache` + `GLCache` | 3.2 GB | 1 | GPU shader cache; no provider category existed. **Shipped — see §5** |
 | Windows Search index (`Windows.db`) | 2.2 GB | 2 | Needs a service stop, so no cleaner attempts it |
 | `C:\$WinREAgent` | 1.7 GB | 2 | Disk Cleanup's update pass does not remove it |
@@ -393,11 +393,53 @@ all before this is scheduled.**
 
 ## 7. Things every cleaner does on `C:` and nowhere else
 
-### Per-volume recycle bins — Tier 3, measured at 3.6 GB
+### Per-volume recycle bins — Tier 3, measured at 3.6 GB ✅ done
 
-Every NTFS volume has its own `$Recycle.Bin`, and deleting a file on `D:` fills `D:`'s bin, not
-`C:`'s. On the audited machine `C:` held nothing and two other volumes held 551 MB and 3.09 GB. A
-tool that already enumerates volumes for the MFT scanner gets this nearly free.
+**Outcome:** shipped as `RecycleBinProvider`, and as the first Tier 3 provider in the product. Each
+step targets one fixed volume's directory for the *current account's* security identifier, never
+the `$Recycle.Bin` root that contains it — the root is a shared parent in §5.2's exact sense, since
+another person's deleted files and `S-1-5-18`'s sit beside this user's, told apart by nothing but a
+string of digits. Windows re-creates the per-account directory on the next delete, so the bin keeps
+working. Per item was the other candidate and is the wrong grain twice over: the paired `$I` and
+`$R` entries must go together, and §7's age column wants a row a reader can act on rather than ten
+thousand of them.
+
+**This section's claim about volume enumeration was wrong, and the work had to build the seam.**
+Nothing in the solution enumerated volumes: `DirectoryScanner` derives a drive letter from the path
+it is handed via `VolumePath.TryParse`, `IMftSourceFactory.TryOpen` is given the letter to open, and
+no call to `DriveInfo.GetDrives` existed anywhere. The MFT scanner never needed the machine's volume
+list because it is only ever asked about a path somebody already chose. So this cost a new seam,
+`IVolumeInventory`, rather than being nearly free.
+
+Four further things the work settled that this section did not anticipate:
+
+- **§5.1 has an answer here, and it is "no".** Windows ships `SHEmptyRecycleBin`, which takes a
+  volume root — the grain this provider already works at — so the §5.1 question is live rather than
+  vacuous, and every other provider in the product records its position on it. The position is that
+  the preview outranks it: §7 makes the dry run the primary action, this plan names one directory
+  per volume with a size and a date, and §5.6 asserts what survived beside it, none of which a call
+  that names a volume and reports nothing back could support. §5.2 is the second reason, because the
+  safety property is "this account's directory, never a sibling" and handing a whole volume to the
+  shell puts that decision outside the code the rule is checkable in. The accepted cost is that the
+  shell is not told what changed, so a Recycle Bin window left open may show a stale picture until
+  it refreshes — not observed, and a stale picture rather than a stale deletion.
+
+- **The seam is its own interface rather than a member on `IUserEnvironment`.** That interface is
+  the signed-in user — their profile directories, their `PATH`, their environment — and the mounted
+  volumes are a fact about the hardware. Describing one type as "the user and the disks" is G1's own
+  test for two types. What *did* go onto `IUserEnvironment` is the account's security identifier,
+  which is the user, and which is null when it cannot be established — because a provider that
+  cannot say who it is running as must recognise no bin at all.
+- **The seam reports each volume's kind rather than filtering by it.** Which kinds may be acted on
+  is a safety decision belonging to the provider, and a seam that filtered would leave that decision
+  untestable, since no fake could present the kind being refused. The provider takes fixed, ready
+  volumes only: a network share has no bin at all, so a `$RECYCLE.BIN` on one belongs to the
+  server's users, and removable media can be swapped between the preview and the clean.
+- **The first Tier 3 subject made an existing sentence read as a contradiction.** `Tier 3 requires
+  typed confirmation` was already built, and its wording told the user their data "is not sent to
+  the Recycle Bin" — which against a plan whose whole business is emptying them is not a sentence
+  anybody can act on. The generic requirement now says the loss is total and leaves the mechanism to
+  each plan's own `WhatHappensOnNextUse`.
 
 Tier 3 without argument: the contents are files a user deleted and can still restore, which is the
 definition of recoverable user data. Per-volume rows with an age fit the existing selection model.
@@ -549,7 +591,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Candidate | What it needs | Observed |
 | --- | --- | ---: |
 | GPU shader caches ✅ | Nothing new. Path-based, recognised children, pure Tier 1 | 3.2 GB |
-| Per-volume recycle bins | Volume enumeration the scanner already does, plus Tier 3 confirmation, which exists | 3.6 GB |
+| Per-volume recycle bins ✅ | A volume-enumeration seam, which had to be built — the scanner never had one. Tier 3 confirmation already existed | 3.6 GB |
 | Chromium cache signature ✅ | Expected `ContentSignature` to have the shape. It did not — §4 records what the work needed instead | 0.8 GB |
 | Crash dumps and servicing logs | Path-based, plus elevation for the `C:\Windows` paths, which §6.3 already permits | 0.2 GB |
 | Cargo, Go, pnpm, conda, Maven, vcpkg | One class each, on the npm and NuGet shape. pnpm needs link-aware measurement | researched |

@@ -157,6 +157,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(IDirectoryScanner)
             ? new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated))
         : parameter == typeof(SourceRootStore) ? new SourceRootStore(_environment)
+        : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : throw new XunitException(
             $"{provider.Name} takes a {parameter.Name}, which this test cannot fabricate from a fake. " +
             "Extend Argument so the provider is still covered.");

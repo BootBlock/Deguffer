@@ -157,9 +157,14 @@ public sealed record ConfirmationRequirement
         ConfirmationLevel.None => plan.WhatHappensOnNextUse,
         ConfirmationLevel.Acknowledgement =>
             $"Nothing is lost permanently, but restoring it costs real time. {plan.WhatHappensOnNextUse}",
+        // Deliberately silent about the Recycle Bin, which this sentence used to name as the thing
+        // the deletion does not go through. The bins themselves are now a Tier 3 subject, and the
+        // wording read as a contradiction against the one plan whose whole business is emptying
+        // them. What the user needs from a generic sentence is that the loss is total; which
+        // mechanism is bypassed belongs to the plan's own WhatHappensOnNextUse.
         ConfirmationLevel.TypedPhrase =>
-            $"This is user data, and deleting it is permanent — it is not sent to the Recycle Bin and " +
-            $"cannot be undone. {plan.WhatHappensOnNextUse}",
+            $"This is user data, and deleting it is permanent — it is removed outright and cannot " +
+            $"be undone. {plan.WhatHappensOnNextUse}",
         _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
     };
 }

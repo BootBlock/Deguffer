@@ -165,26 +165,38 @@ public sealed class CleanupPlannerTests
         Assert.True(provider.WasExecuted);
     }
 
+    /// <summary>
+    /// Every provider above Tier 1 is named here individually, in both directions.
+    ///
+    /// This replaced a blanket assertion that nothing above Tier 2 shipped, which the Recycle Bin
+    /// provider retired. Widening that to <c>&lt;= UserData</c> would have left the gate asserting
+    /// almost nothing, so what it checks now is membership: a provider that changes tier fails,
+    /// and so does a new one that arrives at Tier 3 without anybody deciding it should. Tier 3 is
+    /// irreversible loss of user data, so arriving there is a decision, never a default.
+    /// </summary>
     [Fact]
-    public void TheDefaultSetIsTheVerifiedSourcesAndNothingAboveTier2()
+    public void TheDefaultSetIsTheVerifiedSourcesAndEveryTierAboveOneIsNamed()
     {
         var planner = CleanupPlanner.CreateDefault();
 
         Assert.Equal(
             [
                 "dotnet-obj", "nuget", "gradle", "npm", "vscode-cpptools", "uv", "pip",
-                "gpu-shader-cache", "chromium-app-cache", "platformio", "playwright",
+                "gpu-shader-cache", "chromium-app-cache", "platformio", "playwright", "recycle-bin",
             ],
             planner.Providers.Select(p => p.Id));
 
-        // Tier 3 needs the typed-confirmation UI and a subject whose per-item attribution is
-        // trustworthy; neither exists yet, so nothing above Tier 2 ships.
-        Assert.All(planner.Providers, p =>
-            Assert.True(p.Tier <= SafetyTier.RegenerableWithCost, $"{p.Id} is {p.Tier}"));
-        // The Tier 2 members named individually, so demoting one to Tier 1 — which would make it
-        // pre-selected and skip §7's acknowledgement — fails here rather than silently shipping.
-        Assert.Equal(SafetyTier.RegenerableWithCost, planner.Providers.Single(p => p.Id == "platformio").Tier);
-        Assert.Equal(SafetyTier.RegenerableWithCost, planner.Providers.Single(p => p.Id == "playwright").Tier);
+        Assert.Equal(
+            ["platformio", "playwright"],
+            planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
+
+        Assert.Equal(
+            ["recycle-bin"],
+            planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
+
+        // §3 excludes Tier 4 from the UI entirely, so a provider declaring it could only ever
+        // produce a row no confirmation can authorise.
+        Assert.DoesNotContain(planner.Providers, p => p.Tier == SafetyTier.DoNotTouch);
     }
 
     [Fact]
