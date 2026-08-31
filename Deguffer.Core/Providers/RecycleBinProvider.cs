@@ -123,7 +123,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// it records disagree. <see cref="DisposableChildSet"/> says a provider whose own tier is
     /// narrower than what it offers owes itself exactly that test.
     /// </summary>
-    public DisposableChildSet RecognisedChildren => _children;
+    public DisposableChildSet DisposableChildren => _children;
 
     /// <summary>
     /// Presence is this user's own bin existing on some volume, never a bin root existing: every

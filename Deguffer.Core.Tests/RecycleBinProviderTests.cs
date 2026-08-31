@@ -117,8 +117,9 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.NotNull(step.LastWritten);
 
         // Against the value written, rather than a window around "about 200 days ago" that any
-        // roughly-right timestamp would satisfy. The comparison normalises to UTC, as
-        // RelativeAge.Describe does, so which Kind the provider hands back is not what this pins.
+        // roughly-right timestamp would satisfy. The comparison subtracts ticks and ignores
+        // DateTimeKind, so it says nothing about which Kind the provider returns — and it does not
+        // need to. RelativeAge.Describe is the only consumer and normalises both sides itself.
         Assert.Equal(written, step.LastWritten!.Value, TimeSpan.FromSeconds(1));
     }
 
@@ -301,13 +302,13 @@ public sealed class RecycleBinProviderTests : IDisposable
     public void EveryDeclaredChildIsTheTierTheProviderClaims()
     {
         var provider = CreateProvider();
-        var declared = provider.RecognisedChildren.DisposableNames.ToList();
+        var declared = provider.DisposableChildren.DisposableNames.ToList();
 
         // One entry, and it is this account's own identifier. A second would mean the provider had
         // learned to empty something it never decided to.
         Assert.Equal([Sid], declared);
         Assert.All(declared, name =>
-            Assert.Equal(provider.Tier, provider.RecognisedChildren.Classify(name).Tier));
+            Assert.Equal(provider.Tier, provider.DisposableChildren.Classify(name).Tier));
     }
 
     /// <summary>
