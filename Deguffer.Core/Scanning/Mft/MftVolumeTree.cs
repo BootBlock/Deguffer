@@ -27,6 +27,13 @@ public sealed class MftVolumeTree(int count)
     public bool[] SizeUnknown { get; } = new bool[count];
 
     /// <summary>
+    /// Entries that are links to somewhere else. The walk never enters one, so neither may
+    /// anything derived from this tree — and a link's own subtree here is empty, which would
+    /// otherwise total a populated directory as clear.
+    /// </summary>
+    public bool[] IsReparsePoint { get; } = new bool[count];
+
+    /// <summary>
     /// Names are kept for directories only. Path resolution never needs a file's name — a subtree
     /// total is the sum of its records regardless of what they are called — and skipping them is
     /// the difference between tens of megabytes of strings and hundreds on a full volume.
@@ -47,6 +54,7 @@ public sealed class MftVolumeTree(int count)
         Logical[number] = record.Size?.Logical ?? 0;
         SizeUnknown[number] = record.Size is null;
         IsDirectory[number] = record.IsDirectory;
+        IsReparsePoint[number] = record.IsReparsePoint;
         Present[number] = true;
 
         if (record.IsDirectory)

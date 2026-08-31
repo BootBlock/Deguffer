@@ -17,11 +17,16 @@ namespace Deguffer.Core.Scanning.Mft;
 /// and saying so is what sends the caller to the walk instead of reporting a cache short.
 /// </param>
 /// <param name="IsDirectory">Whether this entry contains other entries.</param>
+/// <param name="IsReparsePoint">
+/// Whether this entry is a junction or a link rather than the thing it names. Its target keeps its
+/// own place in the table, so a link has no children here however much its path appears to hold.
+/// </param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
     string Name,
     ScanSize? Size,
-    bool IsDirectory)
+    bool IsDirectory,
+    bool IsReparsePoint)
 {
     /// <summary>
     /// The root directory always occupies record 5. Path resolution starts here, and the root is

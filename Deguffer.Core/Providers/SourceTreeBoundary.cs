@@ -10,6 +10,10 @@ namespace Deguffer.Core.Providers;
 /// it has to apply the same limits as a filter over what it returns. Two enforcements of one rule
 /// is the price of having two routes; keeping the rule itself here is what stops them becoming two
 /// different answers to the same question, chosen by whether the user happened to elevate.
+///
+/// The walk's third limit — that it never enters a reparse point — is not repeated here. The index
+/// applies that one where it can see it, in the table, and never offers a path that passes through
+/// a link at all.
 /// </summary>
 internal static class SourceTreeBoundary
 {

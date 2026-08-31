@@ -22,7 +22,7 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
     {
         map = default!;
 
-        if (!MftRecordHeader.TryRead(record0, bytesPerSector, out var header))
+        if (MftRecordHeader.Read(record0, bytesPerSector, out var header) != MftParseOutcome.Parsed)
         {
             return false;
         }

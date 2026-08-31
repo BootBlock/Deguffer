@@ -11,11 +11,14 @@ namespace Deguffer.Core.Scanning.Mft;
 /// only be exercised against a live volume would be untestable on any ordinary build agent. Every
 /// structural rule below is therefore provable against a synthesised record.
 /// </summary>
-public static class MftRecordParser
+internal static class MftRecordParser
 {
     internal const uint AttributeFileName = 0x30;
     internal const uint AttributeList = 0x20;
     internal const uint AttributeData = 0x80;
+
+    /// <summary>The attribute flag NTFS sets on a junction or a symbolic link.</summary>
+    private const uint FileAttributeReparsePoint = 0x0400;
 
     /// <summary>
     /// Parse one record. <paramref name="record"/> is modified in place by the update sequence
@@ -25,21 +28,24 @@ public static class MftRecordParser
     /// NTFS 3.1 and later, and the caller already knows the number from its position in the table —
     /// so reading it would add a version dependency to learn something nobody needs.
     ///
-    /// Returns false for records that carry no size information for the tree — see
-    /// <see cref="MftRecordHeader.TryRead"/> for which, and why each is excluded.
+    /// The three outcomes are not interchangeable: see <see cref="MftParseOutcome"/> for why a
+    /// record this cannot read is a different event from one there is nothing to read in.
     /// </summary>
-    public static bool TryParse(Span<byte> record, int bytesPerSector, out MftRecord result)
+    internal static MftParseOutcome Parse(Span<byte> record, int bytesPerSector, out MftRecord result)
     {
         result = default;
 
-        if (!MftRecordHeader.TryRead(record, bytesPerSector, out var header))
+        var outcome = MftRecordHeader.Read(record, bytesPerSector, out var header);
+        if (outcome != MftParseOutcome.Parsed)
         {
-            return false;
+            return outcome;
         }
 
         if (!TryReadAttributes(record[..header.UsedLength], header.FirstAttributeOffset, out var parsed))
         {
-            return false;
+            // In use, and either its attribute run is malformed or it carries no name this reader
+            // can decode. Either way a real entry is here and the tree cannot place it.
+            return MftParseOutcome.Unreadable;
         }
 
         // A directory's own $DATA is not the size of its contents — the contents are counted
@@ -51,39 +57,42 @@ public static class MftRecordParser
             parsed.Parent,
             parsed.Name,
             header.IsDirectory ? ScanSize.Zero : parsed.Size,
-            header.IsDirectory);
+            header.IsDirectory,
+            parsed.IsReparsePoint);
 
-        return true;
+        return MftParseOutcome.Parsed;
     }
 
     private static bool TryReadAttributes(
         ReadOnlySpan<byte> record,
         int firstAttributeOffset,
-        out (uint Parent, string Name, ScanSize? Size) result)
+        out (uint Parent, string Name, ScanSize? Size, bool IsReparsePoint) result)
     {
         result = default;
 
         uint parent = 0;
         var name = string.Empty;
+        var attributes = default(uint);
         ScanSize? size = null;
         var sawData = false;
         var sawAttributeList = false;
         var bestRank = int.MaxValue;
 
-        var attributes = new MftAttributeEnumerator(record, firstAttributeOffset);
+        var walk = new MftAttributeEnumerator(record, firstAttributeOffset);
 
-        while (attributes.MoveNext())
+        while (walk.MoveNext())
         {
-            switch (attributes.CurrentType)
+            switch (walk.CurrentType)
             {
-                case AttributeFileName when TryReadFileName(attributes.Current, out var candidate):
+                case AttributeFileName when TryReadFileName(walk.Current, out var candidate):
                     // Prefer the Win32 name over the 8.3 alias: a long-named file carries several
                     // $FILE_NAME attributes, and picking the DOS alias would make path resolution
                     // fail against the name the user actually typed.
                     var rank = RankOf(candidate.Namespace);
                     if (rank < bestRank)
                     {
-                        (parent, name, bestRank) = (candidate.Parent, candidate.Name, rank);
+                        (parent, name, attributes, bestRank) =
+                            (candidate.Parent, candidate.Name, candidate.Attributes, rank);
                     }
 
                     break;
@@ -92,14 +101,19 @@ public static class MftRecordParser
                     sawAttributeList = true;
                     break;
 
-                case AttributeData when IsUnnamed(attributes.Current):
+                case AttributeData when IsUnnamed(walk.Current):
                     sawData = true;
-                    size = ReadDataSize(attributes.Current);
+
+                    // First answer wins. A file split across extents lists the one starting at VCN
+                    // 0 first — that is the only extent carrying the sizes — and the continuations
+                    // after it declare nothing. Assigning each in turn would let a continuation
+                    // erase a size the record had already established.
+                    size ??= ReadDataSize(walk.Current);
                     break;
             }
         }
 
-        if (attributes.IsMalformed || bestRank == int.MaxValue)
+        if (walk.IsMalformed || bestRank == int.MaxValue)
         {
             return false;
         }
@@ -112,7 +126,7 @@ public static class MftRecordParser
             size = sawAttributeList ? null : ScanSize.Zero;
         }
 
-        result = (parent, name, size);
+        result = (parent, name, size, (attributes & FileAttributeReparsePoint) != 0);
         return true;
     }
 
@@ -127,6 +141,10 @@ public static class MftRecordParser
     /// The sizes an unnamed <c>$DATA</c> declares, or null where this attribute does not declare
     /// them. Every null here is a file whose real size is somewhere the base record does not reach,
     /// so returning zero would silently subtract it from whatever subtree it belongs to.
+    ///
+    /// Both branches check their own length. The enumerator admits an attribute of 0x10 bytes,
+    /// which is shorter than either header, and an unguarded read there throws out of a scan
+    /// rather than reporting a size it could not establish.
     /// </summary>
     internal static ScanSize? ReadDataSize(ReadOnlySpan<byte> attribute)
     {
@@ -134,7 +152,9 @@ public static class MftRecordParser
         {
             // Resident data lives inside the MFT record itself, so it occupies no clusters of its
             // own. Allocated is genuinely zero: deleting such a file frees the record, not extents.
-            return new ScanSize(Allocated: 0, Logical: BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]));
+            return attribute.Length < 0x18
+                ? null
+                : new ScanSize(Allocated: 0, Logical: BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]));
         }
 
         if (attribute.Length < 0x38)
@@ -157,7 +177,7 @@ public static class MftRecordParser
 
     private static bool TryReadFileName(
         ReadOnlySpan<byte> attribute,
-        out (uint Parent, string Name, FileNameNamespace Namespace) result)
+        out (uint Parent, string Name, uint Attributes, FileNameNamespace Namespace) result)
     {
         result = default;
 
@@ -195,7 +215,18 @@ public static class MftRecordParser
             return false;
         }
 
-        result = (parent, Encoding.Unicode.GetString(value.Slice(0x42, nameLength)), (FileNameNamespace)value[0x41]);
+        // The attribute flags kept alongside the name. This is the copy the containing directory's
+        // index holds, which is the right one for a reader modelling the directory tree: it is what
+        // an enumeration of the parent would report. $STANDARD_INFORMATION holds the authoritative
+        // copy, and reading it would mean parsing a second attribute to learn the same bit.
+        var attributes = BinaryPrimitives.ReadUInt32LittleEndian(value[0x38..]);
+
+        result = (
+            parent,
+            Encoding.Unicode.GetString(value.Slice(0x42, nameLength)),
+            attributes,
+            (FileNameNamespace)value[0x41]);
+
         return true;
     }
 

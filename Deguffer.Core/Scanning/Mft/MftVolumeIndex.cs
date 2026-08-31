@@ -82,10 +82,11 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// Rebuild one record's path by walking <see cref="MftVolumeTree.Parent"/> up to the root.
     ///
     /// Returns null for a record whose chain does not reach the root — an orphan, or a parent
-    /// pointing outside the table. That is a real condition on a live volume rather than a
-    /// corruption check: a directory deleted while the table was being read leaves its children
-    /// briefly unreachable, and a path that cannot be rebuilt must be dropped rather than guessed
-    /// at, because a wrong path here is a wrong deletion target.
+    /// pointing outside the table — and for one whose chain passes through a link. The first is a
+    /// real condition on a live volume rather than a corruption check: a directory deleted while the
+    /// table was being read leaves its children briefly unreachable. Either way a path that cannot
+    /// be rebuilt must be dropped rather than guessed at, because a wrong path here is a wrong
+    /// deletion target.
     /// </summary>
     private IReadOnlyList<string>? TryBuildPath(uint record)
     {
@@ -102,6 +103,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             {
                 components.Reverse();
                 return components;
+            }
+
+            // A link, or anything under one. The walk never enters a reparse point, so a path that
+            // passes through one is not something the guaranteed route could ever have produced —
+            // and the deletion target it names is a pointer, not the thing the user asked about.
+            if (current < tree.Count && tree.IsReparsePoint[current])
+            {
+                return null;
             }
 
             if (current >= tree.Count || tree.Names[current] is not { } component)
@@ -146,7 +155,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             current = next;
         }
 
-        return current;
+        // A path reached through a link is one this table cannot total: the link's target keeps its
+        // own place, so the subtree here is empty and would report a populated cache as clear. The
+        // walk follows the link and is right, so the answer is to send the caller there.
+        return tree.IsReparsePoint[current] ? null : current;
     }
 
     /// <summary>
