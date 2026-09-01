@@ -11,35 +11,42 @@
             One line per subject, its size in a column of its own. The title above already asks the
             question, so the list needs no sentence introducing it — and a size the user can read
             off a row is a size they can check against the row they ticked.
+
+            It scrolls inside a bounded height rather than growing without limit, because the
+            dialog's own content sits in a ScrollViewer of its own: a long selection would otherwise
+            push the total and the two sentences below the fold, leaving the Clean button reachable
+            with "This cannot be undone." still unread.
         -->
-        <ItemsControl ItemsSource="{x:Bind Confirmation.Items}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="execution:CleanConfirmationItem">
-                    <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
-                        <!--
-                            Decoration, and the only element on the row with nothing to say: it is
-                            hidden from assistive technology, as ShareBar is, so a reader hears the
-                            subject and its size rather than an empty node in front of each.
-                        -->
-                        <TextBlock Grid.Column="0"
-                                   Text="&#x2022;"
-                                   AutomationProperties.AccessibilityView="Raw"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{x:Bind ProviderName}"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Grid.Column="2"
-                                   Text="{x:Bind SizeLabel}"
-                                   Style="{StaticResource SecondaryText}" />
-                    </Grid>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{x:Bind Confirmation.Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="execution:CleanConfirmationItem">
+                        <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+                            <!--
+                                Decoration, and the only element on the row with nothing to say: it is
+                                hidden from assistive technology, as ShareBar is, so a reader hears the
+                                subject and its size rather than an empty node in front of each.
+                            -->
+                            <TextBlock Grid.Column="0"
+                                       Text="&#x2022;"
+                                       AutomationProperties.AccessibilityView="Raw"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind ProviderName}"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{x:Bind SizeLabel}"
+                                       Style="{StaticResource SecondaryText}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <Border Style="{StaticResource Divider}" />
 
-        <!-- The estimate on its own line, so it is no longer buried in the warning sentence. -->
+        <!-- The figure the user is authorising, on a line of its own rather than inside a sentence. -->
         <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" />
             <TextBlock Grid.Column="1" Text="{x:Bind Confirmation.TotalLabel}" FontWeight="SemiBold" />

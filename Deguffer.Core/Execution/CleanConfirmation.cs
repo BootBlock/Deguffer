@@ -25,9 +25,10 @@ public sealed record CleanConfirmation
     /// <remarks>
     /// Private so <see cref="For"/> is the only way to make one, which is what keeps
     /// <see cref="TotalLabel"/> a fact about <see cref="Items"/> rather than a claim a caller
-    /// supplies. It also keeps the type out of the XAML type-info generator's activator table: a
-    /// public parameterless constructor there is emitted as <c>new CleanConfirmation()</c>, which
-    /// does not compile against required members.
+    /// supplies. It also keeps the type out of the XAML type-info generator's activator table,
+    /// which emits <c>new CleanConfirmation()</c> for any bound type that offers a public
+    /// parameterless constructor, and does not compile when the members it would leave unset are
+    /// required.
     /// </remarks>
     private CleanConfirmation(IReadOnlyList<CleanConfirmationItem> items, string totalLabel)
     {
