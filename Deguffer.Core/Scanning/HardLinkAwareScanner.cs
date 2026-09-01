@@ -1,4 +1,3 @@
-﻿using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Microsoft.Win32.SafeHandles;
@@ -44,7 +43,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
         new(Task.Run(
             () => TryMeasureFile(path) is { } file
                 ? ScanResult.Direct(file)
-                : ScanResult.Slow(Measure(path, progress, ct), FallbackReason.None),
+                : ScanResult.ByChoice(Measure(path, progress, ct)),
             ct));
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
@@ -67,46 +66,21 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         long allocated = 0;
         long logical = 0;
-        var pending = new ConcurrentQueue<string>();
-        pending.Enqueue(LongPath.Extended(path));
 
-        var options = new ParallelOptions
-        {
-            CancellationToken = ct,
-            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 2, 16),
-        };
-
-        while (!pending.IsEmpty)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var batch = new List<string>(pending.Count);
-            while (pending.TryDequeue(out var next))
+        BoundedFileWalk.Visit(
+            LongPath.Extended(path),
+            file =>
             {
-                batch.Add(next);
-            }
-
-            Parallel.ForEach(batch, options, directory =>
-            {
-                foreach (var entry in EnumerateSafely(directory))
+                if (TryQuery(file.FullName) is { NumberOfLinks: 1 } sole)
                 {
-                    if (entry.IsDirectory)
-                    {
-                        pending.Enqueue(entry.Path);
-                    }
-                    else if (TryQuery(entry.Path) is { NumberOfLinks: 1 } sole)
-                    {
-                        Interlocked.Add(ref allocated, sole.AllocationSize);
-                        Interlocked.Add(ref logical, sole.EndOfFile);
-                    }
+                    Interlocked.Add(ref allocated, sole.AllocationSize);
+                    Interlocked.Add(ref logical, sole.EndOfFile);
                 }
-            });
-
-            // §5.5: stream partial results, one report per breadth-first level — the same
-            // compromise ParallelEnumerationScanner records.
-            progress?.Report(Approximate(
-                Interlocked.Read(ref allocated), Interlocked.Read(ref logical)));
-        }
+            },
+            // §5.5: stream partial results. One report per breadth-first level, not per file.
+            () => progress?.Report(Approximate(
+                Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),
+            ct);
 
         return Approximate(Interlocked.Read(ref allocated), Interlocked.Read(ref logical));
     }
@@ -137,36 +111,6 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                 info.NumberOfLinks == 1 ? info.AllocationSize : 0,
                 info.NumberOfLinks == 1 ? info.EndOfFile : 0)
             : Approximate(0, 0);
-    }
-
-    private readonly record struct Entry(string Path, bool IsDirectory);
-
-    /// <summary>
-    /// §5.3: access denied is normal and skipped silently, and reparse points are followed nowhere
-    /// — a junction's target keeps its own links and was never classified as this tree's.
-    /// </summary>
-    private static List<Entry> EnumerateSafely(string extendedDirectory)
-    {
-        var entries = new List<Entry>();
-
-        try
-        {
-            foreach (var info in new DirectoryInfo(extendedDirectory).EnumerateFileSystemInfos())
-            {
-                if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    continue;
-                }
-
-                entries.Add(new Entry(info.FullName, info is DirectoryInfo));
-            }
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Expected on a live machine. Skip.
-        }
-
-        return entries;
     }
 
     /// <summary>

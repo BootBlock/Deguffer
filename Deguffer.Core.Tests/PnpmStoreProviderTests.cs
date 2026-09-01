@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Tests.Fakes;
@@ -92,7 +92,9 @@ public sealed class PnpmStoreProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.Equal(4096, plan.EstimatedBytes);
+        // Logical rather than the reclaimable (allocated) figure, which rounds to the volume's
+        // cluster size and would make this a claim about the disk the test runs on.
+        Assert.Equal(4096, plan.Estimated.Logical);
         Assert.True(plan.Estimated.IsApproximate);
     }
 
@@ -134,22 +136,44 @@ public sealed class PnpmStoreProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.6. The store's neighbours are the launcher, the global installs and the configuration —
-    /// none of them cache, all of them one directory away from what the command prunes.
+    /// §5.6, and the store heads the list. `pnpm store prune` works inside the store, so a command
+    /// that took the whole directory would destroy every package on the machine — and a plan that
+    /// named only the store's neighbours would report that run as a success.
     /// </summary>
     [Fact]
-    public async Task AssertsTheHomeAndGlobalPackagesSurvive()
+    public async Task AssertsTheStoreItselfAndItsNeighboursSurvive()
     {
         Populate(Store);
         Populate(Path.Combine(Home, "global"));
 
         var plan = await CreateProvider().PlanAsync();
 
-        foreach (var path in (string[])[Path.Combine(Home, "store"), Home, Path.Combine(Home, "global")])
+        foreach (var path in (string[])[Store, Path.Combine(Home, "store"), Home, Path.Combine(Home, "global")])
         {
             Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
         }
+    }
+
+    /// <summary>
+    /// The §5.6 negative for the store itself. Every other check on this plan passes while the
+    /// store is gone, which is exactly why the store has to be one of them.
+    /// </summary>
+    [Fact]
+    public async Task VerificationFailsLoudlyIfThePruneTookTheWholeStore()
+    {
+        Populate(Store);
+        Populate(Path.Combine(Home, "global"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Directory.Delete(Store, recursive: true);
+
+        var verification = await provider.VerifyAsync(plan);
+
+        Assert.False(verification.Passed);
+        Assert.Contains(verification.Failures, c => c.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

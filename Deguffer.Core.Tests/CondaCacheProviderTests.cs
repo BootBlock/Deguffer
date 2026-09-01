@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -131,11 +131,14 @@ public sealed class CondaCacheProviderTests : IDisposable
     public async Task AddsItsOwnMeasureOfTheIndexCacheWhichCondaDoesNotSize()
     {
         Populate(PackageCache);
-        Populate(Path.Combine(PackageCache, "cache"), bytes: 2048);
+        // A whole 4 KB cluster, because this figure is the allocated one: on the file-table
+        // route a 2048-byte file reports 4096 and the sum would depend on how Deguffer was
+        // launched.
+        Populate(Path.Combine(PackageCache, "cache"), bytes: 4096);
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.Equal(10_000 + 2048, plan.EstimatedBytes);
+        Assert.Equal(10_000 + 4096, plan.EstimatedBytes);
     }
 
     /// <summary>

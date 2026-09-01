@@ -227,6 +227,83 @@ regular Go build as a risk.
 
 ---
 
+## pnpm store
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Wherever `pnpm store path` reports, ordinarily under `%LOCALAPPDATA%\pnpm\store` |
+| **Method** | `pnpm store prune` (the tool's own command) |
+| **Typical size** | Several GB on a machine with a few Node projects on it |
+
+### What it is
+
+pnpm installs Node packages differently from npm, and the difference is the whole reason this entry
+needs its own explanation.
+
+npm gives every project its own full copy of every dependency. pnpm keeps **one** copy of each
+package version in a single store, and then **hard-links** that copy into each project's
+`node_modules`. A hard link is not a shortcut or a copy: it is a second name for the same blocks on
+disk. Ten projects using the same version of the same library share one set of blocks between them,
+which is why pnpm uses far less disk than npm for the same projects.
+
+The store grows because pnpm does not remove anything on its own. Upgrade a dependency and the old
+version stays in the store, in case something still wants it.
+
+### What Deguffer does
+
+It asks pnpm where the store is, because a `store-dir` setting moves it, and pnpm keeps a separate
+store per drive. It then runs `pnpm store prune`, which removes exactly the packages that **no
+project on your machine still references**. Deguffer deletes no path here at all.
+
+That selectivity is why this is a better eviction than npm's. `npm cache clean` empties the lot;
+`pnpm store prune` keeps everything in use and takes only the rest.
+
+Deguffer does **not** pass `--force`. To pnpm, force means "also remove alien files" — anything in
+the store the package manager did not put there. Deguffer never deletes what no rule can name, so
+that flag is left alone.
+
+### The size shown is smaller than the store, deliberately
+
+**This is the one thing worth understanding about this row.** Because the store's files are
+hard-linked into every project using them, adding up the file sizes in the store would count each
+package once for the store and again for every project that links it. On a machine with several
+projects the total can be several times what pruning could ever free.
+
+So Deguffer counts only the files in the store that **nothing outside the store links** — the ones
+whose blocks really would come back. That is the number on the row, and it is smaller, and it is
+the true one.
+
+It is still shown as an approximation, because it is a prediction. Link counts change every time a
+project installs or removes a dependency, and pnpm decides what to prune from its own records
+rather than by counting links.
+
+### What is protected
+
+The directory holding the store, pnpm's home directory, and **`global`** inside it — the packages
+you installed with `pnpm add --global`, which are not a cache. pnpm's own launcher lives in the
+home directory too. Deguffer asserts all three survived the run.
+
+Where pnpm reports something that is not a usable directory, or names a drive root, Deguffer offers
+nothing rather than guessing. There is no documented default to fall back on: the store directory
+carries a layout version in its name, which moves between pnpm releases.
+
+### What it costs you
+
+A later install that needs one of the removed packages downloads it again. Nothing else changes.
+
+**Your projects are untouched.** Anything a project still links stays in the store, so no
+`node_modules` breaks and no install has to be re-run. pnpm's own documentation puts it plainly:
+pruning the store is not harmful, it may only slow a future install.
+
+### Why Tier 1
+
+Everything removed is, by pnpm's own accounting, referenced by nothing. It refills itself the next
+time a project asks for it, with no command from you and nothing to re-configure.
+
+---
+
 ## Maven local repository
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
@@ -373,6 +450,84 @@ rebuild of a large C++ library is the same cost with the clock running the other
 Two of the four — `buildtrees` and `packages` — are genuinely scratch and would be Tier 1 on their
 own. A plan carries one tier, and the more cautious of the two governs it. You are not denied them:
 each directory is its own row, so you can take the scratch and leave the binary cache.
+
+---
+
+## Conda package cache
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | Every writable package cache `conda info` reports, ordinarily `%PROGRAMDATA%\miniconda3\pkgs` or `%USERPROFILE%\.conda\pkgs` |
+| **Method** | `conda clean --index-cache --packages --tarballs --tempfiles` (the tool's own command) |
+| **Typical size** | Anaconda's own documentation puts it at tens to hundreds of GB on a machine in daily use |
+
+### What it is
+
+Conda downloads each package once, as an archive, and unpacks it into a shared `pkgs` directory.
+Creating an environment then **hard-links** those unpacked files into the environment rather than
+copying them, so ten environments using the same version of the same library share one copy on disk.
+
+`pkgs` therefore holds three different things: the downloaded archives, the unpacked packages that
+environments link to, and a cache of the channel index conda uses to resolve versions.
+
+### What Deguffer does
+
+It asks conda where its caches are, then asks conda **what its own clean command would remove**, and
+shows you that figure. It deletes no path itself.
+
+Conda is not on your `PATH` by default, so Deguffer looks for it in three places: your `PATH`, the
+`CONDA_EXE` variable conda's own shell integration sets, and the documented install locations for
+Anaconda, Miniconda and Miniforge.
+
+Two categories are deliberately left out of the command:
+
+- **`--all` is not used**, because it also removes conda's log files. A log is a record of something
+  that already happened, which Deguffer treats as your data rather than as cache.
+- **`--force-pkgs-dirs` is never used.** It removes every writable cache whole, and conda's own help
+  says outright that it breaks environments whose packages are linked back to the cache.
+
+### The size shown is conda's own figure, not a measurement
+
+Measuring `pkgs` directly would count every package your environments are still using, because they
+are all hard-linked out of it. On a machine with a few environments that number is several times
+what the clean could free.
+
+Conda already solves this for itself: its clean skips any file with more than one hard link, so what
+its dry run reports is exactly what its clean would remove. Deguffer shows that, and adds only its
+own measurement of the channel index cache, which conda lists but does not size.
+
+**Where conda will not report, Deguffer offers nothing.** The only other figure available is the one
+that counts your environments' packages, and showing it would promise space that cannot be freed.
+
+### What is protected
+
+The conda installation itself, including its base environment; **every environment directory conda
+reports**, whose packages hard-link back into the cache being cleaned; each package cache directory
+itself; and **`.condarc`**, your conda configuration, which can name private channels with tokens
+embedded in the URL. Deguffer asserts they all survived the run.
+
+### What it costs you
+
+The next `conda install` downloads the packages it needs again and re-fetches the channel index,
+which for a large environment is gigabytes over the network.
+
+**Your environments keep working.** Conda keeps every package an environment still links, so nothing
+you have already created stops functioning.
+
+### Why Tier 2, not Tier 1
+
+Two reasons, and neither is the one you might expect. The command touches no environment at all, so
+this is not about environments being expensive to rebuild.
+
+- **The refill is large.** Tier 2 covers what is "re-created, but only by re-downloading gigabytes",
+  and conda packages are among the largest a package manager fetches.
+- **Conda decides what is unused by counting hard links, and its own documentation warns that this
+  does not see an environment linked by symlink instead.** Windows environments use hard links or
+  copies unless symlinks were deliberately enabled, so the case is unlikely here — but a rule that
+  can be wrong in the destructive direction belongs at the tier that is never ticked for you.
 
 ---
 

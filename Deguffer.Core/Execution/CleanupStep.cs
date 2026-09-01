@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Safety;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -74,12 +74,20 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// <see cref="CleanupStep.Estimated"/>. Null means they are the same figure, which is every
     /// provider whose estimate *is* its measurement of those paths.
     ///
-    /// Exists for the provider whose estimate is the tool's own accounting rather than Deguffer's:
-    /// conda's dry run reports what its clean will free, while its package caches measure far
-    /// larger, because everything an environment hard-links stays. Reporting the reclaim as
-    /// "estimate minus what remains" would then compare two different kinds of number and call the
-    /// result negative. The delta must subtract like from like, so the step carries Deguffer's own
-    /// plan-time probe of the same paths the executor re-measures.
+    /// <para>Exists for the provider whose estimate is the tool's own accounting rather than
+    /// Deguffer's: conda's dry run reports what its clean will free, while its package caches
+    /// measure far larger, because everything an environment hard-links stays. Reporting the
+    /// reclaim as "estimate minus what remains" would then compare two different kinds of number
+    /// and call the result negative. The delta must subtract like from like, so the step carries
+    /// Deguffer's own plan-time probe of the same paths the executor re-measures.</para>
+    ///
+    /// <para><b>It fixes the pairing, not the re-measurement.</b> The "after" figure comes from the
+    /// provider's own scanner, and <see cref="Scanning.DirectoryScanner"/> holds its volume index
+    /// until something invalidates it — so on an elevated run every command step, this one
+    /// included, subtracts two readings of the same pre-command snapshot and reports nothing
+    /// reclaimed. That defect is older and wider than this field, it belongs to the executor rather
+    /// than to any provider, and closing it means deciding what rebuilding the index after each
+    /// command should cost. It is recorded in <c>docs/todo/unreached-locations.md</c> §1a.</para>
     /// </summary>
     public ScanSize? MeasuredBefore { get; init; }
 

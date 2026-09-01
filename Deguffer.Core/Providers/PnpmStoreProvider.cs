@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -145,13 +145,16 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.6. The store's neighbours are not cache: the directory holding it is pnpm's own layout,
-    /// and the home carries the launcher the user runs, the packages installed with
-    /// <c>pnpm add --global</c>, and the per-user configuration — none of which any eviction may
-    /// reach.
+    /// §5.6. The store itself heads the list, and that is the assertion this provider most needs:
+    /// <c>pnpm store prune</c> works <em>inside</em> the store, so a command that removed the whole
+    /// directory would lose every package on the machine while every other check here still
+    /// passed. Its neighbours matter too, and none of them is cache — the directory holding the
+    /// store is pnpm's own layout, and the home carries the launcher the user runs, the packages
+    /// installed with <c>pnpm add --global</c>, and the per-user configuration.
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string store) => Protect(
-        (Path.GetDirectoryName(store)!, "The directory holding the store must survive — the command prunes inside it."),
+        (store, "The store directory itself must survive — only unreferenced packages inside it are removed."),
+        (Path.GetDirectoryName(store)!, "The directory holding the store, which is pnpm's own layout."),
         (HomeDirectory, "pnpm's home directory, which holds pnpm itself and its configuration."),
         (Path.Combine(HomeDirectory, "global"), "Globally installed packages — never a cache."));
 

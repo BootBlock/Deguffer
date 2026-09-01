@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -45,7 +45,11 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         var size = await MeasureAsync(store);
 
         Assert.Equal(4096, size.Logical);
-        Assert.Equal(4096, size.Allocated);
+
+        // Allocated is the volume's real, cluster-rounded figure here rather than a copy of
+        // the length, so it is asserted as a relationship: a 64 KB-cluster volume would make
+        // an exact expectation a claim about the disk the test happens to run on.
+        Assert.True(size.Allocated >= size.Logical);
     }
 
     /// <summary>

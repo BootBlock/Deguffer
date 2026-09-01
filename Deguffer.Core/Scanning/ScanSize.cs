@@ -1,4 +1,4 @@
-﻿namespace Deguffer.Core.Scanning;
+namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// What a tree occupies, as the two numbers that can legitimately differ.
