@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
@@ -82,45 +81,13 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         }
 
         long total = 0;
-        var pending = new ConcurrentQueue<string>();
-        pending.Enqueue(LongPath.Extended(path));
 
-        var options = new ParallelOptions
-        {
-            CancellationToken = ct,
-            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 2, 16),
-        };
-
-        while (!pending.IsEmpty)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var batch = new List<string>(pending.Count);
-            while (pending.TryDequeue(out var next))
-            {
-                batch.Add(next);
-            }
-
-            Parallel.ForEach(batch, options, directory =>
-            {
-                foreach (var entry in EnumerateSafely(directory))
-                {
-                    if (entry.IsDirectory)
-                    {
-                        pending.Enqueue(entry.Path);
-                    }
-                    else
-                    {
-                        Interlocked.Add(ref total, entry.Length);
-                    }
-                }
-            });
-
-            // §5.5: stream partial results. One report per breadth-first level, not per file —
-            // the UI cannot use thousands of updates a second, and marshalling them would cost
-            // more than the enumeration.
-            progress?.Report(ScanSize.Approximate(Interlocked.Read(ref total)));
-        }
+        BoundedFileWalk.Visit(
+            LongPath.Extended(path),
+            file => Interlocked.Add(ref total, file.Length),
+            // §5.5: stream partial results. One report per breadth-first level, not per file.
+            () => progress?.Report(ScanSize.Approximate(Interlocked.Read(ref total))),
+            ct);
 
         return ScanSize.Approximate(Interlocked.Read(ref total));
     }
@@ -143,7 +110,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             var file = new FileInfo(LongPath.Extended(path));
 
             // A link's length is its own, not its target's, and following one would count a tree
-            // this scanner never looked inside — the same rule EnumerateSafely applies below.
+            // this scanner never looked inside — the same rule BoundedFileWalk applies to every
+            // entry it enumerates.
             return file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint)
                 ? ScanSize.Approximate(file.Length)
                 : null;
@@ -152,39 +120,5 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         {
             return null;
         }
-    }
-
-    private readonly record struct Entry(string Path, bool IsDirectory, long Length);
-
-    /// <summary>
-    /// §5.3: treat access denied as normal and skip silently. A directory we cannot read is
-    /// simply not counted; it is never a reason to abandon the scan.
-    /// </summary>
-    private static List<Entry> EnumerateSafely(string extendedDirectory)
-    {
-        var entries = new List<Entry>();
-
-        try
-        {
-            foreach (var info in new DirectoryInfo(extendedDirectory).EnumerateFileSystemInfos())
-            {
-                // Reparse points are followed nowhere: a junction into another tree would both
-                // double-count and, worse, make deletion escape the target.
-                if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    continue;
-                }
-
-                entries.Add(info is FileInfo file
-                    ? new Entry(file.FullName, IsDirectory: false, file.Length)
-                    : new Entry(info.FullName, IsDirectory: true, 0));
-            }
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Expected on a live machine. Skip.
-        }
-
-        return entries;
     }
 }
