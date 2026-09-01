@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -68,6 +68,20 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// at all, so this list is a probe, never a target.
     /// </summary>
     public IReadOnlyList<string> MeasuredPaths { get; init; } = [];
+
+    /// <summary>
+    /// What <see cref="MeasuredPaths"/> held at plan time, where that is a different number from
+    /// <see cref="CleanupStep.Estimated"/>. Null means they are the same figure, which is every
+    /// provider whose estimate *is* its measurement of those paths.
+    ///
+    /// Exists for the provider whose estimate is the tool's own accounting rather than Deguffer's:
+    /// conda's dry run reports what its clean will free, while its package caches measure far
+    /// larger, because everything an environment hard-links stays. Reporting the reclaim as
+    /// "estimate minus what remains" would then compare two different kinds of number and call the
+    /// result negative. The delta must subtract like from like, so the step carries Deguffer's own
+    /// plan-time probe of the same paths the executor re-measures.
+    /// </summary>
+    public ScanSize? MeasuredBefore { get; init; }
 
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 }

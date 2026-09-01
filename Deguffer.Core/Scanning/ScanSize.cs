@@ -1,4 +1,4 @@
-namespace Deguffer.Core.Scanning;
+﻿namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// What a tree occupies, as the two numbers that can legitimately differ.
@@ -14,9 +14,10 @@ namespace Deguffer.Core.Scanning;
 /// belongs to a provider, not to scanning.
 /// </summary>
 /// <param name="IsApproximate">
-/// True when the numbers came from a source that cannot distinguish the two (§5.5's fallback path
-/// reports file lengths only). Carried so the UI can say so rather than implying precision the
-/// measurement does not have.
+/// True when the numbers came from a source that cannot vouch for them precisely — §5.5's fallback
+/// path reports file lengths only, and <see cref="HardLinkAwareScanner"/>'s sole-link sum predicts
+/// an eviction whose link counts can change under it. Carried so the UI can say so rather than
+/// implying precision the measurement does not have.
 /// </param>
 public readonly record struct ScanSize(long Allocated, long Logical, bool IsApproximate = false)
 {
