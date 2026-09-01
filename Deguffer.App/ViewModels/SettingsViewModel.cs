@@ -87,6 +87,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { ConfirmBeforeCleaning = value });
     }
 
+    public bool RequireTypedConfirmation
+    {
+        get => _preferences.Current.RequireTypedConfirmation;
+        set => Apply(current => current with { RequireTypedConfirmation = value });
+    }
+
     /// <summary>
     /// Shown only when a write failed. A settings page that silently discards a choice is worse
     /// than one that never offered it — the user has no way to tell it did not take.

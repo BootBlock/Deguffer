@@ -16,13 +16,54 @@ public class PreferenceStoreTests
         using var temp = new TempDirectory();
         var store = new PreferenceStore(new FakeUserEnvironment(temp.Path));
 
-        Assert.True(store.Save(new AppPreferences(AppTheme.Dark, BackdropEnabled: false, ConfirmBeforeCleaning: false)));
+        Assert.True(store.Save(new AppPreferences(
+            AppTheme.Dark,
+            BackdropEnabled: false,
+            ConfirmBeforeCleaning: false,
+            RequireTypedConfirmation: true)));
 
         var loaded = store.Load();
 
         Assert.Equal(AppTheme.Dark, loaded.Theme);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
+        Assert.True(loaded.RequireTypedConfirmation);
+    }
+
+    /// <summary>
+    /// A settings file written before a preference existed is the ordinary case on upgrade, and it
+    /// must land on that preference's own default rather than on whatever the JSON reader picks for
+    /// a missing value. Read the other way round this is the safety question: an absent
+    /// <c>RequireTypedConfirmation</c> must not be read as anything but the shipped default.
+    /// </summary>
+    [Fact]
+    public void AFileFromBeforeAPreferenceExistedTakesThatPreferencesDefault()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var directory = Directory.CreateDirectory(Path.Combine(environment.LocalAppData, "Deguffer"));
+
+        File.WriteAllText(
+            Path.Combine(directory.FullName, "preferences.json"),
+            """{ "Theme": "Dark", "BackdropEnabled": false, "ConfirmBeforeCleaning": false }""");
+
+        var loaded = new PreferenceStore(environment).Load();
+
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(AppPreferences.Default.RequireTypedConfirmation, loaded.RequireTypedConfirmation);
+    }
+
+    /// <summary>
+    /// The shipped answer to "what is asked before a deletion", on a machine nobody has configured.
+    /// The blanket confirmation is on and the typed phrase is off, so a fresh install asks once, in
+    /// words, naming everything it is about to remove. Either default flipping by accident changes
+    /// that silently, which is why they are pinned rather than left to the record declaration.
+    /// </summary>
+    [Fact]
+    public void TheShippedDefaultsAskOnceAndDoNotAskForTyping()
+    {
+        Assert.True(AppPreferences.Default.ConfirmBeforeCleaning);
+        Assert.False(AppPreferences.Default.RequireTypedConfirmation);
     }
 
     [Fact]

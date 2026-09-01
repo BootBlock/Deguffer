@@ -47,21 +47,32 @@ public sealed partial class CleanPage : Page
     /// so the default is to ask.
     ///
     /// This is the blanket confirmation, which covers the Tier 1 case §7 does not prompt for. The
-    /// view-model stands it down when §7 will ask about the selection anyway.
+    /// view-model stands it down when §7 will ask about the selection anyway — and with the typed
+    /// phrase switched off, Tier 3 is one of the rows it therefore covers.
     /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyConfirmationPreference();
+        ApplyConfirmationPreferences();
         App.Preferences.Changed += OnPreferencesChanged;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) =>
         App.Preferences.Changed -= OnPreferencesChanged;
 
-    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyConfirmationPreference();
+    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyConfirmationPreferences();
 
-    private void ApplyConfirmationPreference() =>
-        ViewModel.ConfirmCleanAsync = App.Preferences.Current.ConfirmBeforeCleaning ? ConfirmCleanAsync : null;
+    /// <summary>
+    /// Both confirmation preferences, applied together. They are one decision from the user's side —
+    /// what gets asked before a deletion — and applying only one of them here is how a Tier 3 row
+    /// would come to be asked about by neither.
+    /// </summary>
+    private void ApplyConfirmationPreferences()
+    {
+        var preferences = App.Preferences.Current;
+
+        ViewModel.ConfirmCleanAsync = preferences.ConfirmBeforeCleaning ? ConfirmCleanAsync : null;
+        ViewModel.RequireTypedConfirmation = preferences.RequireTypedConfirmation;
+    }
 
     private async Task<bool> ConfirmCleanAsync(string summary)
     {

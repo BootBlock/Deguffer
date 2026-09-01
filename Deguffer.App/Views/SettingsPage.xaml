@@ -58,6 +58,21 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- §7 makes the typed phrase Tier 3's own gate. Off by default: typing a name for
+                 every emptied Recycle Bin is transcription rather than deliberation, and a gate
+                 the user resents is one they learn to get past without reading. Switching it off
+                 does not make the row silent — the description says which confirmation it falls
+                 back to, because a safety setting whose real effect is unstated is worse than no
+                 setting. -->
+            <views:SettingsRow Glyph="&#xE70F;"
+                               Title="Type a name to delete user data"
+                               Description="Logs, histories and Recycle Bins are user data, and removing them is permanent. Ask for the item's name to be typed out before deleting it. When this is off, they are covered by Confirm before cleaning instead.">
+                <views:SettingsRow.Control>
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.RequireTypedConfirmation, Mode=TwoWay}"
+                                  AutomationProperties.Name="Type a name to delete user data" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <!-- The only settings on this page that change what Deguffer will delete rather than
                  how it looks. Stated as scope rather than as a preference, because an empty list
                  is not a disabled feature — it is Deguffer having nowhere it is allowed to look. -->

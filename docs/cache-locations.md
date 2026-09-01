@@ -19,7 +19,7 @@ four questions worth asking before deleting anything:
 | --- | --- | --- |
 | **1 — Regenerable cache** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
 | **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **never pre-selected**, and needs an extra acknowledgement. |
-| **3 — User data in a cache costume** | Logs, histories, saved sessions. Deleting loses it permanently. | Needs a typed confirmation. |
+| **3 — User data in a cache costume** | Logs, histories, saved sessions. Deleting loses it permanently. | Offered, **never pre-selected**, and confirmed before deletion. Settings can raise that confirmation to typing the item's name out. |
 | **4 — Do not touch** | Config, credentials, live state, or anything Deguffer cannot positively identify. | Excluded entirely — not even shown as an option. |
 
 **Tier 4 is the default, not the exception.** Every provider names the children it recognises;
