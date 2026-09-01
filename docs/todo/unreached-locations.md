@@ -1,10 +1,11 @@
 # Unreached locations — what the shipped providers do not see
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
-> and vcpkg providers, §4's Chromium application caches, §5's GPU shader caches, §6's crash dumps
-> and servicing logs, and §7's per-volume recycle bins have shipped; §1's pnpm and conda and
-> everything else are unstarted. Flip to ✅ COMPLETE and `git mv` into `done/` when the list is
-> exhausted, or supersede it with a newer plan.
+> and vcpkg providers, §1a's pnpm and conda, §4's Chromium application caches, §5's GPU shader
+> caches, §6's crash dumps and servicing logs, and §7's per-volume recycle bins have shipped;
+> everything else is unstarted. **Open question 1 is answered** — see the foot of this document.
+> Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
+> newer plan.
 
 [after-the-scanner.md](after-the-scanner.md) sequences the work that follows the §5.5 scanner, and
 its provider items are drawn from the founding audit's own tables. That audit was a snapshot of one
@@ -61,11 +62,12 @@ The closest fit to what Deguffer already does. Each has a §5.1 command or a §5
 existing provider shape applies almost unchanged. Cleaners miss them because each needs its own
 knowledge and there are a lot of them.
 
-**Outcome:** four of the six shipped — `CargoCacheProvider`, `GoCacheProvider`,
+**Outcome:** four of the six shipped in this phase — `CargoCacheProvider`, `GoCacheProvider`,
 `MavenRepositoryProvider` and `VcpkgCacheProvider`, with `VcpkgDiscovery` split out beside the last
-of them. pnpm and conda did not, and the row in the sequencing table was split rather than ticked:
-both are blocked on the link-aware measurement open question 1 records, and neither is a provider
-until that is answered. Every one of the four is **researched rather than measured** — none of these
+of them. pnpm and conda did not, and the row in the sequencing table was split rather than ticked,
+both being blocked on the link-aware measurement open question 1 records. They shipped in the phase
+after this one, and §1a below records what that took. Every one of the four here is
+**researched rather than measured** — none of these
 toolchains is installed on the machine this was written against, so the sizes here remain vendor
 documentation and community report, and the rules are proved through the fakes rather than against a
 real cache.
@@ -173,7 +175,7 @@ path treats it as a URI, and §6.3's extended-length prefix is not one, so readi
 codebase that hands an extended path to an API expecting a URI has the same defect, and nothing
 currently does.
 
-Left out deliberately, and each for a reason: pnpm and conda, which are the split row below;
+Left out deliberately, and each for a reason: pnpm and conda, which became §1a below;
 `%USERPROFILE%\.rustup\toolchains`, which is Tier 2 and its own provider rather than a child of
 Cargo's; `.m2\wrapper`, which is disposable but holds Maven distributions of a few megabytes and is
 named as a survivor instead; `VCPKG_BINARY_SOURCES`, which is a small expression language rather
@@ -206,7 +208,113 @@ file, which §5.3 says to treat as normal and skip — so a path-based Go provid
 reclaim nothing while reporting success. Use the command, or clear the attribute explicitly and
 prove it with a test that fails without the clearing.
 
-### pnpm — Tier 1, researched
+## 1a. The two that needed a link-aware answer — pnpm and conda ✅ done
+
+**Outcome:** both shipped, as `PnpmStoreProvider` and `CondaCacheProvider`, and **open question 1 is
+answered rather than worked around** — the answer is at the foot of this document. The short form:
+the unelevated walk can measure this, the MFT cannot do it better, and the two providers then took
+*different* answers to the accounting question, which is the finding this section did not anticipate.
+
+Seven things the work settled.
+
+- **The measurement question and the reclaim question are different, and only one of them was open
+  question 1's.** A perfect link-aware total for a store still is not the reclaim, because
+  `pnpm store prune` removes only the unreferenced part of it. The two providers land on opposite
+  sides of that and both are right: pnpm's estimate is Deguffer's own link-aware measurement of the
+  store, because pnpm reports no figure of its own; conda's is conda's figure, because conda reports
+  one and it is better than anything Deguffer could compute. Stating the question that way is what
+  made it obvious that **conda never needed the scanner at all**, which is the next point.
+
+- **Conda ships on PlatformIO's shape, and the phase was two phases.** `conda clean --dry-run --json`
+  reports `total_size` per category in bytes, and conda's own sizing skips any file with more than
+  one hard link — the check is `if stat.st_nlink > 1: raise NotImplementedError` in its
+  `main_clean.py`, which drops the file from the total. So what the dry run reports is exactly what
+  the clean removes, already link-aware, computed by the tool that owns the records. Deguffer shows
+  that and measures nothing of its own except the channel index cache, which the report lists by path
+  and never sizes. Open question 1 gated **pnpm alone**; conda was only ever waiting behind it by
+  association. Where the dry run cannot be read, the plan offers nothing, because the only substitute
+  figure is the one that counts every package the environments still link.
+
+- **A tool's figure and Deguffer's measurement cannot be subtracted from one another, and the
+  executor was doing exactly that.** `PlanExecutor` computed reclaim as the step's estimate minus a
+  re-measurement of `MeasuredPaths`. That is sound for every provider whose estimate *is* its
+  measurement of those paths, which was all of them until now. For conda the estimate is a
+  prediction and the re-measure is a measurement, so a successful clean would have reported a
+  negative delta and the "the cache grew since the preview" sentence. `RunCommandStep.MeasuredBefore`
+  carries Deguffer's own plan-time probe of the same paths, and the executor prefers it where it is
+  present. Null everywhere else, so nothing changed for the other seven command providers.
+
+- **The tier moved for conda, and this section's stated reason for it was wrong.** Tier 2 stands, but
+  "re-creating an environment is a download rather than a rebuild" describes an operation the command
+  never performs — `conda clean` touches no environment, and every package an environment links
+  stays. The two reasons that survive are the size of the re-download, which is Tier 2's own
+  definition, and conda's documented warning that its unused test cannot see an environment linked by
+  *symlink*. The second is the honest one: a rule that can be wrong in the destructive direction
+  belongs at the tier nothing is ticked at. That is the third phase running in which the survey's
+  tier was right and its argument was not, and the pattern is worth naming — a proposed tier is a
+  conclusion, and the work has to re-derive it rather than inherit it.
+
+- **§5.1's answer is "yes" twice, and the interesting half is which flags to leave off.** Both tools
+  ship a command, so neither provider deletes a path. What each *declines* to pass is the part that
+  needed deciding, and both are written into the class. pnpm's `prune --force` means "also remove
+  alien files", directories the package manager did not create — deleting what no rule can name is
+  §5.2's whole subject, so force is never passed. conda's `--all` sweeps in `--logfiles`, and a log is
+  a record of something that already happened, which §6 of this document has twice argued is Tier 3;
+  a Tier 2 plan must not carry one, so the categories are named individually. `--force-pkgs-dirs` is
+  never passed at all, conda's own help saying it breaks environments linked back to the cache.
+
+- **A configured root reached by a *command* is a smaller hazard than one reached by a deletion, and
+  the reason is worth writing down.** The last phase closed four holes of the shape "a string from an
+  environment variable used before anything established what it was", and both providers here take
+  such strings — `pnpm store path`, `PNPM_HOME`, `CONDA_EXE`, and three path lists out of
+  `conda info --json`. Every one goes through `LongPath.Configured`. But neither provider needs the
+  `LongPath.Contains` refusal Maven and vcpkg carry, and the distinction is structural rather than a
+  judgement call: those two turn a configured root into a `DeleteDirectoryStep`, and these two turn
+  it into a `RunCommandStep` whose paths are a measurement probe. A hostile value here produces a
+  wrong *number*, never a Deguffer deletion. Both suites assert `TargetedPaths` is empty, which is
+  the assertion that keeps it structural.
+
+- **Conda turned out to be installed on the audited machine, and the survey's premise for this row
+  was wrong.** This section said neither tool was present. Miniconda was, at
+  a machine-wide location no `PATH` entry pointed at, which is exactly why the provider looks in
+  three places rather than one. So conda is **partly measured rather than purely researched**:
+  `conda info --json` and `conda clean --dry-run --json` were both run against the real tool, and
+  their output matches what `CondaReport` parses, field for field. What could not be observed is a
+  populated cache — all three `pkgs` directories it reported were absent, so the provider produced
+  its "cached nothing yet" empty plan and the row rendered at zero. The sizes in this section remain
+  vendor documentation. pnpm is not installed and stays entirely researched.
+
+One residual the work leaves behind. It is older and wider than this phase, and it is documented
+rather than fixed because the fix is a decision rather than a mechanical change.
+
+- **A command step's reclaim reads zero on an elevated run, for every §5.1 provider.**
+  `PlanExecutor` reports what a command freed as the plan-time figure minus a re-measurement of the
+  same paths. The re-measurement goes through the provider's own scanner, and `DirectoryScanner`
+  holds its volume index until something calls `Invalidate` — which happens once, at the start of a
+  planning pass. So where the fast path is in play, both readings come from the same pre-command
+  snapshot, they cancel, and the step reports nothing reclaimed after a clean that freed gigabytes.
+  That is §5.4's own stated failure, "the user will prune, see no change, and lose trust in the
+  tool", arriving by a different route. It predates this phase and affects NuGet, npm, pip, uv, Go,
+  PlatformIO and conda alike; pnpm is the one exception, because `HardLinkAwareScanner` holds no
+  index and its second reading is genuinely fresh. **It is not fixed here because the fix is a
+  decision, not a patch:** the executor must either rebuild the volume index after each command, at
+  a cost measured in seconds per volume on a large disk, or take the after-measure by walking and
+  give up the fast path exactly where the tree is largest. `RunCommandStep.MeasuredBefore` says the
+  same thing where a reader will meet it.
+
+One thing the deduplication turned up on its way past, worth recording because of how it was
+found. **§5.3's "access denied is normal, skip silently" had no test at all, in either scanner** —
+removing the catch filter outright left every test green, so the rule could have been deleted and
+nothing would have noticed. It went untested for as long as it did because it lived in two places
+and belonged to neither; one shared seam made it one testable thing, and it is tested now. The
+fixture is a directory the running account denies itself the right to list, which needs no
+elevation: the deny goes on the DACL, the account stays the owner, and an owner may always take it
+off again. A first attempt was abandoned on the belief that restoring it needed a privilege an
+ordinary process lacks. That was wrong — `SeSecurityPrivilege` gates the audit list, not the
+permissions — and the lesson generalises past this one test: a safety rule left untested because
+the fixture "cannot be built" deserves the second look, because the reason is sometimes a mistake.
+
+### pnpm — Tier 1, researched ✅ done
 
 `pnpm store path` locates it and `pnpm store prune` evicts only what no project on the machine still
 references. A better eviction than npm's, because it is selective rather than total.
@@ -217,21 +325,22 @@ file lengths counts each copy, and the disk gives back only the blocks whose las
 This is §5.4's lesson in a different costume: report what will actually be freed, or the user prunes
 4 GB and watches free space move by 400 MB.
 
-The MFT reader can answer this where a directory walk cannot — the file record carries a hard-link
-count, so a link-aware sum is available on the fast path. This is the first candidate that needs the
-scanner to be more than fast, and it is the reason to build it early rather than late.
+**The MFT was the wrong place to solve it**, which this entry had backwards. The record does carry a
+hard-link count, but the table is readable only under elevation, so a figure taken from it would
+disagree with the unelevated figure for the same store — and §6.3 makes unelevated the ordinary run.
+`HardLinkAwareScanner` asks the file itself instead. Open question 1 records what that cost and what
+it does not cover.
 
-### Conda — Tier 2, researched
+### Conda — Tier 2, partly measured ✅ done
 
 Anaconda's own documentation puts the `pkgs` directory at tens to hundreds of gigabytes.
-`conda clean --all` removes tarballs, unused cached packages, the index cache and the source cache.
-`conda clean --all --dry-run` reports the figure without acting, which is a preview Deguffer can
-show directly rather than measure — the same relationship PlatformIO's `prune --dry-run` already
-has.
+`conda clean` removes tarballs, unused cached packages, the index cache and the source cache, and
+`--dry-run --json` reports the figure without acting — the same relationship PlatformIO's
+`prune --dry-run` already has, and the shape this provider ships on.
 
-Tier 2 rather than Tier 1: unpacked packages in `pkgs` are hard-linked into every environment that
-uses them, so pnpm's accounting caution applies, and re-creating an environment is a download rather
-than a rebuild.
+Tier 2 rather than Tier 1, but **not** for the reason first written here. See the outcome above:
+the command re-creates no environment, so the tier rests on the size of the re-download and on
+conda's own warning about environments linked by symlink.
 
 ### The long tail — Tier 1
 
@@ -899,7 +1008,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Chromium cache signature ✅ | Expected `ContentSignature` to have the shape. It did not — §4 records what the work needed instead | 0.8 GB |
 | Crash dumps and servicing logs ✅ | Expected path-based plus elevation. Elevation turned out to be a claim `CleanupPlan` could not make, and `MEMORY.DMP` a step kind it did not have — §6 records both | 0.2 GB |
 | Cargo, Go, Maven, vcpkg ✅ | Expected one class each on the npm and NuGet shape. Two wanted the declared-path shape instead, two moved to Tier 2, and the read-only trap turned out to be in the remover — §1 records all three | researched |
-| pnpm and conda | A link-aware size, which open question 1 leaves unresolved. The MFT record carries the hard-link count; whether the fallback walk can answer at all is not established, and a provider whose number is right only under elevation is a poor citizen | researched |
+| pnpm and conda ✅ | Expected one link-aware measurement to unblock both. The walk can answer and the file table cannot do it better, but only pnpm needed the answer — conda reports its own link-aware figure, so it shipped on PlatformIO's shape. §1a records the split | researched |
 | Per-project build output | Extends `SourceRootStore`; needs §5.3's live-tree exclusion generalised beyond `%TEMP%` | 8.6 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
@@ -913,9 +1022,32 @@ reason about. The tier model handles them. The plan and execution types do not, 
 
 ## Open questions this survey raises
 
-1. **Does `LongPath` cover a hard-linked file's identity?** pnpm and conda both need a link-aware
-   size, and the MFT record carries the count. Whether the fallback walk can answer at all is
-   unresolved, and a provider whose number is right only under elevation is a poor citizen.
+1. ~~**Does `LongPath` cover a hard-linked file's identity?**~~ **Answered.** The walk can measure
+   this, unelevated, and the file table cannot do it better.
+
+   `GetFileInformationByHandleEx` with `FileStandardInfo` returns a file's hard-link count, its
+   allocated size and its logical size from one `FILE_READ_ATTRIBUTES` handle, and that handle is
+   granted at either privilege level — observed on a real hard link on an unelevated process before
+   any of `HardLinkAwareScanner` was written. The MFT record does carry the count at offset `0x12`,
+   which `MftRecordHeader.Read` still does not read, and **it should stay unread**: the table is
+   openable only under elevation, so a link-aware total taken from it would disagree with the
+   unelevated total for the same tree, and §6.3 makes unelevated the ordinary run. One route serving
+   both is worth more than a faster route serving one. The result therefore carries no
+   `FallbackReason`, because elevating would change nothing and offering it would be false.
+
+   **What the answer does not cover, and this is the part to carry forward.** The rule counts a file
+   only when it has exactly one link, so a file linked twice *inside* the measured tree is dropped
+   even though removing the tree would free it. That under-reports rather than over-reports, which
+   is the direction §5.4 allows, and telling the case apart means enumerating every link's name per
+   multi-linked file — for stores whose layout never produces it, since content-addressed files link
+   outward rather than to each other. The figure is also a prediction rather than a measurement:
+   link counts move whenever a project installs or removes a dependency, so every result is marked
+   approximate however exactly its bytes were read.
+
+   **And it was only ever pnpm's question.** conda's own clean skips any file with more than one
+   link, so its dry run already reports a link-aware figure computed by the tool that owns the
+   records. §1a records why that made this two phases rather than one.
+
 2. **How is a live source tree detected?** §5.3's exclusion is written against `%TEMP%` and open
    handles. A `.venv` whose interpreter is running, or a Unity project open in the editor, needs the
    same answer at a different granularity.
