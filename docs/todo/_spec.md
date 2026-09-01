@@ -323,15 +323,16 @@ Deliberate points, and the traps that come with them:
   disk", not "what folders exist".
 - **Every row states what happens on next use**: "re-downloads on next build (~10 GB)" is more
   useful than a checkbox.
-- **Tier 3 is confirmed before it is deleted, and says plainly what is unrecoverable.** How hard
-  that confirmation is to give is the user's to set. Typing a provider's name for every emptied
-  Recycle Bin is transcription rather than deliberation, and a gate the user resents is a gate
-  they learn to get past without reading it, so the typed phrase is a preference and it is off
-  by default. Switching it off retires Tier 3's *own* question rather than the question: the row
-  falls to the blanket confirmation, which names it and says the deletion cannot be undone.
-  Switching that off as well is a second, separate choice, and what then stands between the user
-  and the deletion is the preview below and Tier 3 never being pre-selected. **No preference
-  reaches Tier 4**, which stays excluded however the settings are left.
+- **Tier 3 says plainly what is unrecoverable**, and by default it is confirmed before deletion.
+  *Saying* it is not negotiable. *How hard the confirmation is to give* is the user's to set, and
+  the two are separate. Typing a provider's name for every emptied Recycle Bin is transcription
+  rather than deliberation, and a gate the user resents is a gate they learn to get past without
+  reading it, so the typed phrase is a preference and it is off by default. Switching it off retires
+  Tier 3's *own* question rather than the question: the row falls to the blanket confirmation, which
+  names it, quotes the same "user data, permanent, cannot be undone" sentence the typed dialog would
+  have carried, and totals what is going. Switching that off as well is a second, separate choice,
+  and what then stands between the user and the deletion is the preview below and Tier 3 never being
+  pre-selected. **No preference reaches Tier 4**, which stays excluded however the settings are left.
 - **Dry run is the default action.** The primary button previews; deleting is the second step.
 - **Show free space before and after**, prominently. It is the only number the user came for.
 - **Age is a first-class column** for per-workspace and per-project data — "last touched 5 months

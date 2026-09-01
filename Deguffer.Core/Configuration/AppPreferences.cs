@@ -35,9 +35,12 @@ public enum AppTheme
 /// user resents is a gate they learn to get past without reading.
 ///
 /// Switching it off retires Tier 3's <em>own</em> question, not the question. The row then falls to
-/// <paramref name="ConfirmBeforeCleaning"/>, which names it and says the deletion cannot be undone.
-/// Turning both off is a deliberate pair of choices, and leaves the preview and Tier 3 never being
-/// pre-selected as what stands between the user and the deletion.
+/// <paramref name="ConfirmBeforeCleaning"/>, which names it and quotes the same
+/// <see cref="Execution.ConfirmationRequirement.ConsequenceOf"/> sentence the typed dialog would
+/// have carried — §7 leaves how hard the confirmation is to give to the user, and never left saying
+/// what is unrecoverable to anybody. Turning both off is a deliberate pair of choices, and leaves
+/// the preview and Tier 3 never being pre-selected as what stands between the user and the
+/// deletion.
 /// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,

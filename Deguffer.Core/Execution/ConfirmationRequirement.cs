@@ -15,12 +15,13 @@ public enum ConfirmationLevel
     Acknowledgement,
 
     /// <summary>
-    /// Tier 3. §7: "Tier 3 requires typed confirmation, and says plainly what is unrecoverable."
-    /// The user types <see cref="ConfirmationRequirement.RequiredPhrase"/> to proceed.
+    /// Tier 3. The user types <see cref="ConfirmationRequirement.RequiredPhrase"/> to proceed.
     ///
-    /// Reached only where the user has asked for it. §7 makes the typed phrase a preference, and
-    /// with it off a Tier 3 plan is <see cref="None"/> here and confirmed by the shell's blanket
-    /// question instead.
+    /// Reached only where the user has asked for it. §7 leaves how hard the confirmation is to give
+    /// to the user, and with the typed phrase off a Tier 3 plan is <see cref="None"/> here and
+    /// confirmed by the shell's blanket question instead. What §7 does not make optional is saying
+    /// plainly what is unrecoverable, which is why <see cref="ConfirmationRequirement.ConsequenceOf"/>
+    /// reads from the tier rather than from this.
     /// </summary>
     TypedPhrase,
 
@@ -137,7 +138,7 @@ public sealed record ConfirmationRequirement
             ProviderName = plan.ProviderName,
             Tier = plan.Tier,
             Level = level,
-            Consequence = Describe(plan),
+            Consequence = ConsequenceOf(plan),
             RequiredPhrase = level == ConfirmationLevel.TypedPhrase ? plan.ProviderName : null,
         };
     }
@@ -176,24 +177,34 @@ public sealed record ConfirmationRequirement
     }
 
     /// <summary>
-    /// What deleting this plan costs. Read from the tier rather than from the level, because the
-    /// consequence is a fact about the data and does not change when the user relaxes how hard the
-    /// deletion is to authorise. A Tier 3 plan with the typed phrase switched off is quoted in the
-    /// shell's blanket confirmation, and a Tier 1 sentence there would understate it.
+    /// What deleting this plan costs, said plainly, and in the irreversible case saying so (§7).
+    ///
+    /// Read from the tier rather than from <see cref="Level"/>, because the consequence is a fact
+    /// about the data and does not change when the user relaxes how hard the deletion is to
+    /// authorise. Public because the shell's blanket confirmation needs the same sentence for a
+    /// Tier 3 row the typed phrase is switched off for: §7 makes that confirmation optional, and
+    /// never made saying what is unrecoverable optional with it.
     /// </summary>
-    private static string Describe(CleanupPlan plan) => plan.Tier switch
+    public static string ConsequenceOf(CleanupPlan plan)
     {
-        SafetyTier.RegenerableCache => plan.WhatHappensOnNextUse,
-        SafetyTier.RegenerableWithCost =>
-            $"Nothing is lost permanently, but restoring it costs real time. {plan.WhatHappensOnNextUse}",
-        // Deliberately silent about the Recycle Bin, which this sentence used to name as the thing
-        // the deletion does not go through. The bins themselves are now a Tier 3 subject, and the
-        // wording read as a contradiction against the one plan whose whole business is emptying
-        // them. What the user needs from a generic sentence is that the loss is total; which
-        // mechanism is bypassed belongs to the plan's own WhatHappensOnNextUse.
-        SafetyTier.UserData =>
-            $"This is user data, and deleting it is permanent — it is removed outright and cannot " +
-            $"be undone. {plan.WhatHappensOnNextUse}",
-        _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
-    };
+        ArgumentNullException.ThrowIfNull(plan);
+
+        return plan.Tier switch
+        {
+            SafetyTier.RegenerableCache => plan.WhatHappensOnNextUse,
+            SafetyTier.RegenerableWithCost =>
+                $"Nothing is lost permanently, but restoring it costs real time. {plan.WhatHappensOnNextUse}",
+
+            // Deliberately silent about the Recycle Bin, which this sentence used to name as the
+            // thing the deletion does not go through. The bins themselves are now a Tier 3 subject,
+            // and the wording read as a contradiction against the one plan whose whole business is
+            // emptying them. What the user needs from a generic sentence is that the loss is total;
+            // which mechanism is bypassed belongs to the plan's own WhatHappensOnNextUse.
+            SafetyTier.UserData =>
+                $"This is user data, and deleting it is permanent — it is removed outright and " +
+                $"cannot be undone. {plan.WhatHappensOnNextUse}",
+
+            _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
+        };
+    }
 }

@@ -220,8 +220,9 @@ public sealed class ConfirmationRequirementTests
 
     /// <summary>
     /// What is lost does not change because the user switched the typing off, so the wording must
-    /// still say the deletion is permanent. With the preference off the blanket confirmation is the
-    /// only dialog a Tier 3 row gets, and a Tier 1 sentence there would understate it.
+    /// still say the deletion is permanent. This is the sentence the shell's blanket confirmation
+    /// quotes for a Tier 3 row once the typed dialog stops appearing, so keying it to the derived
+    /// level rather than the tier would put a Tier 1 sentence in front of a permanent deletion.
     /// </summary>
     [Fact]
     public void Tier3StillSaysPlainlyThatTheLossIsPermanentWithTheTypedPhraseOff()

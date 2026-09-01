@@ -31,10 +31,16 @@ public class PreferenceStoreTests
     }
 
     /// <summary>
-    /// A settings file written before a preference existed is the ordinary case on upgrade, and it
-    /// must land on that preference's own default rather than on whatever the JSON reader picks for
-    /// a missing value. Read the other way round this is the safety question: an absent
-    /// <c>RequireTypedConfirmation</c> must not be read as anything but the shipped default.
+    /// A settings file written before a preference existed is the ordinary case on upgrade, and the
+    /// absent key must land on that preference's declared default rather than on whatever the JSON
+    /// reader picks for a missing value.
+    ///
+    /// <c>ConfirmBeforeCleaning</c> is what proves it, and it is the only preference that can. Its
+    /// declared default is <c>true</c> while <c>default(bool)</c> is <c>false</c>, so the two
+    /// answers differ and the assertion has something to catch. Asserting the same thing about
+    /// <c>RequireTypedConfirmation</c> would prove nothing: both answers there are <c>false</c>.
+    /// It is also the case with the consequence — an upgraded file read as "do not confirm" would
+    /// silently drop the only question a Tier 3 row gets once the typed phrase is off.
     /// </summary>
     [Fact]
     public void AFileFromBeforeAPreferenceExistedTakesThatPreferencesDefault()
@@ -45,12 +51,17 @@ public class PreferenceStoreTests
 
         File.WriteAllText(
             Path.Combine(directory.FullName, "preferences.json"),
-            """{ "Theme": "Dark", "BackdropEnabled": false, "ConfirmBeforeCleaning": false }""");
+            """{ "Theme": "Dark", "BackdropEnabled": false }""");
 
         var loaded = new PreferenceStore(environment).Load();
 
+        // The file parsed, rather than falling through Load's catch to the defaults wholesale —
+        // without which the two assertions below would hold for the wrong reason.
         Assert.Equal(AppTheme.Dark, loaded.Theme);
-        Assert.Equal(AppPreferences.Default.RequireTypedConfirmation, loaded.RequireTypedConfirmation);
+        Assert.False(loaded.BackdropEnabled);
+
+        Assert.True(loaded.ConfirmBeforeCleaning);
+        Assert.False(loaded.RequireTypedConfirmation);
     }
 
     /// <summary>
