@@ -31,6 +31,7 @@ body:
         - The preview, or the plan it describes
         - Executing a cleanup
         - A new cache source or tool to support
+        - User interface
         - Settings
         - Storage
         - Packaging and distribution
