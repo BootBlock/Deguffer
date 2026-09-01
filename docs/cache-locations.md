@@ -281,9 +281,13 @@ rather than by counting links.
 
 ### What is protected
 
-The directory holding the store, pnpm's home directory, and **`global`** inside it — the packages
-you installed with `pnpm add --global`, which are not a cache. pnpm's own launcher lives in the
-home directory too. Deguffer asserts all three survived the run.
+**The store directory itself**, first of all. `pnpm store prune` works *inside* the store, so the
+directory has to still be there when it finishes — and a check that watched only its surroundings
+would call a run that removed every package on the machine a success.
+
+Around it: the directory holding the store, pnpm's home directory, and **`global`** inside it — the
+packages you installed with `pnpm add --global`, which are not a cache. pnpm's own launcher lives in
+the home directory too. Deguffer asserts all four survived the run.
 
 Where pnpm reports something that is not a usable directory, or names a drive root, Deguffer offers
 nothing rather than guessing. There is no documented default to fall back on: the store directory

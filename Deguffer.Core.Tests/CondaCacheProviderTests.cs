@@ -138,7 +138,10 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.Equal(10_000 + 4096, plan.EstimatedBytes);
+        // Logical, not the reclaimable (allocated) figure: allocated rounds to the volume's
+        // cluster size, so an exact expectation on it would be a claim about the disk the test
+        // happens to run on, and would differ between the two scan routes.
+        Assert.Equal(10_000 + 4096, plan.Estimated.Logical);
     }
 
     /// <summary>

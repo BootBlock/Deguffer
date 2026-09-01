@@ -275,7 +275,7 @@ Seven things the work settled.
   the assertion that keeps it structural.
 
 - **Conda turned out to be installed on the audited machine, and the survey's premise for this row
-  was wrong.** This section and the phase brief both said neither tool was present. Miniconda was, at
+  was wrong.** This section said neither tool was present. Miniconda was, at
   a machine-wide location no `PATH` entry pointed at, which is exactly why the provider looks in
   three places rather than one. So conda is **partly measured rather than purely researched**:
   `conda info --json` and `conda clean --dry-run --json` were both run against the real tool, and
@@ -284,8 +284,8 @@ Seven things the work settled.
   its "cached nothing yet" empty plan and the row rendered at zero. The sizes in this section remain
   vendor documentation. pnpm is not installed and stays entirely researched.
 
-Two residuals the work leaves behind, both older and wider than this phase, and both documented
-rather than fixed because the fix is somebody's decision rather than a mechanical change.
+One residual the work leaves behind. It is older and wider than this phase, and it is documented
+rather than fixed because the fix is a decision rather than a mechanical change.
 
 - **A command step's reclaim reads zero on an elevated run, for every §5.1 provider.**
   `PlanExecutor` reports what a command freed as the plan-time figure minus a re-measurement of the
@@ -302,15 +302,17 @@ rather than fixed because the fix is somebody's decision rather than a mechanica
   give up the fast path exactly where the tree is largest. `RunCommandStep.MeasuredBefore` says the
   same thing where a reader will meet it.
 
-- **§5.3's "access denied is normal, skip silently" has no test, in either scanner.** Removing the
-  entire catch filter from the shared walk leaves all 654 tests green, so nothing in the suite
-  exercises a refused or vanished directory during enumeration. The gap predates this phase —
-  `ParallelEnumerationScanner` carried the same untested filter — and deduplicating the walk at
-  least reduces it from two copies to one, so a single test would now cover both scanners. A
-  fixture was attempted and rejected rather than skipped: a deny ACL does produce the refusal
-  unelevated, but restoring the ACL afterwards needs `SeSecurityPrivilege`, so the test would leave
-  a directory on the maintainer's disk that its own cleanup cannot remove. Covering this properly
-  wants an enumeration seam of the kind `IFileSystem` already gives the deletion path.
+One thing the deduplication turned up on its way past, worth recording because of how it was
+found. **§5.3's "access denied is normal, skip silently" had no test at all, in either scanner** —
+removing the catch filter outright left every test green, so the rule could have been deleted and
+nothing would have noticed. It went untested for as long as it did because it lived in two places
+and belonged to neither; one shared seam made it one testable thing, and it is tested now. The
+fixture is a directory the running account denies itself the right to list, which needs no
+elevation: the deny goes on the DACL, the account stays the owner, and an owner may always take it
+off again. A first attempt was abandoned on the belief that restoring it needed a privilege an
+ordinary process lacks. That was wrong — `SeSecurityPrivilege` gates the audit list, not the
+permissions — and the lesson generalises past this one test: a safety rule left untested because
+the fixture "cannot be built" deserves the second look, because the reason is sometimes a mistake.
 
 ### pnpm — Tier 1, researched ✅ done
 

@@ -110,7 +110,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             var file = new FileInfo(LongPath.Extended(path));
 
             // A link's length is its own, not its target's, and following one would count a tree
-            // this scanner never looked inside — the same rule EnumerateSafely applies below.
+            // this scanner never looked inside — the same rule BoundedFileWalk applies to every
+            // entry it enumerates.
             return file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint)
                 ? ScanSize.Approximate(file.Length)
                 : null;

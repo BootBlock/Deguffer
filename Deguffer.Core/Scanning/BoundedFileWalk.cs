@@ -16,8 +16,10 @@ namespace Deguffer.Core.Scanning;
 internal static class BoundedFileWalk
 {
     /// <summary>
-    /// Visit every file at or below <paramref name="root"/>, skipping nothing silently except what
-    /// §5.3 says to skip.
+    /// Visit every file at or below <paramref name="root"/>, minus the two things this walk
+    /// deliberately never reaches: anything under a directory it was refused (§5.3), and anything
+    /// under a reparse point. Both are described on <see cref="EnumerateSafely"/>, which is where
+    /// they are applied.
     ///
     /// <paramref name="onFile"/> is called concurrently from several threads, so what it does must
     /// be safe to do that way. <paramref name="onLevel"/> is called once per breadth-first level,
