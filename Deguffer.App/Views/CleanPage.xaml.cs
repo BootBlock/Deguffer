@@ -63,7 +63,7 @@ public sealed partial class CleanPage : Page
     private void ApplyConfirmationPreference() =>
         ViewModel.ConfirmCleanAsync = App.Preferences.Current.ConfirmBeforeCleaning ? ConfirmCleanAsync : null;
 
-    private async Task<bool> ConfirmCleanAsync(string summary)
+    private async Task<bool> ConfirmCleanAsync(CleanConfirmation confirmation)
     {
         var dialog = new ContentDialog
         {
@@ -76,7 +76,7 @@ public sealed partial class CleanPage : Page
             RequestedTheme = ActualTheme,
 
             Title = "Clean these caches?",
-            Content = summary,
+            Content = new CleanConfirmationView(confirmation),
             PrimaryButtonText = "Clean",
             CloseButtonText = "Cancel",
 

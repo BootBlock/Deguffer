@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.CleanConfirmationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:execution="using:Deguffer.Core.Execution">
+
+    <StackPanel Spacing="16">
+
+        <!--
+            One line per subject, its size in a column of its own. The title above already asks the
+            question, so the list needs no sentence introducing it — and a size the user can read
+            off a row is a size they can check against the row they ticked.
+        -->
+        <ItemsControl ItemsSource="{x:Bind Confirmation.Items}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="execution:CleanConfirmationItem">
+                    <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+                        <!--
+                            Decoration, and the only element on the row with nothing to say: it is
+                            hidden from assistive technology, as ShareBar is, so a reader hears the
+                            subject and its size rather than an empty node in front of each.
+                        -->
+                        <TextBlock Grid.Column="0"
+                                   Text="&#x2022;"
+                                   AutomationProperties.AccessibilityView="Raw"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{x:Bind ProviderName}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{x:Bind SizeLabel}"
+                                   Style="{StaticResource SecondaryText}" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Border Style="{StaticResource Divider}" />
+
+        <!-- The estimate on its own line, so it is no longer buried in the warning sentence. -->
+        <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{x:Bind Confirmation.TotalLabel}" FontWeight="SemiBold" />
+        </Grid>
+
+        <!--
+            True of every line above because §7 leaves only Tier 1 to this dialog — anything costlier
+            is asked about separately, with its own consequence. CleanConfirmationTests asserts that,
+            so this sentence cannot quietly come to cover a tier it is wrong about.
+        -->
+        <TextBlock Style="{StaticResource SecondaryText}"
+                   Text="Each of these is rebuilt the next time the tool that owns it runs, so nothing is lost. That first run may be slower." />
+
+        <TextBlock FontWeight="SemiBold"
+                   TextWrapping="Wrap"
+                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                   Text="Clean removes the files straight away. This cannot be undone." />
+    </StackPanel>
+</UserControl>
