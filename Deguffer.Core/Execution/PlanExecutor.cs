@@ -60,7 +60,11 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
         // sizes exist (ScanEstimateCache) but are never returned from a measurement — they only
         // reach the screen while the real scan runs. Were a stale one to arrive here it would not
         // merely look wrong: it would inflate the reclaimed total reported below.
-        var before = step.EstimatedBytes;
+        //
+        // MeasuredBefore wins where it is present, because the delta must subtract like from
+        // like: a step whose estimate is the tool's own figure re-measures paths that never held
+        // that number. See its declaration.
+        var before = (step.MeasuredBefore ?? step.Estimated).Reclaimable;
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
