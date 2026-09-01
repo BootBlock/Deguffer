@@ -64,7 +64,7 @@
                  does not make the row silent — the description says which confirmation it falls
                  back to, because a safety setting whose real effect is unstated is worse than no
                  setting. -->
-            <views:SettingsRow Glyph="&#xE70F;"
+            <views:SettingsRow Glyph="&#xE765;"
                                Title="Type a name to delete user data"
                                Description="Logs, histories and Recycle Bins are user data, and removing them is permanent. Ask for the item's name to be typed out before deleting it. When this is off, they are covered by Confirm before cleaning instead.">
                 <views:SettingsRow.Control>
