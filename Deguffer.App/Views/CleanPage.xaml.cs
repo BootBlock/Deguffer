@@ -86,7 +86,11 @@ public sealed partial class CleanPage : Page
             // theme applied to the window root — without this it renders dark over a light window.
             RequestedTheme = ActualTheme,
 
-            Title = "Clean these caches?",
+            // "Caches" holds only while everything listed rebuilds itself. A user who switches the
+            // typed phrase off sends Tier 3 here as well, and a Recycle Bin called a cache in the
+            // title of the dialog that authorises deleting it permanently is the same understatement
+            // the body already refuses to make.
+            Title = confirmation.AllRegenerable ? "Clean these caches?" : "Delete these items?",
             Content = new CleanConfirmationView(confirmation),
             PrimaryButtonText = "Clean",
             CloseButtonText = "Cancel",
