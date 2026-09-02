@@ -26,6 +26,10 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         CancellationToken ct = default) =>
         ParallelEnumerationScanner.Default.MeasureAsync(path, progress, ct);
 
+    /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
+    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
+        ParallelEnumerationScanner.Default.MeasureAsync(path, progress: null, ct);
+
     /// <summary>
     /// Null when this fake has no index, matching the contract the real scanner uses to tell the
     /// caller to walk instead. Results are narrowed to <paramref name="root"/> exactly as the real

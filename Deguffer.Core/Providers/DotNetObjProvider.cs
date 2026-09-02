@@ -206,6 +206,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 measured.Note,
                 ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count)),
             Fallback = measured.Fallback,
+            HasUnreadableRoot = discovered.UnreadableDirectories.Count > 0,
         };
     }
 

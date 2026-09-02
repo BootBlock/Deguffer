@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -64,10 +64,22 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
         // MeasuredBefore wins where it is present, because the delta must subtract like from
         // like: a step whose estimate is the tool's own figure re-measures paths that never held
         // that number. See its declaration.
-        var before = (step.MeasuredBefore ?? step.Estimated).Reclaimable;
+        //
+        // Logical, not Reclaimable, and that is the second half of "like from like". Reclaimable is
+        // Allocated, which only the file table knows: the walk reports file lengths and sets
+        // Allocated equal to Logical to say so. Subtracting a walked figure from a table figure
+        // therefore compares allocated bytes with logical ones, and the difference is real — cluster
+        // slack across hundreds of thousands of small files inflates it, a compressed cache drives
+        // it negative. Logical is the one axis both routes measure identically, and it is the axis
+        // DirectoryRemover already reports for a deletion step, so the totals stay commensurable.
+        var before = (step.MeasuredBefore ?? step.Estimated).Logical;
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
+        // From the disk, never from the volume snapshot. Nothing invalidates that snapshot between
+        // planning and executing — Invalidate runs once, at the top of a planning pass — so an
+        // ordinary measurement here would hand back the very figure it is about to be subtracted
+        // from, and a clean that freed gigabytes would report nothing.
         var after = await MeasureAllAsync(step.MeasuredPaths, ct).ConfigureAwait(false);
         var reclaimed = before - after;
 
@@ -144,10 +156,12 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
 
         foreach (var path in paths)
         {
-            var measured = await scanner.MeasureAsync(path, progress: null, ct).ConfigureAwait(false);
+            var measured = await scanner.MeasureFromDiskAsync(path, ct).ConfigureAwait(false);
             total += measured.Size;
         }
 
-        return total.Reclaimable;
+        // Logical rather than Reclaimable: see RunCommandAsync, which subtracts this from a figure
+        // the file table may have produced. Only the table knows allocated bytes.
+        return total.Logical;
     }
 }

@@ -143,9 +143,23 @@ machine, so this gate is stricter than it would be elsewhere.
 - **A change to tier classification needs the unrecognised case (§5.2).** Test that a child the
   provider does *not* recognise lands in Tier 4, not only that the recognised ones classify
   correctly. The dangerous direction is an unknown thing silently treated as safe.
-- **A change that touches path handling needs a long path (§6.3).** Exercise something past
-  `MAX_PATH`. `LongPath` exists because truncation is a silent partial deletion, and a test with
-  short paths cannot tell working code from broken code here.
+- **A change that touches path handling needs an assertion on the *form* of the path (§6.3), not a
+  long one.** A deep-tree test cannot fail. .NET prepends `\\?\` itself to any path of 260
+  characters or more before it calls Win32, so building a tree past `MAX_PATH` and asserting the
+  operation succeeded passes identically with `LongPath.Extended` deleted outright. That is not a
+  property of this machine: it was measured in a process where `RtlAreLongPathsEnabled` reports 0,
+  and the `LongPathsEnabled` registry value changes none of it. Stripping the prefix from each of
+  Core's sixteen seams in turn left the whole suite green for twelve of them.
+
+  So assert what discriminates: that the path handed onward carries `\\?\`. Four tests do, and they
+  are the whole of §6.3's real coverage — `DirectoryRemover` and `FileRemover` through the
+  `IFileSystem` seam, `ChildDirectories` through the children it returns, and `BoundedFileWalk`
+  through the paths it visits. `LongPathTests` guards the runtime assumption underneath them all.
+
+  **Where a seam's only output is a size, a date or a boolean, say so rather than writing a test
+  that cannot fail.** `ParallelEnumerationScanner`, `DirectoryAge` and the signature checks are in
+  that position today. A deep-tree test over them is still worth having as proof the code *reaches*
+  nested content, and it must not be described as proving §6.3.
 - **Test through the fakes, never against the real machine.** `FakeUserEnvironment` and the
   `IProcessRunner` and `IProcessInspector` seams exist so the safety rules are provable with no
   npm, NuGet or Gradle installed. That is what G1's dependency inversion buys. A test that passes
@@ -505,7 +519,8 @@ the plumbing that produced it. This is
    [do the whole fix](#do-the-whole-fix-never-the-cheap-one-mandatory). A change that lands the
    issue but breaks a gate is not done.
 5. **Verify it to the [G8](#g8-what-verified-means) bar:** the failing-first test, the §5.6 negative
-   assertion, the §5.2 unrecognised case, a long path where paths are touched, the fakes rather than
+   assertion, the §5.2 unrecognised case, an assertion on the *form* of a path where paths are
+   touched, the fakes rather than
    the real machine, and the runtime surface actually driven. An issue is not fixed because the
    build is green.
 6. **Review before committing.** Run the

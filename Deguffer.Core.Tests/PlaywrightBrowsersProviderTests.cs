@@ -1,3 +1,4 @@
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -225,8 +226,36 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3: a browser cache relocated past MAX_PATH must still be measured. This assertion is
-    /// weaker on a machine with LongPathsEnabled set.
+    /// The root is found by name, and a listing right is separate from a traverse right — so a
+    /// refusal here yields a plan with no steps, and used to carry no sentence about it either. The
+    /// shell renders that as "Already clear", which is a claim about a folder nobody read.
+    /// </summary>
+    [Fact]
+    public async Task ARootThatWillNotBeListedIsSaidSoRatherThanLeftLookingAlreadyClear()
+    {
+        var root = CreateRoot("chromium-1228");
+
+        using var denied = new DeniedDirectory(root);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// The browsers root is whatever the environment variable points at, so a build under a deeply
+    /// nested one must still be measured.
+    ///
+    /// Not a §6.3 assertion, and not merely a weak one on a machine with <c>LongPathsEnabled</c>
+    /// set: .NET applies <c>\\?\</c> itself past 260 characters, so the measurement succeeds however
+    /// Core handles the path. <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>
+    /// is the one test that would notice if that stopped being true.
     /// </summary>
     [Fact]
     public async Task MeasuresABrowserCacheRelocatedBeyondMaxPath()

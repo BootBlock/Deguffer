@@ -1,4 +1,4 @@
-using Deguffer.Core.Scanning.Mft;
+﻿using Deguffer.Core.Scanning.Mft;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -46,6 +46,65 @@ public class MftVolumeIndexTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
             .AddFile(21, Cache, "unreachable.tgz", allocated: 4_000_000_000, logical: 4_000_000_000)
             .UnreadableFrom(21)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// NTFS reserves the first sixteen records for the volume's own metadata, and 12 to 15 are
+    /// marked in use while carrying no <c>$FILE_NAME</c> and no <c>$ATTRIBUTE_LIST</c> — the exact
+    /// shape the parser calls unreadable, on the stated grounds that no healthy volume produces it.
+    /// Every NTFS volume produces four of them.
+    ///
+    /// <para>Measured on a real volume before this test was written: reading C: elevated logged
+    /// "UNREADABLE record 12", then 13, 14 and 15, and nothing else in 3,038,208 records. The
+    /// builder abandoned the volume at the first, so §5.5's fast path never once engaged — every
+    /// path, on an elevated run, fell back to the walk elevation exists to avoid. With those four
+    /// skipped the index built and measured correctly.</para>
+    ///
+    /// <para>The fixture had records 0 to 4 zero-filled, which the parser reads as "not in use" and
+    /// skips. That is why a suite full of MFT tests stayed green over a fast path that could not
+    /// work: the fake modelled an idealised volume rather than the one NTFS writes.</para>
+    /// </summary>
+    [Fact]
+    public void BuildsAnIndexOverTheReservedRecordsEveryNtfsVolumeCarries()
+    {
+        using var source = Tree()
+            .AddRecordWithNoIdentityAtAll(12)
+            .AddRecordWithNoIdentityAtAll(13)
+            .AddRecordWithNoIdentityAtAll(14)
+            .AddRecordWithNoIdentityAtAll(15)
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .Build();
+
+        Assert.True(
+            MftVolumeIndexBuilder.TryBuild(source, out var index),
+            "The reserved records NTFS writes on every volume took the whole index with them.");
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// The same shape outside records 12 to 15 is still corruption, and still takes the volume. A
+    /// record in use claiming no identity and pointing nowhere else for one is what a torn write
+    /// looks like, and totalling around it would report a directory short with nothing to show it.
+    ///
+    /// <para>Both ends of the bound are pinned, and each pins a different mistake. Record 16 is the
+    /// first record outside the reserved range, so it discriminates <c>&lt;</c> from <c>&lt;=</c>;
+    /// without it an off-by-one would leak one real record through and nothing would notice. Record
+    /// 11 is the last of the <em>named</em> metadata files — <c>$Extend</c> — and it discriminates
+    /// the both-ended bound from a bare "anything below 16", which would silently skip a torn
+    /// <c>$MFT</c> or <c>$LogFile</c> and answer short for the volume root.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(11)]
+    [InlineData(16)]
+    [InlineData(20)]
+    public void StillRefusesANamelessRecordOutsideTheUnnamedReservedRange(uint record)
+    {
+        using var source = Tree()
+            .AddRecordWithNoIdentityAtAll(record)
             .Build();
 
         Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));

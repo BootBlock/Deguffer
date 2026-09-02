@@ -112,7 +112,8 @@ refactor loses them most easily.
 - **§5.6** Every execution verifies the negative, that the protected paths survived. Asserting the
   target was removed is half a test.
 - **§6.3** Every filesystem path goes through `LongPath`. A `MAX_PATH` truncation is a silent
-  partial deletion, and a test with short paths cannot tell working code from broken code here.
+  partial deletion. Test it by asserting the **form** of the path — a deep-tree test cannot fail,
+  because .NET prepends `\\?\` itself past 260 characters.
 - **§6.5** The Acrylic backdrop is decoration. The UI must be fully legible without it.
 
 Full detail in [CLAUDE.md](CLAUDE.md#safety-rules-that-are-also-code-rules), and the specification
@@ -127,8 +128,9 @@ compiler proves the code is well formed. It proves nothing about which directory
   then make it pass. A test written after the fix and green on its first run has proved nothing. If
   you write the tests after the code, prove each one bites by mutating the production code.
 - **A change to what gets deleted needs the §5.6 negative assertion.** A change to tier
-  classification needs the §5.2 unrecognised case. A change touching path handling needs a path past
-  `MAX_PATH`.
+  classification needs the §5.2 unrecognised case. A change touching path handling needs an
+  assertion that the path handed onward carries `\\?\` — a path past `MAX_PATH` proves nothing,
+  because the runtime prefixes it for you.
 - **Test through the fakes, never against the real machine.** `FakeUserEnvironment` and the
   `IProcessRunner` and `IProcessInspector` seams make the safety rules provable with no npm, NuGet
   or Gradle installed.

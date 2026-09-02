@@ -1,4 +1,4 @@
-using Deguffer.Core.Configuration;
+﻿using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -428,8 +428,15 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     // ---- §6.3, §7 and discovery ----------------------------------------------------------------
 
     /// <summary>
-    /// §6.3. A project past <c>MAX_PATH</c> is found, measured and removed like any other. A
-    /// truncation here is not a crash: it is a partial deletion of somebody's project.
+    /// A Cargo project buried four long segments below an approved root is still discovered,
+    /// measured and removed, with its sources left standing. That is worth covering, because
+    /// discovery here walks a tree the user nominated rather than a location the provider knows.
+    ///
+    /// It is not the §6.3 proof its shape suggests. .NET prepends <c>\\?\</c> itself to any path of
+    /// 260 characters or more before it calls Win32, so this passes with Core's prefixing deleted
+    /// outright — see <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
+    /// What discriminates is the form of the path, asserted in
+    /// <see cref="DirectoryRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm"/>.
     /// </summary>
     [Fact]
     public async Task FindsAndRemovesAProjectPastMaxPath()
@@ -559,6 +566,31 @@ public sealed class BuildDirectoryProviderTests : IDisposable
                 RequiredContents = ["CACHEDIR.TAG"],
             },
             link));
+    }
+
+    /// <summary>
+    /// The walk is the only route that can meet a refusal: the index reads the volume table rather
+    /// than descending, so a directory it may not list costs it nothing. A directory the walk cannot
+    /// descend into leaves part of a root the user approved unsearched, and every other sentence in
+    /// the plan describes a sweep of the whole root.
+    /// </summary>
+    [Fact]
+    public async Task ADirectoryTheWalkCouldNotDescendIntoIsNamedRatherThanPassedOverInSilence()
+    {
+        var root = ApproveRoot();
+        var library = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
+        var refused = Path.Combine(root, "Archive");
+        Directory.CreateDirectory(refused);
+
+        using var denied = new DeniedDirectory(refused);
+
+        // A FakeDirectoryScanner with no index answers null, which is the contract that sends
+        // discovery down the walk — so the Library was found by descending, not from a table.
+        var plan = await PlanWith(Unity, new FakeDirectoryScanner());
+
+        Assert.Equal([library], plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(refused));
     }
 
     // ---- helpers --------------------------------------------------------------------------------

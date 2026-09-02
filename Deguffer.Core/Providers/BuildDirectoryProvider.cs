@@ -151,6 +151,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Notes = SourceTreePlanNotes.For(
                 discovered, Kind.DisplayNames, Subject, declined.Count, live, measured.Note),
             Fallback = measured.Fallback,
+            HasUnreadableRoot = discovered.UnreadableDirectories.Count > 0,
         };
     }
 

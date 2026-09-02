@@ -160,6 +160,30 @@ public sealed class GradleCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// The root is found by name, and a listing right is separate from a traverse right — so a
+    /// refusal here yields a plan with no steps, and used to carry no sentence about it either. The
+    /// shell renders that as "Already clear", which is a claim about a folder nobody read.
+    /// </summary>
+    [Fact]
+    public async Task ARootThatWillNotBeListedIsSaidSoRatherThanLeftLookingAlreadyClear()
+    {
+        var root = CreateGradleHome();
+        CreateAt(root, "caches", 4096);
+
+        using var denied = new DeniedDirectory(root);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
     /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>
     private static string CreateAt(string root, string child, int bytes)
     {

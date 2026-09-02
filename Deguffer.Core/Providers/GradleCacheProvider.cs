@@ -86,6 +86,14 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
         var scan = ChildDirectories.Under(_root);
 
+        // The root was found on disk by name above, and a listing right is separate from a traverse
+        // right — so a refusal here leaves a plan with no steps and, without this, nothing said. The
+        // shell renders that as "Already clear", which is a claim about a folder nobody read.
+        if (scan.Unreadable)
+        {
+            notes.Add(UnreadableRoot.Note(_root));
+        }
+
         // A link is a child the user can see, so it is named rather than dropped. It is never
         // followed: what it points at was never classified.
         notes.AddRange(scan.Links.Select(link => new PlanNote(
@@ -137,6 +145,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             ProtectedPaths = BuildProtectedPaths(),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = scan.Unreadable,
         };
     }
 

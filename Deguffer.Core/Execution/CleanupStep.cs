@@ -81,13 +81,14 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// and call the result negative. The delta must subtract like from like, so the step carries
     /// Deguffer's own plan-time probe of the same paths the executor re-measures.</para>
     ///
-    /// <para><b>It fixes the pairing, not the re-measurement.</b> The "after" figure comes from the
-    /// provider's own scanner, and <see cref="Scanning.DirectoryScanner"/> holds its volume index
-    /// until something invalidates it — so on an elevated run every command step, this one
-    /// included, subtracts two readings of the same pre-command snapshot and reports nothing
-    /// reclaimed. That defect is older and wider than this field, it belongs to the executor rather
-    /// than to any provider, and closing it means deciding what rebuilding the index after each
-    /// command should cost. It is recorded in <c>docs/todo/unreached-locations.md</c> §1a.</para>
+    /// <para><b>It fixes the pairing, and the re-measurement is fixed elsewhere.</b> The "after"
+    /// figure comes from the provider's own scanner, and <see cref="Scanning.DirectoryScanner"/>
+    /// holds its volume index until something invalidates it — which happens once, at the start of a
+    /// planning pass. Every command step therefore used to subtract two readings of one pre-command
+    /// snapshot and report nothing reclaimed. That belonged to the executor rather than to any
+    /// provider, and it is closed by
+    /// <see cref="Scanning.IDirectoryScanner.MeasureFromDiskAsync"/>, which the executor's
+    /// after-measure takes.</para>
     /// </summary>
     public ScanSize? MeasuredBefore { get; init; }
 

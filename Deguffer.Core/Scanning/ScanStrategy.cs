@@ -63,6 +63,16 @@ public enum FallbackReason
     /// that anything is wrong — only that this location had to be walked.
     /// </summary>
     MasterFileTableIncomplete,
+
+    /// <summary>
+    /// The caller asked for a reading taken from the disk rather than from a snapshot, so the index
+    /// was not consulted however complete it is.
+    ///
+    /// Not a fault, and nothing the user can act on: it is the executor measuring what a command
+    /// freed, where a snapshot taken before the command would answer with the figure it is being
+    /// subtracted from. See <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>.
+    /// </summary>
+    FreshReadingRequired,
 }
 
 public static class FallbackReasonText
@@ -81,6 +91,13 @@ public static class FallbackReasonText
         FallbackReason.MasterFileTableIncomplete =>
             "Scanned by walking directories: the volume's file table did not account for everything here. "
             + "Sizes are still correct, but the scan took longer than it should.",
+
+        // Nothing to say. Every other reason answers "why was this slower than it could have been",
+        // which is a question about the preview the user is reading. This one belongs to the
+        // executor's after-measure, where what reaches the user is the reclaim itself and how it was
+        // arrived at is not a thing to explain.
+        FallbackReason.FreshReadingRequired => null,
+
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
     };
 }

@@ -133,6 +133,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
+        var unreadable = false;
 
         foreach (var root in Roots)
         {
@@ -165,7 +166,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             survivors.AddRange(root.ProtectedNames.Select(p => (Path.Combine(rootPath, p.Name), p.Reason)));
 
-            CollectFrom(root, rootPath, targets, declined, notes, ct);
+            unreadable |= !CollectFrom(root, rootPath, targets, declined, notes, ct);
         }
 
         if (LongPath.DirectoryExists(_direct3DCache))
@@ -193,7 +194,9 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             }
         }
 
-        if (targets.Count == 0 && declined.Count == 0)
+        // The vendor root was found on disk by name, and a full path resolves through a directory
+        // the account may not list. So the sentence below would deny what this same pass found.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
             return EmptyPlan("No graphics driver has written a shader cache for this user.");
         }
@@ -223,6 +226,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             ProtectedPaths = Protect([.. survivors, .. declined]),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = unreadable,
         };
     }
 
@@ -232,7 +236,11 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// the declined and the targeted are siblings under one parent — which is exactly when an
     /// over-broad rule takes both.
     /// </summary>
-    private static void CollectFrom(
+    /// <returns>
+    /// False where the vendor root would not be listed, so the caller can keep the plan from
+    /// claiming no driver has written a shader cache.
+    /// </returns>
+    private static bool CollectFrom(
         ShaderCacheRoot root,
         string rootPath,
         List<DeletionTarget> targets,
@@ -241,6 +249,12 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         CancellationToken ct)
     {
         var scan = ChildDirectories.Under(rootPath);
+
+        if (scan.Unreadable)
+        {
+            notes.Add(UnreadableRoot.Note(rootPath));
+            return false;
+        }
 
         foreach (var link in scan.Links)
         {
@@ -273,6 +287,8 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             targets.Add(new DeletionTarget(path, classification.Reason));
         }
+
+        return true;
     }
 
     /// <summary>

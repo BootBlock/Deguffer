@@ -16,7 +16,18 @@ namespace Deguffer.Core.Providers;
 /// keeps one profile and writes the caches into the user-data folder directly, while a
 /// Chromium-derived host keeps <c>Default</c>, <c>Profile 1</c> and so on, each with its own copy.
 /// </param>
-public sealed record ChromiumUserData(string Name, string Path, IReadOnlyList<string> Profiles);
+/// <param name="ProfilesIncomplete">
+/// Whether the user-data folder refused to be listed, so <paramref name="Profiles"/> holds only the
+/// folder itself and any profile beside it went unseen. Distinguishing this matters because a
+/// refused folder produces exactly the one-entry list a single-profile embedder legitimately
+/// produces, and a plan built on it counts fewer spared children than there are while saying the
+/// count is what is left alone.
+/// </param>
+public sealed record ChromiumUserData(
+    string Name,
+    string Path,
+    IReadOnlyList<string> Profiles,
+    bool ProfilesIncomplete = false);
 
 /// <summary>
 /// Finds the Chromium user-data folders on this machine, one level under <c>%APPDATA%</c> and
@@ -69,9 +80,22 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     {
         var found = new List<ChromiumUserData>();
 
+        UnreadableRoots = [];
+
         foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
         {
-            foreach (var child in ChildDirectories.Under(root).Directories)
+            var scan = ChildDirectories.Under(root);
+
+            if (scan.Unreadable)
+            {
+                // An application-data root that will not be listed leaves this walk with nothing to
+                // report and nothing to say, which the provider would otherwise render as "no
+                // application on this machine keeps a Chromium cache". It never looked.
+                UnreadableRoots = [.. UnreadableRoots, root];
+                continue;
+            }
+
+            foreach (var child in scan.Directories)
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -82,7 +106,8 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
                     continue;
                 }
 
-                found.Add(new ChromiumUserData(child.Name, path, ProfilesUnder(path)));
+                var profiles = ProfilesUnder(path, out var incomplete);
+                found.Add(new ChromiumUserData(child.Name, path, profiles, incomplete));
             }
         }
 
@@ -90,15 +115,32 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     }
 
     /// <summary>
+    /// The application-data roots the last <see cref="Discover"/> was refused, so a caller can avoid
+    /// reporting "nothing found" as though the folders had been read. Empty on every ordinary
+    /// machine: both roots sit inside the user's own profile.
+    /// </summary>
+    public IReadOnlyList<string> UnreadableRoots { get; private set; } = [];
+
+    /// <summary>
     /// The user-data folder itself, then its named profiles. The folder is always included because
     /// a Chromium host writes <c>GPUCache</c> there as well as inside each profile, and an
     /// application embedding the engine writes all of its caches there and has no profiles at all.
     /// </summary>
-    private static IReadOnlyList<string> ProfilesUnder(string userData)
+    /// <param name="incomplete">
+    /// True where the user-data folder would not be listed. The folder itself is still returned,
+    /// because the caches inside it are reached by name and a full path resolves through a directory
+    /// the account may not list — but any <c>Default</c> or <c>Profile N</c> beside it was never
+    /// seen. Without this the answer is one path, which is exactly what a legitimate single-profile
+    /// embedder returns, and no caller could tell the two apart.
+    /// </param>
+    private static IReadOnlyList<string> ProfilesUnder(string userData, out bool incomplete)
     {
         List<string> profiles = [userData];
 
-        profiles.AddRange(ChildDirectories.Under(userData).Directories
+        var scan = ChildDirectories.Under(userData);
+        incomplete = scan.Unreadable;
+
+        profiles.AddRange(scan.Directories
             .Where(d => IsProfile(d.Name))
             .Select(d => LongPath.Display(d.FullName)));
 

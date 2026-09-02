@@ -150,9 +150,15 @@ public class RouteAgreementTests
     }
 
     /// <summary>
-    /// §6.3: the same agreement past MAX_PATH, because the index route decides what to keep by
-    /// taking a path apart. A truncation there is not a crash — it is a candidate list quietly
-    /// disagreeing with the walk's, which is the one thing these tests exist to rule out.
+    /// The agreement has to survive long names as well, because the index route decides what to keep
+    /// by taking a path apart rather than by walking it. A disagreement there is not a crash: it is a
+    /// candidate list quietly differing from the walk's, which is the one thing these tests exist to
+    /// rule out.
+    ///
+    /// <para>The depth is not itself a §6.3 assertion. Both routes reach the deep <c>obj</c> whether
+    /// or not Core prefixes anything, because .NET prefixes at 260 characters on its own — see
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>. What is
+    /// established here is the agreement, not the prefix.</para>
     /// </summary>
     [Fact]
     public async Task TheTwoRoutesAgreeOnDirectoriesPastMaxPath()

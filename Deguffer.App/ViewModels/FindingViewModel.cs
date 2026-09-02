@@ -90,7 +90,9 @@ public sealed partial class FindingViewModel : ObservableObject
     public string StatusLabel => !Finding.IsPresent
         ? "Not installed on this machine"
         : !Finding.HasReclaimableSpace
-            ? "Already clear"
+            // "Already clear" is a claim, and it must not be made about a folder Windows would not
+            // let Deguffer list. The expander below names which one and why the figure is short.
+            ? Finding.Plan?.HasUnreadableRoot == true ? "Could not be read" : "Already clear"
             : CanBeSelected
                 ? "Ready to clean"
                 // Nothing in the row can be acted on as Deguffer is running, so "Ready to clean"

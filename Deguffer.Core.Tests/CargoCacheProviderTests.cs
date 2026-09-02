@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -344,8 +344,14 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A crate unpacked into <c>registry\src</c> nests deeply enough to pass <c>MAX_PATH</c>
-    /// on its own, and a truncation there is a silent partial deletion.
+    /// A crate unpacked into <c>registry\src</c> nests deeply enough to pass <c>MAX_PATH</c> on its
+    /// own, so the whole round trip is worth running over one: the source tree is measured, and then
+    /// reclaimed in full.
+    ///
+    /// The outcome is not evidence about the prefix. .NET applies <c>\\?\</c> itself at 260
+    /// characters, so this holds with <see cref="LongPath.Extended"/> gone —
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> is where that
+    /// is pinned, and the form assertions on the removal seams are what carry §6.3.
     /// </summary>
     [Fact]
     public async Task ReachesACrateSourceTreeBeyondMaxPath()
@@ -423,6 +429,34 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         Assert.False(verification.Passed);
         Assert.Contains(verification.Failures, c => c.Path.Equals(credentials, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Presence is decided by probing a cache path <em>by full name</em>, and a full path still
+    /// resolves through a directory the account may not list — listing and traversing are separate
+    /// rights. So the level walk can be refused inside <c>registry</c>, come back with no children
+    /// at all, and leave the plan saying Cargo has downloaded nothing into a home whose crate
+    /// archives this same pass had already found on disk.
+    /// </summary>
+    [Fact]
+    public async Task ALevelThatWillNotBeListedIsSaidSoRatherThanReportedAsAnEmptyHome()
+    {
+        var registry = Path.Combine(Home, "registry");
+        Populate(Path.Combine(registry, "cache"));
+
+        using var denied = new DeniedDirectory(registry);
+
+        var provider = CreateProvider();
+
+        // The premise: the by-name probe still reaches the archives through the refused container.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(registry));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Cargo has downloaded nothing"));
+        Assert.Empty(plan.TargetedPaths);
     }
 
     private static bool IsAtOrUnder(string candidate, string ancestor) =>

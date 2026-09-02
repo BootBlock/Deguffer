@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -172,9 +172,17 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// Presence is a cache actually on disk, never a folder existing. An application that embeds
     /// Chromium but has not run yet keeps a user-data folder with no cache in it, and reporting that
     /// as a source would offer the user a row the plan then has nothing to say about.
+    ///
+    /// <para><b>A refused application-data root counts as present, and this is the one provider
+    /// where that matters.</b> Every other one decides presence by probing a path it already knows
+    /// the name of, and a full path still resolves through a directory the account may not list.
+    /// This one decides by enumerating, so a refusal here answers "no source" and the row renders as
+    /// "Not installed on this machine" — a stronger claim than the "Already clear" the rest of this
+    /// change exists to stop, and one made about a folder Deguffer never read. Answering true sends
+    /// the pass into <see cref="PlanAsync"/>, which says so.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Applications(ct).Count > 0);
+        Task.FromResult(Applications(ct).Count > 0 || _discovery.UnreadableRoots.Count > 0);
 
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
@@ -182,7 +190,12 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
         if (applications.Count == 0)
         {
-            return EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.");
+            // A refused application-data root leaves this walk with nothing found and nothing said,
+            // which is not the same as having looked and found none.
+            return _discovery.UnreadableRoots.Count == 0
+                ? EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.")
+                : EmptyPlan(UnreadableRoot.WhyNothingWasPlanned(
+                    string.Join("' and '", _discovery.UnreadableRoots))) with { HasUnreadableRoot = true };
         }
 
         var notes = new List<PlanNote>();
@@ -190,9 +203,28 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
 
+        // Seeded rather than started at false. A root that refused to be listed is a fact about this
+        // pass whether or not the *other* root turned up applications, and reading it only in the
+        // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
+        // Seeded rather than started at false. A root that refused to be listed is a fact about this
+        // pass whether or not the *other* root turned up applications, and reading it only in the
+        // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
+        var unreadable = _discovery.UnreadableRoots.Count > 0;
+
+        foreach (var root in _discovery.UnreadableRoots)
+        {
+            notes.Add(UnreadableRoot.Note(root));
+        }
+
         foreach (var application in applications)
         {
             ct.ThrowIfCancellationRequested();
+
+            if (application.ProfilesIncomplete)
+            {
+                notes.Add(UnreadableRoot.Note(application.Path));
+                unreadable = true;
+            }
 
             survivors.Add((
                 application.Path,
@@ -213,6 +245,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
                 spared += outcome.Spared;
                 emptiedAContainer |= outcome.EmptiedAContainer;
+                unreadable |= outcome.Unreadable;
             }
 
             // One note per application rather than one per spared child. A Chromium profile holds
@@ -227,7 +260,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In '{application.Name}', {spared} other {(spared == 1 ? "item is" : "items are")} left alone "
+                    $"In '{application.Name}', {(application.ProfilesIncomplete ? "at least " : string.Empty)}"
+                    + $"{spared} other {(spared == 1 ? "item is" : "items are")} left alone "
                     + "beside the caches. Sign-in state, saved passwords and offline data all live in that folder, "
                     + "so only the recognised cache directories are removed."
                     + (emptiedAContainer
@@ -237,7 +271,10 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             }
         }
 
-        if (targets.Count == 0 && declined.Count == 0)
+        // Reaching here means HasRecognisedCache already found a cache directory on disk by full
+        // name, and a full path resolves through a directory the account may not list. So the
+        // sentence below would deny what this same provider established one method earlier.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
             return EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.");
         }
@@ -272,6 +309,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 [.. survivors.Concat(declined).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = unreadable,
         };
     }
 
@@ -291,6 +329,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     {
         var spared = 0;
         var emptiedAContainer = false;
+        var unreadable = false;
 
         // A container that is a link is met twice: once as a link child of the profile, and once as
         // a level whose own directory turns out to be one. Both times it is the same path and the
@@ -322,6 +361,13 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
             var scan = ChildDirectories.Under(directory);
 
+            if (scan.Unreadable)
+            {
+                notes.Add(UnreadableRoot.Note(directory));
+                unreadable = true;
+                continue;
+            }
+
             foreach (var link in scan.Links)
             {
                 Decline(LongPath.Display(link.FullName));
@@ -345,7 +391,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             }
         }
 
-        return new ProfileOutcome(spared, emptiedAContainer);
+        return new ProfileOutcome(spared, emptiedAContainer, unreadable);
 
         void Decline(string path)
         {
@@ -370,7 +416,14 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// are kept, so without this the user sees one still standing and cannot tell that the cache
     /// inside it went.
     /// </param>
-    private readonly record struct ProfileOutcome(int Spared, bool EmptiedAContainer);
+    /// <param name="Unreadable">
+    /// Whether a level's directory would not be listed. A level is reached by name, and a full path
+    /// resolves through a directory the account may not list — so the level can exist, pass the
+    /// presence probe, and then hand back no children at all. Without this the provider treats that
+    /// as "the cache is empty" and reports the application as keeping no Chromium cache, which its
+    /// own probe already found on disk.
+    /// </param>
+    private readonly record struct ProfileOutcome(int Spared, bool EmptiedAContainer, bool Unreadable);
 
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";

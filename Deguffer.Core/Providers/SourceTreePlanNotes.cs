@@ -49,6 +49,24 @@ internal static class SourceTreePlanNotes
                 "read the volume index instead, which is considerably faster."));
         }
 
+        // Part of a root the user approved was never searched. The two notes above are about how
+        // the search was performed and what it decided; this one is about where it did not go, and
+        // no other sentence in the plan would say so.
+        //
+        // Collapsed past the first, on the rule this file's neighbours already follow: a source root
+        // can hold any number of directories the account may not list, and a plan nobody reads
+        // protects nothing. One named example plus a count says the same thing and stays readable.
+        if (discovered.UnreadableDirectories.Count > 0)
+        {
+            notes.Add(discovered.UnreadableDirectories.Count == 1
+                ? UnreadableRoot.Note(discovered.UnreadableDirectories[0])
+                : new PlanNote(
+                    PlanNoteSeverity.Warning,
+                    $"Deguffer could not list {discovered.UnreadableDirectories.Count} directories inside your "
+                    + $"source folders, '{discovered.UnreadableDirectories[0]}' among them, so nothing inside "
+                    + "them was examined. Anything in there is left alone and is not counted in the size shown."));
+        }
+
         if (declinedCount > 0)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, Declined(declinedCount, directoryNames, subject)));

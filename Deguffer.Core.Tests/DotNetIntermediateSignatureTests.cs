@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -181,9 +181,13 @@ public sealed class DotNetIntermediateSignatureTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A project nested past MAX_PATH must be recognised rather than silently skipped —
-    /// truncation here would mean the directory is never offered, and the same truncation on the
-    /// deletion side is a partial delete.
+    /// Recognition reads the project file beside <c>obj</c>, and this covers that read happening
+    /// past <c>MAX_PATH</c>: a project nested that deep is recognised rather than silently passed
+    /// over, which is what would keep it from ever being offered.
+    ///
+    /// The depth is not what makes this a §6.3 test. .NET prepends <c>\\?\</c> at 260 characters on
+    /// its own, so the recognition would succeed here with Core's prefixing removed; see
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
     /// </summary>
     [Fact]
     public void RecognisesAProjectNestedPastMaxPath()

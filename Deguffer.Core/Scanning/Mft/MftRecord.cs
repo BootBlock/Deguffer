@@ -33,4 +33,34 @@ public readonly record struct MftRecord(
     /// the one record whose parent is itself.
     /// </summary>
     public const uint RootRecordNumber = 5;
+
+    /// <summary>
+    /// NTFS reserves the first sixteen records of every volume for its own metadata files, and the
+    /// count is fixed by the format rather than by a version or a formatting option.
+    ///
+    /// <para>Records 0 to 11 are the named ones — <c>$MFT</c>, <c>$MFTMirr</c>, <c>$LogFile</c>,
+    /// <c>$Volume</c>, <c>$AttrDef</c>, the root, <c>$Bitmap</c>, <c>$Boot</c>, <c>$BadClus</c>,
+    /// <c>$Secure</c>, <c>$UpCase</c> and <c>$Extend</c>. Records 12 to 15 are held back for future
+    /// metadata: NTFS marks them in use and gives them neither a <c>$FILE_NAME</c> nor an
+    /// <c>$ATTRIBUTE_LIST</c>, which is precisely the shape a reader has every reason to call
+    /// corruption anywhere else in the table.</para>
+    ///
+    /// <para>None of the sixteen contributes to any directory total Deguffer measures. They are the
+    /// volume's own bookkeeping, they hang off no user-visible directory, and their sizes are
+    /// already outside what a cache subtree sums. So skipping one costs nothing, while refusing one
+    /// costs the whole volume.</para>
+    /// </summary>
+    public const uint ReservedRecordCount = 16;
+
+    /// <summary>
+    /// The first of the reserved records NTFS leaves nameless. 0 to 11 are the named metadata files
+    /// and parse like any other record; 12 to 15 are held back for future use, marked in use and
+    /// given neither a <c>$FILE_NAME</c> nor an <c>$ATTRIBUTE_LIST</c>.
+    ///
+    /// <para>The distinction is what keeps the builder's tolerance as narrow as the fact behind it.
+    /// A record it cannot read anywhere else in the table is damage and takes the volume, and that
+    /// has to stay true of a torn <c>$MFT</c> or <c>$LogFile</c> too — those are real files with
+    /// real sizes, and a build that skipped one would answer short for the volume root.</para>
+    /// </summary>
+    public const uint FirstUnnamedReservedRecord = 12;
 }

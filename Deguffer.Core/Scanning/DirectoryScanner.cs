@@ -65,6 +65,23 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
+    /// Straight to the walk, whatever the index holds. The remembered estimate is still updated,
+    /// because this is the freshest figure Deguffer has for the path.
+    /// </summary>
+    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var result = await _fallback
+            .Because(FallbackReason.FreshReadingRequired)
+            .MeasureAsync(path, progress: null, ct)
+            .ConfigureAwait(false);
+
+        _estimates?.Set(path, result.Size);
+        return result;
+    }
+
+    /// <summary>
     /// Ask the volume index for directories by name, narrowed to <paramref name="root"/>.
     ///
     /// The narrowing is the consent model, not an optimisation. The index knows every directory on
