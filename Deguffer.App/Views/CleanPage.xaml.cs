@@ -1,5 +1,6 @@
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
@@ -52,14 +53,47 @@ public sealed partial class CleanPage : Page
     /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyConfirmationPreferences();
+        ApplyPreferences();
         App.Preferences.Changed += OnPreferencesChanged;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) =>
         App.Preferences.Changed -= OnPreferencesChanged;
 
-    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyConfirmationPreferences();
+    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyPreferences();
+
+    private void ApplyPreferences()
+    {
+        ApplyConfirmationPreferences();
+        ShowFindingsAt(App.Preferences.Current.View);
+    }
+
+    /// <summary>
+    /// Draw the list at <paramref name="density"/>, and leave the selector agreeing with what is on
+    /// screen. Assigning the index it already holds raises no selection change, so this is safe to
+    /// call from the handler for one.
+    /// </summary>
+    private void ShowFindingsAt(ViewDensity density)
+    {
+        ViewSelector.SelectedIndex = (int)density;
+        FindingsList.ItemTemplate = (DataTemplate)Resources[
+            density == ViewDensity.Compact ? "CompactFinding" : "StandardFinding"];
+    }
+
+    /// <summary>
+    /// The view is applied first and persisted second, so it takes effect whether or not the
+    /// preferences file can be written. A failed write costs the user this choice at the next
+    /// launch and nothing else — and the info bar on this page carries §5.6's verification
+    /// headline, which is not a thing to interrupt for a setting the user can see took effect and
+    /// re-apply in one click.
+    /// </summary>
+    private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var density = (ViewDensity)ViewSelector.SelectedIndex;
+
+        ShowFindingsAt(density);
+        App.Preferences.Update(current => current with { View = density });
+    }
 
     /// <summary>
     /// Both confirmation preferences, applied together. They are one decision from the user's side —

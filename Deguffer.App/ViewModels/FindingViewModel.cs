@@ -110,6 +110,14 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool CanBeSelected => Finding.HasReclaimableSpace && Steps.Any(s => s.CanBeSelected);
 
+    /// <summary>
+    /// The compact row has one column for a figure, and a row that cannot be ticked spends it on
+    /// <see cref="StatusLabel"/> instead. Stated here rather than negated in the template because
+    /// x:Bind has no operators, and a converter for one "not" would be more machinery than the
+    /// property it replaces.
+    /// </summary>
+    public bool CannotBeSelected => !CanBeSelected;
+
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }
 
@@ -149,6 +157,18 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
 
     public string DetailHeader => Steps.Count > 0 ? "What this will do" : "What was left alone";
+
+    /// <summary>
+    /// What a screen reader calls the compact row's disclosure. The whole row is that disclosure's
+    /// header there, so it derives no name of its own and would otherwise be announced as an
+    /// unnamed button.
+    ///
+    /// Named for the row rather than for what is inside it, because in the compact view the
+    /// disclosure always holds the sentence §7 asks each row to state, whether or not there is a
+    /// plan under it — <see cref="DetailHeader"/> would call a not-installed row's description
+    /// "what was left alone".
+    /// </summary>
+    public string DetailToggleName => $"More about {Name}";
 
     /// <summary>Ticking the row ticks everything in it; unticking it clears the lot.</summary>
     partial void OnIsSelectedChanged(bool value)

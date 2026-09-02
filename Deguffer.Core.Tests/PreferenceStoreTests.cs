@@ -18,6 +18,7 @@ public class PreferenceStoreTests
 
         Assert.True(store.Save(new AppPreferences(
             AppTheme.Dark,
+            ViewDensity.Compact,
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true)));
@@ -25,6 +26,7 @@ public class PreferenceStoreTests
         var loaded = store.Load();
 
         Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(ViewDensity.Compact, loaded.View);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
@@ -75,6 +77,17 @@ public class PreferenceStoreTests
     {
         Assert.True(AppPreferences.Default.ConfirmBeforeCleaning);
         Assert.False(AppPreferences.Default.RequireTypedConfirmation);
+    }
+
+    /// <summary>
+    /// The Storage list is drawn in full on a machine nobody has configured. Compact hides the
+    /// sentence §7 asks every row to state, so it is a view the user opts into rather than one they
+    /// arrive in.
+    /// </summary>
+    [Fact]
+    public void TheShippedDefaultDrawsTheFullRow()
+    {
+        Assert.Equal(ViewDensity.Standard, AppPreferences.Default.View);
     }
 
     [Fact]
