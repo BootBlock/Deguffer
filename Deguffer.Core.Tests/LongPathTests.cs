@@ -48,6 +48,50 @@ public class LongPathTests
         Assert.Equal(expected, LongPath.Display(extended));
 
     /// <summary>
+    /// The assumption every other long-path test in this suite rests on, made falsifiable.
+    ///
+    /// <para>.NET prepends <c>\\?\</c> itself to any path of 260 characters or more before it calls
+    /// Win32. That is why building a deep tree and asserting an operation succeeded proves nothing
+    /// about this codebase: such a test passes identically with <see cref="LongPath.Extended"/>
+    /// deleted outright. Measured, rather than assumed — stripping every
+    /// <c>LongPath.Extended</c> call from all sixteen seams in Core, one seam at a time, left the
+    /// whole suite green except for the two assertions that check the <em>form</em> of a path.</para>
+    ///
+    /// <para>The registry is not what makes that true. <c>LongPathsEnabled</c> is set on the machine
+    /// this was measured on, and <c>RtlAreLongPathsEnabled</c> still reports 0 inside an ordinary
+    /// .NET apphost, because the process manifest must opt in as well and a test host has no such
+    /// manifest. In that very process a raw <c>CreateDirectoryW</c> on a 377-character path failed
+    /// with <c>ERROR_PATH_NOT_FOUND</c> while <c>Directory.CreateDirectory</c> on the same path
+    /// succeeded. So an outcome-based long-path test is unfalsifiable on every machine, not merely
+    /// on one with the registry value set.</para>
+    ///
+    /// <para>This test is the one place that assumption is checked. It goes red on a runtime that
+    /// stops prefixing for us — which is precisely the moment <see cref="LongPath"/> starts earning
+    /// its keep, and the moment the outcome-based tests elsewhere would begin to mean something.</para>
+    /// </summary>
+    [Fact]
+    public void TheRuntimeStillReachesPastMaxPathWithoutOurPrefix()
+    {
+        using var temp = new TempDirectory();
+
+        var deep = temp.Path;
+        while (deep.Length < 400)
+        {
+            deep = Path.Combine(deep, new string('d', 40));
+        }
+
+        Assert.True(deep.Length > 260);
+
+        // No LongPath.Extended anywhere below. If any of this throws, the runtime has stopped
+        // prefixing on our behalf and the suite's long-path coverage needs re-reading.
+        Directory.CreateDirectory(deep);
+        File.WriteAllBytes(Path.Combine(deep, "payload.bin"), new byte[512]);
+
+        Assert.True(Directory.Exists(deep));
+        Assert.Single(new DirectoryInfo(deep).EnumerateFiles());
+    }
+
+    /// <summary>
     /// A smoke test over the real filesystem. The assertions above carry the actual proof, because
     /// they check the string form directly — this one would hold even with the prefixing removed,
     /// since .NET applies <c>\\?\</c> itself at 260 characters.
