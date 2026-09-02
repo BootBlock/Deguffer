@@ -1,4 +1,4 @@
-﻿namespace Deguffer.Core.Scanning;
+namespace Deguffer.Core.Scanning;
 
 /// <summary>Which of §5.5's two measurement routes produced a number.</summary>
 public enum ScanStrategy
@@ -91,6 +91,13 @@ public static class FallbackReasonText
         FallbackReason.MasterFileTableIncomplete =>
             "Scanned by walking directories: the volume's file table did not account for everything here. "
             + "Sizes are still correct, but the scan took longer than it should.",
+
+        // Nothing to say. Every other reason answers "why was this slower than it could have been",
+        // which is a question about the preview the user is reading. This one belongs to the
+        // executor's after-measure, where what reaches the user is the reclaim itself and how it was
+        // arrived at is not a thing to explain.
+        FallbackReason.FreshReadingRequired => null,
+
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
     };
 }

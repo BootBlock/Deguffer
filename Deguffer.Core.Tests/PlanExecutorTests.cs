@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -98,6 +98,22 @@ public sealed class PlanExecutorTests : IDisposable
         // why the executor cannot use it here.
         Assert.Equal(4096, (await scanner.MeasureAsync(cache)).Size.Reclaimable);
         Assert.Equal(0, (await scanner.MeasureFromDiskAsync(cache)).Size.Reclaimable);
+    }
+
+    /// <summary>
+    /// Every reason must have a sentence or a considered silence, because <c>ScanResult</c> exposes
+    /// the lookup as a property and a switch with no arm throws rather than returning nothing. A new
+    /// member added without one is a crash on a property access, which is a poor way to find out.
+    /// </summary>
+    [Fact]
+    public void EveryFallbackReasonHasAnAnswerRatherThanAThrow()
+    {
+        foreach (var reason in Enum.GetValues<FallbackReason>())
+        {
+            var exception = Record.Exception(() => FallbackReasonText.Describe(reason));
+
+            Assert.True(exception is null, $"{reason} has no arm in FallbackReasonText.Describe.");
+        }
     }
 
     private static char VolumeLetter(string path) => char.ToUpperInvariant(path[0]);
