@@ -285,23 +285,64 @@ Seven things the work settled.
   its "cached nothing yet" empty plan and the row rendered at zero. The sizes in this section remain
   vendor documentation. pnpm is not installed and stays entirely researched.
 
-One residual the work leaves behind. It is older and wider than this phase, and it is documented
-rather than fixed because the fix is a decision rather than a mechanical change.
+One residual the work left behind, since **fixed** — and the fixing turned up something larger
+underneath it. Both are recorded here rather than removed, because the shape of the mistake is worth
+more than the correction.
 
-- **A command step's reclaim reads zero on an elevated run, for every §5.1 provider.**
+- **A command step's reclaim reads zero on an elevated run, for every §5.1 provider.** ✅ fixed.
   `PlanExecutor` reports what a command freed as the plan-time figure minus a re-measurement of the
   same paths. The re-measurement goes through the provider's own scanner, and `DirectoryScanner`
   holds its volume index until something calls `Invalidate` — which happens once, at the start of a
   planning pass. So where the fast path is in play, both readings come from the same pre-command
   snapshot, they cancel, and the step reports nothing reclaimed after a clean that freed gigabytes.
   That is §5.4's own stated failure, "the user will prune, see no change, and lose trust in the
-  tool", arriving by a different route. It predates this phase and affects NuGet, npm, pip, uv, Go,
-  PlatformIO and conda alike; pnpm is the one exception, because `HardLinkAwareScanner` holds no
-  index and its second reading is genuinely fresh. **It is not fixed here because the fix is a
-  decision, not a patch:** the executor must either rebuild the volume index after each command, at
-  a cost measured in seconds per volume on a large disk, or take the after-measure by walking and
-  give up the fast path exactly where the tree is largest. `RunCommandStep.MeasuredBefore` says the
-  same thing where a reader will meet it.
+  tool", arriving by a different route.
+
+  **Observed rather than reasoned about**, on a real volume under elevation: a 10 MB tree measured
+  through the index at 10,485,760 bytes, deleted, then measured again through the same scanner at
+  10,485,760 bytes. The identical figure, not a rounding difference.
+
+  This section proposed two fixes and both were wrong to reach for. Rebuilding the volume index
+  after each command drops *every* volume and costs seconds per command step, several times over in
+  one run. Taking the after-measure by walking is right, but the stated cost — "give up the fast
+  path exactly where the tree is largest" — is not a real cost: the after-measure runs *after* a
+  successful eviction, so the tree it walks is the empty one. The expensive walk happens only when
+  the command freed nothing, which is the case Deguffer least needs to be quick at.
+
+  What landed is that second option, stated as a rule rather than a route.
+  `IDirectoryScanner.MeasureFromDiskAsync` is a measurement that must not come from a snapshot, and
+  the executor's after-measure uses it. A separate member rather than a flag, because a figure
+  subtracted from an earlier one has to come from the disk — a property of the question, not a
+  tuning option a caller may get wrong. The two scanners that remember nothing between calls answer
+  it with the walk they already do, so pnpm's link-aware sum is untouched.
+
+- **§5.5's fast path had never engaged on a real volume, which is why the residual above could not
+  be reproduced at first.** ✅ fixed, and this is the larger finding.
+
+  `MftVolumeIndexBuilder` abandons the whole volume when any record is unreadable, and
+  `MftRecordParser` calls a record unreadable when it is in use, carries no `$FILE_NAME` and points
+  at no `$ATTRIBUTE_LIST` — on the stated grounds that "no healthy volume produces this". NTFS
+  reserves the first sixteen records of every volume for its own metadata and holds 12 to 15 back
+  for future use, marked in use and given no name. Every NTFS volume produces four of them.
+
+  Measured on a real volume, elevated, with the builder instrumented to log rather than bail:
+  `UNREADABLE` at records 12, 13, 14 and 15, and nowhere else in 3,038,208 records. The build
+  aborted at the first, the index never existed, and every path on an elevated run fell back to the
+  walk — including a real npm cache, whose reclaim was therefore *correct*, because the walk is
+  genuinely fresh. Elevation bought nothing at all, and reading the MFT is the entire reason the app
+  offers to elevate.
+
+  **The fixture is why this stayed green.** `MftFixture` zero-filled records 0 to 4 and numbered
+  fixtures from 6, and a zero-filled record reads as "not in use" and is skipped — so a suite full
+  of MFT tests proved the reader worked on a volume nobody has. The fixture now writes 12 to 15 the
+  way NTFS does. The lesson generalises past this one reader: a fake that models an idealised
+  version of the thing under test is worth less than no fake, because it produces confidence rather
+  than doubt.
+
+  The two defects had to be fixed in this order, and only in this order does either matter. Before
+  the first, the reclaim figure was right by accident; after it, the fast path serves planning and
+  the stale snapshot becomes reachable. Both were then confirmed together on a real elevated volume:
+  the plan-time reading came from the table, and the step reported 10,485,760 bytes rather than 0.
 
 One thing the deduplication turned up on its way past, worth recording because of how it was
 found. **§5.3's "access denied is normal, skip silently" had no test at all, in either scanner** —
@@ -575,11 +616,26 @@ the three did not.
   Deguffer running from inside the same source tree, which then vetoes it: the over-reporting
   direction, where the wider rule's failure handed a live project to a deletion.
 
-- **One gap this pass found and did not close.** A walk that is refused a directory tells nobody. It
-  is §5.3's "skip silently" working as designed for a measurement, but for *discovery* it means part
-  of an approved root was never searched and the plan says nothing about it. Closing that needs
-  `ChildDirectories.Under` to distinguish "empty" from "refused", which every caller of it would then
-  have to answer for — a change with its own design decision, not a correction to this one.
+- **One gap this pass found and did not close.** ✅ closed since, and it was wider than described
+  here. A walk that is refused a directory told nobody: §5.3's "skip silently" working as designed
+  for a measurement, but for *discovery* it meant part of an approved root went unsearched with the
+  plan saying nothing about it. Closing it did need `ChildDirectories.Under` to distinguish "empty"
+  from "refused", and every one of its ten callers did have to answer for it.
+
+  What this entry understated is what the other nine callers were doing. For four providers the plan
+  did not merely say nothing — it said something **false**, and the same provider's own presence
+  probe contradicted it within one planning pass. Listing a directory and traversing it are separate
+  rights, so a probe by full name answers correctly through a parent that refuses to be enumerated:
+  `RecycleBinProvider` could report "your bin is on D:" and then, one method later, "no volume on
+  this machine holds a Recycle Bin for this user". `ChromiumCacheProvider`, `CargoCacheProvider` and
+  `GpuShaderCacheProvider` had the identical shape. Three more — Gradle, Playwright and the VS Code
+  cpptools cache — emitted no note at all and fell through to a plan with zero steps, which the shell
+  rendered as "Already clear", a claim with less behind it than the sentences above.
+
+  Neither §5.2 nor §5.6 was ever breached by this. Classification iterates the child list, so an
+  empty one recognises nothing and declines nothing; `PlanVerifier` probes every protected path by
+  full name, which answers correctly through a refused parent. The defect was always in what the
+  user was told, which is why it read as cosmetic and was not.
 
 ### Unity `Library` — Tier 2, measured at 5.4 GB across 7 projects ✅ done
 
