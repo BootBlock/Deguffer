@@ -61,6 +61,7 @@ public static class BuildDirectoryFixture
         if (writeManifest)
         {
             WriteText(Path.Combine(projectDirectory, "Cargo.toml"), "[package]\nname = \"example\"");
+            WriteText(Path.Combine(projectDirectory, "Cargo.lock"), "version = 4");
         }
 
         Directory(projectDirectory, "src");

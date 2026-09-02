@@ -244,11 +244,19 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         var provider = Cargo();
         var plan = await provider.PlanAsync();
+
+        // Named as survivors in the plan, not merely left standing by luck. Neither identifies the
+        // directory being removed, so neither would be here if §5.6's question were "what did
+        // recognition read" rather than "what would an over-broad rule take".
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "src") && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "Cargo.lock") && p.ExistedBefore);
+
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
         Assert.False(LongPath.DirectoryExists(target));
         Assert.True(LongPath.FileExists(Path.Combine(project, "Cargo.toml")));
+        Assert.True(LongPath.FileExists(Path.Combine(project, "Cargo.lock")));
         Assert.True(LongPath.FileExists(Path.Combine(project, "src", "main.rs")));
         Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
