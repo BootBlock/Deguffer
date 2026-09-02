@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Scanning.Mft;
+using Deguffer.Core.Scanning.Mft;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;

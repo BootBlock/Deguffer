@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Configuration;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;

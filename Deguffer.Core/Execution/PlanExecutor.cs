@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 

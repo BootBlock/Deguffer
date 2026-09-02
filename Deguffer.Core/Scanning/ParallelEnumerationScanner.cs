@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Safety;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
 
