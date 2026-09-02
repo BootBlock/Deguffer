@@ -50,7 +50,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// view supplies it and decides *how* to ask; leaving it null means do not ask, which is how
     /// the preference is expressed without this type knowing settings exist.
     /// </summary>
-    public Func<string, Task<bool>>? ConfirmCleanAsync { get; set; }
+    public Func<CleanConfirmation, Task<bool>>? ConfirmCleanAsync { get; set; }
 
     /// <summary>
     /// Whether §7 holds Tier 3 to its typed phrase. The view sets it from the preference, the same
@@ -212,9 +212,15 @@ public sealed partial class CleanViewModel : ObservableObject
         // than flickering through a busy state for an operation that never started.
         var unasked = ConfirmationRequirement.NotPromptedFor(selected, f => f.Plan, requireTypedPhrase);
 
-        if (ConfirmCleanAsync is { } confirm && unasked.Count > 0 && !await confirm(Describe(unasked)))
+        if (ConfirmCleanAsync is { } confirm && unasked.Count > 0)
         {
-            return;
+            // NotPromptedFor keeps only the rows carrying a plan, so nothing is dropped here.
+            var plans = unasked.Select(f => f.Plan).OfType<CleanupPlan>().ToList();
+
+            if (!await confirm(CleanConfirmation.For(plans)))
+            {
+                return;
+            }
         }
 
         IsBusy = true;
@@ -421,43 +427,6 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             row.SharePercent = largest > 0 ? 100.0 * row.Finding.EstimatedBytes / largest : 0;
         }
-    }
-
-    /// <summary>
-    /// What the confirmation prompt says is about to happen. Names every row this dialog is asking
-    /// about rather than only totalling them: "3 items, 12 GB" is not something a user can check,
-    /// and this is the last point at which a mistaken selection can still be caught.
-    ///
-    /// The total is recomputed rather than reusing <see cref="SelectedTotalLabel"/>: in a mixed
-    /// selection that figure includes the rows §7 asks about separately, and a dialog that quotes a
-    /// number larger than the deletions it authorises is describing something the user is not being
-    /// asked to approve.
-    /// </summary>
-    /// <remarks>
-    /// Takes the already-narrowed findings, so its total is the selected bytes by construction —
-    /// with per-item selection a ticked row may be contributing only some of its steps, and the
-    /// reasoning above applies to that too: the dialog must not quote a figure larger than the
-    /// deletions it is authorising.
-    /// </remarks>
-    private static string Describe(IReadOnlyList<Finding> findings)
-    {
-        var total = FreeSpace.Format(findings.Aggregate(ScanSize.Zero, (sum, f) => sum + f.Estimated));
-
-        var summary = $"{string.Join(", ", findings.Select(f => f.Provider.Name))} — {total} in total. "
-                    + "This cannot be undone.";
-
-        // §7 leaves how hard a Tier 3 row is to authorise to the user, and never left saying what is
-        // unrecoverable to anybody. Where the typed phrase is switched off this is the only dialog
-        // those rows get, and the sentence above reads identically for a cache that re-downloads —
-        // so each one states its own loss, quoted from Core rather than restated here, because §7's
-        // wording is not the shell's to choose.
-        var userData = findings
-            .Select(f => f.Plan)
-            .OfType<CleanupPlan>()
-            .Where(plan => plan.Tier == SafetyTier.UserData)
-            .Select(plan => $"{plan.ProviderName}: {ConfirmationRequirement.ConsequenceOf(plan)}");
-
-        return string.Join("\n\n", userData.Prepend(summary));
     }
 
     /// <summary>
