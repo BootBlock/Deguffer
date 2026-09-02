@@ -312,9 +312,9 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §7: Tier 3 requires typed confirmation. This is the first provider to reach that path, so
-    /// the wiring from the provider's tier through to the phrase the shell asks for is worth
-    /// pinning end to end.
+    /// §7's typed phrase, which Tier 3 asks for wherever the user has left that setting on. This is
+    /// the first provider to reach that path, so the wiring from the provider's tier through to the
+    /// phrase the shell asks for is worth pinning end to end.
     /// </summary>
     [Fact]
     public async Task ATier3PlanDemandsTheTypedPhrase()

@@ -311,7 +311,10 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.True(File.Exists(bystander), "planning looked through a junctioned container");
     }
 
-    /// <summary>§7: Tier 3, so never pre-selected and never run without the typed phrase.</summary>
+    /// <summary>
+    /// §7: Tier 3, so never pre-selected, and held to the typed phrase wherever the user has left
+    /// that setting on.
+    /// </summary>
     [Fact]
     public async Task ATier3PlanIsNeverPreSelectedAndDemandsTheTypedPhrase()
     {

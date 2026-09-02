@@ -101,7 +101,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     /// §3, and a correction to the survey that proposed these as Tier 1. Nothing re-creates a crash
     /// dump, because the crash does not happen again to order — which is the property that puts a
     /// thing in Tier 3 rather than Tier 1, and Tier 3 is what decides the row is never pre-selected
-    /// and never runs without the typed phrase.
+    /// and asks §7's typed phrase of anyone who has left that setting on.
     /// </summary>
     [Fact]
     public async Task ATier3PlanIsNeverPreSelectedAndDemandsTheTypedPhrase()

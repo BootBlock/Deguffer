@@ -1,3 +1,4 @@
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -9,6 +10,14 @@ namespace Deguffer.Core.Execution;
 /// establish it exactly.
 /// </param>
 public sealed record CleanConfirmationItem(string ProviderName, string SizeLabel);
+
+/// <summary>A listed subject that does not rebuild itself, and what deleting it costs.</summary>
+/// <param name="ProviderName">The named cause, as the line listing it calls it.</param>
+/// <param name="Consequence">
+/// From <see cref="ConfirmationRequirement.ConsequenceOf"/>, so this is the same sentence the
+/// subject's own dialog would have carried rather than a second one written for this list.
+/// </param>
+public sealed record CleanConfirmationLoss(string ProviderName, string Consequence);
 
 /// <summary>
 /// What the shell's blanket "are you sure" is about: the selected plans §7 will not put a question
@@ -30,14 +39,39 @@ public sealed record CleanConfirmation
     /// parameterless constructor, and does not compile when the members it would leave unset are
     /// required.
     /// </remarks>
-    private CleanConfirmation(IReadOnlyList<CleanConfirmationItem> items, string totalLabel)
+    private CleanConfirmation(
+        IReadOnlyList<CleanConfirmationItem> items,
+        IReadOnlyList<CleanConfirmationLoss> permanentLosses,
+        string totalLabel)
     {
         Items = items;
+        PermanentLosses = permanentLosses;
         TotalLabel = totalLabel;
     }
 
     /// <summary>One per subject, in the order they were selected.</summary>
     public IReadOnlyList<CleanConfirmationItem> Items { get; }
+
+    /// <summary>
+    /// Of <see cref="Items"/>, those that do not rebuild themselves, and what each one loses.
+    ///
+    /// Ordinarily empty, because §7 leaves only Tier 1 to this dialog. It stops being empty where
+    /// the user has switched the typed phrase off: Tier 3 then asks nothing of its own and arrives
+    /// here instead, and "everything listed rebuilds itself" is false of those rows. §7 leaves how
+    /// hard the confirmation is to give to the user; it never left saying what is unrecoverable to
+    /// anybody.
+    ///
+    /// Keyed on "not Tier 1" rather than on Tier 3, so a tier that reaches this dialog without
+    /// anyone deciding it should stands the reassurance down rather than inheriting it. That is
+    /// §5.2's direction: an unrecognised thing must not come out treated as safe.
+    /// </summary>
+    public IReadOnlyList<CleanConfirmationLoss> PermanentLosses { get; }
+
+    /// <summary>
+    /// Whether every listed subject rebuilds itself, and so whether the shell may say so. False the
+    /// moment <see cref="PermanentLosses"/> is not empty.
+    /// </summary>
+    public bool AllRegenerable => PermanentLosses.Count == 0;
 
     /// <summary>
     /// The sum of <see cref="Items"/> and of nothing else.
@@ -55,6 +89,12 @@ public sealed record CleanConfirmation
 
         return new CleanConfirmation(
             [.. plans.Select(p => new CleanConfirmationItem(p.ProviderName, FreeSpace.Format(p.Estimated)))],
+            [
+                .. plans
+                    .Where(p => p.Tier != SafetyTier.RegenerableCache)
+                    .Select(p => new CleanConfirmationLoss(
+                        p.ProviderName, ConfirmationRequirement.ConsequenceOf(p))),
+            ],
             FreeSpace.Format(plans.Aggregate(ScanSize.Zero, (total, p) => total + p.Estimated)));
     }
 }

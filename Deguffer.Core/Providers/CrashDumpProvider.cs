@@ -49,7 +49,7 @@ namespace Deguffer.Core.Providers;
 /// and the age column, not a cut-off. §5.3's exclusion for <c>%TEMP%</c> exists because live working
 /// files sit among dead ones and look identical; here nothing is live except a dump still being
 /// written, and that one is held open and skipped. So each step carries the newest write inside it,
-/// Tier 3 keeps it unselected until the user types the phrase, and the decision stays theirs. A
+/// Tier 3 keeps it unselected and confirmed before it runs, and the decision stays theirs. A
 /// filter would take it away and would also have to change the grain from one directory to one
 /// dump, which §7's age column is not asking for.</para>
 /// </summary>

@@ -62,8 +62,8 @@ public sealed class CleanConfirmationTests
 
     /// <summary>
     /// The dialog tells the user, in one sentence covering every line, that what it lists rebuilds
-    /// itself on next use. That sentence is only true because Tier 1 is the only tier §7 leaves to
-    /// the blanket ask, so the claim is asserted here rather than left to the wording.
+    /// itself on next use. Under §7's own defaults that sentence holds because Tier 1 is the only
+    /// tier left to the blanket ask, so the claim is asserted here rather than left to the wording.
     /// </summary>
     [Theory]
     [InlineData(SafetyTier.RegenerableWithCost)]
@@ -80,6 +80,53 @@ public sealed class CleanConfirmationTests
         var confirmation = CleanConfirmation.For(ConfirmationRequirement.NotPromptedFor(selection, p => p));
 
         Assert.Equal(["npm"], confirmation.Items.Select(i => i.ProviderName));
+        Assert.Empty(confirmation.PermanentLosses);
+        Assert.True(confirmation.AllRegenerable);
+    }
+
+    /// <summary>
+    /// The case that breaks the sentence above. A user who switches the typed phrase off sends
+    /// Tier 3 to this dialog, and telling somebody their Recycle Bin rebuilds itself is the worst
+    /// sentence this app could show before an irreversible deletion. So the row arrives carrying
+    /// what it loses, and <see cref="CleanConfirmation.AllRegenerable"/> goes false to stand the
+    /// reassurance down.
+    /// </summary>
+    [Fact]
+    public void ATier3RowSentHereByThePreferenceCarriesWhatItLoses()
+    {
+        CleanupPlan[] selection =
+        [
+            Plan("npm", SafetyTier.RegenerableCache, Gigabytes(3)),
+            Plan("Recycle Bin", SafetyTier.UserData, Gigabytes(9)),
+        ];
+
+        var confirmation = CleanConfirmation.For(
+            ConfirmationRequirement.NotPromptedFor(selection, p => p, requireTypedPhrase: false));
+
+        Assert.Equal(["npm", "Recycle Bin"], confirmation.Items.Select(i => i.ProviderName));
+        Assert.False(confirmation.AllRegenerable);
+
+        var loss = Assert.Single(confirmation.PermanentLosses);
+        Assert.Equal("Recycle Bin", loss.ProviderName);
+        Assert.Contains("permanent", loss.Consequence, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cannot be undone", loss.Consequence, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Keyed on "not Tier 1" rather than on Tier 3, so a tier nobody decided should reach this
+    /// dialog stands the reassurance down instead of inheriting it. §5.2's direction: an
+    /// unrecognised thing must not come out treated as safe.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    [InlineData(SafetyTier.DoNotTouch)]
+    public void AnythingBeyondTier1ThatReachesTheDialogStandsTheReassuranceDown(SafetyTier tier)
+    {
+        var confirmation = CleanConfirmation.For([Plan("other", tier, Gigabytes(9))]);
+
+        Assert.False(confirmation.AllRegenerable);
+        Assert.Equal(["other"], confirmation.PermanentLosses.Select(l => l.ProviderName));
     }
 
     /// <summary>

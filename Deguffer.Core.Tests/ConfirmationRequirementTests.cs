@@ -178,6 +178,90 @@ public sealed class ConfirmationRequirementTests
         Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p));
     }
 
+    /// <summary>
+    /// The typed phrase is a preference, and switching it off retires Tier 3's own question. It does
+    /// not promote the row to Tier 1: the level drops to <see cref="ConfirmationLevel.None"/> so that
+    /// the shell's blanket confirmation picks the row up instead, which the pair of assertions
+    /// further down proves.
+    /// </summary>
+    [Fact]
+    public void Tier3AsksNothingOfItsOwnWhenTheTypedPhraseIsSwitchedOff()
+    {
+        var requirement = ConfirmationRequirement.For(PlanFor(SafetyTier.UserData), requireTypedPhrase: false);
+
+        Assert.Equal(ConfirmationLevel.None, requirement.Level);
+        Assert.Null(requirement.RequiredPhrase);
+        Assert.True(requirement.IsSatisfiedBy([]));
+    }
+
+    /// <summary>
+    /// The preference reaches Tier 3 and nothing else. Tier 4 in particular stays refused: a
+    /// preference is not an authorisation, and that is the direction that loses data §3 never
+    /// offered for deletion.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableCache, ConfirmationLevel.None)]
+    [InlineData(SafetyTier.RegenerableWithCost, ConfirmationLevel.Acknowledgement)]
+    [InlineData(SafetyTier.DoNotTouch, ConfirmationLevel.Refused)]
+    public void SwitchingTheTypedPhraseOffLeavesEveryOtherTierAlone(SafetyTier tier, ConfirmationLevel expected)
+    {
+        Assert.Equal(expected, ConfirmationRequirement.For(PlanFor(tier), requireTypedPhrase: false).Level);
+    }
+
+    [Fact]
+    public void NothingSatisfiesTier4EvenWithTheTypedPhraseSwitchedOff()
+    {
+        var requirement = ConfirmationRequirement.For(PlanFor(SafetyTier.DoNotTouch), requireTypedPhrase: false);
+
+        Assert.False(requirement.IsSatisfiedBy([]));
+        Assert.False(requirement.IsSatisfiedBy([new Confirmation("subject")]));
+        Assert.False(requirement.IsSatisfiedBy([new Confirmation("subject", "Android SDK")]));
+    }
+
+    /// <summary>
+    /// What is lost does not change because the user switched the typing off, so the wording must
+    /// still say the deletion is permanent. This is the sentence the shell's blanket confirmation
+    /// quotes for a Tier 3 row once the typed dialog stops appearing, so keying it to the derived
+    /// level rather than the tier would put a Tier 1 sentence in front of a permanent deletion.
+    /// </summary>
+    [Fact]
+    public void Tier3StillSaysPlainlyThatTheLossIsPermanentWithTheTypedPhraseOff()
+    {
+        var consequence = ConfirmationRequirement
+            .For(PlanFor(SafetyTier.UserData), requireTypedPhrase: false)
+            .Consequence;
+
+        Assert.Contains("permanent", consequence, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cannot be undone", consequence, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The half of the preference that has to hold for it to be safe at all. Switching the typed
+    /// phrase off moves a Tier 3 row into the blanket confirmation; it must not drop out of both,
+    /// which would delete user data having asked nothing whatsoever.
+    /// </summary>
+    [Fact]
+    public void ATier3RowFallsToTheBlanketConfirmationWhenTheTypedPhraseIsOff()
+    {
+        CleanupPlan[] selection = [WorkToDo(PlanFor(SafetyTier.UserData))];
+
+        Assert.False(ConfirmationRequirement.PromptsUser(selection[0], requireTypedPhrase: false));
+        Assert.Equal(
+            ["subject"],
+            ConfirmationRequirement
+                .NotPromptedFor(selection, p => p, requireTypedPhrase: false)
+                .Select(p => p.ProviderId));
+    }
+
+    /// <summary>Tier 2 remains §7's to ask about, so it must not be swept in alongside it.</summary>
+    [Fact]
+    public void ATier2RowIsStillNotAskedTwiceWhenTheTypedPhraseIsOff()
+    {
+        CleanupPlan[] selection = [WorkToDo(PlanFor(SafetyTier.RegenerableWithCost))];
+
+        Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p, requireTypedPhrase: false));
+    }
+
     private static CleanupPlan PlanFor(SafetyTier tier) => new()
     {
         ProviderId = "subject",

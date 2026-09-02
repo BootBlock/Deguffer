@@ -53,12 +53,37 @@
         </Grid>
 
         <!--
-            True of every line above because §7 leaves only Tier 1 to this dialog — anything costlier
-            is asked about separately, with its own consequence. CleanConfirmationTests asserts that,
-            so this sentence cannot quietly come to cover a tier it is wrong about.
+            Shown only while it is true of every line above. §7 ordinarily leaves this dialog Tier 1
+            alone, but a user who switches the typed phrase off sends Tier 3 here as well, and
+            telling somebody their Recycle Bin rebuilds itself is the worst sentence this app could
+            put in front of an irreversible deletion. Core decides whether it holds; the shell only
+            decides where it sits.
         -->
         <TextBlock Style="{StaticResource SecondaryText}"
+                   Visibility="{x:Bind Confirmation.AllRegenerable}"
                    Text="Each of these is rebuilt the next time the tool that owns it runs, so nothing is lost. That first run may be slower." />
+
+        <!--
+            And what stands in its place: one paragraph per subject that does not rebuild itself,
+            naming it and quoting the consequence its own dialog would have carried. §7 leaves how
+            hard the confirmation is to give to the user, and never left saying what is unrecoverable
+            to anybody.
+        -->
+        <ItemsControl ItemsSource="{x:Bind Confirmation.PermanentLosses}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="execution:CleanConfirmationLoss">
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="{x:Bind ProviderName}"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Text="{x:Bind Consequence}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <TextBlock FontWeight="SemiBold"
                    TextWrapping="Wrap"
