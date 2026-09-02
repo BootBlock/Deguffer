@@ -88,7 +88,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     /// §5.2's dangerous direction is treating an unknown thing as safe, and outside a tool's own
     /// root a directory's name is the whole of what a careless rule would go on. Each case here is a
     /// directory of exactly the right name with one piece of evidence missing, which is what a real
-    /// mistake looks like — a photographer's <c>Library</c>, a hand-kept <c>build</c>, a
+    /// mistake looks like — a photographer's <c>Library</c>, a hand-made <c>target</c>, a
     /// <c>node_modules</c> in a project with no lock file to restore it from.
     /// </summary>
     [Fact]
@@ -320,7 +320,13 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Equal([idle], plan.TargetedPaths);
         Assert.DoesNotContain(busy, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("Close what is using", StringComparison.Ordinal));
+
+        // Named, and named singly: the note has to say which project and what is holding it, or the
+        // user cannot act on it. Both grammatical forms are covered, because one project held back
+        // is the ordinary case and the sentence reads wrong on a developer's machine otherwise.
+        var note = Assert.Single(plan.Notes, n => n.Message.StartsWith("Left Library in Open", StringComparison.Ordinal));
+
+        Assert.Contains("Close what is using it and preview again", note.Message, StringComparison.Ordinal);
 
         // §5.6's negative, on the case it exists for: two directories of the same name in the same
         // tree, separated only by evidence. Asserting the target went proves nothing about the one
@@ -329,6 +335,29 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.False(LongPath.DirectoryExists(idle));
         Assert.True(LongPath.DirectoryExists(busy));
         Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// Two projects held back are named separately, each with what is holding it. One project's
+    /// holders attributed to all of them would be a wrong answer on the one sentence the user acts
+    /// on to decide what to close.
+    /// </summary>
+    [Fact]
+    public async Task EachHeldBackProjectIsNamedWithWhatIsHoldingIt()
+    {
+        var root = ApproveRoot();
+        var first = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Open"));
+        var second = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "AlsoOpen"));
+
+        var plan = await PlanWith(Unity, liveTrees: new FakeLiveTreeInspector(first, second));
+
+        Assert.Empty(plan.TargetedPaths);
+
+        var note = Assert.Single(plan.Notes, n => n.Message.StartsWith("Left Library in", StringComparison.Ordinal));
+
+        Assert.Contains("Library in Open", note.Message, StringComparison.Ordinal);
+        Assert.Contains("Library in AlsoOpen", note.Message, StringComparison.Ordinal);
+        Assert.Contains("Close what is using each one and preview again", note.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

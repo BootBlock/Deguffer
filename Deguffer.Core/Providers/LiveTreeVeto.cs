@@ -74,10 +74,14 @@ internal static class LiveTreeVeto
         // leaves them believing the check misfired when the project stays on the list.
         var held = vetoed.Select(v => $"{Name(v.Directory)} in {Name(Parent(v.Directory))} ({string.Join("; ", v.Holders)})");
 
+        // Both grammatical forms written out, for the reason ObjPlanNotes records: driving the real
+        // window is what catches a sentence that reads correctly only on a machine with more than
+        // one of something.
         return new PlanNote(
             PlanNoteSeverity.Warning,
-            $"Left {string.Join(", ", held)} alone. " +
-            "Close what is using each one and preview again to include it.");
+            $"Left {string.Join(", ", held)} alone. " + (vetoed.Count == 1
+                ? "Close what is using it and preview again to include it."
+                : "Close what is using each one and preview again to include them."));
     }
 
     private static string Name(string path) => Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
