@@ -344,8 +344,14 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A crate unpacked into <c>registry\src</c> nests deeply enough to pass <c>MAX_PATH</c>
-    /// on its own, and a truncation there is a silent partial deletion.
+    /// A crate unpacked into <c>registry\src</c> nests deeply enough to pass <c>MAX_PATH</c> on its
+    /// own, so the whole round trip is worth running over one: the source tree is measured, and then
+    /// reclaimed in full.
+    ///
+    /// The outcome is not evidence about the prefix. .NET applies <c>\?\</c> itself at 260
+    /// characters, so this holds with <see cref="LongPath.Extended"/> gone —
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> is where that
+    /// is pinned, and the form assertions on the removal seams are what carry §6.3.
     /// </summary>
     [Fact]
     public async Task ReachesACrateSourceTreeBeyondMaxPath()

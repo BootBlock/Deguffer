@@ -145,7 +145,14 @@ public sealed class DirectoryAgeTests : IDisposable
         Assert.Null(DirectoryAge.Of(directory));
     }
 
-    /// <summary>§6.3: the same answer past MAX_PATH, where an unextended path cannot even open.</summary>
+    /// <summary>
+    /// The newest entry inside still decides the age past <c>MAX_PATH</c>, which is exactly where a
+    /// build directory's age tends to be read from.
+    ///
+    /// It is not evidence for §6.3, and the reason it once gave was wrong: an unextended path opens
+    /// perfectly well at this depth, because .NET prefixes one of 260 characters or more itself. See
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
+    /// </summary>
     [Fact]
     public void ReadsADirectoryPastMaxPath()
     {

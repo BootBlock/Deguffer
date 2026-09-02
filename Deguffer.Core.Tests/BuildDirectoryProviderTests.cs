@@ -428,8 +428,15 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     // ---- §6.3, §7 and discovery ----------------------------------------------------------------
 
     /// <summary>
-    /// §6.3. A project past <c>MAX_PATH</c> is found, measured and removed like any other. A
-    /// truncation here is not a crash: it is a partial deletion of somebody's project.
+    /// A Cargo project buried four long segments below an approved root is still discovered,
+    /// measured and removed, with its sources left standing. That is worth covering, because
+    /// discovery here walks a tree the user nominated rather than a location the provider knows.
+    ///
+    /// It is not the §6.3 proof its shape suggests. .NET prepends <c>\?\</c> itself to any path of
+    /// 260 characters or more before it calls Win32, so this passes with Core's prefixing deleted
+    /// outright — see <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
+    /// What discriminates is the form of the path, asserted in
+    /// <see cref="DirectoryRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm"/>.
     /// </summary>
     [Fact]
     public async Task FindsAndRemovesAProjectPastMaxPath()

@@ -249,8 +249,13 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3: a browser cache relocated past MAX_PATH must still be measured. This assertion is
-    /// weaker on a machine with LongPathsEnabled set.
+    /// The browsers root is whatever the environment variable points at, so a build under a deeply
+    /// nested one must still be measured.
+    ///
+    /// Not a §6.3 assertion, and not merely a weak one on a machine with <c>LongPathsEnabled</c>
+    /// set: .NET applies <c>\?\</c> itself past 260 characters, so the measurement succeeds however
+    /// Core handles the path. <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>
+    /// is the one test that would notice if that stopped being true.
     /// </summary>
     [Fact]
     public async Task MeasuresABrowserCacheRelocatedBeyondMaxPath()

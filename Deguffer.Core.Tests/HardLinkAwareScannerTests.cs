@@ -106,15 +106,16 @@ public sealed class HardLinkAwareScannerTests : IDisposable
     /// be reached, and nothing downstream could tell.
     ///
     /// <para><b>What this establishes, and what it cannot.</b> It proves the walk reaches past
-    /// MAX_PATH on the machine it runs on. It does not prove this scanner applied the prefix
-    /// itself, for the reason <see cref="Safety.IFileSystem"/> already records: .NET prepends
-    /// <c>\\?\</c> to any path of 260 characters or more before calling Win32, and a host that
-    /// is long-path aware — which every .NET 10 test host is — carries a bare path through as
-    /// well. Deleting the prefixing from this scanner was tried, and this test stayed green.
-    /// The exposure is real but is not observable from an outcome: the per-file query here goes
-    /// through <c>CreateFileW</c> directly, which does no normalising of its own, so a machine
-    /// without long-path support would skip the deep file and under-count. Making that assertable
-    /// means asserting on the <em>form</em> of each path handed to Win32, which is the seam
+    /// MAX_PATH. It does not prove this scanner applied the prefix itself, and the reason is not
+    /// the host or the machine: .NET prepends <c>\?\</c> to any path of 260 characters or more
+    /// before calling Win32, whatever <c>LongPathsEnabled</c> says, and even in a process where
+    /// <c>RtlAreLongPathsEnabled</c> reports 0 — which is what an ordinary test host is.
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> holds that
+    /// assumption up. Deleting the prefixing from this scanner was tried, and this test stayed
+    /// green. The exposure is real but is not observable from an outcome: the per-file query goes
+    /// through <c>CreateFileW</c> directly, which does no normalising of its own, so a bare path
+    /// reaching it would skip the deep file and under-count. Making that assertable means asserting
+    /// on the <em>form</em> of each path handed to Win32, which is the seam
     /// <see cref="Safety.IFileSystem"/> exists to provide for deletion and which scanning does not
     /// have.</para>
     /// </summary>

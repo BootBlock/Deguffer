@@ -401,9 +401,14 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. Intermediate output nests deeply by construction — <c>obj/Debug/&lt;tfm&gt;/</c> under
-    /// an already-deep source tree — so a MAX_PATH truncation here is an ordinary case, not an edge
-    /// one, and it would be a silent partial deletion.
+    /// Intermediate output nests deeply by construction — <c>obj/Debug/&lt;tfm&gt;/</c> under an
+    /// already-deep source tree — so this is an ordinary case rather than an edge one: the payload
+    /// past the limit is measured, the <c>obj</c> directory goes, the project file stays, and the
+    /// §5.6 verification passes.
+    ///
+    /// The depth buys reach, not proof of the prefix. The runtime applies one at 260 characters, as
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> records, so
+    /// §6.3 lives in the form assertions on the removal seams instead.
     /// </summary>
     [Fact]
     public async Task MeasuresAndRemovesOutputNestedPastMaxPath()

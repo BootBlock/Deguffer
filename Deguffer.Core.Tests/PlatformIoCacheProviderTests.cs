@@ -312,8 +312,13 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3: a cache relocated under a path past MAX_PATH must still be measured, not silently
-    /// skipped. Note this assertion is weaker on a machine with LongPathsEnabled set.
+    /// PlatformIO reports its own cache location, so a cache relocated past <c>MAX_PATH</c> must
+    /// still be measured rather than skipped.
+    ///
+    /// The caveat is not the machine's <c>LongPathsEnabled</c> setting, as this once said. The
+    /// runtime prepends <c>\?\</c> at 260 characters regardless, so an assertion on the outcome of
+    /// a filesystem operation cannot fail anywhere — see
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
     /// </summary>
     [Fact]
     public async Task MeasuresACacheRelocatedBeyondMaxPath()

@@ -414,8 +414,13 @@ public sealed class CondaCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A conda package cache nests by package name and build string and runs deep, so a
-    /// MAX_PATH truncation here would silently under-measure the probe the delta is taken from.
+    /// The plan reports a delta taken from a probe, so what matters here is that the probe counts a
+    /// package directory nesting past <c>MAX_PATH</c> rather than stopping short of it: the shallow
+    /// and the deep bytes both reach the figure.
+    ///
+    /// It says nothing about the <c>\?\</c> prefix. The runtime supplies one at 260 characters
+    /// whatever Core does — <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>
+    /// — so §6.3 is proved by the assertions on the form of a path, not by a measurement.
     /// </summary>
     [Fact]
     public async Task MeasuresACacheDeeperThanMaxPath()

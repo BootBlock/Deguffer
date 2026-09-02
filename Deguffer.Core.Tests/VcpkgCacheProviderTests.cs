@@ -464,9 +464,14 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A vcpkg buildtree carries a port's whole source tree under a triplet directory, which
-    /// is where <c>MAX_PATH</c> is met in practice, and a truncation there is a silent partial
-    /// deletion.
+    /// A vcpkg buildtree carries a port's whole source tree under a triplet directory, which is where
+    /// <c>MAX_PATH</c> is met in practice, so scratch content that deep is measured and then
+    /// reclaimed in full.
+    ///
+    /// Reach and removal are the whole of it. .NET prepends <c>\?\</c> to a path of 260 characters
+    /// or more before it calls Win32, so the run would look the same with Core's prefixing removed;
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> keeps that
+    /// honest, and §6.3 is proved where a path's form is asserted rather than its outcome.
     /// </summary>
     [Fact]
     public async Task ReachesABuildTreeBeyondMaxPath()

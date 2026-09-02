@@ -72,8 +72,14 @@ public class ParallelEnumerationScannerTests
     }
 
     /// <summary>
-    /// §6.3: every filesystem path goes through LongPath, because a MAX_PATH truncation here would
-    /// silently stop counting partway down a node_modules tree rather than failing.
+    /// A file only a deep walk reaches is still counted, which is the failure worth guarding
+    /// against: a truncation would stop counting partway down a <c>node_modules</c> tree rather than
+    /// failing, and the total would simply be too small.
+    ///
+    /// Whether <c>LongPath</c> is what got the walk there is not observable from a total. .NET
+    /// prefixes past 260 characters itself, so this stays green with the prefixing deleted; the
+    /// property that does discriminate for this walk is asserted in
+    /// <see cref="BoundedFileWalkTests.CarriesTheFormOfTheRootDownToEveryFileItVisits"/>.
     /// </summary>
     [Fact]
     public async Task CountsFilesBeyondMaxPath()

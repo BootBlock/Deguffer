@@ -157,8 +157,13 @@ public sealed class PipCacheProviderTests : IDisposable
     // to begin with, so it passes with the bug present.
 
     /// <summary>
-    /// §6.3: a cache relocated past MAX_PATH must still be measured, not silently skipped. This
-    /// assertion is weaker on a machine with LongPathsEnabled set.
+    /// The cache location comes back from <c>pip cache dir</c>, so it can be anywhere the user put
+    /// it: past <c>MAX_PATH</c> it must still be measured rather than silently skipped.
+    ///
+    /// Weaker than it looks, though not for the machine-specific reason once given here. The
+    /// <c>LongPathsEnabled</c> registry value is beside the point: .NET prefixes a path of 260
+    /// characters or more itself, which makes an outcome-based long-path assertion unfalsifiable on
+    /// every machine. See <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
     /// </summary>
     [Fact]
     public async Task MeasuresACacheRelocatedBeyondMaxPath()

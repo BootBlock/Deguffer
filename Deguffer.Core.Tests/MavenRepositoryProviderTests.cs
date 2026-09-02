@@ -293,9 +293,14 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A Maven coordinate becomes a directory per group segment, so a deeply nested group with
-    /// a long artefact name passes <c>MAX_PATH</c> without trying, and a truncation there is a
-    /// silent partial deletion.
+    /// A Maven coordinate becomes a directory per group segment, so a deeply nested group passes
+    /// <c>MAX_PATH</c> without trying. Both halves of the provider's work are put over such a tree:
+    /// the artefact is measured, and then reclaimed.
+    ///
+    /// Reach and removal are all it shows. .NET prepends <c>\?\</c> to a path of 260 characters or
+    /// more before Win32 sees it, so nothing here would change if Core stopped doing so —
+    /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> guards that
+    /// assumption, and the form assertions on the removal seams are where §6.3 is established.
     /// </summary>
     [Fact]
     public async Task ReachesAnArtefactBeyondMaxPath()
