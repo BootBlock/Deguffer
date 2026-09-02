@@ -7,11 +7,17 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// The live-tree veto, exercised against real live trees rather than against a fake.
 ///
-/// A fake cannot establish that the Restart Manager answers without elevation, that it refuses a
-/// directory, or that another process's working directory is readable at all. Those are claims about
-/// this machine, and the safety rule they carry — never delete a build directory somebody is using —
-/// is worth nothing if they are wrong. So each test here starts a real second process, makes it hold
-/// a real path, and asks.
+/// A fake cannot establish that the Restart Manager answers without elevation, or that another
+/// process's working directory is readable at all. Those are claims about this machine, and the
+/// safety rule they carry — never delete a build directory somebody is using — is worth nothing if
+/// they are wrong. So each test here starts a real second process, makes it hold a real path, and
+/// asks.
+///
+/// One claim the code makes is deliberately not established here: that the Restart Manager refuses a
+/// directory outright. It does, and that is why a provider has to name the file its tool locks — but
+/// <c>RestartManager</c> is internal to Core with one caller, and what is testable from outside is
+/// the consequence rather than the refusal. <see cref="ADeclaredLockFileThatIsADirectoryIsNeverAsked"/>
+/// covers that consequence.
 ///
 /// The helper processes are ordinary Windows programs started with a long wait, and each is stopped
 /// in a <c>finally</c>. Nothing here needs elevation.
@@ -36,7 +42,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
         var project = _temp.CreateDirectory("crate");
         var target = _temp.CreateDirectory("crate", "target");
 
-        using var busy = StartWaiting(project);
+        using var busy = StartWaiting(project, new LiveTreeQuery(target, project));
 
         var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
 
@@ -74,7 +80,10 @@ public sealed class LiveTreeInspectorTests : IDisposable
         var copied = Path.Combine(venv, "interpreter.exe");
         File.Copy(WaitingProgram, copied);
 
-        using var running = StartWaiting(_temp.Path, copied);
+        using var running = StartWaiting(
+            _temp.Path,
+            new LiveTreeQuery(Path.Combine(project, ".venv"), project),
+            copied);
 
         var findings = new LiveTreeInspector().FindLive(
             [new LiveTreeQuery(Path.Combine(project, ".venv"), project)]);
@@ -124,14 +133,36 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
-    /// A declared lock file that is not there costs no session and produces no answer either way.
-    /// Unity removes <c>UnityLockfile</c> when the editor closes, so this is the ordinary case.
+    /// A declared lock file that is not there is the ordinary case — Unity removes
+    /// <c>UnityLockfile</c> when the editor closes — and it must not turn the answer into "could not
+    /// tell". A plan that warned about every dormant project would train the user past the warning
+    /// that matters.
     /// </summary>
     [Fact]
     public void AnAbsentLockFileIsNotAnUnansweredQuestion()
     {
         var project = _temp.CreateDirectory("unity");
         var library = _temp.CreateDirectory("unity", "Library");
+
+        var findings = new LiveTreeInspector().FindLive(
+            [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
+
+        Assert.True(findings.Complete);
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
+    /// A declared lock-file name that turns out to be a directory is never handed to the Restart
+    /// Manager, which refuses a directory outright with an access-denied result. Passing one would
+    /// turn an ordinary project into "Deguffer could not check whether this is in use" — a warning
+    /// with nothing behind it, on a plan that is in fact fine.
+    /// </summary>
+    [Fact]
+    public void ADeclaredLockFileThatIsADirectoryIsNeverAsked()
+    {
+        var project = _temp.CreateDirectory("unity");
+        var library = _temp.CreateDirectory("unity", "Library");
+        _temp.CreateDirectory("unity", "Library", "UnityLockfile");
 
         var findings = new LiveTreeInspector().FindLive(
             [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
@@ -152,7 +183,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
         var idleProject = _temp.CreateDirectory("idle");
         var idleTarget = _temp.CreateDirectory("idle", "target");
 
-        using var busy = StartWaiting(busyProject);
+        using var busy = StartWaiting(busyProject, new LiveTreeQuery(busyTarget, busyProject));
 
         var findings = new LiveTreeInspector().FindLive(
         [
@@ -176,7 +207,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
         var target = _temp.CreateDirectory("crate", "target");
         var lookalike = _temp.CreateDirectory("crate-old");
 
-        using var busy = StartWaiting(lookalike);
+        // Waited on against the lookalike's own project, so the process is established before the
+        // assertion that the real project is untouched by it.
+        using var busy = StartWaiting(lookalike, new LiveTreeQuery(lookalike, lookalike));
 
         var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
 
@@ -184,23 +217,37 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3. A project past <c>MAX_PATH</c> is still answered for, rather than throwing or silently
-    /// reporting dormant — the second of which would hand a live tree to a deletion.
+    /// §6.3, and the answer here is a limit rather than a success. The Restart Manager refuses a path
+    /// past <c>MAX_PATH</c> in both the plain and the extended-length form — established against a
+    /// real file held open at 437 characters — so the lock-file signal genuinely cannot run that
+    /// deep, and no amount of <c>LongPath</c> makes it.
+    ///
+    /// What this pins is that the failure is <em>reported</em>. A truncation or a refusal that read
+    /// as "nothing holds this" would hand a live Unity project to a deletion, so the test requires
+    /// the findings to come back incomplete: the plan then says the check could not run, which is the
+    /// only honest thing to say. Asserting dormancy here would have passed whether or not any of this
+    /// worked, which is what the test that used to sit here did.
     /// </summary>
     [Fact]
-    public void ALongPathIsStillAnswered()
+    public void ALockFilePastMaxPathIsReportedAsUncheckedRatherThanDormant()
     {
         var deep = Path.Combine(_temp.Path, string.Join('\\', Enumerable.Repeat(new string('d', 60), 5)));
         Directory.CreateDirectory(LongPath.Extended(deep));
-        var target = Path.Combine(deep, "target");
-        Directory.CreateDirectory(LongPath.Extended(target));
+        var library = Path.Combine(deep, "Library");
+        Directory.CreateDirectory(LongPath.Extended(library));
 
-        Assert.True(deep.Length > 260);
+        Assert.True(library.Length > 260, "the fixture is not long enough to test anything");
 
-        var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, deep, ["build.lock"])]);
+        var lockFile = Path.Combine(library, "UnityLockfile");
+        File.WriteAllText(LongPath.Extended(lockFile), string.Empty);
 
-        Assert.True(findings.Complete);
-        Assert.False(findings.IsLive(target));
+        using var holder = File.Open(LongPath.Extended(lockFile), FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var findings = new LiveTreeInspector().FindLive(
+            [new LiveTreeQuery(library, deep, ["UnityLockfile"])]);
+
+        Assert.False(findings.Complete);
+        Assert.False(findings.IsLive(library));
     }
 
     /// <summary>
@@ -216,7 +263,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         Assert.False(inspector.FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
 
-        using var busy = StartWaiting(project);
+        using var busy = StartWaiting(project, new LiveTreeQuery(target, project));
 
         // Still the old snapshot, so the process started a moment ago is not in it.
         Assert.False(inspector.FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
@@ -233,7 +280,16 @@ public sealed class LiveTreeInspectorTests : IDisposable
     private static string WaitingProgram =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ping.exe");
 
-    private static WaitingProcess StartWaiting(string workingDirectory, string? program = null)
+    /// <param name="visibleAt">
+    /// A query the started process must answer, which is what makes the wait a wait. A process that
+    /// has begun but not finished starting has no environment block to read yet, so returning before
+    /// the inspector can see it would leave every test here racing that initialisation. Waiting on
+    /// the inspector itself is the only barrier that tests the thing the tests depend on.
+    /// </param>
+    private static WaitingProcess StartWaiting(
+        string workingDirectory,
+        LiveTreeQuery visibleAt,
+        string? program = null)
     {
         var start = new ProcessStartInfo(program ?? WaitingProgram)
         {
@@ -247,26 +303,17 @@ public sealed class LiveTreeInspectorTests : IDisposable
         start.ArgumentList.Add("120");
         start.ArgumentList.Add("127.0.0.1");
 
-        var process = Process.Start(start)!;
+        // Wrapped before anything can throw, so a failure while waiting still stops the child rather
+        // than leaving a ping running for two minutes.
+        var waiting = new WaitingProcess(Process.Start(start)!);
 
-        // The process table is read from another thread's point of view, and a process that has not
-        // finished starting has no environment block to read yet.
-        SpinWait.SpinUntil(() => TableSees(process.Id), TimeSpan.FromSeconds(10));
+        Assert.True(
+            SpinWait.SpinUntil(
+                () => new LiveTreeInspector().FindLive([visibleAt]).IsLive(visibleAt.Directory),
+                TimeSpan.FromSeconds(20)),
+            "the helper process never became visible to the inspector, so the test below would prove nothing");
 
-        return new WaitingProcess(process);
-    }
-
-    private static bool TableSees(int id)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(id);
-            return !process.HasExited && process.MainWindowHandle >= 0;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
+        return waiting;
     }
 
     private sealed class WaitingProcess(Process process) : IDisposable

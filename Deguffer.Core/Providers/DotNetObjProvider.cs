@@ -173,8 +173,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             _liveTrees,
             [.. targets.Select(t => new RecognisedBuildDirectory(
                 t.Path,
-                Path.GetDirectoryName(t.Project.ProjectFilePath)!,
-                "Intermediate build output"))],
+                Path.GetDirectoryName(t.Project.ProjectFilePath)!))],
             [],
             ct);
 
@@ -205,7 +204,6 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 unrecognised,
                 live,
                 measured.Note,
-                BuildRunningProcessNote(),
                 ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count)),
             Fallback = measured.Fallback,
         };

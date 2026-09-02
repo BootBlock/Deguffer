@@ -24,6 +24,14 @@ public readonly record struct FileHolders(IReadOnlyList<string> Holders, bool An
 /// this tree open" — which is why <see cref="LiveTreeInspector"/> pairs this with the process table
 /// rather than relying on it alone, and why a provider has to name the file its tool locks.</para>
 ///
+/// <para><b>It also refuses a path past <c>MAX_PATH</c>, in either form.</b> The plain path and the
+/// extended-length one were both tried against a real file held open at 437 characters, and both
+/// came back refused, so §6.3's usual answer does not apply here — there is no long-path route to
+/// take. What that costs is stated rather than hidden: the query reports
+/// <see cref="FileHolders.Unanswered"/>, the findings go incomplete, and the plan tells the user the
+/// check could not run rather than that nothing is using the directory. A project that deep still
+/// gets the two process-table signals, which have no such limit.</para>
+///
 /// <para>Declared with <c>DllImport</c> rather than the <c>LibraryImport</c> the rest of Core uses.
 /// The source generator cannot express either of the two shapes this API needs: an array of strings
 /// as a resource list, and a struct carrying fixed-length inline character buffers.</para>
@@ -33,6 +41,9 @@ internal static class RestartManager
     private const int ErrorMoreData = 234;
     private const int MaximumAppName = 255;
     private const int MaximumServiceName = 63;
+
+    /// <summary><c>CCH_RM_SESSION_KEY</c>: a GUID in registry form, without separators.</summary>
+    private const int SessionKeyLength = 32;
 
     /// <summary>
     /// A ceiling on the processes reported for one query. The Restart Manager will happily describe
@@ -64,13 +75,22 @@ internal static class RestartManager
             plain[i] = LongPath.Display(files[i]);
         }
 
-        if (RmStartSession(out var session, 0, Guid.NewGuid().ToString("N")) != 0)
-        {
-            return FileHolders.Unanswered;
-        }
+        uint session = 0;
+        var started = false;
 
         try
         {
+            // Inside the guard rather than before it. This is the call that forces rstrtmgr.dll to
+            // load, so it is the only one that can raise DllNotFoundException — outside the try, the
+            // handlers below would be unreachable where they are needed and dead where they sit, and
+            // a stripped image would take the whole planning pass down.
+            if (RmStartSession(out session, 0, SessionKey()) != 0)
+            {
+                return FileHolders.Unanswered;
+            }
+
+            started = true;
+
             ct.ThrowIfCancellationRequested();
 
             if (RmRegisterResources(session, (uint)plain.Length, plain, 0, null, 0, null) != 0)
@@ -95,13 +115,19 @@ internal static class RestartManager
             held = Math.Min(needed, MaximumHolders);
             var info = new ProcessInfo[held];
 
-            if (RmGetList(session, out _, ref held, info, out _) != 0)
+            result = RmGetList(session, out _, ref held, info, out _);
+
+            // ERROR_MORE_DATA again means the cap bit, and the array is filled: RmGetList reports it
+            // whenever the buffer is smaller than the count it wants. Treating that as a failure
+            // would turn the busiest directory on the disk — the one most obviously in use — into
+            // the one Deguffer says it could not ask about.
+            if (result is not (0 or ErrorMoreData))
             {
                 return FileHolders.Unanswered;
             }
 
             var holders = new List<string>((int)held);
-            for (var i = 0; i < held; i++)
+            for (var i = 0; i < held && i < info.Length; i++)
             {
                 var name = info[i].ApplicationName;
                 if (!string.IsNullOrWhiteSpace(name) && !holders.Contains(name, StringComparer.Ordinal))
@@ -124,8 +150,25 @@ internal static class RestartManager
         }
         finally
         {
-            RmEndSession(session);
+            if (started)
+            {
+                RmEndSession(session);
+            }
         }
+    }
+
+    /// <summary>
+    /// A buffer for the session key, which the Restart Manager <em>writes into</em> rather than
+    /// reads. Passing a managed <c>string</c> here would hand native code an immutable object to
+    /// write over: it happens to work while the value is exactly the length the API expects, which
+    /// is how the mistake survives in samples, and it is undefined behaviour regardless.
+    /// </summary>
+    private static char[] SessionKey()
+    {
+        var key = new char[SessionKeyLength + 1];
+        Guid.NewGuid().ToString("N").CopyTo(key);
+
+        return key;
     }
 
     /// <summary>
@@ -162,7 +205,7 @@ internal static class RestartManager
     }
 
     [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
-    private static extern int RmStartSession(out uint sessionHandle, int flags, string sessionKey);
+    private static extern int RmStartSession(out uint sessionHandle, int flags, [Out] char[] sessionKey);
 
     [DllImport("rstrtmgr.dll")]
     private static extern int RmEndSession(uint sessionHandle);

@@ -33,13 +33,21 @@ public sealed record LiveTree(string Directory, IReadOnlyList<string> Holders);
 
 /// <param name="Live">Every candidate found to be in use.</param>
 /// <param name="Complete">
-/// False when a check could not be performed at all, so absence from <see cref="Live"/> is not
-/// evidence of dormancy.
+/// False when one of the mechanisms could not run at all — the Restart Manager refused the query, or
+/// the process table could not be read. Absence from <see cref="Live"/> is then not evidence of
+/// dormancy.
 ///
 /// The distinction is the whole point. "Nothing is using this" and "we could not tell" lead to
 /// opposite decisions on a directory whose deletion breaks the work someone is doing right now, and
 /// a seam that folded them together would report the second as the first — which is the direction
 /// §5.2 calls dangerous, arriving through a different door.
+///
+/// <b>It reports a mechanism failing, not the standing limits of an unelevated run.</b> A process
+/// belonging to another account, or one running elevated, cannot be opened at all from an ordinary
+/// Deguffer, and one that opens without read access to its memory yields no working directory.
+/// Neither is a per-run failure — both are true of every unelevated run on every machine — so
+/// flagging them here would put a warning on every plan and teach the user to ignore the one that
+/// matters. They are stated as a limit of the answer instead, on the interface below.
 /// </param>
 public sealed record LiveTreeFindings(IReadOnlyList<LiveTree> Live, bool Complete)
 {
@@ -69,10 +77,13 @@ public sealed record LiveTreeFindings(IReadOnlyList<LiveTree> Live, bool Complet
 ///
 /// <para><b>It can miss, and it must never fire wrongly.</b> Every signal here is positive evidence
 /// that something is using the directory, so a directory reported live is one. The reverse does not
-/// follow: a compiler holding a file deep inside a tree that is neither its own executable nor its
-/// working directory is invisible to all of this, and nothing unelevated answers that at directory
-/// granularity. <see cref="LiveTreeFindings.Complete"/> carries what could not be asked, and §7's
-/// age column carries the rest of the decision.</para>
+/// follow, and it misses in two known ways. A compiler holding a file deep inside a tree that is
+/// neither its own executable nor its working directory is invisible to all three signals, and
+/// nothing unelevated answers that at directory granularity. And a program running as another
+/// account or as administrator cannot be inspected from an ordinary Deguffer at all, so an elevated
+/// build is not seen. Neither gap closes without elevation, and §6.3 makes unelevated the ordinary
+/// run — so §7's age column carries the rest of the decision, and the user-facing guide says plainly
+/// that the check is not exhaustive.</para>
 /// </summary>
 public interface ILiveTreeInspector
 {

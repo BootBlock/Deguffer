@@ -28,10 +28,12 @@ namespace Deguffer.Core.Providers;
 /// nothing is found and nothing is claimed. And a machine whose Rust toolchain has been uninstalled
 /// still has its <c>target</c> directories, which a command-based provider could not touch at all.</para>
 ///
-/// <para>Recognition needs both halves. A <c>Cargo.toml</c> beside it says a Rust project is here;
-/// <c>CACHEDIR.TAG</c> inside it is written by Cargo itself and is the part that says <em>Cargo made
-/// this</em>. A directory predating that convention is declined, which costs disk space rather than
-/// data.</para>
+/// <para>Recognition needs both halves. A <c>Cargo.toml</c> beside it says a Rust project is here,
+/// and <c>CACHEDIR.TAG</c> inside says something marked this directory as a cache — which is the
+/// part a folder somebody keeps by hand beside a manifest will not have. The file's contents are not
+/// read, so the claim is "a tool following the cache-directory convention wrote this" rather than
+/// "Cargo wrote this"; the conjunction with the manifest is what narrows it to Cargo. A <c>target</c>
+/// predating the convention is declined, which costs disk space rather than data.</para>
 /// </summary>
 public sealed class CargoTargetProvider : BuildDirectoryProvider
 {
@@ -40,6 +42,11 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
         DirectoryNames = ["target"],
         RequiredSiblings = ["Cargo.toml"],
         RequiredContents = ["CACHEDIR.TAG"],
+
+        // Neither identifies the directory, and both are what a rule reaching one level too far
+        // would take with it: the crate's own source, and the lock file pinning what it compiled
+        // against. §5.6 asks what must survive, not what recognition read.
+        ProtectedSiblings = ["src", "Cargo.lock"],
     };
 
     public CargoTargetProvider(

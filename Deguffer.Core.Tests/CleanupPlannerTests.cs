@@ -182,7 +182,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "unity-library", "cargo-target", "node-modules", "python-venv",
-                "dart-build", "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "uv", "pip",
+                "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "uv", "pip",
                 "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
                 "platformio", "playwright", "recycle-bin", "crash-dumps", "windows-servicing-logs",
             ],
@@ -190,7 +190,7 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "unity-library", "cargo-target", "node-modules", "python-venv", "dart-build",
+                "unity-library", "cargo-target", "node-modules", "python-venv",
                 "conda", "maven", "vcpkg", "platformio", "playwright",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
@@ -203,7 +203,6 @@ public sealed class CleanupPlannerTests
         // produce a row no confirmation can authorise.
         Assert.DoesNotContain(planner.Providers, p => p.Tier == SafetyTier.DoNotTouch);
     }
-
 
     [Fact]
     public async Task InvalidatesEveryProviderBeforeAnyOfThemPlans()

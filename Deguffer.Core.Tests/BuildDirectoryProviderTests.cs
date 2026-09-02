@@ -82,15 +82,6 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Equal([environment], plan.TargetedPaths);
     }
 
-    [Fact]
-    public async Task PlansADartBuildWithItsMeasuredSize()
-    {
-        var root = ApproveRoot();
-        var build = BuildDirectoryFixture.CreateDartProject(Path.Combine(root, "flutterapp"));
-
-        Assert.Equal([build], (await PlanWith(Dart)).TargetedPaths);
-    }
-
     // ---- §5.2: unrecognised is left alone ----------------------------------------------------
 
     /// <summary>
@@ -107,6 +98,8 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         var noAssets = BuildDirectoryFixture.CreateUnityProject(
             Path.Combine(root, "photos"), writeAssets: false);
+        var noPackages = BuildDirectoryFixture.CreateUnityProject(
+            Path.Combine(root, "music"), writePackages: false);
         var noSettings = BuildDirectoryFixture.CreateUnityProject(
             Path.Combine(root, "samples"), writeProjectSettings: false);
 
@@ -114,9 +107,11 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(LongPath.DirectoryExists(noAssets));
+        Assert.True(LongPath.DirectoryExists(noPackages));
         Assert.True(LongPath.DirectoryExists(noSettings));
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not be confirmed", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == noAssets);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == noPackages);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == noSettings);
     }
 
@@ -136,6 +131,25 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(LongPath.DirectoryExists(target));
+    }
+
+    /// <summary>
+    /// The other direction: the tool's own marker without the manifest beside it. Either half alone
+    /// is a coincidence, and it is the conjunction that identifies the directory.
+    /// </summary>
+    [Fact]
+    public async Task ABuildDirectoryWithNoProjectManifestBesideItIsNotRecognised()
+    {
+        var root = ApproveRoot();
+        var target = BuildDirectoryFixture.CreateCargoProject(
+            Path.Combine(root, "crate"), writeManifest: false);
+        var modules = BuildDirectoryFixture.CreateNodeProject(
+            Path.Combine(root, "app"), writeManifest: false);
+
+        Assert.Empty((await PlanWith(Cargo)).TargetedPaths);
+        Assert.Empty((await PlanWith(Node)).TargetedPaths);
+        Assert.True(LongPath.DirectoryExists(target));
+        Assert.True(LongPath.DirectoryExists(modules));
     }
 
     /// <summary>
@@ -181,21 +195,6 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         Assert.Empty((await PlanWith(Python)).TargetedPaths);
         Assert.True(LongPath.DirectoryExists(notAnEnvironment));
-    }
-
-    /// <summary>
-    /// A <c>build</c> beside a <c>pubspec.yaml</c> in a package the toolchain has never run in is
-    /// declined. <c>build</c> is the weakest name in this category, so both markers are required.
-    /// </summary>
-    [Fact]
-    public async Task ADartBuildWithoutTheToolchainsOwnDirectoryIsNotRecognised()
-    {
-        var root = ApproveRoot();
-        var build = BuildDirectoryFixture.CreateDartProject(
-            Path.Combine(root, "package"), writeDartTool: false);
-
-        Assert.Empty((await PlanWith(Dart)).TargetedPaths);
-        Assert.True(LongPath.DirectoryExists(build));
     }
 
     // ---- §5.6: the negative --------------------------------------------------------------------
@@ -307,12 +306,45 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var busy = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Open"));
         var idle = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Dormant"));
 
-        var plan = await PlanWith(Unity, liveTrees: new FakeLiveTreeInspector(busy));
+        var provider = Unity(live: new FakeLiveTreeInspector(busy));
+        var plan = await provider.PlanAsync();
 
         Assert.Equal([idle], plan.TargetedPaths);
         Assert.DoesNotContain(busy, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("Close what is using it", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Close what is using", StringComparison.Ordinal));
+
+        // §5.6's negative, on the case it exists for: two directories of the same name in the same
+        // tree, separated only by evidence. Asserting the target went proves nothing about the one
+        // beside it, and an over-broad rule takes both.
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.False(LongPath.DirectoryExists(idle));
+        Assert.True(LongPath.DirectoryExists(busy));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// The same negative for a directory held back because its evidence did not hold, rather than
+    /// because something is using it. Both land in the same protected list, and both sit beside a
+    /// directory that is about to be removed.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedDirectoryBesideARemovedOneSurvivesTheRemoval()
+    {
+        var root = ApproveRoot();
+        var target = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
+        var declined = BuildDirectoryFixture.CreateUnityProject(
+            Path.Combine(root, "photos"), writePackages: false);
+
+        var provider = Unity();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([target], plan.TargetedPaths);
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+
+        Assert.False(LongPath.DirectoryExists(target));
+        Assert.True(LongPath.DirectoryExists(declined));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>
@@ -527,8 +559,4 @@ public sealed class BuildDirectoryProviderTests : IDisposable
             _roots, null, live ?? FakeLiveTreeInspector.NothingLive, _environment, new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning, scanner ?? new FakeDirectoryScanner());
 
-    private BuildDirectoryProvider Dart(IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null) =>
-        new DartBuildProvider(
-            _roots, null, live ?? FakeLiveTreeInspector.NothingLive, _environment, new FakeProcessRunner(),
-            FakeProcessInspector.NothingRunning, scanner ?? new FakeDirectoryScanner());
 }

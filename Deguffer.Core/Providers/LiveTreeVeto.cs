@@ -6,8 +6,7 @@ namespace Deguffer.Core.Providers;
 /// <summary>One directory whose identity is established, and the project folder it belongs to.</summary>
 /// <param name="Path">The directory a plan would remove.</param>
 /// <param name="Project">Its project or solution folder, which must survive (§5.6).</param>
-/// <param name="Subject">What it is, written for the user.</param>
-public readonly record struct RecognisedBuildDirectory(string Path, string Project, string Subject);
+public readonly record struct RecognisedBuildDirectory(string Path, string Project);
 
 /// <param name="Cleared">The directories a plan may go on to target.</param>
 /// <param name="Vetoed">The directories something is using, and what is using each.</param>
@@ -69,17 +68,22 @@ internal static class LiveTreeVeto
             return null;
         }
 
-        var first = vetoed[0];
-        var subject = vetoed.Count == 1
-            ? $"{Path.GetFileName(first.Directory.TrimEnd(Path.DirectorySeparatorChar))} in " +
-              $"{Path.GetFileName(Path.GetDirectoryName(first.Directory.TrimEnd(Path.DirectorySeparatorChar)) ?? string.Empty)}"
-            : $"{vetoed.Count} projects";
+        // Each project with its own holders, rather than one project's holders attributed to all of
+        // them. This is the sentence the user acts on to decide what to close, so naming the wrong
+        // process on it is worse than naming none: it sends them to shut down something innocent and
+        // leaves them believing the check misfired when the project stays on the list.
+        var held = vetoed.Select(v => $"{Name(v.Directory)} in {Name(Parent(v.Directory))} ({string.Join("; ", v.Holders)})");
 
         return new PlanNote(
             PlanNoteSeverity.Warning,
-            $"Left {subject} alone: {string.Join("; ", first.Holders)}. " +
-            "Close what is using it and preview again to include it.");
+            $"Left {string.Join(", ", held)} alone. " +
+            "Close what is using each one and preview again to include it.");
     }
+
+    private static string Name(string path) => Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+
+    private static string Parent(string path) =>
+        Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar)) ?? string.Empty;
 
     /// <summary>
     /// The note for a check that could not run, or null where it could.

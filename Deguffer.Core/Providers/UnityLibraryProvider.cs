@@ -17,10 +17,15 @@ namespace Deguffer.Core.Providers;
 /// <c>Library\PackageCache</c> is fetched over the network again. Tier 2's definition is
 /// "re-downloading gigabytes <em>or</em> re-indexing for minutes", and this is both.</para>
 ///
-/// <para>It does hold a few editor preferences — which scenes were last open, which build target is
-/// selected, which inspector nodes are expanded. Those are settings Unity rewrites, not a record of
-/// anything that happened, which is the line §3 draws around Tier 3. Visual Studio's <c>.vs</c> is
-/// the contrasting case in the same phase, and it falls the other side of it.</para>
+/// <para>It does hold a little session state — which scenes were last open, which build target is
+/// selected, which inspector nodes are expanded — and §3's Tier 3 row names saved sessions
+/// explicitly, so that is worth answering rather than waving past. Two things settle it. Each of
+/// those files is re-created by the next use rather than lost: opening a scene rewrites the scene
+/// setup, and the build target falls back to a default the user re-picks once. And Unity's own
+/// documentation treats the whole directory as disposable, which is why every Unity
+/// <c>.gitignore</c> template excludes it — a vendor telling users to delete a folder is evidence
+/// about what is inside it. Visual Studio's <c>.vs</c> is the contrasting case from the same survey,
+/// and it falls the other side: its Copilot conversation history is re-created by nothing.</para>
 ///
 /// <para>Recognition is a content signature over the <em>parent</em>: a <c>Library</c> is Unity's
 /// when <c>Assets</c>, <c>Packages</c> and <c>ProjectSettings</c> sit beside it. On its own the name

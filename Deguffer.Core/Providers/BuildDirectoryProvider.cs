@@ -77,7 +77,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// </summary>
     protected abstract string NothingApprovedGuidance { get; }
 
-    protected ILiveTreeInspector LiveTrees { get; }
+    private ILiveTreeInspector LiveTrees { get; }
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
     public IReadOnlyList<string> ApprovedRoots => _approved ??= _roots.Load();
@@ -121,7 +121,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
 
             if (BuildDirectorySignature.TryRecognise(Kind, candidate, ct) is { } project)
             {
-                recognised.Add(new RecognisedBuildDirectory(candidate, project, Subject));
+                recognised.Add(new RecognisedBuildDirectory(candidate, project));
             }
             else
             {
@@ -149,8 +149,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = BuildProtectedPaths(live, declined),
             Notes = SourceTreePlanNotes.For(
-                discovered, Kind.DisplayNames, Subject, declined.Count, live,
-                measured.Note, BuildRunningProcessNote()),
+                discovered, Kind.DisplayNames, Subject, declined.Count, live, measured.Note),
             Fallback = measured.Fallback,
         };
     }
@@ -182,8 +181,10 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     ]);
 
     /// <summary>
-    /// Every sibling the recognition looked at, required or alternative alike. The alternatives are
+    /// Everything beside the directory that has to survive it: every sibling the recognition looked
+    /// at, and every one the kind names as a survivor without recognising by. The alternatives are
     /// included because §5.6 asserts survival of what exists, and only one of them will.
     /// </summary>
-    private IEnumerable<string> Markers => Kind.RequiredSiblings.Concat(Kind.AnyOfSiblings);
+    private IReadOnlyList<string> Markers =>
+        [.. Kind.RequiredSiblings, .. Kind.AnyOfSiblings, .. Kind.ProtectedSiblings];
 }

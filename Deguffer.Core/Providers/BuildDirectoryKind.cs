@@ -56,6 +56,16 @@ public sealed record BuildDirectoryKind
     public IReadOnlyList<string> RequiredContents { get; init; } = [];
 
     /// <summary>
+    /// Entries beside the directory that must survive it but are no part of recognising it.
+    ///
+    /// §5.6 asks what an over-broad rule would take, which is a different question from what the
+    /// recognition happened to read. <c>DotNetObjProvider</c> makes the same distinction with
+    /// <c>bin</c>: nothing about it identifies an <c>obj</c>, and it is named as a survivor because
+    /// it is the sibling a rule reaching one directory too far would remove.
+    /// </summary>
+    public IReadOnlyList<string> ProtectedSiblings { get; init; } = [];
+
+    /// <summary>
     /// Files the tool holds open while it is using this directory, relative to it. Handed to
     /// <see cref="Safety.ILiveTreeInspector"/>; see <see cref="Safety.LiveTreeQuery.LockFileNames"/>
     /// for why they are declared rather than discovered.

@@ -21,7 +21,6 @@ public static class BuildDirectoryFixture
         bool writeAssets = true,
         bool writePackages = true,
         bool writeProjectSettings = true,
-        bool writeLockfile = false,
         int payloadBytes = 4096)
     {
         if (writeAssets)
@@ -45,11 +44,6 @@ public static class BuildDirectoryFixture
         Directory(library, "ShaderCache");
         WriteBytes(Path.Combine(library, "ShaderCache", "shaders.bin"), payloadBytes);
         WriteBytes(Path.Combine(library, "ArtifactDB"), payloadBytes);
-
-        if (writeLockfile)
-        {
-            WriteText(Path.Combine(library, "UnityLockfile"), string.Empty);
-        }
 
         return library;
     }
@@ -144,32 +138,6 @@ public static class BuildDirectoryFixture
         WriteBytes(Path.Combine(environment, "Lib", "site.py"), payloadBytes);
 
         return environment;
-    }
-
-    /// <summary>A Dart project, returning its <c>build</c>.</summary>
-    public static string CreateDartProject(
-        string projectDirectory,
-        bool writePubspec = true,
-        bool writeDartTool = true,
-        int payloadBytes = 4096)
-    {
-        if (writePubspec)
-        {
-            WriteText(Path.Combine(projectDirectory, "pubspec.yaml"), "name: example");
-        }
-
-        if (writeDartTool)
-        {
-            Directory(projectDirectory, ".dart_tool");
-        }
-
-        Directory(projectDirectory, "lib");
-        WriteText(Path.Combine(projectDirectory, "lib", "main.dart"), "// the user's own source");
-
-        var build = Directory(projectDirectory, "build");
-        WriteBytes(Path.Combine(build, "app.apk"), payloadBytes);
-
-        return build;
     }
 
     private static string Directory(params string[] segments)

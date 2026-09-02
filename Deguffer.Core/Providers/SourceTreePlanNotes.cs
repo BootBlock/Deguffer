@@ -14,6 +14,11 @@ namespace Deguffer.Core.Providers;
 /// visible half of a safety rule — that a search fell back to walking, and that a project was held
 /// back because something is using it — and a rule whose wording is copied is a rule that ends up
 /// said in one place and not in another.
+///
+/// <see cref="Safety.RunningProcessNotice"/> is deliberately not among them. That note answers "is a
+/// process of this name running anywhere on the machine", which every provider here has stopped
+/// asking: <see cref="Safety.ILiveTreeInspector"/> asks about the directory instead, per project and
+/// without needing to know what the tool is called.
 /// </summary>
 internal static class SourceTreePlanNotes
 {
@@ -27,7 +32,6 @@ internal static class SourceTreePlanNotes
         int declinedCount,
         LiveTreeVetoResult live,
         PlanNote? scanNote,
-        PlanNote? runningProcesses,
         IReadOnlyList<PlanNote>? extra = null)
     {
         var notes = new List<PlanNote>(6);
@@ -68,11 +72,6 @@ internal static class SourceTreePlanNotes
         if (scanNote is { } scan)
         {
             notes.Add(scan);
-        }
-
-        if (runningProcesses is { } warning)
-        {
-            notes.Add(warning);
         }
 
         return notes;

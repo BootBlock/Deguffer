@@ -20,15 +20,17 @@ public sealed class CleanupPlanner
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the per-volume
-    /// Recycle Bins, the crash dumps and the Windows servicing logs — which the audit did not
-    /// cover, and which were investigated on their own terms before being added. Their reasoning
-    /// and their rejected alternatives are in <c>docs/cache-locations.md</c>.
+    /// Recycle Bins, the crash dumps, the Windows servicing logs and the per-project build output
+    /// inside the user's own approved folders — which the audit did not cover, and which were
+    /// investigated on their own terms before being added. Their reasoning and their rejected
+    /// alternatives are in <c>docs/cache-locations.md</c>.
     ///
-    /// Tier 1 throughout except conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2,
-    /// and the Recycle Bins, the crash dumps and the servicing logs, which are Tier 3. Neither tier
-    /// is ever pre-selected, and neither is executed without the confirmation §7 requires of it —
-    /// an acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to
-    /// be held to it.
+    /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
+    /// environments, conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2, and the
+    /// Recycle Bins, the crash dumps and the servicing logs, which are Tier 3. Neither tier is ever
+    /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
+    /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
+    /// held to it.
     /// </summary>
     public static CleanupPlanner CreateDefault()
     {
@@ -48,7 +50,6 @@ public sealed class CleanupPlanner
             new CargoTargetProvider(roots, sourceTrees, liveTrees),
             new NodeModulesProvider(roots, sourceTrees, liveTrees),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees),
-            new DartBuildProvider(roots, sourceTrees, liveTrees),
             .. CacheProviders(),
         ]);
     }

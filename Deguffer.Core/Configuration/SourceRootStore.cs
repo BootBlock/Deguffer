@@ -53,7 +53,7 @@ public sealed class SourceRootStore
                 return [];
             }
 
-            return [.. stored.Where(IsUsableRoot).Distinct(StringComparer.OrdinalIgnoreCase)];
+            return [.. stored.Select(UsableRoot).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -76,7 +76,7 @@ public sealed class SourceRootStore
     {
         ArgumentNullException.ThrowIfNull(roots);
 
-        stored = [.. roots.Where(IsUsableRoot).Distinct(StringComparer.OrdinalIgnoreCase)];
+        stored = [.. roots.Select(UsableRoot).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)];
 
         try
         {
@@ -96,9 +96,17 @@ public sealed class SourceRootStore
     public bool Save(IReadOnlyList<string> roots) => Save(roots, out _);
 
     /// <summary>
-    /// A root has to be an absolute path. A relative one would resolve against whatever directory
-    /// the process happens to be running in, which is not something the user consented to.
+    /// A root in the form the rest of the code may rely on, or null if it is not usable.
+    ///
+    /// A root has to be an absolute path: a relative one would resolve against whatever directory
+    /// the process happens to be running in, which is not something the user consented to. It also
+    /// has to be <em>resolved</em>, and that second half is what <see cref="LongPath.Configured"/>
+    /// is for. Every other configured path in Deguffer already goes through it; this one did not,
+    /// and once several providers share one discovery pass the omission stops being cosmetic. The
+    /// walk resolves a root itself, by way of <see cref="LongPath.Extended"/>, while the volume
+    /// index narrows by comparing strings — so a hand-edited <c>C:/Users/me/src</c> or a value
+    /// carrying <c>..</c> would make the two routes disagree, and an elevated run would quietly
+    /// return an empty plan where an unelevated one found everything.
     /// </summary>
-    private static bool IsUsableRoot(string? root) =>
-        !string.IsNullOrWhiteSpace(root) && Path.IsPathFullyQualified(root);
+    private static string? UsableRoot(string? root) => LongPath.Configured(root);
 }
