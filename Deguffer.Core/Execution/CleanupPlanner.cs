@@ -27,7 +27,8 @@ public sealed class CleanupPlanner
     /// Tier 1 throughout except conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2,
     /// and the Recycle Bins, the crash dumps and the servicing logs, which are Tier 3. Neither tier
     /// is ever pre-selected, and neither is executed without the confirmation §7 requires of it —
-    /// an acknowledgement for Tier 2, the typed phrase for Tier 3.
+    /// an acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to
+    /// be held to it.
     /// </summary>
     public static CleanupPlanner CreateDefault()
     {
@@ -142,9 +143,16 @@ public sealed class CleanupPlanner
     /// §7 makes deleting the deliberate second step. A plan whose requirement is unmet throws rather
     /// than being skipped: silently dropping it would report success for work not done.
     /// </param>
+    /// <param name="requireTypedPhrase">
+    /// The user's preference about §7's typed phrase, which has to reach here as well as the shell:
+    /// the requirement is re-derived below, so a shell that stops asking against a planner still
+    /// demanding an answer would turn the preference into a refusal to clean. It defaults to the
+    /// strict rule, so a caller that says nothing about it fails closed.
+    /// </param>
     public async Task<IReadOnlyList<CleanupResult>> ExecuteAsync(
         IReadOnlyList<Finding> selected,
         IReadOnlyList<Confirmation>? confirmations = null,
+        bool requireTypedPhrase = true,
         IProgress<string>? status = null,
         CancellationToken ct = default)
     {
@@ -166,7 +174,7 @@ public sealed class CleanupPlanner
             // §7's extra confirmation for anything above Tier 1. The requirement is derived here
             // rather than trusted from the caller: a shell that forgot to ask, or asked for the
             // wrong subject, must fail closed rather than delete.
-            var requirement = ConfirmationRequirement.For(plan);
+            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
 
             if (!requirement.IsSatisfiedBy(confirmations))
             {

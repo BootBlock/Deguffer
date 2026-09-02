@@ -15,8 +15,13 @@ public enum ConfirmationLevel
     Acknowledgement,
 
     /// <summary>
-    /// Tier 3. §7: "Tier 3 requires typed confirmation, and says plainly what is unrecoverable."
-    /// The user types <see cref="ConfirmationRequirement.RequiredPhrase"/> to proceed.
+    /// Tier 3. The user types <see cref="ConfirmationRequirement.RequiredPhrase"/> to proceed.
+    ///
+    /// Reached only where the user has asked for it. §7 leaves how hard the confirmation is to give
+    /// to the user, and with the typed phrase off a Tier 3 plan is <see cref="None"/> here and
+    /// confirmed by the shell's blanket question instead. What §7 does not make optional is saying
+    /// plainly what is unrecoverable, which is why <see cref="ConfirmationRequirement.ConsequenceOf"/>
+    /// reads from the tier rather than from this.
     /// </summary>
     TypedPhrase,
 
@@ -37,7 +42,8 @@ public enum ConfirmationLevel
 public sealed record Confirmation(string ProviderId, string? TypedPhrase = null);
 
 /// <summary>
-/// What a plan needs before it may be executed, decided from its tier alone.
+/// What a plan needs before it may be executed, decided from its tier and, for Tier 3 alone, the
+/// user's preference about typing.
 ///
 /// This is a decision, not a dialog: it lives in Core so the rule is provable without a WinUI host,
 /// exactly as <see cref="ElevationOffer"/> is. The shell renders <see cref="Level"/> and
@@ -57,7 +63,8 @@ public sealed record ConfirmationRequirement
     public required string Consequence { get; init; }
 
     /// <summary>
-    /// The words the user must type, for <see cref="ConfirmationLevel.TypedPhrase"/> only.
+    /// The words the user must type, for <see cref="ConfirmationLevel.TypedPhrase"/> only, and so
+    /// null wherever the user has switched the typed phrase off.
     ///
     /// The provider's own name rather than a constant like "DELETE": a fixed word becomes muscle
     /// memory across rows, whereas typing the name of the thing being destroyed is a decision about
@@ -73,11 +80,11 @@ public sealed record ConfirmationRequirement
     /// The shell uses this to stand its own blanket confirmation down: asking twice about one
     /// deletion trains people to dismiss the prompt that carries the §7 consequence.
     /// </summary>
-    public static bool PromptsUser(CleanupPlan plan)
+    public static bool PromptsUser(CleanupPlan plan, bool requireTypedPhrase = true)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        return !plan.IsEmpty && For(plan).Level != ConfirmationLevel.None;
+        return !plan.IsEmpty && For(plan, requireTypedPhrase).Level != ConfirmationLevel.None;
     }
 
     /// <summary>
@@ -88,15 +95,31 @@ public sealed record ConfirmationRequirement
     /// and not left to the caller: treating "does anything here need §7?" as the same question as
     /// "is everything here covered by §7?" deleted a mixed selection's Tier 1 items silently.
     /// </summary>
-    public static IReadOnlyList<T> NotPromptedFor<T>(IEnumerable<T> items, Func<T, CleanupPlan?> planOf)
+    public static IReadOnlyList<T> NotPromptedFor<T>(
+        IEnumerable<T> items,
+        Func<T, CleanupPlan?> planOf,
+        bool requireTypedPhrase = true)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(planOf);
 
-        return [.. items.Where(i => planOf(i) is { IsEmpty: false } plan && !PromptsUser(plan))];
+        return
+        [
+            .. items.Where(i =>
+                planOf(i) is { IsEmpty: false } plan && !PromptsUser(plan, requireTypedPhrase)),
+        ];
     }
 
-    public static ConfirmationRequirement For(CleanupPlan plan)
+    /// <param name="requireTypedPhrase">
+    /// Whether Tier 3 is held to §7's typed phrase, from the user's preference. With it false a
+    /// Tier 3 plan asks nothing of its own and is left to the shell's blanket confirmation, which
+    /// <see cref="NotPromptedFor"/> then includes it in.
+    ///
+    /// It defaults to the strict rule so that a caller which never mentions the preference fails
+    /// closed. It reaches Tier 3 and nothing else: Tier 4 stays refused whatever the user has set,
+    /// because a preference about deliberation is not an authorisation.
+    /// </param>
+    public static ConfirmationRequirement For(CleanupPlan plan, bool requireTypedPhrase = true)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -104,7 +127,8 @@ public sealed record ConfirmationRequirement
         {
             SafetyTier.RegenerableCache => ConfirmationLevel.None,
             SafetyTier.RegenerableWithCost => ConfirmationLevel.Acknowledgement,
-            SafetyTier.UserData => ConfirmationLevel.TypedPhrase,
+            SafetyTier.UserData when requireTypedPhrase => ConfirmationLevel.TypedPhrase,
+            SafetyTier.UserData => ConfirmationLevel.None,
             _ => ConfirmationLevel.Refused,
         };
 
@@ -114,7 +138,7 @@ public sealed record ConfirmationRequirement
             ProviderName = plan.ProviderName,
             Tier = plan.Tier,
             Level = level,
-            Consequence = Describe(plan, level),
+            Consequence = ConsequenceOf(plan),
             RequiredPhrase = level == ConfirmationLevel.TypedPhrase ? plan.ProviderName : null,
         };
     }
@@ -152,19 +176,35 @@ public sealed record ConfirmationRequirement
             || string.Equals(answer.TypedPhrase?.Trim(), RequiredPhrase, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string Describe(CleanupPlan plan, ConfirmationLevel level) => level switch
+    /// <summary>
+    /// What deleting this plan costs, said plainly, and in the irreversible case saying so (§7).
+    ///
+    /// Read from the tier rather than from <see cref="Level"/>, because the consequence is a fact
+    /// about the data and does not change when the user relaxes how hard the deletion is to
+    /// authorise. Public because the shell's blanket confirmation needs the same sentence for a
+    /// Tier 3 row the typed phrase is switched off for: §7 makes that confirmation optional, and
+    /// never made saying what is unrecoverable optional with it.
+    /// </summary>
+    public static string ConsequenceOf(CleanupPlan plan)
     {
-        ConfirmationLevel.None => plan.WhatHappensOnNextUse,
-        ConfirmationLevel.Acknowledgement =>
-            $"Nothing is lost permanently, but restoring it costs real time. {plan.WhatHappensOnNextUse}",
-        // Deliberately silent about the Recycle Bin, which this sentence used to name as the thing
-        // the deletion does not go through. The bins themselves are now a Tier 3 subject, and the
-        // wording read as a contradiction against the one plan whose whole business is emptying
-        // them. What the user needs from a generic sentence is that the loss is total; which
-        // mechanism is bypassed belongs to the plan's own WhatHappensOnNextUse.
-        ConfirmationLevel.TypedPhrase =>
-            $"This is user data, and deleting it is permanent — it is removed outright and cannot " +
-            $"be undone. {plan.WhatHappensOnNextUse}",
-        _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
-    };
+        ArgumentNullException.ThrowIfNull(plan);
+
+        return plan.Tier switch
+        {
+            SafetyTier.RegenerableCache => plan.WhatHappensOnNextUse,
+            SafetyTier.RegenerableWithCost =>
+                $"Nothing is lost permanently, but restoring it costs real time. {plan.WhatHappensOnNextUse}",
+
+            // Deliberately silent about the Recycle Bin, which this sentence used to name as the
+            // thing the deletion does not go through. The bins themselves are now a Tier 3 subject,
+            // and the wording read as a contradiction against the one plan whose whole business is
+            // emptying them. What the user needs from a generic sentence is that the loss is total;
+            // which mechanism is bypassed belongs to the plan's own WhatHappensOnNextUse.
+            SafetyTier.UserData =>
+                $"This is user data, and deleting it is permanent — it is removed outright and " +
+                $"cannot be undone. {plan.WhatHappensOnNextUse}",
+
+            _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
+        };
+    }
 }

@@ -14,7 +14,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Tier 3, and the first one Deguffer ships.</b> The contents are files the user deleted
 /// and can still restore, which is §3's definition of recoverable user data — so this is offered,
-/// never pre-selected, and never executed without the typed phrase §7 requires. Nothing here is
+/// never pre-selected, and never executed without a confirmation that says the loss is permanent.
+/// Whether that confirmation is §7's typed phrase is the user's to set. Nothing here is
 /// regenerable by anything: the tool that could put a file back is the Recycle Bin itself, and
 /// emptying it is what removes that.</para>
 ///

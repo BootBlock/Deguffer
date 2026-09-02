@@ -19,7 +19,7 @@ four questions worth asking before deleting anything:
 | --- | --- | --- |
 | **1 — Regenerable cache** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
 | **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **never pre-selected**, and needs an extra acknowledgement. |
-| **3 — User data in a cache costume** | Logs, histories, saved sessions. Deleting loses it permanently. | Needs a typed confirmation. |
+| **3 — User data in a cache costume** | Logs, histories, saved sessions. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
 | **4 — Do not touch** | Config, credentials, live state, or anything Deguffer cannot positively identify. | Excluded entirely — not even shown as an option. |
 
 **Tier 4 is the default, not the exception.** Every provider names the children it recognises;
@@ -772,8 +772,9 @@ rather than a global install.
 
 ## Recycle Bin
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and released only once you have typed the
-words the dialog asks for.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
+to type the words out.
 
 | | |
 | --- | --- |
@@ -855,15 +856,17 @@ recoverable user data, which is §3's Tier 3 exactly — and it is the one place
 costume" the tier model was built for is not even a disguise. The folder is full of things whose
 only remaining purpose is to be restorable.
 
-So it is never pre-selected, and it is the first location in Deguffer that asks you to type before
-it will run.
+So it is never pre-selected, and it is the first location in Deguffer whose confirmation says the
+loss is permanent rather than costly. Switch *Type a name to delete user data* on and it asks you to
+type the name out as well.
 
 ---
 
 ## Crash dumps and error reports
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and released only once you have typed the
-words the dialog asks for.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
+to type the words out.
 
 | | |
 | --- | --- |
@@ -937,8 +940,9 @@ not the same claim, and the tier model exists to keep them apart.
 
 ## Windows servicing logs
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and released only once you have typed the
-words the dialog asks for.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
+to type the words out.
 
 | | |
 | --- | --- |
@@ -998,7 +1002,8 @@ The same reasoning as the crash dumps, and it is the less obvious of the two. Ev
 internet treats these as free space, and most of the time they are. But a log is a record of an
 operation that has finished, the operation does not run again on request, and what Windows re-creates
 is the next log rather than the ones that went. That is Tier 3's definition and not Tier 1's, so
-Deguffer offers them without ticking them and asks you to type before it acts.
+Deguffer offers them without ticking them, and confirms that the loss is permanent before it
+acts.
 
 ---
 

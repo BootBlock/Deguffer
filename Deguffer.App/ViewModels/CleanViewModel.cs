@@ -50,7 +50,18 @@ public sealed partial class CleanViewModel : ObservableObject
     /// view supplies it and decides *how* to ask; leaving it null means do not ask, which is how
     /// the preference is expressed without this type knowing settings exist.
     /// </summary>
-    public Func<string, Task<bool>>? ConfirmCleanAsync { get; set; }
+    public Func<CleanConfirmation, Task<bool>>? ConfirmCleanAsync { get; set; }
+
+    /// <summary>
+    /// Whether §7 holds Tier 3 to its typed phrase. The view sets it from the preference, the same
+    /// way it supplies <see cref="ConfirmCleanAsync"/>, so this type still knows nothing about
+    /// settings. It defaults to the strict rule so that a view which never sets it fails closed.
+    ///
+    /// With it false a Tier 3 row asks nothing of its own and is covered by the blanket
+    /// confirmation instead, which <see cref="ConfirmationRequirement.NotPromptedFor"/> includes it
+    /// in.
+    /// </summary>
+    public bool RequireTypedConfirmation { get; set; } = true;
 
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
 
@@ -186,6 +197,11 @@ public sealed partial class CleanViewModel : ObservableObject
         // the one that executes — equal by value today, but not a property to depend on silently.
         var selected = selectedRows.Select(f => f.SelectedFinding).ToList();
 
+        // Read once for the whole run. The preference can change under a live page — Settings is a
+        // navigation away — and asking under one rule then executing under another would either
+        // demand a phrase nobody was shown a box for, or skip an ask the run then relies on.
+        var requireTypedPhrase = RequireTypedConfirmation;
+
         // The blanket confirmation covers exactly what §7 will not ask about — nothing more, so no
         // deletion is confirmed twice, and nothing less, so no deletion goes unconfirmed. Standing
         // it down for the whole selection whenever any one row happened to be Tier 2 meant a mixed
@@ -194,11 +210,17 @@ public sealed partial class CleanViewModel : ObservableObject
         //
         // Asked before IsBusy is raised, so declining leaves the screen exactly as it was rather
         // than flickering through a busy state for an operation that never started.
-        var unasked = ConfirmationRequirement.NotPromptedFor(selected, f => f.Plan);
+        var unasked = ConfirmationRequirement.NotPromptedFor(selected, f => f.Plan, requireTypedPhrase);
 
-        if (ConfirmCleanAsync is { } confirm && unasked.Count > 0 && !await confirm(Describe(unasked)))
+        if (ConfirmCleanAsync is { } confirm && unasked.Count > 0)
         {
-            return;
+            // NotPromptedFor keeps only the rows carrying a plan, so nothing is dropped here.
+            var plans = unasked.Select(f => f.Plan).OfType<CleanupPlan>().ToList();
+
+            if (!await confirm(CleanConfirmation.For(plans)))
+            {
+                return;
+            }
         }
 
         IsBusy = true;
@@ -209,7 +231,8 @@ public sealed partial class CleanViewModel : ObservableObject
             // §7's confirmation is collected here, on the UI thread and before any work starts:
             // a dialog cannot be raised from the worker below, and asking mid-deletion would be
             // asking after the point the answer could still change anything.
-            var (authorised, confirmations) = await CollectConfirmationsAsync(selected, ct);
+            var (authorised, confirmations) =
+                await CollectConfirmationsAsync(selected, requireTypedPhrase, ct);
 
             if (authorised.Count == 0)
             {
@@ -227,7 +250,8 @@ public sealed partial class CleanViewModel : ObservableObject
 
             var progress = new Progress<string>(message => Report(message));
 
-            var results = await Task.Run(() => _planner.ExecuteAsync(authorised, confirmations, progress, ct), ct);
+            var results = await Task.Run(
+                () => _planner.ExecuteAsync(authorised, confirmations, requireTypedPhrase, progress, ct), ct);
 
             ReportOutcome(results, freeBefore);
 
@@ -264,7 +288,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// run continues, the same way a dismissed UAC prompt leaves the app running unelevated.
     /// </summary>
     private async Task<(List<Finding> Authorised, List<Confirmation> Confirmations)>
-        CollectConfirmationsAsync(IReadOnlyList<Finding> selected, CancellationToken ct)
+        CollectConfirmationsAsync(
+            IReadOnlyList<Finding> selected,
+            bool requireTypedPhrase,
+            CancellationToken ct)
     {
         List<Finding> authorised = [];
         List<Confirmation> confirmations = [];
@@ -279,7 +306,7 @@ public sealed partial class CleanViewModel : ObservableObject
                 continue;
             }
 
-            var requirement = ConfirmationRequirement.For(plan);
+            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
 
             if (requirement.Level == ConfirmationLevel.None)
             {
@@ -400,31 +427,6 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             row.SharePercent = largest > 0 ? 100.0 * row.Finding.EstimatedBytes / largest : 0;
         }
-    }
-
-    /// <summary>
-    /// What the confirmation prompt says is about to happen. Names the rows rather than only
-    /// totalling them: "3 items, 12 GB" is not something a user can check, and this is the last
-    /// point at which a mistaken selection can still be caught.
-    /// </summary>
-    /// <summary>
-    /// Names every row this dialog is asking about and totals only those. The total is recomputed
-    /// rather than reusing <see cref="SelectedTotalLabel"/>: in a mixed selection that figure
-    /// includes the rows §7 asks about separately, and a dialog that quotes a number larger than
-    /// the deletions it authorises is describing something the user is not being asked to approve.
-    /// </summary>
-    /// <remarks>
-    /// Takes the already-narrowed findings, so its total is the selected bytes by construction —
-    /// with per-item selection a ticked row may be contributing only some of its steps, and the
-    /// reasoning above applies to that too: the dialog must not quote a figure larger than the
-    /// deletions it is authorising.
-    /// </remarks>
-    private static string Describe(IReadOnlyList<Finding> findings)
-    {
-        var total = FreeSpace.Format(findings.Aggregate(ScanSize.Zero, (sum, f) => sum + f.Estimated));
-
-        return $"{string.Join(", ", findings.Select(f => f.Provider.Name))} — {total} in total. "
-             + "This cannot be undone.";
     }
 
     /// <summary>

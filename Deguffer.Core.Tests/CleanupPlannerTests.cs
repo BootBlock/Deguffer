@@ -219,6 +219,69 @@ public sealed class CleanupPlannerTests
         Assert.Equal(["invalidate:a", "invalidate:b", "plan:a", "plan:b"], journal);
     }
 
+    /// <summary>
+    /// The default is §7's strict rule, so a caller that never mentions the preference still gets
+    /// the typed phrase demanded of it. Forgetting to pass it has to fail closed, not open.
+    /// </summary>
+    [Fact]
+    public async Task Tier3DemandsTheTypedPhraseWhenTheCallerSaysNothingAboutThePreference()
+    {
+        var provider = new StubProvider("workspace-state", bytes: 5_000, tier: SafetyTier.UserData);
+        var planner = new CleanupPlanner([provider]);
+        var findings = await planner.PlanAllAsync();
+
+        await Assert.ThrowsAsync<ConfirmationRequiredException>(() => planner.ExecuteAsync(findings));
+        Assert.False(provider.WasExecuted);
+    }
+
+    /// <summary>
+    /// With the typed phrase switched off, the planner accepts a Tier 3 plan with no answer at all.
+    /// Both halves have to move together: a shell that stops asking against a planner that still
+    /// demands an answer turns the preference into a refusal to clean.
+    /// </summary>
+    [Fact]
+    public async Task Tier3ExecutesWithNoAnswerWhenTheTypedPhraseIsSwitchedOff()
+    {
+        var provider = new StubProvider("workspace-state", bytes: 5_000, tier: SafetyTier.UserData);
+        var planner = new CleanupPlanner([provider]);
+        var findings = await planner.PlanAllAsync();
+
+        var results = await planner.ExecuteAsync(findings, requireTypedPhrase: false);
+
+        Assert.Single(results);
+        Assert.True(provider.WasExecuted);
+    }
+
+    /// <summary>
+    /// §3 keeps Tier 4 out of the UI however the user has set the preference. A setting about how
+    /// hard Tier 3 is to authorise must never become an authorisation for the tier above it.
+    /// </summary>
+    [Fact]
+    public async Task NoConfirmationAuthorisesTier4EvenWithTheTypedPhraseSwitchedOff()
+    {
+        var provider = new StubProvider("credentials", bytes: 5_000, tier: SafetyTier.DoNotTouch);
+        var planner = new CleanupPlanner([provider]);
+        var findings = await planner.PlanAllAsync();
+
+        await Assert.ThrowsAsync<ConfirmationRequiredException>(
+            () => planner.ExecuteAsync(
+                findings, [new Confirmation("credentials", "credentials")], requireTypedPhrase: false));
+        Assert.False(provider.WasExecuted);
+    }
+
+    /// <summary>Tier 2 keeps its acknowledgement: the preference is about typing, not about asking.</summary>
+    [Fact]
+    public async Task Tier2StillNeedsItsAcknowledgementWhenTheTypedPhraseIsSwitchedOff()
+    {
+        var provider = new StubProvider("android", bytes: 5_000, tier: SafetyTier.RegenerableWithCost);
+        var planner = new CleanupPlanner([provider]);
+        var findings = await planner.PlanAllAsync();
+
+        await Assert.ThrowsAsync<ConfirmationRequiredException>(
+            () => planner.ExecuteAsync(findings, requireTypedPhrase: false));
+        Assert.False(provider.WasExecuted);
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,

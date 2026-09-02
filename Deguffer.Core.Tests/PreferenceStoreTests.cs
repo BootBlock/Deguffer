@@ -16,13 +16,65 @@ public class PreferenceStoreTests
         using var temp = new TempDirectory();
         var store = new PreferenceStore(new FakeUserEnvironment(temp.Path));
 
-        Assert.True(store.Save(new AppPreferences(AppTheme.Dark, BackdropEnabled: false, ConfirmBeforeCleaning: false)));
+        Assert.True(store.Save(new AppPreferences(
+            AppTheme.Dark,
+            BackdropEnabled: false,
+            ConfirmBeforeCleaning: false,
+            RequireTypedConfirmation: true)));
 
         var loaded = store.Load();
 
         Assert.Equal(AppTheme.Dark, loaded.Theme);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
+        Assert.True(loaded.RequireTypedConfirmation);
+    }
+
+    /// <summary>
+    /// A settings file written before a preference existed is the ordinary case on upgrade, and the
+    /// absent key must land on that preference's declared default rather than on whatever the JSON
+    /// reader picks for a missing value.
+    ///
+    /// <c>ConfirmBeforeCleaning</c> is what proves it, and it is the only preference that can. Its
+    /// declared default is <c>true</c> while <c>default(bool)</c> is <c>false</c>, so the two
+    /// answers differ and the assertion has something to catch. Asserting the same thing about
+    /// <c>RequireTypedConfirmation</c> would prove nothing: both answers there are <c>false</c>.
+    /// It is also the case with the consequence — an upgraded file read as "do not confirm" would
+    /// silently drop the only question a Tier 3 row gets once the typed phrase is off.
+    /// </summary>
+    [Fact]
+    public void AFileFromBeforeAPreferenceExistedTakesThatPreferencesDefault()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var directory = Directory.CreateDirectory(Path.Combine(environment.LocalAppData, "Deguffer"));
+
+        File.WriteAllText(
+            Path.Combine(directory.FullName, "preferences.json"),
+            """{ "Theme": "Dark", "BackdropEnabled": false }""");
+
+        var loaded = new PreferenceStore(environment).Load();
+
+        // The file parsed, rather than falling through Load's catch to the defaults wholesale —
+        // without which the two assertions below would hold for the wrong reason.
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.False(loaded.BackdropEnabled);
+
+        Assert.True(loaded.ConfirmBeforeCleaning);
+        Assert.False(loaded.RequireTypedConfirmation);
+    }
+
+    /// <summary>
+    /// The shipped answer to "what is asked before a deletion", on a machine nobody has configured.
+    /// The blanket confirmation is on and the typed phrase is off, so a fresh install asks once, in
+    /// words, naming everything it is about to remove. Either default flipping by accident changes
+    /// that silently, which is why they are pinned rather than left to the record declaration.
+    /// </summary>
+    [Fact]
+    public void TheShippedDefaultsAskOnceAndDoNotAskForTyping()
+    {
+        Assert.True(AppPreferences.Default.ConfirmBeforeCleaning);
+        Assert.False(AppPreferences.Default.RequireTypedConfirmation);
     }
 
     [Fact]

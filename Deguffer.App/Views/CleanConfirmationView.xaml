@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.CleanConfirmationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:execution="using:Deguffer.Core.Execution">
+
+    <StackPanel Spacing="16">
+
+        <!--
+            One line per subject, its size in a column of its own. The title above already asks the
+            question, so the list needs no sentence introducing it — and a size the user can read
+            off a row is a size they can check against the row they ticked.
+
+            It scrolls inside a bounded height rather than growing without limit, because the
+            dialog's own content sits in a ScrollViewer of its own: a long selection would otherwise
+            push the total and the two sentences below the fold, leaving the Clean button reachable
+            with "This cannot be undone." still unread.
+        -->
+        <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{x:Bind Confirmation.Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="execution:CleanConfirmationItem">
+                        <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+                            <!--
+                                Decoration, and the only element on the row with nothing to say: it is
+                                hidden from assistive technology, as ShareBar is, so a reader hears the
+                                subject and its size rather than an empty node in front of each.
+                            -->
+                            <TextBlock Grid.Column="0"
+                                       Text="&#x2022;"
+                                       AutomationProperties.AccessibilityView="Raw"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind ProviderName}"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{x:Bind SizeLabel}"
+                                       Style="{StaticResource SecondaryText}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Border Style="{StaticResource Divider}" />
+
+        <!-- The figure the user is authorising, on a line of its own rather than inside a sentence. -->
+        <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{x:Bind Confirmation.TotalLabel}" FontWeight="SemiBold" />
+        </Grid>
+
+        <!--
+            Shown only while it is true of every line above. §7 ordinarily leaves this dialog Tier 1
+            alone, but a user who switches the typed phrase off sends Tier 3 here as well, and
+            telling somebody their Recycle Bin rebuilds itself is the worst sentence this app could
+            put in front of an irreversible deletion. Core decides whether it holds; the shell only
+            decides where it sits.
+        -->
+        <TextBlock Style="{StaticResource SecondaryText}"
+                   Visibility="{x:Bind Confirmation.AllRegenerable}"
+                   Text="Each of these is rebuilt the next time the tool that owns it runs, so nothing is lost. That first run may be slower." />
+
+        <!--
+            And what stands in its place: one paragraph per subject that does not rebuild itself,
+            naming it and quoting the consequence its own dialog would have carried. §7 leaves how
+            hard the confirmation is to give to the user, and never left saying what is unrecoverable
+            to anybody.
+        -->
+        <ItemsControl ItemsSource="{x:Bind Confirmation.PermanentLosses}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="execution:CleanConfirmationLoss">
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="{x:Bind ProviderName}"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Text="{x:Bind Consequence}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock FontWeight="SemiBold"
+                   TextWrapping="Wrap"
+                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                   Text="Clean removes the files straight away. This cannot be undone." />
+    </StackPanel>
+</UserControl>
