@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -68,6 +68,10 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
+        // From the disk, never from the volume snapshot. Nothing invalidates that snapshot between
+        // planning and executing — Invalidate runs once, at the top of a planning pass — so an
+        // ordinary measurement here would hand back the very figure it is about to be subtracted
+        // from, and a clean that freed gigabytes would report nothing.
         var after = await MeasureAllAsync(step.MeasuredPaths, ct).ConfigureAwait(false);
         var reclaimed = before - after;
 
@@ -144,7 +148,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
 
         foreach (var path in paths)
         {
-            var measured = await scanner.MeasureAsync(path, progress: null, ct).ConfigureAwait(false);
+            var measured = await scanner.MeasureFromDiskAsync(path, ct).ConfigureAwait(false);
             total += measured.Size;
         }
 

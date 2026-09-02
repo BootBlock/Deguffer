@@ -24,6 +24,25 @@ public interface IDirectoryScanner
         CancellationToken ct = default);
 
     /// <summary>
+    /// Measure <paramref name="path"/> without consulting anything remembered from before now.
+    ///
+    /// <para><see cref="MeasureAsync"/> is free to answer from a volume snapshot, and that is the
+    /// whole of §5.5's speed. A snapshot is only ever fresh relative to when it was taken, though,
+    /// and one caller subtracts two readings across an event that changed the disk between them:
+    /// the executor, reporting what a tool's own eviction command freed. Served from one snapshot
+    /// both readings are identical, they cancel, and a clean that freed gigabytes reports nothing —
+    /// §5.4's stated failure, "the user will prune, see no change, and lose trust in the tool",
+    /// arriving by a different route.</para>
+    ///
+    /// <para>A separate member rather than a flag on <see cref="MeasureAsync"/>, because the rule is
+    /// not a tuning option: a figure subtracted from an earlier one has to come from the disk, and
+    /// that is a property of the question rather than of the caller's patience. The two scanners
+    /// that hold nothing between calls answer this exactly as they answer
+    /// <see cref="MeasureAsync"/>.</para>
+    /// </summary>
+    ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default);
+
+    /// <summary>
     /// Every directory named <paramref name="name"/> at or below <paramref name="root"/>, or null
     /// when this scanner cannot answer without walking.
     ///

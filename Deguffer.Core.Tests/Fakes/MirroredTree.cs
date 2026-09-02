@@ -1,4 +1,4 @@
-using Deguffer.Core.Scanning.Mft;
+﻿using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Tests.Fakes;
 
@@ -45,8 +45,8 @@ public static class MirroredTree
 
     private sealed class Builder
     {
-        // Records 0-5 are NTFS's own, so a fixture numbers its entries from 6.
-        private uint _next = MftRecord.RootRecordNumber + 1;
+        // NTFS reserves the first sixteen records for its own metadata, so entries start past them.
+        private uint _next = MftRecord.ReservedRecordCount;
 
         public MftFixture Fixture { get; } = new();
 

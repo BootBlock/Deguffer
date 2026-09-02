@@ -1,4 +1,4 @@
-using Deguffer.Core.Scanning.Mft;
+﻿using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Tests.Fakes;
 
@@ -21,10 +21,9 @@ public sealed class MftFixture
 
     public MftFixture()
     {
-        // Records 0-4 are NTFS's own metadata files ($MFT, $MFTMirr, $LogFile, $Volume, $AttrDef)
-        // and are left blank here: unused entries are skipped by the parser, which is itself worth
-        // exercising rather than working around. Record 5 is the root, so fixtures number their
-        // own entries from 6.
+        // Records 0-4 are NTFS's own named metadata files ($MFT, $MFTMirr, $LogFile, $Volume,
+        // $AttrDef), left blank here: an unused entry is skipped by the parser, which is worth
+        // exercising rather than working around. Record 5 is the root.
         for (var i = 0; i < MftRecord.RootRecordNumber; i++)
         {
             _records.Add(new byte[MftRecordBytes.BytesPerRecord]);
@@ -38,6 +37,23 @@ public sealed class MftFixture
             MftRecordBytes.DirectoryStreamBytes,
             MftRecordBytes.DirectoryStreamBytes,
             DataPlacement.NonResident));
+
+        // 6 to 11 are the rest of the named metadata, blank for the same reason as 0 to 4.
+        while (_records.Count < 12)
+        {
+            _records.Add(new byte[MftRecordBytes.BytesPerRecord]);
+        }
+
+        // 12 to 15 are not blank on a real volume, and this is the whole point of filling them in.
+        // NTFS holds them back for future metadata, marks them in use, and gives them neither a
+        // $FILE_NAME nor an $ATTRIBUTE_LIST. Leaving them out of the fixture is what let a builder
+        // that abandons the volume on that shape stay green through every test here while §5.5's
+        // fast path could not engage on any real machine. A fake that models an idealised volume
+        // proves the reader works on a volume nobody has.
+        while (_records.Count < MftRecord.ReservedRecordCount)
+        {
+            _records.Add(MftRecordBytes.RecordWithoutAName(withAttributeList: false));
+        }
     }
 
     public MftFixture AddDirectory(uint number, uint parent, string name) =>

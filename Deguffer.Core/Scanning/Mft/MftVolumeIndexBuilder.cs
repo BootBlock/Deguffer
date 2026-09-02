@@ -84,6 +84,20 @@ public static class MftVolumeIndexBuilder
                     // caught mid-write — the condition the update sequence array exists to detect,
                     // and one a second read of that record alone would very likely settle. Retrying
                     // is the improvement this wants; refusing is the answer that is never wrong.
+                    // …except inside the reserved range, where this shape is not damage but the
+                    // format. NTFS marks records 12 to 15 in use and gives them no name, so the
+                    // refusal below fired on record 12 of every NTFS volume and took the index with
+                    // it — measured on a real volume: those four records, and no others in three
+                    // million. §5.5's fast path could therefore never engage on a real machine, and
+                    // an elevated run walked every path exactly as an unelevated one did.
+                    //
+                    // Skipping them loses nothing. None of the sixteen hangs off a user-visible
+                    // directory, so no subtree Deguffer totals is short by a byte.
+                    if (outcome == MftParseOutcome.Unreadable && next + i < MftRecord.ReservedRecordCount)
+                    {
+                        continue;
+                    }
+
                     if (outcome == MftParseOutcome.Unreadable)
                     {
                         return false;

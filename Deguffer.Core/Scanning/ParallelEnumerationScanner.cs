@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
 
@@ -57,6 +57,10 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 ? ScanResult.Direct(file)
                 : ScanResult.Slow(Measure(path, progress, ct), _reason),
             ct));
+
+    /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
+    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
+        MeasureAsync(path, progress: null, ct);
 
     /// <summary>
     /// Always null: this scanner holds no index, so it has nothing to search. Answering by walking

@@ -1,4 +1,4 @@
-namespace Deguffer.Core.Scanning;
+﻿namespace Deguffer.Core.Scanning;
 
 /// <summary>Which of §5.5's two measurement routes produced a number.</summary>
 public enum ScanStrategy
@@ -63,6 +63,16 @@ public enum FallbackReason
     /// that anything is wrong — only that this location had to be walked.
     /// </summary>
     MasterFileTableIncomplete,
+
+    /// <summary>
+    /// The caller asked for a reading taken from the disk rather than from a snapshot, so the index
+    /// was not consulted however complete it is.
+    ///
+    /// Not a fault, and nothing the user can act on: it is the executor measuring what a command
+    /// freed, where a snapshot taken before the command would answer with the figure it is being
+    /// subtracted from. See <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>.
+    /// </summary>
+    FreshReadingRequired,
 }
 
 public static class FallbackReasonText

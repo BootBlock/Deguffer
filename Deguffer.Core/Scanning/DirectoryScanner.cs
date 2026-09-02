@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Scanning;
@@ -59,6 +59,23 @@ public sealed class DirectoryScanner : IDirectoryScanner
         }
 
         var result = await MeasureFreshAsync(path, progress, ct).ConfigureAwait(false);
+
+        _estimates?.Set(path, result.Size);
+        return result;
+    }
+
+    /// <summary>
+    /// Straight to the walk, whatever the index holds. The remembered estimate is still updated,
+    /// because this is the freshest figure Deguffer has for the path.
+    /// </summary>
+    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var result = await _fallback
+            .Because(FallbackReason.FreshReadingRequired)
+            .MeasureAsync(path, progress: null, ct)
+            .ConfigureAwait(false);
 
         _estimates?.Set(path, result.Size);
         return result;
