@@ -75,6 +75,16 @@ public sealed partial class FindingViewModel : ObservableObject
     [ObservableProperty]
     public partial double SharePercent { get; set; }
 
+    /// <summary>
+    /// Whether this row is drawn at all. Owned by the parent for the same reason
+    /// <see cref="SharePercent"/> is: it answers a question about the list, not about this finding.
+    ///
+    /// Hidden rather than never built, so switching the filter needs no rescan and the row keeps
+    /// its place in the size order it was inserted at.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsListed { get; set; } = true;
+
     public Finding Finding { get; }
 
     public string Name => Finding.Provider.Name;

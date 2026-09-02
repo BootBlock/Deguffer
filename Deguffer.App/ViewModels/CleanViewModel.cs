@@ -63,6 +63,19 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     public bool RequireTypedConfirmation { get; set; } = true;
 
+    /// <summary>
+    /// Whether to list a provider whose toolchain is not on this machine. The view sets it from the
+    /// preference, the same way it supplies <see cref="ConfirmCleanAsync"/>, so this type still
+    /// knows nothing about settings.
+    ///
+    /// A hidden row is still scanned, still counted and still in the list — it is drawn or not.
+    /// Skipping the provider instead would make the filter a decision about what Deguffer looks at,
+    /// and a machine that gained the toolchain since the last scan would then be reported as not
+    /// having it.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowNotInstalled { get; set; }
+
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
 
     [ObservableProperty]
@@ -82,6 +95,19 @@ public sealed partial class CleanViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     public partial bool IsBusy { get; set; }
+
+    /// <summary>
+    /// A row is drawn when its toolchain is on this machine, or when the user asked to see the ones
+    /// that are not. Applied to every row rather than only to new ones, because the filter changes
+    /// under a list that is already built.
+    /// </summary>
+    partial void OnShowNotInstalledChanged(bool value)
+    {
+        foreach (var row in Findings)
+        {
+            row.IsListed = value || row.Finding.IsPresent;
+        }
+    }
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
@@ -396,7 +422,12 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private void AddRowInSizeOrder(Finding finding)
     {
-        var row = new FindingViewModel(finding);
+        var row = new FindingViewModel(finding)
+        {
+            // Rows arrive one provider at a time, so each one is filtered as it lands rather than
+            // in a pass at the end that a cancelled scan would never reach.
+            IsListed = ShowNotInstalled || finding.IsPresent,
+        };
 
         // One event for both directions: the row's own checkbox and any step within it. Subscribing
         // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays
