@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -316,7 +316,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     /// still be measured rather than skipped.
     ///
     /// The caveat is not the machine's <c>LongPathsEnabled</c> setting, as this once said. The
-    /// runtime prepends <c>\?\</c> at 260 characters regardless, so an assertion on the outcome of
+    /// runtime prepends <c>\\?\</c> at 260 characters regardless, so an assertion on the outcome of
     /// a filesystem operation cannot fail anywhere — see
     /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
     /// </summary>

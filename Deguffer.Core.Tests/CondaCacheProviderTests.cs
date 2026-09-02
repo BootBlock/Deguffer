@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -418,7 +418,7 @@ public sealed class CondaCacheProviderTests : IDisposable
     /// package directory nesting past <c>MAX_PATH</c> rather than stopping short of it: the shallow
     /// and the deep bytes both reach the figure.
     ///
-    /// It says nothing about the <c>\?\</c> prefix. The runtime supplies one at 260 characters
+    /// It says nothing about the <c>\\?\</c> prefix. The runtime supplies one at 260 characters
     /// whatever Core does — <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>
     /// — so §6.3 is proved by the assertions on the form of a path, not by a measurement.
     /// </summary>

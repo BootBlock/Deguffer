@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -172,9 +172,17 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// Presence is a cache actually on disk, never a folder existing. An application that embeds
     /// Chromium but has not run yet keeps a user-data folder with no cache in it, and reporting that
     /// as a source would offer the user a row the plan then has nothing to say about.
+    ///
+    /// <para><b>A refused application-data root counts as present, and this is the one provider
+    /// where that matters.</b> Every other one decides presence by probing a path it already knows
+    /// the name of, and a full path still resolves through a directory the account may not list.
+    /// This one decides by enumerating, so a refusal here answers "no source" and the row renders as
+    /// "Not installed on this machine" — a stronger claim than the "Already clear" the rest of this
+    /// change exists to stop, and one made about a folder Deguffer never read. Answering true sends
+    /// the pass into <see cref="PlanAsync"/>, which says so.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Applications(ct).Count > 0);
+        Task.FromResult(Applications(ct).Count > 0 || _discovery.UnreadableRoots.Count > 0);
 
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
@@ -194,7 +202,19 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
-        var unreadable = false;
+
+        // Seeded rather than started at false. A root that refused to be listed is a fact about this
+        // pass whether or not the *other* root turned up applications, and reading it only in the
+        // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
+        // Seeded rather than started at false. A root that refused to be listed is a fact about this
+        // pass whether or not the *other* root turned up applications, and reading it only in the
+        // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
+        var unreadable = _discovery.UnreadableRoots.Count > 0;
+
+        foreach (var root in _discovery.UnreadableRoots)
+        {
+            notes.Add(UnreadableRoot.Note(root));
+        }
 
         foreach (var application in applications)
         {
@@ -240,7 +260,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In '{application.Name}', {spared} other {(spared == 1 ? "item is" : "items are")} left alone "
+                    $"In '{application.Name}', {(application.ProfilesIncomplete ? "at least " : string.Empty)}"
+                    + $"{spared} other {(spared == 1 ? "item is" : "items are")} left alone "
                     + "beside the caches. Sign-in state, saved passwords and offline data all live in that folder, "
                     + "so only the recognised cache directories are removed."
                     + (emptiedAContainer

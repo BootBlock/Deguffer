@@ -39,6 +39,18 @@ public interface IDirectoryScanner
     /// that is a property of the question rather than of the caller's patience. The two scanners
     /// that hold nothing between calls answer this exactly as they answer
     /// <see cref="MeasureAsync"/>.</para>
+    ///
+    /// <para><b>The cost is a walk, and it is not always the cheap one.</b> After a successful
+    /// eviction the tree is nearly empty and the walk is nearly free, which is the ordinary case for
+    /// npm, pip, uv, Go and NuGet. It is not the case for conda, whose clean deliberately leaves
+    /// every package an environment still links, nor for a command that failed — and §5.5 measured
+    /// that walk at over ten minutes across a handful of profile subtrees. Nothing is reported while
+    /// it runs, because a command step has no progress to report against in the first place.</para>
+    ///
+    /// <para>The alternative was rebuilding the volume index between the command and the measure,
+    /// which drops every volume and costs seconds apiece, repeated once per command step in a run.
+    /// Neither option is free; this one is wrong in the direction of being slow rather than in the
+    /// direction of reporting a number nobody can check.</para>
     /// </summary>
     ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default);
 

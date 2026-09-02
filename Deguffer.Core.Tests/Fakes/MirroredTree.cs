@@ -1,4 +1,4 @@
-using Deguffer.Core.Scanning.Mft;
+﻿using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Tests.Fakes;
 
@@ -6,13 +6,23 @@ namespace Deguffer.Core.Tests.Fakes;
 public abstract record TreeEntry(string Name);
 
 /// <param name="Bytes">The file's length, written to disk and declared to the table.</param>
+/// <param name="Allocated">
+/// What the table says the file occupies, where that differs from its length. Null means the two
+/// agree, which is the ordinary case.
+///
+/// <para>A walk can only ever report the length: it reads <c>FileInfo.Length</c> and says so by
+/// setting allocated equal to logical. The table knows both. So a fixture where the two agree
+/// cannot tell a caller that mixes the axes from one that does not, and every mirrored tree agreed
+/// until this existed. Cluster slack makes allocated larger on any real volume; NTFS compression
+/// makes it smaller.</para>
+/// </param>
 /// <param name="Resident">
 /// Whether the table should describe this file as living inside its own MFT record. A real file
 /// written to disk may be resident or not depending on its size and the volume, and no test can
 /// control that — stating it here is what lets one pin the single place the two routes are
 /// expected to disagree.
 /// </param>
-public sealed record TreeFile(string Name, int Bytes, bool Resident = false) : TreeEntry(Name);
+public sealed record TreeFile(string Name, int Bytes, bool Resident = false, int? Allocated = null) : TreeEntry(Name);
 
 public sealed record TreeDirectory(string Name, params TreeEntry[] Children) : TreeEntry(Name);
 
@@ -81,7 +91,8 @@ public static class MirroredTree
                     }
                     else
                     {
-                        Fixture.AddFile(number, parent, file.Name, allocated: file.Bytes, logical: file.Bytes);
+                        Fixture.AddFile(
+                            number, parent, file.Name, file.Allocated ?? file.Bytes, logical: file.Bytes);
                     }
 
                     break;

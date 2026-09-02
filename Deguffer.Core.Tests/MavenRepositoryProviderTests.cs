@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -297,7 +297,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     /// <c>MAX_PATH</c> without trying. Both halves of the provider's work are put over such a tree:
     /// the artefact is measured, and then reclaimed.
     ///
-    /// Reach and removal are all it shows. .NET prepends <c>\?\</c> to a path of 260 characters or
+    /// Reach and removal are all it shows. .NET prepends <c>\\?\</c> to a path of 260 characters or
     /// more before Win32 sees it, so nothing here would change if Core stopped doing so —
     /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> guards that
     /// assumption, and the form assertions on the removal seams are where §6.3 is established.

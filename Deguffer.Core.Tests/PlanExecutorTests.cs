@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -75,6 +75,59 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(cache), "the fixture command did not actually empty the tree.");
         Assert.Equal(4096 + 8192, result.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// A command that freed nothing must report nothing, and the trap is that the two readings come
+    /// from different routes.
+    ///
+    /// <para>The plan-time figure can come from the file table, which knows what a file occupies.
+    /// The after-measure comes from a walk, which knows only what a file's length is and says so by
+    /// setting allocated equal to logical. Subtracting one from the other compares two different
+    /// kinds of byte, and the gap is not academic: cluster slack across a cache of small files makes
+    /// allocated much the larger, so a clean that removed nothing would report a reclaim.</para>
+    ///
+    /// <para>The fixture is a file the table says occupies 8192 bytes and whose length is 4096 — the
+    /// ordinary shape of a small file on a 4 KB-cluster volume. Every other mirrored tree in the
+    /// suite sets the two equal, which is why nothing here could discriminate before.</para>
+    /// </summary>
+    [Fact]
+    public async Task ReportsNothingWhenTheCommandFreedNothing()
+    {
+        var (cache, fixture) = MirroredTree.Realise(
+            _temp,
+            new TreeDirectory("cache", new TreeFile("a.bin", 4096, Allocated: 8192)));
+
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture));
+
+        var planTime = await scanner.MeasureAsync(cache);
+        Assert.Equal(ScanStrategy.MasterFileTable, planTime.Strategy);
+        Assert.Equal(8192, planTime.Size.Allocated);
+        Assert.Equal(4096, planTime.Size.Logical);
+
+        // A command that succeeds and clears nothing, which is what a failed eviction looks like
+        // from here, and what conda's clean looks like for everything an environment still links.
+        var runner = new FakeProcessRunner();
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Steps =
+            [
+                new RunCommandStep("tool", "clean", "Clear the cache with the tool's own command")
+                {
+                    Estimated = planTime.Size,
+                    MeasuredPaths = [cache],
+                },
+            ],
+        };
+
+        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, progress: null, default);
+
+        Assert.Equal(0, result.BytesReclaimed);
     }
 
     /// <summary>

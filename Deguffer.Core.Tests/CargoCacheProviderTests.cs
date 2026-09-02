@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -348,7 +348,7 @@ public sealed class CargoCacheProviderTests : IDisposable
     /// own, so the whole round trip is worth running over one: the source tree is measured, and then
     /// reclaimed in full.
     ///
-    /// The outcome is not evidence about the prefix. .NET applies <c>\?\</c> itself at 260
+    /// The outcome is not evidence about the prefix. .NET applies <c>\\?\</c> itself at 260
     /// characters, so this holds with <see cref="LongPath.Extended"/> gone —
     /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> is where that
     /// is pinned, and the form assertions on the removal seams are what carry §6.3.

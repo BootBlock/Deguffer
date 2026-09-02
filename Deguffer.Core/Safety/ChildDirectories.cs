@@ -10,12 +10,16 @@ namespace Deguffer.Core.Safety;
 /// plan that quietly disagrees with the folder. It is never followed.
 /// </param>
 /// <param name="Unreadable">
-/// The root did not answer, so the two lists above describe nothing rather than describing a folder
-/// with no children in it.
+/// The root refused to answer, so the two lists above describe nothing rather than describing a
+/// folder with no children in it.
 ///
 /// <para>A caller must not read this as a fourth kind of emptiness to ignore. Every caller of this
 /// seam turns the children into a plan, and a plan built on a listing that never happened states
 /// something about the machine that nobody established.</para>
+///
+/// <para>A directory that is <em>not there</em> is deliberately not this. Absence is a complete
+/// answer — nothing is inside it — and reporting it here would put "Deguffer could not list this
+/// folder", a sentence about permissions, against a folder that simply does not exist.</para>
 /// </param>
 public readonly record struct ChildDirectoryScan(
     IReadOnlyList<DirectoryInfo> Directories,
@@ -66,10 +70,21 @@ public static class ChildDirectories
                 }
             }
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        catch (DirectoryNotFoundException)
+        {
+            // Not there is an answer, and a complete one: a directory that does not exist holds
+            // nothing, so a caller reading this as empty is reading it correctly. Every caller but
+            // two checks existence first, and for those two — the walk popping a path a build has
+            // since removed, and the sweep of the application-data roots — "gone" must not be
+            // reported as "Deguffer could not list this", which is a sentence about permissions.
+            return new ChildDirectoryScan([], [], Unreadable: false);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
             // Nothing rather than a partial view. A caller decides what a root holds from what it is
             // handed, so half a listing invites a plan that describes a folder nobody fully read.
+            // Unlike the case above this is not an answer at all, and saying so is the difference
+            // between a plan that is quiet about a folder and one that is wrong about it.
             return new ChildDirectoryScan([], [], Unreadable: true);
         }
 

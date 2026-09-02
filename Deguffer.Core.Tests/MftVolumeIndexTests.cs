@@ -1,4 +1,4 @@
-using Deguffer.Core.Scanning.Mft;
+﻿using Deguffer.Core.Scanning.Mft;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -86,15 +86,25 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
-    /// The same shape past the reserved range is still corruption, and still takes the volume. A
+    /// The same shape outside records 12 to 15 is still corruption, and still takes the volume. A
     /// record in use claiming no identity and pointing nowhere else for one is what a torn write
     /// looks like, and totalling around it would report a directory short with nothing to show it.
+    ///
+    /// <para>Both ends of the bound are pinned, and each pins a different mistake. Record 16 is the
+    /// first record outside the reserved range, so it discriminates <c>&lt;</c> from <c>&lt;=</c>;
+    /// without it an off-by-one would leak one real record through and nothing would notice. Record
+    /// 11 is the last of the <em>named</em> metadata files — <c>$Extend</c> — and it discriminates
+    /// the both-ended bound from a bare "anything below 16", which would silently skip a torn
+    /// <c>$MFT</c> or <c>$LogFile</c> and answer short for the volume root.</para>
     /// </summary>
-    [Fact]
-    public void StillRefusesANamelessRecordOutsideTheReservedRange()
+    [Theory]
+    [InlineData(11)]
+    [InlineData(16)]
+    [InlineData(20)]
+    public void StillRefusesANamelessRecordOutsideTheUnnamedReservedRange(uint record)
     {
         using var source = Tree()
-            .AddRecordWithNoIdentityAtAll(20)
+            .AddRecordWithNoIdentityAtAll(record)
             .Build();
 
         Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));

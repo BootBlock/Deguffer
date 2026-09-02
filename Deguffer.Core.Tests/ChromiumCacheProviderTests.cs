@@ -64,6 +64,62 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
     }
 
+    /// <summary>
+    /// The refusal one level up, at an application-data root, which is the case this provider gets
+    /// wrong in a way no other provider can.
+    ///
+    /// <para>Every other provider decides presence by probing a path it already knows the name of,
+    /// and a full path resolves through a directory the account may not list. This one decides by
+    /// <em>enumerating</em> both application-data roots, so a refusal there answers "no source at
+    /// all" — and the planner never calls <see cref="ChromiumCacheProvider.PlanAsync"/> for a
+    /// provider that reports itself absent. The row then reads "Not installed on this machine",
+    /// which is a stronger untruth than the "Already clear" the rest of this work exists to
+    /// stop.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnApplicationDataRootThatWillNotBeListedIsSaidSoRatherThanReportedAsAbsent()
+    {
+        using var denied = new DeniedDirectory(_environment.RoamingAppData);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Message.Contains(_environment.RoamingAppData, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("No application on this machine keeps a Chromium cache"));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// The same refusal while the <em>other</em> root still turns up an application. Reading the
+    /// refused roots only where nothing was found dropped the fact in exactly the case where a plan
+    /// gets rendered and read, so the sentence has to survive a successful pass too.
+    /// </summary>
+    [Fact]
+    public async Task ARefusedRootIsStillReportedWhenTheOtherRootFindsAnApplication()
+    {
+        var application = CreateApplication("Chatter", _environment.LocalAppData);
+        CreateDirectory(Path.Combine(application, "GPUCache"));
+
+        using var denied = new DeniedDirectory(_environment.RoamingAppData);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning
+                && n.Message.Contains(_environment.RoamingAppData, StringComparison.Ordinal));
+
+        // The application the readable root did turn up is still planned normally.
+        Assert.Contains(Path.Combine(application, "GPUCache"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>Create a directory holding one file, so it measures as non-empty.</summary>
     private static string CreateDirectory(string path, int bytes = 4096)
     {

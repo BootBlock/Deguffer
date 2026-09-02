@@ -149,7 +149,7 @@ machine, so this gate is stricter than it would be elsewhere.
   operation succeeded passes identically with `LongPath.Extended` deleted outright. That is not a
   property of this machine: it was measured in a process where `RtlAreLongPathsEnabled` reports 0,
   and the `LongPathsEnabled` registry value changes none of it. Stripping the prefix from each of
-  Core's sixteen seams in turn left the whole suite green for fourteen of them.
+  Core's sixteen seams in turn left the whole suite green for twelve of them.
 
   So assert what discriminates: that the path handed onward carries `\\?\`. Four tests do, and they
   are the whole of §6.3's real coverage — `DirectoryRemover` and `FileRemover` through the

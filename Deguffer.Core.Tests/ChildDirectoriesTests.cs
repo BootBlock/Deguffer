@@ -67,17 +67,21 @@ public sealed class ChildDirectoriesTests : IDisposable
     }
 
     /// <summary>
-    /// A root that is not there is unreadable for the same reason and reports it the same way. Every
-    /// caller checks existence before asking, so reaching this means the directory went away between
-    /// the check and the listing — which is exactly as much of an answer as a refusal is, and the
-    /// caller must not read it as "empty" either.
+    /// A root that is not there is empty, not unreadable, and the distinction is the whole point of
+    /// the flag. "Deguffer could not list this folder" is a sentence about permissions; a folder
+    /// that does not exist holds nothing, which is a complete answer rather than the absence of one.
+    ///
+    /// <para>Two callers reach here without checking existence first, and both would say the wrong
+    /// thing otherwise: the discovery walk pops a path a build has since removed, and the sweep of
+    /// the two application-data roots takes them as configured. Neither is a refusal, and neither
+    /// should raise a warning about permissions.</para>
     /// </summary>
     [Fact]
-    public void AMissingRootIsUnreadableRatherThanEmpty()
+    public void AMissingRootIsEmptyRatherThanUnreadable()
     {
         var scan = ChildDirectories.Under(Path.Combine(_temp.Path, "never-created"));
 
-        Assert.True(scan.Unreadable);
+        Assert.False(scan.Unreadable);
         Assert.Empty(scan.Directories);
     }
 
@@ -108,9 +112,12 @@ public sealed class ChildDirectoriesTests : IDisposable
 
         var scan = ChildDirectories.Under(root);
 
-        Assert.All(
-            scan.Directories.Concat(scan.Links),
-            child => Assert.StartsWith(@"\\?\", child.FullName, StringComparison.Ordinal));
+        var children = scan.Directories.Concat(scan.Links).ToList();
+
+        // Assert.All passes over an empty sequence, so the count comes first: a regression that
+        // returned nothing at all would otherwise turn this into a green no-op.
+        Assert.Equal(2, children.Count);
+        Assert.All(children, child => Assert.StartsWith(@"\\?\", child.FullName, StringComparison.Ordinal));
     }
 
     /// <summary>

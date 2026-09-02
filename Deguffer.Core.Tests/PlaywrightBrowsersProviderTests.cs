@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -253,7 +253,7 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
     /// nested one must still be measured.
     ///
     /// Not a §6.3 assertion, and not merely a weak one on a machine with <c>LongPathsEnabled</c>
-    /// set: .NET applies <c>\?\</c> itself past 260 characters, so the measurement succeeds however
+    /// set: .NET applies <c>\\?\</c> itself past 260 characters, so the measurement succeeds however
     /// Core handles the path. <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>
     /// is the one test that would notice if that stopped being true.
     /// </summary>

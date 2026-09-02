@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -55,7 +55,8 @@ public class LongPathTests
     /// about this codebase: such a test passes identically with <see cref="LongPath.Extended"/>
     /// deleted outright. Measured, rather than assumed — stripping every
     /// <c>LongPath.Extended</c> call from all sixteen seams in Core, one seam at a time, left the
-    /// whole suite green except for the two assertions that check the <em>form</em> of a path.</para>
+    /// whole suite green for twelve of them; the four that go red are the ones that check the
+    /// <em>form</em> of a path rather than the outcome of an operation.</para>
     ///
     /// <para>The registry is not what makes that true. <c>LongPathsEnabled</c> is set on the machine
     /// this was measured on, and <c>RtlAreLongPathsEnabled</c> still reports 0 inside an ordinary

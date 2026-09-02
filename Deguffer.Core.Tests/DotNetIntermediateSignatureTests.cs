@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -185,7 +185,7 @@ public sealed class DotNetIntermediateSignatureTests : IDisposable
     /// past <c>MAX_PATH</c>: a project nested that deep is recognised rather than silently passed
     /// over, which is what would keep it from ever being offered.
     ///
-    /// The depth is not what makes this a §6.3 test. .NET prepends <c>\?\</c> at 260 characters on
+    /// The depth is not what makes this a §6.3 test. .NET prepends <c>\\?\</c> at 260 characters on
     /// its own, so the recognition would succeed here with Core's prefixing removed; see
     /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/>.
     /// </summary>

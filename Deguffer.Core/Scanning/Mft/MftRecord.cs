@@ -51,4 +51,16 @@ public readonly record struct MftRecord(
     /// costs the whole volume.</para>
     /// </summary>
     public const uint ReservedRecordCount = 16;
+
+    /// <summary>
+    /// The first of the reserved records NTFS leaves nameless. 0 to 11 are the named metadata files
+    /// and parse like any other record; 12 to 15 are held back for future use, marked in use and
+    /// given neither a <c>$FILE_NAME</c> nor an <c>$ATTRIBUTE_LIST</c>.
+    ///
+    /// <para>The distinction is what keeps the builder's tolerance as narrow as the fact behind it.
+    /// A record it cannot read anywhere else in the table is damage and takes the volume, and that
+    /// has to stay true of a torn <c>$MFT</c> or <c>$LogFile</c> too — those are real files with
+    /// real sizes, and a build that skipped one would answer short for the volume root.</para>
+    /// </summary>
+    public const uint FirstUnnamedReservedRecord = 12;
 }

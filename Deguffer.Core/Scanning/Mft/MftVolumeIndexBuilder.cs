@@ -84,16 +84,26 @@ public static class MftVolumeIndexBuilder
                     // caught mid-write — the condition the update sequence array exists to detect,
                     // and one a second read of that record alone would very likely settle. Retrying
                     // is the improvement this wants; refusing is the answer that is never wrong.
-                    // …except inside the reserved range, where this shape is not damage but the
-                    // format. NTFS marks records 12 to 15 in use and gives them no name, so the
-                    // refusal below fired on record 12 of every NTFS volume and took the index with
-                    // it — measured on a real volume: those four records, and no others in three
-                    // million. §5.5's fast path could therefore never engage on a real machine, and
-                    // an elevated run walked every path exactly as an unelevated one did.
+                    // …except across records 12 to 15, where this shape is not damage but the
+                    // format. NTFS holds those four back for future metadata, marks them in use and
+                    // gives them no name, so the refusal below fired on record 12 of every NTFS
+                    // volume and took the index with it — measured on a real volume: those four
+                    // records, and no others in three million. §5.5's fast path could therefore
+                    // never engage on a real machine, and an elevated run walked every path exactly
+                    // as an unelevated one did.
                     //
-                    // Skipping them loses nothing. None of the sixteen hangs off a user-visible
-                    // directory, so no subtree Deguffer totals is short by a byte.
-                    if (outcome == MftParseOutcome.Unreadable && next + i < MftRecord.ReservedRecordCount)
+                    // Skipping them loses nothing. A record that is never added is absent from the
+                    // child links entirely rather than present as a zero, so no subtree total can be
+                    // short by a byte — and these four have no $FILE_NAME, so they name no parent to
+                    // hang off in the first place.
+                    //
+                    // The bound is both-ended on purpose. Records 0 to 11 are the named metadata
+                    // files and parse like anything else, so an unreadable one there is damage —
+                    // a torn $MFT is a real file of real size, and skipping it would answer short
+                    // for the volume root while claiming a complete index.
+                    if (outcome == MftParseOutcome.Unreadable
+                        && next + i >= MftRecord.FirstUnnamedReservedRecord
+                        && next + i < MftRecord.ReservedRecordCount)
                     {
                         continue;
                     }

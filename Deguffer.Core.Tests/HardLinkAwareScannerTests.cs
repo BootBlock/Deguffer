@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -107,7 +107,7 @@ public sealed class HardLinkAwareScannerTests : IDisposable
     ///
     /// <para><b>What this establishes, and what it cannot.</b> It proves the walk reaches past
     /// MAX_PATH. It does not prove this scanner applied the prefix itself, and the reason is not
-    /// the host or the machine: .NET prepends <c>\?\</c> to any path of 260 characters or more
+    /// the host or the machine: .NET prepends <c>\\?\</c> to any path of 260 characters or more
     /// before calling Win32, whatever <c>LongPathsEnabled</c> says, and even in a process where
     /// <c>RtlAreLongPathsEnabled</c> reports 0 — which is what an ordinary test host is.
     /// <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> holds that
