@@ -83,24 +83,33 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     }
 
     /// <summary>
-    /// The table without Deguffer itself.
+    /// The table without this process.
     ///
     /// Deguffer is normally started from somewhere inside a developer's own folders, and on this
     /// repository it is started from inside the very source tree it is asked to look at. Left in,
     /// it would report every project below its own working directory as busy — with itself.
+    ///
+    /// <para><b>By process id, which is the only identity that is one process.</b> The obvious
+    /// alternative is the image path, and it reads as the wider and therefore safer rule — no
+    /// Deguffer is evidence about a developer's tree, not just this one. It is not safer, because
+    /// the image path is a fact about how the application is <em>hosted</em> rather than about the
+    /// application. It is only Deguffer's own executable while the app ships self-contained, which
+    /// is a property of <c>Deguffer.App.csproj</c>; framework-dependent, or started through a shared
+    /// host, <see cref="Environment.ProcessPath"/> is <c>dotnet.exe</c> and every other
+    /// <c>dotnet.exe</c> on the machine matches it — a build in flight included, which is precisely
+    /// what the veto exists to catch. A safety filter must not be one edit to an unrelated project
+    /// file away from disarming itself, and a process id cannot be reached from a build
+    /// setting.</para>
+    ///
+    /// <para>What the narrower rule gives up is a second Deguffer running from inside the same
+    /// source tree, which then vetoes it. That is the over-reporting direction: the user is told a
+    /// directory looks busy and can look, where the wider rule's failure hands a live project to a
+    /// deletion.</para>
     /// </summary>
-    private static ProcessTable Filtered(ProcessTable table)
+    internal static ProcessTable Filtered(ProcessTable table) => table with
     {
-        var self = Environment.ProcessPath;
-
-        return self is null
-            ? table
-            : table with
-            {
-                Processes = [.. table.Processes.Where(p =>
-                    !string.Equals(p.ImagePath, self, StringComparison.OrdinalIgnoreCase))],
-            };
-    }
+        Processes = [.. table.Processes.Where(p => p.Id != Environment.ProcessId)],
+    };
 
     /// <summary>
     /// The declared lock files that are actually on disk.

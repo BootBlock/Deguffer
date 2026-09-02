@@ -199,6 +199,59 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// The disagreement discovery is <em>meant</em> to have, and the one this class exists to keep
+    /// visible: below a directory the account may not list, the walk finds nothing and the index
+    /// finds everything.
+    ///
+    /// <para>The walk has to enumerate, and an enumeration that is refused yields nothing rather
+    /// than a partial view, so the whole subtree is out of its reach. The MFT reads file records and
+    /// no ACL guards those. Reach is therefore a property of the token, not of the rules, and
+    /// <see cref="SourceTreeBoundary"/> cannot equalise it — it judges a candidate by name, and a
+    /// name says nothing about who may read it.</para>
+    ///
+    /// <para>Three things are asserted in the one denied tree, because the argument for accepting
+    /// the disagreement needs all three and each is worthless alone. The walk finds nothing. The
+    /// index still refuses everything the boundary refuses — a nested candidate, a directory under
+    /// <c>.git</c>, one under <c>node_modules</c> — so the extra reach carries no extra licence. And
+    /// what the index does offer is a whole candidate rather than a broken one: denying the right to
+    /// <em>list</em> a directory leaves the right to traverse it, so the project around the
+    /// candidate is readable and the candidate itself measures. That last one is the claim the whole
+    /// argument rests on, and it is the one that would be invisible if it stopped being true.</para>
+    /// </summary>
+    [Fact]
+    public async Task OnlyTheIndexReachesBelowADirectoryTheAccountMayNotList()
+    {
+        using var temp = new TempDirectory();
+
+        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "src",
+            new TreeDirectory(
+                "restricted",
+                new TreeDirectory(
+                    "Example",
+                    new TreeFile("Example.csproj", 64),
+                    new TreeDirectory("obj", new TreeFile("Example.dll", 128), new TreeDirectory("obj"))),
+                new TreeDirectory(".git", new TreeDirectory("obj")),
+                new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj"))))));
+
+        var candidate = Path.Combine(root, "restricted", "Example", "obj");
+
+        using var denied = new DeniedDirectory(Path.Combine(root, "restricted"));
+
+        var walked = await Discovery(Walking()).FindAsync([root]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+
+        Assert.Empty(walked.Candidates);
+        Assert.Equal([candidate], indexed.Candidates);
+
+        // The candidate is a real one, which is what makes this reach rather than licence. A path
+        // through the denied directory still resolves, so everything §5.2 recognises a build
+        // directory by is readable, and the size the user is shown is measured rather than guessed.
+        Assert.True(File.Exists(Path.Combine(root, "restricted", "Example", "Example.csproj")));
+        Assert.Equal(128, (await Walking().MeasureAsync(candidate)).Size.Logical);
+    }
+
+    /// <summary>
     /// A discovery looking for <c>obj</c> alone, which is what these tests compare the two routes
     /// over. The names a discovery is given are part of what defines its answer, so both routes get
     /// the same ones.

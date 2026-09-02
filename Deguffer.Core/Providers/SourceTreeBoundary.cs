@@ -6,15 +6,37 @@ namespace Deguffer.Core.Providers;
 /// <summary>
 /// Where a search through a source folder stops, stated once for both routes that perform one.
 ///
-/// <see cref="SourceDirectoryDiscovery"/> walks a root and enforces these limits by not descending.
-/// The volume index has no traversal to stop — it already knows every directory on the volume — so
-/// it has to apply the same limits as a filter over what it returns. Two enforcements of one rule
-/// is the price of having two routes; keeping the rule itself here is what stops them becoming two
-/// different answers to the same question, chosen by whether the user happened to elevate.
+/// <para><see cref="SourceDirectoryDiscovery"/> walks a root and enforces these limits by not
+/// descending. The volume index has no traversal to stop — it already knows every directory on the
+/// volume — so it has to apply the same limits as a filter over what it returns. Two enforcements
+/// of one rule is the price of having two routes; keeping the rule itself here is what stops them
+/// becoming two different <em>rules</em>, chosen by whether the user happened to elevate.</para>
 ///
-/// The walk's third limit — that it never enters a reparse point — is not repeated here. The index
-/// applies that one where it can see it, in the table, and never offers a path that passes through
-/// a link at all.
+/// <para>The walk's third limit — that it never enters a reparse point — is not repeated here. The
+/// index applies that one where it can see it, in the table, and never offers a path that passes
+/// through a link at all.</para>
+///
+/// <para><b>The rules are what agree. The reach is not, and cannot be made to.</b> A search's reach
+/// is a property of the token it runs under, and the two routes do not share one. The walk
+/// enumerates, so a directory the account may not list yields nothing at all — <see
+/// cref="Safety.ChildDirectories.Under"/> returns nothing rather than a partial view — and the whole
+/// subtree below it is out of the walk's reach. The MFT reads file records, which no ACL guards, so
+/// an elevated run offers candidates from inside that subtree that an unelevated one never finds.
+/// Established against a real denied directory rather than reasoned about; see
+/// <c>RouteAgreementTests</c>.</para>
+///
+/// <para>Closing that gap was considered and is not possible here. It would mean asking, per
+/// candidate ancestor, whether this process can list it — a directory enumeration each, on the one
+/// route that exists because enumeration is too slow (§5.5) — and the answer would come back under
+/// the <em>elevated</em> token, so it would describe a walk that never happened rather than the
+/// unelevated one it is meant to agree with.</para>
+///
+/// <para>What matters is that the difference is reach and nothing else. Every rule below applies to
+/// an indexed candidate exactly as the walk applies it, by name, which no permission affects. A
+/// candidate that gets through is still inside a root the user approved, still has to be recognised
+/// by the project around it (§5.2), still faces the live-tree veto, and still appears in the preview
+/// before anything can happen to it. An elevated run reaching more of the folder it was asked to
+/// look inside is §5.5's intent, not a hole in it.</para>
 /// </summary>
 internal static class SourceTreeBoundary
 {
@@ -39,9 +61,11 @@ internal static class SourceTreeBoundary
     public static bool IsNeverEntered(string name) => NeverEntered.Contains(name);
 
     /// <summary>
-    /// Whether the walk would also have offered <paramref name="candidate"/>. The walk is the
-    /// guaranteed route and the index is an accelerator, so where they can differ, the walk's answer
-    /// is the one that defines the question.
+    /// Whether <paramref name="candidate"/> lies inside the region this search covers.
+    ///
+    /// <para>Deliberately not named for what the walk would have found. It answers by name only, so
+    /// it can say that a candidate is within the rules and cannot say that the walk could have got
+    /// there — see the reach paragraphs above for why nothing here can.</para>
     ///
     /// <paramref name="candidate"/> must already be known to sit at or below <paramref name="root"/>;
     /// the scanner narrows to the approved root before anything reaches here.
@@ -52,7 +76,7 @@ internal static class SourceTreeBoundary
     /// <c>dist</c> inside a <c>node_modules</c> is out of reach exactly when <c>node_modules</c> is
     /// also being sought — which is the point at which the walk stops descending too.
     /// </param>
-    public static bool WouldBeFoundByWalking(string candidate, string root, FrozenSet<string> names)
+    public static bool IsInsideTheSearch(string candidate, string root, FrozenSet<string> names)
     {
         // Asked for rather than derived by slicing the candidate at the root's length: that
         // arithmetic is only correct while this and the scanner's own narrowing spell a path the

@@ -442,7 +442,9 @@ Ten things the work settled.
   deletion, what a deletion costs is a rebuild, so "when was this last built" is the question and
   "when was this project last edited" is a different one. Reading the source would also mean walking
   the tree this exists to avoid walking. `DotNetObjProvider` already had this rule; it is
-  `BuildDirectoryAge` now, shared by all six.
+  `BuildDirectoryAge` now, shared by all six. **Half of that reasoning was later found to be an
+  argument against the wrong thing — see the audit below, where the rule became the newest of the
+  directory *and* its entries, in `DirectoryAge`.**
 
 - **The `node_modules` collision needed no exception, and seeing why took longer than fixing it.**
   `SourceTreeBoundary` refuses to enter `node_modules` because walking one costs hundreds of
@@ -452,7 +454,8 @@ Ten things the work settled.
   that "inside another candidate" is a property of the whole name set rather than of one name: a pass
   that knows about `node_modules` never offers the `build` directory of a package inside one, and a
   pass that does not will walk straight in. Both routes are handed the same set for that reason, so
-  elevating cannot change what Deguffer offers.
+  elevating cannot change which *rules* Deguffer applies. **It does change the reach, which this
+  sentence originally claimed it did not — see the audit below.**
 
 - **§5.1's `cargo clean` was considered and declined, and the reasons are in the class.** It is a
   per-project command run in the project's own directory, so it means one subprocess per Rust project
@@ -506,6 +509,77 @@ Two defects the work turned up, neither of them in a provider.
   follow a walked discovery, but read together they look like a defect, so the discovery sentence is
   now left to the measurement's where that one is already there. Found by driving the real window,
   not by reading the code.
+
+### The route and age audit — three claims re-examined, two of them wrong ✅ done
+
+A later pass went back over what §2 had just shipped and asked, of each safety-shaped claim,
+whether the consequence actually follows rather than whether the code is shaped as described. Two of
+the three did not.
+
+- **The boundary asserted an invariant it does not hold, and the disagreement is real.**
+  `SourceTreeBoundary` opened by saying the walk and the volume index cannot become "two different
+  answers to the same question, chosen by whether the user happened to elevate". Measured against a
+  real directory the account is denied the right to list: the walk returns **nothing** below it,
+  because `ChildDirectories.Under` gives nothing rather than a partial view, and the index returns
+  the `obj` inside it. The candidate is not a degraded one either — denying the right to *list* a
+  directory leaves the right to traverse it, so a full path still resolves, the project around the
+  candidate is readable, recognition succeeds and the directory measures. An elevated run genuinely
+  offers what an unelevated one cannot find.
+
+- **The disagreement is accepted, because it is reach rather than licence.** Making the two agree
+  would mean asking, per candidate ancestor, whether this process may list it — a directory
+  enumeration each, on the one route that exists because enumeration is too slow (§5.5) — and the
+  answer would come back under the *elevated* token, describing a walk that never happened. It also
+  buys nothing: the boundary's rules are applied by name, a name is readable whatever the ACL says,
+  and an indexed candidate still has to be inside an approved root, recognised by the project around
+  it (§5.2), cleared by the live-tree veto, and shown in the preview. An elevated run reaching more
+  of the folder it was asked to look inside is §5.5's intent. What changed is the claim: the class
+  now states what it guarantees and what it cannot, and `WouldBeFoundByWalking` is
+  `IsInsideTheSearch`, because a method that cannot answer for the walk should not be named for it.
+  `RouteAgreementTests` pins all three parts of that argument in one denied tree, because each is
+  worthless alone: the walk finds nothing, the index still refuses everything the boundary refuses,
+  and what the index offers is a whole candidate rather than a broken one.
+
+- **Four answers to "how old is this" were three copies of one rule plus one honest exception, and
+  the shared rule was missing half of itself.** `BuildDirectoryAge` argued at length that a
+  directory's own timestamp lies, because it moves only when an entry is added, removed or renamed.
+  That is an argument against using it *alone*, and it had been applied as an argument against using
+  it at all — so the rule caught a file rewritten in place and missed everything the directory
+  catches. Measured on this machine: a directory whose entries are 400 days old but which was itself
+  written a moment ago reported **400 days**, and one emptied an hour ago reported **unknown**. Both
+  errors point the same way, and it is the one that invites a deletion. The rule is now the newest of
+  the directory *and* its immediate entries, one level, in `DirectoryAge` — and `DeclaredLocations`
+  and the VS Code cpptools provider call it instead of carrying their own copies. A directory whose
+  entries cannot be read reports **no age at all**, which is the one place the consolidation could
+  have gone wrong quietly: a refusal leaves only the directory's own timestamp, and that is the half
+  that reads older than the truth. The live subject is a servicing log directory the account may not
+  list, whose traces are rewritten while the parent's timestamp sits still — a Tier 3 row, whose loss
+  is permanent, carrying an age that invites the deletion.
+
+- **The Recycle Bin was the one genuine exception, and it stays as it was.** It asks the same
+  question, and its own timestamp is already the whole answer: nothing in a bin is rewritten in
+  place, so no entry can be newer than the directory. Reading the entries would enumerate everything
+  the user has deleted on the volume to arrive at a timestamp already in hand, and would read the
+  wrong dates anyway — Windows preserves each deleted file's own timestamps, so those say when the
+  files were last edited rather than when they were thrown away. That is now stated in the code
+  rather than left as a difference the next reader has to account for.
+
+- **A safety filter was one edit to an unrelated project file away from disarming itself.**
+  `LiveTreeInspector` drops Deguffer from the process table so its own working directory does not
+  veto every project below it, and it identified Deguffer by comparing each process's image path to
+  `Environment.ProcessPath`. That is only Deguffer's own executable while the app ships
+  self-contained, which is a property of `Deguffer.App.csproj`. Framework-dependent, or started
+  through a shared host, `ProcessPath` is `dotnet.exe` and every other `dotnet.exe` on the machine
+  matches it — a build in flight included, which is precisely what the veto exists to catch. The
+  filter now compares process ids, which no build setting can reach. What that gives up is a second
+  Deguffer running from inside the same source tree, which then vetoes it: the over-reporting
+  direction, where the wider rule's failure handed a live project to a deletion.
+
+- **One gap this pass found and did not close.** A walk that is refused a directory tells nobody. It
+  is §5.3's "skip silently" working as designed for a measurement, but for *discovery* it means part
+  of an approved root was never searched and the plan says nothing about it. Closing that needs
+  `ChildDirectories.Under` to distinguish "empty" from "refused", which every caller of it would then
+  have to answer for — a change with its own design decision, not a correction to this one.
 
 ### Unity `Library` — Tier 2, measured at 5.4 GB across 7 projects ✅ done
 

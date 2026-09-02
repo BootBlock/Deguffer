@@ -185,7 +185,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 .. targets.Select(t => new DeletionTarget(
                     t.Path,
                     $"Intermediate build output for {t.Project.ProjectName}",
-                    BuildDirectoryAge.Of(t.Path, ct))),
+                    DirectoryAge.Of(t.Path, ct))),
             ],
             ct).ConfigureAwait(false);
 

@@ -273,11 +273,19 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// When this bin last gained or lost an entry, for §7's age column — "you last deleted
     /// something on this drive eight months ago" is the figure that decides whether to empty it.
     ///
-    /// The directory's own timestamp, unlike the cpptools workspace databases which needed the
-    /// newest file inside. Nothing in a bin is ever rewritten in place: an entry arrives when
-    /// something is deleted and goes when it is restored or purged, and both move the directory.
-    /// The value is filled in by the enumeration that produced <paramref name="bin"/>, so reading
-    /// it costs no second look at the disk.
+    /// <para><b>The same question <see cref="DirectoryAge"/> answers, and the one subject where the
+    /// directory's own timestamp is already the whole answer.</b> That rule reads the entries as well
+    /// because a file rewritten in place moves its own timestamp and leaves the directory's alone.
+    /// Nothing in a bin is ever rewritten in place: an entry arrives when something is deleted and
+    /// goes when it is restored or purged, and both move the directory. The entries would also
+    /// answer a different question if they were read — Windows preserves each deleted file's own
+    /// timestamps, so their dates are when the files were last edited rather than when they were
+    /// thrown away.</para>
+    ///
+    /// <para>So calling the shared rule here would enumerate every file in the bin, which is
+    /// everything the user has deleted on the volume, to arrive at the timestamp already in hand.
+    /// The value comes from the enumeration that produced <paramref name="bin"/> and costs no
+    /// second look at the disk.</para>
     /// </summary>
     private static DateTime? LastActivity(DirectoryInfo bin) => bin.LastWriteTimeUtc;
 

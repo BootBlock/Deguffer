@@ -15,9 +15,11 @@ namespace Deguffer.Core.Tests;
 ///
 /// One claim the code makes is deliberately not established here: that the Restart Manager refuses a
 /// directory outright. It does, and that is why a provider has to name the file its tool locks — but
-/// <c>RestartManager</c> is internal to Core with one caller, and what is testable from outside is
-/// the consequence rather than the refusal. <see cref="ADeclaredLockFileThatIsADirectoryIsNeverAsked"/>
-/// covers that consequence.
+/// what is testable from outside is the consequence rather than the refusal, and it is the
+/// consequence that carries the safety.
+/// <see cref="ADeclaredLockFileThatIsADirectoryIsNeverAsked"/> covers it. Core's internals are
+/// visible to this project, so <c>RestartManager</c> could be called directly; that is the reason
+/// this stays a decision rather than a limit.
 ///
 /// The helper processes are ordinary Windows programs started with a long wait, and each is stopped
 /// in a <c>finally</c>. Nothing here needs elevation.
