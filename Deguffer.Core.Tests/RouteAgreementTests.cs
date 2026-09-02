@@ -139,8 +139,8 @@ public class RouteAgreementTests
             new TreeDirectory(".git", new TreeDirectory("obj")),
             new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj")))));
 
-        var walked = await new ObjDirectoryDiscovery(Walking()).FindAsync("obj", [root]);
-        var indexed = await new ObjDirectoryDiscovery(Indexing(root, fixture)).FindAsync("obj", [root]);
+        var walked = await Discovery(Walking()).FindAsync([root]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
 
         Assert.False(walked.UsedIndex);
         Assert.True(indexed.UsedIndex);
@@ -172,8 +172,8 @@ public class RouteAgreementTests
 
         Assert.True(Path.Combine(root, Deep, Deep, Deep, "obj").Length > 260, "the tree is not long enough to test anything");
 
-        var walked = await new ObjDirectoryDiscovery(Walking()).FindAsync("obj", [root]);
-        var indexed = await new ObjDirectoryDiscovery(Indexing(root, fixture)).FindAsync("obj", [root]);
+        var walked = await Discovery(Walking()).FindAsync([root]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
 
         Assert.Equal([Path.Combine(root, Deep, Deep, Deep, "obj")], walked.Candidates);
         Assert.Equal(walked.Candidates, indexed.Candidates);
@@ -191,10 +191,22 @@ public class RouteAgreementTests
 
         var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory("obj", new TreeFile("Example.dll", 512)));
 
-        var walked = await new ObjDirectoryDiscovery(Walking()).FindAsync("obj", [root]);
-        var indexed = await new ObjDirectoryDiscovery(Indexing(root, fixture)).FindAsync("obj", [root]);
+        var walked = await Discovery(Walking()).FindAsync([root]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
 
         Assert.Empty(walked.Candidates);
         Assert.Empty(indexed.Candidates);
+    }
+
+    /// <summary>
+    /// A discovery looking for <c>obj</c> alone, which is what these tests compare the two routes
+    /// over. The names a discovery is given are part of what defines its answer, so both routes get
+    /// the same ones.
+    /// </summary>
+    private static SourceDirectoryDiscovery Discovery(IDirectoryScanner scanner)
+    {
+        var discovery = new SourceDirectoryDiscovery(scanner);
+        discovery.Include(["obj"]);
+        return discovery;
     }
 }

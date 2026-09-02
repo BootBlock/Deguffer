@@ -35,8 +35,11 @@ public sealed class DotNetObjProviderTests : IDisposable
 
     private DotNetObjProvider CreateProvider(
         IDirectoryScanner? scanner = null,
-        FakeProcessRunner? runner = null) =>
+        FakeProcessRunner? runner = null,
+        ILiveTreeInspector? liveTrees = null) =>
         new(_roots,
+            discovery: null,
+            liveTrees ?? FakeLiveTreeInspector.NothingLive,
             _environment,
             runner ?? new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,

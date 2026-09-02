@@ -6,7 +6,7 @@ namespace Deguffer.Core.Providers;
 /// <summary>
 /// Where a search through a source folder stops, stated once for both routes that perform one.
 ///
-/// <see cref="ObjDirectoryDiscovery"/> walks a root and enforces these limits by not descending.
+/// <see cref="SourceDirectoryDiscovery"/> walks a root and enforces these limits by not descending.
 /// The volume index has no traversal to stop — it already knows every directory on the volume — so
 /// it has to apply the same limits as a filter over what it returns. Two enforcements of one rule
 /// is the price of having two routes; keeping the rule itself here is what stops them becoming two
@@ -19,9 +19,19 @@ namespace Deguffer.Core.Providers;
 internal static class SourceTreeBoundary
 {
     /// <summary>
-    /// Directories that would slow the walk considerably and can never hold a recognised candidate
-    /// beneath them. <c>node_modules</c> is the expensive one — hundreds of thousands of entries in
-    /// a tree that has no .NET intermediate output in it.
+    /// Directories a search never enters <em>unless it is looking for them</em>. <c>node_modules</c>
+    /// is the expensive one — hundreds of thousands of entries, in a tree that holds no .NET
+    /// intermediate output at all.
+    ///
+    /// <para>A name being sought overrides this, and the two rules do not conflict: a search stops
+    /// at a directory it is looking for, without descending, because everything below a candidate
+    /// belongs to that candidate. So a search for <c>node_modules</c> pays for one directory entry
+    /// rather than for the tree beneath it — the same cost this boundary exists to avoid — while a
+    /// search for <c>obj</c> still refuses to go in.</para>
+    ///
+    /// <para><c>.git</c> is here for a different reason and is never sought: a repository's object
+    /// store holds directories of every conceivable name, none of which is build output, and the
+    /// cost of a rule reaching inside one is not measured in disk space.</para>
     /// </summary>
     private static readonly FrozenSet<string> NeverEntered =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".git", "node_modules");
@@ -36,7 +46,13 @@ internal static class SourceTreeBoundary
     /// <paramref name="candidate"/> must already be known to sit at or below <paramref name="root"/>;
     /// the scanner narrows to the approved root before anything reaches here.
     /// </summary>
-    public static bool WouldBeFoundByWalking(string candidate, string root, string name)
+    /// <param name="names">
+    /// Every name the pass is looking for. The whole set matters rather than the one name that
+    /// matched: a directory below <em>any</em> candidate belongs to that candidate, so a
+    /// <c>dist</c> inside a <c>node_modules</c> is out of reach exactly when <c>node_modules</c> is
+    /// also being sought — which is the point at which the walk stops descending too.
+    /// </param>
+    public static bool WouldBeFoundByWalking(string candidate, string root, FrozenSet<string> names)
     {
         // Asked for rather than derived by slicing the candidate at the root's length: that
         // arithmetic is only correct while this and the scanner's own narrowing spell a path the
@@ -57,7 +73,7 @@ internal static class SourceTreeBoundary
         // it as well would make two steps where one deletes the other's parent.
         for (var i = 0; i < relative.Length - 1; i++)
         {
-            if (IsNeverEntered(relative[i]) || relative[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (names.Contains(relative[i]) || IsNeverEntered(relative[i]))
             {
                 return false;
             }

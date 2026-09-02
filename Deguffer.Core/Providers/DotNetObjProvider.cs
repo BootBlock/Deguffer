@@ -19,20 +19,25 @@ namespace Deguffer.Core.Providers;
 /// package cache, both of which are still present.
 ///
 /// Recognition is <see cref="DotNetIntermediateSignature"/>'s job and lives there; discovery is
-/// <see cref="ObjDirectoryDiscovery"/>'s. This holds the rules about what to do with the answers.
+/// <see cref="SourceDirectoryDiscovery"/>'s. This holds the rules about what to do with the answers.
 /// </summary>
 public sealed class DotNetObjProvider : CleanupProviderBase
 {
     private const string DirectoryName = "obj";
 
+    private static readonly string[] DirectoryNames = [DirectoryName];
+
     private readonly SourceRootStore _roots;
-    private readonly ObjDirectoryDiscovery _discovery;
+    private readonly SourceDirectoryDiscovery _discovery;
+    private readonly ILiveTreeInspector _liveTrees;
     private readonly TrackedFileCheck _tracked;
 
     private IReadOnlyList<string>? _approved;
 
     public DotNetObjProvider(
         SourceRootStore roots,
+        SourceDirectoryDiscovery? discovery = null,
+        ILiveTreeInspector? liveTrees = null,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
@@ -46,7 +51,9 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         ArgumentNullException.ThrowIfNull(roots);
 
         _roots = roots;
-        _discovery = new ObjDirectoryDiscovery(Scanner);
+        _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+        _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner);
+        _discovery.Include(DirectoryNames);
         _tracked = new TrackedFileCheck(Environment, Runner);
     }
 
@@ -67,19 +74,15 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         "If you also clear the NuGet cache in this run, the next restore needs the network, and a " +
         "project whose feed is unreachable will not rebuild until that is resolved.";
 
-    /// <summary>
-    /// §5.3, and it carries more force here than elsewhere: deleting intermediate output under a
-    /// live build breaks that build in flight rather than merely leaving stale state behind.
-    /// </summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames =>
-        ["MSBuild", "VBCSCompiler", "devenv", "rider64", "dotnet"];
-
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
     public IReadOnlyList<string> ApprovedRoots => _approved ??= _roots.Load();
 
     public override void InvalidateCaches()
     {
         base.InvalidateCaches();
+
+        _liveTrees.Invalidate();
+        _discovery.Invalidate();
 
         // Re-read on the next pass, so a root added in Settings is picked up without a restart.
         _approved = null;
@@ -109,7 +112,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 "for build output inside them, and nowhere else.");
         }
 
-        var discovered = await _discovery.FindAsync(DirectoryName, ApprovedRoots, ct).ConfigureAwait(false);
+        var discovered = await _discovery.FindAsync(ApprovedRoots, ct).ConfigureAwait(false);
 
         // One list of pairs rather than two lists held in step. The directory and the project it
         // belongs to are used together everywhere below, and keeping them aligned by index would
@@ -118,7 +121,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         var targets = new List<RecognisedObj>();
         var declined = new List<string>();
 
-        foreach (var candidate in discovered.Candidates)
+        foreach (var candidate in discovered.Named(DirectoryNames))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -160,12 +163,30 @@ public sealed class DotNetObjProvider : CleanupProviderBase
 
         targets = cleared;
 
+        // §5.3, and it carries more force here than for a cache: removing intermediate output under
+        // a live build breaks that build in flight rather than leaving stale state behind. This
+        // replaces the list of process names this provider used to carry, which asked a question
+        // that was wrong in both directions — one MSBuild anywhere on the machine warned about every
+        // project on the disk, while the compiler server actually holding a directory open need not
+        // be called any of them.
+        var live = LiveTreeVeto.Apply(
+            _liveTrees,
+            [.. targets.Select(t => new RecognisedBuildDirectory(
+                t.Path,
+                Path.GetDirectoryName(t.Project.ProjectFilePath)!,
+                "Intermediate build output"))],
+            [],
+            ct);
+
+        var vetoed = live.Vetoed.Select(v => v.Directory).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        targets = [.. targets.Where(t => !vetoed.Contains(t.Path))];
+
         var (steps, measured) = await PlanDeletionsAsync(
             [
                 .. targets.Select(t => new DeletionTarget(
                     t.Path,
                     $"Intermediate build output for {t.Project.ProjectName}",
-                    LastBuilt(t.Path, ct))),
+                    BuildDirectoryAge.Of(t.Path, ct))),
             ],
             ct).ConfigureAwait(false);
 
@@ -176,10 +197,16 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(targets, declined),
-            Notes = ObjPlanNotes.For(
-                discovered, unrecognised, git.Tracked.Count, git.Unanswered.Count,
-                measured.Note, BuildRunningProcessNote()),
+            ProtectedPaths = BuildProtectedPaths(targets, declined, live),
+            Notes = SourceTreePlanNotes.For(
+                discovered,
+                $"'{DirectoryName}'",
+                ".NET intermediate build output",
+                unrecognised,
+                live,
+                measured.Note,
+                BuildRunningProcessNote(),
+                ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count)),
             Fallback = measured.Fallback,
         };
     }
@@ -194,13 +221,15 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// <c>bin</c> (the sibling that looks equivalent and is not — it can hold hand-placed native
     /// dependencies and copied assets that no build reproduces, which is why it is out of scope).
     ///
-    /// Every declined candidate is protected by name as well. They are directories of the same
-    /// name, often in the same tree, separated from the targets only by evidence — which is exactly
-    /// the situation where an over-broad rule takes one with the other.
+    /// Every declined candidate is protected by name as well, and so is every directory held back
+    /// because something is using it. They are directories of the same name, often in the same tree,
+    /// separated from the targets only by evidence — which is exactly the situation where an
+    /// over-broad rule takes one with the other.
     /// </summary>
     private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         IReadOnlyList<RecognisedObj> targets,
-        IReadOnlyList<string> declined) => Protect(
+        IReadOnlyList<string> declined,
+        LiveTreeVetoResult live) => Protect(
     [
         .. targets.Select(t => t.Project).SelectMany(project =>
         {
@@ -214,40 +243,6 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             };
         }),
         .. declined.Select(path => (path, "Not recognised as .NET intermediate build output, so it is left alone.")),
+        .. live.Vetoed.Select(v => (v.Directory, LiveTreeVeto.ProtectedReason)),
     ]);
-
-    /// <summary>
-    /// Roughly when this project was last built, for §7's age column.
-    ///
-    /// The newest of the directory's immediate entries. That covers the restore manifest and the
-    /// generated imports, which are rewritten on every restore, and the per-configuration
-    /// directories, whose timestamps move as build output is added and removed. It deliberately
-    /// does not walk the tree: this runs per project across a whole source root, and the age column
-    /// exists to tell a year-old project from this morning's — a resolution that does not justify
-    /// enumerating hundreds of thousands of files to sharpen.
-    /// </summary>
-    private static DateTime? LastBuilt(string directory, CancellationToken ct)
-    {
-        try
-        {
-            DateTime? newest = null;
-
-            foreach (var entry in new DirectoryInfo(LongPath.Extended(directory)).EnumerateFileSystemInfos())
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (newest is null || entry.LastWriteTimeUtc > newest)
-                {
-                    newest = entry.LastWriteTimeUtc;
-                }
-            }
-
-            return newest;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // No timestamp is a real answer, and §7 renders it as unknown rather than as an age.
-            return null;
-        }
-    }
 }
