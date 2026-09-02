@@ -56,18 +56,28 @@ public class ParallelEnumerationScannerTests
     }
 
     /// <summary>
-    /// This route cannot see allocated size, and says so rather than implying precision. The flag
-    /// is what stops a caller treating a walked figure as an exact reclaim promise.
+    /// This route does not hedge its sizes, and that reverses what it used to do.
+    ///
+    /// <para>The flag meant "this could not see allocated bytes", which was true and, once
+    /// <see cref="ScanSize.Reclaimable"/> became the logical figure, no longer relevant to the
+    /// number anybody reads: the walk sums file lengths and file lengths are what gets reported, to
+    /// the byte. §6.3 makes this the ordinary route, so leaving the flag on would have printed
+    /// "about" in front of every size on an unelevated machine — a qualification with nothing
+    /// behind it, which is the opposite of what the flag exists for.</para>
+    ///
+    /// <para>What still carries it is a figure that is a forecast: conda's dry run, and
+    /// <see cref="HardLinkAwareScanner"/>'s sole-link sum.</para>
     /// </summary>
     [Fact]
-    public async Task MarksItsSizesApproximate()
+    public async Task DoesNotHedgeSizesItMeasuredExactly()
     {
         using var temp = new TempDirectory();
         temp.CreateFile(1024, "cache", "a.bin");
 
         var result = await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"));
 
-        Assert.True(result.Size.IsApproximate);
+        Assert.False(result.Size.IsApproximate);
+        Assert.Equal(1024, result.Size.Reclaimable);
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
     }
 

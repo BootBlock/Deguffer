@@ -77,13 +77,14 @@ public enum FallbackReason
 
 public static class FallbackReasonText
 {
-    /// <summary>The sentence shown beside a slow scan, or null when the fast path was used.</summary>
+    /// <summary>The sentence shown beside a walked scan, or null when the table answered.</summary>
     public static string? Describe(FallbackReason reason) => reason switch
     {
         FallbackReason.None => null,
         FallbackReason.NotElevated =>
-            "Scanned by walking directories, which is slower. Run Deguffer as administrator to read the "
-            + "file table directly.",
+            "Scanned by walking directories. Running Deguffer as administrator lets it read the volume's "
+            + "file table instead, which answers a location without walking it — though building the "
+            + "table costs one pass over the whole volume first.",
         FallbackReason.NotNtfsVolume =>
             "Scanned by walking directories: this volume is not NTFS, so it has no file table to read.",
         FallbackReason.VolumeNotAddressable =>

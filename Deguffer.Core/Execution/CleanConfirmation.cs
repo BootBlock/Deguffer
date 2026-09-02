@@ -6,8 +6,8 @@ namespace Deguffer.Core.Execution;
 /// <summary>One line of a <see cref="CleanConfirmation"/>: a named subject and what it frees.</summary>
 /// <param name="ProviderName">The named cause, as the preview row calls it (§2).</param>
 /// <param name="SizeLabel">
-/// What removing it is estimated to reclaim, already qualified where the measurement could not
-/// establish it exactly.
+/// What removing it is estimated to reclaim, already qualified where the figure is a forecast
+/// rather than a measurement.
 /// </param>
 public sealed record CleanConfirmationItem(string ProviderName, string SizeLabel);
 

@@ -10,7 +10,10 @@ namespace Deguffer.Core.Execution;
 ///
 /// <list type="bullet">
 /// <item><see cref="FallbackReason.NotElevated"/> — a size that had to be walked for rather than
-/// read from the file table. The number is right; getting it was slow.</item>
+/// read from the file table. The number is right, and the offer is not a promise of a quicker run:
+/// the table answers a location without walking it, and building it costs one pass over the volume,
+/// which on a machine with several volumes and a modest source tree came to more than it saved. See
+/// <see cref="Deguffer.App.Views.AboutPage"/>'s scan-mode note for what was measured.</item>
 /// <item><see cref="CleanupPlan.RequiresElevation"/> — a step that cannot be carried out at all,
 /// whatever route measured it. The Windows directory and <c>%PROGRAMDATA%</c> are where this
 /// arises.</item>

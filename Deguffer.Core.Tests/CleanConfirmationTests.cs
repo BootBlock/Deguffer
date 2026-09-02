@@ -130,10 +130,9 @@ public sealed class CleanConfirmationTests
     }
 
     /// <summary>
-    /// §5.5's fallback walk cannot tell allocated bytes from logical ones, and the qualifier is the
-    /// difference between reporting a measurement and promising what the deletion returns. It has
-    /// to survive both the line and the total, since a total is only as exact as its least exact
-    /// part.
+    /// A forecast is qualified, and the qualifier is the difference between reporting a measurement
+    /// and repeating what a tool said it expects to free. It has to survive both the line and the
+    /// total, since a total is only as exact as its least exact part.
     /// </summary>
     [Fact]
     public void KeepsTheQualifierOnAMeasurementThatCouldNotBeExact()

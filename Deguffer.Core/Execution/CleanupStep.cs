@@ -19,7 +19,11 @@ public abstract record CleanupStep
     /// </summary>
     public ScanSize Estimated { get; init; }
 
-    /// <summary>The single number to show and to subtract: what the volume actually gives back.</summary>
+    /// <summary>
+    /// The single number to show and to subtract. It is the logical figure, which is not the same
+    /// as what the volume gives back — see <see cref="ScanSize.Reclaimable"/> for the measurements
+    /// that chose it over the allocated one, and for where the honest free-space answer comes from.
+    /// </summary>
     public long EstimatedBytes => Estimated.Reclaimable;
 
     /// <summary>

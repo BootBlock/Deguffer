@@ -380,8 +380,9 @@ public sealed partial class CleanViewModel : ObservableObject
         if (!ElevatedRelaunch.TryRelaunch())
         {
             Report(
-                "Deguffer is still running without administrator rights, so scans use the slower "
-                + "directory walk. Everything else works exactly the same.",
+                "Deguffer is still running without administrator rights, so scans measure by walking "
+                + "directories and any step needing those rights cannot be carried out. Everything else "
+                + "works exactly the same.",
                 InfoBarSeverity.Warning);
             return;
         }

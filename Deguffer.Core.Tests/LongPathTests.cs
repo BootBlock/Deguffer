@@ -117,4 +117,63 @@ public class LongPathTests
         Assert.True(LongPath.DirectoryExists(deep));
         Assert.True(LongPath.FileExists(file));
     }
+
+    /// <summary>
+    /// <see cref="LongPath.IsReparsePoint"/> fails closed on a path whose attributes cannot be
+    /// read, and the reading that matters is that no caller ever sees it do so.
+    ///
+    /// <para>Establishing the refusal at all took measuring, because the obvious denials do not
+    /// produce it. NTFS answers <c>GetFileAttributes</c> out of the parent directory's own index
+    /// whenever the caller may list the parent, so denying the target every right including
+    /// <c>FILE_READ_ATTRIBUTES</c> leaves the attributes readable; and denying the parent
+    /// everything leaves them readable too, because the target still answers for itself. Only both
+    /// ends together refuse — which is what <see cref="DeniedDirectory.WithUnreadableAttributes"/>
+    /// arranges.</para>
+    ///
+    /// <para>In exactly that condition <see cref="LongPath.DirectoryExists"/> answers false, and
+    /// that is the whole reachability argument: it is the same attribute query, and
+    /// <c>Directory.Exists</c> swallows the same failure. Every caller that turns a true here into
+    /// a sentence about a link asks this first and takes the absent branch instead. The pairing is
+    /// asserted rather than reasoned about, because a change to either half is what would let the
+    /// fail-closed answer out.</para>
+    /// </summary>
+    [Fact]
+    public void FailsClosedOnAPathItCannotReadWhileTheExistenceCheckAheadOfItFailsToo()
+    {
+        using var temp = new TempDirectory();
+
+        var directory = Path.Combine(temp.Path, "cache");
+        Directory.CreateDirectory(directory);
+
+        Assert.False(LongPath.IsReparsePoint(directory));
+        Assert.True(LongPath.DirectoryExists(directory));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(directory);
+
+        Assert.True(LongPath.IsReparsePoint(directory));
+        Assert.False(LongPath.DirectoryExists(directory));
+    }
+
+    /// <summary>
+    /// The one refusal that leaves the attributes readable, and the reason the §5.3 fixture next to
+    /// this one cannot reach <see cref="LongPath.IsReparsePoint"/>'s closed branch.
+    ///
+    /// A directory the account may not list is the ordinary shape of an access refusal in this
+    /// suite, and it says nothing at all about the attribute read: the right to list a directory
+    /// and the right to read its own attributes are separate, and only the second is what
+    /// <c>GetFileAttributes</c> needs.
+    /// </summary>
+    [Fact]
+    public void ADirectoryTheAccountMayNotListStillAnswersForItsOwnAttributes()
+    {
+        using var temp = new TempDirectory();
+
+        var directory = Path.Combine(temp.Path, "cache");
+        Directory.CreateDirectory(directory);
+
+        using var denied = new DeniedDirectory(directory);
+
+        Assert.False(LongPath.IsReparsePoint(directory));
+        Assert.True(LongPath.DirectoryExists(directory));
+    }
 }

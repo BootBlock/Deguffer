@@ -92,8 +92,8 @@ public sealed class PnpmStoreProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        // Logical rather than the reclaimable (allocated) figure, which rounds to the volume's
-        // cluster size and would make this a claim about the disk the test runs on.
+        // Logical, which is also the reclaimable figure. Allocated rounds to the volume's cluster
+        // size and would make this a claim about the disk the test runs on.
         Assert.Equal(4096, plan.Estimated.Logical);
         Assert.True(plan.Estimated.IsApproximate);
     }

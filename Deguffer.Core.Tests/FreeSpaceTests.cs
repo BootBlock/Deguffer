@@ -67,19 +67,29 @@ public class FreeSpaceTests
         Assert.Equal("-1.5 MB", FreeSpace.Format(-1536 * 1024));
 
     /// <summary>
-    /// §5.5's fallback sums file lengths and cannot see how many clusters anything occupies, so
-    /// its figure is not the exact reclaim the fast path produces. <see cref="ScanSize"/> has
-    /// carried that distinction since the scanner landed with nothing saying it out loud.
+    /// A figure a tool produced about its own future behaviour is hedged. Conda's dry run is the
+    /// caller: it says what its clean expects to free, and its next run may disagree.
     /// </summary>
     [Fact]
-    public void SaysWhenASizeCameFromAMeasurementThatCouldNotSeeAllocatedBytes() =>
+    public void SaysWhenASizeIsAPredictionRatherThanAMeasurement() =>
         Assert.Equal("about 1.5 MB", FreeSpace.Format(ScanSize.Approximate(1536 * 1024)));
 
     /// <summary>
-    /// An exact measurement is stated exactly, and it is the allocated figure — what the volume
-    /// gives back, not what re-downloading would cost.
+    /// §5.5's fallback walk is <em>not</em> hedged, and this is the assertion that changed when
+    /// <see cref="ScanSize.Reclaimable"/> became the logical figure. The walk reports file lengths;
+    /// file lengths are now the number reported; so the walk measures the reported number exactly,
+    /// and "about" would be a qualification on every unelevated preview with nothing behind it.
     /// </summary>
     [Fact]
-    public void StatesAnExactlyMeasuredSizeAsTheAllocatedFigure() =>
-        Assert.Equal("1.5 MB", FreeSpace.Format(new ScanSize(1536 * 1024, 9_000_000)));
+    public void DoesNotHedgeAWalkedSizeBecauseTheWalkMeasuresTheReportedNumberExactly() =>
+        Assert.Equal("1.5 MB", FreeSpace.Format(ScanSize.FromLengths(1536 * 1024)));
+
+    /// <summary>
+    /// The number stated is the logical one. The allocated figure is deliberately different here,
+    /// so this fails rather than passing by coincidence if the two axes are ever swapped back —
+    /// <see cref="ScanSize.Reclaimable"/> carries the three measurements that decided it.
+    /// </summary>
+    [Fact]
+    public void StatesAMeasuredSizeAsTheLogicalFigure() =>
+        Assert.Equal("8.6 MB", FreeSpace.Format(new ScanSize(1536 * 1024, 9_000_000)));
 }
