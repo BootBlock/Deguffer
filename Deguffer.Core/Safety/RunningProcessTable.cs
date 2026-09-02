@@ -3,10 +3,15 @@ using System.Runtime.InteropServices;
 
 namespace Deguffer.Core.Safety;
 
+/// <param name="Id">
+/// The operating system's own identifier for it, which is the only thing that tells one process
+/// from another. An image path does not: several processes run the same executable, and under a
+/// shared host that executable is not even the application's.
+/// </param>
 /// <param name="Name">The process name, for telling the user what to close.</param>
 /// <param name="ImagePath">Where its executable lives, or null where that could not be read.</param>
 /// <param name="CurrentDirectory">Its working directory, or null where that could not be read.</param>
-internal sealed record RunningProcess(string Name, string? ImagePath, string? CurrentDirectory);
+internal sealed record RunningProcess(int Id, string Name, string? ImagePath, string? CurrentDirectory);
 
 /// <param name="Processes">Every process this account was allowed to look at.</param>
 /// <param name="CurrentDirectoriesReadable">
@@ -92,6 +97,7 @@ internal static partial class RunningProcessTable
                 try
                 {
                     processes.Add(new RunningProcess(
+                        id,
                         name,
                         ImagePathOf(handle),
                         readable ? CurrentDirectoryOf(handle) : null));

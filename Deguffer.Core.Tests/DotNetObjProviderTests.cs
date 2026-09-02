@@ -369,6 +369,12 @@ public sealed class DotNetObjProviderTests : IDisposable
     /// <summary>
     /// §7's age column: one row per project, so a project untouched for a year is distinguishable
     /// from this morning's.
+    ///
+    /// The output is aged a year and the directory holding it with it, then one file is rewritten a
+    /// month ago — which is a rebuild that changed a file without changing the set of files, and
+    /// which moves nothing but that file's own timestamp. The step must report the rebuild. See
+    /// <see cref="DirectoryAgeTests"/> for the rule's other half, which this fixture's aged
+    /// directory would otherwise hide.
     /// </summary>
     [Fact]
     public async Task DatesEachProjectByItsMostRecentBuildOutput()
@@ -382,11 +388,16 @@ public sealed class DotNetObjProviderTests : IDisposable
             entry.LastWriteTimeUtc = stale;
         }
 
+        Directory.SetLastWriteTimeUtc(obj, stale);
+
+        var rebuilt = DateTime.UtcNow.AddDays(-30);
+        File.SetLastWriteTimeUtc(Path.Combine(obj, "project.assets.json"), rebuilt);
+
         var plan = await CreateProvider().PlanAsync();
         var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
 
         Assert.NotNull(step.LastWritten);
-        Assert.Equal(stale, step.LastWritten!.Value, TimeSpan.FromSeconds(5));
+        Assert.Equal(rebuilt, step.LastWritten!.Value, TimeSpan.FromSeconds(5));
     }
 
     /// <summary>

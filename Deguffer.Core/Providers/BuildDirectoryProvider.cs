@@ -136,7 +136,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 .. live.Cleared.Select(target => new DeletionTarget(
                     target.Path,
                     $"{Subject} for {Path.GetFileName(target.Project)}",
-                    BuildDirectoryAge.Of(target.Path, ct))),
+                    DirectoryAge.Of(target.Path, ct))),
             ],
             ct).ConfigureAwait(false);
 

@@ -20,4 +20,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      The process table is internal because nothing outside Core has any business reading it, and
+      the safety rule that decides which of its rows count as evidence is a pure function over it.
+      Driving that rule from outside would mean starting a second process at this one's own image
+      path, which is not something a test can arrange. So the test reaches the function instead.
+    -->
+    <InternalsVisibleTo Include="Deguffer.Core.Tests" />
+  </ItemGroup>
+
 </Project>

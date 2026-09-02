@@ -199,6 +199,70 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// The disagreement discovery is <em>meant</em> to have, and the one this class exists to keep
+    /// visible: below a directory the account may not list, the walk finds nothing and the index
+    /// finds everything.
+    ///
+    /// <para>The walk has to enumerate, and an enumeration that is refused yields nothing rather
+    /// than a partial view, so the whole subtree is out of its reach. The MFT reads file records and
+    /// no ACL guards those. Reach is therefore a property of the token, not of the rules, and
+    /// <see cref="SourceTreeBoundary"/> cannot equalise it — it judges a candidate by name, and a
+    /// name says nothing about who may read it.</para>
+    ///
+    /// <para>Pinned rather than left to be discovered, in the same spirit as the resident-file case
+    /// above. The class's own claim used to be that the routes cannot differ at all, and a reader had
+    /// no way to learn otherwise.</para>
+    /// </summary>
+    [Fact]
+    public async Task OnlyTheIndexReachesBelowADirectoryTheAccountMayNotList()
+    {
+        using var temp = new TempDirectory();
+
+        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "src",
+            new TreeDirectory(
+                "restricted",
+                new TreeDirectory("Example", new TreeDirectory("obj", new TreeFile("Example.dll", 128))))));
+
+        using var denied = new DeniedDirectory(Path.Combine(root, "restricted"));
+
+        var walked = await Discovery(Walking()).FindAsync([root]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+
+        Assert.Empty(walked.Candidates);
+        Assert.Equal([Path.Combine(root, "restricted", "Example", "obj")], indexed.Candidates);
+    }
+
+    /// <summary>
+    /// The extra reach comes with no extra licence, which is the half that carries the safety.
+    ///
+    /// Inside the same unreadable subtree sit the three things the boundary refuses — a directory
+    /// under <c>.git</c>, one under <c>node_modules</c>, and one nested inside another candidate —
+    /// and the index must refuse all three there exactly as it refuses them anywhere else. The rules
+    /// are applied by name, and a name is readable whatever the ACL says, so an unreadable ancestor
+    /// must not be the one place a rule stops running.
+    /// </summary>
+    [Fact]
+    public async Task TheIndexStillAppliesEveryBoundaryRuleInsideAnUnreadableSubtree()
+    {
+        using var temp = new TempDirectory();
+
+        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "src",
+            new TreeDirectory(
+                "restricted",
+                new TreeDirectory("Example", new TreeDirectory("obj", new TreeDirectory("obj"))),
+                new TreeDirectory(".git", new TreeDirectory("obj")),
+                new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj"))))));
+
+        using var denied = new DeniedDirectory(Path.Combine(root, "restricted"));
+
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+
+        Assert.Equal([Path.Combine(root, "restricted", "Example", "obj")], indexed.Candidates);
+    }
+
+    /// <summary>
     /// A discovery looking for <c>obj</c> alone, which is what these tests compare the two routes
     /// over. The names a discovery is given are part of what defines its answer, so both routes get
     /// the same ones.

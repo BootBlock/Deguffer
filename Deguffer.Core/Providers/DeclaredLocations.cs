@@ -202,40 +202,25 @@ public static class DeclaredLocations
     }
 
     /// <summary>
-    /// §7's age. For a file its own timestamp, which for <c>MEMORY.DMP</c> is the moment the machine
-    /// stopped. For a directory the newest of its own timestamp and its immediate children's.
+    /// §7's age. A directory is dated by <see cref="DirectoryAge"/>, the one rule every provider
+    /// asking this question uses. A file is dated by its own timestamp, which for <c>MEMORY.DMP</c>
+    /// is the moment the machine stopped.
     ///
-    /// The Recycle Bin could use a directory's own timestamp because nothing in a bin is ever
-    /// rewritten in place. These are logs, and a log is appended to — which moves the file and
-    /// leaves the parent untouched, so the directory alone would report a servicing log being
-    /// written right now as months old. One level is enough wherever a location's own children are
-    /// the things being written: the logs and dumps sit directly inside, and where a report is a
-    /// directory of its own its arrival moves the parent anyway. Where that does not hold, the
-    /// location says so and is never asked — see <see cref="DeclaredLocation.ReportsAge"/>.
+    /// One level is enough for the locations declared here because their own children are the things
+    /// being written: the logs and dumps sit directly inside, and where a report is a directory of
+    /// its own, its arrival moves the parent. Where that does not hold, the location says so and is
+    /// never asked — see <see cref="DeclaredLocation.ReportsAge"/>.
     /// </summary>
     private static DateTime? LastWritten(string path, bool isFile)
     {
-        var extended = LongPath.Extended(path);
+        if (!isFile)
+        {
+            return DirectoryAge.Of(path);
+        }
 
         try
         {
-            if (isFile)
-            {
-                return new FileInfo(extended).LastWriteTimeUtc;
-            }
-
-            var directory = new DirectoryInfo(extended);
-            var newest = directory.LastWriteTimeUtc;
-
-            foreach (var child in directory.EnumerateFileSystemInfos())
-            {
-                if (child.LastWriteTimeUtc > newest)
-                {
-                    newest = child.LastWriteTimeUtc;
-                }
-            }
-
-            return newest;
+            return new FileInfo(LongPath.Extended(path)).LastWriteTimeUtc;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {

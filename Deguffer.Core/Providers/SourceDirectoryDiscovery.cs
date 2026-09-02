@@ -57,8 +57,9 @@ public sealed class SourceDirectoryDiscovery
     /// restated. And what counts as "inside another candidate" is a property of the set rather than
     /// of one name: a pass that knows about <c>node_modules</c> stops there and never offers the
     /// <c>build</c> directory of a package inside it, where a pass that does not walks straight in.
-    /// Both routes are given this set, so they cannot disagree — see
-    /// <see cref="SourceTreeBoundary.WouldBeFoundByWalking"/>.</para>
+    /// Both routes are given this set, so neither applies a rule the other does not — which is as
+    /// far as the two can be held together, and <see cref="SourceTreeBoundary"/> says where that
+    /// stops.</para>
     /// </summary>
     public void Include(IReadOnlyList<string> names)
     {
@@ -138,11 +139,13 @@ public sealed class SourceDirectoryDiscovery
                 }
 
                 // The index answers with every directory of that name on the volume, narrowed to
-                // this root. Narrowing is not the whole of the walk's behaviour, and the difference
-                // is not cosmetic: without this an elevated run offers directories inside .git and
-                // node_modules, and nested ones already covered by their own parent.
+                // this root. Narrowing is not the whole of the boundary, and the difference is not
+                // cosmetic: without this an elevated run offers directories inside .git and
+                // node_modules, and nested ones already covered by their own parent. What the
+                // filter cannot restore is the walk's reach, which is a property of the token —
+                // SourceTreeBoundary says why, and says why that is reach rather than licence.
                 candidates.AddRange(
-                    indexed.Where(path => SourceTreeBoundary.WouldBeFoundByWalking(path, root, names)));
+                    indexed.Where(path => SourceTreeBoundary.IsInsideTheSearch(path, root, names)));
             }
 
             if (walked)
