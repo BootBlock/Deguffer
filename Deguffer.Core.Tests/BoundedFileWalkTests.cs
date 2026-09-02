@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -63,6 +64,177 @@ public sealed class BoundedFileWalkTests : IDisposable
 
         Assert.All(Visited(LongPath.Extended(root)), p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
         Assert.All(Visited(root), p => Assert.False(p.StartsWith(@"\\?\", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The state-carrying overload hands each directory back whatever its parent chose for it, which
+    /// is how a caller building a structure keeps its place. Nothing else in the callback says which
+    /// directory is being read, so a state delivered to the wrong child produces a tree that is
+    /// entirely well formed and describes a different disk.
+    /// </summary>
+    [Fact]
+    public void CarriesTheCallersStateDownToTheChildItWasChosenFor()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(16, "cache", "one", "a.bin");
+        _temp.CreateFile(16, "cache", "one", "deeper", "b.bin");
+        _temp.CreateFile(16, "cache", "two", "c.bin");
+
+        var seen = new ConcurrentBag<(string State, string Entries)>();
+
+        BoundedFileWalk.Visit(
+            root,
+            "cache",
+            (state, contents, descend) =>
+            {
+                seen.Add((state, string.Join(", ", contents.Entries.Select(e => e.Name).Order(StringComparer.Ordinal))));
+
+                foreach (var entry in contents.Entries)
+                {
+                    if (entry is DirectoryInfo directory)
+                    {
+                        descend(directory, directory.Name);
+                    }
+                }
+            },
+            () => { },
+            default);
+
+        Assert.Equal(
+            [("cache", "one, two"), ("deeper", "b.bin"), ("one", "a.bin, deeper"), ("two", "c.bin")],
+            seen.Order());
+    }
+
+    /// <summary>
+    /// A link is reported and is never something the caller may descend into. The rule lives in the
+    /// walk rather than in each of its three callers, so it is asserted here: the junction is present
+    /// among the links, and the file inside its target is visited exactly once — through the target's
+    /// own place in the tree, and not again through the name pointing at it.
+    /// </summary>
+    [Fact]
+    public void ReportsALinkSeparatelySoNoCallerCanDescendThroughIt()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var real = _temp.CreateDirectory("cache", "content-v2");
+        _temp.CreateFile(32, "cache", "content-v2", "inside.bin");
+
+        Directory.CreateSymbolicLink(Path.Combine(root, "shortcut"), real);
+
+        var entries = new ConcurrentBag<string>();
+        var links = new ConcurrentBag<string>();
+
+        BoundedFileWalk.Visit<byte>(
+            root,
+            0,
+            (_, contents, descend) =>
+            {
+                foreach (var entry in contents.Entries)
+                {
+                    entries.Add(entry.Name);
+
+                    if (entry is DirectoryInfo directory)
+                    {
+                        descend(directory, 0);
+                    }
+                }
+
+                foreach (var link in contents.Links)
+                {
+                    links.Add(link.Name);
+                }
+            },
+            () => { },
+            default);
+
+        Assert.Equal(["shortcut"], links.Order(StringComparer.Ordinal));
+        Assert.Equal(["content-v2", "inside.bin"], entries.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.3 again, from the other side. A directory that could not be listed is still skipped
+    /// silently, but it is now distinguishable from one that is genuinely empty — without that, a
+    /// caller reporting a total has no way to know the total is a lower bound, and reports it as a
+    /// measurement.
+    /// </summary>
+    [Fact]
+    public void SaysWhichDirectoryItWasRefusedRatherThanReportingItEmpty()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateDirectory("cache", "empty");
+        var refused = _temp.CreateDirectory("cache", "refused");
+        _temp.CreateFile(64, "cache", "refused", "unreachable.bin");
+
+        using var denied = new DeniedDirectory(refused);
+
+        var outcomes = new ConcurrentBag<(string Directory, bool Refused, int Entries)>();
+
+        BoundedFileWalk.Visit(
+            root,
+            "cache",
+            (state, contents, descend) =>
+            {
+                outcomes.Add((state, contents.WasRefused, contents.Entries.Count));
+
+                foreach (var entry in contents.Entries)
+                {
+                    if (entry is DirectoryInfo directory)
+                    {
+                        descend(directory, directory.Name);
+                    }
+                }
+            },
+            () => { },
+            default);
+
+        Assert.Equal(
+            [("cache", false, 2), ("empty", false, 0), ("refused", true, 0)],
+            outcomes.Order());
+    }
+
+    /// <summary>
+    /// §6.3 for the state-carrying overload, asserted the same discriminating way as for the plain
+    /// one: what a long-path fixture can actually prove is that the prefix propagates, not that a
+    /// deep tree was reached. Both overloads run the same traversal, and this is the one three
+    /// callers now use.
+    /// </summary>
+    [Fact]
+    public void CarriesTheFormOfTheRootDownToEveryDirectoryTheStatefulWalkVisits()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(64, "cache", "top.bin");
+        _temp.CreateFile(64, "cache", "nested", "deeper", "leaf.bin");
+
+        Assert.All(Reached(LongPath.Extended(root)), p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
+        Assert.All(Reached(root), p => Assert.False(p.StartsWith(@"\\?\", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// Every entry the state-carrying walk hands back, by the path it was handed back under.
+    /// </summary>
+    private static List<string> Reached(string root)
+    {
+        var seen = new ConcurrentBag<string>();
+
+        BoundedFileWalk.Visit<byte>(
+            root,
+            0,
+            (_, contents, descend) =>
+            {
+                foreach (var entry in contents.Entries)
+                {
+                    seen.Add(entry.FullName);
+
+                    if (entry is DirectoryInfo directory)
+                    {
+                        descend(directory, 0);
+                    }
+                }
+            },
+            () => { },
+            default);
+
+        Assert.Equal(4, seen.Count);
+        return [.. seen];
     }
 
     private static List<string> Visited(string root)

@@ -37,8 +37,14 @@ public static class TileRasteriser
     private const double Ambient = 0.13;
     private const double Diffuse = 0.87;
 
-    // The light source van Wijk's paper uses, and every implementation after it: up and to the
-    // left, almost head-on.
+    // Van Wijk's light, l = [1, 2, 10] normalised, with the two lateral components negated because
+    // a bitmap's y axis runs downwards and the paper's does not. Negating both puts the key light
+    // above and to the left, which is where every implementation of this puts it and where a reader
+    // expects a highlight to be.
+    //
+    // The model is ambient plus Lambertian diffuse, and nothing else. There is no specular term:
+    // the paper is explicit that "a simple model, i.e. diffuse reflection, suffices", and a
+    // highlight would read as a material rather than as a shape.
     private const double LightX = -0.09759;
     private const double LightY = -0.19518;
     private const double LightZ = 0.9759;

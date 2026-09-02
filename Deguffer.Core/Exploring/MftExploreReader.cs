@@ -41,8 +41,14 @@ internal static class MftExploreReader
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
 
-        var count = (int)Math.Min(source.RecordCount, int.MaxValue);
+        var records = (int)Math.Min(source.RecordCount, int.MaxValue);
         var root = (int)MftRecord.RootRecordNumber;
+
+        // Never smaller than the reserved block, whatever the source claims to hold. The root is at
+        // a fixed record number and is written below whether or not it parsed, so a table reporting
+        // fewer records than that would otherwise index past the end of every array here. Slots
+        // past the real count are simply absent, and an absent slot contributes nothing.
+        var count = Math.Max(records, (int)MftRecord.ReservedRecordCount);
 
         var names = new string[count];
         var parents = new int[count];
@@ -58,7 +64,7 @@ internal static class MftExploreReader
 
         var couldNotReadWholeTable = !MftRecordStream.TryReadAll(
             source,
-            count,
+            records,
             (number, outcome, in record) =>
             {
                 if ((number & (ProgressInterval - 1)) == 0)
@@ -72,7 +78,23 @@ internal static class MftExploreReader
                     // nothing; an unreadable one holds something this cannot name or place, and
                     // there is no parent to attribute it to — so the loss is declared once, on the
                     // root, rather than guessed at somewhere in the middle of the tree.
-                    sawUnreadableRecord |= outcome == MftParseOutcome.Unreadable;
+                    //
+                    // Except across records 12 to 15, which are not damage but the format. NTFS
+                    // holds those four back for future metadata, marks them in use, and gives them
+                    // neither a $FILE_NAME nor an $ATTRIBUTE_LIST — precisely the shape the parser
+                    // has every reason to call unreadable, and precisely what it reports on every
+                    // NTFS volume ever formatted. Without this carve-out the tree would say "some
+                    // of this drive could not be read" about every drive, always, which is a
+                    // caveat carrying no information at all.
+                    //
+                    // This is the same fact that took MftVolumeIndexBuilder's whole fast path out
+                    // for six weeks. The bound is both-ended there for a reason and it is
+                    // both-ended here for the same one: records 0 to 11 are the named metadata
+                    // files, and an unreadable one of those is real damage.
+                    sawUnreadableRecord |= outcome == MftParseOutcome.Unreadable
+                        && (number < MftRecord.FirstUnnamedReservedRecord
+                            || number >= MftRecord.ReservedRecordCount);
+
                     return true;
                 }
 

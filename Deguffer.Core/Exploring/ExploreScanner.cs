@@ -98,9 +98,12 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExplore
             {
                 // The volume went away mid-scan, or the driver refused a read. Neither should take
                 // the window down, and the walk still answers.
-                return Walk(root, FallbackReason.MasterFileTableIncomplete, progress, ct);
             }
         }
+
+        // Outside the using deliberately. The walk can run for minutes on a full drive, and holding
+        // a raw volume handle open across it serves nothing once the table has been given up on.
+        return Walk(root, FallbackReason.MasterFileTableIncomplete, progress, ct);
     }
 
     private static ExploreTree Read(

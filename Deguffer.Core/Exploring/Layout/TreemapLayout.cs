@@ -4,11 +4,20 @@ namespace Deguffer.Core.Exploring.Layout;
 /// Squarified treemap layout: Bruls, Huizing and van Wijk, <i>Squarified Treemaps</i>, Proc. Joint
 /// Eurographics/IEEE TCVG Symposium on Visualization, 2000, pp. 33–42.
 ///
-/// <para>Squarified rather than the slice-and-dice original because area is only comparable when
-/// the rectangles are roughly square: the paper measured slice-and-dice reaching a 304:1 aspect
-/// ratio across 100 items, at which point a thin sliver and a fat block of equal area do not look
-/// equal at all. The cost is stated in the paper and is real — "the relative ordering of siblings is
-/// lost" — which is why this is the layout for a finished scan rather than a running one.</para>
+/// <para>Squarified rather than the slice-and-dice original because slice-and-dice reaches a 304:1
+/// aspect ratio across 100 items, at which point a thin sliver and a fat block of equal area do not
+/// look equal at all.</para>
+///
+/// <para>Note what that argument is <em>not</em>. The original paper justifies squares on the
+/// grounds that "comparison of the size of rectangles is easier when their aspect ratios are
+/// similar", and Kong, Heer and Agrawala (IEEE TVCG 16(6), 2010) measured that and found the
+/// opposite: two squares are compared about as badly as two 9:2 slivers, and accuracy is best
+/// around 3:2 and when the two rectangles differ from each other. Their conclusion is that
+/// squarification helps because it avoids the extremes, and partly because it never quite achieves
+/// its own stated objective. So this is here for the 304:1 case, not for the squares.</para>
+///
+/// <para>The cost is stated in the paper and is real — "the relative ordering of siblings is lost"
+/// — which is why this is the layout for a finished scan rather than a running one.</para>
 ///
 /// <para>The layout is iterative throughout. A volume's tree can be arbitrarily deep, and a
 /// recursive layout over a real <c>node_modules</c> is a stack overflow in a repaint handler.</para>
@@ -109,20 +118,17 @@ public static class TreemapLayout
             var side = Math.Min(remaining.Width, remaining.Height);
             var row = TakeRow(tree, children, index, side, scale);
 
-            if (row.Count == 0)
-            {
-                break;
-            }
-
-            var thickness = (float)(row.Area / side);
-
-            // Everything from here on is thinner than the floor. The children are in decreasing
-            // order, so no later one can be larger — stop, and say how much was left out.
-            if (thickness < limits.MinimumTileSize)
+            // Two ways to reach the end of what can be drawn: the next child has no area at all, or
+            // the row it would form is thinner than the floor. Both leave real bytes undrawn, and
+            // both take the same exit — a blank corner of a treemap reads as free space rather than
+            // as detail withheld, which is the opposite of what happened.
+            if (row.Count == 0 || (float)(row.Area / side) < limits.MinimumTileSize)
             {
                 Aggregate(tree, children[index..], remaining, depth, tiles);
                 return;
             }
+
+            var thickness = (float)(row.Area / side);
 
             LayRow(tree, children.Slice(index, row.Count), row.Area, thickness, ref remaining, depth, limits, tiles, pending);
             index += row.Count;
@@ -271,6 +277,13 @@ public static class TreemapLayout
             bytes += tree.SizeOf(node);
         }
 
+        // Nothing to stand for. A directory whose remaining children are all empty would otherwise
+        // get a grey block over the space they do not occupy, which invents an occupant.
+        if (bytes == 0)
+        {
+            return;
+        }
+
         tiles.Add(new ExploreTile(
             ExploreTile.Aggregated, depth, bytes, area.X, area.Y, area.Width, area.Height));
     }
@@ -278,6 +291,14 @@ public static class TreemapLayout
     /// <summary>
     /// The border a parent keeps around its children, or zero where the rectangle has no room to
     /// spare. Two pixels of frame inside a six-pixel tile leaves nothing to draw the children in.
+    ///
+    /// <para>The frame is not free, and the cost is a real distortion rather than lost pixels.
+    /// Barlow and Neville (Proc. IEEE InfoVis 2001) put it exactly: with an offset, a rectangle's
+    /// area is proportional to its size <em>relative to all its ancestors</em>, so two equal nodes
+    /// at different depths get different areas. One pixel per level keeps that within a rounding
+    /// error at the sizes drawn here, and it cannot be removed without also removing the only cue
+    /// that says where one directory ends and the next begins. Lü and Fogarty's two-stage layout
+    /// (Graphics Interface 2008) is the correction, and it is a different algorithm.</para>
     /// </summary>
     private static float Inset(float width, float height, LayoutLimits limits) =>
         Math.Min(width, height) >= limits.MinimumTileSize * 4 ? 1f : 0f;

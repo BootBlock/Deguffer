@@ -103,6 +103,16 @@ public sealed class ExploreTree
     ///
     /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
     /// here combined, and the UI asks for one only when the user points at something.</para>
+    ///
+    /// <para>Throws for a node whose parent chain does not reach the root. Such nodes exist: the
+    /// file-table route sizes its arrays to the whole record count and most of those slots are
+    /// never filled, so their parent is a default zero and the walk would never terminate. Every
+    /// node reachable through <see cref="ChildrenOf"/> from the root is safe by construction, and
+    /// that is the only way anything gets one to pass here.</para>
+    ///
+    /// <para>Throwing rather than answering, because the caller wants this for a label today and to
+    /// open a folder tomorrow. A guessed path is a wrong path, and the one thing worse than no
+    /// answer is a plausible one.</para>
     /// </summary>
     public string PathOf(int node)
     {
@@ -112,15 +122,35 @@ public sealed class ExploreTree
         }
 
         var components = new List<string>();
+        var current = node;
 
-        for (var current = node; current != RootNode; current = _parents[current])
+        // Bounded by the node count rather than by a chosen depth. A path cannot have more
+        // components than the tree has nodes, so this rejects nothing legitimate however deep a
+        // real tree turns out to be — and a chain longer than that has a cycle in it, which is the
+        // only thing this bound is here to end.
+        for (var depth = 0; depth < NodeCount; depth++)
         {
             components.Add(_names[current]);
+
+            var parent = _parents[current];
+
+            // Only the root is its own parent; anything else claiming to be would loop forever.
+            if (parent == current)
+            {
+                break;
+            }
+
+            current = parent;
+
+            if (current == RootNode)
+            {
+                components.Reverse();
+                return Path.Combine([RootPath, .. components]);
+            }
         }
 
-        components.Reverse();
-
-        return Path.Combine([RootPath, .. components]);
+        throw new ArgumentOutOfRangeException(
+            nameof(node), node, "This node is not reachable from the root, so it has no path.");
     }
 
     /// <summary>

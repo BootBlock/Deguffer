@@ -78,6 +78,27 @@ public sealed class ExploreMap : UserControl
         PointerExited += OnPointerExited;
         DoubleTapped += OnDoubleTapped;
 
+        // Dragged to a differently scaled display, the control's size in device-independent units
+        // does not change, so nothing above fires and the bitmap stays at the old resolution.
+        // The scale is read from the XamlRoot rather than from this element: the identically
+        // documented property on UIElement does not update on a scale change
+        // (microsoft-ui-xaml #9610), and the root is not attached until this is loaded.
+        Loaded += (_, _) =>
+        {
+            if (XamlRoot is { } root)
+            {
+                root.Changed += OnRootChanged;
+            }
+        };
+
+        Unloaded += (_, _) =>
+        {
+            if (XamlRoot is { } root)
+            {
+                root.Changed -= OnRootChanged;
+            }
+        };
+
         // The map is one focusable thing rather than one per rectangle, and the status line beside
         // it carries what is under the pointer. A screen reader needs the same information without
         // a pointer, which the list view provides in full — so this announces its role and defers.
@@ -283,6 +304,19 @@ public sealed class ExploreMap : UserControl
             { } node => (node.Node, null),
             _ => (null, null),
         });
+    }
+
+    /// <summary>
+    /// Redraw only when the scale actually moved. The root raises this for several reasons — the
+    /// window changing host among them — and rasterising a full volume for each would be a repaint
+    /// for something that did not change a pixel.
+    /// </summary>
+    private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        if (Math.Abs(sender.RasterizationScale - _scale) > 0.001)
+        {
+            Redraw();
+        }
     }
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)

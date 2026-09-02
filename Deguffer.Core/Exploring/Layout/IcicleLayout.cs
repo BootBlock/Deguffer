@@ -137,6 +137,13 @@ public static class IcicleLayout
             bytes += tree.SizeOf(node);
         }
 
+        // Nothing to stand for, so nothing to draw — a block over space its children do not occupy
+        // would invent an occupant.
+        if (bytes == 0)
+        {
+            return;
+        }
+
         tiles.Add(new ExploreTile(
             ExploreTile.Aggregated, depth, bytes, x, depth * rowHeight, width, rowHeight));
     }

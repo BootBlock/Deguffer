@@ -46,18 +46,6 @@ public sealed class ExploreTreeBuilder
         _sizeUnknown = [false];
     }
 
-    /// <summary>How many nodes have been recorded, the root included.</summary>
-    public int Count
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _names.Count;
-            }
-        }
-    }
-
     /// <summary>
     /// Record every child of <paramref name="parent"/> at once, and return the node number of the
     /// first. The rest follow it consecutively, which is how a caller learns the number of a child
