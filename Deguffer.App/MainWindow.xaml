@@ -31,9 +31,9 @@
         </Border>
 
         <!--
-            A rail with permanent labels rather than a collapsible pane: there are three
-            destinations and they will not grow, so nothing has to be opened to find out what is
-            here. The pane toggle is hidden for the same reason — collapsing three items saves no
+            A rail with permanent labels rather than a collapsible pane: there are four
+            destinations and they will not grow much, so nothing has to be opened to find out what
+            is here. The pane toggle is hidden for the same reason — collapsing four items saves no
             meaningful width and costs the user the labels.
         -->
         <NavigationView x:Name="Navigation"
@@ -50,6 +50,15 @@
                 <NavigationViewItem Content="Storage" Tag="Clean" IsSelected="True">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEDA2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <!-- Explore answers "what is using the space"; Storage answers "what is safe to
+                     remove". §3 is entirely about those being different questions, so they are
+                     different destinations rather than two views of one screen. -->
+                <NavigationViewItem Content="Explore" Tag="Explore">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

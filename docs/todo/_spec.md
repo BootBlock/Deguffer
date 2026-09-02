@@ -32,6 +32,11 @@ are the bulk of the waste, and each needs its own knowledge to clear safely.
 Size alone cannot distinguish them, so ranking directories by size and letting the user guess is
 not a design this can adopt — §3 is the alternative.
 
+That is a statement about how Deguffer decides what to *offer*, not a refusal to show the user
+their own disk. §7.1 adds a view that ranks by size and says so, kept deliberately apart from the
+one that classifies, because the failure this paragraph describes is a size ranking presented as a
+recommendation.
+
 The evidence below comes from auditing one real workstation (Windows 11, ~330 GB system drive) that
 had reached **5.6 GB free**. Targeted cleanup of three package-manager caches recovered **22.9 GB**
 in a few minutes, without touching a single piece of user data.
@@ -47,10 +52,15 @@ in a few minutes, without touching a single piece of user data.
 - Prefer a tool's own eviction command over deleting its folder.
 - Never delete without a preview, and never delete something irreplaceable without saying so.
 - Be fast enough to scan a full drive without the user walking away.
+- **Show where the space actually went**, as a picture of the whole drive, without implying that
+  any of what it shows is safe to remove. See §7.1.
 
 **Non-goals**
 
-- Not a general file manager, duplicate finder, or uninstaller.
+- Not a duplicate finder or an uninstaller.
+- Not a general file manager. Explore (§7.1) opens, reveals and removes an individual file or
+  folder the user has picked out of the picture, because that is the action a size view leads to.
+  It does not browse, move, rename or copy, and it does not aim to replace Explorer.
 - No automatic/scheduled deletion in v1. Nothing is removed without explicit confirmation.
 - Not a Windows component cleaner — `WinSxS` and `Windows\Installer` are deliberately out of scope
   (see §9).
@@ -340,6 +350,35 @@ Deliberate points, and the traps that come with them:
 - **The Acrylic backdrop (§6.5) is decoration, never information.** Tier, risk and selection state
   must all read correctly on a flat solid background, because on plenty of machines that is exactly
   what the user will see.
+
+### 7.1 Explore — the other question
+
+Storage answers **"what is safe to remove"**. Explore answers **"where did the space go"**. §1 says
+plainly that the second question cannot be allowed to answer the first: size alone cannot tell a
+package cache from eleven gigabytes of chat history, and §3 exists because a size-ranked list would
+have recommended deleting the second.
+
+Both questions are real, and a tool that answers only the first sends the user to a different
+program the moment its providers do not recognise what filled the disk. So Explore is a separate
+destination, and the separation is the design:
+
+- **Explore never classifies.** It reports a name and a number. It never says a thing is safe, never
+  pre-selects anything, and never orders anything by how removable it is.
+- **Explore never pre-selects and never acts on more than the user picked out by hand.** Storage
+  offers a plan; Explore acts on a selection, one item at a time, and there is no "clean everything
+  here".
+- **Nothing in Explore may reach Tier 4.** The §9 exclusions, `C:\Windows`, `Program Files`, and any
+  path a provider protects are refused outright, with the reason stated. A path Explore does not
+  recognise is not thereby safe — it is merely unclassified, which is exactly what the user is being
+  told.
+- **Removal from Explore goes to the Recycle Bin by default.** §8's fourth question concludes that
+  undo is impossible at cache sizes, and that is true of a ten-gigabyte tree. It is not true of the
+  one file a user picked out of a picture, and where recovery is available it is not optional.
+  Removing permanently stays available as a deliberate second choice, and says what it is.
+- **§5.6 still applies.** Every removal asserts afterwards that what should have survived did.
+- **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
+  Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
+  acceptable where it draws a picture — provided the picture states which it is.
 
 ---
 

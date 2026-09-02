@@ -28,6 +28,23 @@ public enum ViewDensity
 }
 
 /// <summary>
+/// How the Explore page draws what it found.
+///
+/// <para><see cref="Treemap"/> is the shipped view: it is what every tool in this category shows by
+/// default, so it is the one a user arrives already able to read. The other two are not decoration
+/// beside it. <see cref="List"/> is the densest answer to "what is biggest", which is the question
+/// most people actually open the page with, and it is the only view that stays readable while a
+/// scan is still filling it in. <see cref="Icicle"/> keeps area exactly proportional at every level
+/// and has room to label several levels at once, which a treemap does not.</para>
+/// </summary>
+public enum ExploreView
+{
+    Treemap = 0,
+    Icicle = 1,
+    List = 2,
+}
+
+/// <summary>
 /// The user's settings, as a value. Most of it is presentation-only — §6.5 makes the backdrop
 /// decoration, so switching it off changes nothing about what Deguffer will delete — but the two
 /// confirmation settings govern what is asked before a deletion, so they are read by Core rather
@@ -37,6 +54,11 @@ public enum ViewDensity
 /// <param name="View">
 /// How much of each finding row the Storage page draws. Presentation only — it changes what is on
 /// screen, never what is scanned, offered or deleted.
+/// </param>
+/// <param name="Explore">
+/// How the Explore page draws a scanned volume. Presentation only, in the same way
+/// <paramref name="View"/> is: it changes which picture is on screen, never what was scanned and
+/// never what may be removed.
 /// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
@@ -65,6 +87,7 @@ public enum ViewDensity
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Standard,
+    ExploreView Explore = ExploreView.Treemap,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false)
