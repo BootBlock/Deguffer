@@ -118,10 +118,13 @@
             The compact row: the four things the user is choosing between, on one line — is it
             ticked, what is it, what class of thing is it, and how big is it.
 
-            The size is replaced by the reason whenever the row cannot be ticked, rather than
-            leaving a greyed-out checkbox that states no reason (§6.5). Those rows have a figure of
-            "0 B" or "—", so nothing readable is displaced; the per-step sizes are still under the
-            disclosure for a row that holds real space an unelevated process may not touch.
+            A row that cannot be ticked says why, rather than leaving a greyed-out checkbox that
+            states no reason (§6.5). The reason sits beside the figure rather than in place of it,
+            because the two do not always arrive together: a row needing administrator rights has a
+            real total and still cannot be ticked, and the list is ordered by that total, so
+            replacing it left the biggest cause at the top of the list with no number against it. A
+            row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
+            reason beside it already says in words.
         -->
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
             <Grid ColumnSpacing="14" ColumnDefinitions="Auto,*,Auto" Padding="16,8,0,8">
@@ -148,22 +151,25 @@
                                     Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="2"
-                           Text="{x:Bind SizeLabel}"
-                           Visibility="{x:Bind CanBeSelected}"
-                           Style="{StaticResource Figure}"
-                           FontSize="15"
-                           TextAlignment="Right"
-                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind StatusLabel}"
+                               Visibility="{x:Bind CannotBeSelected}"
+                               Style="{StaticResource SecondaryText}"
+                               FontSize="12"
+                               TextWrapping="NoWrap"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center" />
 
-                <TextBlock Grid.Column="2"
-                           Text="{x:Bind StatusLabel}"
-                           Visibility="{x:Bind CannotBeSelected}"
-                           Style="{StaticResource SecondaryText}"
-                           FontSize="12"
-                           TextWrapping="NoWrap"
-                           TextAlignment="Right"
-                           VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Bind SizeLabel}"
+                               Visibility="{x:Bind HasSizeToShow}"
+                               Style="{StaticResource Figure}"
+                               FontSize="15"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center" />
+                </StackPanel>
             </Grid>
         </DataTemplate>
 
@@ -285,7 +291,9 @@
 
                 <!-- How much of each row to draw. It sits with the list it reshapes rather than in
                      Settings, because it is a way of reading this screen and gets changed while
-                     reading it. Presentation only: no view changes what is scanned or offered. -->
+                     reading it. Presentation only: every row is offered in both views, ticks the
+                     same checkbox and removes the same thing. What differs is how much of the row
+                     is on screen and how much is one click inside it. -->
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="8"

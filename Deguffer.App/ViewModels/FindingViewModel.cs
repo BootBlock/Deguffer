@@ -111,12 +111,24 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool CanBeSelected => Finding.HasReclaimableSpace && Steps.Any(s => s.CanBeSelected);
 
     /// <summary>
-    /// The compact row has one column for a figure, and a row that cannot be ticked spends it on
-    /// <see cref="StatusLabel"/> instead. Stated here rather than negated in the template because
-    /// x:Bind has no operators, and a converter for one "not" would be more machinery than the
-    /// property it replaces.
+    /// Whether the compact row states why it cannot be ticked. Stated here rather than negated in
+    /// the template because x:Bind has no operators, and a converter for one "not" would be more
+    /// machinery than the property it replaces.
     /// </summary>
     public bool CannotBeSelected => !CanBeSelected;
+
+    /// <summary>
+    /// Whether the compact row has a figure worth showing.
+    ///
+    /// Asked separately from <see cref="CannotBeSelected"/> because the two are independent, and
+    /// treating them as opposites lost the size of the row most likely to be the largest. A row
+    /// needing administrator rights has a real, measured total and still cannot be ticked, and the
+    /// list is ordered by that total — so hiding it left the biggest cause at the top of the list
+    /// with no number against it, which is the one figure that decides whether elevating is worth
+    /// it. A row with nothing to reclaim shows "0 B" or "—", which the reason beside it already
+    /// says in words.
+    /// </summary>
+    public bool HasSizeToShow => Finding.HasReclaimableSpace;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }
