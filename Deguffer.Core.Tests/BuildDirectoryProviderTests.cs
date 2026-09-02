@@ -283,17 +283,23 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The build-output family is absent for a reason the user can act on, and says so. A cache
-    /// provider's absence means the tool is not here, and says that instead. The distinction is the
-    /// difference between hiding a row and hiding the largest thing Deguffer could reclaim.
+    /// A provider that searches the user's source trees says when it has nowhere approved to search,
+    /// and stops saying it once a folder is approved. A cache provider never says it: it knows where
+    /// its own cache lives and needs no permission to look there.
+    ///
+    /// The distinction is the difference between hiding a row and hiding the largest thing Deguffer
+    /// could reclaim.
     /// </summary>
     [Fact]
-    public void SaysItsAbsenceIsAboutSourceFoldersRatherThanAMissingTool()
+    public void SaysWhenItHasNowhereApprovedToLook()
     {
-        Assert.True(Unity().NeedsSourceFolders);
-        Assert.True(Node().NeedsSourceFolders);
+        Assert.True(Unity().IsAwaitingSourceFolders);
+        Assert.True(Node().IsAwaitingSourceFolders);
 
-        Assert.False(new NpmCacheProvider(_environment).NeedsSourceFolders);
+        Assert.False(new NpmCacheProvider(_environment).IsAwaitingSourceFolders);
+
+        ApproveRoot();
+        Assert.False(Unity().IsAwaitingSourceFolders);
     }
 
     /// <summary>
@@ -301,7 +307,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     /// would make it look for.
     ///
     /// Absent here is not the same absence a cache provider reports, which is why the provider
-    /// declares <see cref="ICleanupProvider.NeedsSourceFolders"/> alongside it. The test below
+    /// declares <see cref="ICleanupProvider.IsAwaitingSourceFolders"/> alongside it. The test above
     /// covers that; without it a shell reading presence alone drops this row and calls it "not
     /// installed", which names the wrong problem and offers no way out of it.
     /// </summary>

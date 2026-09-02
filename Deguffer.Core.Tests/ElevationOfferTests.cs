@@ -136,7 +136,7 @@ public sealed class ElevationOfferTests
 
     private sealed class StubProvider : ICleanupProvider
     {
-        public bool NeedsSourceFolders => false;
+        public bool IsAwaitingSourceFolders => false;
 
         public string Id => "stub";
 

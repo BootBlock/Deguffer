@@ -295,7 +295,7 @@ public sealed class CleanupPlannerTests
     {
         var journal = new List<string>();
         var planner = new CleanupPlanner(
-            [new StubProvider("build-output", bytes: 0, present: false, journal: journal, needsSourceFolders: true)]);
+            [new StubProvider("build-output", bytes: 0, present: false, journal: journal, awaitingSourceFolders: true)]);
 
         var findings = await planner.PlanAllAsync();
 
@@ -329,9 +329,9 @@ public sealed class CleanupPlannerTests
         bool present = true,
         SafetyTier tier = SafetyTier.RegenerableCache,
         List<string>? journal = null,
-        bool needsSourceFolders = false) : ICleanupProvider
+        bool awaitingSourceFolders = false) : ICleanupProvider
     {
-        public bool NeedsSourceFolders => needsSourceFolders;
+        public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
         public bool WasExecuted { get; private set; }
 

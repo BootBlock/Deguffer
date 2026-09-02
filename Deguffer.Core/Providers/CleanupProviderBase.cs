@@ -57,10 +57,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
     public abstract Task<bool> IsPresentAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// False for a cache provider: it answers presence from the tool itself, so absent means
-    /// absent. <see cref="BuildDirectoryProvider"/> is where this is true.
+    /// False for a cache provider: it knows where its own cache lives and needs no permission to
+    /// look there. The providers that search the user's source trees override it.
     /// </summary>
-    public virtual bool NeedsSourceFolders => false;
+    public virtual bool IsAwaitingSourceFolders => false;
 
     public virtual void InvalidateCaches()
     {

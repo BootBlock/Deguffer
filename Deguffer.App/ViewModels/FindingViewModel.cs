@@ -97,13 +97,14 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Estimated) : "—";
 
-    public string StatusLabel => !Finding.IsPresent
-        // Two different absences, and only one of them is the user's to resolve. Saying "not
-        // installed" about a folder nobody has approved names the wrong problem and offers no way
-        // out of it.
-        ? Finding.Provider.NeedsSourceFolders
-            ? "Needs a source folder"
-            : "Not installed on this machine"
+    // Asked before presence, because the two do not line up: the .NET build output is present
+    // whenever the SDK is, approved folders or not, and that row has as little to report as the four
+    // that are absent for the same reason. Every one of them needs the same thing said, and saying
+    // "not installed" or "already clear" instead names the wrong problem and offers no way out.
+    public string StatusLabel => Finding.AwaitingSourceFolders
+        ? "Needs a source folder"
+        : !Finding.IsPresent
+        ? "Not installed on this machine"
         : !Finding.HasReclaimableSpace
             // "Already clear" is a claim, and it must not be made about a folder Windows would not
             // let Deguffer list. The expander below names which one and why the figure is short.
@@ -153,7 +154,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <see cref="Finding.IsPresent"/>, and is the opposite of noise: it is the row that says the
     /// largest reclaimable thing on the disk is one setting away.
     /// </summary>
-    public bool IsToolchainMissing => !Finding.IsPresent && !Finding.Provider.NeedsSourceFolders;
+    public bool IsToolchainMissing => !Finding.IsPresent && !Finding.AwaitingSourceFolders;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }
@@ -193,7 +194,19 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
 
-    public string DetailHeader => Steps.Count > 0 ? "What this will do" : "What was left alone";
+    /// <summary>
+    /// What the disclosure holds, named for which of the three things it is.
+    ///
+    /// A row with nowhere approved to look has left nothing alone: it has not looked. Calling its
+    /// guidance "what was left alone" borrows §5.2's protected-path vocabulary for a sentence that
+    /// is asking the user for something, and puts the only instruction on the screen behind a label
+    /// that reads as a report.
+    /// </summary>
+    public string DetailHeader => Steps.Count > 0
+        ? "What this will do"
+        : Finding.AwaitingSourceFolders
+            ? "What Deguffer needs"
+            : "What was left alone";
 
     /// <summary>
     /// What a screen reader calls the compact row's disclosure. The whole row is that disclosure's
@@ -202,8 +215,7 @@ public sealed partial class FindingViewModel : ObservableObject
     ///
     /// Named for the row rather than for what is inside it, because in the compact view the
     /// disclosure always holds the sentence §7 asks each row to state, whether or not there is a
-    /// plan under it — <see cref="DetailHeader"/> would call a not-installed row's description
-    /// "what was left alone".
+    /// plan under it, and <see cref="DetailHeader"/> names only the plan half.
     /// </summary>
     public string DetailToggleName => $"More about {Name}";
 

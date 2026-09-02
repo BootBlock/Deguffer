@@ -103,6 +103,14 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ApprovedRoots.Count > 0 || Environment.FindExecutable("dotnet") is not null);
 
+    /// <summary>
+    /// The reason this is asked separately from presence. With the SDK installed and no folder
+    /// approved this provider is present and has nowhere to look, so a shell reading absence alone
+    /// would report the row "already clear" — a claim about directories it never enumerated, in the
+    /// same list where its four siblings correctly say what they need.
+    /// </summary>
+    public override bool IsAwaitingSourceFolders => ApprovedRoots.Count == 0;
+
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
         if (ApprovedRoots.Count == 0)

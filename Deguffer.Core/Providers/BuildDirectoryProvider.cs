@@ -109,7 +109,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// the two alike would drop the largest reclaimable thing on the machine from the list, and
     /// call it "not installed" on the way out.
     /// </summary>
-    public override bool NeedsSourceFolders => true;
+    public override bool IsAwaitingSourceFolders => ApprovedRoots.Count == 0;
 
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
