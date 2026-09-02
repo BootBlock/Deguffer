@@ -146,16 +146,20 @@
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
             <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto,72" Padding="16,8,0,8">
 
+                <!-- §7's sentence, announced where the decision is made. A tooltip cannot serve a
+                     screen reader or a keyboard, and this is the control both of them land on to
+                     tick the row, so the answer to "what happens if I tick this" is on it. -->
                 <CheckBox Grid.Column="0"
                           MinWidth="0"
                           VerticalAlignment="Center"
                           IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                           IsEnabled="{x:Bind CanBeSelected}"
-                          AutomationProperties.Name="{x:Bind Name}" />
+                          AutomationProperties.Name="{x:Bind Name}"
+                          AutomationProperties.HelpText="{x:Bind WhatHappensOnNextUse}" />
 
-                <!-- §7's sentence, on the row that has no line for it. The tooltip is a
-                     convenience for a pointer, not the only way to reach it: the disclosure below
-                     opens the same sentence for a keyboard or a screen reader. -->
+                <!-- The same sentence for a pointer. The row has no line to write it on, so it is
+                     here, on the checkbox above, and in the disclosure below — §7 asks that it be
+                     reachable from the row by whatever the reader is using. -->
                 <TextBlock Grid.Column="1"
                            Text="{x:Bind Name}"
                            Style="{StaticResource SectionHeading}"
