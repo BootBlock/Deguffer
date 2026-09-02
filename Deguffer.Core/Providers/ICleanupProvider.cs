@@ -24,6 +24,23 @@ public interface ICleanupProvider
     Task<bool> IsPresentAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Whether this provider looks only inside folders the user has approved, and has none.
+    ///
+    /// It is a fact about the configuration rather than about the machine, and it is the one the
+    /// shell needs. "The tool is not installed" and "Deguffer has not been told where to look" are
+    /// opposite in what they ask of the user: nothing can be done about the first, and adding a
+    /// folder is the whole of the second. It is also the decision worth the most on the screen,
+    /// because build output is usually the largest thing Deguffer can reclaim.
+    ///
+    /// Asked separately from <see cref="IsPresentAsync"/> rather than derived from it, because the
+    /// two do not line up. A provider can be present and still have nowhere to look — the .NET
+    /// build output is present whenever the SDK is, approved folders or not — and reading absence
+    /// as the signal would leave that row claiming to be "already clear" about directories nobody
+    /// ever enumerated.
+    /// </summary>
+    bool IsAwaitingSourceFolders { get; }
+
+    /// <summary>
     /// Discard anything cached about the machine — resolved tool paths, the process snapshot,
     /// probed cache locations. Called once before a planning pass.
     ///

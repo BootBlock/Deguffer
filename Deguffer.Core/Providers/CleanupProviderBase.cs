@@ -56,6 +56,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public abstract Task<bool> IsPresentAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// False for a cache provider: it knows where its own cache lives and needs no permission to
+    /// look there. The providers that search the user's source trees override it.
+    /// </summary>
+    public virtual bool IsAwaitingSourceFolders => false;
+
     public virtual void InvalidateCaches()
     {
         Environment.Invalidate();

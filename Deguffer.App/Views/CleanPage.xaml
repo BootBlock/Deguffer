@@ -125,58 +125,79 @@
             replacing it left the biggest cause at the top of the list with no number against it. A
             row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
             reason beside it already says in words.
+
+            The figure sits in a fixed-width column and everything to its right of the name is
+            right-aligned against it. WinUI 3 has no SharedSizeGroup and each row builds its own
+            Grid, so a figure column left to Auto comes out at a different width on every row and
+            the chips beside it step raggedly down the page. Pinning that one column is enough:
+            the chip's own column can stay Auto and still start at the same offset from the right
+            on every row, which is what puts the chips in a straight line.
+
+            Only that one column is pinned, because a pinned column is a promise about text the
+            app does not control. Windows text scaling grows the chip, and a fixed column would
+            have it overflow leftwards over the status instead of pushing the name.
+
+            The name never gives way. It is the row's identity, and a list of rows that no longer
+            say which row they are is not a list. So the name column is Auto and the status column
+            takes the slack, which means the status is what trims when the window narrows — and the
+            status is a secondary sentence that the disclosure repeats in full. The window's own
+            minimum width is set so that even that trim is shallow.
         -->
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
-            <Grid ColumnSpacing="14" ColumnDefinitions="Auto,*,Auto" Padding="16,8,0,8">
+            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto,72" Padding="16,8,0,8">
 
+                <!-- §7's sentence, announced where the decision is made. A tooltip cannot serve a
+                     screen reader or a keyboard, and this is the control both of them land on to
+                     tick the row, so the answer to "what happens if I tick this" is on it. -->
                 <CheckBox Grid.Column="0"
                           MinWidth="0"
                           VerticalAlignment="Center"
                           IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                           IsEnabled="{x:Bind CanBeSelected}"
-                          AutomationProperties.Name="{x:Bind Name}" />
+                          AutomationProperties.Name="{x:Bind Name}"
+                          AutomationProperties.HelpText="{x:Bind WhatHappensOnNextUse}" />
 
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            Spacing="10"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{x:Bind Name}"
-                               Style="{StaticResource SectionHeading}"
-                               FontSize="14"
-                               VerticalAlignment="Center" />
+                <!-- The same sentence for a pointer. The row has no line to write it on, so it is
+                     here, on the checkbox above, and in the disclosure below — §7 asks that it be
+                     reachable from the row by whatever the reader is using. -->
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind Name}"
+                           Style="{StaticResource SectionHeading}"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           ToolTipService.ToolTip="{x:Bind WhatHappensOnNextUse}" />
 
-                    <!-- Tier is text on a tinted chip, never colour alone: the classification must
-                         survive a flat background and a high-contrast theme (§6.5). -->
-                    <ContentControl Content="{x:Bind TierLabel}"
-                                    Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
-                </StackPanel>
+                <TextBlock Grid.Column="2"
+                           Text="{x:Bind StatusLabel}"
+                           Visibility="{x:Bind CannotBeSelected}"
+                           Style="{StaticResource SecondaryText}"
+                           FontSize="12"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           TextAlignment="Right"
+                           VerticalAlignment="Center" />
 
-                <StackPanel Grid.Column="2"
-                            Orientation="Horizontal"
-                            Spacing="10"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{x:Bind StatusLabel}"
-                               Visibility="{x:Bind CannotBeSelected}"
-                               Style="{StaticResource SecondaryText}"
-                               FontSize="12"
-                               TextWrapping="NoWrap"
-                               TextAlignment="Right"
-                               VerticalAlignment="Center" />
+                <!-- Tier is text on a tinted chip, never colour alone: the classification must
+                     survive a flat background and a high-contrast theme (§6.5). -->
+                <ContentControl Grid.Column="3"
+                                HorizontalAlignment="Right"
+                                Content="{x:Bind TierLabel}"
+                                Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
 
-                    <TextBlock Text="{x:Bind SizeLabel}"
-                               Visibility="{x:Bind HasSizeToShow}"
-                               Style="{StaticResource Figure}"
-                               FontSize="15"
-                               TextAlignment="Right"
-                               VerticalAlignment="Center" />
-                </StackPanel>
+                <TextBlock Grid.Column="4"
+                           Text="{x:Bind SizeLabel}"
+                           Visibility="{x:Bind HasSizeToShow}"
+                           Style="{StaticResource Figure}"
+                           FontSize="15"
+                           TextAlignment="Right"
+                           VerticalAlignment="Center" />
             </Grid>
         </DataTemplate>
 
         <!-- One row per named cause (§7), largest first: the checkbox, the sentence saying what
              happens on next use, the figures, and the disclosure holding the plan. -->
         <DataTemplate x:Key="StandardFinding" x:DataType="vm:FindingViewModel">
-            <Grid RowDefinitions="Auto,Auto">
+            <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
 
                 <Grid Grid.Row="0" ColumnSpacing="14" Padding="16,14" ColumnDefinitions="Auto,*,Auto">
 
@@ -248,7 +269,7 @@
             thing here as a row with an empty disclosure.
         -->
         <DataTemplate x:Key="CompactFinding" x:DataType="vm:FindingViewModel">
-            <Grid RowDefinitions="Auto,Auto">
+            <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
                 <Expander Grid.Row="0"
                           AutomationProperties.Name="{x:Bind DetailToggleName}"
                           HorizontalAlignment="Stretch"
@@ -296,21 +317,34 @@
                      is on screen and how much is one click inside it. -->
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
-                            Spacing="8"
+                            Spacing="16"
                             VerticalAlignment="Center">
-                    <!-- Raw for assistive technology: the combo box carries the same name, and
-                         without this a screen reader announces "View" twice. -->
-                    <TextBlock Text="View"
-                               Style="{StaticResource FieldLabel}"
-                               VerticalAlignment="Center"
-                               AutomationProperties.AccessibilityView="Raw" />
-                    <ComboBox x:Name="ViewSelector"
-                              MinWidth="132"
-                              SelectionChanged="OnViewSelectionChanged"
-                              AutomationProperties.Name="View">
-                        <ComboBoxItem Content="Standard" />
-                        <ComboBoxItem Content="Compact" />
-                    </ComboBox>
+                    <!-- A provider whose toolchain is absent has nothing to reclaim and nothing to
+                         tick, so by default it is not drawn: it lengthens the list without adding a
+                         decision to it. The rows still exist and are still scanned, so this only
+                         decides whether they are on screen. -->
+                    <CheckBox x:Name="NotInstalledToggle"
+                              Content="Show items not installed"
+                              MinWidth="0"
+                              VerticalAlignment="Center"
+                              Checked="OnShowNotInstalledChanged"
+                              Unchecked="OnShowNotInstalledChanged" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- Raw for assistive technology: the combo box carries the same name, and
+                             without this a screen reader announces "View" twice. -->
+                        <TextBlock Text="View"
+                                   Style="{StaticResource FieldLabel}"
+                                   VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                        <ComboBox x:Name="ViewSelector"
+                                  MinWidth="132"
+                                  SelectionChanged="OnViewSelectionChanged"
+                                  AutomationProperties.Name="View">
+                            <ComboBoxItem Content="Standard" />
+                            <ComboBoxItem Content="Compact" />
+                        </ComboBox>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
 
@@ -401,12 +435,13 @@
                 </StackPanel>
 
                 <ScrollViewer Padding="0,4">
-                    <!-- The template is swapped for the compact one in code-behind. Standard is
-                         named here as well so the list is never left untemplated, whatever order
-                         the framework loads and shows this page in. -->
+                    <!-- The template is set from the stored preference in code-behind. The
+                         shipped default is named here as well, so the list is never left
+                         untemplated whatever order the framework loads and shows this page in,
+                         and so the markup does not disagree with what most windows will draw. -->
                     <ItemsControl x:Name="FindingsList"
                                   ItemsSource="{x:Bind ViewModel.Findings}"
-                                  ItemTemplate="{StaticResource StandardFinding}" />
+                                  ItemTemplate="{StaticResource CompactFinding}" />
                 </ScrollViewer>
             </Grid>
         </Border>

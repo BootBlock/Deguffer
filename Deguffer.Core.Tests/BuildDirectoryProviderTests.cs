@@ -283,8 +283,33 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// With nothing approved the provider is absent, not empty. A row that can never find anything
-    /// is noise, and the guidance says what approving a folder would make it look for.
+    /// A provider that searches the user's source trees says when it has nowhere approved to search,
+    /// and stops saying it once a folder is approved. A cache provider never says it: it knows where
+    /// its own cache lives and needs no permission to look there.
+    ///
+    /// The distinction is the difference between hiding a row and hiding the largest thing Deguffer
+    /// could reclaim.
+    /// </summary>
+    [Fact]
+    public void SaysWhenItHasNowhereApprovedToLook()
+    {
+        Assert.True(Unity().IsAwaitingSourceFolders);
+        Assert.True(Node().IsAwaitingSourceFolders);
+
+        Assert.False(new NpmCacheProvider(_environment).IsAwaitingSourceFolders);
+
+        ApproveRoot();
+        Assert.False(Unity().IsAwaitingSourceFolders);
+    }
+
+    /// <summary>
+    /// With nothing approved the provider is absent, not empty, and it says what approving a folder
+    /// would make it look for.
+    ///
+    /// Absent here is not the same absence a cache provider reports, which is why the provider
+    /// declares <see cref="ICleanupProvider.IsAwaitingSourceFolders"/> alongside it. The test above
+    /// covers that; without it a shell reading presence alone drops this row and calls it "not
+    /// installed", which names the wrong problem and offers no way out of it.
     /// </summary>
     [Fact]
     public async Task IsAbsentUntilAFolderIsApprovedAndSaysWhatItWouldLookFor()

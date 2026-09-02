@@ -46,6 +46,29 @@ public sealed class DotNetObjProviderTests : IDisposable
             scanner ?? new FakeDirectoryScanner());
 
     /// <summary>
+    /// The case the source-folder question exists for, and the only provider that shows it.
+    ///
+    /// This one is present whenever the SDK is, approved folders or not, so presence and having
+    /// somewhere to look come apart here in a way they cannot for its four siblings, which are
+    /// absent in the same situation. A shell reading absence alone therefore calls this row
+    /// "already clear" — a claim about directories nobody ever enumerated.
+    ///
+    /// Deliberately not asserted against <see cref="DotNetObjProvider.IsPresentAsync"/>: that
+    /// consults the real PATH, so a test pinning the pair would pass or fail on whether the machine
+    /// running it has the SDK. What is asserted is the half that is knowable, and it is the half the
+    /// shell reads.
+    /// </summary>
+    [Fact]
+    public void SaysItHasNowhereToLookUntilAFolderIsApproved()
+    {
+        Assert.True(CreateProvider().IsAwaitingSourceFolders);
+
+        ApproveRoot();
+
+        Assert.False(CreateProvider().IsAwaitingSourceFolders);
+    }
+
+    /// <summary>
     /// A machine with no .NET and no approved folders has nothing to say, so the row is not shown
     /// at all rather than shown empty.
     /// </summary>
