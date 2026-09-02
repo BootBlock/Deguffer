@@ -65,7 +65,7 @@ public sealed class UnityLibraryProvider : BuildDirectoryProvider
         "On a large project that takes many minutes, and any packages it had downloaded are fetched " +
         "again. Nothing is lost — all of it is derived from Assets, Packages and ProjectSettings.";
 
-    protected override string Subject => "a Unity project's imported assets and caches";
+    protected override string Subject => "Unity imported assets and caches";
 
     protected override string NothingApprovedGuidance =>
         "No source folders have been added yet. Add them in Settings and Deguffer will look for " +
