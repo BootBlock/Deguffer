@@ -417,9 +417,44 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The same rule for a name the boundary knows nothing about. <c>node_modules</c> is protected
+    /// twice over — the search stops at it and would refuse to enter it anyway — so it cannot show
+    /// whether the stop is doing any work. A vendored crate inside a <c>target</c> can: nothing but
+    /// "everything below a candidate belongs to that candidate" keeps the inner one out of the plan,
+    /// and offering both would make two steps where one deletes the other's parent.
+    /// </summary>
+    [Fact]
+    public async Task ACandidateNestedInsideAnotherOfTheSameKindIsNotOfferedSeparately()
+    {
+        var root = ApproveRoot();
+        var outer = BuildDirectoryFixture.CreateCargoProject(Path.Combine(root, "crate"));
+        var inner = BuildDirectoryFixture.CreateCargoProject(Path.Combine(outer, "vendored"));
+
+        Assert.True(LongPath.DirectoryExists(inner), "the fixture did not build the nested case");
+        Assert.Equal([outer], (await PlanWith(Cargo)).TargetedPaths);
+    }
+
+    /// <summary>
     /// The same agreement on the indexed route. The volume index has no traversal to stop, so it
     /// applies the rule as a filter — and if the two disagreed, whether a directory was offered
     /// would depend on whether the user happened to run Deguffer as administrator.
+    /// </summary>
+    [Fact]
+    public async Task TheIndexedRouteAgreesAboutACandidateNestedInsideAnother()
+    {
+        var root = ApproveRoot();
+        var outer = BuildDirectoryFixture.CreateCargoProject(Path.Combine(root, "crate"));
+        var inner = BuildDirectoryFixture.CreateCargoProject(Path.Combine(outer, "vendored"));
+
+        var plan = await PlanWith(Cargo, new FakeDirectoryScanner([outer, inner]));
+
+        Assert.Equal([outer], plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// The indexed route's answer for the pair above, where the boundary would have covered it
+    /// anyway. Kept because <c>node_modules</c> is the collision this phase had to resolve: the
+    /// search now stops at a directory it also refuses to enter, and the two must not disagree.
     /// </summary>
     [Fact]
     public async Task TheIndexedRouteAgreesAboutANestedNodeModules()
