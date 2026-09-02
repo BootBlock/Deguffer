@@ -56,6 +56,24 @@ public sealed record CleanupPlan
     public FallbackReason Fallback { get; init; } = FallbackReason.None;
 
     /// <summary>
+    /// Whether a directory this plan describes refused to be listed, so what is inside it was never
+    /// examined and nothing below it is in the figures.
+    ///
+    /// <para>The same shape as <see cref="Fallback"/>, and for the same reason: the sentence is
+    /// already in <see cref="Notes"/>, and this is that fact in the form the shell can act on,
+    /// because "is this row actually clear?" is a decision rather than a sentence. A present row
+    /// with nothing to reclaim renders as "Already clear", and that is a claim — it must not be
+    /// made about a folder nobody was allowed to read.</para>
+    ///
+    /// <para>A refusal is ordinary rather than an error (§5.3), and a listing right is separate from
+    /// a traverse right — so a provider that probed for its cache <em>by name</em> can find it there
+    /// and then be refused the listing that would classify its children. Four providers reported
+    /// that combination as "there is nothing here", contradicting their own presence probe within
+    /// one planning pass.</para>
+    /// </summary>
+    public bool HasUnreadableRoot { get; init; }
+
+    /// <summary>
     /// Whether any step here cannot be carried out without administrator rights.
     ///
     /// Separate from <see cref="Fallback"/> on purpose: that one is about how a size was arrived at,

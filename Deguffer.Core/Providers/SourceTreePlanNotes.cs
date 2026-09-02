@@ -49,6 +49,14 @@ internal static class SourceTreePlanNotes
                 "read the volume index instead, which is considerably faster."));
         }
 
+        // Part of a root the user approved was never searched. The two notes above are about how
+        // the search was performed and what it decided; this one is about where it did not go, and
+        // no other sentence in the plan would say so.
+        foreach (var refused in discovered.UnreadableDirectories)
+        {
+            notes.Add(UnreadableRoot.Note(refused));
+        }
+
         if (declinedCount > 0)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, Declined(declinedCount, directoryNames, subject)));

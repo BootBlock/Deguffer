@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -182,17 +182,29 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
         if (applications.Count == 0)
         {
-            return EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.");
+            // A refused application-data root leaves this walk with nothing found and nothing said,
+            // which is not the same as having looked and found none.
+            return _discovery.UnreadableRoots.Count == 0
+                ? EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.")
+                : EmptyPlan(UnreadableRoot.WhyNothingWasPlanned(
+                    string.Join("' and '", _discovery.UnreadableRoots))) with { HasUnreadableRoot = true };
         }
 
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
+        var unreadable = false;
 
         foreach (var application in applications)
         {
             ct.ThrowIfCancellationRequested();
+
+            if (application.ProfilesIncomplete)
+            {
+                notes.Add(UnreadableRoot.Note(application.Path));
+                unreadable = true;
+            }
 
             survivors.Add((
                 application.Path,
@@ -213,6 +225,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
                 spared += outcome.Spared;
                 emptiedAContainer |= outcome.EmptiedAContainer;
+                unreadable |= outcome.Unreadable;
             }
 
             // One note per application rather than one per spared child. A Chromium profile holds
@@ -237,7 +250,10 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             }
         }
 
-        if (targets.Count == 0 && declined.Count == 0)
+        // Reaching here means HasRecognisedCache already found a cache directory on disk by full
+        // name, and a full path resolves through a directory the account may not list. So the
+        // sentence below would deny what this same provider established one method earlier.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
             return EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.");
         }
@@ -272,6 +288,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 [.. survivors.Concat(declined).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = unreadable,
         };
     }
 
@@ -291,6 +308,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     {
         var spared = 0;
         var emptiedAContainer = false;
+        var unreadable = false;
 
         // A container that is a link is met twice: once as a link child of the profile, and once as
         // a level whose own directory turns out to be one. Both times it is the same path and the
@@ -322,6 +340,13 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
             var scan = ChildDirectories.Under(directory);
 
+            if (scan.Unreadable)
+            {
+                notes.Add(UnreadableRoot.Note(directory));
+                unreadable = true;
+                continue;
+            }
+
             foreach (var link in scan.Links)
             {
                 Decline(LongPath.Display(link.FullName));
@@ -345,7 +370,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             }
         }
 
-        return new ProfileOutcome(spared, emptiedAContainer);
+        return new ProfileOutcome(spared, emptiedAContainer, unreadable);
 
         void Decline(string path)
         {
@@ -370,7 +395,14 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// are kept, so without this the user sees one still standing and cannot tell that the cache
     /// inside it went.
     /// </param>
-    private readonly record struct ProfileOutcome(int Spared, bool EmptiedAContainer);
+    /// <param name="Unreadable">
+    /// Whether a level's directory would not be listed. A level is reached by name, and a full path
+    /// resolves through a directory the account may not list — so the level can exist, pass the
+    /// presence probe, and then hand back no children at all. Without this the provider treats that
+    /// as "the cache is empty" and reports the application as keeping no Chromium cache, which its
+    /// own probe already found on disk.
+    /// </param>
+    private readonly record struct ProfileOutcome(int Spared, bool EmptiedAContainer, bool Unreadable);
 
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";

@@ -162,6 +162,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
+        var unreadable = false;
 
         foreach (var bin in CandidateBins())
         {
@@ -189,10 +190,15 @@ public sealed class RecycleBinProvider : CleanupProviderBase
                 bin,
                 "The volume's Recycle Bin itself must survive — only this user's own bin inside it is removed."));
 
-            CollectFrom(bin, targets, declined, notes, ct);
+            unreadable |= !CollectFrom(bin, targets, declined, notes, ct);
         }
 
-        if (targets.Count == 0 && declined.Count == 0)
+        // A refused bin root must not be reported as an absent one. Presence was decided by probing
+        // this user's own bin by full name, and a full path resolves through a parent the account
+        // may not list — so "no volume holds a bin for this user" would contradict what this same
+        // provider established one method earlier. The per-bin notes already name which root
+        // refused; what the sentence below would add is the claim that must not be made.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
             return EmptyPlan("No volume on this machine holds a Recycle Bin for this user.");
         }
@@ -214,6 +220,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             ProtectedPaths = Protect([.. survivors, .. declined]),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = unreadable,
         };
     }
 
@@ -226,7 +233,11 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// identical shape under one parent, distinguished by nothing but a string of digits — and the
     /// spared one holds another person's files.
     /// </summary>
-    private void CollectFrom(
+    /// <returns>
+    /// False where the bin root would not be listed, so the caller can keep the plan from claiming
+    /// the volume holds nothing.
+    /// </returns>
+    private bool CollectFrom(
         string bin,
         List<DeletionTarget> targets,
         List<(string Path, string Reason)> declined,
@@ -234,6 +245,12 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         CancellationToken ct)
     {
         var scan = ChildDirectories.Under(bin);
+
+        if (scan.Unreadable)
+        {
+            notes.Add(UnreadableRoot.Note(bin));
+            return false;
+        }
 
         foreach (var link in scan.Links)
         {
@@ -267,6 +284,8 @@ public sealed class RecycleBinProvider : CleanupProviderBase
 
             targets.Add(new DeletionTarget(path, classification.Reason, LastActivity(child)));
         }
+
+        return true;
     }
 
     /// <summary>

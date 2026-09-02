@@ -1,4 +1,4 @@
-using System.Collections.Frozen;
+﻿using System.Collections.Frozen;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -10,7 +10,16 @@ namespace Deguffer.Core.Providers;
 /// False if any root had to be walked. §5.5 requires the fallback to be observable, and a discovery
 /// pass that took thirty seconds is otherwise indistinguishable from a large source tree.
 /// </param>
-public sealed record SourceDiscovery(IReadOnlyList<string> Candidates, bool UsedIndex)
+/// <param name="UnreadableDirectories">
+/// Directories inside an approved root that refused to be listed, so the walk never went below
+/// them. Reported rather than dropped: part of a root the user approved went unsearched, and a plan
+/// that says nothing about it describes a search it did not perform. Always empty on an indexed
+/// run, which reads the volume table rather than enumerating.
+/// </param>
+public sealed record SourceDiscovery(
+    IReadOnlyList<string> Candidates,
+    bool UsedIndex,
+    IReadOnlyList<string> UnreadableDirectories)
 {
     /// <summary>The candidates called any of <paramref name="names"/>, for the provider that owns them.</summary>
     public IReadOnlyList<string> Named(IReadOnlyList<string> names) =>
@@ -110,6 +119,7 @@ public sealed class SourceDirectoryDiscovery
         }
 
         var candidates = new List<string>();
+        var unreadable = new List<string>();
         var usedIndex = true;
 
         foreach (var root in roots)
@@ -150,7 +160,7 @@ public sealed class SourceDirectoryDiscovery
 
             if (walked)
             {
-                Walk(names, root, candidates, ct);
+                Walk(names, root, candidates, unreadable, ct);
             }
         }
 
@@ -158,7 +168,8 @@ public sealed class SourceDirectoryDiscovery
         // steps deleting one path.
         var result = new SourceDiscovery(
             [.. candidates.Distinct(StringComparer.OrdinalIgnoreCase)],
-            usedIndex);
+            usedIndex,
+            [.. unreadable.Distinct(StringComparer.OrdinalIgnoreCase)]);
 
         Remember(roots, result);
 
@@ -215,7 +226,12 @@ public sealed class SourceDirectoryDiscovery
     /// The guaranteed route: enumerate the root ourselves. Iterative rather than recursive, because
     /// the trees this runs over are exactly the deeply nested ones that overflow a stack.
     /// </summary>
-    private static void Walk(FrozenSet<string> names, string root, List<string> candidates, CancellationToken ct)
+    private static void Walk(
+        FrozenSet<string> names,
+        string root,
+        List<string> candidates,
+        List<string> unreadable,
+        CancellationToken ct)
     {
         var pending = new Stack<string>();
         pending.Push(LongPath.Extended(root));
@@ -224,7 +240,17 @@ public sealed class SourceDirectoryDiscovery
         {
             ct.ThrowIfCancellationRequested();
 
-            foreach (var child in ChildDirectories.Under(directory).Directories)
+            var scan = ChildDirectories.Under(directory);
+
+            if (scan.Unreadable)
+            {
+                // Everything below here went unsearched. Silence would leave the plan describing a
+                // sweep of the whole approved root, which is not what happened.
+                unreadable.Add(LongPath.Display(directory));
+                continue;
+            }
+
+            foreach (var child in scan.Directories)
             {
                 if (names.Contains(child.Name))
                 {

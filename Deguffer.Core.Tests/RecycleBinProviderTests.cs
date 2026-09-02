@@ -412,4 +412,38 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.False(Directory.Exists(bin));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
+
+    /// <summary>
+    /// The sharpest case of the refusal, because <c>$Recycle.Bin</c> is the one root in the codebase
+    /// whose permissions genuinely vary from machine to machine.
+    ///
+    /// <para>Presence is decided by probing this user's own bin <em>by full name</em>, and a full
+    /// path still resolves through a directory the account may not list — listing and traversing are
+    /// separate rights. So the provider can answer "present, your bin is on D:" and then, one method
+    /// later, enumerate the bin root, be refused, see no children, and conclude "no volume on this
+    /// machine holds a Recycle Bin for this user". One pass, two contradictory statements, and the
+    /// second one is what the user reads.</para>
+    /// </summary>
+    [Fact]
+    public async Task ABinRootThatWillNotBeListedIsSaidSoRatherThanReportedAsAbsent()
+    {
+        var volume = CreateVolume("D");
+        var bin = CreateBin(volume, Sid);
+        var binRoot = Path.Combine(volume, BinName);
+
+        using var denied = new DeniedDirectory(binRoot);
+
+        var provider = CreateProvider();
+
+        // The premise: the by-name probe still finds this user's bin through the refused parent.
+        Assert.True(await provider.IsPresentAsync());
+        Assert.True(LongPath.DirectoryExists(bin));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(binRoot));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("No volume on this machine holds"));
+        Assert.Empty(plan.TargetedPaths);
+    }
 }

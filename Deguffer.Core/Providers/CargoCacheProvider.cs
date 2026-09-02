@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -218,13 +218,18 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         // so without this the plan carries the sentence twice and §5.6 reports one survivor as two.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var unreadable = false;
+
         foreach (var level in Levels)
         {
             ct.ThrowIfCancellationRequested();
-            CollectFrom(level, home, targets, declined, seen, notes, ct);
+            unreadable |= !CollectFrom(level, home, targets, declined, seen, notes, ct);
         }
 
-        if (targets.Count == 0 && declined.Count == 0)
+        // The home was found on disk by name above, and a full path resolves through a directory the
+        // account may not list. So "Cargo has downloaded nothing" would deny what this same method
+        // established a few lines earlier.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
             return EmptyPlan($"Cargo has downloaded nothing into {home} yet.");
         }
@@ -251,6 +256,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
             ProtectedPaths = Protect([.. BuildProtectedPaths(home), .. declined]),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = unreadable,
         };
     }
 
@@ -260,7 +266,11 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     /// omitted, because it is a sibling of a targeted one under the same parent — which is exactly
     /// when an over-broad rule takes both.
     /// </summary>
-    private static void CollectFrom(
+    /// <returns>
+    /// False where a level's directory would not be listed, so the caller can keep the plan from
+    /// claiming Cargo has downloaded nothing.
+    /// </returns>
+    private static bool CollectFrom(
         CacheLevel level,
         string home,
         List<DeletionTarget> targets,
@@ -273,7 +283,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
 
         if (!LongPath.DirectoryExists(directory))
         {
-            return;
+            return true;
         }
 
         // Applied at every level rather than only at the root, which is the one level reached by
@@ -283,10 +293,16 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         if (LongPath.IsReparsePoint(directory))
         {
             Decline(directory, OwnName(level, directory), LinkReason);
-            return;
+            return true;
         }
 
         var scan = ChildDirectories.Under(directory);
+
+        if (scan.Unreadable)
+        {
+            notes.Add(UnreadableRoot.Note(directory));
+            return false;
+        }
 
         foreach (var link in scan.Links)
         {
@@ -308,6 +324,8 @@ public sealed class CargoCacheProvider : CleanupProviderBase
 
             targets.Add(new DeletionTarget(path, classification.Reason));
         }
+
+        return true;
 
         void Decline(string path, string label, string reason)
         {
