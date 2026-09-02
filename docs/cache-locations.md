@@ -770,6 +770,192 @@ rather than a global install.
 
 ---
 
+## Per-project build output
+
+**Tier 1 for .NET intermediate output, Tier 2 for the rest.** The only thing Deguffer looks for
+inside your own folders, and the only thing it will not look for anywhere else.
+
+| Directory | What it belongs to | Tier |
+| --- | --- | --- |
+| `obj` | .NET intermediate build output | 1 |
+| `Library` | A Unity project's imported assets and caches | 2 |
+| `target` | Rust build output | 2 |
+| `node_modules` | Installed Node.js dependencies | 2 |
+| `.venv`, `venv` | A Python virtual environment | 2 |
+
+### It only looks where you tell it to
+
+Every other location in this document belongs to a tool, and Deguffer knows where to find it. These
+are your project folders, and Deguffer has no idea where you keep them — so it does not guess.
+**Settings → Source folders** is the whole of its permission: it searches inside the folders listed
+there and nowhere else, and with the list empty these providers find nothing at all.
+
+That holds even when finding something would be free. On a machine running as administrator,
+Deguffer reads the volume's file table and already knows about every `node_modules` on the disk. It
+still offers only the ones inside a folder you added. A cheap answer is not permission.
+
+Approving a folder approves it for **every** kind of build output in the table above, which is what
+the Settings description says. If you want a narrower scope, add narrower folders.
+
+### What Deguffer does
+
+**A directory's name is not evidence.** `build`, `target` and `Library` are ordinary English words,
+and a folder called one of them is as likely to hold somebody's exports as a compiler's output. So
+recognition is never by name: it is by the project standing around the directory, and by the marker
+the tool itself writes inside it.
+
+| Directory | Must sit beside it | Must be inside it |
+| --- | --- | --- |
+| `obj` | A project file the restore manifest names | `project.assets.json`, and the generated NuGet imports for that same project |
+| `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
+| `target` | `Cargo.toml` | `CACHEDIR.TAG`, which Cargo writes |
+| `node_modules` | `package.json`, **and a lock file** | — |
+| `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
+
+Every condition has to hold. A directory that fails any of them is left alone, and the preview says
+how many were left and why. `obj` carries an extra check of its own: git is asked whether the
+directory holds any tracked file, because intermediate output never should, and one that does is not
+intermediate output whatever the manifest beside it claims.
+
+Two of those requirements are there for a reason worth stating, because both look like fussiness and
+neither is:
+
+- **`node_modules` needs a lock file.** "Regenerable" is a claim that reinstalling gives you back
+  what was there, and only a lock file makes that true. Without one, `npm install` re-resolves
+  version ranges and can hand you a different dependency tree — which is a change to your project,
+  not a regeneration of it. A `node_modules` with no lock file beside it is left alone.
+- **A virtual environment needs a manifest.** With no record of what was installed into it, the
+  environment is the only copy of its own contents, and removing it destroys information rather than
+  freeing space. `pyvenv.cfg` proves the folder is an environment; the manifest proves it can be
+  rebuilt. Neither alone is enough.
+
+Nested directories belong to their parent. A `node_modules` inside another one, or a vendored crate's
+`target` inside the outer `target`, is removed with the directory that contains it rather than
+offered as a second row.
+
+### A project you are using now is never offered
+
+This is the part with no equivalent anywhere else in this document. Clearing a cache under a running
+tool costs a slower next use. Removing a build directory under a live editor or a build in flight
+breaks the work you are doing at that moment, and nothing re-downloads the afternoon.
+
+So before anything reaches the preview, Deguffer asks whether each project is in use, and holds back
+the ones that are. It needs no administrator rights to ask. Three signals, each of them positive
+evidence rather than a guess:
+
+- **The tool's own lock file is held open.** Unity writes `Library\UnityLockfile` when the editor
+  opens a project and removes it when the editor closes, and Windows will say which process is
+  holding it. Whether the file *exists* is not the test — a crashed editor leaves one behind for ever
+  — so what is asked is whether anything has it open.
+- **A running program lives inside the directory.** An activated virtual environment runs
+  `.venv\Scripts\python.exe`, and a Rust binary you started runs out of `target\debug`.
+- **A running program is working inside the project.** A build in flight, a terminal sitting in the
+  folder, or an editor with the solution open. Visual Studio's working directory is the solution's
+  own folder, which is how a solution you have open is recognised.
+
+A held-back project is listed as something left alone, with what is using it named, so you can close
+it and preview again.
+
+**It can miss, and it never fires wrongly.** Three things it does not see, all of them stated here
+because a safeguard whose limits are unwritten gets trusted past them:
+
+- A compiler holding a file deep inside a tree that is neither its own program nor its working
+  folder. Nothing can ask that question about a directory without administrator rights.
+- **A program running as administrator, or as another user.** Deguffer runs unelevated, and Windows
+  will not let it inspect those at all — so a build started from an elevated terminal is invisible.
+- A project whose path is longer than 260 characters, for the lock-file signal only. Windows'
+  Restart Manager refuses a path that long, so Unity's lockfile cannot be asked about there. The
+  other two signals are unaffected, and the preview says the check could not run rather than
+  reporting the project idle.
+
+Where a check cannot run at all, the preview says so rather than staying quiet — "could not tell"
+and "nothing is using it" are different answers, and only the second is permission. The age column
+beside each row carries the rest of the decision: a project nobody has touched in a year is where the
+space actually is.
+
+### What is protected
+
+Everything except the one directory in each row, asserted by name after the deletion runs:
+
+- **The project folder itself** — only the build directory inside it is removed.
+- **Every file the rebuild reads.** `Assets`, `Packages` and `ProjectSettings` for Unity;
+  `Cargo.toml`; `package.json` and the lock file; the Python manifest; `pubspec.yaml` and
+  `.dart_tool`. These are what make the directory regenerable, so losing one would falsify the whole
+  claim.
+- **`bin`, for .NET, and `src` and `Cargo.lock` for Rust.** None of them identifies the directory
+  being removed; each is named because it is what a rule reaching one level too far would take.
+  `bin` in particular looks equivalent to `obj` and is not — it can hold hand-placed native
+  dependencies and copied assets that no build reproduces — so it is out of scope entirely.
+- **Every directory that was left alone**, whether because it could not be confirmed or because
+  something is using it. Those sit in the same trees as the targets, separated only by evidence,
+  which is exactly the situation where an over-broad rule takes one with the other.
+
+### What it costs you
+
+| Directory | The next use |
+| --- | --- |
+| `obj` | The next build regenerates it, so that build is slower. Nothing here is unique. |
+| `Library` | Unity reimports every asset when you next open the project. On a large one that is tens of minutes, and packages it had downloaded are fetched again. |
+| `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. |
+| `node_modules` | The project will not build or run until dependencies are installed again. The lock file pins the versions, so what comes back is what was there. |
+| `.venv` / `venv` | The environment has to be created again and the install re-run from the manifest. **A manifest only lists what somebody wrote down** — check it covers what you had before removing an environment you still use. |
+
+Where a package manager's own cache still holds the downloads, most of this is offline. Clearing that
+cache in the same run is what makes it a download — so a run that takes both the npm cache and a
+`node_modules` needs the network afterwards.
+
+### Why `obj` is Tier 1 and the other four are Tier 2
+
+Tier 1 means the tool re-creates it on demand and you lose only time. That is `obj`: a missing one
+makes the next build slower and nothing else.
+
+The other four cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
+only by re-downloading gigabytes or re-indexing for minutes" — is met by each of them differently:
+
+- **Unity** is the re-indexing case exactly. Nothing in `Library` is anyone's only copy; all of it is
+  built from `Assets`, `Packages` and `ProjectSettings`, which is why every Unity `.gitignore`
+  excludes it. What makes it Tier 2 is the reimport, plus the packages in `Library\PackageCache` that
+  are fetched again.
+- **Rust `target`** is Tier 2 rather than the Tier 1 it might look like, and the reason is worth
+  being clear about: restoring it is not a slower build, it *is* the build. Every dependency is
+  compiled from source, per profile and per feature set, which is where the five to twenty gigabytes
+  came from. That is the same argument that puts vcpkg's binary cache in Tier 2 — a cache whose
+  entries are recovered by compiling rather than by downloading — and it applies here with more
+  force, because there is no cache to fall back on.
+- **`node_modules` and a virtual environment** are the ordinary Tier 2 shape: a download, and a
+  project that does not run until it finishes.
+
+None of them is pre-selected, and each needs an acknowledgement before it runs.
+
+### Not reached: `dist`, Dart's `build`, and Visual Studio's `.vs`
+
+All three are per-project directories that look like obvious candidates and are not offered.
+
+**`dist` has no evidence to go on.** It is produced by a build script on some projects and curated by
+hand on others, and nothing inside it or beside it tells the two apart. The name is the only signal,
+and §5.2 says an unrecognised thing stays in Tier 4.
+
+**A Dart or Flutter `build` has the same problem, one step further along.** A `pubspec.yaml` and a
+`.dart_tool` beside it prove a Dart package is there and that `pub get` has run — both facts about
+the *parent*, neither about the directory. The toolchain does not always create a top-level `build`,
+so a folder of that name beside a package can be somebody's own, and unlike Unity's `Library` there
+is nothing inside it that only the toolchain writes: `.last_build_id` appears in some `build`
+directories and not others, which was checked against real projects rather than assumed. Every other
+directory here is recognised by something written inside it, or by a parent whose identity implies
+the child. This one would be recognised by its name and its neighbours alone.
+
+**`.vs` is not the small, disposable folder it appears to be.** It holds the IntelliSense database,
+the design-time build cache and the file-content index, all of which are rebuilt on the next solution
+open. It also holds `copilot-chat\sessions`, which is AI conversation history, `CopilotSnapshots`,
+which is a record of file states, code-coverage data, and the `.suo` and window-layout files that
+hold your open documents, breakpoints and expanded nodes. On the machine this was surveyed, roughly a
+quarter of `.vs` by size was material of the second kind. That is §3's founding mistake — Visual
+Studio Code's `workspaceStorage`, dominated by chat history — in a second costume, and it needs the
+recognised-children rule applied *inside* `.vs` rather than a rule about `.vs` as a whole. It is
+tracked as its own item rather than folded in here.
+
+---
+
 ## Recycle Bin
 
 **Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the

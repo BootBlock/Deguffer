@@ -181,6 +181,9 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(IDirectoryScanner)
             ? new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated))
         : parameter == typeof(SourceRootStore) ? new SourceRootStore(_environment)
+        : parameter == typeof(SourceDirectoryDiscovery)
+            ? new SourceDirectoryDiscovery(new FakeDirectoryScanner())
+        : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : throw new XunitException(

@@ -35,8 +35,11 @@ public sealed class DotNetObjProviderTests : IDisposable
 
     private DotNetObjProvider CreateProvider(
         IDirectoryScanner? scanner = null,
-        FakeProcessRunner? runner = null) =>
+        FakeProcessRunner? runner = null,
+        ILiveTreeInspector? liveTrees = null) =>
         new(_roots,
+            discovery: null,
+            liveTrees ?? FakeLiveTreeInspector.NothingLive,
             _environment,
             runner ?? new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
@@ -479,5 +482,90 @@ public sealed class DotNetObjProviderTests : IDisposable
 
         Assert.True(await provider.IsPresentAsync());
         Assert.Single((await provider.PlanAsync()).TargetedPaths);
+    }
+
+    /// <summary>
+    /// §5.3, and this provider's version of it changed: the list of process names it used to warn
+    /// about is gone, replaced by a per-directory veto. That was a change to what gets deleted, so it
+    /// needs its own test rather than inheriting the one the newer providers have — the partitioning
+    /// here is this class's own, not the shared helper's.
+    ///
+    /// Removing intermediate output under a live build breaks that build in flight, which is why the
+    /// answer is a refusal rather than a warning beside a step that still runs.
+    /// </summary>
+    [Fact]
+    public async Task AnObjDirectorySomethingIsUsingIsNotATargetAndSurvivesTheRun()
+    {
+        var root = ApproveRoot();
+        var busy = ProjectFixture.CreateProject(Path.Combine(root, "Building"), "Building");
+        var idle = ProjectFixture.CreateProject(Path.Combine(root, "Dormant"), "Dormant");
+
+        var provider = CreateProvider(liveTrees: new FakeLiveTreeInspector(busy));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([idle], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Close what is using", StringComparison.Ordinal));
+
+        // §5.6's negative on the case that matters: the two are the same shape, in the same tree,
+        // separated only by whether something is using them.
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.False(LongPath.DirectoryExists(idle));
+        Assert.True(LongPath.DirectoryExists(busy));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// "Could not tell" is not permission. The check failing has to reach the user, for the same
+    /// reason §5.5 makes the measurement fallback observable.
+    /// </summary>
+    [Fact]
+    public async Task SaysSoWhenItCouldNotCheckWhetherAProjectIsInUse()
+    {
+        var root = ApproveRoot();
+        ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
+
+        var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("could not check whether these projects are in use", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The reach reduction that came with sharing one discovery pass across every source-tree
+    /// provider, pinned so it stays deliberate.
+    ///
+    /// The pass stops at any name it is looking for, because everything below a candidate belongs to
+    /// that candidate — and the names now include <c>target</c>, <c>node_modules</c> and the virtual
+    /// environments. So an <c>obj</c> below a directory merely <em>called</em> one of those is no
+    /// longer offered, whether or not that directory turns out to be a recognised candidate. It errs
+    /// toward finding less, which is the safe direction, and it is what keeps the walk and the volume
+    /// index answering identically.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReachAnObjBelowADirectoryNamedLikeAnotherProvidersCandidate()
+    {
+        var root = ApproveRoot();
+        var reachable = ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
+        var below = ProjectFixture.CreateProject(Path.Combine(root, "target", "Tooling"), "Tooling");
+
+        var provider = new DotNetObjProvider(
+            _roots,
+            Discovery(["obj", "target"]),
+            FakeLiveTreeInspector.NothingLive,
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            new FakeDirectoryScanner());
+
+        Assert.Equal([reachable], (await provider.PlanAsync()).TargetedPaths);
+        Assert.True(LongPath.DirectoryExists(below));
+    }
+
+    private static SourceDirectoryDiscovery Discovery(IReadOnlyList<string> names)
+    {
+        var discovery = new SourceDirectoryDiscovery(new FakeDirectoryScanner());
+        discovery.Include(names);
+        return discovery;
     }
 }

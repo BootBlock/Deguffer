@@ -1,9 +1,10 @@
 # Unreached locations — what the shipped providers do not see
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
-> and vcpkg providers, §1a's pnpm and conda, §4's Chromium application caches, §5's GPU shader
-> caches, §6's crash dumps and servicing logs, and §7's per-volume recycle bins have shipped;
-> everything else is unstarted. **Open question 1 is answered** — see the foot of this document.
+> and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
+> providers, §4's Chromium application caches, §5's GPU shader caches, §6's crash dumps and
+> servicing logs, and §7's per-volume recycle bins have shipped; everything else is unstarted.
+> **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -36,14 +37,14 @@ form throughout this document.
 | --- | ---: | --- | --- |
 | `%LOCALAPPDATA%\Packages\<pkg>\LocalCache\Roaming` | 10.7 GB | mixed | MSIX redirects an app's `%APPDATA%` here. Nothing looks under `Packages` |
 | Container data disk (`*.vhdx`) | 8.5 GB | 2 | Known (§5.4), still unbuilt. Needs the two-number report |
-| Unity per-project `Library\` (7 projects) | 5.4 GB | 2 | Per-project build output; only `obj\` has a provider |
+| Unity per-project `Library\` (7 projects) | 5.4 GB | 2 | Per-project build output; only `obj\` had a provider. **Shipped — see §2** |
 | Store-Python `LocalCache\local-packages` | 5.4 GB | 3 | Same redirection blind spot; it is installed packages, not cache |
 | `$Recycle.Bin` on non-system volumes | 3.6 GB | 3 | Cleaners empty `C:` only. `C:` held 0 bytes here. **Shipped — see §7** |
 | `%LOCALAPPDATA%\NVIDIA\DXCache` + `GLCache` | 3.2 GB | 1 | GPU shader cache; no provider category existed. **Shipped — see §5** |
 | Windows Search index (`Windows.db`) | 2.2 GB | 2 | Needs a service stop, so no cleaner attempts it |
 | `C:\$WinREAgent` | 1.7 GB | 2 | Disk Cleanup's update pass does not remove it |
 | .NET SDKs, 8 versions, one out of support | 1.8 GB | 4 | An uninstall, not a delete. §2 rules it out |
-| Visual Studio `.vs\` per solution (4 solutions) | 0.8 GB | 1 | Inside source trees, beside the `obj\` already walked |
+| Visual Studio `.vs\` per solution | 1.5 GB | mixed | Inside source trees, beside the `obj\` already walked. **Re-measured across 51 solutions, and the tier is a correction — see §2** |
 | Chromium-shaped caches across 10 desktop apps | 0.8 GB | 1 | Recognisable by shape, not by name. **Shipped — see §4** |
 | Crash dumps, CBS logs, WER archives | 0.2 GB | 3 | Small here; routinely tens of GB after a bugcheck. **Shipped — see §6**, and the tier is a correction |
 
@@ -362,15 +363,153 @@ One class each, on the shape npm and NuGet already use.
 
 ---
 
-## 2. Per-project build output
+## 2. Per-project build output — Unity, Rust, node_modules and .venv ✅ done
 
 The seam already exists. `DotNetObjProvider` walks source roots through `SourceRootStore`, and the
 age column built for the cpptools workspace databases is exactly the signal these need. What is
 missing is the other kinds of build directory.
 
-### Unity `Library\` — Tier 2, measured at 5.4 GB across 7 projects
+**Outcome:** four kinds shipped — `UnityLibraryProvider`, `CargoTargetProvider`,
+`NodeModulesProvider` and `PythonVirtualEnvironmentProvider`, all on a shared `BuildDirectoryProvider`
+reading a declared `BuildDirectoryKind`. **Open question 2 is answered rather than worked around** —
+the answer is at the foot of this document, and it is the larger half of what this phase was. Visual
+Studio's `.vs` did not ship and the row was split rather than ticked; `dist` and a Dart `build` are
+both declined outright. Every reason is below, and the `.vs` one is the finding of the phase.
 
-Unity regenerates `Library\` from the project's assets and settings, so nothing is lost. Tier 2
+Ten things the work settled.
+
+- **A live tree can be detected, unelevated, and the name check it replaces was wrong in both
+  directions.** §5.3's exclusion asked "is a process called `devenv` running", which vetoes every
+  project on the disk when any one is open, and misses the case entirely when the process holding a
+  directory is not called what a reader would expect. Both halves were observed rather than reasoned
+  about: a live Visual Studio solution's `.vs` index is held open by `DevHub.exe`, a service host,
+  while `devenv` holds nothing inside `.vs` at all. `ILiveTreeInspector` asks about a *path* instead,
+  and a directory it reports live is vetoed rather than warned about — the difference between a cache
+  a tool is still writing to and a build directory removed under a live editor is the difference
+  between a slower next use and losing the afternoon.
+
+- **The Restart Manager answers for a file and refuses a directory, which is why there are two
+  mechanisms rather than one.** `RmRegisterResources` returns `ERROR_ACCESS_DENIED` for a directory
+  path — observed on three separate directories — so there is no way to ask "is anything under this
+  tree open". What it does answer, unelevated, is who holds a named file, correctly and in about ten
+  milliseconds once the session is up. That makes it the §5.1-shaped signal: the provider names the
+  file its tool locks, and Unity's `Library\UnityLockfile` is the case. Existence is not the test,
+  because a crashed editor leaves one behind for ever; being held open is.
+
+- **The other two signals come from the process table, and they are what answer for a directory.** A
+  running program whose executable is inside the directory is an activated `.venv` or a binary
+  started from `target\debug`. A running program whose working directory is inside the *project* is a
+  build in flight, a shell, or an editor with the solution open — Visual Studio's working directory
+  is the solution folder, which is how an open solution is recognised without knowing any process
+  name. One pass over the whole table costs about 30 ms for ~500 processes, of which ~360 could be
+  opened at all, and needs no elevation.
+
+- **The working directory has no documented accessor, and the mitigation is the interesting part.**
+  It is read out of the process environment block at offsets Windows does not promise to keep. A
+  layout that moved would produce nonsense matching no directory, which reads as "nothing is using
+  this" — the one wrong answer that costs somebody their work. So the offsets are checked against
+  Deguffer's own process, whose working directory is already known, and a mismatch turns the
+  mechanism off and says so. `LiveTreeFindings.Complete` is what carries that outward, and it is the
+  same distinction §5.5 draws for the measurement fallback: a safeguard that could not run must not
+  look like a safeguard that found nothing.
+
+- **The veto can miss and must never fire wrongly, and that asymmetry is what sets the shape.** Every
+  signal is positive evidence, so a directory reported live is one. The reverse does not follow, and
+  review found three gaps rather than the one this phase started with. A compiler holding a file deep
+  inside a tree that is neither its own image nor its working directory is invisible to all three
+  signals. **A process running elevated or as another user cannot be opened at all from an unelevated
+  Deguffer**, so an elevated build is invisible too — measured at 143 unopenable and 46 more readable
+  only in part, out of 457 processes, of which three were ordinary elevated user applications in the
+  interactive session. And the Restart Manager refuses a path past `MAX_PATH` in *either* form, so
+  the lock-file signal cannot run that deep at all; that one is reported rather than silent, because
+  the refusal turns the findings incomplete. None of the three closes without elevation, and §6.3
+  makes unelevated the ordinary run. So the veto is one input and age is the other, exactly as this
+  section predicted — "age is the whole decision" is not quite right, but "the veto answers *now* and
+  age answers *dormant*" is.
+
+  **The middle two are stated rather than warned about, and that was a decision.** A note saying "a
+  process running as administrator would not be seen" is true of every unelevated run on every
+  machine, so a plan carrying it would carry it always, and a warning that never varies is one the
+  user learns to read past — taking the one that does vary with it. `LiveTreeFindings.Complete`
+  therefore reports a *mechanism* failing, and the standing limits of running unelevated are written
+  into the interface, this document and the user-facing guide instead.
+
+- **Age is read from the build directory's immediate entries, and both other candidates were
+  rejected for stated reasons.** Not the directory's own timestamp: that moves only when an entry is
+  added, removed or renamed, so a project rebuilt daily reports the date its output layout last
+  changed — the servicing-log provider met the same trap from the other side, and it applies here.
+  Not the source beside it either, which is the tempting answer: age is asked in order to price a
+  deletion, what a deletion costs is a rebuild, so "when was this last built" is the question and
+  "when was this project last edited" is a different one. Reading the source would also mean walking
+  the tree this exists to avoid walking. `DotNetObjProvider` already had this rule; it is
+  `BuildDirectoryAge` now, shared by all six.
+
+- **The `node_modules` collision needed no exception, and seeing why took longer than fixing it.**
+  `SourceTreeBoundary` refuses to enter `node_modules` because walking one costs hundreds of
+  thousands of entries. A search that is *looking* for `node_modules` stops at it without descending
+  anyway, because everything below a candidate belongs to that candidate — so the sought-name stop is
+  a strictly stronger rule than the boundary, and the two never disagree. What did have to change is
+  that "inside another candidate" is a property of the whole name set rather than of one name: a pass
+  that knows about `node_modules` never offers the `build` directory of a package inside one, and a
+  pass that does not will walk straight in. Both routes are handed the same set for that reason, so
+  elevating cannot change what Deguffer offers.
+
+- **§5.1's `cargo clean` was considered and declined, and the reasons are in the class.** It is a
+  per-project command run in the project's own directory, so it means one subprocess per Rust project
+  on the disk, each able to hang, against a per-step selection model where the user picks a handful.
+  §5.1's actual argument — that the tool reaches locations we do not know about — buys almost nothing
+  here, because with no configuration `cargo clean` removes the very directory discovery already
+  found. What it reaches and this does not is a `target` relocated by `CARGO_TARGET_DIR`, and that
+  case is invisible to a path-based provider rather than mishandled by it. A machine whose Rust
+  toolchain has been uninstalled still has its `target` directories, and a command-based provider
+  could not touch them at all.
+
+- **Cargo's tier moved, which is the fourth phase running in which a proposed tier or its argument
+  did not survive.** This section proposed Tier 1. Restoring a `target` is not a slower build, it
+  *is* the build: every dependency compiled from source, per profile and per feature set, which is
+  where the five to twenty gigabytes came from. That is vcpkg's argument from the previous phase — a
+  cache whose entries are recovered by compiling rather than downloading — with more force, because
+  there is no cache to fall back on. Unity's proposed Tier 2 held *and* its stated argument held,
+  which is the first time in four phases. The other three are Tier 2 on the ordinary reading.
+
+- **Consent had to move with the code, and it is one sentence rather than a mechanism.** The Settings
+  copy said Deguffer looks inside approved folders "for .NET intermediate build output (obj)". That
+  is a specific promise, and approving a folder under it is not approval to find `node_modules`. The
+  copy now names every kind, in the same change that widened the search. A second consent list was
+  considered and rejected: the *scope* is unchanged — the same folders, nothing new outside them —
+  and only the kinds found inside widen, which §7's preview-first flow already shows the user before
+  anything is removed. There is no way to grandfather an existing approval, because the roots file
+  records only paths, so an existing approval is re-read under the new sentence and can be removed.
+
+- **A `build` beside a `pubspec.yaml` shipped and was then withdrawn, and the reason generalises.**
+  It was written, tested and reviewed before the question that killed it got asked: what, inside that
+  directory, says the toolchain made it? Nothing. `pubspec.yaml` and `.dart_tool` are both facts about
+  the *parent* — a Dart package is here, and `pub get` has run — and a pure Dart package does not
+  always produce a top-level `build` at all, so the conjunction is satisfied by projects whose `build`
+  is somebody's own. Unity's `Library` survives the same question because its parent's identity
+  *implies* the child: a directory holding `Assets`, `Packages` and `ProjectSettings` is a Unity
+  project, and Unity always creates `Library` in it. Checking real Flutter projects on this machine
+  settled the last hope: `.last_build_id` is present in one project's `build` and absent from
+  another's, so there is no marker to require. **Recognition by a directory's name plus its
+  neighbours, with nothing inside it, is the shape to refuse** — it is §5.2's dangerous direction
+  wearing a conjunction.
+
+Two defects the work turned up, neither of them in a provider.
+
+- **`Any(predicate)` short-circuits, so a provider declaring two directory names searched for one.**
+  `SourceDirectoryDiscovery.Include` registered names with `names.Any(_names.Add)`, which stops at
+  the first name that is new. Python declares `.venv` and `venv`; only `.venv` was ever searched for.
+  Caught by the test for the second name, which is exactly the case a single-name provider would
+  never have exercised.
+- **The unelevated run announced the walk twice.** Discovery says it walked, and the measurement says
+  it walked, in two wordings one under the other. They are different facts and a fast measurement can
+  follow a walked discovery, but read together they look like a defect, so the discovery sentence is
+  now left to the measurement's where that one is already there. Found by driving the real window,
+  not by reading the code.
+
+### Unity `Library` — Tier 2, measured at 5.4 GB across 7 projects ✅ done
+
+Unity regenerates `Library` from the project's assets and settings, so nothing is lost. Tier 2
 rather than Tier 1 because the regeneration is a full asset reimport, which on a large project is
 tens of minutes. The largest single one measured 1.59 GB.
 
@@ -378,36 +517,79 @@ The recognition rule is strong: a directory named `Library` whose parent also ho
 `Packages` and `ProjectSettings` is a Unity project. That is a content signature over the *parent*,
 and `ContentSignature` already makes that kind of judgement for the cpptools workspace databases.
 
-### Rust `target\` — Tier 1, researched
+**Re-measured while this shipped, and the survey's premise about the machine was half wrong.** Unity
+Hub is installed here and no editor is, so `Library` is *measured* — 5.26 GB across the same seven
+projects, largest 1.67 GB — while nothing about a running editor could be observed. That is why the
+lock file goes through the Restart Manager rather than being tested for existence: the rule is
+provable against a file this test holds open, with no Unity anywhere.
+
+### Rust `target` — Tier 2, researched ✅ done
 
 The largest per-project directory in common developer use, routinely 5 to 20 GB per workspace,
-because every dependency is compiled per profile and per feature set. Recognised by a sibling
-`Cargo.toml`, and evicted with `cargo clean` run in the project directory — the §5.1 path.
+because every dependency is compiled per profile and per feature set.
 
-### Visual Studio `.vs\` — Tier 1, measured at 0.8 GB across 4 solutions
+**Tier 2 rather than the Tier 1 proposed here, and path-based rather than the §5.1 command.** Both
+corrections are argued in the outcome above. Recognised by a sibling `Cargo.toml` *and* by
+`CACHEDIR.TAG` inside, which Cargo writes itself — the manifest says a Rust project is here, and the
+tag is the part that says Cargo made this directory. No Rust toolchain is installed on this machine,
+so the sizes remain vendor documentation and community report, and the rules are proved through a
+synthetic tree rather than against a real `target`.
 
-Per-solution IntelliSense database, browsing data and editor state, hidden beside the `.sln` and
-rebuilt on the next solution open. The three largest measured 384 MB, 214 MB and 212 MB.
+### Visual Studio `.vs` — measured at 1.45 GB across 51 solutions, **split out, not shipped**
 
-**One child is not cache.** `.vs\<solution>\v17\.suo` holds the user's own solution options: open
-documents, breakpoints, expanded nodes, window layout. Small, and Tier 3. The recognised-children
-rule matters here even though the directory is otherwise disposable.
+Per-solution IntelliSense database, browsing data and editor state, hidden beside the `.sln`.
 
-### The rest of the shape — Tier 2, measured at 3.2 GB in the top five
+**This entry is wrong, and correcting it is the most valuable thing this phase produced.** It
+proposed Tier 1 with one Tier 3 child, `.suo`. What is actually in `.vs` on the surveyed machine:
 
-Outside Unity, the audited machine held 1.24 GB in a `dist\`, 1.17 GB in a Dart `build\`, 803 MB in
-a Python `.venv\`, and 681 MB across two `node_modules\`. Each is regenerable from a manifest beside
-it, and each is worthless in a project nobody has opened for a year.
+| Child | What it is | Tier |
+| --- | ---: | --- |
+| `<solution>\v<N>\` | 406 MB. Holds `.suo` (86 MB), `.wsuo`, `DocumentLayout.json` — open documents, breakpoints, window layout — beside genuinely disposable browse databases, `ipch` and a 236 MB `Server` directory | mixed |
+| `<solution>\lut\` | 350 MB of code-coverage data — a record of test runs that already happened | 3 |
+| `CopilotSnapshots\` | 265 MB of file-state snapshots | 3 |
+| `ProjectEvaluation\` | 150 MB of MSBuild evaluation cache | 1 |
+| `<solution>\FileContentIndex\` | 144 MB of `.vsidx` index files | 1 |
+| `<solution>\copilot-chat\sessions\` | 71 MB of **AI conversation history**, megabytes per session | 3 |
+| `<solution>\CopilotIndices\` | 36 MB, an index over the code — probably Tier 1, not established | ? |
+| `<solution>\DesignTimeBuild\` | 24 MB of design-time build cache | 1 |
 
-**The design question is not which names to recognise. It is that age is the whole decision**, and
-§7 already calls age a first-class column. A dormant project's `node_modules` is free space; the
-same directory in the project open in another window is a broken build. Per-step selection already
-carries this without new UI.
+**Roughly a quarter of `.vs` by size is Tier 3 material this entry did not know existed**, and
+`copilot-chat\sessions` is §3's founding mistake exactly — Visual Studio Code's `workspaceStorage`,
+dominated by chat history, in a second costume one directory away from a folder every developer would
+call disposable.
 
-**A live tree must never be a target.** §5.3's running-process exclusion is written for `%TEMP%`, and
-this category needs it as much: a `.venv` with an activated interpreter, a `target\` mid-build, a
-`Library\` with the editor open. All three fail badly and all three are invisible to a name check.
-Generalising that exclusion is a prerequisite for this item, not a detail inside it.
+Two smaller corrections come with it. The version directory is not `v17`: `v14`, `v15`, `v16`, `v17`
+and `v18` were all present here, because Visual Studio 2026 writes `v18`, so a rule hard-coded to
+`v17` would have walked past a `.suo` it thought it had accounted for. And `.vs` has children at two
+different levels — `ProjectEvaluation`, `CopilotSnapshots`, `VSWorkspaceState.json` and
+`slnx.sqlite` sit directly under `.vs`, while the rest sit under a per-solution directory — so this is
+a nested recognised-children problem rather than the flat one every other provider has.
+
+That is a different shape of work from the five that shipped: those remove a whole directory the
+project regenerates, and this one has to name disposable *children* inside a directory that is
+mostly not disposable. It is its own row in the sequencing table now.
+
+### The rest of the shape — `node_modules` and `.venv` ✅ done; `dist` and Dart `build` declined
+
+Outside Unity, the audited machine held 1.24 GB in a `dist`, 1.17 GB in a Dart `build`, 803 MB in a
+Python `.venv`, and 681 MB across two `node_modules`. Each is regenerable from a manifest beside it,
+and each is worthless in a project nobody has opened for a year.
+
+**Two shipped and two are declined.** `node_modules` requires `package.json` *and* a lock file,
+because "regenerable" is a claim that reinstalling returns what was there and only a lock file makes
+it true. A virtual environment requires `pyvenv.cfg` inside *and* a dependency manifest beside,
+because without a manifest the environment is the only copy of its own contents and removing it
+destroys information rather than freeing space.
+
+**`dist` and a Dart `build` are declined for the same reason, and it is the one this section did not
+anticipate.** Both would be recognised by their name plus what stands beside them, with nothing
+inside either directory that the toolchain alone writes. For `dist` that is obvious: it is a build
+script's output on some projects and a hand-curated folder of releases on others. For `build` it took
+the review to see — `pubspec.yaml` and `.dart_tool` prove a Dart package is present and that
+`pub get` has run, both facts about the parent, and unlike Unity the parent's identity does not imply
+the child exists or is the toolchain's. That is 2.4 GB of the measured 3.2 GB left on the table,
+deliberately, and the rule it establishes is worth more than the reclaim: **a directory outside a
+tool's own root needs evidence from inside itself, or a parent whose identity implies it.**
 
 ---
 
@@ -1009,7 +1191,8 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Crash dumps and servicing logs ✅ | Expected path-based plus elevation. Elevation turned out to be a claim `CleanupPlan` could not make, and `MEMORY.DMP` a step kind it did not have — §6 records both | 0.2 GB |
 | Cargo, Go, Maven, vcpkg ✅ | Expected one class each on the npm and NuGet shape. Two wanted the declared-path shape instead, two moved to Tier 2, and the read-only trap turned out to be in the remover — §1 records all three | researched |
 | pnpm and conda ✅ | Expected one link-aware measurement to unblock both. The walk can answer and the file table cannot do it better, but only pnpm needed the answer — conda reports its own link-aware figure, so it shipped on PlatformIO's shape. §1a records the split | researched |
-| Per-project build output | Extends `SourceRootStore`; needs §5.3's live-tree exclusion generalised beyond `%TEMP%` | 8.6 GB |
+| Per-project build output ✅ | Expected §5.3's exclusion generalised, and that was indeed the larger half. Unity, Rust, node_modules and .venv shipped; `.vs` split out below, `dist` and Dart's `build` declined for want of evidence inside the directory — §2 records why | 5.8 GB |
+| Visual Studio `.vs` per solution | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at two nesting levels | 1.5 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
 | Windows Search index | Service control, which Deguffer does not do today. Decide the policy before the provider | 2.2 GB |
@@ -1048,9 +1231,39 @@ reason about. The tier model handles them. The plan and execution types do not, 
    link, so its dry run already reports a link-aware figure computed by the tool that owns the
    records. §1a records why that made this two phases rather than one.
 
-2. **How is a live source tree detected?** §5.3's exclusion is written against `%TEMP%` and open
-   handles. A `.venv` whose interpreter is running, or a Unity project open in the editor, needs the
-   same answer at a different granularity.
+2. ~~**How is a live source tree detected?**~~ **Answered.** Three signals, all of them positive
+   evidence, all readable without elevation, and none of them a process name.
+
+   **The Restart Manager answers for a *file*.** `RmStartSession` / `RmRegisterResources` /
+   `RmGetList` will name the processes holding a path open, and it does so unelevated — established
+   on this machine, against a file held open by another process, before any of `LiveTreeInspector`
+   was written. **It refuses a directory**, returning `ERROR_ACCESS_DENIED`, so there is no way to
+   ask "is anything under this tree open" and no substitute for asking about a named file. That makes
+   it §5.1-shaped: the provider declares the file its tool locks, and Unity's `UnityLockfile` is the
+   case. Whether that file *exists* is the weaker test, because a crashed editor leaves one behind
+   for ever.
+
+   **The process table answers for a *directory*, twice.** A running program whose executable sits
+   inside the directory is an activated `.venv` or a binary started from `target\debug`. A running
+   program whose working directory sits inside the *project* is a build in flight, a shell, or an
+   editor with the solution open. One pass over ~500 processes costs about 30 ms and needs no
+   elevation. The second of those is what makes a name check unnecessary, and it is worth recording
+   why the name check had to go: a live Visual Studio solution's `.vs` index is held open by
+   `DevHub.exe`, a service host, while `devenv` holds nothing in it — observed, not reasoned about.
+
+   **What the answer does not cover, and this is the part to carry forward.** A process holding a
+   file deep inside a tree that is neither its own image nor its working directory is invisible to
+   all three, and nothing unelevated answers that at directory granularity without enumerating every
+   handle on the machine. So the veto can miss and must never fire wrongly, which is why every signal
+   is positive evidence and why `LiveTreeFindings.Complete` keeps "could not tell" distinct from
+   "nothing is using it". §7's age column carries the rest of the decision: the veto answers *now*,
+   and age answers *dormant*.
+
+   **One cost worth naming.** The working directory has no documented accessor, so it is read out of
+   the process environment block at offsets Windows does not promise to keep. A layout that moved
+   would produce nonsense matching nothing, which reads as "dormant" — the dangerous direction. The
+   offsets are therefore checked against Deguffer's own process, whose working directory is already
+   known, and a mismatch turns the mechanism off and reports incomplete rather than empty.
 3. **Is the pending-reboot check reliable enough to ship?** It gates `C:\$WinREAgent` entirely.
 4. **Should Deguffer control services at all?** It gates the search index, and possibly nothing else.
    If nothing else, the answer is probably no, and the index belongs in §9.

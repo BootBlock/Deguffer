@@ -80,7 +80,7 @@
 
             <views:SettingsRow Glyph="&#xE8B7;"
                                Title="Where to look for build output"
-                               Description="Deguffer looks for .NET intermediate build output (obj) inside these folders and nowhere else. Nothing outside them is ever offered, even when it is plainly build output.">
+                               Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, Unity Library, Rust target, node_modules and Python virtual environments. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone.">
                 <views:SettingsRow.Control>
                     <Button Content="Add folder…"
                             Click="OnAddSourceRoot"

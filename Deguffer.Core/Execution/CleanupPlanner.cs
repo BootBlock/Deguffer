@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -19,19 +20,42 @@ public sealed class CleanupPlanner
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the per-volume
-    /// Recycle Bins, the crash dumps and the Windows servicing logs — which the audit did not
-    /// cover, and which were investigated on their own terms before being added. Their reasoning
-    /// and their rejected alternatives are in <c>docs/cache-locations.md</c>.
+    /// Recycle Bins, the crash dumps, the Windows servicing logs and the per-project build output
+    /// inside the user's own approved folders — which the audit did not cover, and which were
+    /// investigated on their own terms before being added. Their reasoning and their rejected
+    /// alternatives are in <c>docs/cache-locations.md</c>.
     ///
-    /// Tier 1 throughout except conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2,
-    /// and the Recycle Bins, the crash dumps and the servicing logs, which are Tier 3. Neither tier
-    /// is ever pre-selected, and neither is executed without the confirmation §7 requires of it —
-    /// an acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to
-    /// be held to it.
+    /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
+    /// environments, conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2, and the
+    /// Recycle Bins, the crash dumps and the servicing logs, which are Tier 3. Neither tier is ever
+    /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
+    /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
+    /// held to it.
     /// </summary>
-    public static CleanupPlanner CreateDefault() => new(
+    public static CleanupPlanner CreateDefault()
+    {
+        var roots = new SourceRootStore(UserEnvironment.Current);
+
+        // One discovery for every provider that searches the user's own folders, and one live-tree
+        // inspector beside it. Shared deliberately rather than defaulted per provider: six unshared
+        // passes would each walk the developer's whole disk on an unelevated run, and the names each
+        // provider registers on the way in are what make the one pass answer for all of them.
+        var sourceTrees = new SourceDirectoryDiscovery(DirectoryScanner.Default);
+        var liveTrees = LiveTreeInspector.Default;
+
+        return new CleanupPlanner(
+        [
+            new DotNetObjProvider(roots, sourceTrees, liveTrees),
+            new UnityLibraryProvider(roots, sourceTrees, liveTrees),
+            new CargoTargetProvider(roots, sourceTrees, liveTrees),
+            new NodeModulesProvider(roots, sourceTrees, liveTrees),
+            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees),
+            .. CacheProviders(),
+        ]);
+    }
+
+    private static IReadOnlyList<ICleanupProvider> CacheProviders() =>
     [
-        new DotNetObjProvider(new SourceRootStore(UserEnvironment.Current)),
         new NuGetCacheProvider(),
         new GradleCacheProvider(),
         new NpmCacheProvider(),
@@ -51,7 +75,7 @@ public sealed class CleanupPlanner
         new RecycleBinProvider(),
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
-    ]);
+    ];
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
 

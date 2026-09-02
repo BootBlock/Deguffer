@@ -105,4 +105,25 @@ public sealed class SourceRootStoreTests : IDisposable
         Assert.True(CreateStore().Save([@"C:\Users\testuser\src"]));
         Assert.True(File.Exists(StoreFile));
     }
+
+    /// <summary>
+    /// A root reaches disk resolved, whatever form it arrived in.
+    ///
+    /// This is the only configured path in Deguffer that used to skip <c>LongPath.Configured</c>,
+    /// and it matters because two routes read it. The walk resolves a root itself on the way to the
+    /// extended-length form, while the volume index narrows its results by comparing strings — so a
+    /// hand-edited entry with forward slashes, a trailing separator or a <c>..</c> segment would make
+    /// an elevated run return an empty plan where an unelevated one found every project.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:/Users/testuser/src")]
+    [InlineData(@"C:\Users\testuser\src\")]
+    [InlineData(@"C:\Users\testuser\tools\..\src")]
+    public void NormalisesARootHoweverItWasWritten(string written)
+    {
+        Assert.True(CreateStore().Save([written], out var stored));
+
+        Assert.Equal([@"C:\Users\testuser\src"], stored);
+        Assert.Equal(stored, CreateStore().Load());
+    }
 }
