@@ -171,7 +171,12 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// A file small enough to live in its own MFT record occupies no clusters, so deleting it frees
-    /// none. Reporting its length as reclaimable would overstate what a cleanup can return.
+    /// none. The table is the only thing that can see that, which is why it is asserted here.
+    ///
+    /// <para>The reported figure is the length regardless — see
+    /// <see cref="Deguffer.Core.Scanning.ScanSize.Reclaimable"/>. Showing the zero instead was
+    /// measured to make seven real Recycle Bins unselectable on an elevated run, which is a worse
+    /// error than overstating a compressed tree.</para>
     /// </summary>
     [Fact]
     public void CountsResidentFilesAsOccupyingNoClusters()

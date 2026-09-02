@@ -1,4 +1,4 @@
-﻿﻿using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;

@@ -308,7 +308,7 @@
                 <Button Content="Elevate and rescan"
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
-                        AutomationProperties.HelpText="Restart Deguffer as administrator and scan again using the file table, which is faster." />
+                        AutomationProperties.HelpText="Restart Deguffer as administrator and scan again, so it can read the volume's file table and carry out steps only an administrator may perform." />
                 <Button Content="Cancel"
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                         Command="{x:Bind ViewModel.CancelCommand}" />

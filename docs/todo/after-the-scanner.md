@@ -2,7 +2,7 @@
 
 > **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
 > are done; item 4 records what was deferred and why, and item 5 what is still undecided. Items 6
-> and 7 came later, from watching the fast path actually run, and are open. Flip to ✅ COMPLETE and
+> to 8 came later, from watching the fast path actually run, and are open. Flip to ✅ COMPLETE and
 > `git mv` into `done/` when the list is exhausted, or supersede it with a newer plan.
 
 The §5.5 scanner (MFT fast path, observable fallback, cross-run size cache, progressive preview)
@@ -392,3 +392,42 @@ worth thinking about before anyone writes code:
 - Item 6 changes the arithmetic. If the table stops declining the large locations, the index earns
   back more per volume and this may cease to matter on `C:` while still mattering on the five
   volumes with one tiny location each.
+
+## 8. Let a root probe tell "not there" from "I was refused"
+
+**Established while auditing the fast path, and left standing because the fix is a capability rather
+than a correction.** `LongPath.DirectoryExists` returns false for a directory that exists and whose
+attributes the account may not read, because `Directory.Exists` swallows the refusal. Eleven
+providers probe their cache root by name through it before classifying anything, so what the user is
+told is "Gradle is not installed for this user — no .gradle directory" about a directory that is on
+disk with a cache inside it. `IsPresentAsync` denies it on the same evidence, so the row does not
+appear at all.
+
+That is precisely the contradiction `UnreadableRoot.WhyNothingWasPlanned` was written to end one
+refusal over — where a root that will not be *listed* is still reached by a probe that traverses to
+it — and the sentence it produces is the one this case wants.
+
+The refusal takes an access rule on **both** the parent (deny `ListDirectory`) and the target (deny
+`ReadAttributes`), because NTFS answers `GetFileAttributes` out of the parent's own index whenever
+the caller may list the parent. Either rule alone leaves the attributes readable, including a deny
+of `FullControl` on the target. `DeniedDirectory.WithUnreadableAttributes` builds it, and
+`GradleCacheProviderTests.ARootWhoseAttributesCannotBeReadIsCalledAbsentRatherThanALink`
+characterises today's answer so this work has something to change.
+
+Two other things fall out of the same gap and should be settled with it:
+
+- **`DirectoryRemover` reports a directory it cannot see as removed.** `Remove` returns
+  `RootRemoved: true` when `DirectoryExists` is false, and `PlanExecutor` turns that into a
+  successful step. Under this refusal the directory is still there. Pre-existing, and only reachable
+  now that a fixture can produce the condition.
+- **`LongPath.IsReparsePoint` fails closed and no caller renders it as a link**, which is only true
+  *because* the existence gate fails first. Its doc comment says so, and that argument stops holding
+  the moment the gate learns a third answer — so the two have to move together.
+
+Why it is not in the audit that found it: 55 call sites in Core go through `DirectoryExists` or
+`FileExists`, and each provider's root probe carries its own §5.6 survivor list and its own tests.
+Threading a third state through them is the size of the `ChildDirectoryScan` work, not of a
+correction. It also needs a decision that is not the auditor's: whether a condition that takes a
+deliberately hostile pair of access rules earns a distinct sentence in eleven providers, or whether
+the honest move is narrower — for instance answering only at the presence probe, so the row appears
+and the existing unreadable-root note does the rest.

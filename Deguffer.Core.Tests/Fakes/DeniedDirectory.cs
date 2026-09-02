@@ -28,17 +28,15 @@ public sealed class DeniedDirectory : IDisposable
     /// resolves — which is exactly the situation an index-driven route meets, and the reason a
     /// candidate it offers from in there is a real one.
     /// </summary>
-    public DeniedDirectory(string directory)
+    public DeniedDirectory(string directory) => Build(() =>
     {
         Deny(directory, FileSystemRights.ListDirectory);
 
-        Verify(
-            directory,
-            () => Assert.Throws<UnauthorizedAccessException>(
-                () => Directory.EnumerateFileSystemEntries(directory).ToList()));
-    }
+        Assert.Throws<UnauthorizedAccessException>(
+            () => Directory.EnumerateFileSystemEntries(directory).ToList());
+    });
 
-    private DeniedDirectory(string directory, string parent)
+    private DeniedDirectory(string directory, string parent) => Build(() =>
     {
         // Both ends, because either one alone leaves the attributes readable — measured rather than
         // assumed. NTFS answers GetFileAttributes out of the parent directory's own index whenever
@@ -48,10 +46,8 @@ public sealed class DeniedDirectory : IDisposable
         Deny(parent, FileSystemRights.ListDirectory);
         Deny(directory, FileSystemRights.ReadAttributes);
 
-        Verify(
-            directory,
-            () => Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(directory)));
-    }
+        Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(directory));
+    });
 
     /// <summary>
     /// Refuse the attribute read itself, which takes an access rule on <paramref name="directory"/>
@@ -93,21 +89,29 @@ public sealed class DeniedDirectory : IDisposable
     }
 
     /// <summary>
-    /// The fixture is only a fixture if the refusal is real. A machine that let this through would
-    /// make every assertion downstream pass for the wrong reason.
+    /// Apply the rules and prove the refusal is real, undoing everything if any part of it throws.
+    ///
+    /// <para>The whole body is guarded, not just the assertion. <see cref="Deny"/> writes each rule
+    /// to disk before recording it, and the two-ended mode writes two — so a throw on the second
+    /// leaves the first standing with no object for a caller to dispose. That one is on the
+    /// <em>parent</em>, and a Deny/ListDirectory there defeats
+    /// <see cref="TempDirectory"/>'s own recursive delete, which swallows
+    /// <see cref="UnauthorizedAccessException"/>. The scratch tree would then stay on the
+    /// developer's disk for good, with nothing said and no test failing.</para>
+    ///
+    /// <para>The assertion itself is the other reason to guard: a machine that let the refusal
+    /// through would make every assertion downstream pass for the wrong reason, and a TEMP that does
+    /// not round-trip a DACL — a redirected share, a bind mount — is a real way for that to
+    /// happen.</para>
     /// </summary>
-    private void Verify(string directory, Action assertion)
+    private void Build(Action apply)
     {
         try
         {
-            assertion();
+            apply();
         }
         catch
         {
-            // The rules are on disk already, and a throw here means no caller ever got an object to
-            // dispose. A TEMP that does not round-trip a DACL — a redirected share, a bind mount —
-            // would otherwise leave a directory the suite cannot delete and the user cannot find,
-            // once per run.
             Dispose();
             throw;
         }

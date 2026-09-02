@@ -361,10 +361,10 @@ what §5.5 assumes**, and the numbers are recorded here because no fixture can p
 
 - **The table answers most locations and roughly half the bytes.** Across the 328 paths one
   planning pass measures on this workstation, plus `C:\`, `C:\Windows`, `C:\Windows\Logs`,
-  `C:\Windows\Logs\DISM`, `C:\Program Files` and the two `dotnet` locations: 323 answered from
-  the table and 13 declined. Every decline is on `C:`, where the ratio is 35 answered to 13, and the
-  declines are the large ones — `.nuget\packages` at 7.97 GB, the npm cache at 416 MB, the NuGet
-  v3 cache at 2.48 GB. The answered paths total 11.88 GB and the declined 11.84 GB.
+  `C:\Windows\Logs\DISM`, `C:\Program Files` and the two `dotnet` locations, 335 in all: 322
+  answered from the table and 13 declined. Every decline is on `C:`, where the ratio is 35 answered to 13, and the
+  declines are the large ones — `.nuget\packages` at 7.97 GB, the NuGet v3 cache at 2.48 GB, and
+  the npm cache. The answered paths total 11.88 GB and the declined 11.84 GB.
 
 - **Every decline has one cause, and it is not the one the code most guards against.** All 13 are
   `SumSubtree` meeting a record whose size the table did not establish. Not one is a path the index
@@ -383,7 +383,7 @@ what §5.5 assumes**, and the numbers are recorded here because no fixture can p
   against 15.5 unelevated cold, and 28.0 against 17.1 warm — the elevated run second in both cases,
   so with the warmer cache. The cause is legible: building the index cost 9.9 seconds across seven
   volumes, and walking every path it then answered for would have cost 1.24 seconds (1.09 on `C:`
-  over 45 paths, 0.15 on `P:` over 282). Five of those volumes were indexed at 0.47 to 0.72 seconds
+  over 45 paths, and 0.15 over the 282 on the source volume). Five of those volumes were indexed at 0.47 to 0.72 seconds
   apiece to measure one 129-byte Recycle Bin each, because that is the only location on them any
   provider names.
 
@@ -392,9 +392,13 @@ what §5.5 assumes**, and the numbers are recorded here because no fixture can p
   walking and 2.71 through the index. That is the one speed claim in the UI that survived the
   measurement, and it is the one the source-tree plan note makes.
 
-  This does not settle the founding audit's "over ten minutes across a handful of profile subtrees".
-  Two machines disagree, and one measurement cannot say which is representative — so the roadmap's
-  premise stands and only the sentences that promised *this* user a quicker scan were changed.
+  **This does not contradict §5.5, and it is worth being exact about why.** The founding audit's
+  "over ten minutes across a handful of profile subtrees" was measured on *naive recursive*
+  enumeration. What ships is `BoundedFileWalk`, the bounded parallel pool §5.5's own second bullet
+  prescribes, and the 15.5 seconds above is that. The two figures are not two machines disagreeing;
+  they are two algorithms. What the measurement does show is that the prescribed fallback turned out
+  fast enough that the route it was written to fall back *from* no longer pays for itself here — so
+  the premise stands and only the sentences promising *this* user a quicker scan were changed.
 
 - **Elevating made seven real locations unselectable, until the reported axis changed.** A file
   small enough to live inside its own MFT record occupies no clusters, so the table reports zero
@@ -420,7 +424,9 @@ what §5.5 assumes**, and the numbers are recorded here because no fixture can p
 that holds a file's `$DATA` is the root-cause fix for every decline measured above, and it is a
 piece of NTFS work with its own fixture requirements rather than a correction — see
 [after-the-scanner.md](after-the-scanner.md) items 6 and 7, which also carry the per-volume index
-cost.
+cost. Item 8 there carries a third thing this pass established and did not fix: a root probed by
+name cannot tell "not there" from "I was refused", so a provider reports a cache as not installed
+when the directory is on disk with content in it.
 
 ### pnpm — Tier 1, researched ✅ done
 

@@ -61,7 +61,7 @@ public readonly record struct ScanSize(long Allocated, long Logical, bool IsAppr
     /// <para><b>Nothing that deletes can produce it.</b> <see cref="Execution.DirectoryRemover"/>
     /// and <see cref="Execution.FileRemover"/> both count file lengths, so a plan previewing
     /// allocated bytes always reported a logical reclaim afterwards — preview and result on
-    /// different axes for every step, not only for the command steps a review caught. Teaching the
+    /// different axes for every step, not only for the command steps. Teaching the
     /// walk to read allocated was measured rather than assumed: <c>GetCompressedFileSize</c> costs
     /// 1.1x to 5.4x a length pass and returns the file's length for anything not compressed or
     /// sparse, so it does not produce cluster slack at all; the call that does,

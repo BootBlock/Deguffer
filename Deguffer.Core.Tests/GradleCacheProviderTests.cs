@@ -185,22 +185,31 @@ public sealed class GradleCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A root whose attributes cannot be read is not reported as a link.
+    /// A root whose attributes cannot be read is not reported as a link — and is reported as absent,
+    /// which is a different wrong sentence and is pinned here rather than left to be discovered.
     ///
     /// <para><see cref="LongPath.IsReparsePoint"/> fails closed, which is right for a predicate
     /// guarding a deletion and would be wrong to render: every provider here turns a true into
-    /// "it is a link to somewhere else", which is a specific claim about the machine rather than an
-    /// admission that Deguffer could not tell. That is the defect
-    /// <see cref="Safety.ChildDirectories"/> was corrected for, one predicate over.</para>
+    /// "it is a link to somewhere else", a specific claim about the machine rather than an
+    /// admission that Deguffer could not tell. It never gets the chance. The only access rules that
+    /// break the attribute read break the existence check identically — see
+    /// <see cref="LongPathTests.FailsClosedOnAPathItCannotReadWhileTheExistenceCheckAheadOfItFailsToo"/>
+    /// — and every such provider probes by name before it classifies, so it takes the absent branch
+    /// first. Gradle stands for all eleven of them here because they share that shape.</para>
     ///
-    /// <para>It does not arise, and this pins why rather than leaving it to be re-derived. The
-    /// only access rules that break the attribute read break the existence check identically —
-    /// see <see cref="LongPathTests.FailsClosedOnAPathItCannotReadWhileTheExistenceCheckAheadOfItFailsToo"/>
-    /// — and every such provider asks that first. Gradle stands for all of them here because they
-    /// share the shape: probe by name, then classify.</para>
+    /// <para><b>The absent branch is not right either.</b> "Gradle is not installed for this user"
+    /// is asserted about a directory that is on disk with a 4 KB cache inside it, and
+    /// <see cref="ICleanupProvider.IsPresentAsync"/> denies it on the same evidence — which is
+    /// exactly the contradiction <see cref="UnreadableRoot.WhyNothingWasPlanned"/> was written to
+    /// end one refusal over, where a root that will not be <em>listed</em> is reached by a probe
+    /// that traverses to it. Fixing it means <see cref="LongPath.DirectoryExists"/> answering in
+    /// three states across every root probe in Core, which is its own piece of work:
+    /// <c>docs/todo/after-the-scanner.md</c> item 8. This test characterises today's behaviour so
+    /// that work has something to change, and so nobody reads the link half as a clean bill of
+    /// health.</para>
     /// </summary>
     [Fact]
-    public async Task ARootWhoseAttributesCannotBeReadIsNotReportedAsALink()
+    public async Task ARootWhoseAttributesCannotBeReadIsCalledAbsentRatherThanALink()
     {
         var root = CreateGradleHome();
         CreateAt(root, "caches", 4096);
@@ -209,14 +218,22 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         var provider = CreateProvider();
 
-        // The path is there and the attribute read is refused, so the fail-closed predicate would
-        // answer "link" if anything asked it.
+        // The directory is there with content in it, and the attribute read is refused — so the
+        // fail-closed predicate would answer "link" if anything asked it.
+        Assert.True(Directory.Exists(Path.Combine(root, "caches")));
         Assert.True(LongPath.IsReparsePoint(root));
 
         var plan = await provider.PlanAsync();
 
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("link", StringComparison.OrdinalIgnoreCase));
         Assert.Empty(plan.TargetedPaths);
+
+        // What it says instead, and what it will stop saying when item 8 lands. The sibling test
+        // above asserts IsPresentAsync is true for a root that merely will not be listed; here the
+        // presence probe is refused as well, and the plan agrees with it for the wrong reason.
+        Assert.False(await provider.IsPresentAsync());
+        Assert.Contains(plan.Notes, n => n.Message.Contains("not installed", StringComparison.OrdinalIgnoreCase));
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>

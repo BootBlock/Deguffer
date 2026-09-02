@@ -87,7 +87,9 @@ public sealed record CleanupPlan
 
     /// <summary>
     /// The same total with both numbers intact, and with the approximation flag preserved: a plan
-    /// measured wholly or partly by the fallback walk cannot claim exact allocated sizes.
+    /// holding a step whose figure is a forecast rather than a measurement is only as exact as that
+    /// step. Both of §5.5's routes measure, so neither sets the flag; conda's dry run and the
+    /// sole-link sum do.
     /// </summary>
     public ScanSize Estimated => Steps.Aggregate(ScanSize.Zero, (total, step) => total + step.Estimated);
 

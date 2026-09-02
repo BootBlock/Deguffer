@@ -140,27 +140,39 @@ public static class LongPath
     /// parse is not an answer at all, and the only safe reading of "I cannot tell" on a predicate
     /// guarding a deletion is the one that stops it.</para>
     ///
-    /// <para><b>The closed answer costs nothing, because no caller can reach it</b>, and that is
-    /// worth stating because eleven callers turn a true into the sentence "it is a link to somewhere
-    /// else" — a specific claim about the machine, where the truth would be that Deguffer could not
-    /// tell. Rendering a non-answer as a fact is the defect
-    /// <see cref="ChildDirectories.Under"/> was corrected for, and it would be worse here.</para>
+    /// <para><b>No caller renders the closed answer as a link</b>, and that is worth stating
+    /// because eleven of them turn a true into the sentence "it is a link to somewhere else" — a
+    /// specific claim about the machine, where the truth would be that Deguffer could not tell.
+    /// Rendering a non-answer as a fact is the defect <see cref="ChildDirectories.Under"/> was
+    /// corrected for, and it would be worse here.</para>
     ///
-    /// <para>It does not arise because of what it takes to make <c>GetFileAttributes</c> refuse.
-    /// NTFS answers out of the parent directory's own index whenever the caller may list the
-    /// parent, so denying a directory every right including <c>FILE_READ_ATTRIBUTES</c> leaves its
-    /// attributes readable, and so does denying the parent everything while the directory itself
-    /// still answers. Only an access rule on both ends refuses — measured, not reasoned about — and
-    /// in exactly that condition <see cref="DirectoryExists"/> answers false, because it is the
-    /// same query and <c>Directory.Exists</c> swallows the same failure. All eleven of those callers
-    /// ask that first and take the absent branch instead.</para>
+    /// <para>Those eleven do not reach it, because of what it takes to make
+    /// <c>GetFileAttributes</c> refuse. NTFS answers out of the parent directory's own index
+    /// whenever the caller may list the parent, so denying a directory every right including
+    /// <c>FILE_READ_ATTRIBUTES</c> leaves its attributes readable, and so does denying the parent
+    /// everything while the directory itself still answers. Only an access rule on both ends
+    /// refuses — measured, not reasoned about — and in exactly that condition
+    /// <see cref="DirectoryExists"/> answers false, because it is the same query and
+    /// <c>Directory.Exists</c> swallows the same failure. All eleven ask that first and take the
+    /// absent branch instead.</para>
     ///
-    /// <para>The two callers that do <em>not</em> ask first are
-    /// <see cref="BuildDirectorySignature"/> and <see cref="DotNetIntermediateSignature"/>, which
-    /// put a candidate and its parent through this without probing either. They are why the closed
-    /// answer still has to be the right one, and what they say when they get it is "not recognised
-    /// as build output, so it is left alone" — §5.2's own answer for a thing that could not be
-    /// classified, which names no link and claims nothing.</para>
+    /// <para><b>What they say on that branch is not right either, and it is not this predicate's
+    /// to fix.</b> A provider that probed for its cache by name reports "not installed" about a
+    /// directory that is on disk with content in it, because the existence check cannot tell absent
+    /// from unreadable any more than this one can tell link from unreadable.
+    /// <see cref="Providers.UnreadableRoot"/> is the sentence that shape needs, and reaching it
+    /// means a three-state answer from <see cref="DirectoryExists"/> across every root probe in
+    /// Core. That is its own piece of work; <c>docs/todo/after-the-scanner.md</c> item 8 carries
+    /// it.</para>
+    ///
+    /// <para>Three callers do <em>not</em> ask first. <see cref="BuildDirectorySignature"/> and
+    /// <see cref="DotNetIntermediateSignature"/> put a candidate and its parent through this
+    /// without probing either, and what they say when they get a true is "not recognised as build
+    /// output, so it is left alone" — §5.2's own answer for a thing that could not be classified,
+    /// which names no link and claims nothing. <see cref="Execution.FileRemover"/> asks this before
+    /// anything else, through the <see cref="IFileSystem"/> seam, and a true there removes the path
+    /// as a link and reports nothing reclaimed rather than its length. That under-reports, which is
+    /// the safe direction, and it is the one place the closed answer still costs something.</para>
     ///
     /// <para><see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now
     /// calls here instead. A safety predicate written twice is one that gets changed once.</para>
