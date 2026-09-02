@@ -83,22 +83,31 @@ public sealed class DirectoryAgeTests : IDisposable
     }
 
     /// <summary>
-    /// One level only. A directory whose own child directory holds the recent write reports the
-    /// child directory's timestamp, not the file's, because this runs per project across a whole
-    /// source root and descending would enumerate the tree it exists to avoid enumerating.
+    /// One level only, and a child <em>directory</em> counts as an entry at that level.
+    ///
+    /// Both halves are asserted at once, by giving the child directory a date of its own between the
+    /// parent's and the deep file's. The child's date must be the answer: reading files alone would
+    /// return the parent's, and descending would return the file's. Files alone is the shape to
+    /// guard against rather than an invented one — it is what the copy this rule replaced did, and
+    /// <c>obj\Debug</c> is exactly the entry whose timestamp moves as output is added and removed.
+    ///
+    /// Descending is refused because this runs per project across a whole source root, and it would
+    /// enumerate the tree discovery went out of its way not to enumerate.
     /// </summary>
     [Fact]
-    public void DoesNotDescend()
+    public void ReadsAChildDirectoryAsAnEntryAndDoesNotDescendPastIt()
     {
         var directory = _temp.CreateDirectory("obj");
         var nested = _temp.CreateDirectory("obj", "Debug");
         var deep = _temp.CreateFile(16, "obj", "Debug", "net10.0", "Example.dll");
 
+        var configurationChanged = DateTime.UtcNow.AddDays(-40);
+
         Directory.SetLastWriteTimeUtc(directory, LongAgo);
-        Directory.SetLastWriteTimeUtc(nested, LongAgo);
+        Directory.SetLastWriteTimeUtc(nested, configurationChanged);
         File.SetLastWriteTimeUtc(deep, DateTime.UtcNow);
 
-        Assert.Equal(LongAgo, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
+        Assert.Equal(configurationChanged, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
     }
 
     /// <summary>
@@ -111,6 +120,29 @@ public sealed class DirectoryAgeTests : IDisposable
     public void AMissingDirectoryHasNoAge()
     {
         Assert.Null(DirectoryAge.Of(Path.Combine(_temp.Path, "never-existed")));
+    }
+
+    /// <summary>
+    /// A directory whose entries cannot be read has no age at all.
+    ///
+    /// The rule is the newest of the directory <em>and</em> its entries, so a refusal leaves only
+    /// the half that reads older than the truth. §5.3 makes the refusal ordinary; what it must not
+    /// do is turn a partial reading into a number. The live subject is a servicing log directory the
+    /// account may not list, where the traces inside are rewritten while the parent's timestamp sits
+    /// still — and the row carrying that age is Tier 3, whose loss is permanent.
+    /// </summary>
+    [Fact]
+    public void ARefusedDirectoryHasNoAge()
+    {
+        var directory = _temp.CreateDirectory("RtBackup");
+        _temp.CreateFile(16, "RtBackup", "trace.etl");
+
+        File.SetLastWriteTimeUtc(Path.Combine(directory, "trace.etl"), DateTime.UtcNow);
+        Directory.SetLastWriteTimeUtc(directory, LongAgo);
+
+        using var denied = new DeniedDirectory(directory);
+
+        Assert.Null(DirectoryAge.Of(directory));
     }
 
     /// <summary>§6.3: the same answer past MAX_PATH, where an unextended path cannot even open.</summary>

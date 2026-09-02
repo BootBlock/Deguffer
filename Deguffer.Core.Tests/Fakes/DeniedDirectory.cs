@@ -36,10 +36,22 @@ public sealed class DeniedDirectory : IDisposable
 
         Apply(security => security.AddAccessRule(_rule));
 
-        // The fixture is only a fixture if the refusal is real. A machine that let this through
-        // would make every assertion downstream pass for the wrong reason.
-        Assert.Throws<UnauthorizedAccessException>(
-            () => Directory.EnumerateFileSystemEntries(directory).ToList());
+        try
+        {
+            // The fixture is only a fixture if the refusal is real. A machine that let this through
+            // would make every assertion downstream pass for the wrong reason.
+            Assert.Throws<UnauthorizedAccessException>(
+                () => Directory.EnumerateFileSystemEntries(directory).ToList());
+        }
+        catch
+        {
+            // The rule is on disk from the line above, and a throw here means no caller ever got an
+            // object to dispose. A TEMP that does not round-trip a DACL — a redirected share, a bind
+            // mount — would otherwise leave a directory the suite cannot delete and the user cannot
+            // find, once per run.
+            Dispose();
+            throw;
+        }
     }
 
     public void Dispose() => Apply(security => security.RemoveAccessRule(_rule));

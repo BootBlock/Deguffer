@@ -209,9 +209,14 @@ public class RouteAgreementTests
     /// <see cref="SourceTreeBoundary"/> cannot equalise it — it judges a candidate by name, and a
     /// name says nothing about who may read it.</para>
     ///
-    /// <para>Pinned rather than left to be discovered, in the same spirit as the resident-file case
-    /// above. The class's own claim used to be that the routes cannot differ at all, and a reader had
-    /// no way to learn otherwise.</para>
+    /// <para>Three things are asserted in the one denied tree, because the argument for accepting
+    /// the disagreement needs all three and each is worthless alone. The walk finds nothing. The
+    /// index still refuses everything the boundary refuses — a nested candidate, a directory under
+    /// <c>.git</c>, one under <c>node_modules</c> — so the extra reach carries no extra licence. And
+    /// what the index does offer is a whole candidate rather than a broken one: denying the right to
+    /// <em>list</em> a directory leaves the right to traverse it, so the project around the
+    /// candidate is readable and the candidate itself measures. That last one is the claim the whole
+    /// argument rests on, and it is the one that would be invisible if it stopped being true.</para>
     /// </summary>
     [Fact]
     public async Task OnlyTheIndexReachesBelowADirectoryTheAccountMayNotList()
@@ -222,7 +227,14 @@ public class RouteAgreementTests
             "src",
             new TreeDirectory(
                 "restricted",
-                new TreeDirectory("Example", new TreeDirectory("obj", new TreeFile("Example.dll", 128))))));
+                new TreeDirectory(
+                    "Example",
+                    new TreeFile("Example.csproj", 64),
+                    new TreeDirectory("obj", new TreeFile("Example.dll", 128), new TreeDirectory("obj"))),
+                new TreeDirectory(".git", new TreeDirectory("obj")),
+                new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj"))))));
+
+        var candidate = Path.Combine(root, "restricted", "Example", "obj");
 
         using var denied = new DeniedDirectory(Path.Combine(root, "restricted"));
 
@@ -230,36 +242,13 @@ public class RouteAgreementTests
         var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
 
         Assert.Empty(walked.Candidates);
-        Assert.Equal([Path.Combine(root, "restricted", "Example", "obj")], indexed.Candidates);
-    }
+        Assert.Equal([candidate], indexed.Candidates);
 
-    /// <summary>
-    /// The extra reach comes with no extra licence, which is the half that carries the safety.
-    ///
-    /// Inside the same unreadable subtree sit the three things the boundary refuses — a directory
-    /// under <c>.git</c>, one under <c>node_modules</c>, and one nested inside another candidate —
-    /// and the index must refuse all three there exactly as it refuses them anywhere else. The rules
-    /// are applied by name, and a name is readable whatever the ACL says, so an unreadable ancestor
-    /// must not be the one place a rule stops running.
-    /// </summary>
-    [Fact]
-    public async Task TheIndexStillAppliesEveryBoundaryRuleInsideAnUnreadableSubtree()
-    {
-        using var temp = new TempDirectory();
-
-        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
-            "src",
-            new TreeDirectory(
-                "restricted",
-                new TreeDirectory("Example", new TreeDirectory("obj", new TreeDirectory("obj"))),
-                new TreeDirectory(".git", new TreeDirectory("obj")),
-                new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj"))))));
-
-        using var denied = new DeniedDirectory(Path.Combine(root, "restricted"));
-
-        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
-
-        Assert.Equal([Path.Combine(root, "restricted", "Example", "obj")], indexed.Candidates);
+        // The candidate is a real one, which is what makes this reach rather than licence. A path
+        // through the denied directory still resolves, so everything §5.2 recognises a build
+        // directory by is readable, and the size the user is shown is measured rather than guessed.
+        Assert.True(File.Exists(Path.Combine(root, "restricted", "Example", "Example.csproj")));
+        Assert.Equal(128, (await Walking().MeasureAsync(candidate)).Size.Logical);
     }
 
     /// <summary>

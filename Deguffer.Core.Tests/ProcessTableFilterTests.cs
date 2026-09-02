@@ -57,6 +57,30 @@ public class ProcessTableFilterTests
     }
 
     /// <summary>
+    /// A row whose image path could not be read is still evidence, and so is one whose working
+    /// directory could not be.
+    ///
+    /// Both are ordinary on an unelevated run: <c>QueryFullProcessImageName</c> and the environment
+    /// block are refused independently, and a process answers for one question while staying silent
+    /// on the other. The inspector reads the two separately for that reason, so a filter that
+    /// quietly dropped a half-answered row would take away the strongest signal the veto has — a
+    /// build in flight, named by its working directory alone. Written because the identity rule
+    /// alone does not force this: a filter reading <c>p.ImagePath is { } &amp;&amp; p.Id != …</c>, which is
+    /// the idiom used one method away, satisfies every other test here and loses those rows.
+    /// </summary>
+    [Fact]
+    public void ARowWithAFieldThatCouldNotBeReadIsStillEvidence()
+    {
+        var table = TableOf(
+            new RunningProcess(4321, "msbuild", null, @"C:\Users\testuser\src\app"),
+            new RunningProcess(4325, "python", @"C:\Users\testuser\src\app\.venv\Scripts\python.exe", null));
+
+        var filtered = LiveTreeInspector.Filtered(table);
+
+        Assert.Equal(["msbuild", "python"], filtered.Processes.Select(p => p.Name));
+    }
+
+    /// <summary>
     /// Everything else is passed through untouched, and the incompleteness flag with it — a filter
     /// that quietly turned an incomplete table into a complete one would claim the working
     /// directories had been read when they had not.

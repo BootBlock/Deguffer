@@ -536,8 +536,9 @@ the three did not.
   of the folder it was asked to look inside is §5.5's intent. What changed is the claim: the class
   now states what it guarantees and what it cannot, and `WouldBeFoundByWalking` is
   `IsInsideTheSearch`, because a method that cannot answer for the walk should not be named for it.
-  Both halves are pinned in `RouteAgreementTests` — the disagreement itself, and that every boundary
-  rule still runs inside the unreadable subtree.
+  `RouteAgreementTests` pins all three parts of that argument in one denied tree, because each is
+  worthless alone: the walk finds nothing, the index still refuses everything the boundary refuses,
+  and what the index offers is a whole candidate rather than a broken one.
 
 - **Four answers to "how old is this" were three copies of one rule plus one honest exception, and
   the shared rule was missing half of itself.** `BuildDirectoryAge` argued at length that a
@@ -548,7 +549,12 @@ the three did not.
   written a moment ago reported **400 days**, and one emptied an hour ago reported **unknown**. Both
   errors point the same way, and it is the one that invites a deletion. The rule is now the newest of
   the directory *and* its immediate entries, one level, in `DirectoryAge` — and `DeclaredLocations`
-  and the VS Code cpptools provider call it instead of carrying their own copies.
+  and the VS Code cpptools provider call it instead of carrying their own copies. A directory whose
+  entries cannot be read reports **no age at all**, which is the one place the consolidation could
+  have gone wrong quietly: a refusal leaves only the directory's own timestamp, and that is the half
+  that reads older than the truth. The live subject is a servicing log directory the account may not
+  list, whose traces are rewritten while the parent's timestamp sits still — a Tier 3 row, whose loss
+  is permanent, carrying an age that invites the deletion.
 
 - **The Recycle Bin was the one genuine exception, and it stays as it was.** It asks the same
   question, and its own timestamp is already the whole answer: nothing in a bin is rewritten in
