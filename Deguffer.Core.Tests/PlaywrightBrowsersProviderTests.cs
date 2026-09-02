@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -222,6 +223,29 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         // The default location must not be used as a silent fallback either: the user did set the
         // variable, so falling back would clean a folder they had pointed away from.
         Assert.DoesNotContain(plan.TargetedPaths, p => p.Contains("ms-playwright", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The root is found by name, and a listing right is separate from a traverse right — so a
+    /// refusal here yields a plan with no steps, and used to carry no sentence about it either. The
+    /// shell renders that as "Already clear", which is a claim about a folder nobody read.
+    /// </summary>
+    [Fact]
+    public async Task ARootThatWillNotBeListedIsSaidSoRatherThanLeftLookingAlreadyClear()
+    {
+        var root = CreateRoot("chromium-1228");
+
+        using var denied = new DeniedDirectory(root);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root));
+        Assert.Empty(plan.TargetedPaths);
     }
 
     /// <summary>

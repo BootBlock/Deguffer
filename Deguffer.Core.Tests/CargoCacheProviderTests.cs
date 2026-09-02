@@ -425,6 +425,34 @@ public sealed class CargoCacheProviderTests : IDisposable
         Assert.Contains(verification.Failures, c => c.Path.Equals(credentials, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Presence is decided by probing a cache path <em>by full name</em>, and a full path still
+    /// resolves through a directory the account may not list — listing and traversing are separate
+    /// rights. So the level walk can be refused inside <c>registry</c>, come back with no children
+    /// at all, and leave the plan saying Cargo has downloaded nothing into a home whose crate
+    /// archives this same pass had already found on disk.
+    /// </summary>
+    [Fact]
+    public async Task ALevelThatWillNotBeListedIsSaidSoRatherThanReportedAsAnEmptyHome()
+    {
+        var registry = Path.Combine(Home, "registry");
+        Populate(Path.Combine(registry, "cache"));
+
+        using var denied = new DeniedDirectory(registry);
+
+        var provider = CreateProvider();
+
+        // The premise: the by-name probe still reaches the archives through the refused container.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(registry));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Cargo has downloaded nothing"));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

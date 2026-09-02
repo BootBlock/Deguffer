@@ -561,6 +561,31 @@ public sealed class BuildDirectoryProviderTests : IDisposable
             link));
     }
 
+    /// <summary>
+    /// The walk is the only route that can meet a refusal: the index reads the volume table rather
+    /// than descending, so a directory it may not list costs it nothing. A directory the walk cannot
+    /// descend into leaves part of a root the user approved unsearched, and every other sentence in
+    /// the plan describes a sweep of the whole root.
+    /// </summary>
+    [Fact]
+    public async Task ADirectoryTheWalkCouldNotDescendIntoIsNamedRatherThanPassedOverInSilence()
+    {
+        var root = ApproveRoot();
+        var library = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
+        var refused = Path.Combine(root, "Archive");
+        Directory.CreateDirectory(refused);
+
+        using var denied = new DeniedDirectory(refused);
+
+        // A FakeDirectoryScanner with no index answers null, which is the contract that sends
+        // discovery down the walk — so the Library was found by descending, not from a table.
+        var plan = await PlanWith(Unity, new FakeDirectoryScanner());
+
+        Assert.Equal([library], plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(refused));
+    }
+
     // ---- helpers --------------------------------------------------------------------------------
 
     private string ApproveRoot(string name = "src")

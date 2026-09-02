@@ -35,6 +35,35 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// A cache level is reached by name, and a full path resolves through a directory the account
+    /// may not list — listing and traversing are separate rights. So <c>Cache</c> can hold the web
+    /// cache, answer the presence probe with it, refuse the listing that would classify
+    /// <c>Cache_Data</c>, and leave the provider announcing that no application on this machine
+    /// keeps a Chromium cache at all — one pass, two contradictory statements.
+    /// </summary>
+    [Fact]
+    public async Task ACacheLevelThatWillNotBeListedIsSaidSoRatherThanReportedAsNoCacheAtAll()
+    {
+        var application = CreateApplication("Chatter");
+        var container = Path.Combine(application, "Cache");
+        CreateDirectory(Path.Combine(container, "Cache_Data"));
+
+        using var denied = new DeniedDirectory(container);
+
+        var provider = CreateProvider();
+
+        // The premise: the by-name probe still reaches the web cache through the refused container.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(container));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("No application on this machine keeps a Chromium cache"));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
     /// <summary>Create a directory holding one file, so it measures as non-empty.</summary>
     private static string CreateDirectory(string path, int bytes = 4096)
     {

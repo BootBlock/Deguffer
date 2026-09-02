@@ -419,6 +419,35 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.False(Directory.Exists(cache));
     }
 
+    /// <summary>
+    /// Presence is decided by probing a vendor cache <em>by full name</em>, and a full path still
+    /// resolves through a directory the account may not list — listing and traversing are separate
+    /// rights. So the vendor root can hold <c>DXCache</c>, answer the probe with it, refuse the
+    /// listing that would classify it, and leave the plan saying no driver has written a shader
+    /// cache for this user.
+    /// </summary>
+    [Fact]
+    public async Task AVendorRootThatWillNotBeListedIsSaidSoRatherThanReportedAsNoCacheAtAll()
+    {
+        var cache = CreateCache(Path.Combine("NVIDIA", "DXCache"));
+        var vendorRoot = Path.Combine(_environment.LocalAppData, "NVIDIA");
+
+        using var denied = new DeniedDirectory(vendorRoot);
+
+        var provider = CreateProvider();
+
+        // The premise: the by-name probe still reaches the cache through the refused vendor root.
+        Assert.True(await provider.IsPresentAsync());
+        Assert.True(LongPath.DirectoryExists(cache));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(vendorRoot));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("No graphics driver has written a shader cache"));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

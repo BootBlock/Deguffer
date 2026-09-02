@@ -510,6 +510,30 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The root is found by name, and a listing right is separate from a traverse right — so a
+    /// refusal here yields a plan with no steps, and used to carry no sentence about it either. The
+    /// shell renders that as "Already clear", which is a claim about a folder nobody read.
+    /// </summary>
+    [Fact]
+    public async Task ARootThatWillNotBeListedIsSaidSoRatherThanLeftLookingAlreadyClear()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 8192);
+
+        using var denied = new DeniedDirectory(root);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
+    /// <summary>
     /// A hex-named child holding nothing but a browse database — the shape the content signature
     /// recognises. The hex names throughout this file are invented, not taken from a real machine.
     /// </summary>
