@@ -1,5 +1,6 @@
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
@@ -20,6 +21,12 @@ public sealed partial class CleanPage : Page
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         InitializeComponent();
+
+        // Read once, here, and never again. Re-reading it whenever the page came back on screen
+        // undid a choice whose write to disk had failed: PreferenceService leaves Current at the
+        // old value on a failed save, so a trip to Settings and back put the list and the selector
+        // silently back to Standard, in the same session and with no explanation.
+        ShowFindingsAt(App.Preferences.Current.View);
 
         // A scan and its results outlive a trip to Settings; rebuilding the page on the way back
         // would throw away a preview the user has not acted on yet.
@@ -60,6 +67,41 @@ public sealed partial class CleanPage : Page
         App.Preferences.Changed -= OnPreferencesChanged;
 
     private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyConfirmationPreferences();
+
+    /// <summary>
+    /// Draw the list at <paramref name="density"/>, and leave the selector agreeing with what is on
+    /// screen.
+    ///
+    /// Safe to call from the selector's own change handler. The first call moves the index off -1
+    /// and does re-enter that handler once, which lands back here with the index it now holds, and
+    /// assigning an unchanged index raises nothing further.
+    /// </summary>
+    private void ShowFindingsAt(ViewDensity density)
+    {
+        ViewSelector.SelectedIndex = (int)density;
+        FindingsList.ItemTemplate = (DataTemplate)Resources[
+            density == ViewDensity.Compact ? "CompactFinding" : "StandardFinding"];
+    }
+
+    /// <summary>
+    /// The view is applied first and persisted second, so it takes effect whether or not the
+    /// preferences file can be written. That inverts <see cref="PreferenceService"/>'s usual order
+    /// deliberately: it holds that order so a rejected write cannot take effect for the session,
+    /// which is right for a setting that governs what gets deleted and wrong for one that governs
+    /// how tall a row is.
+    ///
+    /// A failed write therefore costs the user this choice at the next launch, and nothing sooner,
+    /// because the stored value is read once at construction and never re-read. The result is
+    /// discarded rather than reported: the info bar on this page carries §5.6's verification
+    /// headline, which is not a thing to displace for a setting the user can see took effect.
+    /// </summary>
+    private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var density = (ViewDensity)ViewSelector.SelectedIndex;
+
+        ShowFindingsAt(density);
+        App.Preferences.Update(current => current with { View = density });
+    }
 
     /// <summary>
     /// Both confirmation preferences, applied together. They are one decision from the user's side —

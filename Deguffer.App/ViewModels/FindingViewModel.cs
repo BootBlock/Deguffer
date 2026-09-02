@@ -110,6 +110,26 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool CanBeSelected => Finding.HasReclaimableSpace && Steps.Any(s => s.CanBeSelected);
 
+    /// <summary>
+    /// Whether the compact row states why it cannot be ticked. Stated here rather than negated in
+    /// the template because x:Bind has no operators, and a converter for one "not" would be more
+    /// machinery than the property it replaces.
+    /// </summary>
+    public bool CannotBeSelected => !CanBeSelected;
+
+    /// <summary>
+    /// Whether the compact row has a figure worth showing.
+    ///
+    /// Asked separately from <see cref="CannotBeSelected"/> because the two are independent, and
+    /// treating them as opposites lost the size of the row most likely to be the largest. A row
+    /// needing administrator rights has a real, measured total and still cannot be ticked, and the
+    /// list is ordered by that total — so hiding it left the biggest cause at the top of the list
+    /// with no number against it, which is the one figure that decides whether elevating is worth
+    /// it. A row with nothing to reclaim shows "0 B" or "—", which the reason beside it already
+    /// says in words.
+    /// </summary>
+    public bool HasSizeToShow => Finding.HasReclaimableSpace;
+
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }
 
@@ -149,6 +169,18 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
 
     public string DetailHeader => Steps.Count > 0 ? "What this will do" : "What was left alone";
+
+    /// <summary>
+    /// What a screen reader calls the compact row's disclosure. The whole row is that disclosure's
+    /// header there, so it derives no name of its own and would otherwise be announced as an
+    /// unnamed button.
+    ///
+    /// Named for the row rather than for what is inside it, because in the compact view the
+    /// disclosure always holds the sentence §7 asks each row to state, whether or not there is a
+    /// plan under it — <see cref="DetailHeader"/> would call a not-installed row's description
+    /// "what was left alone".
+    /// </summary>
+    public string DetailToggleName => $"More about {Name}";
 
     /// <summary>Ticking the row ticks everything in it; unticking it clears the lot.</summary>
     partial void OnIsSelectedChanged(bool value)

@@ -23,6 +23,262 @@
         <Thickness x:Key="ExpanderHeaderPadding">0,0,8,0</Thickness>
         <Thickness x:Key="ExpanderContentPadding">0,4,0,4</Thickness>
         <x:Double x:Key="ExpanderMinHeight">32</x:Double>
+
+        <!-- §7: nothing is deleted without a preview, so the exact steps are inspectable before
+             the user confirms. Held as one template and presented by both views, because that
+             inspectability is the same promise in either of them and a second copy is how the two
+             would come to show different things. -->
+        <DataTemplate x:Key="FindingDetail" x:DataType="vm:FindingViewModel">
+            <StackPanel Spacing="6">
+                <!-- §4.3 and §7: per-workspace data is pruned one item at a time, and age drives
+                     that choice more than size does, so the two figures sit together in one
+                     right-hand stack rather than in columns of their own. That stack is
+                     fixed-width rather than Auto because WinUI 3 has no SharedSizeGroup — each row
+                     builds its own Grid, so Auto columns come out ragged between rows once
+                     anything sits to their right. Stacking also means the steps that carry no age
+                     (a whole cache has none) cost the description no width for a cell they never
+                     fill. -->
+                <ItemsControl ItemsSource="{x:Bind Steps}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:StepViewModel">
+                            <Grid ColumnSpacing="10"
+                                  Margin="0,1"
+                                  ColumnDefinitions="Auto,*,80">
+
+                                <!-- Hidden when the finding has only one step: that step is the
+                                     whole row, so a checkbox here would be a second control for a
+                                     decision the row checkbox already owns. -->
+                                <CheckBox Grid.Column="0"
+                                          MinWidth="0"
+                                          VerticalAlignment="Top"
+                                          Margin="0,-2,0,0"
+                                          Visibility="{x:Bind IsIndividuallySelectable}"
+                                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                          IsEnabled="{x:Bind CanBeSelected}"
+                                          AutomationProperties.Name="{x:Bind Description}" />
+
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="{x:Bind Description}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                               TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True"
+                                               FontSize="12" />
+
+                                    <!-- Shown when Deguffer can see the location and cannot remove
+                                         it as it is running. Text rather than a disabled checkbox
+                                         alone (§6.5): a control that is simply greyed out states
+                                         no reason, and the reason is the whole of what the user
+                                         needs in order to act. -->
+                                    <TextBlock Text="Needs administrator rights — use Elevate and rescan"
+                                               Visibility="{x:Bind NeedsElevationFirst}"
+                                               Style="{StaticResource SecondaryText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                                    <!-- Size leads so it lands on the same line as the first line
+                                         of the description on every row, age or no age. -->
+                                    <TextBlock Text="{x:Bind SizeLabel}"
+                                               Style="{StaticResource SecondaryText}"
+                                               TextAlignment="Right"
+                                               FontSize="12" />
+
+                                    <!-- Text, never colour alone (§6.5): an age indicator reduced
+                                         to a coloured dot breaks the same rule the tier chip
+                                         exists to respect. -->
+                                    <!-- No AutomationProperties.Name here: setting one replaces
+                                         what a screen reader announces, so naming the value "Last
+                                         written" would read the heading aloud and never the age
+                                         itself. The text is already the value, and it says "ago" —
+                                         it carries its own meaning without a label. -->
+                                    <TextBlock Text="{x:Bind AgeLabel}"
+                                               Visibility="{x:Bind HasAge}"
+                                               Style="{StaticResource SecondaryText}"
+                                               TextAlignment="Right"
+                                               FontSize="12" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <ItemsControl ItemsSource="{x:Bind Notes}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{x:Bind}"
+                                       Style="{StaticResource SecondaryText}"
+                                       FontSize="12" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
+        <!--
+            The compact row: the four things the user is choosing between, on one line — is it
+            ticked, what is it, what class of thing is it, and how big is it.
+
+            A row that cannot be ticked says why, rather than leaving a greyed-out checkbox that
+            states no reason (§6.5). The reason sits beside the figure rather than in place of it,
+            because the two do not always arrive together: a row needing administrator rights has a
+            real total and still cannot be ticked, and the list is ordered by that total, so
+            replacing it left the biggest cause at the top of the list with no number against it. A
+            row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
+            reason beside it already says in words.
+        -->
+        <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
+            <Grid ColumnSpacing="14" ColumnDefinitions="Auto,*,Auto" Padding="16,8,0,8">
+
+                <CheckBox Grid.Column="0"
+                          MinWidth="0"
+                          VerticalAlignment="Center"
+                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                          IsEnabled="{x:Bind CanBeSelected}"
+                          AutomationProperties.Name="{x:Bind Name}" />
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind Name}"
+                               Style="{StaticResource SectionHeading}"
+                               FontSize="14"
+                               VerticalAlignment="Center" />
+
+                    <!-- Tier is text on a tinted chip, never colour alone: the classification must
+                         survive a flat background and a high-contrast theme (§6.5). -->
+                    <ContentControl Content="{x:Bind TierLabel}"
+                                    Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind StatusLabel}"
+                               Visibility="{x:Bind CannotBeSelected}"
+                               Style="{StaticResource SecondaryText}"
+                               FontSize="12"
+                               TextWrapping="NoWrap"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center" />
+
+                    <TextBlock Text="{x:Bind SizeLabel}"
+                               Visibility="{x:Bind HasSizeToShow}"
+                               Style="{StaticResource Figure}"
+                               FontSize="15"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <!-- One row per named cause (§7), largest first: the checkbox, the sentence saying what
+             happens on next use, the figures, and the disclosure holding the plan. -->
+        <DataTemplate x:Key="StandardFinding" x:DataType="vm:FindingViewModel">
+            <Grid RowDefinitions="Auto,Auto">
+
+                <Grid Grid.Row="0" ColumnSpacing="14" Padding="16,14" ColumnDefinitions="Auto,*,Auto">
+
+                    <CheckBox Grid.Column="0"
+                              VerticalAlignment="Top"
+                              MinWidth="0"
+                              Margin="0,2,0,0"
+                              IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                              IsEnabled="{x:Bind CanBeSelected}"
+                              AutomationProperties.Name="{x:Bind Name}" />
+
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{x:Bind Name}"
+                                       Style="{StaticResource SectionHeading}"
+                                       FontSize="15"
+                                       VerticalAlignment="Center" />
+
+                            <!-- Tier is text on a tinted chip, never colour alone:
+                                 the classification must survive a flat background
+                                 and a high-contrast theme (§6.5). -->
+                            <ContentControl Content="{x:Bind TierLabel}"
+                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="13" />
+
+                        <Expander Margin="0,2,0,0"
+                                  Visibility="{x:Bind HasDetail}"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Header="{x:Bind DetailHeader}">
+                            <ContentPresenter Content="{x:Bind}"
+                                              ContentTemplate="{StaticResource FindingDetail}" />
+                        </Expander>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
+                        <TextBlock Text="{x:Bind SizeLabel}"
+                                   Style="{StaticResource Figure}"
+                                   HorizontalAlignment="Right" />
+                        <TextBlock Text="{x:Bind StatusLabel}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="11"
+                                   TextAlignment="Right"
+                                   HorizontalAlignment="Right" />
+                        <ProgressBar Style="{StaticResource ShareBar}"
+                                     Value="{x:Bind SharePercent, Mode=OneWay}"
+                                     Margin="0,5,0,0" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Grid.Row="1" Style="{StaticResource Divider}" Margin="16,0" />
+            </Grid>
+        </DataTemplate>
+
+        <!--
+            The same row with the prose folded away. The whole line is the disclosure's header, so
+            the chevron lands at the end of it and the detail opens across the full card rather
+            than inside one narrow column.
+
+            Every row gets the disclosure, including a toolchain that is not installed: what it
+            holds is the sentence §7 asks each row to state, which compact hides rather than
+            retires. A row with nothing else to add still has that sentence, so there is no such
+            thing here as a row with an empty disclosure.
+        -->
+        <DataTemplate x:Key="CompactFinding" x:DataType="vm:FindingViewModel">
+            <Grid RowDefinitions="Auto,Auto">
+                <Expander Grid.Row="0"
+                          AutomationProperties.Name="{x:Bind DetailToggleName}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Stretch"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          Padding="0,0,0,6">
+                    <Expander.Header>
+                        <ContentPresenter Content="{x:Bind}"
+                                          ContentTemplate="{StaticResource CompactFindingRow}" />
+                    </Expander.Header>
+
+                    <!-- Indented to the name above it rather than to the card edge, so the
+                         disclosure reads as belonging to its row and not to the list. -->
+                    <StackPanel Spacing="8" Margin="72,0,16,0">
+                        <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="13" />
+
+                        <StackPanel Spacing="6" Visibility="{x:Bind HasDetail}">
+                            <TextBlock Text="{x:Bind DetailHeader}" Style="{StaticResource FieldLabel}" />
+                            <ContentPresenter Content="{x:Bind}"
+                                              ContentTemplate="{StaticResource FindingDetail}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Expander>
+
+                <Border Grid.Row="1" Style="{StaticResource Divider}" Margin="16,0" />
+            </Grid>
+        </DataTemplate>
     </Page.Resources>
 
     <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
@@ -30,7 +286,33 @@
     <Grid RowSpacing="16" RowDefinitions="Auto,Auto,*,Auto" Padding="28,8,28,0">
 
         <StackPanel Grid.Row="0" Spacing="16">
-            <TextBlock Text="Storage" Style="{StaticResource PageTitle}" />
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Storage" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
+
+                <!-- How much of each row to draw. It sits with the list it reshapes rather than in
+                     Settings, because it is a way of reading this screen and gets changed while
+                     reading it. Presentation only: every row is offered in both views, ticks the
+                     same checkbox and removes the same thing. What differs is how much of the row
+                     is on screen and how much is one click inside it. -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                    <!-- Raw for assistive technology: the combo box carries the same name, and
+                         without this a screen reader announces "View" twice. -->
+                    <TextBlock Text="View"
+                               Style="{StaticResource FieldLabel}"
+                               VerticalAlignment="Center"
+                               AutomationProperties.AccessibilityView="Raw" />
+                    <ComboBox x:Name="ViewSelector"
+                              MinWidth="132"
+                              SelectionChanged="OnViewSelectionChanged"
+                              AutomationProperties.Name="View">
+                        <ComboBoxItem Content="Standard" />
+                        <ComboBoxItem Content="Compact" />
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
 
             <!-- §7: free space, prominently. It is the only number the user came for. -->
             <Border Style="{StaticResource CardStyle}">
@@ -119,169 +401,12 @@
                 </StackPanel>
 
                 <ScrollViewer Padding="0,4">
-                <ItemsControl ItemsSource="{x:Bind ViewModel.Findings}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:FindingViewModel">
-                            <Grid RowDefinitions="Auto,Auto">
-
-                                <Grid Grid.Row="0" ColumnSpacing="14" Padding="16,14" ColumnDefinitions="Auto,*,Auto">
-
-                                    <CheckBox Grid.Column="0"
-                                              VerticalAlignment="Top"
-                                              MinWidth="0"
-                                              Margin="0,2,0,0"
-                                              IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                                              IsEnabled="{x:Bind CanBeSelected}"
-                                              AutomationProperties.Name="{x:Bind Name}" />
-
-                                    <StackPanel Grid.Column="1" Spacing="6">
-                                        <StackPanel Orientation="Horizontal" Spacing="10">
-                                            <TextBlock Text="{x:Bind Name}"
-                                                       Style="{StaticResource SectionHeading}"
-                                                       FontSize="15"
-                                                       VerticalAlignment="Center" />
-
-                                            <!-- Tier is text on a tinted chip, never colour alone:
-                                                 the classification must survive a flat background
-                                                 and a high-contrast theme (§6.5). -->
-                                            <ContentControl Content="{x:Bind TierLabel}"
-                                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
-                                        </StackPanel>
-
-                                        <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
-                                                   Style="{StaticResource SecondaryText}"
-                                                   FontSize="13" />
-
-                                        <!-- §7: nothing is deleted without a preview, so the exact
-                                             steps are inspectable before the user confirms. -->
-                                        <Expander Margin="0,2,0,0"
-                                                  Visibility="{x:Bind HasDetail}"
-                                                  HorizontalAlignment="Stretch"
-                                                  HorizontalContentAlignment="Left"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Header="{x:Bind DetailHeader}">
-                                            <StackPanel Spacing="6">
-                                                <!-- §4.3 and §7: per-workspace data is pruned one
-                                                     item at a time, and age drives that choice more
-                                                     than size does, so the two figures sit together
-                                                     in one right-hand stack rather than in columns
-                                                     of their own. That stack is fixed-width rather
-                                                     than Auto because WinUI 3 has no
-                                                     SharedSizeGroup — each row builds its own Grid,
-                                                     so Auto columns come out ragged between rows
-                                                     once anything sits to their right. Stacking
-                                                     also means the steps that carry no age (a whole
-                                                     cache has none) cost the description no width
-                                                     for a cell they never fill. -->
-                                                <ItemsControl ItemsSource="{x:Bind Steps}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="vm:StepViewModel">
-                                                            <Grid ColumnSpacing="10"
-                                                                  Margin="0,1"
-                                                                  ColumnDefinitions="Auto,*,80">
-
-                                                                <!-- Hidden when the finding has only
-                                                                     one step: that step is the whole
-                                                                     row, so a checkbox here would be
-                                                                     a second control for a decision
-                                                                     the row checkbox already owns. -->
-                                                                <CheckBox Grid.Column="0"
-                                                                          MinWidth="0"
-                                                                          VerticalAlignment="Top"
-                                                                          Margin="0,-2,0,0"
-                                                                          Visibility="{x:Bind IsIndividuallySelectable}"
-                                                                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                                                                          IsEnabled="{x:Bind CanBeSelected}"
-                                                                          AutomationProperties.Name="{x:Bind Description}" />
-
-                                                                <StackPanel Grid.Column="1" Spacing="2">
-                                                                    <TextBlock Text="{x:Bind Description}"
-                                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                                               TextWrapping="Wrap"
-                                                                               IsTextSelectionEnabled="True"
-                                                                               FontSize="12" />
-
-                                                                    <!-- Shown when Deguffer can see the
-                                                                         location and cannot remove it as
-                                                                         it is running. Text rather than a
-                                                                         disabled checkbox alone (§6.5): a
-                                                                         control that is simply greyed out
-                                                                         states no reason, and the reason
-                                                                         is the whole of what the user
-                                                                         needs in order to act. -->
-                                                                    <TextBlock Text="Needs administrator rights — use Elevate and rescan"
-                                                                               Visibility="{x:Bind NeedsElevationFirst}"
-                                                                               Style="{StaticResource SecondaryText}"
-                                                                               TextWrapping="Wrap"
-                                                                               FontSize="12" />
-                                                                </StackPanel>
-
-                                                                <StackPanel Grid.Column="2"
-                                                                            VerticalAlignment="Top">
-                                                                    <!-- Size leads so it lands on the
-                                                                         same line as the first line
-                                                                         of the description on every
-                                                                         row, age or no age. -->
-                                                                    <TextBlock Text="{x:Bind SizeLabel}"
-                                                                               Style="{StaticResource SecondaryText}"
-                                                                               TextAlignment="Right"
-                                                                               FontSize="12" />
-
-                                                                    <!-- Text, never colour alone (§6.5):
-                                                                         an age indicator reduced to a
-                                                                         coloured dot breaks the same
-                                                                         rule the tier chip exists to
-                                                                         respect. -->
-                                                                    <!-- No AutomationProperties.Name here: setting one
-                                                                         replaces what a screen reader announces, so
-                                                                         naming the value "Last written" would read the
-                                                                         heading aloud and never the age itself. The text
-                                                                         is already the value, and it says "ago" — it
-                                                                         carries its own meaning without a label. -->
-                                                                    <TextBlock Text="{x:Bind AgeLabel}"
-                                                                               Visibility="{x:Bind HasAge}"
-                                                                               Style="{StaticResource SecondaryText}"
-                                                                               TextAlignment="Right"
-                                                                               FontSize="12" />
-                                                                </StackPanel>
-                                                            </Grid>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                                <ItemsControl ItemsSource="{x:Bind Notes}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="x:String">
-                                                            <TextBlock Text="{x:Bind}"
-                                                                       Style="{StaticResource SecondaryText}"
-                                                                       FontSize="12" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </Expander>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
-                                        <TextBlock Text="{x:Bind SizeLabel}"
-                                                   Style="{StaticResource Figure}"
-                                                   HorizontalAlignment="Right" />
-                                        <TextBlock Text="{x:Bind StatusLabel}"
-                                                   Style="{StaticResource SecondaryText}"
-                                                   FontSize="11"
-                                                   TextAlignment="Right"
-                                                   HorizontalAlignment="Right" />
-                                        <ProgressBar Style="{StaticResource ShareBar}"
-                                                     Value="{x:Bind SharePercent, Mode=OneWay}"
-                                                     Margin="0,5,0,0" />
-                                    </StackPanel>
-                                </Grid>
-
-                                <Border Grid.Row="1" Style="{StaticResource Divider}" Margin="16,0" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    <!-- The template is swapped for the compact one in code-behind. Standard is
+                         named here as well so the list is never left untemplated, whatever order
+                         the framework loads and shows this page in. -->
+                    <ItemsControl x:Name="FindingsList"
+                                  ItemsSource="{x:Bind ViewModel.Findings}"
+                                  ItemTemplate="{StaticResource StandardFinding}" />
                 </ScrollViewer>
             </Grid>
         </Border>

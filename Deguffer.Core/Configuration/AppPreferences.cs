@@ -12,12 +12,32 @@ public enum AppTheme
 }
 
 /// <summary>
+/// How much of each finding row the Storage page draws. <see cref="Standard"/> is the shipped
+/// view: §7 wants every row to state what happens on next use, and only the full row has room
+/// for that sentence.
+///
+/// <see cref="Compact"/> is the user asking for the list to be scannable instead — name, tier and
+/// size on one line. It hides the sentence rather than retiring it: the row keeps its disclosure,
+/// so the plan, the per-step figures and §5.2's "what was left alone" notes are one click away in
+/// either view.
+/// </summary>
+public enum ViewDensity
+{
+    Standard = 0,
+    Compact = 1,
+}
+
+/// <summary>
 /// The user's settings, as a value. Most of it is presentation-only — §6.5 makes the backdrop
 /// decoration, so switching it off changes nothing about what Deguffer will delete — but the two
 /// confirmation settings govern what is asked before a deletion, so they are read by Core rather
 /// than only by the shell.
 /// </summary>
 /// <param name="Theme">Light, dark, or follow the system.</param>
+/// <param name="View">
+/// How much of each finding row the Storage page draws. Presentation only — it changes what is on
+/// screen, never what is scanned, offered or deleted.
+/// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
 /// backdrop fights the user's stated accessibility requirement, and that is not negotiable by a
@@ -44,6 +64,7 @@ public enum AppTheme
 /// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
+    ViewDensity View = ViewDensity.Standard,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false)
