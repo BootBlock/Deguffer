@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -92,14 +93,21 @@ public class RouteAgreementTests
     }
 
     /// <summary>
-    /// The one disagreement that is meant to be there. A file small enough to live inside its own
-    /// MFT record occupies no clusters, so deleting it frees none — the walk cannot see that and
-    /// reports its length. Pinned rather than left to be discovered: it is the reason an elevated
-    /// scan can offer less than an unelevated one, and a future change that hides it would be
-    /// hiding an honest number behind a flattering one.
+    /// The disagreement that used to reach the user, and no longer does.
+    ///
+    /// <para>A file small enough to live inside its own MFT record occupies no clusters, so the
+    /// table reports zero allocated where the walk reports the file's length. That difference is
+    /// real and is still asserted below. What changed is which number is shown: while the reported
+    /// figure was allocated, an elevated run measured a populated directory at zero — and a step
+    /// with nothing to reclaim cannot be selected, so elevating took the location away rather than
+    /// describing it more precisely. Measured on a real machine, that is every per-volume Recycle
+    /// Bin: seven of them, 0 allocated against 903 logical.</para>
+    ///
+    /// <para>The routes now agree on what they report and still differ on what they know, which is
+    /// the right way round. <see cref="ScanSize.Reclaimable"/> carries why.</para>
     /// </summary>
     [Fact]
-    public async Task TheRoutesDisagreeOnResidentFilesAndTheIndexIsTheHonestOne()
+    public async Task TheRoutesAgreeOnAResidentFileAndStillDifferOnWhatItOccupies()
     {
         using var temp = new TempDirectory();
 
@@ -110,13 +118,46 @@ public class RouteAgreementTests
         var walked = await Walking().MeasureAsync(path);
         var indexed = await Indexing(path, fixture).MeasureAsync(path);
 
-        Assert.Equal(300, walked.Size.Reclaimable);
-        Assert.Equal(0, indexed.Size.Reclaimable);
+        // The routes really were different ones, or this compares a number with itself.
+        Assert.Equal(ScanStrategy.ParallelEnumeration, walked.Strategy);
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
 
-        // Both agree on what re-downloading would cost; they differ only on what the volume gives
-        // back, which is the number the user is shown.
-        Assert.Equal(300, walked.Size.Logical);
-        Assert.Equal(300, indexed.Size.Logical);
+        Assert.Equal(300, walked.Size.Reclaimable);
+        Assert.Equal(300, indexed.Size.Reclaimable);
+
+        // The table still knows the thing the walk cannot: those 300 bytes occupy no clusters.
+        Assert.Equal(300, walked.Size.Allocated);
+        Assert.Equal(0, indexed.Size.Allocated);
+    }
+
+    /// <summary>
+    /// The consequence of the above, at the seam that decides it. A step's
+    /// <see cref="CleanupStep.EstimatedBytes"/> is what both <c>Finding.HasReclaimableSpace</c> and
+    /// the shell's per-step checkbox read, so a directory measured at zero is one the user is shown
+    /// and cannot act on.
+    ///
+    /// <para>Asserted through a step rather than through a <see cref="ScanSize"/> alone, because the
+    /// size was never the defect: the defect was a populated directory arriving at the shell as
+    /// nothing to do. A fixture where the two axes agreed could not have caught it.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnElevatedRunStillOffersADirectoryWhoseFilesOccupyNoClusters()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "cache",
+            new TreeFile("index.json", 300, Resident: true)));
+
+        var indexed = await Indexing(path, fixture).MeasureAsync(path);
+
+        var step = new DeleteDirectoryStep(path, "A cache of resident files.")
+        {
+            Estimated = indexed.Size,
+        };
+
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+        Assert.Equal(300, step.EstimatedBytes);
     }
 
     /// <summary>

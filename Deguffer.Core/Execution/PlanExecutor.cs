@@ -65,14 +65,12 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
         // like: a step whose estimate is the tool's own figure re-measures paths that never held
         // that number. See its declaration.
         //
-        // Logical, not Reclaimable, and that is the second half of "like from like". Reclaimable is
-        // Allocated, which only the file table knows: the walk reports file lengths and sets
-        // Allocated equal to Logical to say so. Subtracting a walked figure from a table figure
-        // therefore compares allocated bytes with logical ones, and the difference is real — cluster
-        // slack across hundreds of thousands of small files inflates it, a compressed cache drives
-        // it negative. Logical is the one axis both routes measure identically, and it is the axis
-        // DirectoryRemover already reports for a deletion step, so the totals stay commensurable.
-        var before = (step.MeasuredBefore ?? step.Estimated).Logical;
+        // The two sides are commensurable because ScanSize.Reclaimable is Logical, which both of
+        // §5.5's routes measure and measure identically. This subtraction was the first place that
+        // mattered — the before-figure can come from the file table and the after-figure never does
+        // — and it is no longer a special case: see ScanSize.Reclaimable for why the whole tool
+        // reports that axis.
+        var before = (step.MeasuredBefore ?? step.Estimated).Reclaimable;
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
@@ -160,8 +158,6 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
             total += measured.Size;
         }
 
-        // Logical rather than Reclaimable: see RunCommandAsync, which subtracts this from a figure
-        // the file table may have produced. Only the table knows allocated bytes.
-        return total.Logical;
+        return total.Reclaimable;
     }
 }

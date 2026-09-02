@@ -1,9 +1,9 @@
 # After the scanner — sequenced backlog
 
 > **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
-> are done; item 4 records what was deferred and why, and item 5 what is still undecided. Flip to
-> ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a newer
-> plan.
+> are done; item 4 records what was deferred and why, and item 5 what is still undecided. Items 6
+> and 7 came later, from watching the fast path actually run, and are open. Flip to ✅ COMPLETE and
+> `git mv` into `done/` when the list is exhausted, or supersede it with a newer plan.
 
 The §5.5 scanner (MFT fast path, observable fallback, cross-run size cache, progressive preview)
 landed on `feature/mft-scanner`. This is what follows, in the order it should be done and with the
@@ -24,6 +24,13 @@ set.
 readable rather than refused; the index built over roughly 2.4M records in about five seconds and
 every provider resolved through the fast path with no fallback note and no approximate size. The
 reasoning below stands as the record of why the branch was held.
+
+> **This outcome was later shown to be mistaken, and is left standing as the record.**
+> `MftVolumeIndexBuilder` aborted on NTFS reserved record 12 of every volume, so no index was ever
+> built and every elevated run walked exactly as an unelevated one did. What the check above
+> actually established was that the *volume open* works. See
+> [unreached-locations.md](unreached-locations.md), "§5.5's fast path had never engaged on a real
+> volume", and the measurement record that follows it.
 
 **The fast path has never been executed.** Reading the MFT needs administrator rights, so every
 test covers it through a synthesised table and the `IMftSource` seam; the only thing exercised
@@ -334,3 +341,54 @@ process, which Deguffer is not, so there is no correct interpretation available.
   Open behind all of this: whether `LongPath.Extended` is still load-bearing for MAX_PATH on
   .NET 10 at all, or is now defence-in-depth against a case the framework already covers. Note it
   routes through `Path.GetFullPath`, so it does not help with trailing-dot or trailing-space names.
+
+---
+
+## 6. Follow `$ATTRIBUTE_LIST` to the extension record that holds a file's size
+
+**This is the whole of why §5.5's fast path declines.** On a real volume, all 13 of the 48 measured
+locations the index refused were refused for one reason: `SumSubtree` met a record whose size the
+table did not establish. Re-reading 400 of those records raw, 400 of 400 carried an
+`$ATTRIBUTE_LIST` and no unnamed `$DATA` in the base record. `MftRecordParser.ReadAttributes`
+already names this as the answer that costs nothing and says it is a larger piece of work than the
+rule it sits in. It is, and the measurement is in
+[unreached-locations.md](unreached-locations.md).
+
+The declines are not the small locations. They are `.nuget\packages` at 7.97 GB, the NuGet v3 cache
+at 2.48 GB and the npm cache at 416 MB — about half the bytes Deguffer measures on that machine.
+One unresolved record poisons its whole subtree by design, so `C:\Windows\Logs\DISM` declines on
+one record out of two.
+
+The shape, so the seam survives it:
+
+- `MftRecordParser.Parse` stays a pure function over a span. Where a record has an
+  `$ATTRIBUTE_LIST` and no unnamed `$DATA`, it reports the *file reference* of the extension record
+  that does, rather than reaching for it.
+- `MftVolumeIndexBuilder` does the second read, because it is the thing that already holds an
+  `IMftSource` and can address any record. A second pass over the deferred ones after the first
+  completes avoids random access mid-batch.
+- `MftFixture` has to be able to synthesise an `$ATTRIBUTE_LIST` and an extension record, or the
+  tests prove nothing — the lesson item 0 above records the hard way.
+- Verification needs an elevated run against a real volume: the decline count is the assertion, and
+  no fixture can produce a machine's own table.
+
+## 7. Do not build a volume index that cannot pay for itself
+
+**Measured, on the same pass.** Building the index cost 9.9 seconds across seven volumes. Walking
+every path it then answered for would have cost 1.24 seconds. Five of those volumes were indexed at
+0.47 to 0.72 seconds each to measure one 129-byte Recycle Bin, because a per-volume Recycle Bin is
+the only location any provider names on them. That is most of why an elevated preview takes 28.8
+seconds against 15.5 unelevated.
+
+This is deliberately left open rather than fixed, because every fix that suggests itself is a
+heuristic and [G3](../../CLAUDE.md#g3-no-ai-trope-or-junior-engineer-code) bans the knob. The
+scanner cannot know in advance how many queries a volume will receive, and "build it on the second
+query" is a guess dressed as a rule — the first query is sometimes the expensive one. Two framings
+worth thinking about before anyone writes code:
+
+- The planner *does* know its providers, and therefore roughly which volumes will be asked more
+  than once. Whether that knowledge belongs anywhere near the scanner is exactly the
+  [G1](../../CLAUDE.md#g1-one-responsibility-per-type-and-per-file) question.
+- Item 6 changes the arithmetic. If the table stops declining the large locations, the index earns
+  back more per volume and this may cease to matter on `C:` while still mattering on the five
+  volumes with one tiny location each.

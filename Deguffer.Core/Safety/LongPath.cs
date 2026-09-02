@@ -135,14 +135,35 @@ public static class LongPath
     /// uphold the same rule: a link points at a tree the caller never classified, and deleting
     /// through it leaves the tree the plan described.
     ///
-    /// Every caller reads false as "proceed", so this fails closed. A path that is not there is
-    /// genuinely not a reparse point. A path we were refused, could not read, or could not even
+    /// <para>Every caller reads false as "proceed", so this fails closed. A path that is not there
+    /// is genuinely not a reparse point. A path we were refused, could not read, or could not even
     /// parse is not an answer at all, and the only safe reading of "I cannot tell" on a predicate
-    /// guarding a deletion is the one that stops it. The cost of being wrong that way is one
-    /// unexplained decline.
+    /// guarding a deletion is the one that stops it.</para>
     ///
-    /// <see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now calls
-    /// here instead. A safety predicate written twice is one that gets changed once.
+    /// <para><b>The closed answer costs nothing, because no caller can reach it</b>, and that is
+    /// worth stating because eleven callers turn a true into the sentence "it is a link to somewhere
+    /// else" — a specific claim about the machine, where the truth would be that Deguffer could not
+    /// tell. Rendering a non-answer as a fact is the defect
+    /// <see cref="ChildDirectories.Under"/> was corrected for, and it would be worse here.</para>
+    ///
+    /// <para>It does not arise because of what it takes to make <c>GetFileAttributes</c> refuse.
+    /// NTFS answers out of the parent directory's own index whenever the caller may list the
+    /// parent, so denying a directory every right including <c>FILE_READ_ATTRIBUTES</c> leaves its
+    /// attributes readable, and so does denying the parent everything while the directory itself
+    /// still answers. Only an access rule on both ends refuses — measured, not reasoned about — and
+    /// in exactly that condition <see cref="DirectoryExists"/> answers false, because it is the
+    /// same query and <c>Directory.Exists</c> swallows the same failure. All eleven of those callers
+    /// ask that first and take the absent branch instead.</para>
+    ///
+    /// <para>The two callers that do <em>not</em> ask first are
+    /// <see cref="BuildDirectorySignature"/> and <see cref="DotNetIntermediateSignature"/>, which
+    /// put a candidate and its parent through this without probing either. They are why the closed
+    /// answer still has to be the right one, and what they say when they get it is "not recognised
+    /// as build output, so it is left alone" — §5.2's own answer for a thing that could not be
+    /// classified, which names no link and claims nothing.</para>
+    ///
+    /// <para><see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now
+    /// calls here instead. A safety predicate written twice is one that gets changed once.</para>
     /// </summary>
     public static bool IsReparsePoint(string path)
     {

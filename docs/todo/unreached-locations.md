@@ -356,6 +356,72 @@ ordinary process lacks. That was wrong — `SeSecurityPrivilege` gates the audit
 permissions — and the lesson generalises past this one test: a safety rule left untested because
 the fixture "cannot be built" deserves the second look, because the reason is sometimes a mistake.
 
+Once the fast path was reachable, it was watched running. **What it does on a real machine is not
+what §5.5 assumes**, and the numbers are recorded here because no fixture can produce them.
+
+- **The table answers most locations and roughly half the bytes.** Across the 328 paths one
+  planning pass measures on this workstation, plus `C:\`, `C:\Windows`, `C:\Windows\Logs`,
+  `C:\Windows\Logs\DISM`, `C:\Program Files` and the two `dotnet` locations: 323 answered from
+  the table and 13 declined. Every decline is on `C:`, where the ratio is 35 answered to 13, and the
+  declines are the large ones — `.nuget\packages` at 7.97 GB, the npm cache at 416 MB, the NuGet
+  v3 cache at 2.48 GB. The answered paths total 11.88 GB and the declined 11.84 GB.
+
+- **Every decline has one cause, and it is not the one the code most guards against.** All 13 are
+  `SumSubtree` meeting a record whose size the table did not establish. Not one is a path the index
+  could not resolve, and not one is a reparse point. Re-reading 400 of those records raw: **400 of
+  400 carry an `$ATTRIBUTE_LIST` and no unnamed `$DATA` in the base record**, so the size lives in
+  an extension record `MftRecordParser` does not follow — which is the compromise its own comment
+  names. The volume holds 18,579 such records among 2,556,460 present ones, 0.73%, and they are
+  enough to poison a subtree of two: `C:\Windows\Logs\DISM` declines on one record out of two,
+  and 352 MB of Playwright browsers on one out of 77.
+
+- **Where the table does answer, it agrees with the walk exactly.** Across 322 answered paths the
+  table's logical total and the walk's were equal to the byte, every time. The fast path's numbers
+  are right; it is their availability that is the problem.
+
+- **An elevated preview is slower than an unelevated one, end to end.** 28.8 seconds elevated
+  against 15.5 unelevated cold, and 28.0 against 17.1 warm — the elevated run second in both cases,
+  so with the warmer cache. The cause is legible: building the index cost 9.9 seconds across seven
+  volumes, and walking every path it then answered for would have cost 1.24 seconds (1.09 on `C:`
+  over 45 paths, 0.15 on `P:` over 282). Five of those volumes were indexed at 0.47 to 0.72 seconds
+  apiece to measure one 129-byte Recycle Bin each, because that is the only location on them any
+  provider names.
+
+  **The half that does get quicker is discovery**, which is the walk §5.5 was really written
+  against: finding every sought directory inside the approved source root took 5.34 seconds by
+  walking and 2.71 through the index. That is the one speed claim in the UI that survived the
+  measurement, and it is the one the source-tree plan note makes.
+
+  This does not settle the founding audit's "over ten minutes across a handful of profile subtrees".
+  Two machines disagree, and one measurement cannot say which is representative — so the roadmap's
+  premise stands and only the sentences that promised *this* user a quicker scan were changed.
+
+- **Elevating made seven real locations unselectable, until the reported axis changed.** A file
+  small enough to live inside its own MFT record occupies no clusters, so the table reports zero
+  allocated for it. `ScanSize.Reclaimable` was Allocated, `CleanupStep.EstimatedBytes` reads it, and
+  a step with nothing to reclaim cannot be ticked — so every per-volume Recycle Bin came back at 0
+  bytes on an elevated run and at 903 on an unelevated one. `Reclaimable` is now `Logical`; its own
+  doc comment carries the three measurements behind that, including what it would cost to teach the
+  walk to report allocated bytes instead (`GetCompressedFileSize` is 1.1x to 5.4x a length pass and
+  returns the length again for anything uncompressed; the call that does answer needs a handle per
+  file and took 16.7 seconds over a 426 MB cache against 107 milliseconds).
+
+- **The index route for discovery was checked against a real volume, not a fixture.** An elevated
+  pass and an unelevated one over the same approved roots produced byte-identical target lists, 328
+  paths each. `SourceTreeBoundary` was then put through the cases `RouteAgreementTests` covers
+  synthetically, against the real `C:` index: the raw index returned five `obj` directories inside
+  the approved root and the filter kept two, dropping one nested inside another candidate, one under
+  `.git` and one under `node_modules`. A junction never appeared as a raw match at all — the index
+  cannot build a path through a reparse point — and neither did an `obj` in a sibling directory
+  outside the approved root. The one intended disagreement held: below a directory the account may
+  not list, the index offers a candidate and the walk finds nothing.
+
+**What is left, and why it is not fixed here:** following `$ATTRIBUTE_LIST` to the extension record
+that holds a file's `$DATA` is the root-cause fix for every decline measured above, and it is a
+piece of NTFS work with its own fixture requirements rather than a correction — see
+[after-the-scanner.md](after-the-scanner.md) items 6 and 7, which also carry the per-volume index
+cost.
+
 ### pnpm — Tier 1, researched ✅ done
 
 `pnpm store path` locates it and `pnpm store prune` evicts only what no project on the machine still

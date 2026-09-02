@@ -147,8 +147,15 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// The compressed and sparse case — the reason <see cref="Deguffer.Core.Scanning.ScanSize"/>
-    /// carries two numbers. A walk over <c>FileInfo.Length</c> sees only the logical one and would
-    /// promise 10 GB back from a tree that yields 2.
+    /// carries two numbers rather than one. Only the table can tell them apart: a walk over
+    /// <c>FileInfo.Length</c> sees the logical figure alone.
+    ///
+    /// <para>The reported figure is the logical one, and this test says so deliberately rather than
+    /// leaving it to be inferred. Allocated is the better answer to "what does the volume give
+    /// back" and is not the one shown, because nothing that deletes can produce it and the table
+    /// cannot produce it often enough — see <see cref="Deguffer.Core.Scanning.ScanSize.Reclaimable"/>
+    /// for the three measurements behind that. The two numbers still have to arrive separately, or
+    /// nothing downstream could ever tell them apart again.</para>
     /// </summary>
     [Fact]
     public void ReportsAllocatedAndLogicalSeparatelyForCompressedFiles()
@@ -159,7 +166,7 @@ public class MftVolumeIndexTests
 
         Assert.Equal(2_000_000, size.Allocated);
         Assert.Equal(10_000_000, size.Logical);
-        Assert.Equal(2_000_000, size.Reclaimable);
+        Assert.Equal(10_000_000, size.Reclaimable);
     }
 
     /// <summary>

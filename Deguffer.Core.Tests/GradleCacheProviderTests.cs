@@ -184,6 +184,41 @@ public sealed class GradleCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
     }
 
+    /// <summary>
+    /// A root whose attributes cannot be read is not reported as a link.
+    ///
+    /// <para><see cref="LongPath.IsReparsePoint"/> fails closed, which is right for a predicate
+    /// guarding a deletion and would be wrong to render: every provider here turns a true into
+    /// "it is a link to somewhere else", which is a specific claim about the machine rather than an
+    /// admission that Deguffer could not tell. That is the defect
+    /// <see cref="Safety.ChildDirectories"/> was corrected for, one predicate over.</para>
+    ///
+    /// <para>It does not arise, and this pins why rather than leaving it to be re-derived. The
+    /// only access rules that break the attribute read break the existence check identically —
+    /// see <see cref="LongPathTests.FailsClosedOnAPathItCannotReadWhileTheExistenceCheckAheadOfItFailsToo"/>
+    /// — and every such provider asks that first. Gradle stands for all of them here because they
+    /// share the shape: probe by name, then classify.</para>
+    /// </summary>
+    [Fact]
+    public async Task ARootWhoseAttributesCannotBeReadIsNotReportedAsALink()
+    {
+        var root = CreateGradleHome();
+        CreateAt(root, "caches", 4096);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(root);
+
+        var provider = CreateProvider();
+
+        // The path is there and the attribute read is refused, so the fail-closed predicate would
+        // answer "link" if anything asked it.
+        Assert.True(LongPath.IsReparsePoint(root));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("link", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
     /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>
     private static string CreateAt(string root, string child, int bytes)
     {

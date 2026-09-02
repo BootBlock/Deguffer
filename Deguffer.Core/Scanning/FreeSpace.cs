@@ -37,11 +37,12 @@ public static class FreeSpace
     }
 
     /// <summary>
-    /// The same figure, qualified where the measurement could not establish it exactly.
+    /// The same figure, qualified where it is a prediction rather than a measurement.
     ///
-    /// §5.5's fallback route sums file lengths, which is the right number on most trees and wrong
-    /// on a compressed or sparse one. Saying "about" is the difference between reporting a
-    /// measurement and making a promise about what a deletion will return.
+    /// Both of §5.5's routes measure exactly and agree, so neither is hedged. What is hedged is a
+    /// figure a tool produced about its own future behaviour — conda's dry run — and a sole-link
+    /// sum whose link counts move whenever a project installs a dependency. Saying "about" is the
+    /// difference between reporting a measurement and repeating someone else's forecast.
     /// </summary>
     public static string Format(ScanSize size) =>
         size.IsApproximate ? $"about {Format(size.Reclaimable)}" : Format(size.Reclaimable);
