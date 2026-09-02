@@ -98,7 +98,12 @@ public sealed partial class FindingViewModel : ObservableObject
     public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Estimated) : "—";
 
     public string StatusLabel => !Finding.IsPresent
-        ? "Not installed on this machine"
+        // Two different absences, and only one of them is the user's to resolve. Saying "not
+        // installed" about a folder nobody has approved names the wrong problem and offers no way
+        // out of it.
+        ? Finding.Provider.NeedsSourceFolders
+            ? "Needs a source folder"
+            : "Not installed on this machine"
         : !Finding.HasReclaimableSpace
             // "Already clear" is a claim, and it must not be made about a folder Windows would not
             // let Deguffer list. The expander below names which one and why the figure is short.
@@ -139,6 +144,16 @@ public sealed partial class FindingViewModel : ObservableObject
     /// says in words.
     /// </summary>
     public bool HasSizeToShow => Finding.HasReclaimableSpace;
+
+    /// <summary>
+    /// Whether this row is one the "show items not installed" filter hides.
+    ///
+    /// Only a tool that is genuinely not on this machine, never one waiting on a folder the user
+    /// can approve. The second kind is absent in exactly the same way through
+    /// <see cref="Finding.IsPresent"/>, and is the opposite of noise: it is the row that says the
+    /// largest reclaimable thing on the disk is one setting away.
+    /// </summary>
+    public bool IsToolchainMissing => !Finding.IsPresent && !Finding.Provider.NeedsSourceFolders;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }

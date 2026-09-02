@@ -281,13 +281,58 @@ public sealed class CleanupPlannerTests
         Assert.False(provider.WasExecuted);
     }
 
+    /// <summary>
+    /// A provider absent only for want of an approved folder is still asked for its plan, because
+    /// that plan is the only place it says which folder to add. It was not, and the sentence was
+    /// unreachable: presence and "nothing approved yet" were the same answer, so the guidance sat
+    /// behind a branch that ran only when the guidance was not needed.
+    ///
+    /// <see cref="Finding.IsPresent"/> still reports the truth. It is the plan that is now asked
+    /// for regardless, not the presence that is faked.
+    /// </summary>
+    [Fact]
+    public async Task AsksAProviderAwaitingSourceFoldersForItsPlanEvenThoughItIsAbsent()
+    {
+        var journal = new List<string>();
+        var planner = new CleanupPlanner(
+            [new StubProvider("build-output", bytes: 0, present: false, journal: journal, needsSourceFolders: true)]);
+
+        var findings = await planner.PlanAllAsync();
+
+        Assert.Contains("plan:build-output", journal);
+
+        var finding = Assert.Single(findings);
+        Assert.False(finding.IsPresent);
+        Assert.NotNull(finding.Plan);
+    }
+
+    /// <summary>
+    /// The negative of the case above, and the one that keeps the short circuit worth having: a
+    /// toolchain that is simply not installed is never asked to plan, so a machine without it pays
+    /// nothing for the provider being registered.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotPlanForAToolchainThatIsSimplyAbsent()
+    {
+        var journal = new List<string>();
+        var planner = new CleanupPlanner([new StubProvider("gone", bytes: 0, present: false, journal: journal)]);
+
+        var findings = await planner.PlanAllAsync();
+
+        Assert.DoesNotContain("plan:gone", journal);
+        Assert.Null(Assert.Single(findings).Plan);
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,
         bool present = true,
         SafetyTier tier = SafetyTier.RegenerableCache,
-        List<string>? journal = null) : ICleanupProvider
+        List<string>? journal = null,
+        bool needsSourceFolders = false) : ICleanupProvider
     {
+        public bool NeedsSourceFolders => needsSourceFolders;
+
         public bool WasExecuted { get; private set; }
 
         public void InvalidateCaches() => journal?.Add($"invalidate:{id}");

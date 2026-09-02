@@ -7,7 +7,11 @@ namespace Deguffer.Core.Execution;
 /// <summary>One provider's contribution to the preview, present or not.</summary>
 /// <param name="Provider">The provider that produced it.</param>
 /// <param name="IsPresent">Whether the toolchain exists on this machine at all.</param>
-/// <param name="Plan">The dry run. Null only when the toolchain is absent.</param>
+/// <param name="Plan">
+/// The dry run. Null when there was nothing to ask for one — an absent toolchain. A provider that
+/// is absent only for want of an approved folder still carries a plan, because that plan holds the
+/// sentence naming what to add.
+/// </param>
 public sealed record Finding(ICleanupProvider Provider, bool IsPresent, CleanupPlan? Plan)
 {
     public long EstimatedBytes => Plan?.EstimatedBytes ?? 0;

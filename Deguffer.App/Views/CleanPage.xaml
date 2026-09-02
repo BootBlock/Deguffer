@@ -126,15 +126,25 @@
             row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
             reason beside it already says in words.
 
-            The chip and the figure sit in fixed-width columns rather than Auto ones. WinUI 3 has no
-            SharedSizeGroup and each row builds its own Grid, so an Auto column comes out at a
-            different width on every row and the chips step raggedly down the page. Fixed columns
-            put both in a straight line, which is the whole reason the tier is worth reading at a
-            glance. The name takes what is left, so it is the one thing that gives way when the
-            window narrows.
+            The figure sits in a fixed-width column and everything to its right of the name is
+            right-aligned against it. WinUI 3 has no SharedSizeGroup and each row builds its own
+            Grid, so a figure column left to Auto comes out at a different width on every row and
+            the chips beside it step raggedly down the page. Pinning that one column is enough:
+            the chip's own column can stay Auto and still start at the same offset from the right
+            on every row, which is what puts the chips in a straight line.
+
+            Only that one column is pinned, because a pinned column is a promise about text the
+            app does not control. Windows text scaling grows the chip, and a fixed column would
+            have it overflow leftwards over the status instead of pushing the name.
+
+            The name never gives way. It is the row's identity, and a list of rows that no longer
+            say which row they are is not a list. So the name column is Auto and the status column
+            takes the slack, which means the status is what trims when the window narrows — and the
+            status is a secondary sentence that the disclosure repeats in full. The window's own
+            minimum width is set so that even that trim is shallow.
         -->
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
-            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto,152,88" Padding="16,8,0,8">
+            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto,72" Padding="16,8,0,8">
 
                 <CheckBox Grid.Column="0"
                           MinWidth="0"
@@ -150,7 +160,6 @@
                            Text="{x:Bind Name}"
                            Style="{StaticResource SectionHeading}"
                            FontSize="14"
-                           TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center"
                            ToolTipService.ToolTip="{x:Bind WhatHappensOnNextUse}" />
 
@@ -160,6 +169,7 @@
                            Style="{StaticResource SecondaryText}"
                            FontSize="12"
                            TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
                            TextAlignment="Right"
                            VerticalAlignment="Center" />
 

@@ -105,7 +105,7 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         foreach (var row in Findings)
         {
-            row.IsListed = value || row.Finding.IsPresent;
+            row.IsListed = value || !row.IsToolchainMissing;
         }
     }
 
@@ -422,12 +422,11 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private void AddRowInSizeOrder(Finding finding)
     {
-        var row = new FindingViewModel(finding)
-        {
-            // Rows arrive one provider at a time, so each one is filtered as it lands rather than
-            // in a pass at the end that a cancelled scan would never reach.
-            IsListed = ShowNotInstalled || finding.IsPresent,
-        };
+        var row = new FindingViewModel(finding);
+
+        // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
+        // pass at the end that a cancelled scan would never reach.
+        row.IsListed = ShowNotInstalled || !row.IsToolchainMissing;
 
         // One event for both directions: the row's own checkbox and any step within it. Subscribing
         // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays

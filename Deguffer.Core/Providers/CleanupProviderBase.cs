@@ -56,6 +56,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public abstract Task<bool> IsPresentAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// False for a cache provider: it answers presence from the tool itself, so absent means
+    /// absent. <see cref="BuildDirectoryProvider"/> is where this is true.
+    /// </summary>
+    public virtual bool NeedsSourceFolders => false;
+
     public virtual void InvalidateCaches()
     {
         Environment.Invalidate();

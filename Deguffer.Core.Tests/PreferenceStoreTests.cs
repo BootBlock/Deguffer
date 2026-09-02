@@ -39,12 +39,15 @@ public class PreferenceStoreTests
     /// absent key must land on that preference's declared default rather than on whatever the JSON
     /// reader picks for a missing value.
     ///
-    /// <c>ConfirmBeforeCleaning</c> and <c>View</c> are what prove it, and they are the only two
-    /// preferences that can. Their declared defaults, <c>true</c> and <c>Compact</c>, differ from
-    /// <c>default(bool)</c> and <c>default(ViewDensity)</c>, so the two answers differ and the
-    /// assertions have something to catch. Asserting the same thing about
-    /// <c>RequireTypedConfirmation</c> or <c>ShowNotInstalled</c> would prove nothing: both answers
-    /// there are <c>false</c>.
+    /// <c>ConfirmBeforeCleaning</c> and <c>View</c> are what prove it here. Their declared defaults,
+    /// <c>true</c> and <c>Compact</c>, differ from <c>default(bool)</c> and
+    /// <c>default(ViewDensity)</c>, so the two answers differ and the assertions have something to
+    /// catch. Asserting the same thing about <c>RequireTypedConfirmation</c> or
+    /// <c>ShowNotInstalled</c> would prove nothing: both answers there are <c>false</c>.
+    ///
+    /// <c>BackdropEnabled</c> could prove it too, and is spent instead as the parse guard below.
+    /// One preference has to be a key the file actually carries, or a wholesale fall through to the
+    /// defaults would satisfy every assertion here for the wrong reason.
     ///
     /// <c>ConfirmBeforeCleaning</c> is also the case with the consequence — an upgraded file read
     /// as "do not confirm" would silently drop the only question a Tier 3 row gets once the typed

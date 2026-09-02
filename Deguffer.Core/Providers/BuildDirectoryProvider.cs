@@ -103,6 +103,14 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ApprovedRoots.Count > 0);
 
+    /// <summary>
+    /// Absence here means Deguffer has not been told where to look, never that the tool is gone —
+    /// <see cref="IsPresentAsync"/> above does not consult the tool at all. A shell that treated
+    /// the two alike would drop the largest reclaimable thing on the machine from the list, and
+    /// call it "not installed" on the way out.
+    /// </summary>
+    public override bool NeedsSourceFolders => true;
+
     public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
     {
         if (ApprovedRoots.Count == 0)

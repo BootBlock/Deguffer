@@ -24,6 +24,17 @@ public interface ICleanupProvider
     Task<bool> IsPresentAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Whether this provider reports itself absent only for want of an approved source folder,
+    /// rather than because its tool is not on this machine.
+    ///
+    /// The two look identical from outside <see cref="IsPresentAsync"/> and are opposite in what
+    /// they ask of the user. Nothing can be done about a toolchain that is not installed. Adding a
+    /// folder is the whole of what the other one needs, and it is the decision worth the most on
+    /// the screen, because build output is usually the largest thing Deguffer can reclaim.
+    /// </summary>
+    bool NeedsSourceFolders { get; }
+
+    /// <summary>
     /// Discard anything cached about the machine — resolved tool paths, the process snapshot,
     /// probed cache locations. Called once before a planning pass.
     ///
