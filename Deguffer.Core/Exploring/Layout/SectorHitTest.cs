@@ -58,7 +58,7 @@ public sealed class SectorHitTest
         var dy = y - Sunburst.CentreY;
         var radius = MathF.Sqrt((dx * dx) + (dy * dy));
 
-        return radius >= Sunburst.Radius ? null : AtPolar(radius, AngleOf(dx, dy));
+        return AtPolar(radius, AngleOf(dx, dy));
     }
 
     /// <summary>

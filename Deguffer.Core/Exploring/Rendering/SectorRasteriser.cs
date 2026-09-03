@@ -65,6 +65,19 @@ public static class SectorRasteriser
             return;
         }
 
+        // One colour per sector, before a single pixel is written. Resolving it inside the loop
+        // instead would walk a node's ancestors and index the palette three million times per
+        // repaint on a 4K canvas, for an answer that changes only with the sector (G4). This is what
+        // TileRasteriser gets for free by painting one shape at a time.
+        var colours = new TileColour[sectors.Count];
+
+        for (var i = 0; i < sectors.Count; i++)
+        {
+            colours[i] = sectors[i].IsAggregate
+                ? TilePalette.Aggregate
+                : TilePalette.For(branchOf(sectors[i].Node), sectors[i].Depth);
+        }
+
         var left = Math.Max(0, (int)MathF.Floor(sunburst.CentreX - sunburst.Radius));
         var right = Math.Min(width, (int)MathF.Ceiling(sunburst.CentreX + sunburst.Radius));
         var top = Math.Max(0, (int)MathF.Floor(sunburst.CentreY - sunburst.Radius));
@@ -100,16 +113,10 @@ public static class SectorRasteriser
                     continue;
                 }
 
-                var sector = sectors[index];
-
-                var colour = sector.IsAggregate
-                    ? TilePalette.Aggregate
-                    : TilePalette.For(branchOf(sector.Node), sector.Depth);
-
-                var (nx, ny) = Normal(sector, dx, dy, radius, angle);
+                var (nx, ny) = Normal(sectors[index], dx, dy, radius, angle);
 
                 CushionShading.Write(
-                    pixels, ((y * width) + x) * 4, colour, CushionShading.LightAt(nx, ny));
+                    pixels, ((y * width) + x) * 4, colours[index], CushionShading.LightAt(nx, ny));
             }
         }
 

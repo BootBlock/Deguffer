@@ -202,12 +202,18 @@ public sealed class SunburstLayoutTests
                 .Sectors);
     }
 
+    /// <summary>
+    /// A name order is what a scan still running publishes, and the residual wedge cannot be built
+    /// from one: it closes the ring from the first child too narrow to draw onwards, which is only
+    /// the omitted children where the small ones are the tail. <see cref="TreemapLayout"/> refuses
+    /// the same order for its own reason.
+    /// </summary>
     [Fact]
-    public void ADeepTreeDoesNotOverflowTheStack()
+    public void ATreeOrderedByNameIsRefusedRatherThanDrawn()
     {
-        var limits = Sized(LayoutLimits.Default) with { MinimumTileSize = 0.0001f, MaximumDepth = 5000 };
+        var tree = NamedTreeOf(500, 300, 200);
 
-        Assert.NotEmpty(Layout(NestedTree(depth: 5000), limits).Sectors);
+        Assert.Throws<ArgumentException>(() => Layout(tree, Sized(LayoutLimits.Default)));
     }
 
     private static Sunburst Layout(ExploreTree tree, LayoutLimits limits) =>
@@ -219,6 +225,18 @@ public sealed class SunburstLayoutTests
     /// </summary>
     private static LayoutLimits Sized(LayoutLimits limits) => limits with { RowHeight = MinimumRing };
 
+    /// <summary>Children in the order a scan still running publishes them.</summary>
+    private static ExploreTree NamedTreeOf(params long[] sizes)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [.. sizes.Select((size, i) => new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, size))]);
+
+        return builder.Build(ExploreChildOrder.ByName);
+    }
+
     private static ExploreTree TreeOf(params long[] sizes)
     {
         var builder = new ExploreTreeBuilder(@"C:\");
@@ -227,7 +245,7 @@ public sealed class SunburstLayoutTests
             ExploreTreeBuilder.RootNode,
             [.. sizes.Select((size, i) => new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, size))]);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     /// <summary>Two levels, the second wide enough that a ring runs out of room part way round.</summary>
@@ -251,7 +269,7 @@ public sealed class SunburstLayoutTests
                     new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: i * 100L))]);
         }
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     private static ExploreTree NestedTree(int depth)
@@ -267,6 +285,6 @@ public sealed class SunburstLayoutTests
             ]);
         }
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 }

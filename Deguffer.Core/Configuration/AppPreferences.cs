@@ -33,12 +33,13 @@ public enum ViewDensity
 /// <para><see cref="Treemap"/> is the shipped view: it is what every tool in this category shows by
 /// default, so it is the one a user arrives already able to read. The other three are not
 /// decoration beside it. <see cref="List"/> is the densest answer to "what is biggest", which is
-/// the question most people actually open the page with, and it is the only view that stays
-/// readable while a scan is still filling it in. <see cref="Icicle"/> keeps area exactly
-/// proportional at every level and has room to label several levels at once, which a treemap does
-/// not. <see cref="Sunburst"/> is what the rest of this category ships and the easiest of the four
-/// to point at, at the cost of exaggerating whatever is deepest — an outer ring gives more area for
-/// the same proportion, because area grows with the square of the radius.</para>
+/// the question most people actually open the page with. <see cref="Icicle"/> keeps area exactly
+/// proportional at every level, has room to label several levels at once, and is the one picture
+/// that stays still while a scan is filling it in — which is why the map draws it, whichever of the
+/// four is chosen, until the scan finishes. <see cref="Sunburst"/> is what the rest of this category
+/// ships and the easiest of the four to point at, at the cost of exaggerating whatever is deepest —
+/// an outer ring gives more area for the same proportion, because area grows with the square of the
+/// radius.</para>
 ///
 /// <para>The values are ordinal, and the view picker lists them in this order. They are stored by
 /// name rather than by number, so the order is a presentation decision and not a compatibility

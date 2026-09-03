@@ -40,11 +40,25 @@ public static class SunburstLayout
     /// treemap, for the same reason: past six the wedges are slivers of slivers, and the cost is
     /// paid on every repaint. <see cref="LayoutLimits.RowHeight"/> is the floor under a ring's
     /// width, so a small window shows fewer levels rather than unreadable ones.</para>
+    ///
+    /// <para>Throws for a tree whose children are not ordered by size, as
+    /// <see cref="TreemapLayout"/> does. See <see cref="ExploreChildOrder"/>.</para>
     /// </summary>
     public static Sunburst Compute(ExploreTree tree, int root, float width, float height, LayoutLimits limits)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.RowHeight);
+
+        // The residual wedge below closes the ring from the first child too narrow to draw onwards,
+        // which is only the omitted children where the small ones are the tail. Given a name order
+        // this would still produce a circle, and every large child that happened to follow a small
+        // one would be inside the wedge that says it was too small to draw — so it refuses.
+        if (tree.ChildOrder != ExploreChildOrder.BySize)
+        {
+            throw new ArgumentException(
+                $"A sunburst needs children ordered by size, not by {tree.ChildOrder}.",
+                nameof(tree));
+        }
 
         var centreX = width / 2;
         var centreY = height / 2;
@@ -128,17 +142,18 @@ public static class SunburstLayout
         }
 
         var inner = depth * ringWidth;
-        double placed = 0;
+        long placed = 0;
 
-        for (var i = 0; i < children.Length; i++)
+        foreach (var child in children)
         {
-            var from = placed / total * sweep;
-            placed += tree.SizeOf(children[i]);
-            var to = placed / total * sweep;
+            var size = tree.SizeOf(child);
+            var from = (double)placed / total * sweep;
+            var to = (double)(placed + size) / total * sweep;
 
             if ((to - from) * inner >= limits.MinimumTileSize)
             {
-                pending.Enqueue((children[i], depth, tree.SizeOf(children[i]), start + from, to - from));
+                pending.Enqueue((child, depth, size, start + from, to - from));
+                placed += size;
                 continue;
             }
 
@@ -146,26 +161,16 @@ public static class SunburstLayout
             // carrying what it stands for — a gap here would read as space nothing is using rather
             // than as detail withheld. Enqueued rather than emitted directly so it takes its place
             // in the ring's angular order, which the hit test depends on.
-            var omitted = Omitted(tree, children[i..]);
-
-            if (omitted > 0)
+            //
+            // What it stands for is everything the drawn children did not account for, not the sum
+            // of the omitted ones. Those differ when a directory totals more than its children do,
+            // and taking the sum would give the wedge a byte count smaller than the angle it fills.
+            if (placed < total)
             {
-                pending.Enqueue((ExploreSector.Aggregated, depth, omitted, start + from, sweep - from));
+                pending.Enqueue((ExploreSector.Aggregated, depth, total - placed, start + from, sweep - from));
             }
 
             return;
         }
-    }
-
-    private static long Omitted(ExploreTree tree, ReadOnlySpan<int> nodes)
-    {
-        long bytes = 0;
-
-        foreach (var node in nodes)
-        {
-            bytes += tree.SizeOf(node);
-        }
-
-        return bytes;
     }
 }

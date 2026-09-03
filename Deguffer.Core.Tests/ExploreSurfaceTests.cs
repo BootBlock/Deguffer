@@ -38,6 +38,25 @@ public sealed class ExploreSurfaceTests
     }
 
     /// <summary>
+    /// A scan still running publishes a tree ordered by name, and neither the treemap nor the
+    /// sunburst can be drawn from one — both refuse it rather than draw a picture that lies. So the
+    /// icicle stands in until the scan finishes, which is also what stops a repaint throwing.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Sunburst)]
+    [InlineData(ExploreView.Icicle)]
+    public void AScanStillRunningIsDrawnAsAnIcicleWhicheverViewWasPicked(ExploreView view)
+    {
+        var tree = NamedTree(10);
+
+        var surface = ExploreSurface.Create(tree, tree.RootNode, view, Width, Height, scale: 1);
+
+        Assert.IsType<TiledSurface>(surface);
+        Assert.NotEmpty(surface.Labels);
+    }
+
+    /// <summary>
     /// Only a rectangle with nothing drawn inside it gets a label. A child is inset from its parent
     /// by a single pixel, so a parent's label and its first child's land within two pixels of each
     /// other and overprint into an unreadable stack.
@@ -136,33 +155,41 @@ public sealed class ExploreSurfaceTests
     /// <summary>
     /// The block standing in for what was too small to draw has no name to write in it, and giving
     /// it one of its siblings' would say the wrong thing about what is there.
+    ///
+    /// <para>The threshold is raised so that every child is gathered into one block covering most of
+    /// the canvas. A block that is merely small is left unlabelled by the size rule, whatever this
+    /// one does, so the fixture has to make it big enough to be a candidate.</para>
     /// </summary>
     [Fact]
     public void TheBlockStandingInForOmittedSiblingsIsNotLabelled()
     {
-        var tree = LopsidedTree();
+        var tree = FlatTree(200);
+        var limits = LayoutLimits.Default with { MinimumTileSize = 100 };
 
-        Assert.Contains(
-            TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default),
-            t => t.IsAggregate);
+        var tiles = Treemap(tree, limits).Labels;
+        var sectors = Sunburst(tree, limits).Labels;
 
-        Assert.DoesNotContain(ExploreTile.Aggregated, Treemap(tree).Labels.Select(l => l.Node));
-        Assert.DoesNotContain(ExploreSector.Aggregated, Sunburst(tree).Labels.Select(l => l.Node));
+        Assert.DoesNotContain(ExploreTile.Aggregated, tiles.Select(l => l.Node));
+        Assert.DoesNotContain(ExploreSector.Aggregated, sectors.Select(l => l.Node));
     }
 
     private static IReadOnlyList<string> Names(ExploreTree tree, ExploreSurface surface) =>
         [.. surface.Labels.Select(l => tree.NameOf(l.Node))];
 
-    private static ExploreSurface Treemap(ExploreTree tree) => new TiledSurface(
+    private static ExploreSurface Treemap(ExploreTree tree) => Treemap(tree, LayoutLimits.Default);
+
+    private static ExploreSurface Treemap(ExploreTree tree, LayoutLimits limits) => new TiledSurface(
         tree,
         tree.RootNode,
         Width,
         Height,
-        LayoutLimits.Default,
-        TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default));
+        limits,
+        TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits));
 
-    private static ExploreSurface Sunburst(ExploreTree tree) =>
-        new SunburstSurface(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
+    private static ExploreSurface Sunburst(ExploreTree tree) => Sunburst(tree, LayoutLimits.Default);
+
+    private static ExploreSurface Sunburst(ExploreTree tree, LayoutLimits limits) =>
+        new SunburstSurface(tree, tree.RootNode, Width, Height, limits);
 
     /// <summary>Equal children of one root, which is the shape that defeats a size threshold.</summary>
     private static ExploreTree FlatTree(int children)
@@ -174,24 +201,20 @@ public sealed class ExploreSurfaceTests
             [.. Enumerable.Range(0, children).Select(i =>
                 new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
-    /// <summary>One child too big to miss and five hundred too small to draw, which is what forces
-    /// the block standing in for the rest.</summary>
-    private static ExploreTree LopsidedTree()
+    /// <summary>The same shape in the order a scan still running publishes it.</summary>
+    private static ExploreTree NamedTree(int children)
     {
         var builder = new ExploreTreeBuilder(@"C:\");
 
         builder.AddChildren(
             ExploreTreeBuilder.RootNode,
-            [
-                new ExploreChild("big", IsDirectory: false, IsLink: false, Size: 1_000_000),
-                .. Enumerable.Range(0, 500).Select(i =>
-                    new ExploreChild($"small{i}", IsDirectory: false, IsLink: false, Size: 1)),
-            ]);
+            [.. Enumerable.Range(0, children).Select(i =>
+                new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.ByName);
     }
 
     /// <summary>One directory with files in it, so the directory has something drawn inside it.</summary>
@@ -208,6 +231,6 @@ public sealed class ExploreSurfaceTests
             [.. Enumerable.Range(0, 4).Select(i =>
                 new ExploreChild($"leaf{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 }

@@ -94,11 +94,19 @@ public sealed class ExploreTreeBuilder
     }
 
     /// <summary>
-    /// The finished tree. Every slot was filled by this builder, so every one is present — the
-    /// distinction <see cref="ExploreTree.Create"/> needs exists for the file table, which leaves
-    /// free and unreadable records empty.
+    /// The tree as it stands, ordering each node's children by <paramref name="childOrder"/>.
+    ///
+    /// <para>Callable while the walk is still running, which is what makes a snapshot possible, and
+    /// it is the snapshot that wants an order other than by size — see
+    /// <see cref="ExploreChildOrder"/>. Node numbers are indices into these lists and the lists only
+    /// ever grow, so a node in one snapshot is the same node in the next and in the finished
+    /// tree.</para>
+    ///
+    /// <para>Every slot was filled by this builder, so every one is present — the distinction
+    /// <see cref="ExploreTree.Create"/> needs exists for the file table, which leaves free and
+    /// unreadable records empty.</para>
     /// </summary>
-    public ExploreTree Build()
+    public ExploreTree Build(ExploreChildOrder childOrder)
     {
         lock (_gate)
         {
@@ -114,7 +122,8 @@ public sealed class ExploreTreeBuilder
                 [.. _isDirectory],
                 [.. _isLink],
                 [.. _sizeUnknown],
-                present);
+                present,
+                childOrder);
         }
     }
 }

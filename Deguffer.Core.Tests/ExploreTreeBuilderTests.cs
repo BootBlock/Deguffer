@@ -36,7 +36,7 @@ public class ExploreTreeBuilderTests
             new ExploreChild("content-v2", IsDirectory: true, IsLink: false, Size: 0),
         ]);
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(ExploreTreeBuilder.RootNode + 1, first);
         Assert.Equal(first + 3, second);
@@ -76,7 +76,7 @@ public class ExploreTreeBuilderTests
             [.. Enumerable.Range(0, perBatch).Select(entry =>
                 new ExploreChild($"{batch}-{entry}.bin", IsDirectory: false, IsLink: false, Size: 1))]));
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal((batches * perBatch) + 1, tree.NodeCount);
         Assert.Equal(batches * perBatch, tree.TotalBytes);
@@ -104,7 +104,7 @@ public class ExploreTreeBuilderTests
             new ExploreChild("a.tgz", IsDirectory: false, IsLink: false, Size: 4096),
         ]);
 
-        var snapshot = builder.Build();
+        var snapshot = builder.Build(ExploreChildOrder.BySize);
 
         builder.AddChildren(ExploreTreeBuilder.RootNode, [
             new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192),
@@ -112,6 +112,6 @@ public class ExploreTreeBuilderTests
 
         Assert.Equal(4096, snapshot.TotalBytes);
         Assert.Equal(2, snapshot.NodeCount);
-        Assert.Equal(12_288, builder.Build().TotalBytes);
+        Assert.Equal(12_288, builder.Build(ExploreChildOrder.BySize).TotalBytes);
     }
 }

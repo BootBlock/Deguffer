@@ -123,7 +123,16 @@ public abstract class ExploreSurface
 
         var limits = LayoutLimits.Default.At(scale);
 
-        return view switch
+        // A tree still being filled in orders its children by name rather than by size, so that a
+        // growing child widens where it is instead of moving. Two of the four drawings cannot be
+        // made from that at all and say so by refusing: squarification is defined over a decreasing
+        // sequence, and a sunburst's residual wedge assumes the small children are the tail. So a
+        // scan in progress draws the icicle whichever view was picked, and the chosen one arrives
+        // with the finished scan. ExploreViewModel.ViewNote is what keeps that from being a silent
+        // substitution.
+        var drawn = tree.ChildOrder == ExploreChildOrder.BySize ? view : ExploreView.Icicle;
+
+        return drawn switch
         {
             ExploreView.Sunburst => new SunburstSurface(tree, root, width, height, limits),
             ExploreView.Icicle => new TiledSurface(

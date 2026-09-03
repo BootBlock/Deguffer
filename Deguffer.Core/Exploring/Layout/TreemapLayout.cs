@@ -30,6 +30,10 @@ public static class TreemapLayout
     ///
     /// <para>Returns the rectangles in the order they should be painted: a parent before its
     /// children, so a view drawing them in sequence gets the nesting right without sorting.</para>
+    ///
+    /// <para>Throws for a tree whose children are not ordered by size. See
+    /// <see cref="ExploreChildOrder"/>: a scan still running publishes a tree ordered by name, and
+    /// this would lay one out into rectangles that look like a treemap and are not one.</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
         ExploreTree tree,
@@ -39,6 +43,17 @@ public static class TreemapLayout
         LayoutLimits limits)
     {
         ArgumentNullException.ThrowIfNull(tree);
+
+        // Squarification is defined over a decreasing sequence, and both the row packing and the
+        // aggregate below read the children in the order the tree holds them. Given any other order
+        // this would still produce rectangles that tile the canvas, and every one of them would be
+        // in the wrong place — so it refuses rather than draws.
+        if (tree.ChildOrder != ExploreChildOrder.BySize)
+        {
+            throw new ArgumentException(
+                $"A squarified treemap needs children ordered by size, not by {tree.ChildOrder}.",
+                nameof(tree));
+        }
 
         var tiles = new List<ExploreTile>();
 
@@ -84,9 +99,9 @@ public static class TreemapLayout
     /// Fit one node's children into <paramref name="area"/>, row by row, largest first.
     ///
     /// <para>The children arrive already ordered by size, which the algorithm requires — the paper
-    /// is explicit that squarification only works on a decreasing sequence — and
-    /// <see cref="ExploreTree.ChildrenOf"/> guarantees it once at build time rather than per
-    /// repaint.</para>
+    /// is explicit that squarification only works on a decreasing sequence. The tree settles that
+    /// order once at build time rather than per repaint, and <see cref="Compute"/> refuses a tree
+    /// that settled on a different one.</para>
     /// </summary>
     private static void Place(
         ExploreTree tree,

@@ -28,13 +28,14 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
     /// Three quarters of a second is slow enough that the copy is noise against the enumeration and
     /// fast enough to look alive.</para>
     ///
-    /// <para>It is also as far as this goes deliberately. Every disk tool surveyed for this feature
-    /// — WinDirStat, KDirStat, QDirStat, Filelight, Baobab, GrandPerspective, Disk Inventory X —
-    /// refuses to draw its map until the scan finishes, and DaisyDisk tried live rings and abandoned
-    /// them. The measured reason is layout instability: on the Bederson/Shneiderman/Wattenberg
-    /// change metric a squarified treemap scores 14.82 against slice-and-dice's 0.25, so a map
-    /// redrawn from growing data rearranges itself continuously. Deguffer publishes the snapshots
-    /// and leaves what to do with them to the view.</para>
+    /// <para>Every disk tool surveyed for this feature — WinDirStat, KDirStat, QDirStat, Filelight,
+    /// Baobab, GrandPerspective, Disk Inventory X — refuses to draw its map until the scan finishes,
+    /// and DaisyDisk tried live rings and abandoned them. The measured reason is layout instability:
+    /// on the Bederson/Shneiderman/Wattenberg change metric a squarified treemap scores 14.82
+    /// against slice-and-dice's 0.25, so a map redrawn from growing data rearranges itself
+    /// continuously. Deguffer draws its snapshots anyway, and answers that instead — a snapshot is
+    /// ordered by <see cref="ExploreChildOrder.ByName"/>, under which a growing child widens where
+    /// it already is rather than overtaking its siblings.</para>
     /// </summary>
     private static readonly TimeSpan SnapshotInterval = TimeSpan.FromMilliseconds(750);
 
@@ -144,7 +145,14 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
                     since.Restart();
                 }
 
-                progress.Report(new ExploreProgress(items, Total: null, bytes, due ? builder.Build() : null));
+                progress.Report(new ExploreProgress(
+                    items,
+                    Total: null,
+                    bytes,
+                    // By name, not by size. The sizes in a partial tree are still growing, and
+                    // ordering by one of them is what makes every snapshot a different picture of
+                    // the same disk. The finished tree is built by size, once, at the end.
+                    due ? builder.Build(ExploreChildOrder.ByName) : null));
             },
             ct);
 

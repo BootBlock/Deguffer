@@ -46,13 +46,10 @@ public sealed class SunburstSurface : ExploreSurface
     /// </summary>
     private IReadOnlyList<ExploreLabel> BuildLabels()
     {
+        // Only the width has to be checked. A ring is never narrower than
+        // LayoutLimits.RowHeight, which is the smallest band a level may be drawn in at all, so
+        // there is always room across the ring for one line of text.
         var sunburst = _hits.Sunburst;
-
-        if (sunburst.RingWidth < Limits.MinimumLabelHeight)
-        {
-            return [];
-        }
-
         var labels = new List<ExploreLabel>();
 
         foreach (var sector in sunburst.Sectors)
