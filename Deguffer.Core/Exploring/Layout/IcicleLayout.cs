@@ -26,7 +26,7 @@ namespace Deguffer.Core.Exploring.Layout;
 public static class IcicleLayout
 {
     /// <summary>
-    /// Lay <paramref name="root"/>'s subtree out as rows of <paramref name="rowHeight"/>.
+    /// Lay <paramref name="root"/>'s subtree out as rows of <see cref="LayoutLimits.RowHeight"/>.
     ///
     /// <para>Rows stop at whichever comes first: the depth limit, or the bottom of the canvas. The
     /// second is not a failure to draw everything — an icicle over a deep tree is meant to be
@@ -38,12 +38,12 @@ public static class IcicleLayout
         int root,
         float width,
         float height,
-        float rowHeight,
         LayoutLimits limits)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rowHeight);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.RowHeight);
 
+        var rowHeight = limits.RowHeight;
         var tiles = new List<ExploreTile>();
 
         if (width <= 0 || height < rowHeight || tree.SizeOf(root) <= 0)

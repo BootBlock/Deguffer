@@ -99,7 +99,7 @@ public sealed class IcicleLayoutTests
     {
         var tree = TreeOf(100);
 
-        Assert.Empty(IcicleLayout.Compute(tree, tree.RootNode, Width, RowHeight - 1, RowHeight, LayoutLimits.Default));
+        Assert.Empty(IcicleLayout.Compute(tree, tree.RootNode, Width, RowHeight - 1, Rows(LayoutLimits.Default)));
     }
 
     /// <summary>
@@ -139,7 +139,13 @@ public sealed class IcicleLayoutTests
     }
 
     private static IReadOnlyList<ExploreTile> Layout(ExploreTree tree, LayoutLimits limits) =>
-        IcicleLayout.Compute(tree, tree.RootNode, Width, Height, RowHeight, limits);
+        IcicleLayout.Compute(tree, tree.RootNode, Width, Height, Rows(limits));
+
+    /// <summary>
+    /// The row height is a limit like the others, so the tests state it the same way rather than
+    /// carrying a second number that has to be kept in step with the one the layout reads.
+    /// </summary>
+    private static LayoutLimits Rows(LayoutLimits limits) => limits with { RowHeight = RowHeight };
 
     private static ExploreTree TreeOf(params long[] sizes)
     {

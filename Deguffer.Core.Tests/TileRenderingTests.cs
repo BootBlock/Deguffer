@@ -189,7 +189,7 @@ public sealed class TileRenderingTests
     /// </summary>
     private static byte[] Paint(IReadOnlyList<ExploreTile> tiles, int width, int height, TileColour ground, Func<int, int> branchOf)
     {
-        var pixels = new byte[TileRasteriser.BufferLengthFor(width, height)];
+        var pixels = new byte[PixelBuffer.LengthFor(width, height)];
         TileRasteriser.Paint(pixels, tiles, width, height, ground, branchOf);
 
         return pixels;

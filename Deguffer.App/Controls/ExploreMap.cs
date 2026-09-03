@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
-using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
 using Microsoft.UI.Xaml;
@@ -11,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.UI;
 
 namespace Deguffer.App.Controls;
@@ -18,31 +18,22 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// Draws a scanned tree, and says what the pointer is over.
 ///
-/// <para>The geometry is one bitmap. A full volume lays out to tens of thousands of rectangles, and
-/// the framework's own performance guidance is that a vector element repeated enough times should
+/// <para>The geometry is one bitmap. A full volume lays out to tens of thousands of shapes, and the
+/// framework's own performance guidance is that a vector element repeated enough times should
 /// become an image instead — which is also what every reference implementation does, WinDirStat
 /// rendering into a cached surface and blitting it rather than keeping a shape per file.</para>
 ///
 /// <para>The labels are not in the bitmap. They are real text controls laid over it, so they scale
 /// with the user's text size and a screen reader can read them — none of which text burnt into a
-/// bitmap offers. There are only ever a few dozen, because a rectangle too small to read is a
-/// rectangle with no label.</para>
+/// bitmap offers. There are only ever a few dozen, because a shape too small to read is a shape
+/// with no label.</para>
 ///
-/// <para>Nothing here knows what a drive is or how one is scanned. It is handed a tree, a node and
-/// a view, and it reports back what was pointed at (G1).</para>
+/// <para>Nothing here knows what a drive is, how one is scanned, or how any of the views are laid
+/// out. It is handed a tree, a node and a view, it asks Core for the matching
+/// <see cref="ExploreSurface"/>, and it reports back what was pointed at (G1).</para>
 /// </summary>
 public sealed class ExploreMap : UserControl
 {
-    /// <summary>
-    /// How many labels to draw at most.
-    ///
-    /// <para>The size threshold already keeps this small on an ordinary tree, but a directory of
-    /// several hundred near-equal children defeats it — every rectangle is then big enough to label
-    /// and none of them is interesting. Past a few dozen the labels are noise over the picture
-    /// anyway, and the list view is the honest way to read that many names.</para>
-    /// </summary>
-    private const int MaximumLabels = 64;
-
     private readonly Image _surface = new()
     {
         // The bitmap is rendered at the display's pixel size and stretched back over the control's
@@ -53,22 +44,18 @@ public sealed class ExploreMap : UserControl
     private readonly Canvas _labels = new()
     {
         // Labels sit over the map and are never the thing being clicked: a click that landed on a
-        // label rather than the rectangle under it would select whatever the label happened to
-        // overlap.
+        // label rather than the shape under it would select whatever the label happened to overlap.
         IsHitTestVisible = false,
     };
-
-    private readonly Dictionary<int, int> _branches = [];
 
     private ExploreTree? _tree;
     private int _node;
     private ExploreView _view = ExploreView.Treemap;
-    private IReadOnlyList<ExploreTile> _tiles = [];
-    private TileHitTest? _hits;
+    private ExploreSurface? _drawing;
     private WriteableBitmap? _bitmap;
     private byte[]? _pixels;
     private double _scale = 1;
-    private int? _hovered;
+    private ExploreHit? _hovered;
 
     public ExploreMap()
     {
@@ -107,14 +94,14 @@ public sealed class ExploreMap : UserControl
         // this same event for the same reason.
         ActualThemeChanged += (_, _) => Redraw();
 
-        // The map is one focusable thing rather than one per rectangle, and the status line beside
-        // it carries what is under the pointer. A screen reader needs the same information without
-        // a pointer, which the list view provides in full — so this announces its role and defers.
+        // The map is one focusable thing rather than one per shape, and the status line beside it
+        // carries what is under the pointer. A screen reader needs the same information without a
+        // pointer, which the list view provides in full — so this announces its role and defers.
         IsTabStop = true;
         AutomationProperties.SetName(this, "Map of the scanned drive");
 
         // Naming where the same content is readable, because deferring to the list view only helps
-        // somebody who knows it is there. It is one of three options in the View picker and it is
+        // somebody who knows it is there. It is one of four options in the View picker and it is
         // not the default.
         AutomationProperties.SetHelpText(
             this,
@@ -122,12 +109,12 @@ public sealed class ExploreMap : UserControl
             + "contents as a readable list.");
     }
 
-    /// <summary>The node the user asked to open, by double-clicking a rectangle.</summary>
+    /// <summary>The node the user asked to open, by double-clicking a shape.</summary>
     public event EventHandler<int>? Activated;
 
     /// <summary>
-    /// What the pointer moved over: a node, or a byte count where it is over the rectangle standing
-    /// in for items too small to draw. Both null when it is over nothing.
+    /// What the pointer moved over: a node, or a byte count where it is over the block standing in
+    /// for items too small to draw. Both null when it is over nothing.
     /// </summary>
     public event EventHandler<(int? Node, long? AggregateBytes)>? Hovered;
 
@@ -158,39 +145,12 @@ public sealed class ExploreMap : UserControl
             _surface.Source = null;
             _bitmap = null;
             _pixels = null;
-            _tiles = [];
-            _hits = null;
+            _drawing = null;
             return;
         }
 
-        // The hue each direct child gets, fixed before anything is drawn so the map, the labels and
-        // any later selection all agree on it.
-        _branches.Clear();
-
-        var children = tree.ChildrenOf(_node);
-        for (var i = 0; i < children.Length; i++)
-        {
-            _branches[children[i]] = i;
-        }
-
-        // Every pixel threshold in the layout is in device-independent units, so a 3-pixel floor at
-        // 100% must stay 3 logical pixels at 200% rather than becoming a pixel and a half. The
-        // label thresholds go with it: a treemap laid out in device pixels and compared against raw
-        // constants labels rectangles half the intended size on a high-DPI display.
-        var limits = LayoutLimits.Default.At(_scale);
-
-        // A tree still being filled in orders its children by name rather than by size, and that
-        // is the whole reason the icicle exists beside the treemap: with the order fixed a growing
-        // child widens where it is, where a treemap repacks its rows and rearranges the picture on
-        // every snapshot. So a scan in progress draws the icicle whichever view was picked, and the
-        // treemap arrives with the finished scan. ExploreViewModel.ViewNote says so on screen.
-        var stillFillingIn = tree.ChildOrder != ExploreChildOrder.BySize;
-
-        _tiles = _view == ExploreView.Icicle || stillFillingIn
-            ? IcicleLayout.Compute(tree, _node, width, height, (float)(22 * _scale), limits)
-            : TreemapLayout.Compute(tree, _node, width, height, limits);
-
-        _hits = new TileHitTest(_tiles, width, height);
+        var drawing = ExploreSurface.Create(tree, _node, _view, width, height, _scale);
+        _drawing = drawing;
 
         // Both reused while the size holds. A scan redraws this every three quarters of a second,
         // and at 3840 by 2160 the buffer alone is 33 MB of large-object-heap allocation — several
@@ -200,16 +160,16 @@ public sealed class ExploreMap : UserControl
         {
             bitmap = new WriteableBitmap(width, height);
             _bitmap = bitmap;
-            _pixels = new byte[TileRasteriser.BufferLengthFor(width, height)];
+            _pixels = new byte[PixelBuffer.LengthFor(width, height)];
             _surface.Source = bitmap;
         }
 
-        TileRasteriser.Paint(_pixels!, _tiles, width, height, Ground(), BranchOf);
+        drawing.Paint(_pixels!, Ground());
 
         _pixels!.CopyTo(0, bitmap.PixelBuffer, 0, _pixels!.Length);
         bitmap.Invalidate();
 
-        DrawLabels(tree, limits);
+        DrawLabels(tree, drawing);
     }
 
     /// <summary>
@@ -230,121 +190,65 @@ public sealed class ExploreMap : UserControl
         : new TileColour(243, 243, 243);
 
     /// <summary>
-    /// Which top-level branch a node belongs to, so a whole subtree shares one hue.
+    /// Lay the labels over the finished bitmap, where the surface said they go.
     ///
-    /// <para>Walked up from the node rather than carried in the tile, because "top level" means
-    /// relative to whatever the user has descended into — the same node is a branch of its own when
-    /// opened, and part of a larger one when seen from above.</para>
-    ///
-    /// <para>The answer is the branch's <em>position</em> among its siblings, not its node number.
-    /// Node numbers are whatever the scan happened to assign, so taking them modulo the palette
-    /// gives two adjacent branches the same hue often enough to be visible — and the two largest
-    /// rectangles on the screen sharing a colour is precisely the collision that matters.</para>
+    /// <para>Which shapes are worth labelling is the drawing's decision and is made in Core, where
+    /// it can be tested. What is left here is the part that is a control: the text, the colour, and
+    /// the turn a sunburst's labels take to lie along their own ring.</para>
     /// </summary>
-    private int BranchOf(int node)
+    private void DrawLabels(ExploreTree tree, ExploreSurface drawing)
     {
-        if (_tree is not { } tree)
+        foreach (var label in drawing.Labels)
         {
-            return 0;
-        }
-
-        var current = node;
-
-        while (current != _node && tree.ParentOf(current) != _node && current != tree.RootNode)
-        {
-            current = tree.ParentOf(current);
-        }
-
-        return _branches.TryGetValue(current, out var position) ? position : 0;
-    }
-
-    /// <summary>
-    /// Lay the labels over the finished bitmap.
-    ///
-    /// <para>Only a rectangle with nothing drawn inside it gets one. A child is inset from its
-    /// parent by a single pixel, so a parent's label and its first child's land within two pixels of
-    /// each other and overprint into an unreadable stack — which is what the top-left corner of a
-    /// treemap of any real drive looked like. Labelling the innermost rectangles instead is both
-    /// legible and the more useful half: the parent's name is on the breadcrumb, and what is inside
-    /// it is not written anywhere else.</para>
-    /// </summary>
-    private void DrawLabels(ExploreTree tree, LayoutLimits limits)
-    {
-        // Which nodes had a rectangle drawn inside them. The layouts emit a parent before its
-        // children, so this is complete for every tile by the time the second pass reaches it.
-        var covered = new HashSet<int>();
-
-        foreach (var tile in _tiles)
-        {
-            if (!tile.IsAggregate && tile.Node != _node)
-            {
-                covered.Add(tree.ParentOf(tile.Node));
-            }
-        }
-
-        var drawn = 0;
-
-        foreach (var tile in _tiles)
-        {
-            if (drawn >= MaximumLabels)
-            {
-                return;
-            }
-
-            if (tile.IsAggregate
-                || tile.Node == _node
-                || covered.Contains(tile.Node)
-                || !tile.HasRoomForALabel(limits))
-            {
-                continue;
-            }
-
-            var colour = TilePalette.For(BranchOf(tile.Node), tile.Depth).ContrastingText;
-
             var text = new TextBlock
             {
-                Text = $"{tree.NameOf(tile.Node)}  {FreeSpace.Format(tree.SizeOf(tile.Node))}",
+                Text = $"{tree.NameOf(label.Node)}  {FreeSpace.Format(tree.SizeOf(label.Node))}",
                 FontSize = 12,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                Width = (tile.Width / _scale) - 8,
-                Foreground = new SolidColorBrush(Color.FromArgb(255, colour.Red, colour.Green, colour.Blue)),
+                TextAlignment = label.Centred ? TextAlignment.Center : TextAlignment.Left,
+                Width = label.Width / _scale,
+                Foreground = new SolidColorBrush(Color.FromArgb(
+                    255, label.Colour.Red, label.Colour.Green, label.Colour.Blue)),
             };
+
+            if (label.Rotation != 0)
+            {
+                text.RenderTransformOrigin = new Point(0.5, 0.5);
+                text.RenderTransform = new RotateTransform { Angle = label.Rotation };
+            }
 
             // Announced through the list view instead: a label here duplicates a row there, and a
             // screen reader reading fifty fragments of a picture helps nobody.
             AutomationProperties.SetAccessibilityView(text, AccessibilityView.Raw);
 
-            Canvas.SetLeft(text, (tile.X / _scale) + 4);
-            Canvas.SetTop(text, (tile.Y / _scale) + 2);
+            Canvas.SetLeft(text, label.X / _scale);
+            Canvas.SetTop(text, label.Y / _scale);
 
             _labels.Children.Add(text);
-            drawn++;
         }
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_hits is null)
+        if (_drawing is not { } drawing)
         {
             return;
         }
 
         var point = e.GetCurrentPoint(this).Position;
-        var index = _hits.At((float)(point.X * _scale), (float)(point.Y * _scale));
+        var hit = drawing.At((float)(point.X * _scale), (float)(point.Y * _scale));
 
-        // Only when it changed. A pointer moves at the display's refresh rate and lands in the same
-        // rectangle for most of that, so reporting every move would rebuild the same string sixty
-        // times a second.
-        if (index == _hovered)
+        // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
+        // shape for most of that, so reporting every move would rebuild the same string sixty times
+        // a second.
+        if (hit == _hovered)
         {
             return;
         }
 
-        _hovered = index;
+        _hovered = hit;
 
-        var tile = index is { } i ? _tiles[i] : (ExploreTile?)null;
-
-        Hovered?.Invoke(this, tile switch
+        Hovered?.Invoke(this, hit switch
         {
             { IsAggregate: true } aggregate => (null, aggregate.Bytes),
             { } node => (node.Node, null),
@@ -373,17 +277,17 @@ public sealed class ExploreMap : UserControl
 
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (_hits is null)
+        if (_drawing is not { } drawing)
         {
             return;
         }
 
         var point = e.GetPosition(this);
 
-        if (_hits.At((float)(point.X * _scale), (float)(point.Y * _scale)) is { } index
-            && !_tiles[index].IsAggregate)
+        if (drawing.At((float)(point.X * _scale), (float)(point.Y * _scale))
+            is { IsAggregate: false } hit)
         {
-            Activated?.Invoke(this, _tiles[index].Node);
+            Activated?.Invoke(this, hit.Node);
         }
     }
 }

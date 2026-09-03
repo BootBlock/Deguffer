@@ -157,21 +157,29 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// How what is on screen differs from what the View box names, or null when it does not.
     ///
     /// <para>Only ever raised by a partial tree, and every view is affected by one. Its children are
-    /// ordered by name rather than by size, so that a scan in progress stays still, and the treemap
-    /// cannot be drawn from that at all — squarification is defined only over a decreasing
-    /// sequence — so the map substitutes the icicle on top. A scan reading the file table publishes
-    /// no partial tree, so it never says any of this.</para>
+    /// ordered by name rather than by size, so that a scan in progress stays still, and neither the
+    /// treemap nor the sunburst can be drawn from that at all — squarification is defined only over
+    /// a decreasing sequence, and a sunburst's residual wedge assumes the small children are the
+    /// tail — so the map substitutes the icicle on top. A scan reading the file table publishes no
+    /// partial tree, so it never says any of this.</para>
     ///
     /// <para>The list gets the sentence as much as the pictures do. It reorders itself alphabetically
     /// and back again, which is a substitution too, and one nobody is told about is the kind a user
     /// reads as a bug.</para>
     /// </summary>
     public string? ViewNote => Tree is { ChildOrder: not ExploreChildOrder.BySize }
-        ? SelectedView == ExploreView.Treemap
-            ? "Drawing the icicle, in name order, while the scan runs. A treemap reorders every "
-              + "folder as it grows, so it follows when the scan finishes."
-            : "In name order while the scan runs, so nothing moves as a folder grows. Largest first "
-              + "when the scan finishes."
+        ? SelectedView switch
+        {
+            ExploreView.Treemap =>
+                "Drawing the icicle, in name order, while the scan runs. A treemap reorders every "
+                + "folder as it grows, so it follows when the scan finishes.",
+            ExploreView.Sunburst =>
+                "Drawing the icicle, in name order, while the scan runs. A sunburst turns every "
+                + "wedge after one that grows, so it follows when the scan finishes.",
+            _ =>
+                "In name order while the scan runs, so nothing moves as a folder grows. Largest "
+                + "first when the scan finishes.",
+        }
         : null;
 
     public bool HasViewNote => ViewNote is not null;
