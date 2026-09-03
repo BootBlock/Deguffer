@@ -32,10 +32,12 @@ public sealed class ExploreTree
         bool[] isLink,
         bool[] sizeUnknown,
         int[] childStart,
-        int[] children)
+        int[] children,
+        ExploreChildOrder childOrder)
     {
         RootPath = rootPath;
         RootNode = rootNode;
+        ChildOrder = childOrder;
         _names = names;
         _parents = parents;
         _sizes = sizes;
@@ -55,6 +57,16 @@ public sealed class ExploreTree
     /// over the whole volume to save an assumption nothing needs.
     /// </summary>
     public int RootNode { get; }
+
+    /// <summary>
+    /// The order <see cref="ChildrenOf"/> returns siblings in.
+    ///
+    /// <para>Exposed because it is a precondition rather than a detail. Squarification is defined
+    /// only over a decreasing sequence, so a consumer holding a tree ordered any other way has to
+    /// draw something else — and a view inferring that from whether a scan was running would be
+    /// inferring the one thing that decides whether its picture means anything.</para>
+    /// </summary>
+    public ExploreChildOrder ChildOrder { get; }
 
     /// <summary>Total bytes under the root, as far as the scan established them.</summary>
     public long TotalBytes => _sizes[RootNode];
@@ -91,9 +103,10 @@ public sealed class ExploreTree
     public int ParentOf(int node) => _parents[node];
 
     /// <summary>
-    /// This node's children, largest first. The order is fixed at build time because every consumer
-    /// wants it — a treemap needs descending size for its row packing, a list shows it directly,
-    /// and a sunburst draws its arcs in it — so sorting once beats sorting per repaint (G4/G5).
+    /// This node's children, in <see cref="ChildOrder"/>. Fixed at build time because every
+    /// consumer wants an order — a treemap needs descending size for its row packing, a list shows
+    /// it directly, and a sunburst draws its arcs in it — so sorting once beats sorting per repaint
+    /// (G4/G5).
     /// </summary>
     public ReadOnlySpan<int> ChildrenOf(int node) =>
         _children.AsSpan(_childStart[node], _childStart[node + 1] - _childStart[node]);
@@ -164,6 +177,10 @@ public sealed class ExploreTree
     /// <paramref name="present"/> says which slots the reader actually filled. The walk fills every
     /// one; the table leaves free and unreadable records empty, and without this those read as a
     /// forest of node-zero children that would attach the whole volume to the root a second time.
+    ///
+    /// <paramref name="childOrder"/> settles the last of the three. See
+    /// <see cref="ExploreChildOrder"/> for why a tree still being filled in wants a different one
+    /// from a finished tree.
     /// </summary>
     internal static ExploreTree Create(
         string rootPath,
@@ -174,17 +191,18 @@ public sealed class ExploreTree
         bool[] isDirectory,
         bool[] isLink,
         bool[] sizeUnknown,
-        bool[] present)
+        bool[] present,
+        ExploreChildOrder childOrder)
     {
         var (childStart, children) = InvertParentLinks(parents, present, rootNode);
         var order = DepthFirstOrder(childStart, children, rootNode);
 
         RollUp(order, parents, sizes, sizeUnknown, rootNode);
-        SortChildrenBySize(childStart, children, sizes);
+        SortChildren(childStart, children, sizes, names, childOrder);
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, isDirectory, isLink, sizeUnknown,
-            childStart, children);
+            childStart, children, childOrder);
     }
 
     /// <summary>
@@ -281,11 +299,18 @@ public sealed class ExploreTree
     }
 
     /// <summary>
-    /// Order each node's children largest first, in place, once. See <see cref="ChildrenOf"/> for
-    /// why the order belongs here rather than in each consumer.
+    /// Order each node's children, in place, once. See <see cref="ChildrenOf"/> for why the order
+    /// belongs here rather than in each consumer, and <see cref="ExploreChildOrder"/> for why there
+    /// is more than one of them.
     /// </summary>
-    private static void SortChildrenBySize(int[] childStart, int[] children, long[] sizes)
+    private static void SortChildren(
+        int[] childStart, int[] children, long[] sizes, string[] names, ExploreChildOrder order)
     {
+        // One delegate for the whole tree rather than one per directory. A volume has hundreds of
+        // thousands of directories, and this runs again on every snapshot of a scan in progress
+        // (G5).
+        var byName = ByName(names);
+
         for (var node = 0; node + 1 < childStart.Length; node++)
         {
             var from = childStart[node];
@@ -297,6 +322,13 @@ public sealed class ExploreTree
             }
 
             var slice = children.AsSpan(from, length);
+
+            if (order == ExploreChildOrder.ByName)
+            {
+                MemoryExtensions.Sort(slice, byName);
+                continue;
+            }
+
             var keys = new long[length];
 
             for (var i = 0; i < length; i++)
@@ -310,4 +342,18 @@ public sealed class ExploreTree
             MemoryExtensions.Sort(keys.AsSpan(), slice);
         }
     }
+
+    /// <summary>
+    /// Compare two siblings by name, ordinally and without regard to case.
+    ///
+    /// <para>Ordinal so that the same disk draws the same picture on every machine. Without regard
+    /// to case because the alternative sorts every capitalised name ahead of every lower-case one,
+    /// which reads as no order at all to somebody looking at the list.</para>
+    ///
+    /// <para>Two siblings can compare equal, on a directory with case sensitivity enabled. They
+    /// keep the order they were recorded in, by the same stability the size order relies on for
+    /// equal-sized children.</para>
+    /// </summary>
+    private static Comparison<int> ByName(string[] names) =>
+        (left, right) => string.Compare(names[left], names[right], StringComparison.OrdinalIgnoreCase);
 }

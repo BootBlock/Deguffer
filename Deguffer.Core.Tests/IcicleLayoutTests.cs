@@ -102,6 +102,42 @@ public sealed class IcicleLayoutTests
         Assert.Empty(IcicleLayout.Compute(tree, tree.RootNode, Width, RowHeight - 1, RowHeight, LayoutLimits.Default));
     }
 
+    /// <summary>
+    /// Under a name order the children too narrow to draw are scattered through the row rather than
+    /// gathered at its end, and every child after the first of them is still a child that has to be
+    /// drawn. Stopping at the first narrow one — which is all a size order ever needs — loses them.
+    /// </summary>
+    [Fact]
+    public void DrawsEveryChildWideEnoughEvenWhereTheNarrowOnesComeFirst()
+    {
+        var tiles = Layout(ScatteredTree(), LayoutLimits.Default);
+
+        var drawn = tiles
+            .Where(tile => tile.Depth == 1 && !tile.IsAggregate)
+            .Select(tile => tile.Bytes)
+            .OrderByDescending(bytes => bytes)
+            .ToList();
+
+        Assert.Equal([400L, 300L, 298L], drawn);
+    }
+
+    /// <summary>
+    /// The scattered narrow children still add up to something, and it is still stated once: one
+    /// rectangle, carrying their bytes, in the space at the end of the row that the drawn children
+    /// did not take. A gap there would read as free space rather than as detail withheld.
+    /// </summary>
+    [Fact]
+    public void GathersTheNarrowChildrenIntoOneRectangleWhereverTheySatInTheOrder()
+    {
+        var tiles = Layout(ScatteredTree(), LayoutLimits.Default).Where(t => t.Depth == 1).ToList();
+
+        var aggregate = Assert.Single(tiles, tile => tile.IsAggregate);
+
+        Assert.Equal(2, aggregate.Bytes);
+        Assert.Equal(1000, tiles.Sum(tile => tile.Bytes));
+        Assert.InRange(aggregate.X + aggregate.Width, Width - 0.01, Width + 0.01);
+    }
+
     private static IReadOnlyList<ExploreTile> Layout(ExploreTree tree, LayoutLimits limits) =>
         IcicleLayout.Compute(tree, tree.RootNode, Width, Height, RowHeight, limits);
 
@@ -113,7 +149,27 @@ public sealed class IcicleLayoutTests
             ExploreTreeBuilder.RootNode,
             [.. sizes.Select((size, i) => new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, size))]);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>
+    /// A snapshot of a scan in progress: ordered by name, so the two one-byte children sit between
+    /// the three that are wide enough to draw. At 800 pixels across 1000 bytes the floor of three
+    /// pixels is four bytes, so exactly those two are too narrow.
+    /// </summary>
+    private static ExploreTree ScatteredTree()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 400),
+            new ExploreChild("b.bin", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("c.bin", IsDirectory: false, IsLink: false, Size: 300),
+            new ExploreChild("d.bin", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("e.bin", IsDirectory: false, IsLink: false, Size: 298),
+        ]);
+
+        return builder.Build(ExploreChildOrder.ByName);
     }
 
     private static ExploreTree NestedTree(int depth)
@@ -129,6 +185,6 @@ public sealed class IcicleLayoutTests
             ]);
         }
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 }

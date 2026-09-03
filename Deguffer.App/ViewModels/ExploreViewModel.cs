@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -132,8 +133,38 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTree))]
     [NotifyPropertyChangedFor(nameof(HasNoTree))]
+    [NotifyPropertyChangedFor(nameof(MapNote))]
+    [NotifyPropertyChangedFor(nameof(HasMapNote))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; set; }
+
+    /// <summary>
+    /// Which picture the user asked for.
+    ///
+    /// <para>Here rather than only in the page, because the page is not the only thing that has to
+    /// answer for it. While a scan is running the map draws the icicle whatever this says, and
+    /// <see cref="MapNote"/> is what keeps that from being a silent substitution.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MapNote))]
+    [NotifyPropertyChangedFor(nameof(HasMapNote))]
+    public partial ExploreView SelectedView { get; set; }
+
+    /// <summary>
+    /// Why the picture on screen is not the one the View box names, or null when it is.
+    ///
+    /// <para>Only ever raised by a partial tree, which is the one thing the treemap cannot draw:
+    /// its children are ordered by name so that a scan in progress stays still, and squarification
+    /// needs them ordered by size. A scan reading the file table publishes no partial tree at all,
+    /// so it never says this.</para>
+    /// </summary>
+    public string? MapNote =>
+        SelectedView == ExploreView.Treemap && Tree is { ChildOrder: not ExploreChildOrder.BySize }
+            ? "Drawing the icicle while the scan runs. A treemap reorders every folder as it grows, "
+              + "so the treemap follows when the scan finishes."
+            : null;
+
+    public bool HasMapNote => MapNote is not null;
 
     /// <summary>Which node the views are drawing. The scan's root until the user descends.</summary>
     [ObservableProperty]

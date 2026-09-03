@@ -179,7 +179,14 @@ public sealed class ExploreMap : UserControl
         // constants labels rectangles half the intended size on a high-DPI display.
         var limits = LayoutLimits.Default.At(_scale);
 
-        _tiles = _view == ExploreView.Icicle
+        // A tree still being filled in orders its children by name rather than by size, and that
+        // is the whole reason the icicle exists beside the treemap: with the order fixed a growing
+        // child widens where it is, where a treemap repacks its rows and rearranges the picture on
+        // every snapshot. So a scan in progress draws the icicle whichever view was picked, and the
+        // treemap arrives with the finished scan. ExploreViewModel.MapNote says so on screen.
+        var stillFillingIn = tree.ChildOrder != ExploreChildOrder.BySize;
+
+        _tiles = _view == ExploreView.Icicle || stillFillingIn
             ? IcicleLayout.Compute(tree, _node, width, height, (float)(22 * _scale), limits)
             : TreemapLayout.Compute(tree, _node, width, height, limits);
 

@@ -179,6 +179,14 @@
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
 
+            <!-- The one place the picture is not what the View box names. A treemap repacks its
+                 rows every time a folder grows, so a scan in progress is drawn as an icicle — and
+                 a substitution nobody is told about is the kind a user reads as a bug. -->
+            <TextBlock Text="{x:Bind ViewModel.MapNote, Mode=OneWay}"
+                       Visibility="{x:Bind ViewModel.HasMapNote, Mode=OneWay}"
+                       TextWrapping="Wrap"
+                       Style="{StaticResource SecondaryText}" />
+
             <!-- §5.5: the fallback must be observable, not inferred from how long the scan took. -->
             <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
                      IsClosable="False"

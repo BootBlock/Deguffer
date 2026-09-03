@@ -74,7 +74,7 @@ internal static class WalkExploreReader
             () => onLevel?.Invoke(builder, Interlocked.Read(ref items), Interlocked.Read(ref bytes)),
             ct);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     /// <summary>

@@ -43,8 +43,6 @@ public sealed partial class ExplorePage : Page
 
     public ExploreViewModel ViewModel { get; }
 
-    private ExploreView _view = ExploreView.Treemap;
-
     /// <summary>
     /// Draw the page in <paramref name="view"/>, and leave the selector agreeing with what is on
     /// screen.
@@ -55,7 +53,7 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void ShowAs(ExploreView view)
     {
-        _view = view;
+        ViewModel.SelectedView = view;
         ViewSelector.SelectedIndex = (int)view;
 
         var listed = view == ExploreView.List;
@@ -66,7 +64,8 @@ public sealed partial class ExplorePage : Page
         ShowCurrentNode();
     }
 
-    private void ShowCurrentNode() => Map.Show(ViewModel.Tree, ViewModel.CurrentNode, _view);
+    private void ShowCurrentNode() =>
+        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView);
 
     /// <summary>
     /// The view is applied first and persisted second, so it takes effect whether or not the

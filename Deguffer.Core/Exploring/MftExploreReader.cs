@@ -132,7 +132,11 @@ internal static class MftExploreReader
         present[root] = true;
         sizeUnknown[root] |= couldNotReadWholeTable || sawUnreadableRecord;
 
+        // By size, and there is no choice to make here: this route inverts the parent links once,
+        // after the whole table has been read, so it never publishes a partial tree that a growing
+        // size could rearrange.
         return ExploreTree.Create(
-            rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, present);
+            rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, present,
+            ExploreChildOrder.BySize);
     }
 }

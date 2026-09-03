@@ -33,7 +33,7 @@ public class ExploreTreeTests
 
         builder.AddChildren(deep, [File("a.tgz", 4000), File("b.tgz", 6000)]);
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(10_000, tree.SizeOf(deep));
         Assert.Equal(10_200, tree.SizeOf(local));
@@ -60,7 +60,7 @@ public class ExploreTreeTests
         var cache = top + 1;
         builder.AddChildren(cache, [File("c.tgz", 7), File("a.tgz", 9000), File("b.tgz", 300)]);
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(["cache", "medium.bin", "small.bin"], NamesOfChildren(tree, tree.RootNode));
         Assert.Equal(["a.tgz", "b.tgz", "c.tgz"], NamesOfChildren(tree, cache));
@@ -89,7 +89,7 @@ public class ExploreTreeTests
             File("delta.bin", 4096),
         ]);
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(["alpha.bin", "bravo.bin", "charlie.bin", "delta.bin"], NamesOfChildren(tree, tree.RootNode));
         Assert.Equal([first, first + 1, first + 2, first + 3], tree.ChildrenOf(tree.RootNode).ToArray());
@@ -114,7 +114,7 @@ public class ExploreTreeTests
             builder.AddChildren(top, [.. Enumerable.Range(0, 64).Select(i => File($"pack-{i:D2}.tgz", 4096))]);
             builder.AddChildren(top + 1, [File("a.log", 30), File("b.log", 30), File("c.log", 900)]);
 
-            var tree = builder.Build();
+            var tree = builder.Build(ExploreChildOrder.BySize);
             var order = new List<string>();
 
             for (var node = 0; node < tree.NodeCount; node++)
@@ -138,7 +138,7 @@ public class ExploreTreeTests
         }
 
         var leaf = builder.AddChildren(node, [File("sha512.tgz", 1234)]);
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(Root, tree.PathOf(tree.RootNode));
         Assert.Equal(Path.Combine(Root, @"AppData\Local\npm-cache\content-v2"), tree.PathOf(node));
@@ -170,7 +170,7 @@ public class ExploreTreeTests
 
         builder.AddChildren(node, [File("index.js", 512)]);
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(512, tree.TotalBytes);
         Assert.Equal(levels, tree.PathOf(node).Split(Path.DirectorySeparatorChar).Count(c => c == "node_modules"));
@@ -184,7 +184,7 @@ public class ExploreTreeTests
         var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [Directory("cache")]);
         builder.AddChildren(top, [File("a.tgz", 4096)]);
 
-        Assert.False(builder.Build().HasUnknownSizes);
+        Assert.False(builder.Build(ExploreChildOrder.BySize).HasUnknownSizes);
     }
 
     /// <summary>
@@ -207,7 +207,7 @@ public class ExploreTreeTests
 
         builder.MarkSizeUnknown(nested);
 
-        var tree = builder.Build();
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
         Assert.True(tree.HasUnknownSizeBelow(nested));
         Assert.True(tree.HasUnknownSizeBelow(cache));
@@ -240,10 +240,100 @@ public class ExploreTreeTests
             isDirectory: [true, true, false, true, true, false],
             isLink: [false, false, false, false, false, false],
             sizeUnknown: [false, false, false, false, false, false],
-            present: [true, true, true, true, true, false]);
+            present: [true, true, true, true, true, false],
+            childOrder: ExploreChildOrder.BySize);
 
         Assert.Equal(100, tree.TotalBytes);
         Assert.Equal(["cache"], NamesOfChildren(tree, tree.RootNode));
+    }
+
+    /// <summary>
+    /// What <see cref="ExploreChildOrder.ByName"/> is for, as an assertion: two snapshots of one
+    /// scan, taken as a directory below fills in, order the root's children identically.
+    /// </summary>
+    [Fact]
+    public void ANameOrderedTreeKeepsItsSiblingsWhereTheyAreAsTheyGrow()
+    {
+        var builder = GrowingScan(out var cache);
+
+        var early = builder.Build(ExploreChildOrder.ByName);
+
+        // The walk reaches the cache, which turns out to hold more than everything else together.
+        builder.AddChildren(cache, [File("big.bin", 9_000_000)]);
+
+        var later = builder.Build(ExploreChildOrder.ByName);
+
+        Assert.Equal(["apps", "cache", "zzz.bin"], NamesOfChildren(early, early.RootNode));
+        Assert.Equal(["apps", "cache", "zzz.bin"], NamesOfChildren(later, later.RootNode));
+        Assert.Equal(ExploreChildOrder.ByName, later.ChildOrder);
+    }
+
+    /// <summary>
+    /// The same two snapshots under a size order, which is the churn the name order exists to stop.
+    /// Stated as its own test rather than left implied, because a stability test that would pass
+    /// against either order proves nothing — every sibling here changes place between the two.
+    /// </summary>
+    [Fact]
+    public void ASizeOrderedTreeRearrangesItselfAsItsChildrenGrow()
+    {
+        var builder = GrowingScan(out var cache);
+
+        var early = builder.Build(ExploreChildOrder.BySize);
+
+        builder.AddChildren(cache, [File("big.bin", 9_000_000)]);
+
+        var later = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.Equal(["zzz.bin", "apps", "cache"], NamesOfChildren(early, early.RootNode));
+        Assert.Equal(["cache", "zzz.bin", "apps"], NamesOfChildren(later, later.RootNode));
+        Assert.Equal(ExploreChildOrder.BySize, later.ChildOrder);
+    }
+
+    /// <summary>
+    /// Compared without regard to case, because a directory holding <c>Apps</c> and <c>zzz.bin</c>
+    /// drawn in ordinal order puts every capitalised name before every lower-case one — which reads
+    /// as no order at all to somebody looking at the list.
+    /// </summary>
+    [Fact]
+    public void ANameOrderIgnoresCase()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        // Every capital letter sorts ahead of every lower-case one ordinally, so this is the
+        // order that separates the two comparisons rather than one they agree on.
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            File("Zebra.bin", 10),
+            File("apples.bin", 10),
+            File("mangoes.bin", 10),
+            File("Bananas.bin", 10),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.ByName);
+
+        Assert.Equal(
+            ["apples.bin", "Bananas.bin", "mangoes.bin", "Zebra.bin"],
+            NamesOfChildren(tree, tree.RootNode));
+    }
+
+    /// <summary>
+    /// A scan part way through a directory that is about to dwarf its siblings. The root holds one
+    /// of each thing a walk records — a directory already measured, a directory not yet descended
+    /// into, and a file — and <paramref name="cache"/> is the one still to fill in.
+    /// </summary>
+    private static ExploreTreeBuilder GrowingScan(out int cache)
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            Directory("apps"),
+            Directory("cache"),
+            File("zzz.bin", 5000),
+        ]);
+
+        builder.AddChildren(top, [File("a.bin", 100)]);
+
+        cache = top + 1;
+        return builder;
     }
 
     private static ExploreChild Directory(string name) =>
