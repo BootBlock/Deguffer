@@ -16,7 +16,7 @@
             it governs — a control that changes how something is drawn belongs next to the drawing,
             not next to the thing that produced the data.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
             <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
                  page would otherwise stop naming the folder it is still scanning. -->
             <ComboBox Grid.Column="0"
@@ -100,6 +100,19 @@
                 <ComboBoxItem Content="Sunburst" />
                 <ComboBoxItem Content="List" />
             </ComboBox>
+
+            <!-- Beside the View box because the two are one decision to the reader — what is on
+                 screen and what its colours mean — and orthogonal to it in fact: every pairing of
+                 the two is meaningful. Indexed against ExploreColouring, like the box above it. -->
+            <ComboBox x:Name="ColourSelector"
+                      Grid.Column="7"
+                      MinWidth="110"
+                      Header="Colour"
+                      SelectionChanged="OnColourSelectionChanged"
+                      AutomationProperties.Name="What the colours on the map say">
+                <ComboBoxItem Content="Branch" />
+                <ComboBoxItem Content="Age" />
+            </ComboBox>
         </Grid>
 
         <!--
@@ -167,9 +180,16 @@
                           ItemsSource="{x:Bind ViewModel.Rows}">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExploreRow">
+                            <!-- Transparent rather than unset, so the whole row carries the
+                                 tooltip. A panel with no background is not hit-tested, so the
+                                 gaps between the columns fall through and the exact dates are
+                                 reachable only by landing on a word — which is precisely where a
+                                 reader is not pointing when they are reading the age column. -->
                             <Grid ColumnSpacing="12" Padding="0,4"
-                                  ColumnDefinitions="16,*,120,90"
-                                  AutomationProperties.Name="{x:Bind Description}">
+                                  Background="Transparent"
+                                  ColumnDefinitions="16,*,120,90,150"
+                                  AutomationProperties.Name="{x:Bind Description}"
+                                  ToolTipService.ToolTip="{x:Bind DatesLabel}">
                                 <FontIcon Grid.Column="0"
                                           FontSize="14"
                                           Glyph="{x:Bind Icon}"
@@ -192,6 +212,17 @@
                                 <TextBlock Grid.Column="3"
                                            Text="{x:Bind SizeLabel}"
                                            TextAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource SecondaryText}" />
+
+                                <!-- The newest write at or below the row, not the row's own
+                                     timestamp — a folder's own date moves when its layout changes
+                                     and stands still while its contents are rewritten. The exact
+                                     dates, and which is which, are on the row's tooltip. -->
+                                <TextBlock Grid.Column="4"
+                                           Text="{x:Bind AgeLabel}"
+                                           TextAlignment="Right"
+                                           TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
                             </Grid>
@@ -220,6 +251,43 @@
                        Style="{StaticResource SecondaryText}"
                        TextTrimming="CharacterEllipsis"
                        MinHeight="20" />
+
+            <!-- What the colours mean, when they mean an age. A hue per branch needs no legend,
+                 because the branch it names is the shape it is inside; an age band means nothing
+                 at all without the scale beside it. -->
+            <!-- One row that scrolls rather than a wrapping one. ItemsWrapGrid gives every cell
+                 the width of the first, so "Today" sized the whole legend and clipped every band
+                 after it; the panels that size each item to its own content are not in the
+                 framework. A narrow window scrolls this instead, which is what the rest of the app
+                 does with content too wide for its container. -->
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          VerticalScrollMode="Disabled"
+                          Visibility="{x:Bind ViewModel.ShowsAgeLegend, Mode=OneWay}">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.AgeLegend}"
+                          AutomationProperties.Name="What the map's colours mean">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExploreLegendBand">
+                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,12,0"
+                                    AutomationProperties.Name="{x:Bind Label}">
+                            <Border Width="12" Height="12" CornerRadius="2"
+                                    VerticalAlignment="Center"
+                                    Background="{x:Bind Swatch}"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Text="{x:Bind Label}"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryText}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            </ScrollViewer>
 
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"

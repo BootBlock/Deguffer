@@ -75,7 +75,17 @@ public abstract class ExploreSurface
     /// </summary>
     private readonly Dictionary<int, int> _branches = [];
 
-    protected ExploreSurface(ExploreTree tree, int root, int width, int height, LayoutLimits limits)
+    private readonly ExploreColouring _colouring;
+    private readonly DateTime _nowUtc;
+
+    protected ExploreSurface(
+        ExploreTree tree,
+        int root,
+        int width,
+        int height,
+        LayoutLimits limits,
+        ExploreColouring colouring,
+        DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -84,6 +94,8 @@ public abstract class ExploreSurface
         Width = width;
         Height = height;
         Limits = limits;
+        _colouring = colouring;
+        _nowUtc = nowUtc;
 
         var children = tree.ChildrenOf(root);
 
@@ -116,8 +128,22 @@ public abstract class ExploreSurface
     /// one of them is stated in device-independent pixels and a layout measured in device pixels
     /// compared against raw constants draws half-size detail on a high-DPI display.</para>
     /// </summary>
+    /// <param name="colouring">What the colours are to say: which branch a shape is in, or how long
+    /// ago it was last written.</param>
+    /// <param name="nowUtc">
+    /// What "now" is, for the age bands. Passed in rather than read, so a drawing coloured by age is
+    /// provable without a clock (G8) — the same seam
+    /// <see cref="Scanning.RelativeAge.Describe"/> takes.
+    /// </param>
     public static ExploreSurface Create(
-        ExploreTree tree, int root, ExploreView view, int width, int height, double scale)
+        ExploreTree tree,
+        int root,
+        ExploreView view,
+        int width,
+        int height,
+        double scale,
+        ExploreColouring colouring,
+        DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -134,16 +160,17 @@ public abstract class ExploreSurface
 
         return drawn switch
         {
-            ExploreView.Sunburst => new SunburstSurface(tree, root, width, height, limits),
+            ExploreView.Sunburst => new SunburstSurface(
+                tree, root, width, height, limits, colouring, nowUtc),
             ExploreView.Icicle => new TiledSurface(
-                tree, root, width, height, limits,
+                tree, root, width, height, limits, colouring, nowUtc,
                 IcicleLayout.Compute(tree, root, width, height, limits)),
 
             // Including List, which draws no map at all. The page hides the map rather than telling
             // it to stop, so this is the drawing it will be showing again when the user switches
             // back, and it is the one they last saw.
             _ => new TiledSurface(
-                tree, root, width, height, limits,
+                tree, root, width, height, limits, colouring, nowUtc,
                 TreemapLayout.Compute(tree, root, width, height, limits)),
         };
     }
@@ -173,7 +200,25 @@ public abstract class ExploreSurface
         return _branches.TryGetValue(current, out var position) ? position : 0;
     }
 
+    /// <summary>
+    /// What the shape for this node at this depth is painted.
+    ///
+    /// <para>Every colour decision the drawing makes, in one place. The rasterisers are handed this
+    /// and do no palette work of their own, so a third way of colouring a volume is a case here
+    /// rather than an edit to each of them — and, more to the point, the labels cannot come out
+    /// contrasted against a colour the shape underneath was not painted in.</para>
+    ///
+    /// <para>An aggregate is never coloured by either scheme. It is not a thing on the disk: it
+    /// stands for a run of siblings too small to draw, so it belongs to no branch and has no single
+    /// date. Giving it a colour that reads as one would invite the user to act on it.</para>
+    /// </summary>
+    protected TileColour ColourFor(int node, int depth) => (node, _colouring) switch
+    {
+        (ExploreTile.Aggregated, _) => TilePalette.Aggregate,
+        (_, ExploreColouring.Age) => AgePalette.For(Tree.ModifiedOf(node), _nowUtc),
+        _ => TilePalette.For(BranchOf(node), depth),
+    };
+
     /// <summary>The colour text over a shape of this node at this depth has to be drawn in.</summary>
-    protected TileColour TextColourFor(int node, int depth) =>
-        TilePalette.For(BranchOf(node), depth).ContrastingText;
+    protected TileColour TextColourFor(int node, int depth) => ColourFor(node, depth).ContrastingText;
 }

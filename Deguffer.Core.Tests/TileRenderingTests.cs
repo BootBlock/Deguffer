@@ -190,7 +190,15 @@ public sealed class TileRenderingTests
     private static byte[] Paint(IReadOnlyList<ExploreTile> tiles, int width, int height, TileColour ground, Func<int, int> branchOf)
     {
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
-        TileRasteriser.Paint(pixels, tiles, width, height, ground, branchOf);
+
+        // These tests are about where the pixels go, so they colour the way the shipped map does
+        // and let the branch stand in for the whole scheme. AgeColouringTests asks the other
+        // question, which is what a colour means.
+        TileRasteriser.Paint(
+            pixels, tiles, width, height, ground,
+            (node, depth) => node == ExploreTile.Aggregated
+                ? TilePalette.Aggregate
+                : TilePalette.For(branchOf(node), depth));
 
         return pixels;
     }

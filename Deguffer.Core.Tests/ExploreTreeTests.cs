@@ -240,6 +240,8 @@ public class ExploreTreeTests
             isDirectory: [true, true, false, true, true, false],
             isLink: [false, false, false, false, false, false],
             sizeUnknown: [false, false, false, false, false, false],
+            created: new ExploreTimestamp[6],
+            modified: new ExploreTimestamp[6],
             present: [true, true, true, true, true, false],
             childOrder: ExploreChildOrder.BySize);
 
@@ -336,11 +338,129 @@ public class ExploreTreeTests
         return builder;
     }
 
-    private static ExploreChild Directory(string name) =>
-        new(name, IsDirectory: true, IsLink: false, Size: 0);
+    /// <summary>
+    /// A directory reports the newest write anywhere at or below it, not its own timestamp.
+    ///
+    /// <para>The distinction is the whole reason the roll-up exists. NTFS moves a directory's own
+    /// timestamp when an entry is added, removed or renamed and leaves it alone when an entry's
+    /// contents change — so <c>node_modules</c> whose layout was fixed two years ago and whose files
+    /// were rewritten this morning reads as two years idle from its own date. That is the reading
+    /// §8's first open question needed, and it is the one that would invite a deletion.</para>
+    ///
+    /// <para>Every level above is asserted, not only the one holding the file. A roll-up that
+    /// stopped at the parent would pass on the deepest directory and leave the drive root dated by
+    /// whenever Windows was installed.</para>
+    /// </summary>
+    [Fact]
+    public void ADirectoryIsDatedByTheNewestWriteBeneathItAtEveryLevel()
+    {
+        var builder = new ExploreTreeBuilder(Root, Stamp(At(2019, 1, 1)), Stamp(At(2019, 1, 1)));
 
-    private static ExploreChild File(string name, long size) =>
-        new(name, IsDirectory: false, IsLink: false, size);
+        var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            Directory("AppData", made: At(2020, 1, 1), touched: At(2020, 6, 1)),
+        ]);
+
+        var cache = builder.AddChildren(top, [
+            Directory("npm-cache", made: At(2021, 1, 1), touched: At(2021, 6, 1)),
+        ]);
+
+        builder.AddChildren(cache, [
+            File("old.tgz", 100, made: At(2022, 1, 1), touched: At(2022, 1, 1)),
+            File("new.tgz", 100, made: At(2021, 1, 1), touched: At(2024, 9, 30)),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        foreach (var node in new[] { tree.RootNode, top, cache })
+        {
+            Assert.Equal(At(2024, 9, 30), tree.ModifiedOf(node).Utc);
+        }
+    }
+
+    /// <summary>
+    /// A creation date is the one of the three rolled-up facts that means something on its own, so
+    /// it stays the node's own. A directory made in 2020 is a 2020 directory however new the file
+    /// somebody dropped into it this morning, and that is what tells the age of an installation
+    /// apart from the age of its contents.
+    /// </summary>
+    [Fact]
+    public void ACreationDateIsNeverRolledUp()
+    {
+        var builder = new ExploreTreeBuilder(Root, Stamp(At(2019, 1, 1)), Stamp(At(2019, 1, 1)));
+
+        var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            Directory("AppData", made: At(2020, 1, 1), touched: At(2020, 1, 1)),
+        ]);
+
+        builder.AddChildren(top, [File("new.tgz", 100, made: At(2024, 9, 30), touched: At(2024, 9, 30))]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.Equal(At(2020, 1, 1), tree.CreatedOf(top).Utc);
+        Assert.Equal(At(2019, 1, 1), tree.CreatedOf(tree.RootNode).Utc);
+
+        // And the modified date did move, so the assertion above is about the creation date rather
+        // than about a tree in which nothing was carried at all.
+        Assert.Equal(At(2024, 9, 30), tree.ModifiedOf(top).Utc);
+    }
+
+    /// <summary>
+    /// One child nothing could date must not undate the directory holding it. Unknown is the
+    /// smallest value there is, so it loses to every real date without needing a case of its own —
+    /// and a folder reported as undated because one file in it was unreadable is a column the user
+    /// stops trusting.
+    /// </summary>
+    [Fact]
+    public void AnUndatedChildDoesNotUndateThePathAboveIt()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [Directory("cache")]);
+
+        builder.AddChildren(top, [
+            File("dated.tgz", 100, made: At(2023, 5, 5), touched: At(2023, 5, 5)),
+            File("undated.tgz", 100),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.Equal(At(2023, 5, 5), tree.ModifiedOf(top).Utc);
+
+        // The undated child still says so for itself. Inheriting its parent's answer would put a
+        // date on something nothing dated.
+        var undated = tree.ChildrenOf(top).ToArray().Single(n => tree.NameOf(n) == "undated.tgz");
+
+        Assert.False(tree.ModifiedOf(undated).IsKnown);
+    }
+
+    /// <summary>
+    /// A tree in which nothing carried a date at all stays undated, rather than acquiring one from
+    /// the zero the arrays start at. The start of the Windows epoch in an age column is the oldest
+    /// invitation there is to delete something.
+    /// </summary>
+    [Fact]
+    public void ATreeWithNoDatesAtAllReportsNone()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [File("a.tgz", 100)]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.False(tree.ModifiedOf(tree.RootNode).IsKnown);
+        Assert.False(tree.CreatedOf(tree.RootNode).IsKnown);
+    }
+
+    private static DateTime At(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+
+    private static ExploreChild Directory(string name, DateTime? made = null, DateTime? touched = null) =>
+        new(name, IsDirectory: true, IsLink: false, Size: 0, Stamp(made), Stamp(touched));
+
+    private static ExploreChild File(string name, long size, DateTime? made = null, DateTime? touched = null) =>
+        new(name, IsDirectory: false, IsLink: false, size, Stamp(made), Stamp(touched));
+
+    private static ExploreTimestamp Stamp(DateTime? when) =>
+        when is { } value ? ExploreTimestamp.FromUtc(value) : ExploreTimestamp.Unknown;
 
     private static List<string> NamesOfChildren(ExploreTree tree, int node)
     {

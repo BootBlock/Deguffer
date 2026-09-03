@@ -8,8 +8,8 @@ namespace Deguffer.Core.Exploring;
 /// than every field here put together.</para>
 ///
 /// <para>This holds no knowledge of drawing, of tiers, or of what may be deleted. It answers "what
-/// is under this node and how big is it", and nothing else — which is what lets one tree serve a
-/// treemap, a sunburst and a list without any of them being privileged.</para>
+/// is under this node, how big is it, and when was it touched", and nothing else — which is what
+/// lets one tree serve a treemap, a sunburst and a list without any of them being privileged.</para>
 /// </summary>
 public sealed class ExploreTree
 {
@@ -19,6 +19,8 @@ public sealed class ExploreTree
     private readonly bool[] _isDirectory;
     private readonly bool[] _isLink;
     private readonly bool[] _sizeUnknown;
+    private readonly ExploreTimestamp[] _created;
+    private readonly ExploreTimestamp[] _modified;
     private readonly int[] _childStart;
     private readonly int[] _children;
 
@@ -31,6 +33,8 @@ public sealed class ExploreTree
         bool[] isDirectory,
         bool[] isLink,
         bool[] sizeUnknown,
+        ExploreTimestamp[] created,
+        ExploreTimestamp[] modified,
         int[] childStart,
         int[] children,
         ExploreChildOrder childOrder)
@@ -44,6 +48,8 @@ public sealed class ExploreTree
         _isDirectory = isDirectory;
         _isLink = isLink;
         _sizeUnknown = sizeUnknown;
+        _created = created;
+        _modified = modified;
         _childStart = childStart;
         _children = children;
     }
@@ -100,6 +106,36 @@ public sealed class ExploreTree
 
     /// <summary>Whether <see cref="SizeOf"/> for this node is a lower bound.</summary>
     public bool HasUnknownSizeBelow(int node) => _sizeUnknown[node];
+
+    /// <summary>
+    /// When this node was made, as the filesystem recorded it, or
+    /// <see cref="ExploreTimestamp.Unknown"/> where the scan could not establish it.
+    ///
+    /// <para>The node's own date, never rolled up. A directory's creation time is the day it was
+    /// made and stays that whatever happens inside it, which is exactly the fact worth having: it
+    /// tells the age of an installation apart from the age of its contents.</para>
+    /// </summary>
+    public ExploreTimestamp CreatedOf(int node) => _created[node];
+
+    /// <summary>
+    /// The newest write at or below this node, or <see cref="ExploreTimestamp.Unknown"/> where
+    /// nothing under it carried a date.
+    ///
+    /// <para><b>Rolled up, and that is the whole value of it.</b> A file answers for itself. A
+    /// directory answers for everything inside it, because NTFS moves a directory's own timestamp
+    /// when an entry is added, removed or renamed and leaves it alone when an entry's contents
+    /// change — so the directory alone dates the last time its layout altered, not the last time
+    /// anything in it was written. <see cref="Providers.DirectoryAge"/> reaches the same conclusion
+    /// for a single location one level down; this is that rule applied to a whole volume, which is
+    /// affordable here because the pass has already been made.</para>
+    ///
+    /// <para>This is what §8's first open question asked for. "Is this toolchain idle" is answered
+    /// by the newest write anywhere beneath it and by nothing shallower — an Android SDK whose top
+    /// directory was touched by an installer last week is idle if nothing inside it has been written
+    /// in two years. Last-access times would answer it more directly and NTFS stops maintaining
+    /// them by default, which is why the question was open.</para>
+    /// </summary>
+    public ExploreTimestamp ModifiedOf(int node) => _modified[node];
 
     public int ParentOf(int node) => _parents[node];
 
@@ -200,18 +236,20 @@ public sealed class ExploreTree
         bool[] isDirectory,
         bool[] isLink,
         bool[] sizeUnknown,
+        ExploreTimestamp[] created,
+        ExploreTimestamp[] modified,
         bool[] present,
         ExploreChildOrder childOrder)
     {
         var (childStart, children) = InvertParentLinks(parents, present);
         var order = DepthFirstOrder(childStart, children, rootNode);
 
-        RollUp(order, parents, sizes, sizeUnknown, rootNode);
+        RollUp(order, parents, sizes, sizeUnknown, modified, rootNode);
         SortChildren(childStart, children, sizes, names, childOrder);
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, isDirectory, isLink, sizeUnknown,
-            childStart, children, childOrder);
+            created, modified, childStart, children, childOrder);
     }
 
     /// <summary>
@@ -296,8 +334,21 @@ public sealed class ExploreTree
     /// <para>An unknown size travels the same way. One record the scan could not size makes every
     /// total above it a lower bound, and a lower bound presented as a measurement is the one thing
     /// a size picture must not do.</para>
+    ///
+    /// <para>So does the last-written time, and it rides this pass rather than getting one of its
+    /// own precisely because the traversal is the cost. The three are combined by different
+    /// operations — sizes add, unknowns spread, times take the later — and the same single ordering
+    /// serves all three. See <see cref="ModifiedOf"/> for why a directory has to answer for its
+    /// contents rather than for itself, and note that a creation time is deliberately absent from
+    /// this: it is the one of the three that means something on its own.</para>
     /// </summary>
-    private static void RollUp(int[] order, int[] parents, long[] sizes, bool[] sizeUnknown, int rootNode)
+    private static void RollUp(
+        int[] order,
+        int[] parents,
+        long[] sizes,
+        bool[] sizeUnknown,
+        ExploreTimestamp[] modified,
+        int rootNode)
     {
         for (var i = order.Length - 1; i >= 0; i--)
         {
@@ -310,6 +361,11 @@ public sealed class ExploreTree
             var parent = parents[node];
             sizes[parent] += sizes[node];
             sizeUnknown[parent] |= sizeUnknown[node];
+
+            // Unknown is zero, so it loses to every real date without a case of its own — which is
+            // the answer that is wanted. A directory holding one file it could not date and one it
+            // could is dated by the one it could, not reduced to "unknown" by the other.
+            modified[parent] = ExploreTimestamp.Newer(modified[parent], modified[node]);
         }
     }
 

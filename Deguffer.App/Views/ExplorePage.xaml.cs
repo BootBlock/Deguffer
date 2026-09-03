@@ -35,7 +35,12 @@ public sealed partial class ExplorePage : Page
         // Read once, here, and never again — the same rule the Storage page's density selector
         // follows, and for the same reason: re-reading on every navigation undoes a choice whose
         // write to disk failed, silently and in the same session.
-        ShowAs(App.Preferences.Current.Explore);
+        var preferences = App.Preferences.Current;
+
+        // The colouring first, because ShowAs draws the map and the map has to be told what its
+        // colours mean before it paints rather than after.
+        ColourAs(preferences.ExploreColours);
+        ShowAs(preferences.Explore);
 
         // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
         // back would be its own defect.
@@ -65,8 +70,20 @@ public sealed partial class ExplorePage : Page
         ShowCurrentNode();
     }
 
+    /// <summary>
+    /// Colour the map by <paramref name="colouring"/>, and leave that selector agreeing with what is
+    /// on screen. Re-entrant on the same terms as <see cref="ShowAs"/>.
+    /// </summary>
+    private void ColourAs(ExploreColouring colouring)
+    {
+        ViewModel.SelectedColouring = colouring;
+        ColourSelector.SelectedIndex = (int)colouring;
+
+        ShowCurrentNode();
+    }
+
     private void ShowCurrentNode() =>
-        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView);
+        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView, ViewModel.SelectedColouring);
 
     /// <summary>
     /// The view is applied first and persisted second, so it takes effect whether or not the
@@ -81,6 +98,15 @@ public sealed partial class ExplorePage : Page
 
         ShowAs(view);
         App.Preferences.Update(current => current with { Explore = view });
+    }
+
+    /// <summary>Applied first and persisted second, for the reason above.</summary>
+    private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var colouring = (ExploreColouring)ColourSelector.SelectedIndex;
+
+        ColourAs(colouring);
+        App.Preferences.Update(current => current with { ExploreColours = colouring });
     }
 
     /// <summary>

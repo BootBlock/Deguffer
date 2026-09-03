@@ -51,6 +51,7 @@ public sealed class ExploreMap : UserControl
     private ExploreTree? _tree;
     private int _node;
     private ExploreView _view = ExploreView.Treemap;
+    private ExploreColouring _colouring = ExploreColouring.Branch;
     private ExploreSurface? _drawing;
     private WriteableBitmap? _bitmap;
     private byte[]? _pixels;
@@ -118,12 +119,16 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     public event EventHandler<(int? Node, long? AggregateBytes)>? Hovered;
 
-    /// <summary>Draw <paramref name="node"/> of <paramref name="tree"/> in <paramref name="view"/>.</summary>
-    public void Show(ExploreTree? tree, int node, ExploreView view)
+    /// <summary>
+    /// Draw <paramref name="node"/> of <paramref name="tree"/> in <paramref name="view"/>, with the
+    /// shapes coloured to say <paramref name="colouring"/>.
+    /// </summary>
+    public void Show(ExploreTree? tree, int node, ExploreView view, ExploreColouring colouring)
     {
         _tree = tree;
         _node = node;
         _view = view;
+        _colouring = colouring;
 
         Redraw();
     }
@@ -149,7 +154,11 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var drawing = ExploreSurface.Create(tree, _node, _view, width, height, _scale);
+        // The clock is read here rather than held, because the age bands are relative to now and
+        // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
+        // one read of it against a full rasterisation.
+        var drawing = ExploreSurface.Create(
+            tree, _node, _view, width, height, _scale, _colouring, DateTime.UtcNow);
         _drawing = drawing;
 
         // Both reused while the size holds. A scan redraws this every three quarters of a second,

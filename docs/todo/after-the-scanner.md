@@ -175,10 +175,19 @@ meaningfully larger piece of UI than anything the shell does today.
   says a file changed, not by how much, so it is an optimisation layered on the MFT reader rather
   than an independent mechanism. `ScanEstimateCache` is display-only and expiry-based, which is
   sound precisely because a remembered size is never returned as an answer.
-- **§8 question 1 — detecting an idle toolchain.** Android and PlatformIO are 12 GB combined and
-  pure waste *if* idle, and NTFS last-access times are unreliable by default. Worth revisiting now
-  the index exists: `$STANDARD_INFORMATION` timestamps come back in the same MFT pass already being
-  made, which may be a better signal than a directory walk could afford.
+- **§8 question 1 — detecting an idle toolchain.** ✅ **taken up, and half answered.** Android and
+  PlatformIO are 12 GB combined and pure waste *if* idle, and NTFS last-access times are unreliable
+  by default. The deferral above was lifted exactly as it anticipated: `$STANDARD_INFORMATION`
+  timestamps do come back in the same MFT pass, the walk reads the same two fields off the directory
+  entry it already enumerated, and `ExploreTree` now carries a created date per node and a
+  last-written date rolled up as the newest write at or below it. Explore shows that as a column and
+  as a colouring, so a whole volume can be read for idleness at a glance.
+
+  **What is still open is the other half.** This dates the *picture*. The Storage page's rows still
+  take their age from `DirectoryAge`, one level down per location, which is the right cost there and
+  a coarser answer — so a provider still cannot say "this toolchain has been idle for two years" the
+  way the map now shows it. Feeding the volume-wide dates back to the providers is the work that
+  would close the question, and it needs the two pages to share a scan before it is worth doing.
 - **§8 question 4 — undo.** Still likely impossible at these sizes. If so, §7 should say so plainly
   rather than implying reversibility.
 

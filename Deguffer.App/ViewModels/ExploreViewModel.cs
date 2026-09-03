@@ -12,10 +12,18 @@ namespace Deguffer.App.ViewModels;
 /// <summary>
 /// Drives the Explore page: pick a drive or a folder, scan it, and move around what was found.
 ///
-/// <para>This orchestrates and formats. It holds no knowledge of how a volume is read — that is
-/// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — and none
-/// of how a rectangle is drawn, which belongs to the layout and the rasteriser in Core. What is
-/// left here is which node is being looked at and what the screen says about it (G2).</para>
+/// <para>This orchestrates. It holds no knowledge of how a volume is read — that is
+/// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — none of
+/// how a rectangle is drawn, which belongs to the layout and the rasteriser in Core, and none of
+/// how a row is worded, which is <see cref="ExploreRowText"/>'s. What is left here is which node is
+/// being looked at (G2).</para>
+///
+/// <para><b>Past G1's 500-line ceiling, and the reason is that what remains does not divide.</b>
+/// Every seam this page had has been cut and lives beside it: the row and crumb values, the wording
+/// of a row, the legend's bands, the drawing, and the scanning. What is left is one page's
+/// controller, and its parts are not independently useful — the scan, the scope, the navigation and
+/// the view selection all read and write the same current tree and current node, so a second type
+/// over them would share that state rather than own any of it.</para>
 /// </summary>
 public sealed partial class ExploreViewModel : ObservableObject
 {
@@ -132,6 +140,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasNoTree))]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; set; }
 
@@ -145,7 +154,37 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
     public partial ExploreView SelectedView { get; set; }
+
+    /// <summary>
+    /// What the colours on the map are to say. See <see cref="ExploreColouring"/>.
+    ///
+    /// <para>Unlike <see cref="SelectedView"/> this is never substituted. A partial tree is coloured
+    /// exactly as a finished one is — an age is a fact about a node rather than about the ordering
+    /// of its siblings — so a scan in progress needs no sentence explaining this one away.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    public partial ExploreColouring SelectedColouring { get; set; }
+
+    /// <summary>
+    /// What each colour on the map means, or an empty list where the colours are branches.
+    ///
+    /// <para>A legend is not decoration for this one. A hue per branch is self-explanatory, because
+    /// the branch it names is the rectangle it is inside — but an age band means nothing at all
+    /// without the scale beside it, and a picture whose colours the reader cannot decode is worse
+    /// than one with no colours in it.</para>
+    /// </summary>
+    public IReadOnlyList<ExploreLegendBand> AgeLegend => ExploreLegendBand.All;
+
+    /// <summary>
+    /// Whether to show that legend: only when the colours are ages, only when there is a picture
+    /// rather than a list, and only once something has been scanned into it. A scale beside an
+    /// empty card explains nothing and reads as part of the empty state.
+    /// </summary>
+    public bool ShowsAgeLegend =>
+        SelectedColouring == ExploreColouring.Age && SelectedView != ExploreView.List && HasTree;
 
     /// <summary>
     /// How what is on screen differs from what the View box names, or null when it does not.
@@ -357,7 +396,14 @@ public sealed partial class ExploreViewModel : ObservableObject
         Hovered = (Tree, node, aggregateBytes) switch
         {
             (_, _, { } bytes) => $"{FreeSpace.Format(bytes)} in items too small to draw separately",
-            ({ } tree, { } value, _) => $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}",
+
+            // The age is on this line whichever colouring is on, not only when the map is drawn by
+            // age. A pointer is how somebody checks one shape against the rest, and having to change
+            // the colouring to read a date would be a worse answer than showing it always.
+            ({ } tree, { } value, _) =>
+                $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}, "
+                + $"last written {ExploreRowText.Age(tree, value, DateTime.UtcNow)}",
+
             _ => string.Empty,
         };
     }
@@ -404,32 +450,25 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         var total = tree.SizeOf(node);
 
+        // Once for the whole list rather than once per row. Every age in it is measured against the
+        // same instant, which is both cheaper and the only way two rows a millisecond apart cannot
+        // land in different days (G5).
+        var now = DateTime.UtcNow;
+
         foreach (var child in tree.ChildrenOf(node))
         {
             Rows.Add(new ExploreRow(
                 child,
                 tree.NameOf(child),
-                Size(tree, child),
+                ExploreRowText.Size(tree, child),
                 total > 0 ? 100.0 * tree.SizeOf(child) / total : 0,
                 tree.IsDirectory(child),
                 tree.IsLink(child),
-                tree.HasUnknownSizeBelow(child)));
+                tree.HasUnknownSizeBelow(child),
+                ExploreRowText.Age(tree, child, now),
+                ExploreRowText.Dates(tree, child)));
         }
     }
-
-    /// <summary>
-    /// A row's size, marked where it is a lower bound.
-    ///
-    /// <para>A directory the walk was refused totals only what it could see, and the plain figure
-    /// reads as a measurement. The page says so once in its status line, which is true and is not
-    /// enough — it is the row for <c>System Volume Information</c> showing "0 B" that a reader
-    /// acts on. <see cref="ExploreRow.Description"/> says the same in words for a screen reader,
-    /// because a symbol read aloud is not a sentence.</para>
-    /// </summary>
-    private static string Size(ExploreTree tree, int node) =>
-        tree.HasUnknownSizeBelow(node)
-            ? "≥ " + FreeSpace.Format(tree.SizeOf(node))
-            : FreeSpace.Format(tree.SizeOf(node));
 
     private void BuildTrail(ExploreTree tree, int node)
     {

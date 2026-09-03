@@ -80,6 +80,14 @@ internal static class MftExploreReader
         var isDirectory = new bool[count];
         var isLink = new bool[count];
         var sizeUnknown = new bool[count];
+
+        // Four bytes per node each, not eight. This route sizes every array to the whole record
+        // count before it reads one — 2.4M on an ordinary system volume — so a pair of DateTime
+        // arrays here would be 38 MB allocated up front and mostly into slots no record ever fills.
+        // See ExploreTimestamp for what the minute of precision buys.
+        var created = new ExploreTimestamp[count];
+        var modified = new ExploreTimestamp[count];
+
         var present = new bool[count];
 
         Array.Fill(names, string.Empty);
@@ -144,6 +152,8 @@ internal static class MftExploreReader
                 isDirectory[number] = record.IsDirectory;
                 isLink[number] = record.IsReparsePoint;
                 sizeUnknown[number] = record.Size is null;
+                created[number] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
+                modified[number] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
                 present[number] = true;
 
                 return true;
@@ -167,6 +177,11 @@ internal static class MftExploreReader
         // The scan's root carries the path the user chose rather than the name NTFS holds for it —
         // "." for a volume root, and a bare folder name below one — and it is its own parent, which
         // is what keeps ExploreTree's link inversion from drawing the tree above the scope back in.
+        //
+        // Its dates are deliberately not forced along with them. The record holding this folder
+        // carries them like any other, and where it did not parse there is nothing to put here but
+        // the unknown the array already holds — a date for a folder nothing could read is not one
+        // to invent.
         names[root] = rootPath;
         parents[root] = root;
 
@@ -180,8 +195,8 @@ internal static class MftExploreReader
         // size could rearrange.
         return new MftExploreRead(
             ExploreTree.Create(
-                rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, present,
-                ExploreChildOrder.BySize),
+                rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, created,
+                modified, present, ExploreChildOrder.BySize),
             FallbackReason.None);
     }
 

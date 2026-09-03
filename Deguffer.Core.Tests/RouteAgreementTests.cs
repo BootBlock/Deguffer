@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -296,6 +297,116 @@ public class RouteAgreementTests
         // directory by is readable, and the size the user is shown is measured rather than guessed.
         Assert.True(File.Exists(Path.Combine(root, "restricted", "Example", "Example.csproj")));
         Assert.Equal(128, (await Walking().MeasureAsync(candidate)).Size.Logical);
+    }
+
+    /// <summary>
+    /// The dates, which are the newest thing the two routes both have to answer for.
+    ///
+    /// <para>They arrive by genuinely different means — the table decodes
+    /// <c>$STANDARD_INFORMATION</c>, and the walk reads the directory entry the enumeration
+    /// cached — so nothing but a comparison like this can show they agree. A disagreement would be
+    /// silent: both routes would show a plausible date, and which one the user saw would depend on
+    /// whether they had started the app as administrator.</para>
+    ///
+    /// <para>The described tree is stamped, so both sides are asked about one instant rather than
+    /// two that resemble each other. Every entry is compared, not a sample, and the folder's own
+    /// rolled-up date is compared with it — that one is computed from the children on both routes
+    /// rather than read, so it is where an off-by-one in either would show.</para>
+    /// </summary>
+    [Fact]
+    public void TheTwoRoutesDateOneTreeIdentically()
+    {
+        using var temp = new TempDirectory();
+
+        var made = new DateTime(2021, 4, 5, 9, 15, 0, DateTimeKind.Utc);
+        var written = new DateTime(2024, 11, 30, 17, 45, 0, DateTimeKind.Utc);
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "cache",
+            new TreeFile("a.tgz", 4096) { Created = made, Modified = written },
+            new TreeDirectory("content-v2", new TreeFile("b.tgz", 8000)
+            {
+                Created = made.AddDays(1),
+                Modified = written.AddDays(1),
+            })
+            {
+                Created = made.AddYears(-1),
+                Modified = made.AddYears(-1),
+            })
+        {
+            Created = made.AddYears(-2),
+            Modified = made.AddYears(-2),
+        });
+
+        using var source = fixture.Build();
+
+        var walked = WalkExploreReader.Read(path, onLevel: null, default);
+        // The whole volume, then descended to the tree — rather than a scoped read, which would
+        // root the table at the same folder the walk was handed and hide any disagreement about
+        // where that folder sits.
+        var indexed = MftExploreReader.Read(source, path[..3], [], onProgress: null, default).Tree!;
+
+        var walkedDates = DatesByPath(walked, walked.RootNode);
+        var indexedDates = DatesByPath(indexed, NodeAt(indexed, path));
+
+        // Both routes found the same tree, or the comparison below is over an empty intersection.
+        Assert.Equal(4, walkedDates.Count);
+        Assert.Equal(walkedDates.Keys.Order(), indexedDates.Keys.Order());
+
+        Assert.Equal(walkedDates, indexedDates);
+
+        // And the dates are the ones the description asked for, so this is not two routes agreeing
+        // about nothing.
+        Assert.Equal((made, written), walkedDates[@".\a.tgz"]);
+        Assert.Equal((made.AddYears(-2), written.AddDays(1)), walkedDates["."]);
+    }
+
+    /// <summary>
+    /// Every node at or below <paramref name="from"/>, by its path relative to it, with the two
+    /// dates the tree carries.
+    ///
+    /// <para>Relative, because the two trees are rooted differently: the walk is handed the tree's
+    /// own path and the table is addressed from the volume root. Descended through
+    /// <see cref="ExploreTree.ChildrenOf"/> rather than looped over every node, because the table
+    /// route sizes its arrays to the whole record count and asking an unfilled slot for a path
+    /// throws.</para>
+    /// </summary>
+    private static Dictionary<string, (DateTime? Created, DateTime? Modified)> DatesByPath(
+        ExploreTree tree, int from)
+    {
+        var dates = new Dictionary<string, (DateTime? Created, DateTime? Modified)>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<(int Node, string Path)>();
+
+        // A fixed label rather than the node's own name. The two routes disagree about what the
+        // starting node is called and are meant to: the walk names its root by the path it was
+        // handed, and the table names the same directory by its entry. Neither is wrong, and
+        // neither is what this compares.
+        pending.Push((from, "."));
+
+        while (pending.TryPop(out var current))
+        {
+            dates[current.Path] = (tree.CreatedOf(current.Node).Utc, tree.ModifiedOf(current.Node).Utc);
+
+            foreach (var child in tree.ChildrenOf(current.Node))
+            {
+                pending.Push((child, Path.Combine(current.Path, tree.NameOf(child))));
+            }
+        }
+
+        return dates;
+    }
+
+    /// <summary>The node an absolute path names, found by descending from the tree's own root.</summary>
+    private static int NodeAt(ExploreTree tree, string path)
+    {
+        var node = tree.RootNode;
+
+        foreach (var component in path[3..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            node = tree.ChildrenOf(node).ToArray().Single(c => tree.NameOf(c) == component);
+        }
+
+        return node;
     }
 
     /// <summary>
