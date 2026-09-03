@@ -116,13 +116,21 @@ public static class TreemapLayout
         while (index < children.Length && remaining.Width > 0 && remaining.Height > 0)
         {
             var side = Math.Min(remaining.Width, remaining.Height);
-            var row = TakeRow(tree, children, index, side, scale);
+            var row = TakeRow(tree, children, index, side, scale, limits.MinimumTileSize);
 
-            // Two ways to reach the end of what can be drawn: the next child has no area at all, or
-            // the row it would form is thinner than the floor. Both leave real bytes undrawn, and
-            // both take the same exit — a blank corner of a treemap reads as free space rather than
-            // as detail withheld, which is the opposite of what happened.
-            if (row.Count == 0 || (float)(row.Area / side) < limits.MinimumTileSize)
+            // Three ways to reach the end of what can be drawn, and they all take the same exit. The
+            // next child has no area at all; the row it would form is thinner than the floor; or
+            // what is left to lay into is already narrower than the floor along its short side, so
+            // every rectangle cut from it fails the check whatever its thickness.
+            //
+            // That third case is the one worth naming. It is not the row that is too small — it is
+            // the space — and without it the loop kept going, LayRow skipped each tile in turn, and
+            // `index` still advanced past them. Real children then left the picture drawn nowhere
+            // and counted in no aggregate, which is precisely the blank corner an aggregate exists
+            // to prevent: it reads as free space rather than as detail withheld.
+            if (row.Count == 0
+                || side < limits.MinimumTileSize
+                || (float)(row.Area / side) < limits.MinimumTileSize)
             {
                 Aggregate(tree, children[index..], remaining, depth, tiles);
                 return;
@@ -130,7 +138,7 @@ public static class TreemapLayout
 
             var thickness = (float)(row.Area / side);
 
-            LayRow(tree, children.Slice(index, row.Count), row.Area, thickness, ref remaining, depth, limits, tiles, pending);
+            LayRow(tree, children.Slice(index, row.Count), row.Area, thickness, ref remaining, depth, tiles, pending);
             index += row.Count;
         }
     }
@@ -142,13 +150,22 @@ public static class TreemapLayout
     /// <para>This is the paper's <c>squarify</c> recurrence, flattened. <c>worst</c> is
     /// <c>max(w²r⁺/s², s²/(w²r⁻))</c> over the row's areas, with <c>r⁺</c> and <c>r⁻</c> the largest
     /// and smallest in it.</para>
+    ///
+    /// <para>With one addition the paper has no reason to make: a child is admitted only while every
+    /// member of the row stays wide enough to draw. A member's extent along the row is
+    /// <c>area × side / sum</c>, so admitting one more child shrinks every extent already in it —
+    /// which means an otherwise healthy row can end up containing a child too narrow for the floor.
+    /// Left to <see cref="LayRow"/> to skip, that child was drawn nowhere and counted in no
+    /// aggregate, and its bytes left the picture silently. Closing the row early instead sends it,
+    /// and everything after it, to the aggregate where it belongs.</para>
     /// </summary>
     private static (int Count, double Area) TakeRow(
         ExploreTree tree,
         ReadOnlySpan<int> children,
         int index,
         float side,
-        double scale)
+        double scale,
+        float minimumTileSize)
     {
         double sum = 0;
         double smallest = 0;
@@ -174,6 +191,14 @@ public static class TreemapLayout
             var worst = Worst(candidateSum, candidateSmallest, candidateLargest, side);
 
             if (count > 0 && worst > best)
+            {
+                break;
+            }
+
+            // The smallest member decides, and it is this one: the children arrive in decreasing
+            // order. Checked before the row is committed rather than after, because by then the
+            // only remedies are drawing a rectangle below the floor or dropping a real child.
+            if (count > 0 && candidateSmallest * side / candidateSum < minimumTileSize)
             {
                 break;
             }
@@ -205,7 +230,6 @@ public static class TreemapLayout
         float thickness,
         ref Rectangle remaining,
         int depth,
-        LayoutLimits limits,
         List<ExploreTile> tiles,
         Stack<(int Node, int Depth, float X, float Y, float Width, float Height)> pending)
     {
@@ -230,11 +254,11 @@ public static class TreemapLayout
                 ? new Rectangle(remaining.X, remaining.Y + from, thickness, to - from)
                 : new Rectangle(remaining.X + from, remaining.Y, to - from, thickness);
 
-            if (tile.Width < limits.MinimumTileSize || tile.Height < limits.MinimumTileSize)
-            {
-                continue;
-            }
-
+            // Every child the row admitted is drawn. There is no size check here on purpose:
+            // TakeRow already refused to admit one that would not fit, so a check here could only
+            // fire on a rounding hair — and skipping a child at this point drops it from the
+            // picture entirely, because the aggregate that should have stood for it was decided
+            // one frame up.
             pending.Push((child, depth, tile.X, tile.Y, tile.Width, tile.Height));
         }
 

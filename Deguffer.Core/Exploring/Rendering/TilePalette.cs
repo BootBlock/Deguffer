@@ -52,9 +52,11 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
 /// palette puts pure red at index 1 and pure green at index 2, which is the exact pair deuteranopia
 /// and protanopia cannot separate.</para>
 ///
-/// <para>The hues are Okabe and Ito's Color Universal Design set, chosen because it is the most
-/// widely used categorical palette that is distinguishable under all three common deficiencies.
-/// WinDirStat's own newer views moved to it too.</para>
+/// <para>The seven hues are Okabe and Ito's Color Universal Design set, chosen because it is the
+/// most widely used categorical palette that is distinguishable under all three common
+/// deficiencies. WinDirStat's own newer views moved to it too. The eighth entry is a neutral grey
+/// rather than that palette's black, which would read as a hole in the picture rather than as a
+/// branch.</para>
 /// </summary>
 public static class TilePalette
 {
@@ -67,7 +69,7 @@ public static class TilePalette
         TileColour.FromRgb(0x0072B2), // blue
         TileColour.FromRgb(0xD55E00), // vermillion
         TileColour.FromRgb(0xCC79A7), // reddish purple
-        TileColour.FromRgb(0x999999), // neutral, for the ninth branch onwards
+        TileColour.FromRgb(0x999999), // neutral, for the eighth branch; a ninth wraps to the first
     ];
 
     /// <summary>

@@ -64,7 +64,7 @@ public sealed class IcicleLayoutTests
     [Fact]
     public void WhatIsTooNarrowToDrawIsAggregatedRatherThanDropped()
     {
-        var limits = new LayoutLimits(MinimumTileSize: 20, MaximumDepth: 2);
+        var limits = LayoutLimits.Default with { MinimumTileSize = 20, MaximumDepth = 2 };
         var tree = TreeOf([1_000_000, .. Enumerable.Repeat(1L, 500)]);
 
         var tiles = Layout(tree, limits);
@@ -81,7 +81,7 @@ public sealed class IcicleLayoutTests
     [Fact]
     public void RowsStopAtTheBottomOfTheCanvas()
     {
-        var tiles = Layout(NestedTree(depth: 60), new LayoutLimits(MinimumTileSize: 0.01f, MaximumDepth: 60));
+        var tiles = Layout(NestedTree(depth: 60), LayoutLimits.Default with { MinimumTileSize = 0.01f, MaximumDepth = 60 });
 
         Assert.All(tiles, t => Assert.InRange(t.Y + t.Height, 0, Height));
     }
@@ -91,7 +91,7 @@ public sealed class IcicleLayoutTests
     {
         var tree = NestedTree(depth: 5000);
 
-        Assert.NotEmpty(Layout(tree, new LayoutLimits(MinimumTileSize: 0.0001f, MaximumDepth: 5000)));
+        Assert.NotEmpty(Layout(tree, LayoutLimits.Default with { MinimumTileSize = 0.0001f, MaximumDepth = 5000 }));
     }
 
     [Fact]

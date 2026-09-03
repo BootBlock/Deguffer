@@ -21,6 +21,25 @@ internal enum MftParseOutcome
     NotAnEntry,
 
     /// <summary>
+    /// A record in use whose identity this reader cannot reach: it carries an
+    /// <c>$ATTRIBUTE_LIST</c> and no name of its own, so its <c>$FILE_NAME</c> lives in an
+    /// extension record the parser does not follow. NTFS does this once a file has enough hard
+    /// links to overflow its own record, which a system volume is full of.
+    ///
+    /// <para>Deliberately not <see cref="NotAnEntry"/>, though both are skipped. A free record
+    /// holds nothing; this one holds a real file of real size, so the directory above it totals
+    /// short. Collapsing the two means a caller cannot tell "there was nothing here" from "there
+    /// was something here and I could not place it", and a total that is short with nothing to say
+    /// so is the one thing a size scan must not produce.</para>
+    ///
+    /// <para>Deliberately not <see cref="Unreadable"/> either. That takes a volume down, and this
+    /// shape is ordinary rather than damage — refusing it would take the fast path off any machine
+    /// with a system volume. Following the attribute list to the extension record is the fix that
+    /// costs nothing, and it is <c>docs/todo/after-the-scanner.md</c> item 6.</para>
+    /// </summary>
+    IdentityElsewhere,
+
+    /// <summary>
     /// A record in use that could not be read — a torn write, a malformed attribute run, or a name
     /// this reader cannot decode. Something exists here and the table will not say what, so every
     /// directory above it would total short.

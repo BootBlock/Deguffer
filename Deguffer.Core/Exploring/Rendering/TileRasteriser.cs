@@ -56,8 +56,28 @@ public static class TileRasteriser
     private const int ParallelPixelThreshold = 512 * 1024;
 
     /// <summary>
-    /// Paint <paramref name="tiles"/> into a BGRA buffer of
+    /// G4: bounded explicitly rather than left to the pool. This is not a rare branch — the root
+    /// rectangle of any map on a display wider than 1024 by 512 clears the threshold on every
+    /// repaint, and a repaint happens per progress snapshot, per view change, per descend and
+    /// continuously while a window edge is dragged. Processor count rather than twice it, because
+    /// shading is arithmetic and waits on nothing.
+    /// </summary>
+    private static readonly ParallelOptions RowOptions = new()
+    {
+        MaxDegreeOfParallelism = Environment.ProcessorCount,
+    };
+
+    /// <summary>How large a buffer <see cref="Paint"/> needs for a canvas of this size.</summary>
+    public static int BufferLengthFor(int width, int height) => width * height * 4;
+
+    /// <summary>
+    /// Paint <paramref name="tiles"/> into <paramref name="pixels"/>, a BGRA buffer of
     /// <paramref name="width"/> × <paramref name="height"/>.
+    ///
+    /// <para>The buffer belongs to the caller and is overwritten in full, so a view that repaints
+    /// keeps one and hands it back (G5). At 3840 by 2160 it is 33 MB — every one of them a
+    /// large-object-heap allocation, and the heap is not compacted by default — so allocating per
+    /// repaint would leak tens of megabytes a second for the length of a scan.</para>
     ///
     /// <para>Tiles are painted in the order given, which the layouts produce parent-first — so a
     /// child covers its parent and the nesting comes out right without sorting anything here.</para>
@@ -66,19 +86,27 @@ public static class TileRasteriser
     /// gives a whole subtree one hue. It is supplied rather than derived because the tree does not
     /// know which node the view is currently rooted at.
     /// </summary>
-    public static byte[] Paint(
+    public static void Paint(
+        byte[] pixels,
         IReadOnlyList<ExploreTile> tiles,
         int width,
         int height,
         TileColour background,
         Func<int, int> branchOf)
     {
+        ArgumentNullException.ThrowIfNull(pixels);
         ArgumentNullException.ThrowIfNull(tiles);
         ArgumentNullException.ThrowIfNull(branchOf);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        var pixels = new byte[width * height * 4];
+        if (pixels.Length < BufferLengthFor(width, height))
+        {
+            throw new ArgumentException(
+                $"A {width}x{height} canvas needs {BufferLengthFor(width, height)} bytes, not {pixels.Length}.",
+                nameof(pixels));
+        }
+
         Fill(pixels, background);
 
         foreach (var tile in tiles)
@@ -89,18 +117,7 @@ public static class TileRasteriser
 
             Cushion(pixels, width, height, tile, colour);
         }
-
-        return pixels;
     }
-
-    /// <summary>
-    /// Whether a rectangle has room for a readable label.
-    ///
-    /// <para>Asked here rather than in the view because it is the same threshold the drawing works
-    /// to, and because the answer decides how many controls the shell creates: without it a full
-    /// volume wants fifty thousand text blocks, and with it a few dozen.</para>
-    /// </summary>
-    public static bool CanCarryLabel(ExploreTile tile) => tile.Width >= 48 && tile.Height >= 16;
 
     private static void Fill(byte[] pixels, TileColour colour)
     {
@@ -164,7 +181,7 @@ public static class TileRasteriser
 
         if (spanWidth * spanHeight >= ParallelPixelThreshold)
         {
-            Parallel.For(top, bottom, Row);
+            Parallel.For(top, bottom, RowOptions, Row);
             return;
         }
 

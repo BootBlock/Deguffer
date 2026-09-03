@@ -38,6 +38,21 @@ public readonly record struct ExploreTile(
     public const int Aggregated = -1;
 
     public bool IsAggregate => Node == Aggregated;
+
+    /// <summary>
+    /// Whether this rectangle has room for a readable label.
+    ///
+    /// <para>Here rather than on the rasteriser, which draws no text and says so. The thresholds are
+    /// pixel limits like every other field of <see cref="LayoutLimits"/>, and they have to be scaled
+    /// for the display the same way — a 48-pixel floor is 48 device pixels at 100% and 96 at 200%,
+    /// so comparing raw constants against a layout measured in device pixels labels rectangles half
+    /// the intended size on a high-DPI screen.</para>
+    ///
+    /// <para>It decides how many controls the shell creates as much as what is readable: without it
+    /// a full volume wants fifty thousand text blocks, and with it a few dozen.</para>
+    /// </summary>
+    public bool HasRoomForALabel(LayoutLimits limits) =>
+        Width >= limits.MinimumLabelWidth && Height >= limits.MinimumLabelHeight;
 }
 
 /// <summary>
@@ -51,10 +66,30 @@ public readonly record struct ExploreTile(
 /// pixel and a half at 200%.
 /// </param>
 /// <param name="MaximumDepth">
-/// How many levels to descend. WinDirStat's default is 6. Past that the rectangles are frames
-/// around frames, and the cost is paid on every repaint.
+/// How many levels a nesting layout descends. WinDirStat's default is 6. Past that the rectangles
+/// are frames around frames, and the cost is paid on every repaint.
+///
+/// <para>This governs the treemap. It does not govern the icicle, whose levels are rows rather than
+/// nested frames: there the canvas runs out first, and a depth cap only leaves the panel blank.</para>
 /// </param>
-public readonly record struct LayoutLimits(float MinimumTileSize, int MaximumDepth)
+/// <param name="MinimumLabelWidth">
+/// The narrowest rectangle worth putting text in. WinDirStat draws a treemap label at 16 by 16 and
+/// a flame-graph label at 40 by 14; a name and a size together need more width than either.
+/// </param>
+/// <param name="MinimumLabelHeight">The shortest rectangle worth putting text in.</param>
+public readonly record struct LayoutLimits(
+    float MinimumTileSize,
+    int MaximumDepth,
+    float MinimumLabelWidth,
+    float MinimumLabelHeight)
 {
-    public static readonly LayoutLimits Default = new(MinimumTileSize: 3f, MaximumDepth: 6);
+    public static readonly LayoutLimits Default = new(
+        MinimumTileSize: 3f, MaximumDepth: 6, MinimumLabelWidth: 48f, MinimumLabelHeight: 16f);
+
+    /// <summary>The same limits in device pixels, for a display at <paramref name="scale"/>.</summary>
+    public LayoutLimits At(double scale) => new(
+        (float)(MinimumTileSize * scale),
+        MaximumDepth,
+        (float)(MinimumLabelWidth * scale),
+        (float)(MinimumLabelHeight * scale));
 }

@@ -11,23 +11,14 @@ namespace Deguffer.Core.Exploring;
 /// <see cref="DirectoryScanner"/> for a single path. Nothing above this knows there is a choice to
 /// make, because the choice depends on the volume and the process token rather than on anything
 /// about what is being drawn (G1, G2).</para>
+///
+/// <para>Concrete, with no interface over it. The seam that makes this testable is
+/// <see cref="IMftSourceFactory"/>, which already exists and which the tests substitute directly;
+/// an interface here would have one implementation, no fake behind it, and one consumer — which is
+/// the ceremonial abstraction G3 names. <c>CleanViewModel</c> takes its <c>CleanupPlanner</c> the
+/// same way.</para>
 /// </summary>
-public interface IExploreScanner
-{
-    /// <summary>
-    /// Scan everything at or below <paramref name="root"/>.
-    ///
-    /// <paramref name="progress"/> receives running counts, and occasionally a snapshot of the tree
-    /// so far — §5.5: never block on a complete scan.
-    /// </summary>
-    ValueTask<ExploreScan> ScanAsync(
-        string root,
-        IProgress<ExploreProgress>? progress = null,
-        CancellationToken ct = default);
-}
-
-/// <inheritdoc cref="IExploreScanner" />
-public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExploreScanner
+public sealed class ExploreScanner(IMftSourceFactory? sources = null)
 {
     /// <summary>
     /// How often the walk publishes a tree to draw.
@@ -52,6 +43,12 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExplore
     /// <summary>The scanner the app runs with: real volumes (G5).</summary>
     public static ExploreScanner Default { get; } = new();
 
+    /// <summary>
+    /// Scan everything at or below <paramref name="root"/>.
+    ///
+    /// <paramref name="progress"/> receives running counts, and occasionally a snapshot of the tree
+    /// so far — §5.5: never block on a complete scan.
+    /// </summary>
     public async ValueTask<ExploreScan> ScanAsync(
         string root,
         IProgress<ExploreProgress>? progress = null,

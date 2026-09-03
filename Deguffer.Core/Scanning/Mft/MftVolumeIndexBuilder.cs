@@ -48,7 +48,13 @@ public static class MftVolumeIndexBuilder
     /// </summary>
     private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record)
     {
-        if (outcome == MftParseOutcome.NotAnEntry)
+        // Both are skipped, and the index cannot tell them apart usefully. A record whose name lives
+        // in an extension record is a real file this reader cannot place, so the directory above it
+        // totals short and the total is not marked approximate — a compromise this builder has
+        // always made, because refusing instead would take the fast path off any volume holding one,
+        // which on a system drive means always. Following the attribute list is the fix, and it is
+        // after-the-scanner.md item 6.
+        if (outcome is MftParseOutcome.NotAnEntry or MftParseOutcome.IdentityElsewhere)
         {
             return true;
         }

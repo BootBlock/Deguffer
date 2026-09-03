@@ -25,8 +25,6 @@ internal static class WalkExploreReader
         Action<ExploreTreeBuilder, long, long>? onLevel,
         CancellationToken ct)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(root);
-
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
         // the parent it was handed — so the whole traversal stays past MAX_PATH. The tree keeps the
         // ordinary form, because every path it hands back is one a person reads or a shell opens.

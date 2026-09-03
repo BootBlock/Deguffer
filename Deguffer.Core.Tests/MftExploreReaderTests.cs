@@ -104,6 +104,40 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
+    /// A record whose <c>$FILE_NAME</c> lives in an extension record is a real file, and the tree
+    /// says its totals are short because of it.
+    ///
+    /// <para>NTFS moves the name out once a file has enough hard links to overflow its own record —
+    /// the shape the fixture describes as one "a system volume is full of". The parser reports it as
+    /// its own outcome rather than folding it in with a free record, because the two look identical
+    /// to a caller reading only "nothing to place": one holds nothing, and the other holds bytes
+    /// this reader cannot reach. Counting the second as the first is how a whole drive comes to be
+    /// reported short with no caveat at all.</para>
+    ///
+    /// <para>The index, whose numbers decide deletions, still skips it silently. That compromise
+    /// predates Explore and is <c>after-the-scanner.md</c> item 6; what is asserted here is that the
+    /// picture is honest about it and that the index's own answer did not change.</para>
+    /// </summary>
+    [Fact]
+    public void SaysItIsShortWhenAFilesNameLivesInAnExtensionRecord()
+    {
+        var fixture = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddRecordWithNamesInExtensionRecords(21);
+
+        using var source = fixture.Build();
+        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+
+        Assert.Equal(4000, tree.TotalBytes);
+        Assert.True(tree.HasUnknownSizes, "a real file was skipped and the total was called exact");
+
+        // The index treats it exactly as it always has: skipped, and the volume still usable.
+        using var strict = fixture.Build();
+        Assert.True(MftVolumeIndexBuilder.TryBuild(strict, out var index));
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
     /// The difference from <see cref="MftVolumeIndex"/>, stated as an assertion rather than as a
     /// comment. That index keeps a name for a directory only, because naming every file on a volume
     /// costs a string per record and it never needs one; a picture of the disk is mostly files, so
@@ -145,14 +179,10 @@ public class MftExploreReaderTests
     /// is the <em>same</em> table. Asserting the tolerant half alone would stay green if the strict
     /// policy quietly relaxed to match it, which is the direction that matters.</para>
     ///
-    /// <para>What is asserted is the tree, not <see cref="ExploreTree.HasUnknownSizes"/>. That flag
-    /// cannot discriminate here: it is raised on the root by any unreadable record at all, and every
-    /// table carries four — NTFS holds records 12 to 15 back for future metadata and gives them
-    /// neither a <c>$FILE_NAME</c> nor an <c>$ATTRIBUTE_LIST</c>, which is the exact shape the parser
-    /// calls unreadable, as
-    /// <see cref="MftVolumeIndexTests.BuildsAnIndexOverTheReservedRecordsEveryNtfsVolumeCarries"/>
-    /// records having measured on a real volume. Asserting it here would pass with this record
-    /// removed.</para>
+    /// <para>The caveat is asserted alongside the tree. The reserved records every table carries do
+    /// <em>not</em> raise it — see
+    /// <see cref="TheReservedRecordsEveryNtfsVolumeCarriesRaiseNoCaveat"/> — so the flag says
+    /// something here, and what it says is that the picture knows it is short.</para>
     /// </summary>
     [Fact]
     public void KeepsGoingPastARecordTheIndexWouldAbandonTheVolumeOver()
@@ -170,16 +200,16 @@ public class MftExploreReaderTests
         Assert.Equal(4000, tree.TotalBytes);
         Assert.Equal("a.tgz", tree.NameOf(20));
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+
+        Assert.True(tree.HasUnknownSizes, "the picture kept going and did not say it was short");
     }
 
     /// <summary>
     /// A region of the table that cannot be read ends the pass and keeps what was gathered — again
     /// where the index refuses outright rather than answer short.
     ///
-    /// <para>What survived the short read is what is asserted, for the reason given in
-    /// <see cref="KeepsGoingPastARecordTheIndexWouldAbandonTheVolumeOver"/>: the root's
-    /// unknown-size flag is already raised by the reserved records every table carries, so it cannot
-    /// show that this short read was noticed.</para>
+    /// <para>What survived is asserted, and so is the caveat: a total missing four gigabytes is
+    /// only tolerable because the tree says it is a lower bound.</para>
     /// </summary>
     [Fact]
     public void KeepsWhatItGatheredWhenTheTableStopsAnsweringPartWayThrough()
@@ -198,6 +228,8 @@ public class MftExploreReaderTests
         Assert.Equal(4000, tree.TotalBytes);
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
         Assert.DoesNotContain("unreachable.tgz", Reachable(tree).Select(tree.NameOf));
+
+        Assert.True(tree.HasUnknownSizes, "four gigabytes went missing and the total was called exact");
     }
 
     /// <summary>

@@ -106,7 +106,7 @@ public sealed class TreemapLayoutTests
     [Fact]
     public void NoRectangleIsSmallerThanTheFloor()
     {
-        var limits = new LayoutLimits(MinimumTileSize: 6, MaximumDepth: 6);
+        var limits = LayoutLimits.Default with { MinimumTileSize = 6, MaximumDepth = 6 };
         var tree = TreeOf([.. Enumerable.Range(1, 2000).Select(i => (long)i)]);
 
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
@@ -126,7 +126,7 @@ public sealed class TreemapLayoutTests
     [Fact]
     public void WhatIsTooSmallToDrawIsAggregatedRatherThanDropped()
     {
-        var limits = new LayoutLimits(MinimumTileSize: 20, MaximumDepth: 2);
+        var limits = LayoutLimits.Default with { MinimumTileSize = 20, MaximumDepth = 2 };
         var tree = TreeOf([1_000_000, .. Enumerable.Repeat(1L, 500)]);
 
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
@@ -136,11 +136,49 @@ public sealed class TreemapLayoutTests
         Assert.All(aggregates, a => Assert.True(a.Bytes > 0, "an aggregate stood for nothing"));
     }
 
+    /// <summary>
+    /// Every byte is either drawn or aggregated. Nothing leaves the picture silently.
+    ///
+    /// <para>This is the half the test above cannot see. It exercises the branch where the row is
+    /// accepted — its thickness clears the floor — and a member <em>within</em> it comes out too
+    /// narrow to draw. That child used to be skipped where it stood: no rectangle, no aggregate, and
+    /// `index` advanced past it regardless, so its bytes were neither shown nor counted as hidden.
+    /// The space then showed the parent's colour and read as free.</para>
+    ///
+    /// <para>The shape is the reviewer's: a rectangle whose short side is only a little over the
+    /// floor, and two siblings at a 4:1 ratio, which squarification is perfectly happy to put in one
+    /// row.</para>
+    /// </summary>
+    [Fact]
+    public void EveryByteIsEitherDrawnOrCountedInAnAggregate()
+    {
+        var limits = LayoutLimits.Default with { MinimumTileSize = 3, MaximumDepth = 2 };
+
+        foreach (var (width, height, sizes) in new[]
+        {
+            (17f, 40f, new long[] { 400, 100 }),
+            (98f, 98f, new long[] { 300, 1 }),
+            (400f, 300f, new long[] { 4000, 10 }),
+            (1200f, 800f, new long[] { 4000, 10 }),
+            (800f, 600f, new long[] { 5000, 900, 80, 7, 1 }),
+        })
+        {
+            var tree = TreeOf(sizes);
+            var tiles = TreemapLayout.Compute(tree, tree.RootNode, width, height, limits);
+
+            var accounted = tiles
+                .Where(t => t.Depth > 0)
+                .Sum(t => t.Bytes);
+
+            Assert.Equal(sizes.Sum(), accounted);
+        }
+    }
+
     [Fact]
     public void DescentStopsAtTheDepthLimit()
     {
         var tree = NestedTree(depth: 12);
-        var limits = new LayoutLimits(MinimumTileSize: 1, MaximumDepth: 3);
+        var limits = LayoutLimits.Default with { MinimumTileSize = 1, MaximumDepth = 3 };
 
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
 
@@ -155,7 +193,7 @@ public sealed class TreemapLayoutTests
     public void ADeepTreeDoesNotOverflowTheStack()
     {
         var tree = NestedTree(depth: 5000);
-        var limits = new LayoutLimits(MinimumTileSize: 0.0001f, MaximumDepth: 5000);
+        var limits = LayoutLimits.Default with { MinimumTileSize = 0.0001f, MaximumDepth = 5000 };
 
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
 

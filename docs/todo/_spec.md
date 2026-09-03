@@ -372,17 +372,27 @@ have recommended deleting the second.
 
 Both questions are real, and a tool that answers only the first sends the user to a different
 program the moment its providers do not recognise what filled the disk. So Explore is a separate
-destination, and the separation is the design:
+destination, and the separation is the design.
+
+As with the rest of this document, what follows is the target rather than a description of the code.
+Explore currently draws and navigates; it removes nothing. The rules below govern the work that
+makes it act, which is issue #22.
 
 - **Explore never classifies.** It reports a name and a number. It never says a thing is safe, never
   pre-selects anything, and never orders anything by how removable it is.
 - **Explore never pre-selects and never acts on more than the user picked out by hand.** Storage
   offers a plan; Explore acts on a selection, one item at a time, and there is no "clean everything
   here".
-- **Nothing in Explore may reach Tier 4.** The §9 exclusions, `C:\Windows`, `Program Files`, and any
-  path a provider protects are refused outright, with the reason stated. A path Explore does not
-  recognise is not thereby safe — it is merely unclassified, which is exactly what the user is being
-  told.
+- **Explore refuses whatever the tier model would call Tier 4**, and it does not get to decide what
+  that is. §5.2 is unconditional and is not scoped to a page: an unrecognised child of a tool's root
+  *is* Tier 4, so `gradle.properties` beside `.gradle\caches` is refused here exactly as it is
+  refused there. So are the §9 exclusions, `C:\Windows`, `Program Files`, and every path a provider
+  names as protected.
+- **What Explore shows and what Explore will act on are different sets**, and the second is much
+  smaller. Drawing a rectangle for a path says only that the bytes are there. It is not a
+  classification, it is not an offer, and the UI must never let a user read it as one — which is why
+  Explore has no bulk action and no pre-selection, and why the refusals above are stated with their
+  reason rather than by greying something out.
 - **Removal from Explore goes to the Recycle Bin by default.** §8's fourth question concludes that
   undo is impossible at cache sizes, and that is true of a ten-gigabyte tree. It is not true of the
   one file a user picked out of a picture, and where recovery is available it is not optional.

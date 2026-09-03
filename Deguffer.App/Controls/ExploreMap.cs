@@ -66,6 +66,7 @@ public sealed class ExploreMap : UserControl
     private IReadOnlyList<ExploreTile> _tiles = [];
     private TileHitTest? _hits;
     private WriteableBitmap? _bitmap;
+    private byte[]? _pixels;
     private double _scale = 1;
     private int? _hovered;
 
@@ -99,11 +100,26 @@ public sealed class ExploreMap : UserControl
             }
         };
 
+        // The ground is baked into the bitmap, so unlike every themed control around it the map
+        // cannot restyle itself. Nothing else here fires on a theme switch — the page is kept alive
+        // by NavigationCacheMode, so a trip to Settings and back does not rebuild it either — and
+        // the map would keep the old ground until the window was resized. WindowBackdrop subscribes
+        // this same event for the same reason.
+        ActualThemeChanged += (_, _) => Redraw();
+
         // The map is one focusable thing rather than one per rectangle, and the status line beside
         // it carries what is under the pointer. A screen reader needs the same information without
         // a pointer, which the list view provides in full — so this announces its role and defers.
         IsTabStop = true;
         AutomationProperties.SetName(this, "Map of the scanned drive");
+
+        // Naming where the same content is readable, because deferring to the list view only helps
+        // somebody who knows it is there. It is one of three options in the View picker and it is
+        // not the default.
+        AutomationProperties.SetHelpText(
+            this,
+            "A picture of what is using the space. Choose List in the View box for the same "
+            + "contents as a readable list.");
     }
 
     /// <summary>The node the user asked to open, by double-clicking a rectangle.</summary>
@@ -141,6 +157,7 @@ public sealed class ExploreMap : UserControl
             // and never reattach it, leaving the control blank until the window is resized.
             _surface.Source = null;
             _bitmap = null;
+            _pixels = null;
             _tiles = [];
             _hits = null;
             return;
@@ -157,11 +174,10 @@ public sealed class ExploreMap : UserControl
         }
 
         // Every pixel threshold in the layout is in device-independent units, so a 3-pixel floor at
-        // 100% must stay 3 logical pixels at 200% rather than becoming a pixel and a half.
-        var limits = LayoutLimits.Default with
-        {
-            MinimumTileSize = (float)(LayoutLimits.Default.MinimumTileSize * _scale),
-        };
+        // 100% must stay 3 logical pixels at 200% rather than becoming a pixel and a half. The
+        // label thresholds go with it: a treemap laid out in device pixels and compared against raw
+        // constants labels rectangles half the intended size on a high-DPI display.
+        var limits = LayoutLimits.Default.At(_scale);
 
         _tiles = _view == ExploreView.Icicle
             ? IcicleLayout.Compute(tree, _node, width, height, (float)(22 * _scale), limits)
@@ -169,22 +185,24 @@ public sealed class ExploreMap : UserControl
 
         _hits = new TileHitTest(_tiles, width, height);
 
-        var pixels = TileRasteriser.Paint(_tiles, width, height, Ground(), BranchOf);
-
-        // Reused while the size holds. A scan redraws this every three quarters of a second, and a
-        // fresh bitmap each time is several megabytes of garbage per second for a surface whose
-        // dimensions only change when the window does (G5).
+        // Both reused while the size holds. A scan redraws this every three quarters of a second,
+        // and at 3840 by 2160 the buffer alone is 33 MB of large-object-heap allocation — several
+        // megabytes of garbage per second, for a surface whose dimensions only change when the
+        // window does (G5).
         if (_bitmap is not { } bitmap || bitmap.PixelWidth != width || bitmap.PixelHeight != height)
         {
             bitmap = new WriteableBitmap(width, height);
             _bitmap = bitmap;
+            _pixels = new byte[TileRasteriser.BufferLengthFor(width, height)];
             _surface.Source = bitmap;
         }
 
-        pixels.CopyTo(0, bitmap.PixelBuffer, 0, pixels.Length);
+        TileRasteriser.Paint(_pixels!, _tiles, width, height, Ground(), BranchOf);
+
+        _pixels!.CopyTo(0, bitmap.PixelBuffer, 0, _pixels!.Length);
         bitmap.Invalidate();
 
-        DrawLabels(tree);
+        DrawLabels(tree, limits);
     }
 
     /// <summary>
@@ -194,17 +212,15 @@ public sealed class ExploreMap : UserControl
     /// is where the reference implementation took the shortcut this cannot: WinDirStat's newer views
     /// hard-code a near-black ground and are dark whatever the system is set to.</para>
     /// </summary>
-    private TileColour Ground()
-    {
-        if (Application.Current.Resources["LayerFillColorDefaultBrush"] is SolidColorBrush brush)
-        {
-            return new TileColour(brush.Color.R, brush.Color.G, brush.Color.B);
-        }
-
-        return ActualTheme == ElementTheme.Dark
-            ? new TileColour(32, 32, 32)
-            : new TileColour(243, 243, 243);
-    }
+    /// <para>Read from <see cref="FrameworkElement.ActualTheme"/> rather than by pulling the brush
+    /// out of the application's resource dictionary. This app applies the user's choice at element
+    /// level — <c>MainWindow</c> sets <c>RequestedTheme</c> on the content root and nothing ever
+    /// sets it on the application — so the application dictionary answers for the *system* theme.
+    /// Asking it for a colour gives a light ground behind a dark page whenever the two disagree,
+    /// which is the §6.5 failure this method exists to avoid.</para>
+    private TileColour Ground() => ActualTheme == ElementTheme.Dark
+        ? new TileColour(32, 32, 32)
+        : new TileColour(243, 243, 243);
 
     /// <summary>
     /// Which top-level branch a node belongs to, so a whole subtree shares one hue.
@@ -235,8 +251,30 @@ public sealed class ExploreMap : UserControl
         return _branches.TryGetValue(current, out var position) ? position : 0;
     }
 
-    private void DrawLabels(ExploreTree tree)
+    /// <summary>
+    /// Lay the labels over the finished bitmap.
+    ///
+    /// <para>Only a rectangle with nothing drawn inside it gets one. A child is inset from its
+    /// parent by a single pixel, so a parent's label and its first child's land within two pixels of
+    /// each other and overprint into an unreadable stack — which is what the top-left corner of a
+    /// treemap of any real drive looked like. Labelling the innermost rectangles instead is both
+    /// legible and the more useful half: the parent's name is on the breadcrumb, and what is inside
+    /// it is not written anywhere else.</para>
+    /// </summary>
+    private void DrawLabels(ExploreTree tree, LayoutLimits limits)
     {
+        // Which nodes had a rectangle drawn inside them. The layouts emit a parent before its
+        // children, so this is complete for every tile by the time the second pass reaches it.
+        var covered = new HashSet<int>();
+
+        foreach (var tile in _tiles)
+        {
+            if (!tile.IsAggregate && tile.Node != _node)
+            {
+                covered.Add(tree.ParentOf(tile.Node));
+            }
+        }
+
         var drawn = 0;
 
         foreach (var tile in _tiles)
@@ -246,7 +284,10 @@ public sealed class ExploreMap : UserControl
                 return;
             }
 
-            if (tile.IsAggregate || !TileRasteriser.CanCarryLabel(tile) || tile.Node == _node)
+            if (tile.IsAggregate
+                || tile.Node == _node
+                || covered.Contains(tile.Node)
+                || !tile.HasRoomForALabel(limits))
             {
                 continue;
             }
@@ -260,12 +301,10 @@ public sealed class ExploreMap : UserControl
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Width = (tile.Width / _scale) - 8,
                 Foreground = new SolidColorBrush(Color.FromArgb(255, colour.Red, colour.Green, colour.Blue)),
-
-                // Announced through the list view instead: a label here duplicates a row there, and
-                // a screen reader reading fifty overlapping fragments of a picture helps nobody.
-                Visibility = Visibility.Visible,
             };
 
+            // Announced through the list view instead: a label here duplicates a row there, and a
+            // screen reader reading fifty fragments of a picture helps nobody.
             AutomationProperties.SetAccessibilityView(text, AccessibilityView.Raw);
 
             Canvas.SetLeft(text, (tile.X / _scale) + 4);

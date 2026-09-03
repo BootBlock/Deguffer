@@ -38,9 +38,6 @@ internal static class MftExploreReader
         Action<long>? onProgress,
         CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-
         var records = (int)Math.Min(source.RecordCount, int.MaxValue);
         var root = (int)MftRecord.RootRecordNumber;
 
@@ -74,10 +71,17 @@ internal static class MftExploreReader
 
                 if (outcome != MftParseOutcome.Parsed)
                 {
-                    // Both other outcomes leave a slot empty. A free record genuinely holds
-                    // nothing; an unreadable one holds something this cannot name or place, and
-                    // there is no parent to attribute it to — so the loss is declared once, on the
-                    // root, rather than guessed at somewhere in the middle of the tree.
+                    // Every other outcome leaves a slot empty, and only one of them leaves nothing
+                    // missing. A free record genuinely holds nothing. An unreadable one, and one
+                    // whose identity lives in an extension record, both hold a real file this
+                    // cannot place — and there is no parent to attribute the loss to, so it is
+                    // declared once, on the root, rather than guessed at somewhere in the middle of
+                    // the tree.
+                    //
+                    // The second of those is the common one rather than the exotic one: NTFS moves
+                    // a file's $FILE_NAME into an extension record once it has enough hard links to
+                    // overflow its own record, which a system volume is full of. Counting it as a
+                    // free record is how a drive comes to be reported short with no caveat at all.
                     //
                     // Except across records 12 to 15, which are not damage but the format. NTFS
                     // holds those four back for future metadata, marks them in use, and gives them
@@ -91,9 +95,10 @@ internal static class MftExploreReader
                     // for six weeks. The bound is both-ended there for a reason and it is
                     // both-ended here for the same one: records 0 to 11 are the named metadata
                     // files, and an unreadable one of those is real damage.
-                    sawUnreadableRecord |= outcome == MftParseOutcome.Unreadable
-                        && (number < MftRecord.FirstUnnamedReservedRecord
-                            || number >= MftRecord.ReservedRecordCount);
+                    sawUnreadableRecord |= outcome == MftParseOutcome.IdentityElsewhere
+                        || (outcome == MftParseOutcome.Unreadable
+                            && (number < MftRecord.FirstUnnamedReservedRecord
+                                || number >= MftRecord.ReservedRecordCount));
 
                     return true;
                 }

@@ -19,7 +19,7 @@ public sealed class TileRenderingTests
     [Fact]
     public void TheBufferIsFullyOpaqueAndTheRightSize()
     {
-        var pixels = TileRasteriser.Paint([], Width, Height, Ground, _ => 0);
+        var pixels = Paint([], Width, Height, Ground, _ => 0);
 
         Assert.Equal(Width * Height * 4, pixels.Length);
 
@@ -32,7 +32,7 @@ public sealed class TileRenderingTests
     [Fact]
     public void WhereNothingIsDrawnTheCallersGroundShowsThrough()
     {
-        var pixels = TileRasteriser.Paint([], Width, Height, Ground, _ => 0);
+        var pixels = Paint([], Width, Height, Ground, _ => 0);
 
         Assert.Equal(Ground.Blue, pixels[0]);
         Assert.Equal(Ground.Green, pixels[1]);
@@ -44,7 +44,7 @@ public sealed class TileRenderingTests
     {
         var tile = new ExploreTile(Node: 1, Depth: 1, Bytes: 1, X: 10, Y: 10, Width: 20, Height: 20);
 
-        var pixels = TileRasteriser.Paint([tile], Width, Height, Ground, _ => 0);
+        var pixels = Paint([tile], Width, Height, Ground, _ => 0);
 
         Assert.NotEqual(Ground, At(pixels, 15, 15));
         Assert.Equal(Ground, At(pixels, 5, 5));
@@ -61,7 +61,7 @@ public sealed class TileRenderingTests
         var tile = new ExploreTile(Node: 1, Depth: 0, Bytes: 1, X: 0, Y: 0, Width: Width, Height: Height);
         var expected = TilePalette.For(0, 0);
 
-        var pixels = TileRasteriser.Paint([tile], Width, Height, Ground, _ => 0);
+        var pixels = Paint([tile], Width, Height, Ground, _ => 0);
 
         var centre = At(pixels, Width / 2, Height / 2);
         var corner = At(pixels, 1, 1);
@@ -78,7 +78,7 @@ public sealed class TileRenderingTests
     {
         var tile = new ExploreTile(ExploreTile.Aggregated, Depth: 1, Bytes: 99, X: 0, Y: 0, Width: Width, Height: Height);
 
-        var pixels = TileRasteriser.Paint([tile], Width, Height, Ground, _ => 0);
+        var pixels = Paint([tile], Width, Height, Ground, _ => 0);
 
         // Flat, and neutral: an aggregate is not a thing on the disk, so it gets neither a cushion
         // nor a hue that would give it the same presence as the files it stands in for.
@@ -95,7 +95,7 @@ public sealed class TileRenderingTests
         var under = new ExploreTile(1, 0, 1, 0, 0, Width, Height);
         var over = new ExploreTile(2, 1, 1, 4, 4, 8, 8);
 
-        var pixels = TileRasteriser.Paint([under, over], Width, Height, Ground, n => n);
+        var pixels = Paint([under, over], Width, Height, Ground, n => n);
 
         Assert.NotEqual(At(pixels, 6, 6), At(pixels, 30, 30));
     }
@@ -103,9 +103,15 @@ public sealed class TileRenderingTests
     [Fact]
     public void OnlyARectangleWithRoomForTextIsOfferedALabel()
     {
-        Assert.True(TileRasteriser.CanCarryLabel(new ExploreTile(1, 1, 1, 0, 0, 120, 40)));
-        Assert.False(TileRasteriser.CanCarryLabel(new ExploreTile(1, 1, 1, 0, 0, 120, 8)));
-        Assert.False(TileRasteriser.CanCarryLabel(new ExploreTile(1, 1, 1, 0, 0, 20, 40)));
+        var limits = LayoutLimits.Default;
+
+        Assert.True(new ExploreTile(1, 1, 1, 0, 0, 120, 40).HasRoomForALabel(limits));
+        Assert.False(new ExploreTile(1, 1, 1, 0, 0, 120, 8).HasRoomForALabel(limits));
+        Assert.False(new ExploreTile(1, 1, 1, 0, 0, 20, 40).HasRoomForALabel(limits));
+
+        // Scaled with the display, or a high-DPI screen labels rectangles half the intended size.
+        Assert.False(new ExploreTile(1, 1, 1, 0, 0, 60, 20).HasRoomForALabel(limits.At(2)));
+        Assert.True(new ExploreTile(1, 1, 1, 0, 0, 120, 40).HasRoomForALabel(limits.At(2)));
     }
 
     /// <summary>
@@ -174,6 +180,19 @@ public sealed class TileRenderingTests
             : (b.RelativeLuminance, a.RelativeLuminance);
 
         return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    /// <summary>
+    /// Paint into a buffer this test owns. The rasteriser writes into a caller-supplied array
+    /// rather than allocating one, because at 4K that array is 33 MB and the view repaints it
+    /// several times a second.
+    /// </summary>
+    private static byte[] Paint(IReadOnlyList<ExploreTile> tiles, int width, int height, TileColour ground, Func<int, int> branchOf)
+    {
+        var pixels = new byte[TileRasteriser.BufferLengthFor(width, height)];
+        TileRasteriser.Paint(pixels, tiles, width, height, ground, branchOf);
+
+        return pixels;
     }
 
     private static TileColour At(byte[] pixels, int x, int y)

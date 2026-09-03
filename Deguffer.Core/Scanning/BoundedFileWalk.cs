@@ -125,10 +125,23 @@ internal static class BoundedFileWalk
             {
                 var contents = Read(item.Path);
 
-                onDirectory(
-                    item.State,
-                    contents,
-                    (directory, state) => pending.Enqueue((directory.FullName, state)));
+                onDirectory(item.State, contents, Descend);
+
+                void Descend(DirectoryInfo directory, TState state)
+                {
+                    // The walk holds this rule rather than trusting the caller to, because the
+                    // caller is the half that changes. A junction's target keeps its own place on
+                    // the volume, so descending through one both counts it twice and describes a
+                    // tree nothing classified — and `Read` hands links back now instead of dropping
+                    // them, so a caller iterating the wrong list is a mistake that can be made.
+                    //
+                    // The attributes were read during enumeration and are cached on the instance,
+                    // so this costs no I/O.
+                    if (!directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    {
+                        pending.Enqueue((directory.FullName, state));
+                    }
+                }
             });
 
             onLevel();

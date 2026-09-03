@@ -45,7 +45,13 @@ public static class IcicleLayout
             return tiles;
         }
 
-        var deepest = Math.Min(limits.MaximumDepth, (int)(height / rowHeight) - 1);
+        // The canvas is the limit here, and <see cref="LayoutLimits.MaximumDepth"/> deliberately is
+        // not. That cap exists for the treemap, where each extra level is a frame inside a frame
+        // costing depth for no width; an icicle spends a whole row per level and simply runs out of
+        // panel. Capping at six on a canvas with room for sixteen leaves the lower two thirds blank
+        // and throws away the one thing this layout is better at than a treemap — showing, and
+        // labelling, several levels at once.
+        var deepest = (int)(height / rowHeight) - 1;
         var pending = new Stack<(int Node, int Depth, float X, float Width)>();
         pending.Push((root, 0, 0, width));
 

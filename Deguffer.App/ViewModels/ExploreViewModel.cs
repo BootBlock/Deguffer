@@ -52,16 +52,16 @@ public sealed record ExploreCrumb(int Node, string Name);
 /// Drives the Explore page: pick a drive, scan it, and move around what was found.
 ///
 /// <para>This orchestrates and formats. It holds no knowledge of how a volume is read — that is
-/// <see cref="IExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — and none
+/// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — and none
 /// of how a rectangle is drawn, which belongs to the layout and the rasteriser in Core. What is
 /// left here is which node is being looked at and what the screen says about it (G2).</para>
 /// </summary>
 public sealed partial class ExploreViewModel : ObservableObject
 {
-    private readonly IExploreScanner _scanner;
+    private readonly ExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
 
-    public ExploreViewModel(IExploreScanner scanner, IVolumeInventory volumes)
+    public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes)
     {
         _scanner = scanner;
         _volumes = volumes;
@@ -132,11 +132,11 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTree))]
     [NotifyPropertyChangedFor(nameof(HasNoTree))]
+    [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; set; }
 
     /// <summary>Which node the views are drawing. The scan's root until the user descends.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CurrentPath))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial int CurrentNode { get; set; }
 
@@ -151,8 +151,6 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// that has failed rather than one waiting to be told to start.
     /// </summary>
     public bool HasNoTree => Tree is null;
-
-    public string CurrentPath => Tree?.PathOf(CurrentNode) ?? string.Empty;
 
     /// <summary>
     /// Raised when the tree or the current node changed, so the map redraws. An event rather than
@@ -194,7 +192,16 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            Status = "Scan cancelled.";
+            // The last snapshot goes with it. A partial tree covers only the levels walked so far,
+            // its HasUnknownSizes is false because nothing refused anything, and it draws and
+            // navigates exactly like a finished scan — so leaving it on screen states a total for
+            // the drive that is wrong by however much was left.
+            Tree = null;
+            Rows.Clear();
+            Trail.Clear();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+
+            Status = "Scan cancelled. Nothing was measured.";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -317,13 +324,27 @@ public sealed partial class ExploreViewModel : ObservableObject
             Rows.Add(new ExploreRow(
                 child,
                 tree.NameOf(child),
-                FreeSpace.Format(tree.SizeOf(child)),
+                Size(tree, child),
                 total > 0 ? 100.0 * tree.SizeOf(child) / total : 0,
                 tree.IsDirectory(child),
                 tree.IsLink(child),
                 tree.HasUnknownSizeBelow(child)));
         }
     }
+
+    /// <summary>
+    /// A row's size, marked where it is a lower bound.
+    ///
+    /// <para>A directory the walk was refused totals only what it could see, and the plain figure
+    /// reads as a measurement. The page says so once in its status line, which is true and is not
+    /// enough — it is the row for <c>System Volume Information</c> showing "0 B" that a reader
+    /// acts on. <see cref="ExploreRow.Description"/> says the same in words for a screen reader,
+    /// because a symbol read aloud is not a sentence.</para>
+    /// </summary>
+    private static string Size(ExploreTree tree, int node) =>
+        tree.HasUnknownSizeBelow(node)
+            ? "≥ " + FreeSpace.Format(tree.SizeOf(node))
+            : FreeSpace.Format(tree.SizeOf(node));
 
     private void BuildTrail(ExploreTree tree, int node)
     {

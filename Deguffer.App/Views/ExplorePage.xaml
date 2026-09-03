@@ -17,8 +17,7 @@
             not next to the thing that produced the data.
         -->
         <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
-            <ComboBox x:Name="DriveSelector"
-                      Grid.Column="0"
+            <ComboBox Grid.Column="0"
                       MinWidth="88"
                       Header="Drive"
                       ItemsSource="{x:Bind ViewModel.Drives}"
@@ -174,10 +173,11 @@
             <TextBlock Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
                        Style="{StaticResource SecondaryText}"
                        TextTrimming="CharacterEllipsis"
-                       Height="16" />
+                       MinHeight="20" />
 
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
-                       TextWrapping="Wrap" />
+                       TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" />
 
             <!-- §5.5: the fallback must be observable, not inferred from how long the scan took. -->
             <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
