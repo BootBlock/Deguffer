@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.ProviderInfoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels">
+
+    <UserControl.Resources>
+        <!-- §7: nothing is deleted without a preview, so the exact steps are inspectable before the
+             user confirms. This template used to sit on the Storage page and be presented by both
+             densities; it is here now because the disclosure it filled has moved into this dialog,
+             and it is still held in one place for the reason it always was — a second copy is how
+             two views come to show different things. -->
+        <DataTemplate x:Key="PlanStep" x:DataType="vm:StepViewModel">
+            <!-- §4.3 and §7: per-workspace data is pruned one item at a time, and age drives that
+                 choice more than size does, so the two figures sit together in one right-hand stack
+                 rather than in columns of their own. That stack is fixed-width rather than Auto
+                 because WinUI 3 has no SharedSizeGroup — each row builds its own Grid, so Auto
+                 columns come out ragged between rows once anything sits to their right. Stacking
+                 also means the steps that carry no age (a whole cache has none) cost the description
+                 no width for a cell they never fill. -->
+            <Grid ColumnSpacing="10"
+                  Margin="0,2"
+                  ColumnDefinitions="Auto,*,80">
+
+                <!-- Hidden when the finding has only one step: that step is the whole row, so a
+                     checkbox here would be a second control for a decision the row checkbox on the
+                     Storage page already owns. -->
+                <CheckBox Grid.Column="0"
+                          MinWidth="0"
+                          VerticalAlignment="Top"
+                          Margin="0,-2,0,0"
+                          Visibility="{x:Bind IsIndividuallySelectable}"
+                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                          IsEnabled="{x:Bind CanBeSelected}"
+                          AutomationProperties.Name="{x:Bind Description}" />
+
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{x:Bind Description}"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               FontSize="13" />
+
+                    <!-- Shown when Deguffer can see the location and cannot remove it as it is
+                         running. Text rather than a disabled checkbox alone (§6.5): a control that
+                         is simply greyed out states no reason, and the reason is the whole of what
+                         the user needs in order to act. -->
+                    <TextBlock Text="Needs administrator rights — use Elevate and rescan"
+                               Visibility="{x:Bind NeedsElevationFirst}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap"
+                               FontSize="12" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                    <!-- Size leads so it lands on the same line as the first line of the
+                         description on every row, age or no age. -->
+                    <TextBlock Text="{x:Bind SizeLabel}"
+                               Style="{StaticResource SecondaryText}"
+                               TextAlignment="Right"
+                               FontSize="12" />
+
+                    <!-- Text, never colour alone (§6.5): an age indicator reduced to a coloured dot
+                         breaks the same rule the tier chip exists to respect. -->
+                    <!-- No AutomationProperties.Name here: setting one replaces what a screen
+                         reader announces, so naming the value "Last written" would read the heading
+                         aloud and never the age itself. The text is already the value, and it says
+                         "ago" — it carries its own meaning without a label. -->
+                    <TextBlock Text="{x:Bind AgeLabel}"
+                               Visibility="{x:Bind HasAge}"
+                               Style="{StaticResource SecondaryText}"
+                               TextAlignment="Right"
+                               FontSize="12" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!--
+        Two questions, kept apart. "What is this?" is answerable the moment the dialog opens and is
+        the same every time; "Contents" is this scan's plan, and it is the half that can be long. A
+        reader who only wanted to know whose folder this is never pays for the second.
+    -->
+    <Pivot x:Name="Sections" SelectionChanged="OnSectionChanged">
+
+        <PivotItem Header="What is this?">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
+                <StackPanel Spacing="18">
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Application" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind Finding.Description.Application}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- Provenance, stated rather than implied. Somebody deciding whether to let a
+                         cleaner near a directory is entitled to know whose directory it is. -->
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Published by" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind Finding.Description.Publisher}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="What it is for" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind Finding.Description.Purpose}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Border Style="{StaticResource Divider}" />
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Should you clean it?" Style="{StaticResource FieldLabel}" />
+
+                        <!-- The verdict is §3's, so it arrives with the tier that produced it.
+                             Tier is text on a tinted chip, never colour alone: the classification
+                             must survive a flat background and a high-contrast theme (§6.5). -->
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ContentControl Content="{x:Bind Finding.TierLabel}"
+                                            Style="{x:Bind Finding.Tier, Converter={StaticResource TierChipStyle}}" />
+                            <TextBlock Text="{x:Bind Finding.CleaningAdvice}"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Text="{x:Bind Finding.Description.Recommendation}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Border Style="{StaticResource Divider}" />
+
+                    <!-- §7's own sentence, repeated here rather than moved here. It stays on the
+                         row, because §7 requires it to be reachable from the row by whatever the
+                         reader is using, and a dialog is not that. -->
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="What it costs you" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind Finding.WhatHappensOnNextUse}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </PivotItem>
+
+        <PivotItem x:Name="ContentsSection" Header="Contents">
+            <Grid>
+                <!-- Raised only once the fill has been running for a second, so a plan that lists
+                     in a blink never flashes a ring at the reader. -->
+                <ProgressRing x:Name="ContentsRing"
+                              IsActive="True"
+                              Visibility="Collapsed"
+                              Width="32"
+                              Height="32"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center"
+                              AutomationProperties.Name="Listing what will be removed" />
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="{x:Bind Finding.DetailHeader}"
+                                   Style="{StaticResource FieldLabel}" />
+
+                        <!-- A row whose toolchain is absent has no plan at all, so this tab would
+                             otherwise be a blank panel behind a tab that promised a list. -->
+                        <TextBlock Visibility="{x:Bind Finding.HasNoDetail}"
+                                   Style="{StaticResource SecondaryText}"
+                                   Text="There is nothing here for Deguffer to remove." />
+
+                        <ItemsControl x:Name="StepList" ItemTemplate="{StaticResource PlanStep}" />
+
+                        <ItemsControl x:Name="NoteList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{x:Bind}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </PivotItem>
+    </Pivot>
+</UserControl>

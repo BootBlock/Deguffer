@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -123,6 +124,21 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
 
+    /// <summary>
+    /// Whose files this row is about and what they are for — the answer to the question in front of
+    /// the one <see cref="WhatHappensOnNextUse"/> answers. Handed through whole rather than
+    /// unpacked into four properties: the dialog is the only reader, and it wants all four.
+    /// </summary>
+    public ProviderDescription Description => Finding.Provider.Description;
+
+    /// <summary>
+    /// §3's verdict on this row, worded for somebody deciding whether to tick it. Read off the tier
+    /// rather than off <see cref="Finding.IsPreSelectedByDefault"/>, which is the same decision
+    /// narrowed by whether there is anything here to reclaim — an empty cache would otherwise be
+    /// advised against on a day it happened to be empty.
+    /// </summary>
+    public string CleaningAdvice => Tier.ToCleaningAdvice();
+
     public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Estimated) : "—";
 
     // Asked before presence, because the two do not line up: the .NET build output is present
@@ -236,6 +252,14 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
 
     /// <summary>
+    /// Whether the Contents tab has to say that there is nothing to list. Stated here rather than
+    /// negated in the template for the reason <see cref="CannotBeSelected"/> is: x:Bind has no
+    /// operators, and a converter for one "not" would be more machinery than the property it
+    /// replaces.
+    /// </summary>
+    public bool HasNoDetail => !HasDetail;
+
+    /// <summary>
     /// What the disclosure holds, named for which of the three things it is.
     ///
     /// A row with nowhere approved to look has left nothing alone: it has not looked. Calling its
@@ -259,6 +283,13 @@ public sealed partial class FindingViewModel : ObservableObject
     /// plan under it, and <see cref="DetailHeader"/> names only the plan half.
     /// </summary>
     public string DetailToggleName => $"More about {Name}";
+
+    /// <summary>
+    /// What a screen reader calls this row's information link. Every row's link reads "What is
+    /// this?", so without a name of its own a reader hears the same three words down the whole list
+    /// with nothing to tell one from another.
+    /// </summary>
+    public string InformationLinkName => $"What is {Name}?";
 
     /// <summary>Ticking the row ticks everything in it; unticking it clears the lot.</summary>
     partial void OnIsSelectedChanged(bool value)
