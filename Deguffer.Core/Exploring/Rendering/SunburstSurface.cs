@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.Core.Exploring.Rendering;
@@ -10,8 +11,15 @@ public sealed class SunburstSurface : ExploreSurface
 {
     private readonly SectorHitTest _hits;
 
-    public SunburstSurface(ExploreTree tree, int root, int width, int height, LayoutLimits limits)
-        : base(tree, root, width, height, limits)
+    public SunburstSurface(
+        ExploreTree tree,
+        int root,
+        int width,
+        int height,
+        LayoutLimits limits,
+        ExploreColouring colouring,
+        DateTime nowUtc)
+        : base(tree, root, width, height, limits, colouring, nowUtc)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
 
@@ -21,7 +29,7 @@ public sealed class SunburstSurface : ExploreSurface
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override void Paint(byte[] pixels, TileColour background) =>
-        SectorRasteriser.Paint(pixels, _hits, Width, Height, background, BranchOf);
+        SectorRasteriser.Paint(pixels, _hits, Width, Height, background, ColourFor);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index

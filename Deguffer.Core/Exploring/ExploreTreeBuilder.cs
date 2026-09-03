@@ -6,7 +6,19 @@ namespace Deguffer.Core.Exploring;
 /// Bytes, for a file. Zero for a directory: a directory's own bytes are its children's, and they
 /// are recorded separately, so anything counted here would be counted twice.
 /// </param>
-public readonly record struct ExploreChild(string Name, bool IsDirectory, bool IsLink, long Size);
+/// <param name="Created">When the entry was made, or unknown where nothing established it.</param>
+/// <param name="LastWritten">
+/// When the entry itself was last written. A directory's own timestamp is meant here, not its
+/// contents' — <see cref="ExploreTree.ModifiedOf"/> is what combines the two, and it can only do
+/// that if what it is given is the node's own.
+/// </param>
+public readonly record struct ExploreChild(
+    string Name,
+    bool IsDirectory,
+    bool IsLink,
+    long Size,
+    ExploreTimestamp Created = default,
+    ExploreTimestamp LastWritten = default);
 
 /// <summary>
 /// Accumulates nodes as something discovers them, then hands over the finished
@@ -28,9 +40,23 @@ public sealed class ExploreTreeBuilder
     private readonly List<bool> _isDirectory;
     private readonly List<bool> _isLink;
     private readonly List<bool> _sizeUnknown;
+    private readonly List<ExploreTimestamp> _created;
+    private readonly List<ExploreTimestamp> _modified;
     private readonly Lock _gate = new();
 
-    public ExploreTreeBuilder(string rootPath)
+    /// <param name="created">
+    /// When the root directory itself was made, where the caller knows. The root is the one node
+    /// nothing discovers as a child, so it is the one node whose dates have to be handed in rather
+    /// than found — and unknown is the honest default for a caller that did not look.
+    /// </param>
+    /// <param name="lastWritten">
+    /// The root's own last-written time. Only ever a floor under what <see cref="Build"/> reports
+    /// for it, because <see cref="ExploreTree.ModifiedOf"/> rolls every child's up into it.
+    /// </param>
+    public ExploreTreeBuilder(
+        string rootPath,
+        ExploreTimestamp created = default,
+        ExploreTimestamp lastWritten = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
 
@@ -44,6 +70,8 @@ public sealed class ExploreTreeBuilder
         _isDirectory = [true];
         _isLink = [false];
         _sizeUnknown = [false];
+        _created = [created];
+        _modified = [lastWritten];
     }
 
     /// <summary>
@@ -72,6 +100,8 @@ public sealed class ExploreTreeBuilder
                 _isDirectory.Add(child.IsDirectory);
                 _isLink.Add(child.IsLink);
                 _sizeUnknown.Add(false);
+                _created.Add(child.Created);
+                _modified.Add(child.LastWritten);
             }
 
             return first;
@@ -122,6 +152,8 @@ public sealed class ExploreTreeBuilder
                 [.. _isDirectory],
                 [.. _isLink],
                 [.. _sizeUnknown],
+                [.. _created],
+                [.. _modified],
                 present,
                 childOrder);
         }

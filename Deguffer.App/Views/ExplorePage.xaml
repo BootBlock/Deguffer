@@ -16,7 +16,7 @@
             governs — a control that changes how something is drawn belongs next to the drawing,
             not next to the thing that produced the data.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">
             <ComboBox Grid.Column="0"
                       MinWidth="88"
                       Header="Drive"
@@ -57,6 +57,19 @@
                 <ComboBoxItem Content="Icicle" />
                 <ComboBoxItem Content="Sunburst" />
                 <ComboBoxItem Content="List" />
+            </ComboBox>
+
+            <!-- Beside the View box because the two are one decision to the reader — what is on
+                 screen and what its colours mean — and orthogonal to it in fact: every pairing of
+                 the two is meaningful. Indexed against ExploreColouring, like the box above it. -->
+            <ComboBox x:Name="ColourSelector"
+                      Grid.Column="6"
+                      MinWidth="110"
+                      Header="Colour"
+                      SelectionChanged="OnColourSelectionChanged"
+                      AutomationProperties.Name="What the colours on the map say">
+                <ComboBoxItem Content="Branch" />
+                <ComboBoxItem Content="Age" />
             </ComboBox>
         </Grid>
 
@@ -126,8 +139,9 @@
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExploreRow">
                             <Grid ColumnSpacing="12" Padding="0,4"
-                                  ColumnDefinitions="16,*,120,90"
-                                  AutomationProperties.Name="{x:Bind Description}">
+                                  ColumnDefinitions="16,*,120,90,110"
+                                  AutomationProperties.Name="{x:Bind Description}"
+                                  ToolTipService.ToolTip="{x:Bind DatesLabel}">
                                 <FontIcon Grid.Column="0"
                                           FontSize="14"
                                           Glyph="{x:Bind Icon}"
@@ -150,6 +164,17 @@
                                 <TextBlock Grid.Column="3"
                                            Text="{x:Bind SizeLabel}"
                                            TextAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource SecondaryText}" />
+
+                                <!-- The newest write at or below the row, not the row's own
+                                     timestamp — a folder's own date moves when its layout changes
+                                     and stands still while its contents are rewritten. The exact
+                                     dates, and which is which, are on the row's tooltip. -->
+                                <TextBlock Grid.Column="4"
+                                           Text="{x:Bind AgeLabel}"
+                                           TextAlignment="Right"
+                                           TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
                             </Grid>
@@ -178,6 +203,35 @@
                        Style="{StaticResource SecondaryText}"
                        TextTrimming="CharacterEllipsis"
                        MinHeight="20" />
+
+            <!-- What the colours mean, when they mean an age. A hue per branch needs no legend,
+                 because the branch it names is the shape it is inside; an age band means nothing
+                 at all without the scale beside it. -->
+            <ItemsControl ItemsSource="{x:Bind ViewModel.AgeLegend}"
+                          Visibility="{x:Bind ViewModel.ShowsAgeLegend, Mode=OneWay}"
+                          AutomationProperties.Name="What the map's colours mean">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <!-- Wrapping, because eight bands and a narrow window do not fit on one
+                             line, and a legend clipped at the edge explains nothing. -->
+                        <ItemsWrapGrid Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExploreLegendBand">
+                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,12,4"
+                                    AutomationProperties.Name="{x:Bind Label}">
+                            <Border Width="12" Height="12" CornerRadius="2"
+                                    VerticalAlignment="Center"
+                                    Background="{x:Bind Swatch}"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Text="{x:Bind Label}"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryText}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"

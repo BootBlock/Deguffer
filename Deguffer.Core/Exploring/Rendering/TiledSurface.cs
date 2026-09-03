@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.Core.Exploring.Rendering;
@@ -18,8 +19,10 @@ public sealed class TiledSurface : ExploreSurface
         int width,
         int height,
         LayoutLimits limits,
+        ExploreColouring colouring,
+        DateTime nowUtc,
         IReadOnlyList<ExploreTile> tiles)
-        : base(tree, root, width, height, limits)
+        : base(tree, root, width, height, limits, colouring, nowUtc)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 
@@ -32,7 +35,7 @@ public sealed class TiledSurface : ExploreSurface
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override void Paint(byte[] pixels, TileColour background) =>
-        TileRasteriser.Paint(pixels, _tiles, Width, Height, background, BranchOf);
+        TileRasteriser.Paint(pixels, _tiles, Width, Height, background, ColourFor);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;

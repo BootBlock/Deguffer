@@ -16,6 +16,16 @@ public sealed class ExploreSurfaceTests
     private const int Width = 800;
     private const int Height = 800;
 
+    /// <summary>
+    /// The colouring these tests are not about. They ask where the shapes and the labels go, which
+    /// no colouring changes, so they all pin the shipped one rather than each stating a choice.
+    /// <see cref="AgeColouringTests"/> is where the other one is exercised.
+    /// </summary>
+    private const ExploreColouring Branch = ExploreColouring.Branch;
+
+    /// <summary>Any instant will do while the colouring is by branch, and it must not be the clock.</summary>
+    private static readonly DateTime Now = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
     [Theory]
     [InlineData(ExploreView.Treemap)]
     [InlineData(ExploreView.Icicle)]
@@ -25,7 +35,8 @@ public sealed class ExploreSurfaceTests
         var tree = FlatTree(10);
 
         Assert.IsType<TiledSurface>(
-            ExploreSurface.Create(tree, tree.RootNode, view, Width, Height, scale: 1));
+            ExploreSurface.Create(
+                tree, tree.RootNode, view, Width, Height, scale: 1, Branch, Now));
     }
 
     [Fact]
@@ -34,7 +45,8 @@ public sealed class ExploreSurfaceTests
         var tree = FlatTree(10);
 
         Assert.IsType<SunburstSurface>(
-            ExploreSurface.Create(tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1));
+            ExploreSurface.Create(
+                tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, Branch, Now));
     }
 
     /// <summary>
@@ -50,7 +62,8 @@ public sealed class ExploreSurfaceTests
     {
         var tree = NamedTree(10);
 
-        var surface = ExploreSurface.Create(tree, tree.RootNode, view, Width, Height, scale: 1);
+        var surface = ExploreSurface.Create(
+            tree, tree.RootNode, view, Width, Height, scale: 1, Branch, Now);
 
         Assert.IsType<TiledSurface>(surface);
         Assert.NotEmpty(surface.Labels);
@@ -84,7 +97,7 @@ public sealed class ExploreSurfaceTests
         var limits = LayoutLimits.Default;
 
         var surface = new TiledSurface(
-            tree, tree.RootNode, 60, 60, limits,
+            tree, tree.RootNode, 60, 60, limits, Branch, Now,
             TreemapLayout.Compute(tree, tree.RootNode, 60, 60, limits));
 
         Assert.DoesNotContain(tree.RootNode, surface.Labels.Select(l => l.Node));
@@ -184,12 +197,14 @@ public sealed class ExploreSurfaceTests
         Width,
         Height,
         limits,
+        Branch,
+        Now,
         TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits));
 
     private static ExploreSurface Sunburst(ExploreTree tree) => Sunburst(tree, LayoutLimits.Default);
 
     private static ExploreSurface Sunburst(ExploreTree tree, LayoutLimits limits) =>
-        new SunburstSurface(tree, tree.RootNode, Width, Height, limits);
+        new SunburstSurface(tree, tree.RootNode, Width, Height, limits, Branch, Now);
 
     /// <summary>Equal children of one root, which is the shape that defeats a size threshold.</summary>
     private static ExploreTree FlatTree(int children)

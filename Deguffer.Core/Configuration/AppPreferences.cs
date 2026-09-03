@@ -54,6 +54,33 @@ public enum ExploreView
 }
 
 /// <summary>
+/// What the colours on the Explore map say.
+///
+/// <para>Orthogonal to <see cref="ExploreView"/> rather than a fifth entry in it, because it is a
+/// different question: the view decides where the shapes go, and this decides what painting one of
+/// them a colour tells the reader. Every combination of the two is meaningful, and folding them
+/// into one list would offer six choices where there are two.</para>
+///
+/// <para><see cref="Branch"/> is the shipped one and answers "what is this part of", which is the
+/// question a map of a drive is opened with. <see cref="Age"/> answers §8's first open question
+/// instead — whether a toolchain is idle — which a size picture cannot show at all: an Android SDK
+/// and a working project look identical by size, and the whole difference is that nothing has
+/// written to one of them in two years.</para>
+/// </summary>
+public enum ExploreColouring
+{
+    /// <summary>A hue per top-level branch, shaded by depth. See <see cref="Rendering.TilePalette"/>.</summary>
+    Branch = 0,
+
+    /// <summary>
+    /// A band per age, by the newest write anywhere at or below the shape. See
+    /// <see cref="Rendering.AgePalette"/>, and <see cref="ExploreTree.ModifiedOf"/> for why it is
+    /// the newest write below rather than the shape's own date.
+    /// </summary>
+    Age = 1,
+}
+
+/// <summary>
 /// The user's settings, as a value. Most of it is presentation-only — §6.5 makes the backdrop
 /// decoration, so switching it off changes nothing about what Deguffer will delete — but the two
 /// confirmation settings govern what is asked before a deletion, so they are read by Core rather
@@ -68,6 +95,10 @@ public enum ExploreView
 /// How the Explore page draws a scanned volume. Presentation only, in the same way
 /// <paramref name="View"/> is: it changes which picture is on screen, never what was scanned and
 /// never what may be removed.
+/// </param>
+/// <param name="ExploreColours">
+/// What the colours in that picture say. Presentation only on the same terms — it changes what the
+/// reader can see at a glance, never what was measured.
 /// </param>
 /// <param name="ShowNotInstalled">
 /// Whether to list a provider whose toolchain is not on this machine. Off by default: such a row
@@ -104,6 +135,7 @@ public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Compact,
     ExploreView Explore = ExploreView.Treemap,
+    ExploreColouring ExploreColours = ExploreColouring.Branch,
     bool ShowNotInstalled = false,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,

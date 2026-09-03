@@ -56,14 +56,23 @@ public sealed class MftFixture
         }
     }
 
-    public MftFixture AddDirectory(uint number, uint parent, string name) =>
+    /// <param name="created">
+    /// When <c>$STANDARD_INFORMATION</c> says the directory was made. Null leaves the record's times
+    /// at zero, which is what NTFS writes for a time it never set.
+    /// </param>
+    /// <param name="lastWritten">When its own entry was last altered. See the note on the parameter above.</param>
+    public MftFixture AddDirectory(
+        uint number, uint parent, string name, DateTime? created = null, DateTime? lastWritten = null) =>
         Add(number, MftRecordBytes.Build(
             Reference(parent),
             name,
             isDirectory: true,
             MftRecordBytes.DirectoryStreamBytes,
             MftRecordBytes.DirectoryStreamBytes,
-            DataPlacement.NonResident));
+            DataPlacement.NonResident,
+            reparseTag: 0,
+            FileTime(created),
+            FileTime(lastWritten)));
 
     /// <summary>
     /// A junction or directory symbolic link. Its target's entries belong to the target's own
@@ -103,9 +112,26 @@ public sealed class MftFixture
     /// A file whose allocated and logical sizes may differ — the compressed or sparse case that a
     /// <c>FileInfo.Length</c> walk cannot see.
     /// </summary>
-    public MftFixture AddFile(uint number, uint parent, string name, long allocated, long logical) =>
+    public MftFixture AddFile(
+        uint number,
+        uint parent,
+        string name,
+        long allocated,
+        long logical,
+        DateTime? created = null,
+        DateTime? lastWritten = null) =>
         Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident));
+            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident,
+            reparseTag: 0, FileTime(created), FileTime(lastWritten)));
+
+    /// <summary>
+    /// A file whose record carries no <c>$STANDARD_INFORMATION</c>, so nothing can date it. It still
+    /// has a name, a parent and a size, and it still has to place and draw —
+    /// <see cref="MftRecordBytes.FileWithoutTimestamps"/> says why refusing it would be the wrong
+    /// trade.
+    /// </summary>
+    public MftFixture AddFileWithNoTimestamps(uint number, uint parent, string name, long logical) =>
+        Add(number, MftRecordBytes.FileWithoutTimestamps(Reference(parent), name, logical));
 
     /// <summary>
     /// A file small enough to live inside its own MFT record. It occupies no clusters, so deleting
@@ -252,6 +278,15 @@ public sealed class MftFixture
     /// on a freshly formatted volume and fails on a used one.
     /// </summary>
     private static ulong Reference(uint recordNumber) => recordNumber | (1UL << 48);
+
+    /// <summary>
+    /// A <see cref="DateTime"/> as NTFS stores one, or zero for "never set".
+    ///
+    /// <para>Converted through <see cref="DateTime.ToFileTimeUtc"/> rather than by arithmetic here,
+    /// so a fixture and the reader under test are not two copies of the same epoch calculation
+    /// agreeing with each other about a mistake.</para>
+    /// </summary>
+    private static long FileTime(DateTime? when) => when?.ToFileTimeUtc() ?? 0;
 
     private MftFixture Add(uint number, byte[] record)
     {

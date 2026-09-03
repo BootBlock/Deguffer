@@ -163,6 +163,89 @@ public sealed class WalkExploreReaderTests : IDisposable
         Assert.Equal((5, 7000), reports[^1]);
     }
 
+    /// <summary>
+    /// The dates come off the directory entry the enumeration already read, which is what lets this
+    /// route answer the same question the file table does without a second pass over the disk.
+    ///
+    /// <para>Stamped rather than taken from the clock, so the assertion is that these values
+    /// arrived rather than that some value did. Two distinct instants, created older than written,
+    /// so swapping the two fields fails rather than coinciding.</para>
+    /// </summary>
+    [Fact]
+    public void DatesEveryEntryFromWhatTheEnumerationAlreadyRead()
+    {
+        var made = new DateTime(2021, 4, 5, 9, 15, 0, DateTimeKind.Utc);
+        var written = new DateTime(2024, 11, 30, 17, 45, 0, DateTimeKind.Utc);
+
+        var root = _temp.CreateDirectory("cache");
+        var file = _temp.CreateFile(1024, "cache", "a.tgz");
+
+        File.SetCreationTimeUtc(file, made);
+        File.SetLastWriteTimeUtc(file, written);
+
+        // Older than the file, and deliberately: creating an entry moves the containing directory's
+        // own write time to now, which would make the roll-up below pass by reporting a date this
+        // test never asked for. This is also the shape the roll-up exists for — a folder whose
+        // layout was settled long before its contents were last rewritten.
+        Directory.SetLastWriteTimeUtc(root, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var byPath = ByPath(tree);
+
+        var node = byPath[Path.Combine(root, "a.tgz")];
+
+        Assert.Equal(made, tree.CreatedOf(node).Utc);
+        Assert.Equal(written, tree.ModifiedOf(node).Utc);
+
+        // The containing directory takes the file's write, which is the roll-up reaching the route
+        // rather than only the tree that assembles it.
+        Assert.Equal(written, tree.ModifiedOf(tree.RootNode).Utc);
+    }
+
+    /// <summary>
+    /// The scan's own root is dated too, and it is the one entry nothing enumerated — so it is the
+    /// one the reader has to look up itself. Without that its creation date is the unknown the
+    /// arrays start at, whatever the disk says.
+    /// </summary>
+    [Fact]
+    public void DatesTheRootItWasHandedAsWellAsWhatIsInside()
+    {
+        var made = new DateTime(2019, 2, 3, 8, 30, 0, DateTimeKind.Utc);
+
+        var root = _temp.CreateDirectory("cache");
+        Directory.SetCreationTimeUtc(root, made);
+
+        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+
+        Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
+    }
+
+    /// <summary>
+    /// A junction is dated by its own entry rather than by whatever it points at, for the same
+    /// reason it is sized at zero: the target holds its own place in this tree and carries its own
+    /// dates there. Dating it from the target would report one instant twice and say nothing about
+    /// the link itself.
+    /// </summary>
+    [Fact]
+    public void DatesALinkByItsOwnEntryRatherThanItsTarget()
+    {
+        var made = new DateTime(2020, 7, 7, 11, 0, 0, DateTimeKind.Utc);
+
+        var root = _temp.CreateDirectory("cache");
+        var target = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(2048, "elsewhere", "big.bin");
+
+        var link = Path.Combine(root, "shortcut");
+        Directory.CreateSymbolicLink(link, target);
+        Directory.SetCreationTimeUtc(link, made);
+
+        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var node = ByPath(tree)[link];
+
+        Assert.True(tree.IsLink(node));
+        Assert.Equal(made, tree.CreatedOf(node).Utc);
+    }
+
     private static int CountNamed(ExploreTree tree, string name)
     {
         var count = 0;

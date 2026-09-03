@@ -3,7 +3,20 @@
 namespace Deguffer.Core.Tests.Fakes;
 
 /// <summary>One entry in a described tree.</summary>
-public abstract record TreeEntry(string Name);
+public abstract record TreeEntry(string Name)
+{
+    /// <summary>
+    /// When the entry should claim to have been made — stamped onto the real file and declared to
+    /// the table, so the two routes are asked about one instant rather than two that resemble each
+    /// other. Null leaves the real entry with whatever the clock said and the table with the zero
+    /// NTFS writes for a time it never set, which is a deliberate <em>dis</em>agreement and not
+    /// something to assert on.
+    /// </summary>
+    public DateTime? Created { get; init; }
+
+    /// <summary>When it should claim to have been last written, on the same terms.</summary>
+    public DateTime? Modified { get; init; }
+}
 
 /// <param name="Bytes">The file's length, written to disk and declared to the table.</param>
 /// <param name="Allocated">
@@ -92,24 +105,56 @@ public static class MirroredTree
                     else
                     {
                         Fixture.AddFile(
-                            number, parent, file.Name, file.Allocated ?? file.Bytes, logical: file.Bytes);
+                            number, parent, file.Name, file.Allocated ?? file.Bytes, logical: file.Bytes,
+                            file.Created, file.Modified);
                     }
 
+                    Stamp(file, File.SetCreationTimeUtc, File.SetLastWriteTimeUtc, path);
                     break;
 
                 case TreeDirectory directory:
                     Directory.CreateDirectory(path);
-                    Fixture.AddDirectory(number, parent, directory.Name);
+                    Fixture.AddDirectory(
+                        number, parent, directory.Name, directory.Created, directory.Modified);
 
                     foreach (var child in directory.Children)
                     {
                         Add(number, child, path);
                     }
 
+                    // After the children, never before. Creating an entry inside a directory moves
+                    // that directory's own last-written time, so a stamp applied first would be
+                    // overwritten by the first child and the two routes would disagree about a
+                    // date the description said they should share.
+                    Stamp(directory, Directory.SetCreationTimeUtc, Directory.SetLastWriteTimeUtc, path);
                     break;
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(entry), entry, "Unknown tree entry.");
+            }
+        }
+
+        /// <summary>
+        /// Put the described dates onto the real entry, where it described any.
+        ///
+        /// <para>Files and directories are stamped by different pairs of methods with identical
+        /// signatures, which is the whole reason this takes them as arguments rather than switching
+        /// on what it was handed.</para>
+        /// </summary>
+        private static void Stamp(
+            TreeEntry entry,
+            Action<string, DateTime> setCreated,
+            Action<string, DateTime> setLastWritten,
+            string path)
+        {
+            if (entry.Created is { } created)
+            {
+                setCreated(path, created);
+            }
+
+            if (entry.Modified is { } modified)
+            {
+                setLastWritten(path, modified);
             }
         }
     }

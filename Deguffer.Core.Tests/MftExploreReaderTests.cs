@@ -353,6 +353,61 @@ public class MftExploreReaderTests
         Assert.Equal([0, 65_536], reports);
     }
 
+    /// <summary>
+    /// The dates come out of <c>$STANDARD_INFORMATION</c>, which is the pass already being made —
+    /// <c>docs/todo/after-the-scanner.md</c> item 4's whole argument for taking them from here
+    /// rather than from a directory walk.
+    ///
+    /// <para>Two distinct instants, and the created one is the older, so a reader that took one
+    /// field for the other would have to swap two different answers rather than agree with itself.
+    /// The record also carries the two times NTFS keeps that must <em>not</em> be read — when the
+    /// record last changed, and when the file was last read — at values nothing here asks for.</para>
+    /// </summary>
+    [Fact]
+    public void ReadsBothTimestampsOutOfTheRecordItAlreadyParsed()
+    {
+        var made = new DateTime(2021, 4, 5, 9, 15, 0, DateTimeKind.Utc);
+        var written = new DateTime(2024, 11, 30, 17, 45, 0, DateTimeKind.Utc);
+
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096, made, written)
+            .Build();
+
+        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+
+        Assert.Equal(made, tree.CreatedOf(20).Utc);
+        Assert.Equal(written, tree.ModifiedOf(20).Utc);
+    }
+
+    /// <summary>
+    /// A record with no <c>$STANDARD_INFORMATION</c> is undated and otherwise entirely fine.
+    ///
+    /// <para>This is the trade the parser makes deliberately, and the opposite of what it does with
+    /// a size it cannot read. A missing size makes a subtree's total wrong, so it travels upward as
+    /// unknown; a missing date costs the record nothing else, so refusing it would take §5.5's fast
+    /// path off a whole volume over a column. The name, the parent and the size are asserted here
+    /// precisely because they are what would be lost by refusing.</para>
+    /// </summary>
+    [Fact]
+    public void ARecordWithNoTimestampsIsUndatedRatherThanUnreadable()
+    {
+        using var source = Tree()
+            .AddFileWithNoTimestamps(20, Cache, "undated.tgz", logical: 4096)
+            .Build();
+
+        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+
+        Assert.False(tree.CreatedOf(20).IsKnown);
+        Assert.False(tree.ModifiedOf(20).IsKnown);
+
+        Assert.Equal(@"C:\Users\testuser\.npm-cache\undated.tgz", tree.PathOf(20));
+        Assert.Equal(4096, tree.SizeOf(20));
+
+        // And the volume is not reported as partly unreadable because of it, which is the failure
+        // that would take the whole fast path off a real disk.
+        Assert.False(tree.HasUnknownSizes);
+    }
+
     private static List<int> Reachable(ExploreTree tree)
     {
         var reached = new List<int>();

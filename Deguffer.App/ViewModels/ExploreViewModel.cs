@@ -4,8 +4,11 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace Deguffer.App.ViewModels;
 
@@ -16,6 +19,15 @@ namespace Deguffer.App.ViewModels;
 /// parent rather than against the largest sibling, because the question the list answers is "what
 /// is this folder made of" and a bar scaled to the biggest child says nothing about that.
 /// </param>
+/// <param name="AgeLabel">
+/// How long ago this was last written, as a sentence — the column the list shows. Relative rather
+/// than a date, because the question is "is this still in use", and "2 years ago" answers it where
+/// "2024-03-11" makes the reader do the subtraction.
+/// </param>
+/// <param name="DatesLabel">
+/// Both exact dates, for the row's tooltip. The column rounds to the week and the year, which is
+/// right for scanning a list and wrong for the one row somebody has stopped on.
+/// </param>
 public sealed record ExploreRow(
     int Node,
     string Name,
@@ -23,7 +35,9 @@ public sealed record ExploreRow(
     double Share,
     bool IsDirectory,
     bool IsLink,
-    bool IsApproximate)
+    bool IsApproximate,
+    string AgeLabel,
+    string DatesLabel)
 {
     /// <summary>
     /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
@@ -40,14 +54,27 @@ public sealed record ExploreRow(
         _ => "\uE7C3",           // Page
     };
 
-    /// <summary>What a screen reader should say instead of reading a bar graphic.</summary>
+    /// <summary>
+    /// What a screen reader should say instead of reading a bar graphic.
+    ///
+    /// <para>The age is in it because it is a column, and a column read as nothing is a column
+    /// somebody cannot use. <see cref="RelativeAge"/> already renders an absent date as
+    /// "Unknown" in words rather than as a blank, which is what makes it safe to read out.</para>
+    /// </summary>
     public string Description =>
         $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}"
-        + $"{(IsApproximate ? ", at least" : string.Empty)}";
+        + $"{(IsApproximate ? ", at least" : string.Empty)}, last written {AgeLabel}";
 }
 
 /// <summary>One step of the path back to the root.</summary>
 public sealed record ExploreCrumb(int Node, string Name);
+
+/// <summary>One band of the age legend, ready to draw.</summary>
+/// <param name="Swatch">
+/// The band's colour as a brush. Converted here rather than in Core, which deliberately knows
+/// nothing about the UI framework so that the whole of the drawing stays testable without a window.
+/// </param>
+public sealed record ExploreLegendBand(string Label, SolidColorBrush Swatch);
 
 /// <summary>
 /// Drives the Explore page: pick a drive, scan it, and move around what was found.
@@ -151,7 +178,41 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
     public partial ExploreView SelectedView { get; set; }
+
+    /// <summary>
+    /// What the colours on the map are to say. See <see cref="ExploreColouring"/>.
+    ///
+    /// <para>Unlike <see cref="SelectedView"/> this is never substituted. A partial tree is coloured
+    /// exactly as a finished one is — an age is a fact about a node rather than about the ordering
+    /// of its siblings — so a scan in progress needs no sentence explaining this one away.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    public partial ExploreColouring SelectedColouring { get; set; }
+
+    /// <summary>
+    /// What each colour on the map means, or an empty list where the colours are branches.
+    ///
+    /// <para>A legend is not decoration for this one. A hue per branch is self-explanatory, because
+    /// the branch it names is the rectangle it is inside — but an age band means nothing at all
+    /// without the scale beside it, and a picture whose colours the reader cannot decode is worse
+    /// than one with no colours in it.</para>
+    /// </summary>
+    public IReadOnlyList<ExploreLegendBand> AgeLegend { get; } =
+    [
+        .. AgePalette.Bands.Select(band => new ExploreLegendBand(
+            band.Label,
+            new SolidColorBrush(Color.FromArgb(255, band.Colour.Red, band.Colour.Green, band.Colour.Blue)))),
+    ];
+
+    /// <summary>
+    /// Whether to show that legend: only when the colours are ages, and only when there is a picture
+    /// for them to explain. The list view carries the same fact as a column of words.
+    /// </summary>
+    public bool ShowsAgeLegend =>
+        SelectedColouring == ExploreColouring.Age && SelectedView != ExploreView.List;
 
     /// <summary>
     /// How what is on screen differs from what the View box names, or null when it does not.
@@ -321,7 +382,14 @@ public sealed partial class ExploreViewModel : ObservableObject
         Hovered = (Tree, node, aggregateBytes) switch
         {
             (_, _, { } bytes) => $"{FreeSpace.Format(bytes)} in items too small to draw separately",
-            ({ } tree, { } value, _) => $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}",
+
+            // The age is on this line whichever colouring is on, not only when the map is drawn by
+            // age. A pointer is how somebody checks one shape against the rest, and having to change
+            // the colouring to read a date would be a worse answer than showing it always.
+            ({ } tree, { } value, _) =>
+                $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}, "
+                + $"last written {RelativeAge.Describe(tree.ModifiedOf(value).Utc, DateTime.UtcNow)}",
+
             _ => string.Empty,
         };
     }
@@ -368,6 +436,11 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         var total = tree.SizeOf(node);
 
+        // Once for the whole list rather than once per row. Every age in it is measured against the
+        // same instant, which is both cheaper and the only way two rows a millisecond apart cannot
+        // land in different days (G5).
+        var now = DateTime.UtcNow;
+
         foreach (var child in tree.ChildrenOf(node))
         {
             Rows.Add(new ExploreRow(
@@ -377,9 +450,38 @@ public sealed partial class ExploreViewModel : ObservableObject
                 total > 0 ? 100.0 * tree.SizeOf(child) / total : 0,
                 tree.IsDirectory(child),
                 tree.IsLink(child),
-                tree.HasUnknownSizeBelow(child)));
+                tree.HasUnknownSizeBelow(child),
+                RelativeAge.Describe(tree.ModifiedOf(child).Utc, now),
+                Dates(tree, child)));
         }
     }
+
+    /// <summary>
+    /// Both of a row's dates in full, for its tooltip.
+    ///
+    /// <para>Local time and the user's own format, because this is the one place the exact instant
+    /// is shown and a reader compares it against what Explorer says beside it. Everything inside the
+    /// tree is UTC, which is what makes two scan routes agree; the conversion belongs here, at the
+    /// last moment before a person reads it.</para>
+    ///
+    /// <para>The two lines say different things and the labels have to keep them apart. Created is
+    /// the node's own date. Modified is the newest write anywhere at or below it, so for a folder it
+    /// is not the folder's own timestamp — see <see cref="ExploreTree.ModifiedOf"/> — and calling it
+    /// "modified" without saying so invites the reader to compare it with a figure Explorer shows
+    /// for something else.</para>
+    /// </summary>
+    private static string Dates(ExploreTree tree, int node)
+    {
+        var created = tree.CreatedOf(node).Utc;
+        var modified = tree.ModifiedOf(node).Utc;
+
+        var newest = tree.IsDirectory(node) ? "Newest write inside" : "Last written";
+
+        return $"Created: {Exact(created)}{Environment.NewLine}{newest}: {Exact(modified)}";
+    }
+
+    private static string Exact(DateTime? when) =>
+        when is { } value ? value.ToLocalTime().ToString("g") : "not known";
 
     /// <summary>
     /// A row's size, marked where it is a lower bound.

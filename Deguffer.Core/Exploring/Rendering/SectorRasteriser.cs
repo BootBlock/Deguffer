@@ -40,11 +40,11 @@ public static class SectorRasteriser
         int width,
         int height,
         TileColour background,
-        Func<int, int> branchOf)
+        Func<int, int, TileColour> colourOf)
     {
         ArgumentNullException.ThrowIfNull(pixels);
         ArgumentNullException.ThrowIfNull(hits);
-        ArgumentNullException.ThrowIfNull(branchOf);
+        ArgumentNullException.ThrowIfNull(colourOf);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
@@ -73,9 +73,7 @@ public static class SectorRasteriser
 
         for (var i = 0; i < sectors.Count; i++)
         {
-            colours[i] = sectors[i].IsAggregate
-                ? TilePalette.Aggregate
-                : TilePalette.For(branchOf(sectors[i].Node), sectors[i].Depth);
+            colours[i] = colourOf(sectors[i].Node, sectors[i].Depth);
         }
 
         var left = Math.Max(0, (int)MathF.Floor(sunburst.CentreX - sunburst.Radius));
