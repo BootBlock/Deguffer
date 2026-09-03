@@ -441,6 +441,8 @@ public sealed class CleanupPlannerTests
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
+        public IReadOnlyList<ToolRoot> ToolRoots => [];
+
         public bool WasExecuted { get; private set; }
 
         public void InvalidateCaches() => journal?.Add($"invalidate:{id}");

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -39,6 +40,46 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
         "The next restore re-downloads packages from your configured feeds. Projects and their configuration are untouched.";
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["devenv", "MSBuild", "VBCSCompiler"];
+
+    /// <summary>
+    /// The two caches NuGet keeps under <c>%LOCALAPPDATA%\NuGet</c>. Its credential-provider
+    /// plugins sit in the same directory and are not a cache, so anything absent here is Tier 4 by
+    /// construction.
+    /// </summary>
+    private static readonly FrozenSet<string> LocalCacheNames =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "v3-cache", "plugins-cache");
+
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. Both folders mix cache with configuration:
+    /// <c>NuGet.Config</c> sits in <c>.nuget</c> beside the packages folder, and the
+    /// credential-provider plugins sit under <c>%LOCALAPPDATA%\NuGet</c> beside the two HTTP caches.
+    ///
+    /// <para>The locations <c>dotnet nuget locals --list</c> reports are deliberately absent. They
+    /// arrive from a subprocess, and a declaration Explore consults on every path has to be readable
+    /// without running one. These are the documented defaults, and a declaration can only ever
+    /// refuse — so naming them costs nothing and covers the ordinary machine.</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            Path.Combine(Environment.UserProfile, ".nuget"),
+            "This is NuGet's own folder. Deguffer clears the downloaded packages inside it and "
+            + "nothing else, because the NuGet.Config beside them may hold credentials for your "
+            + "private feeds.",
+            static name => name.Equals("packages", StringComparison.OrdinalIgnoreCase)),
+
+        new ToolRoot(
+            Path.Combine(Environment.LocalAppData, "NuGet"),
+            "This is NuGet's own folder. Deguffer clears the HTTP and plugin caches inside it and "
+            + "nothing else, because the credential-provider plugins beside them are not a cache.",
+            LocalCacheNames.Contains),
+
+        new ToolRoot(
+            Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
+            "This is your NuGet configuration, and it may hold credentials for your private feeds. "
+            + "Deguffer never removes it.",
+            static _ => false),
+    ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("dotnet") is not null);

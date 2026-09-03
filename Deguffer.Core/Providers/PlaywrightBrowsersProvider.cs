@@ -112,6 +112,28 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         return LongPath.Configured(configured);
     }
 
+    /// <summary>
+    /// The browser cache root. Its children are versioned rather than named, so this carries
+    /// <see cref="RecognisedChild"/> itself — which is exactly why <see cref="ToolRoot"/> holds a
+    /// predicate: a declaration that could only hold names would have had to leave this provider
+    /// out, and §5.2 must never fail in that direction.
+    ///
+    /// Empty where Playwright is configured to install into a project's <c>node_modules</c>, since
+    /// there is then no machine-wide root to make a claim about.
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+        ResolveRoot() is { } root
+            ?
+            [
+                new ToolRoot(
+                    root,
+                    "This is Playwright's browser cache. Deguffer removes whole browser builds from "
+                    + "it and nothing else, because the links and metadata beside them are what "
+                    + "Playwright resolves a build through.",
+                    name => RecognisedChild().IsMatch(name)),
+            ]
+            : [];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveRoot() is { } root && LongPath.DirectoryExists(root));
 

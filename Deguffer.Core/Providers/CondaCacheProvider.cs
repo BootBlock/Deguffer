@@ -67,6 +67,22 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["conda", "mamba"];
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. Conda declares no directory: its installation
+    /// prefix, its environment directories and its package caches all come from
+    /// <c>conda info --json</c>, and a declaration Explore consults on every path has to be readable
+    /// without running a subprocess. What is cheap is the configuration file, and a file is a root
+    /// nothing is ever below.
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            Path.Combine(Environment.UserProfile, ".condarc"),
+            "This is your conda configuration, and it may name private channels together with their "
+            + "tokens. Deguffer never removes it.",
+            static _ => false),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(FindConda() is not null);
 

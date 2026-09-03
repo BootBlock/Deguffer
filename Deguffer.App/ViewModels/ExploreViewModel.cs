@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -30,13 +31,25 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly ExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
 
-    public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes)
+    public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions)
     {
         _scanner = scanner;
         _volumes = volumes;
 
+        Selection = new ExploreSelection(actions);
+
+        // A removal and a scan of the same drive have no business overlapping, so each stands the
+        // other down through the one busy flag. One direction each, rather than a flag both write:
+        // the selection says when it is working, and this says when the page is free to act.
+        Selection.Working += (_, working) => IsBusy = working;
+        Selection.Reported += (_, sentence) => Status = sentence;
+        Selection.Changed += (_, _) => Refresh();
+
         RefreshDrives();
     }
+
+    /// <summary>What the user picked out by hand, and what §7.1 lets them do with it.</summary>
+    public ExploreSelection Selection { get; }
 
     /// <summary>The volumes offered in the picker, as <c>C:\</c> roots.</summary>
     public ObservableCollection<string> Drives { get; } = [];
@@ -84,6 +97,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ScanWholeDriveCommand))]
     public partial bool IsBusy { get; set; }
+
+    partial void OnIsBusyChanged(bool value) => Selection.CanAct = !value;
 
     /// <summary>
     /// Whether the page will accept a new instruction. The folder picker is opened by the page
@@ -283,6 +298,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // navigates exactly like a finished scan — so leaving it on screen states a total for
             // the drive that is wrong by however much was left.
             Tree = null;
+            Selection.Show(null);
             Rows.Clear();
             Trail.Clear();
             ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -361,7 +377,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Show what is inside <paramref name="node"/>. Ignored for anything with nothing in it.</summary>
     public void Descend(int node)
     {
-        if (Tree is not { } tree || !tree.IsDirectory(node) || tree.ChildrenOf(node).Length == 0)
+        if (Tree is not { } tree || Selection.WasRemoved(node) || !tree.IsDirectory(node)
+            || tree.ChildrenOf(node).Length == 0)
         {
             return;
         }
@@ -437,10 +454,22 @@ public sealed partial class ExploreViewModel : ObservableObject
         Tree = tree;
         CurrentNode = node;
 
+        Selection.Show(tree);
         BuildRows(tree, node);
         BuildTrail(tree, node);
 
         Hovered = string.Empty;
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Rebuild the list and the picture from what is left, without rescanning.</summary>
+    private void Refresh()
+    {
+        if (Tree is { } tree)
+        {
+            BuildRows(tree, CurrentNode);
+        }
+
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -457,6 +486,11 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         foreach (var child in tree.ChildrenOf(node))
         {
+            if (Selection.WasRemoved(child))
+            {
+                continue;
+            }
+
             Rows.Add(new ExploreRow(
                 child,
                 tree.NameOf(child),

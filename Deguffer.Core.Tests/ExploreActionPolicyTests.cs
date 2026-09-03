@@ -1,0 +1,413 @@
+using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
+using Deguffer.Core.Tests.Fakes;
+
+namespace Deguffer.Core.Tests;
+
+/// <summary>
+/// §7.1's refusals, asserted without a WinUI host — which is the whole reason the decision is a
+/// Core type rather than a disabled context-menu item.
+///
+/// <para>Everything here runs against a synthetic Windows directory, synthetic program directories
+/// and a synthetic profile. That is not a convenience: the rule that matters is that Explore never
+/// reaches <c>C:\Windows</c>, and it has to be demonstrable on a machine where nobody may delete
+/// anything in there.</para>
+/// </summary>
+public sealed class ExploreActionPolicyTests : IDisposable
+{
+    private readonly TempDirectory _temp = new();
+    private readonly FakeSystemDirectories _system;
+    private readonly FakeUserEnvironment _environment;
+
+    public ExploreActionPolicyTests()
+    {
+        _system = new FakeSystemDirectories(_temp.Path);
+        _environment = new FakeUserEnvironment(_temp.Path);
+    }
+
+    public void Dispose() => _temp.Dispose();
+
+    [Fact]
+    public void TheWindowsDirectoryAndEverythingInItIsRefused()
+    {
+        var policy = Policy();
+
+        Assert.False(policy.MayRemove(_system.WindowsDirectory).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_system.WindowsDirectory, "System32")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_system.WindowsDirectory, "System32", "drivers", "etc")).IsAllowed);
+    }
+
+    /// <summary>
+    /// §9's two exclusions by name. They are covered by the rule above, and naming them anyway is
+    /// the point: §9 is enforced by nothing except not reaching those paths, so an assertion that
+    /// says "we did not reach them" is what turns that into evidence.
+    /// </summary>
+    [Theory]
+    [InlineData("WinSxS")]
+    [InlineData("Installer")]
+    public void TheSection9ExclusionsAreRefused(string name)
+    {
+        Assert.False(Policy().MayRemove(Path.Combine(_system.WindowsDirectory, name)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Both program directories. A rule that knew only the 64-bit one would allow half the
+    /// installed software on the machine, which is the shape of hole nobody notices.
+    /// </summary>
+    [Fact]
+    public void BothProgramDirectoriesAreRefused()
+    {
+        var policy = Policy();
+
+        Assert.False(policy.MayRemove(_system.ProgramFiles).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_system.ProgramFiles, "Some Vendor", "bin")).IsAllowed);
+        Assert.False(policy.MayRemove(_system.ProgramFilesX86).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_system.ProgramFilesX86, "Some Vendor")).IsAllowed);
+    }
+
+    [Fact]
+    public void MachineWideApplicationDataIsRefused()
+    {
+        var policy = Policy();
+
+        Assert.False(policy.MayRemove(_system.ProgramData).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_system.ProgramData, "Some Vendor")).IsAllowed);
+    }
+
+    [Fact]
+    public void AWholeDriveIsRefused()
+    {
+        Assert.False(Policy().MayRemove(_temp.Path).IsAllowed);
+        Assert.False(Policy().MayRemove(@"C:\").IsAllowed);
+    }
+
+    /// <summary>
+    /// The three entries that read as one rule: the profile is not a thing to remove, what the user
+    /// keeps inside it is ordinary, and another account's profile is neither.
+    /// </summary>
+    [Fact]
+    public void TheProfileItselfIsRefusedWhileWhatIsInsideItIsNot()
+    {
+        var policy = Policy();
+
+        Assert.False(policy.MayRemove(_environment.UserProfile).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(_environment.UserProfile, "Downloads")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(_environment.UserProfile, "Downloads", "big.iso")).IsAllowed);
+    }
+
+    [Fact]
+    public void AnotherAccountsProfileIsRefused()
+    {
+        var users = Path.GetDirectoryName(_environment.UserProfile)!;
+
+        Assert.False(Policy().MayRemove(Path.Combine(users, "someone-else")).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(users, "someone-else", "Documents")).IsAllowed);
+    }
+
+    /// <summary>
+    /// What Windows reserves at the top of a volume, on a drive the policy was never told about.
+    ///
+    /// <para>The drive is the point. These were once a table built from
+    /// <see cref="Deguffer.Core.Safety.IVolumeInventory"/>, which is a snapshot — so a volume mounted
+    /// after the page opened was scannable with its paging file and its restore points unprotected.
+    /// Reading it from the path needs no inventory, and this asserts it against a letter no fake ever
+    /// mentioned.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("System Volume Information")]
+    [InlineData("$Recycle.Bin")]
+    [InlineData("pagefile.sys")]
+    [InlineData("swapfile.sys")]
+    [InlineData("hiberfil.sys")]
+    [InlineData("SYSTEM VOLUME INFORMATION")]
+    public void WhatWindowsKeepsAtAVolumeRootIsRefusedOnAnyDrive(string name)
+    {
+        Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, name)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same names one level down are ordinary. A folder somebody called
+    /// <c>System Volume Information</c> inside their own Documents is theirs, and the rule is about
+    /// the reserved place rather than the word.
+    /// </summary>
+    [Fact]
+    public void TheSameNameInsideAFolderIsNotReserved()
+    {
+        Assert.True(Policy()
+            .MayRemove(Path.Combine(_environment.UserProfile, "Documents", "System Volume Information"))
+            .IsAllowed);
+    }
+
+    /// <summary>
+    /// A region whose path will not resolve is dropped rather than kept with the value it arrived
+    /// with. An empty one prefix-matches every UNC path, so admitting it would refuse a whole network
+    /// share with a sentence naming no directory at all — and <c>%ProgramFiles(x86)%</c> is genuinely
+    /// empty on a 32-bit Windows.
+    /// </summary>
+    [Fact]
+    public void ARegionThatNamesNothingProtectsNothing()
+    {
+        var policy = new ExploreActionPolicy(
+            [ProtectedRegion.Refusing(string.Empty, RegionScope.PathAndBelow, "Nowhere.")],
+            []);
+
+        Assert.True(policy.MayRemove(@"\\server\share\folder").IsAllowed);
+        Assert.True(policy.MayRemove(@"C:\anywhere\at\all").IsAllowed);
+    }
+
+    [Fact]
+    public void AToolRootIsNeverRemoved()
+    {
+        Assert.False(Policy(Gradle()).MayRemove(GradleRoot).IsAllowed);
+    }
+
+    /// <summary>
+    /// §5.2's unrecognised case, which is the dangerous direction: an unknown thing must not be
+    /// treated as safe. <c>gradle.properties</c> is the example §7.1 chose, and it may hold signing
+    /// keys and credentials.
+    /// </summary>
+    [Theory]
+    [InlineData("gradle.properties")]
+    [InlineData("init.d")]
+    [InlineData(@"init.d\company.gradle")]
+    [InlineData("something-a-later-gradle-added")]
+    public void AnUnrecognisedChildOfAToolRootIsRefused(string relative)
+    {
+        var verdict = Policy(Gradle()).MayRemove(Path.Combine(GradleRoot, relative));
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("not something Deguffer recognises", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The first segment below the root decides, not the leaf. Asking about the leaf instead would
+    /// refuse <c>caches\modules-2</c> and allow <c>init.d\company.gradle</c>, which is exactly
+    /// backwards.
+    /// </summary>
+    [Theory]
+    [InlineData("caches")]
+    [InlineData(@"caches\modules-2")]
+    [InlineData(@"caches\modules-2\files-2.1\org.example")]
+    [InlineData("wrapper")]
+    public void ARecognisedChildOfAToolRootTakesWhatIsUnderItToo(string relative)
+    {
+        Assert.True(Policy(Gradle()).MayRemove(Path.Combine(GradleRoot, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The profile is permitted below, and <c>.gradle</c> sits inside it. The permitting entry ends
+    /// the structural table's search and not the §5.2 check that follows it — get that ordering
+    /// wrong and every tool root in the user's own profile stops being protected, which is all of
+    /// them.
+    /// </summary>
+    [Fact]
+    public void BeingInsideThePermittedProfileDoesNotOverrideSection52()
+    {
+        Assert.True(LongPath.Contains(_environment.UserProfile, GradleRoot));
+        Assert.False(Policy(Gradle()).MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// §7.1: "A path Explore does not recognise is unclassified, not safe." Most of a drive is in
+    /// this state, and what the user is told about it must not be the word the tier model reserves
+    /// for a thing a provider examined.
+    /// </summary>
+    [Fact]
+    public void AnUnknownPathIsAllowedAndIsNeverDescribedAsSafe()
+    {
+        var verdict = Policy().MayRemove(Path.Combine(_environment.UserProfile, "Videos", "holiday.mp4"));
+
+        Assert.True(verdict.IsAllowed);
+        Assert.DoesNotContain("safe", verdict.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not classified", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path the rules cannot be applied to is refused rather than waved through. Every comparison
+    /// in the policy is a prefix match on text, so a value that will not normalise would walk past
+    /// the whole table.
+    /// </summary>
+    [Theory]
+    [InlineData("not-a-full-path")]
+    [InlineData(@"..\somewhere")]
+    [InlineData("")]
+    public void APathThatWillNotNormaliseIsRefused(string path)
+    {
+        Assert.False(Policy().MayRemove(path).IsAllowed);
+    }
+
+    /// <summary>
+    /// A provider whose caches sit below its root declares a root per level, and the <em>innermost</em>
+    /// one decides.
+    ///
+    /// <para>Cargo is the case. <c>registry</c> is Tier 4 at the home's level, precisely so that only
+    /// what is named inside it goes — so asking the outer root about <c>registry\cache</c> refuses
+    /// the one directory the provider removes. Asking the level that was written about that
+    /// directory is the whole point of declaring one per level.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                        // the home itself
+    [InlineData("registry", false)]                // a Tier 4 container
+    [InlineData("git", false)]
+    [InlineData("bin", false)]                     // installed executables
+    [InlineData(@"registry\cache", true)]          // what Cargo re-downloads
+    [InlineData(@"registry\src", true)]
+    [InlineData(@"registry\cache\github.com-1", true)]
+    [InlineData(@"registry\index", false)]         // metadata Deguffer leaves
+    [InlineData(@"git\checkouts", true)]
+    [InlineData(@"git\db", false)]                 // the only copy of that history
+    [InlineData("credentials.toml", false)]        // unrecognised, so left alone
+    public void TheInnermostToolRootDecidesANestedPath(string relative, bool allowed)
+    {
+        var provider = new CargoCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var home = Path.Combine(_environment.UserProfile, ".cargo");
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? home : Path.Combine(home, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
+    /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
+    /// and repeats the whole layout inside every profile.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                             // the user-data folder itself
+    [InlineData("Local State", false)]                  // the key that decrypts the rest
+    [InlineData("Login Data", false)]                   // saved passwords
+    [InlineData("Default", false)]                      // a whole profile
+    [InlineData(@"Default\Cookies", false)]
+    [InlineData(@"Default\Web Data", false)]            // saved payment cards
+    [InlineData(@"Default\Network", false)]
+    [InlineData("GPUCache", true)]                      // a recognised cache
+    [InlineData(@"Default\GPUCache", true)]
+    [InlineData(@"Default\Cache\Cache_Data", true)]
+    [InlineData(@"Default\Cache", false)]               // the container, which stays
+    [InlineData(@"Default\Service Worker\CacheStorage", true)]
+    public void AChromiumProfileIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        var browser = _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser");
+        _temp.CreateFile(1, "profile", "AppData", "Local", "TestBrowser", "Local State");
+        _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default");
+
+        var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? browser : Path.Combine(browser, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
+    /// the root itself.
+    ///
+    /// <para>G8 asks for the unrecognised case on every tier classification, because that is the
+    /// direction that loses data. The names below are each taken from what the provider's own plan
+    /// asserts must survive, so this is the §5.6 promise read back through the second deletion
+    /// route.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("gradle", "gradle.properties")]              // signing keys and credentials
+    [InlineData("cargo", "credentials.toml")]                // registry tokens
+    [InlineData("nuget", "NuGet.Config")]                    // private feed credentials
+    [InlineData("maven", "settings-security.xml")]           // the master password
+    [InlineData("platformio", "packages")]                   // the installed toolchains
+    [InlineData("uv", "tools")]                              // what 'uv tool install' put there
+    [InlineData("pip", "pip.ini")]                           // private index URLs
+    [InlineData("go", "src")]                                // the user's own code
+    [InlineData("vscode-cpptools", "something-unrecognised")]
+    [InlineData("playwright", ".links")]                     // how Playwright resolves a build
+    [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
+    public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
+    {
+        var provider = Providers().Single(p => p.Id == providerId);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        Assert.NotEmpty(provider.ToolRoots);
+
+        foreach (var root in provider.ToolRoots)
+        {
+            Assert.False(policy.MayRemove(root.Path).IsAllowed);
+        }
+
+        Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
+    }
+
+    private IReadOnlyList<ICleanupProvider> Providers() =>
+    [
+        new GradleCacheProvider(_environment),
+        new CargoCacheProvider(_environment),
+        new NuGetCacheProvider(_environment),
+        new MavenRepositoryProvider(_environment),
+        new PlatformIoCacheProvider(_environment),
+        new UvCacheProvider(_environment),
+        new PipCacheProvider(_environment),
+        new GoCacheProvider(_environment),
+        new VsCodeCppToolsCacheProvider(_environment),
+        new PlaywrightBrowsersProvider(_environment),
+        new GpuShaderCacheProvider(_environment),
+    ];
+
+    /// <summary>
+    /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.For"/> reads §5.2
+    /// out of the providers rather than restating it, so a provider's own declaration is what
+    /// Explore enforces.
+    /// </summary>
+    [Fact]
+    public void ThePolicyReadsSection52OutOfTheProvidersThemselves()
+    {
+        var provider = new GradleCacheProvider(_environment);
+        var policy = ExploreActionPolicy.For(_system, _environment, [provider]);
+
+        Assert.Equal(GradleRoot, provider.RootPath);
+        Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(provider.RootPath, "gradle.properties")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(provider.RootPath, "caches")).IsAllowed);
+    }
+
+    private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");
+
+    private ToolRoot Gradle() =>
+        ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
+
+    private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
+        ExploreActionPolicy.For(_system, _environment, [new StubProvider(toolRoots)]);
+
+    private sealed class StubProvider(IReadOnlyList<ToolRoot> roots) : ICleanupProvider
+    {
+        public string Id => "stub";
+
+        public string Name => "Stub";
+
+        public SafetyTier Tier => SafetyTier.RegenerableCache;
+
+        public string WhatHappensOnNextUse => "Nothing.";
+
+        public bool IsAwaitingSourceFolders => false;
+
+        public IReadOnlyList<ToolRoot> ToolRoots => roots;
+
+        public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
+
+        public void InvalidateCaches()
+        {
+        }
+
+        public Task<Execution.CleanupPlan> PlanAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
+
+        public Task<Execution.CleanupResult> ExecuteAsync(
+            Execution.CleanupPlan plan,
+            IProgress<double>? progress = null,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
+
+        public Task<Execution.VerificationResult> VerifyAsync(
+            Execution.CleanupPlan plan, CancellationToken ct = default) =>
+            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
+    }
+}

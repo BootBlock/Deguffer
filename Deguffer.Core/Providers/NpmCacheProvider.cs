@@ -45,6 +45,21 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// </summary>
     public string DefaultCacheDirectory => Path.Combine(Environment.LocalAppData, "npm-cache");
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. npm has no root to declare: the cache directory
+    /// comes from <c>npm config get cache</c>, and the documented default is a cache folder rather
+    /// than one with configuration beside it. What it does have is a loose file, and a file is a root
+    /// nothing is ever below — refused by the equality branch, and by nothing else.
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            Path.Combine(Environment.UserProfile, ".npmrc"),
+            "This is your npm configuration, and it may hold registry authentication tokens. "
+            + "Deguffer never removes it.",
+            static _ => false),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("npm") is not null);
 
