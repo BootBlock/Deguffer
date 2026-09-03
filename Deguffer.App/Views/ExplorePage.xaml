@@ -11,34 +11,76 @@
           RowDefinitions="Auto,Auto,Auto,*,Auto">
 
         <!--
-            The two pickers the issue asks for, and the actions, on one line. The drive sits at the
-            left where the reading starts, and the view sits at the right beside the picture it
-            governs — a control that changes how something is drawn belongs next to the drawing,
+            What to scan, the actions, and how to draw it, on one line. The drive and the folder sit
+            at the left where the reading starts, and the view sits at the right beside the picture
+            it governs — a control that changes how something is drawn belongs next to the drawing,
             not next to the thing that produced the data.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+            <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
+                 page would otherwise stop naming the folder it is still scanning. -->
             <ComboBox Grid.Column="0"
                       MinWidth="88"
                       Header="Drive"
+                      IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                       ItemsSource="{x:Bind ViewModel.Drives}"
                       SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
                       AutomationProperties.Name="Drive to scan" />
 
+            <!-- Scoping to a folder, through the system picker for the reason the source folders
+                 use one: the path is then one the shell confirmed exists rather than a typed
+                 string. -->
             <Button Grid.Column="1"
+                    VerticalAlignment="Bottom"
+                    Content="Folder…"
+                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                    Click="OnChooseFolder"
+                    AutomationProperties.Name="Choose a folder to scan" />
+
+            <Button Grid.Column="2"
                     VerticalAlignment="Bottom"
                     Style="{StaticResource AccentButtonStyle}"
                     Content="Scan"
                     Command="{x:Bind ViewModel.ScanCommand}" />
 
-            <Button Grid.Column="2"
+            <Button Grid.Column="3"
                     VerticalAlignment="Bottom"
                     Content="Cancel"
                     Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ScanCancelCommand}" />
 
+            <!-- The folder a scan is scoped to, beside the drive box it overrides. Here rather than
+                 in the status line below, because it is half of the same choice as the drive — and
+                 a scope stated somewhere else is a scope people scan past. -->
+            <Grid Grid.Column="4"
+                  ColumnSpacing="6"
+                  VerticalAlignment="Bottom"
+                  ColumnDefinitions="Auto,*,Auto"
+                  Visibility="{x:Bind ViewModel.IsScopedToFolder, Mode=OneWay}">
+                <FontIcon Grid.Column="0"
+                          Glyph="&#xE8B7;"
+                          FontSize="14"
+                          VerticalAlignment="Center"
+                          AutomationProperties.AccessibilityView="Raw" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}" />
+
+                <!-- This clears the folder; it does not start anything. The accessible name says
+                     so, because it is the only thing a screen reader announces. -->
+                <Button Grid.Column="2"
+                        Content="Whole drive"
+                        Command="{x:Bind ViewModel.ScanWholeDriveCommand}"
+                        ToolTipService.ToolTip="Clear the folder, so the next scan covers the whole drive"
+                        AutomationProperties.Name="Clear the folder" />
+            </Grid>
+
             <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it:
                  shown only where a scan actually fell back for want of rights. -->
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     VerticalAlignment="Bottom"
                     Content="Elevate and rescan"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
@@ -48,15 +90,28 @@
                  enum. The three pictures come before the list because that is the order they are
                  read in, not because the numbers demand it. -->
             <ComboBox x:Name="ViewSelector"
-                      Grid.Column="5"
+                      Grid.Column="6"
                       MinWidth="120"
                       Header="View"
                       SelectionChanged="OnViewSelectionChanged"
-                      AutomationProperties.Name="How to draw the drive">
+                      AutomationProperties.Name="How to draw what was scanned">
                 <ComboBoxItem Content="Treemap" />
                 <ComboBoxItem Content="Icicle" />
                 <ComboBoxItem Content="Sunburst" />
                 <ComboBoxItem Content="List" />
+            </ComboBox>
+
+            <!-- Beside the View box because the two are one decision to the reader — what is on
+                 screen and what its colours mean — and orthogonal to it in fact: every pairing of
+                 the two is meaningful. Indexed against ExploreColouring, like the box above it. -->
+            <ComboBox x:Name="ColourSelector"
+                      Grid.Column="7"
+                      MinWidth="110"
+                      Header="Colour"
+                      SelectionChanged="OnColourSelectionChanged"
+                      AutomationProperties.Name="What the colours on the map say">
+                <ComboBoxItem Content="Branch" />
+                <ComboBoxItem Content="Age" />
             </ComboBox>
         </Grid>
 
@@ -226,9 +281,16 @@
                     </ListView.KeyboardAccelerators>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExploreRow">
+                            <!-- Transparent rather than unset, so the whole row carries the
+                                 tooltip. A panel with no background is not hit-tested, so the
+                                 gaps between the columns fall through and the exact dates are
+                                 reachable only by landing on a word — which is precisely where a
+                                 reader is not pointing when they are reading the age column. -->
                             <Grid ColumnSpacing="12" Padding="0,4"
-                                  ColumnDefinitions="16,*,120,90"
-                                  AutomationProperties.Name="{x:Bind Description}">
+                                  Background="Transparent"
+                                  ColumnDefinitions="16,*,120,90,150"
+                                  AutomationProperties.Name="{x:Bind Description}"
+                                  ToolTipService.ToolTip="{x:Bind DatesLabel}">
                                 <FontIcon Grid.Column="0"
                                           FontSize="14"
                                           Glyph="{x:Bind Icon}"
@@ -253,6 +315,17 @@
                                            TextAlignment="Right"
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
+
+                                <!-- The newest write at or below the row, not the row's own
+                                     timestamp — a folder's own date moves when its layout changes
+                                     and stands still while its contents are rewritten. The exact
+                                     dates, and which is which, are on the row's tooltip. -->
+                                <TextBlock Grid.Column="4"
+                                           Text="{x:Bind AgeLabel}"
+                                           TextAlignment="Right"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource SecondaryText}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
@@ -265,7 +338,7 @@
                     <TextBlock Text="Nothing scanned yet"
                                HorizontalAlignment="Center"
                                Style="{StaticResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Choose a drive and press Scan. Nothing is changed by looking."
+                    <TextBlock Text="Choose a drive or a folder and press Scan. Nothing is changed by looking."
                                HorizontalAlignment="Center"
                                Style="{StaticResource SecondaryText}" />
                 </StackPanel>
@@ -285,6 +358,43 @@
             <TextBlock Text="{x:Bind ViewModel.Selection.Label, Mode=OneWay}"
                        Style="{StaticResource SecondaryText}"
                        TextTrimming="CharacterEllipsis" />
+
+            <!-- What the colours mean, when they mean an age. A hue per branch needs no legend,
+                 because the branch it names is the shape it is inside; an age band means nothing
+                 at all without the scale beside it. -->
+            <!-- One row that scrolls rather than a wrapping one. ItemsWrapGrid gives every cell
+                 the width of the first, so "Today" sized the whole legend and clipped every band
+                 after it; the panels that size each item to its own content are not in the
+                 framework. A narrow window scrolls this instead, which is what the rest of the app
+                 does with content too wide for its container. -->
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          VerticalScrollMode="Disabled"
+                          Visibility="{x:Bind ViewModel.ShowsAgeLegend, Mode=OneWay}">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.AgeLegend}"
+                          AutomationProperties.Name="What the map's colours mean">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExploreLegendBand">
+                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,12,0"
+                                    AutomationProperties.Name="{x:Bind Label}">
+                            <Border Width="12" Height="12" CornerRadius="2"
+                                    VerticalAlignment="Center"
+                                    Background="{x:Bind Swatch}"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Text="{x:Bind Label}"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryText}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            </ScrollViewer>
 
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"

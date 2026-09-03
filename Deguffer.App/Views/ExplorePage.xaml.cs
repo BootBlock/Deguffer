@@ -11,11 +11,12 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
+using Windows.Storage.Pickers;
 
 namespace Deguffer.App.Views;
 
 /// <summary>
-/// The Explore page: pick a drive, see what is on it, and act on one thing in it.
+/// The Explore page: pick a drive or a folder, see what is on it, and act on what is in it.
 ///
 /// <para>It answers "what is using the space", which §3 is careful to say is not the same question
 /// as "what is safe to remove" — the Storage page answers that one, and it answers it with a
@@ -62,7 +63,12 @@ public sealed partial class ExplorePage : Page
         // Read once, here, and never again — the same rule the Storage page's density selector
         // follows, and for the same reason: re-reading on every navigation undoes a choice whose
         // write to disk failed, silently and in the same session.
-        ShowAs(App.Preferences.Current.Explore);
+        var preferences = App.Preferences.Current;
+
+        // The colouring first, because ShowAs draws the map and the map has to be told what its
+        // colours mean before it paints rather than after.
+        ColourAs(preferences.ExploreColours);
+        ShowAs(preferences.Explore);
 
         // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
         // back would be its own defect.
@@ -92,8 +98,20 @@ public sealed partial class ExplorePage : Page
         ShowCurrentNode();
     }
 
+    /// <summary>
+    /// Colour the map by <paramref name="colouring"/>, and leave that selector agreeing with what is
+    /// on screen. Re-entrant on the same terms as <see cref="ShowAs"/>.
+    /// </summary>
+    private void ColourAs(ExploreColouring colouring)
+    {
+        ViewModel.SelectedColouring = colouring;
+        ColourSelector.SelectedIndex = (int)colouring;
+
+        ShowCurrentNode();
+    }
+
     private void ShowCurrentNode() =>
-        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView);
+        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView, ViewModel.SelectedColouring);
 
     /// <summary>
     /// The view is applied first and persisted second, so it takes effect whether or not the
@@ -108,6 +126,42 @@ public sealed partial class ExplorePage : Page
 
         ShowAs(view);
         App.Preferences.Update(current => current with { Explore = view });
+    }
+
+    /// <summary>Applied first and persisted second, for the reason above.</summary>
+    private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var colouring = (ExploreColouring)ColourSelector.SelectedIndex;
+
+        ColourAs(colouring);
+        App.Preferences.Update(current => current with { ExploreColours = colouring });
+    }
+
+    /// <summary>
+    /// Scope the next scan to a folder, through the system picker.
+    ///
+    /// <para>The picking lives here rather than in the view model for the reason
+    /// <see cref="SettingsPage"/> gives: it is a WinUI dialog needing a window handle, and the view
+    /// model stays testable by knowing only about the path that comes back.</para>
+    /// </summary>
+    private async void OnChooseFolder(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindow is not { } window)
+        {
+            return;
+        }
+
+        var picker = new FolderPicker();
+        picker.FileTypeFilter.Add("*");
+
+        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+
+        if (await picker.PickSingleFolderAsync() is { } folder)
+        {
+            ViewModel.ScopeTo(folder.Path);
+        }
     }
 
     private void OnCrumbClicked(object sender, RoutedEventArgs e)

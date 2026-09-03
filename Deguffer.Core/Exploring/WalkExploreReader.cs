@@ -28,7 +28,12 @@ internal static class WalkExploreReader
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
         // the parent it was handed — so the whole traversal stays past MAX_PATH. The tree keeps the
         // ordinary form, because every path it hands back is one a person reads or a shell opens.
-        var builder = new ExploreTreeBuilder(LongPath.Display(root));
+        var top = new DirectoryInfo(LongPath.Extended(root));
+
+        var builder = new ExploreTreeBuilder(
+            LongPath.Display(root),
+            Created(top),
+            LastWritten(top));
 
         long items = 0;
         long bytes = 0;
@@ -95,8 +100,12 @@ internal static class WalkExploreReader
         foreach (var entry in contents.Entries)
         {
             children.Add(entry is FileInfo file
-                ? new ExploreChild(file.Name, IsDirectory: false, IsLink: false, Length(file))
-                : new ExploreChild(entry.Name, IsDirectory: true, IsLink: false, Size: 0));
+                ? new ExploreChild(
+                    file.Name, IsDirectory: false, IsLink: false, Length(file),
+                    Created(file), LastWritten(file))
+                : new ExploreChild(
+                    entry.Name, IsDirectory: true, IsLink: false, Size: 0,
+                    Created(entry), LastWritten(entry)));
         }
 
         foreach (var link in contents.Links)
@@ -104,10 +113,57 @@ internal static class WalkExploreReader
             // Shown, and empty. Its target holds its own place in this tree, so counting anything
             // here would count those bytes twice — and hiding it altogether makes a directory the
             // user can plainly see in Explorer vanish from the picture.
-            children.Add(new ExploreChild(link.Name, IsDirectory: true, IsLink: true, Size: 0));
+            //
+            // Dated, though. The dates are the link's own rather than its target's, which is the
+            // right answer for the same reason the size is zero: the target is somewhere else in
+            // this tree, carrying its own.
+            children.Add(new ExploreChild(
+                link.Name, IsDirectory: true, IsLink: true, Size: 0,
+                Created(link), LastWritten(link)));
         }
 
         return children;
+    }
+
+    /// <summary>When the entry was made, or unknown where nothing could say.</summary>
+    private static ExploreTimestamp Created(FileSystemInfo entry) =>
+        TimeOf(entry, static e => e.CreationTimeUtc);
+
+    /// <summary>When the entry itself was last written.</summary>
+    private static ExploreTimestamp LastWritten(FileSystemInfo entry) =>
+        TimeOf(entry, static e => e.LastWriteTimeUtc);
+
+    /// <summary>
+    /// One timestamp off an entry, or unknown where reading it fails.
+    ///
+    /// <para><b>Free for the entries, and that is why both routes can answer alike.</b> The
+    /// enumeration already read the full directory record and .NET caches it on the instance, so
+    /// for a child this is a field read rather than a second trip to the disk — which across
+    /// millions of files is the difference between a column worth having and one that doubles the
+    /// scan.</para>
+    ///
+    /// <para><b>Not free for the root, which is what the guard is here for.</b> The root is the one
+    /// entry nothing enumerated, so the first of these reads is what initialises it — and against a
+    /// share that has gone away that is a real network round trip that raises rather than answering.
+    /// A scan is not worth failing over a date: §5.3 already makes an unreadable path ordinary, the
+    /// walk below still reports what it could reach, and the honest answer for a location nothing
+    /// can open is that its age is not known.</para>
+    ///
+    /// <para>An entry that has gone since the enumeration answers with the start of the Windows
+    /// epoch rather than failing, and <see cref="ExploreTimestamp"/> reads that as unknown.
+    /// <see cref="Providers.DirectoryAge"/> guards the same value for the same reason: January 1601
+    /// in an age column is the oldest invitation there is to delete something.</para>
+    /// </summary>
+    private static ExploreTimestamp TimeOf(FileSystemInfo entry, Func<FileSystemInfo, DateTime> read)
+    {
+        try
+        {
+            return ExploreTimestamp.FromUtc(read(entry));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ExploreTimestamp.Unknown;
+        }
     }
 
     /// <summary>

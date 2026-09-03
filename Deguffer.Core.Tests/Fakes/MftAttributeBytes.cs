@@ -27,6 +27,25 @@ public enum DataPlacement
 internal static class MftAttributeBytes
 {
     /// <summary>
+    /// How long a <see cref="WriteStandardInformation"/> attribute is, header included.
+    ///
+    /// <para>Exposed because it sits before every other attribute in a record, so anything working
+    /// out where a later field lands has to allow for it —
+    /// <see cref="MftRecordBytes.NameLengthPuttingSizeFieldAcrossBoundary"/> is the one that
+    /// does.</para>
+    /// </summary>
+    public const int StandardInformationLength = 0x18 + 0x48;
+
+    /// <summary>
+    /// The two times in <c>$STANDARD_INFORMATION</c> that must never be read as the two that are.
+    /// Distinct values, and distinct from anything a test asks for, so picking the wrong field
+    /// fails rather than coinciding. Arbitrary instants in 2001 and 2002.
+    /// </summary>
+    private const long RecordChangedFileTime = 126_200_000_000_000_000L;
+
+    private const long LastReadFileTime = 126_500_000_000_000_000L;
+
+    /// <summary>
     /// The unnamed <c>$DATA</c>, in whichever of its on-disk forms is asked for. Returns the number
     /// of bytes written, which is zero where the shape is the absence of the attribute.
     /// </summary>
@@ -42,6 +61,43 @@ internal static class MftAttributeBytes
             DataPlacement.TruncatedResidentHeader => WriteTruncatedData(target, 0x10, resident: true),
             _ => WriteNonResidentData(target, allocated, logical, startVirtualCluster: 0),
         };
+
+    /// <summary>
+    /// The <c>$STANDARD_INFORMATION</c> every record on a real volume carries, holding the four
+    /// times NTFS keeps. Only the first two are given values here, because only the first two are
+    /// read.
+    ///
+    /// <para>The value is written at the NTFS 3.x length of 0x48 bytes rather than the 0x30 of the
+    /// original format. A reader that assumed the shorter one would still pass against a fixture
+    /// that wrote it, and every volume Deguffer will meet is the longer.</para>
+    ///
+    /// <para><b>Deliberately the first attribute of the record</b>, which is where NTFS puts it —
+    /// see <see cref="StandardInformationLength"/> for what depends on that.</para>
+    /// </summary>
+    public static int WriteStandardInformation(Span<byte> target, long created, long lastWritten)
+    {
+        const int ValueLength = 0x48;
+
+        BinaryPrimitives.WriteUInt32LittleEndian(target, 0x10);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], StandardInformationLength);
+        target[0x08] = 0;
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x0A..], 0x18);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x10..], ValueLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x14..], 0x18);
+
+        var value = target.Slice(0x18, ValueLength);
+
+        BinaryPrimitives.WriteInt64LittleEndian(value, created);
+        BinaryPrimitives.WriteInt64LittleEndian(value[0x08..], lastWritten);
+
+        // The other two NTFS keeps: when the record last changed, and when the file was last read.
+        // Written to values nothing else here uses, so a reader that took the wrong field would
+        // produce a date no test asked for rather than one that happens to match.
+        BinaryPrimitives.WriteInt64LittleEndian(value[0x10..], RecordChangedFileTime);
+        BinaryPrimitives.WriteInt64LittleEndian(value[0x18..], LastReadFileTime);
+
+        return StandardInformationLength;
+    }
 
     public static int WriteFileName(Span<byte> target, ulong parentReference, string name, long allocated, long logical)
     {

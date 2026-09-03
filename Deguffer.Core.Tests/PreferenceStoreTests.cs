@@ -20,6 +20,7 @@ public class PreferenceStoreTests
             AppTheme.Dark,
             ViewDensity.Standard,
             ExploreView.List,
+            ExploreColouring.Age,
             ShowNotInstalled: true,
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
@@ -33,6 +34,9 @@ public class PreferenceStoreTests
         // Not the default, deliberately: Treemap is zero, so asserting the default here would pass
         // just as well with the preference deleted from the record altogether.
         Assert.Equal(ExploreView.List, loaded.Explore);
+
+        // Not the default either, and for the same reason: Branch is zero.
+        Assert.Equal(ExploreColouring.Age, loaded.ExploreColours);
         Assert.True(loaded.ShowNotInstalled);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);

@@ -41,6 +41,12 @@ internal static class MftRecordBytes
     /// </summary>
     public const uint WindowsOverlayFilterTag = 0x8000_0017;
 
+    /// <param name="created">
+    /// The <c>$STANDARD_INFORMATION</c> creation time, as a <c>FILETIME</c>. Zero is what NTFS
+    /// itself writes for a time it never set, so it is the honest default for a fixture that is not
+    /// about dates.
+    /// </param>
+    /// <param name="lastWritten">The last data change time, in the same units.</param>
     public static byte[] Build(
         ulong parentReference,
         string name,
@@ -48,11 +54,20 @@ internal static class MftRecordBytes
         long allocated,
         long logical,
         DataPlacement placement,
-        uint reparseTag = 0)
+        uint reparseTag = 0,
+        long created = 0,
+        long lastWritten = 0)
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, (ushort)(isDirectory ? 0x0003 : 0x0001), baseReference: 0);
+
+        // First, which is where NTFS puts it, and on every record rather than only the dated ones.
+        // A fixture that wrote it when a test asked about dates and not otherwise would be modelling
+        // an idealised volume again — the same mistake that let reserved records 12 to 15 go
+        // untested for six weeks. The builders below carry one for the same reason; only the two
+        // shapes that are *defined* by a missing attribute go without.
+        offset += MftAttributeBytes.WriteStandardInformation(span[offset..], created, lastWritten);
 
         offset += MftAttributeBytes.WriteFileName(span[offset..], parentReference, name, allocated, logical);
 
@@ -69,12 +84,36 @@ internal static class MftRecordBytes
     /// <summary>
     /// A record whose attributes belong to another record's file. NTFS writes these whenever one
     /// record runs out of room, so a real volume is full of them and none of them is a fault.
+    ///
+    /// <para>No <c>$STANDARD_INFORMATION</c>, and that is the format rather than an omission: the
+    /// times belong to the base record that owns this one.</para>
     /// </summary>
     public static byte[] ExtensionRecord(uint baseRecordNumber)
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, flags: 0x0001, baseReference: baseRecordNumber | (1UL << 48));
+
+        return Close(record, offset);
+    }
+
+    /// <summary>
+    /// A file with no <c>$STANDARD_INFORMATION</c> at all — the shape a reader must date as unknown
+    /// rather than refuse.
+    ///
+    /// <para>Nothing else about such a record is in doubt: it has a name, a parent and a size, and
+    /// it draws. Refusing it would take §5.5's fast path off a whole volume over a column, and the
+    /// reserved records NTFS leaves nameless are the standing reminder of what a reader that gives
+    /// up too readily costs.</para>
+    /// </summary>
+    public static byte[] FileWithoutTimestamps(ulong parentReference, string name, long logical)
+    {
+        var record = new byte[BytesPerRecord];
+        var span = record.AsSpan();
+        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0);
+
+        offset += MftAttributeBytes.WriteFileName(span[offset..], parentReference, name, logical, logical);
+        offset += MftAttributeBytes.WriteData(span[offset..], logical, logical, DataPlacement.NonResident);
 
         return Close(record, offset);
     }
@@ -92,6 +131,13 @@ internal static class MftRecordBytes
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, flags: 0x0001, baseReference: 0);
+
+        // Dated like any other record. This shape stands in for reserved records 12 to 15 among
+        // others, and those carry times on a real volume — the thing that makes them unreadable is
+        // the missing $FILE_NAME, not a missing $STANDARD_INFORMATION. Leaving it out here would
+        // have made the four records the reader's carve-out exists for the least realistic ones in
+        // the fixture.
+        offset += MftAttributeBytes.WriteStandardInformation(span[offset..], created: 0, lastWritten: 0);
 
         if (withAttributeList)
         {
@@ -114,6 +160,11 @@ internal static class MftRecordBytes
         var span = record.AsSpan();
         var offset = WriteHeader(span, flags: 0x0001, baseReference: 0);
 
+        // Record 0 is a real file with real times, so it carries the attribute like the rest. The
+        // run list that follows is located by an offset within its own attribute, so starting it
+        // further into the record changes nothing about how it is read.
+        offset += MftAttributeBytes.WriteStandardInformation(span[offset..], created: 0, lastWritten: 0);
+
         if (withAttributeList)
         {
             offset += MftAttributeBytes.WriteAttributeList(span[offset..]);
@@ -131,7 +182,11 @@ internal static class MftRecordBytes
     public static int NameLengthPuttingSizeFieldAcrossBoundary()
     {
         var boundary = BytesPerSector - 2;
-        var firstAttribute = FirstAttributeOffset();
+
+        // $STANDARD_INFORMATION sits between the header and the name, so the name does not start at
+        // the first attribute offset. Derived rather than hard-coded so it stays correct if the
+        // record layout is ever adjusted — which is exactly what adding that attribute was.
+        var firstAttribute = FirstAttributeOffset() + MftAttributeBytes.StandardInformationLength;
 
         for (var length = 1; length < 255; length++)
         {

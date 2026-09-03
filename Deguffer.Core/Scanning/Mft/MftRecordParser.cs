@@ -13,6 +13,7 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 internal static class MftRecordParser
 {
+    internal const uint AttributeStandardInformation = 0x10;
     internal const uint AttributeFileName = 0x30;
     internal const uint AttributeList = 0x20;
     internal const uint AttributeData = 0x80;
@@ -55,7 +56,9 @@ internal static class MftRecordParser
             parsed.Name,
             header.IsDirectory ? ScanSize.Zero : parsed.Size,
             header.IsDirectory,
-            parsed.IsReparsePoint);
+            parsed.IsReparsePoint,
+            parsed.Created,
+            parsed.LastWritten);
 
         return MftParseOutcome.Parsed;
     }
@@ -68,7 +71,7 @@ internal static class MftRecordParser
     private static MftParseOutcome ReadAttributes(
         ReadOnlySpan<byte> record,
         int firstAttributeOffset,
-        out (uint Parent, string Name, ScanSize? Size, bool IsReparsePoint) result)
+        out (uint Parent, string Name, ScanSize? Size, bool IsReparsePoint, long Created, long LastWritten) result)
     {
         result = default;
 
@@ -79,6 +82,8 @@ internal static class MftRecordParser
         var sawAttributeList = false;
         var sawReparsePoint = false;
         var bestRank = int.MaxValue;
+        long created = 0;
+        long lastWritten = 0;
 
         var walk = new MftAttributeEnumerator(record, firstAttributeOffset);
 
@@ -86,6 +91,16 @@ internal static class MftRecordParser
         {
             switch (walk.CurrentType)
             {
+                // Where the dates come from, and the only place they may. NTFS keeps a second copy
+                // of all four times inside $FILE_NAME, and refreshes that copy when the name
+                // changes rather than when the file does — so a project rebuilt every day since it
+                // was last renamed reports the date of the rename there. The same trap the
+                // reparse-point flag beside the name sets, and the same answer: read the structure
+                // that is the thing itself.
+                case AttributeStandardInformation:
+                    (created, lastWritten) = ReadTimestamps(walk.Current);
+                    break;
+
                 case AttributeFileName when TryReadFileName(walk.Current, out var candidate):
                     // Prefer the Win32 name over the 8.3 alias: a long-named file carries several
                     // $FILE_NAME attributes, and picking the DOS alias would make path resolution
@@ -153,8 +168,59 @@ internal static class MftRecordParser
             size = sawAttributeList ? null : ScanSize.Zero;
         }
 
-        result = (parent, name, size, sawReparsePoint);
+        result = (parent, name, size, sawReparsePoint, created, lastWritten);
         return MftParseOutcome.Parsed;
+    }
+
+    /// <summary>
+    /// The created and last-written times a <c>$STANDARD_INFORMATION</c> declares, as
+    /// <c>FILETIME</c>s, or zeroes where this attribute does not declare them.
+    ///
+    /// <para>Zeroes rather than <see cref="MftParseOutcome.Unreadable"/>, and the asymmetry with
+    /// <see cref="ReadDataSize"/> is deliberate. A size that cannot be read makes a subtree's total
+    /// wrong, so it has to be reported as unknown and travel upward as one. A date that cannot be
+    /// read costs the record nothing else: it still has its name, its parent and its size, and it
+    /// still draws. Refusing a record for want of a date would take the fast path off a volume over
+    /// a column, which is a trade nothing about a picture justifies.</para>
+    ///
+    /// <para>Zero is also what NTFS itself writes for a time it never set, so the two cases arrive
+    /// as one value and both mean the same thing to a reader.</para>
+    /// </summary>
+    internal static (long Created, long LastWritten) ReadTimestamps(ReadOnlySpan<byte> attribute)
+    {
+        // Always resident on any volume NTFS wrote — it is 48 bytes at most and is the first
+        // attribute of every record — so a non-resident one is a corrupt record rather than a shape
+        // to follow. The enumerator admits an attribute of 0x10 bytes, which is shorter than the
+        // resident header itself, so the length is checked before either field is read.
+        if (attribute.Length < 0x18 || attribute[0x08] != 0)
+        {
+            return default;
+        }
+
+        var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
+        var valueLength = (int)BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]);
+
+        // The two wanted are the first two fields of the value: created, then last written. The
+        // other two NTFS keeps here — when the record itself last changed, and when the file was
+        // last read — are deliberately not taken. The first dates bookkeeping rather than content,
+        // and the second is the signal §8 rejected, because Windows stops maintaining it by
+        // default.
+        // Subtracted rather than added, because the sum overflows. A corrupt record can declare a
+        // value length near int.MaxValue, and `valueOffset + valueLength` then wraps negative, passes
+        // a `>` test and throws out of the slice below — which nothing on the scan path catches, so
+        // it would take the window down. Reading this attribute at all is new, so this exposure is
+        // new with it: the length is bounded by the record and the offset by a ushort, so neither
+        // side of the subtraction can wrap.
+        if (valueLength < 0x10 || valueOffset > attribute.Length - valueLength)
+        {
+            return default;
+        }
+
+        var value = attribute.Slice(valueOffset, valueLength);
+
+        return (
+            BinaryPrimitives.ReadInt64LittleEndian(value),
+            BinaryPrimitives.ReadInt64LittleEndian(value[0x08..]));
     }
 
     /// <summary>

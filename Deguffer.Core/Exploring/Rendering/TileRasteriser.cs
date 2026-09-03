@@ -33,9 +33,10 @@ public static class TileRasteriser
     /// <para>Tiles are painted in the order given, which the layouts produce parent-first — so a
     /// child covers its parent and the nesting comes out right without sorting anything here.</para>
     ///
-    /// <paramref name="branchOf"/> says which top-level branch a node belongs to, which is what
-    /// gives a whole subtree one hue. It is supplied rather than derived because the tree does not
-    /// know which node the view is currently rooted at.
+    /// <paramref name="colourOf"/> answers what one shape is painted, given its node and its
+    /// depth. Supplied rather than decided here because what a colour means is the surface's choice
+    /// — a hue per branch, or a band per age — and because the tree does not know which node the
+    /// view is currently rooted at, which is what a branch is measured from.
     /// </summary>
     public static void Paint(
         byte[] pixels,
@@ -43,11 +44,11 @@ public static class TileRasteriser
         int width,
         int height,
         TileColour background,
-        Func<int, int> branchOf)
+        Func<int, int, TileColour> colourOf)
     {
         ArgumentNullException.ThrowIfNull(pixels);
         ArgumentNullException.ThrowIfNull(tiles);
-        ArgumentNullException.ThrowIfNull(branchOf);
+        ArgumentNullException.ThrowIfNull(colourOf);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
@@ -62,11 +63,7 @@ public static class TileRasteriser
 
         foreach (var tile in tiles)
         {
-            var colour = tile.IsAggregate
-                ? TilePalette.Aggregate
-                : TilePalette.For(branchOf(tile.Node), tile.Depth);
-
-            Cushion(pixels, width, height, tile, colour);
+            Cushion(pixels, width, height, tile, colourOf(tile.Node, tile.Depth));
         }
     }
 
