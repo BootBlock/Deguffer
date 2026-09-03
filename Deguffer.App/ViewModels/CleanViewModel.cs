@@ -97,6 +97,25 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial bool IsBusy { get; set; }
 
     /// <summary>
+    /// Whether a clean is running, as distinct from the busy state a preview shares. Only the
+    /// clean has a knowable extent, so only the clean gets a bar; a preview keeps the ring, which
+    /// is the honest shape for an operation that cannot say how much is left.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsCleaning { get; set; }
+
+    /// <summary>How far through that clean, 0 to 100.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CleanPercentLabel))]
+    public partial double CleanPercent { get; set; }
+
+    /// <summary>
+    /// The same figure in words, beside the bar. §6.5's rule for the backdrop is the same rule
+    /// here: nothing may be readable only as a graphic.
+    /// </summary>
+    public string CleanPercentLabel => $"{CleanPercent:0}%";
+
+    /// <summary>
     /// A row is drawn when its toolchain is on this machine, or when the user asked to see the ones
     /// that are not. Applied to every row rather than only to new ones, because the filter changes
     /// under a list that is already built.
@@ -275,9 +294,26 @@ public sealed partial class CleanViewModel : ObservableObject
             }
 
             var progress = new Progress<string>(message => Report(message));
+            var completed = new Progress<double>(SetCleanProgress);
 
-            var results = await Task.Run(
-                () => _planner.ExecuteAsync(authorised, confirmations, requireTypedPhrase, progress, ct), ct);
+            CleanPercent = 0;
+            IsCleaning = true;
+
+            IReadOnlyList<CleanupResult> results;
+            try
+            {
+                results = await Task.Run(
+                    () => _planner.ExecuteAsync(
+                        authorised, confirmations, requireTypedPhrase, progress, completed, ct),
+                    ct);
+            }
+            finally
+            {
+                // Down before the re-preview below, not in the outer finally with IsBusy: the bar
+                // describes the run that has just ended, and leaving it up over a scan would show a
+                // full bar against a status line counting providers.
+                IsCleaning = false;
+            }
 
             ReportOutcome(results, freeBefore);
 
@@ -491,6 +527,25 @@ public sealed partial class CleanViewModel : ObservableObject
             $"Removed {RemovedLabel}. All protected paths survived." +
             (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty),
             InfoBarSeverity.Success);
+    }
+
+    /// <summary>
+    /// Takes a report from the run and moves the bar, but not for every one of them.
+    ///
+    /// A directory removal reports every 256 files, which on a fast volume is hundreds of reports a
+    /// second, and each one that reaches the property raises a change notification and re-lays out
+    /// the bar. Half a percent is under two pixels on any window this screen fits in, so anything
+    /// smaller is spent for nothing. The end is always taken, because the one value the bar has to
+    /// arrive at is the last one.
+    /// </summary>
+    private void SetCleanProgress(double fraction)
+    {
+        var percent = Math.Clamp(fraction * 100, 0, 100);
+
+        if (percent >= 100 || percent - CleanPercent >= 0.5)
+        {
+            CleanPercent = percent;
+        }
     }
 
     private void Report(string message, InfoBarSeverity severity = InfoBarSeverity.Informational)

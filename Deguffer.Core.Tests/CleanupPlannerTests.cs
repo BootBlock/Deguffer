@@ -323,13 +323,121 @@ public sealed class CleanupPlannerTests
         Assert.Null(Assert.Single(findings).Plan);
     }
 
+    /// <summary>
+    /// The bar is weighted by what each plan will free, not by how many plans there are. A 40 GB
+    /// cache and a 5 MB one are one plan each, so an equal split would park the bar half way
+    /// through for the whole of the part that takes any time.
+    /// </summary>
+    [Fact]
+    public async Task WeightsTheBarByWhatEachPlanFreesRatherThanByHowManyThereAre()
+    {
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("large", bytes: 9_000),
+            new StubProvider("small", bytes: 1_000),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// A provider reporting about itself reports 0 to 1, and what reaches the caller is that
+    /// provider's share. Without the offset the first plan would drive the bar to the end and
+    /// every plan after it would drive it there again.
+    /// </summary>
+    [Fact]
+    public async Task AProvidersOwnFractionArrivesAsItsShareOfTheWholeRun()
+    {
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("large", bytes: 9_000, reports: [0.5]),
+            new StubProvider("small", bytes: 1_000, reports: [0.5]),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        // Half way through nine tenths of the run is 45%; half way through the last tenth is 95%.
+        Assert.Equal([0.45, 0.9, 0.95, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// A selected row with nothing to remove is not part of the run and takes no share of the bar.
+    /// Counting it would give half the bar to a finding that completes instantly, which is the
+    /// same misdescription weighting by size exists to avoid.
+    /// </summary>
+    [Fact]
+    public async Task APlanWithNothingToRemoveTakesNoShareOfTheBar()
+    {
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("has-work", bytes: 1_000),
+            new StubProvider("already-clear", bytes: 0),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        Assert.Equal([1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// The run made entirely of command steps whose own tool reports no figure. There is nothing to
+    /// weight by, so the count is the best answer available — and it is a real answer rather than a
+    /// division by zero.
+    /// </summary>
+    [Fact]
+    public async Task SharesTheBarEquallyWhenNoPlanCarriesAnEstimate()
+    {
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("first", bytes: 0, planStepWithoutEstimate: true),
+            new StubProvider("second", bytes: 0, planStepWithoutEstimate: true),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        Assert.Equal([0.5, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// Nothing selected is the one input whose weights sum to zero, so it is the one that would
+    /// divide by it. The reason it does not is structural rather than guarded: every division sits
+    /// inside the loop over those same parts, which an empty selection never enters. This pins that
+    /// structure, because a NaN reaching the bar leaves it unpaintable rather than merely wrong.
+    /// </summary>
+    [Fact]
+    public async Task AnEmptySelectionReportsNothingRatherThanDividingByZero()
+    {
+        var progress = new ProgressRecorder<double>();
+
+        var results = await new CleanupPlanner([]).ExecuteAsync([], progress: progress);
+
+        Assert.Empty(results);
+        Assert.Empty(progress.Reports);
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,
         bool present = true,
         SafetyTier tier = SafetyTier.RegenerableCache,
         List<string>? journal = null,
-        bool awaitingSourceFolders = false) : ICleanupProvider
+        bool awaitingSourceFolders = false,
+        IReadOnlyList<double>? reports = null,
+        bool planStepWithoutEstimate = false) : ICleanupProvider
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
@@ -359,7 +467,7 @@ public sealed class CleanupPlannerTests
             ProviderName = id,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
-            Steps = bytes == 0
+            Steps = bytes == 0 && !planStepWithoutEstimate
                 ? []
                 : [new RunCommandStep("tool", "clear", "Clear") { Estimated = new ScanSize(bytes, bytes) }],
         };
@@ -367,6 +475,13 @@ public sealed class CleanupPlannerTests
         public Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default)
         {
             WasExecuted = true;
+
+            // Stands in for the fractions a real removal emits as it works through a tree.
+            foreach (var fraction in reports ?? [])
+            {
+                progress?.Report(fraction);
+            }
+
             return Task.FromResult(new CleanupResult { ProviderId = id, ProviderName = id });
         }
 

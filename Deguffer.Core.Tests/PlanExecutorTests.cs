@@ -154,6 +154,120 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// A step reports 0 to 1 about itself, and what reaches the caller is that step's slice of the
+    /// plan. Getting the offset wrong is not a cosmetic fault: the bar would reach the end while
+    /// the first of five steps was still running, and then sit there for the rest of the clean.
+    ///
+    /// <para>Both steps here finish in one report, so the discriminating value is the first one.
+    /// The directory removal's own "done" is 1.0, and it must arrive as 0.5. Neither step carries
+    /// an estimate, so this is the equal-share branch of <c>ProgressWeights</c>; the test below
+    /// covers the weighting.</para>
+    /// </summary>
+    [Fact]
+    public async Task AStepsOwnFractionArrivesAsItsSliceOfThePlan()
+    {
+        var directory = _temp.CreateDirectory("cache");
+        _temp.CreateFile(64, "cache", "a.bin");
+        _temp.CreateFile(64, "cache", "b.bin");
+        var file = _temp.CreateFile(64, "dump.dmp");
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Steps =
+            [
+                new DeleteDirectoryStep(directory, "A cache"),
+                new DeleteFileStep(file, "A dump"),
+            ],
+        };
+
+        var progress = new ProgressRecorder<double>();
+
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
+            .ExecuteAsync(plan, progress, default);
+
+        // Repeats are ordinary — the removal reports its last file and then its own completion —
+        // so the claim is about which values appear and in what order, not how many times.
+        Assert.Equal([0.5, 1.0], progress.Reports.Distinct());
+    }
+
+    /// <summary>
+    /// Steps share the bar by what each will free, the same rule the planner applies to whole
+    /// plans. One <c>obj</c> of 4 GB beside five of 20 MB is six steps, and an equal split would
+    /// crawl through the first sixth of the bar and then jump the rest of it.
+    /// </summary>
+    [Fact]
+    public async Task WeightsTheBarByWhatEachStepFreesRatherThanByHowManyThereAre()
+    {
+        var big = _temp.CreateDirectory("big");
+        _temp.CreateFile(64, "big", "a.bin");
+        var small = _temp.CreateDirectory("small");
+        _temp.CreateFile(64, "small", "a.bin");
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Steps =
+            [
+                new DeleteDirectoryStep(big, "The big one") { Estimated = new ScanSize(9_000, 9_000) },
+                new DeleteDirectoryStep(small, "The small one") { Estimated = new ScanSize(1_000, 1_000) },
+            ],
+        };
+
+        var progress = new ProgressRecorder<double>();
+
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
+            .ExecuteAsync(plan, progress, default);
+
+        Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());
+    }
+
+    /// <summary>
+    /// A command step reports nothing at all while it runs, so the executor's own report at the end
+    /// of each step is the only thing that carries the bar across it.
+    ///
+    /// <para>The other progress tests here use removals, and a removal reports its own 1.0 on the
+    /// way out — which lands on exactly the value the executor would report anyway, and so hides
+    /// whether that line ran at all. This is the step type that cannot hide it.</para>
+    /// </summary>
+    [Fact]
+    public async Task ACommandStepAdvancesTheBarThoughItReportsNothingItself()
+    {
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Steps =
+            [
+                new RunCommandStep("tool", "clean", "The big one")
+                {
+                    Estimated = new ScanSize(9_000, 9_000),
+                },
+                new RunCommandStep("tool", "clean", "The small one")
+                {
+                    Estimated = new ScanSize(1_000, 1_000),
+                },
+            ],
+        };
+
+        var progress = new ProgressRecorder<double>();
+
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
+            .ExecuteAsync(plan, progress, default);
+
+        // Two steps, two reports, and nothing else could have produced either of them.
+        Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
     /// Every reason must have a sentence or a considered silence, because <c>ScanResult</c> exposes
     /// the lookup as a property and a switch with no arm throws rather than returning nothing. A new
     /// member added without one is a crash on a property access, which is a poor way to find out.
