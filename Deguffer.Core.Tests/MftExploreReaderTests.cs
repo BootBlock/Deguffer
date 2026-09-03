@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Core.Tests.Fakes;
 
@@ -23,6 +24,12 @@ public class MftExploreReaderTests
     private const uint Sibling = 10;
 
     private const string Root = @"C:\";
+
+    // The folder the scoped reads below are pointed at, and the components that locate it under
+    // the volume's own root — the two halves of what the scanner hands over.
+    private const string CachePath = @"C:\Users\testuser\.npm-cache";
+
+    private static readonly string[] CacheComponents = ["Users", "testuser", ".npm-cache"];
 
     private static MftFixture Tree() => new MftFixture()
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
@@ -51,7 +58,7 @@ public class MftExploreReaderTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
             .Build();
 
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         // Record 0 is $MFT, which this fixture leaves blank exactly as an unused entry is blank on
         // a real volume — so the reader never placed it, and nothing links it to anything.
@@ -87,7 +94,7 @@ public class MftExploreReaderTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
             .Build();
 
-        var tree = MftExploreReader.Read(ordinary, Root, onProgress: null, default);
+        var tree = WholeVolume(ordinary);
 
         Assert.False(
             tree.HasUnknownSizes,
@@ -100,7 +107,7 @@ public class MftExploreReaderTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
             .Build();
 
-        Assert.True(MftExploreReader.Read(damaged, Root, onProgress: null, default).HasUnknownSizes);
+        Assert.True(WholeVolume(damaged).HasUnknownSizes);
     }
 
     /// <summary>
@@ -126,7 +133,7 @@ public class MftExploreReaderTests
             .AddRecordWithNamesInExtensionRecords(21);
 
         using var source = fixture.Build();
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalBytes);
         Assert.True(tree.HasUnknownSizes, "a real file was skipped and the total was called exact");
@@ -155,7 +162,7 @@ public class MftExploreReaderTests
             .AddFile(21, Nested, "sha512.tgz", allocated: 2048, logical: 1500);
 
         using var source = fixture.Build();
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.Equal("a.tgz", tree.NameOf(20));
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
@@ -195,7 +202,7 @@ public class MftExploreReaderTests
         Assert.False(MftVolumeIndexBuilder.TryBuild(strict, out _));
 
         using var source = fixture.Build();
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalBytes);
         Assert.Equal("a.tgz", tree.NameOf(20));
@@ -223,7 +230,7 @@ public class MftExploreReaderTests
         Assert.False(MftVolumeIndexBuilder.TryBuild(strict, out _));
 
         using var source = fixture.Build();
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalBytes);
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
@@ -253,7 +260,7 @@ public class MftExploreReaderTests
             .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.True(tree.HasUnknownSizeBelow(21));
         Assert.True(tree.HasUnknownSizeBelow((int)Nested));
@@ -279,7 +286,7 @@ public class MftExploreReaderTests
             .AddFile(21, parent: 9000, "orphan.tgz", allocated: 8192, logical: 8000)
             .Build();
 
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalBytes);
         Assert.DoesNotContain("orphan.tgz", Reachable(tree).Select(tree.NameOf));
@@ -301,7 +308,7 @@ public class MftExploreReaderTests
             .AddUnused(MftRecord.RootRecordNumber)
             .Build();
 
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.Equal((int)MftRecord.RootRecordNumber, tree.RootNode);
         Assert.Equal(Root, tree.NameOf(tree.RootNode));
@@ -325,7 +332,7 @@ public class MftExploreReaderTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
             .Build();
 
-        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+        var tree = WholeVolume(source);
 
         Assert.True(tree.IsLink(30));
         Assert.True(tree.IsDirectory(30));
@@ -348,10 +355,175 @@ public class MftExploreReaderTests
 
         var reports = new List<long>();
 
-        MftExploreReader.Read(source, Root, reports.Add, default);
+        MftExploreReader.Read(source, Root, [], reports.Add, default);
 
         Assert.Equal([0, 65_536], reports);
     }
+
+    /// <summary>
+    /// A scan scoped to a folder is rooted at the record holding that folder, so the table answers
+    /// for it in the one pass it already costs rather than the folder being walked.
+    ///
+    /// <para>Everything the tree says is then said about the folder: its total, the paths it
+    /// rebuilds, and whether those totals are measurements. The clean table is asserted to leave
+    /// <see cref="ExploreTree.HasUnknownSizes"/> false, so the lower-bound test below says something
+    /// rather than repeating a flag every table raises.</para>
+    /// </summary>
+    [Fact]
+    public void RootsTheTreeAtTheRecordHoldingTheFolderItWasPointedAt()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddFile(21, Nested, "sha512.tgz", allocated: 2048, logical: 1500)
+            .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
+            .Build();
+
+        var read = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default);
+        var tree = read.Tree!;
+
+        Assert.Equal(FallbackReason.None, read.Reason);
+        Assert.Equal((int)Cache, tree.RootNode);
+        Assert.Equal(CachePath, tree.RootPath);
+        Assert.Equal(CachePath, tree.PathOf(tree.RootNode));
+        Assert.Equal(CachePath + @"\content-v2\sha512.tgz", tree.PathOf(21));
+
+        Assert.Equal(5500, tree.TotalBytes);
+        Assert.False(tree.HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// The negative half, and the half that matters. A scoped scan states a total for one folder, so
+    /// anything above or beside that folder reaching the tree makes the number it reports wrong —
+    /// silently, and in the direction that looks like a plausible measurement.
+    ///
+    /// <para>The volume's root is still in the arrays, still present, and still its own parent, so
+    /// this is also what pins the link inversion on that shape rather than on the node number.
+    /// Exclude the root by its record number instead and record 5 becomes its own child, which is a
+    /// cycle sitting one hop outside everything the tree draws.</para>
+    /// </summary>
+    [Fact]
+    public void KeepsAFolderRootedScanInsideThatFolder()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
+            .Build();
+
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default).Tree!;
+        var reachable = Reachable(tree);
+
+        Assert.DoesNotContain((int)MftRecord.RootRecordNumber, reachable);
+        Assert.DoesNotContain((int)Users, reachable);
+        Assert.DoesNotContain((int)Profile, reachable);
+        Assert.DoesNotContain((int)Sibling, reachable);
+        Assert.DoesNotContain(22, reachable);
+
+        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
+        Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf((int)Sibling));
+
+        // The volume's root, left where it was, is not made a child of itself.
+        Assert.DoesNotContain(
+            (int)MftRecord.RootRecordNumber,
+            tree.ChildrenOf((int)MftRecord.RootRecordNumber).ToArray());
+    }
+
+    /// <summary>
+    /// A folder reached through a junction has no record in the table whose subtree is its content:
+    /// whatever the link stands for keeps its own place under its real parent. So the table can
+    /// never root here, however the process is running, and the reader says so with
+    /// <see cref="FallbackReason.None"/> — the caller must walk, and must not offer administrator
+    /// rights that would change nothing.
+    ///
+    /// <para>Both positions are asserted. The link as the folder itself is the case a picker
+    /// produces; the link part way down the path is the one that would slip through a check made
+    /// only on the last component, and it is the same rule <see cref="MftVolumeIndex"/> applies at
+    /// every level for the same reason.</para>
+    /// </summary>
+    [Fact]
+    public void DeclinesToRootAtAFolderReachedThroughALink()
+    {
+        using var source = Tree()
+            .AddDirectoryLink(30, Profile, "linked-cache")
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .Build();
+
+        var itself = MftExploreReader.Read(
+            source, @"C:\Users\testuser\linked-cache", ["Users", "testuser", "linked-cache"],
+            onProgress: null, default);
+
+        Assert.Null(itself.Tree);
+        Assert.Equal(FallbackReason.None, itself.Reason);
+
+        var below = MftExploreReader.Read(
+            source, @"C:\Users\testuser\linked-cache\_cacache",
+            ["Users", "testuser", "linked-cache", "_cacache"],
+            onProgress: null, default);
+
+        Assert.Null(below.Tree);
+        Assert.Equal(FallbackReason.None, below.Reason);
+    }
+
+    /// <summary>
+    /// A folder the table read and does not describe is a route that was lost rather than one that
+    /// never existed, so it is reported as such and the walk answers instead.
+    ///
+    /// <para>Two ways in: a component no record holds, and a component that turns out to be a file.
+    /// Neither can be answered with a subtree, and neither may be answered with the nearest record
+    /// that did resolve — a tree rooted one level up would draw a folder the user did not ask for
+    /// and state its size as though they had.</para>
+    /// </summary>
+    [Fact]
+    public void DeclinesToRootAtAFolderTheTableDoesNotDescribe()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .Build();
+
+        var missing = MftExploreReader.Read(
+            source, @"C:\Users\testuser\.pnpm-store", ["Users", "testuser", ".pnpm-store"],
+            onProgress: null, default);
+
+        Assert.Null(missing.Tree);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, missing.Reason);
+
+        var file = MftExploreReader.Read(
+            source, CachePath + @"\a.tgz", ["Users", "testuser", ".npm-cache", "a.tgz"],
+            onProgress: null, default);
+
+        Assert.Null(file.Tree);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, file.Reason);
+    }
+
+    /// <summary>
+    /// A record the pass could not place has no parent to attribute it to, so a scoped scan cannot
+    /// rule out that it belonged to the folder being drawn — and its total has to say so.
+    ///
+    /// <para>The alternative is to declare the caveat only on the volume's own root, where a scoped
+    /// scan never looks. That reports a folder's total as an exact measurement on the strength of a
+    /// record the reader never read, which is the one thing a size picture must not do.</para>
+    /// </summary>
+    [Fact]
+    public void SaysAFolderRootedTotalIsALowerBoundWhenARecordCouldNotBePlaced()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddRecordWithNamesInExtensionRecords(21)
+            .Build();
+
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default).Tree!;
+
+        Assert.Equal(4000, tree.TotalBytes);
+        Assert.True(tree.HasUnknownSizes, "a folder's total was called exact after a record went unplaced");
+    }
+
+    /// <summary>
+    /// The whole volume: no components below the root, so there is nothing to resolve and a tree
+    /// always comes back. The folder-rooted reads above ask for their own outcome, because what
+    /// they can produce instead is the point of them.
+    /// </summary>
+    private static ExploreTree WholeVolume(IMftSource source) =>
+        MftExploreReader.Read(source, Root, [], onProgress: null, default).Tree!;
 
     private static List<int> Reachable(ExploreTree tree)
     {

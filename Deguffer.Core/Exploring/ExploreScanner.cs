@@ -1,11 +1,12 @@
 using System.Diagnostics;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
-/// The one way anything learns what a whole volume holds.
+/// The one way anything learns what a whole volume, or one folder on it, holds.
 ///
 /// <para>Choosing between §5.5's two routes lives here and nowhere else, exactly as it does in
 /// <see cref="DirectoryScanner"/> for a single path. Nothing above this knows there is a choice to
@@ -45,7 +46,8 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
     public static ExploreScanner Default { get; } = new();
 
     /// <summary>
-    /// Scan everything at or below <paramref name="root"/>.
+    /// Scan everything at or below <paramref name="root"/>, which is a volume root or any folder
+    /// under one.
     ///
     /// <paramref name="progress"/> receives running counts, and occasionally a snapshot of the tree
     /// so far — §5.5: never block on a complete scan.
@@ -70,16 +72,6 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
             return Walk(root, FallbackReason.VolumeNotAddressable, progress, ct);
         }
 
-        // The table is addressed from a volume's own root, so a scan starting below one takes the
-        // walk because that is what it is for — not because anything was unavailable. Rooting the
-        // table at a subtree is the work that makes folder scoping worth having, and it is not this
-        // change. FallbackReason.None is how the difference reaches the user: no route note, and no
-        // offer of administrator rights that would not change the answer.
-        if (volume.Components.Count > 0)
-        {
-            return Walk(root, FallbackReason.None, progress, ct);
-        }
-
         var source = _sources.TryOpen(volume.DriveLetter, out var reason);
         if (source is null)
         {
@@ -90,23 +82,37 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
         {
             try
             {
-                return ExploreScan.Fast(Read(source, root, progress, ct));
+                var read = Read(source, root, volume.Components, progress, ct);
+
+                if (read.Tree is { } tree)
+                {
+                    return ExploreScan.Fast(tree);
+                }
+
+                // The table read and could not root a tree where the scan was pointed. Whether that
+                // is a route lost or a route that never existed is the reader's judgement, not this
+                // one's — a folder reached through a junction has no record whose subtree is its
+                // content, and offering administrator rights for that would be an apology for a
+                // choice nobody made.
+                reason = read.Reason;
             }
             catch (IOException)
             {
                 // The volume went away mid-scan, or the driver refused a read. Neither should take
                 // the window down, and the walk still answers.
+                reason = FallbackReason.MasterFileTableIncomplete;
             }
         }
 
         // Outside the using deliberately. The walk can run for minutes on a full drive, and holding
         // a raw volume handle open across it serves nothing once the table has been given up on.
-        return Walk(root, FallbackReason.MasterFileTableIncomplete, progress, ct);
+        return Walk(root, reason, progress, ct);
     }
 
-    private static ExploreTree Read(
+    private static MftExploreRead Read(
         IMftSource source,
         string root,
+        IReadOnlyList<string> components,
         IProgress<ExploreProgress>? progress,
         CancellationToken ct)
     {
@@ -117,7 +123,8 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
         // the pass it would interrupt is the whole cost of the route.
         return MftExploreReader.Read(
             source,
-            root,
+            LongPath.Display(root),
+            components,
             done => progress?.Report(new ExploreProgress(done, total, BytesSeen: 0)),
             ct);
     }

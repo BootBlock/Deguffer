@@ -1,14 +1,27 @@
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
+/// What reading the table produced.
+/// </summary>
+/// <param name="Tree">
+/// The tree, or null where the table does not describe the location the scan was rooted at.
+/// </param>
+/// <param name="Reason">
+/// Why the caller has to walk instead. Meaningful only where <paramref name="Tree"/> is null.
+/// </param>
+internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason);
+
+/// <summary>
 /// Builds an <see cref="ExploreTree"/> straight from a volume's master file table — §5.5's fast
-/// path, applied to the whole volume rather than to a handful of named locations.
+/// path, applied to a whole volume or to one folder on it rather than to a handful of named
+/// locations.
 ///
 /// <para>This is where the table pays for itself. The deletion path asks it about a dozen paths and
 /// measured the index costing more to build than walking those paths cost outright
-/// (<c>docs/todo/after-the-scanner.md</c>, item 7). Drawing the whole volume is the opposite trade:
+/// (<c>docs/todo/after-the-scanner.md</c>, item 7). Drawing a whole drive is the opposite trade:
 /// one pass over the table answers for every directory on the disk at once, and the walk it
 /// replaces is the one §5.5 measured at over ten minutes.</para>
 ///
@@ -24,7 +37,14 @@ internal static class MftExploreReader
     private const int ProgressInterval = 65536;
 
     /// <summary>
-    /// Read <paramref name="source"/> into a tree rooted at <paramref name="rootPath"/>.
+    /// Read <paramref name="source"/> into a tree rooted at <paramref name="rootPath"/>, which
+    /// <paramref name="components"/> locates below the volume's own root — empty for the volume
+    /// itself.
+    ///
+    /// <para>The whole table is read whichever is asked for. The table is addressed by record
+    /// number and says nothing about where a record sits, so the parent links have to be inverted
+    /// before any path can be resolved at all; there is no cheaper pass that answers for a folder
+    /// alone.</para>
     ///
     /// <para>Best effort by design. A record this cannot read is skipped and the tree says its
     /// totals are lower bounds; a region that cannot be read at all ends the pass and keeps what was
@@ -32,14 +52,15 @@ internal static class MftExploreReader
     /// extension record the parser does not follow — measured at 400 of 400 sampled, and the
     /// unfinished work is <c>docs/todo/after-the-scanner.md</c> item 6.</para>
     /// </summary>
-    public static ExploreTree Read(
+    public static MftExploreRead Read(
         IMftSource source,
         string rootPath,
+        IReadOnlyList<string> components,
         Action<long>? onProgress,
         CancellationToken ct)
     {
         var records = (int)Math.Min(source.RecordCount, int.MaxValue);
-        var root = (int)MftRecord.RootRecordNumber;
+        var volumeRoot = (int)MftRecord.RootRecordNumber;
 
         // Never smaller than the reserved block, whatever the source claims to hold. The root is at
         // a fixed record number and is written below whether or not it parsed, so a table reporting
@@ -75,8 +96,8 @@ internal static class MftExploreReader
                     // missing. A free record genuinely holds nothing. An unreadable one, and one
                     // whose identity lives in an extension record, both hold a real file this
                     // cannot place — and there is no parent to attribute the loss to, so it is
-                    // declared once, on the root, rather than guessed at somewhere in the middle of
-                    // the tree.
+                    // declared once, on the scan's root, rather than guessed at somewhere in the
+                    // middle of the tree.
                     //
                     // The second of those is the common one rather than the exotic one: NTFS moves
                     // a file's $FILE_NAME into an extension record once it has enough hard links to
@@ -123,20 +144,114 @@ internal static class MftExploreReader
             },
             ct);
 
-        // The root is its own parent and carries the volume's own name rather than the "." NTFS
-        // gives it. Forced rather than trusted: a table whose record 5 did not parse would otherwise
-        // leave the root absent, and every directory on the volume unreachable with it.
+        // The volume's root is forced present whether or not record 5 parsed. Resolution starts
+        // here and every directory on the volume hangs off it, so a table whose root record declined
+        // would otherwise leave the whole disk unreachable — a full drive drawn as empty, from one
+        // record.
+        parents[volumeRoot] = volumeRoot;
+        isDirectory[volumeRoot] = true;
+        present[volumeRoot] = true;
+
+        var resolved = Resolve(components, names, parents, isDirectory, isLink, present, count);
+        if (resolved.Node is not { } root)
+        {
+            return new MftExploreRead(Tree: null, resolved.Reason);
+        }
+
+        // The scan's root carries the path the user chose rather than the name NTFS holds for it —
+        // "." for a volume root, and a bare folder name below one — and it is its own parent, which
+        // is what keeps ExploreTree's link inversion from drawing the tree above the scope back in.
         names[root] = rootPath;
         parents[root] = root;
-        isDirectory[root] = true;
-        present[root] = true;
+
+        // A record the pass could not place might have been anywhere, this folder included, so the
+        // caveat lands on whatever the scan is rooted at. Attributing it only to the volume's root
+        // would let a scoped scan report a total as exact on the strength of a record it never read.
         sizeUnknown[root] |= couldNotReadWholeTable || sawUnreadableRecord;
 
         // By size, and there is no choice to make here: this route inverts the parent links once,
         // after the whole table has been read, so it never publishes a partial tree that a growing
         // size could rearrange.
-        return ExploreTree.Create(
-            rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, present,
-            ExploreChildOrder.BySize);
+        return new MftExploreRead(
+            ExploreTree.Create(
+                rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, present,
+                ExploreChildOrder.BySize),
+            FallbackReason.None);
+    }
+
+    /// <summary>
+    /// Walk <paramref name="components"/> down from the volume's root to the record that holds the
+    /// folder they name, or say why the table cannot answer for it.
+    ///
+    /// <para>Two failures, and they are not the same thing to the user. A path reached through a
+    /// junction has no record whose subtree is its content — whatever the link stands for keeps its
+    /// own place under its real parent — so the table could never root here however the process is
+    /// running, and the walk, which the shell resolves the link for, is simply the right route.
+    /// Anything else means the table read and did not describe this folder, which is a route that
+    /// was lost rather than one that never existed.</para>
+    /// </summary>
+    private static (int? Node, FallbackReason Reason) Resolve(
+        IReadOnlyList<string> components,
+        string[] names,
+        int[] parents,
+        bool[] isDirectory,
+        bool[] isLink,
+        bool[] present,
+        int count)
+    {
+        var current = (int)MftRecord.RootRecordNumber;
+
+        foreach (var component in components)
+        {
+            if (isLink[current])
+            {
+                return (null, FallbackReason.None);
+            }
+
+            if (!isDirectory[current]
+                || FindChild(current, component, names, parents, present, count) is not { } next)
+            {
+                return (null, FallbackReason.MasterFileTableIncomplete);
+            }
+
+            current = next;
+        }
+
+        if (isLink[current])
+        {
+            return (null, FallbackReason.None);
+        }
+
+        return isDirectory[current]
+            ? (current, FallbackReason.None)
+            : (null, FallbackReason.MasterFileTableIncomplete);
+    }
+
+    /// <summary>
+    /// One pass over the table for one path component, which is the same trade
+    /// <see cref="MftVolumeIndex"/> makes when it looks a child up and for the same reason: a path
+    /// has a handful of components, so a name index built across every record on the volume would
+    /// cost far more than these passes ever save (G4). Only the records whose parent matches are
+    /// compared by name.
+    ///
+    /// <para>A record naming itself as its parent is no directory's child, which is the rule
+    /// <see cref="ExploreTree.Create"/> builds its child lists by. Resolving through one would pick
+    /// a node the tree then declines to link.</para>
+    /// </summary>
+    private static int? FindChild(
+        int directory, string name, string[] names, int[] parents, bool[] present, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (present[i]
+                && parents[i] == directory
+                && i != directory
+                && names[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return null;
     }
 }

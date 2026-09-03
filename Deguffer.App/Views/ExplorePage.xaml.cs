@@ -5,6 +5,7 @@ using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Storage.Pickers;
 
 namespace Deguffer.App.Views;
 
@@ -80,6 +81,35 @@ public sealed partial class ExplorePage : Page
 
         ShowAs(view);
         App.Preferences.Update(current => current with { Explore = view });
+    }
+
+    /// <summary>
+    /// Scope the next scan to a folder, through the system picker.
+    ///
+    /// <para>The picking lives here rather than in the view model for the reason
+    /// <see cref="SettingsPage"/> gives: it is a WinUI dialog needing a window handle, and the view
+    /// model stays testable by knowing only about the path that comes back. That split is also what
+    /// covers this code — the picker opens in a separate broker process and cannot be driven by the
+    /// automation harness, while the scan the path produces is exercised in Core.</para>
+    /// </summary>
+    private async void OnChooseFolder(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindow is not { } window)
+        {
+            return;
+        }
+
+        var picker = new FolderPicker();
+        picker.FileTypeFilter.Add("*");
+
+        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+
+        if (await picker.PickSingleFolderAsync() is { } folder)
+        {
+            ViewModel.ScopeTo(folder.Path);
+        }
     }
 
     private void OnCrumbClicked(object sender, RoutedEventArgs e)
