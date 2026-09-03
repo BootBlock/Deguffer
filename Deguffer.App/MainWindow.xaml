@@ -47,9 +47,9 @@
                         SelectionChanged="OnDestinationChanged">
 
             <NavigationView.MenuItems>
-                <!-- Which item starts selected is set in code rather than here. A markup
-                     IsSelected is applied when the rail loads, which is after the window's
-                     constructor, so it silently overwrote a selection made there. -->
+                <!-- Which item starts selected is set in the window's constructor rather than
+                     here. A markup IsSelected stays true on the item after the rail has been moved
+                     elsewhere, so the rail would report two items selected. -->
                 <NavigationViewItem x:Name="StorageItem" Content="Storage" Tag="Clean">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEDA2;" />

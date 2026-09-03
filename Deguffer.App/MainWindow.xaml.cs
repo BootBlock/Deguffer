@@ -40,11 +40,12 @@ public sealed partial class MainWindow : Window
     /// and on Explore that includes a folder they chose through a dialog. See
     /// <see cref="ElevationRequest"/> for what survives the relaunch.</para>
     ///
-    /// <para>The rail's starting item is set here rather than in the markup, and that is what makes
-    /// this work at all. An <c>IsSelected</c> declared on a <c>NavigationViewItem</c> is applied
-    /// when the rail loads, which is after this constructor — so a selection assigned here was
-    /// overwritten, and the frame was taken back to the markup's destination with no error
-    /// anywhere.</para>
+    /// <para>Two measurements shape how the rail is moved, and neither reports an error when it is
+    /// got wrong. Setting <c>IsSelected</c> on the item from here does not move the rail at all: it
+    /// settles its selection later, and the window opened on Storage regardless. And a markup
+    /// <c>IsSelected</c> stays true on its item after the rail has moved elsewhere, so the rail then
+    /// reported both items selected. Hence the rail's own property, assigned here, and no starting
+    /// selection in the markup.</para>
     /// </summary>
     private void OpenWhereTheLaunchAsked()
     {

@@ -338,9 +338,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         //
         // Assigned before the folder, because selecting a drive is what drops a folder scope. The
         // other order would clear the scope this is establishing.
-        if (Path.GetPathRoot(folder) is { } root
-            && Drives.FirstOrDefault(drive => drive.Equals(root, StringComparison.OrdinalIgnoreCase))
-                is { } listed)
+        if (Offered(Path.GetPathRoot(folder)) is { } listed)
         {
             SelectedDrive = listed;
         }
@@ -368,9 +366,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         // The drive first, for the reason ScopeTo gives: selecting one drops any folder scope, so
         // the other order would clear the scope this is restoring.
-        if (drive is not null
-            && Drives.FirstOrDefault(listed => listed.Equals(drive, StringComparison.OrdinalIgnoreCase))
-                is { } mounted)
+        if (Offered(drive) is { } mounted)
         {
             SelectedDrive = mounted;
             pointed = true;
@@ -384,6 +380,16 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         return pointed;
     }
+
+    /// <summary>
+    /// The entry in <see cref="Drives"/> naming <paramref name="volume"/>, or null where the box
+    /// does not offer it. Null in, null out, so a path with no root and an absent drive are one case
+    /// here rather than two at each caller.
+    /// </summary>
+    private string? Offered(string? volume) =>
+        volume is null
+            ? null
+            : Drives.FirstOrDefault(listed => listed.Equals(volume, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
     [RelayCommand(CanExecute = nameof(CanRun))]

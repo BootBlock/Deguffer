@@ -60,8 +60,13 @@ public sealed class ElevationRequestTests
     }
 
     /// <summary>
-    /// A path with a space in it is one argument. This is what would break first if the two values
-    /// were ever joined into a single string, and a truncated path is a scan of the wrong folder.
+    /// A space in a path is not a separator. The value carries as the rest of one argument, so what
+    /// comes back is the whole path rather than the part before the first space, which would be a
+    /// scan of the wrong folder.
+    ///
+    /// <para>This covers the encoding only. Whether the shell hands those arguments to the new
+    /// process one by one is <c>ElevatedRelaunch</c>'s, and it uses <c>ArgumentList</c> for exactly
+    /// this reason.</para>
     /// </summary>
     [Fact]
     public void APathWithSpacesInItArrivesWhole()
@@ -94,14 +99,20 @@ public sealed class ElevationRequestTests
     }
 
     /// <summary>
-    /// An empty value is a missing path rather than a path. Taking it literally would point a scan
-    /// at the empty string.
+    /// A value that is empty, or nothing but spaces, is a missing path rather than a path. Taking
+    /// one literally points the scan at a path that cannot exist, and <c>ExploreScanner</c> rejects
+    /// that by throwing. On a launch that scans on its own nothing awaits that exception, so it ends
+    /// the process — observed, with the old rule in place, before this case was covered.
     /// </summary>
-    [Fact]
-    public void AnEmptyValueIsNoPathAtAll()
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData("\t")]
+    public void AValueThatNamesNothingIsNoPathAtAll(string value)
     {
-        var restored = Assert.IsType<ExploreRequest>(
-            ElevationRequest.From(["--explore", "--explore-drive=", "--explore-folder="]));
+        var restored = Assert.IsType<ExploreRequest>(ElevationRequest.From(
+            ["--explore", "--explore-drive=" + value, "--explore-folder=" + value]));
 
         Assert.Null(restored.Drive);
         Assert.Null(restored.Folder);

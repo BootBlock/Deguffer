@@ -84,11 +84,18 @@ public abstract record ElevationRequest
     private protected const string FolderPrefix = "--explore-folder=";
 
     /// <summary>
-    /// What follows the prefix, or null where nothing does. An empty value is a missing one rather
-    /// than a path, and treating it as a path would point a scan at the empty string.
+    /// What follows the prefix, or null where nothing does. A value that is empty, or nothing but
+    /// spaces, is a missing one rather than a path.
+    ///
+    /// <para>Taking one literally points the scan at a path that cannot exist, and
+    /// <see cref="Deguffer.Core.Exploring.ExploreScanner"/> rejects such a path by throwing.
+    /// Measured, on a launch that scans on its own: nothing awaits that exception, it reaches the
+    /// shell's last-resort handler, and the process ends — the handler deliberately does not mark
+    /// a fault handled. Reading the value as absent instead leaves the page waiting, which is what
+    /// it does for every other request it cannot honour.</para>
     /// </summary>
     private static string? ValueOf(string argument, string prefix) =>
-        argument[prefix.Length..] is { Length: > 0 } value ? value : null;
+        argument[prefix.Length..] is var value && !string.IsNullOrWhiteSpace(value) ? value : null;
 }
 
 /// <summary>Open on the Storage page and preview again. See <see cref="ElevationRequest.Preview"/>.</summary>
