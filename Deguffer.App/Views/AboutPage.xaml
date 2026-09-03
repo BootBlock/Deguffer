@@ -12,16 +12,86 @@
 
             <Border Style="{StaticResource CardStyle}">
                 <StackPanel Spacing="6">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" />
-                        <TextBlock Text="{x:Bind Version}"
-                                   Style="{StaticResource SecondaryText}"
-                                   VerticalAlignment="Bottom"
-                                   Margin="0,0,0,3" />
-                    </StackPanel>
+                    <!-- The version belongs with the build date and the architecture in the card
+                         below, not beside the name as well; the same number twice, two lines
+                         apart, only invites the reader to check whether it is the same number. -->
+                    <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" />
 
                     <TextBlock Style="{StaticResource SecondaryText}"
                                Text="Reclaims disk space by recognising what specific locations on your disk actually are, and telling you what each one costs to lose before you agree to lose it." />
+                </StackPanel>
+            </Border>
+
+            <!-- Directly under the name, because "which build is this" is what an about box is
+                 asked first, and the links belong beside it rather than at the foot of a page
+                 nobody scrolls to. -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="16">
+                    <Grid ColumnSpacing="20" RowSpacing="8" ColumnDefinitions="Auto,*"
+                          RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Version"
+                                   Style="{StaticResource FieldLabel}" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Version}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Built"
+                                   Style="{StaticResource FieldLabel}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind BuildDate}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextWrapping="Wrap" />
+
+                        <!-- The architecture is meaningless to most readers on its own, so the
+                             explanation has to reach every one of them. A TextBlock cannot take
+                             focus, so a tooltip on one serves a pointer and nobody else, which is
+                             why the value sits in a tab-stoppable ContentControl: the tooltip then
+                             opens on keyboard focus as well as on hover, and the sentence is
+                             HelpText on that one element. On both elements it would be announced
+                             twice. The label keeps a tooltip of its own because a pointer lands on
+                             the word as readily as on the value, and a duplicate tooltip string,
+                             unlike a duplicate HelpText, is only ever shown one at a time. -->
+                        <TextBlock x:Name="ArchitectureLabel"
+                                   Grid.Row="2" Grid.Column="0" Text="Architecture"
+                                   Style="{StaticResource FieldLabel}"
+                                   ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}" />
+                        <ContentControl Grid.Row="2" Grid.Column="1"
+                                        IsTabStop="True"
+                                        UseSystemFocusVisuals="True"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}"
+                                        AutomationProperties.LabeledBy="{x:Bind ArchitectureLabel}"
+                                        AutomationProperties.HelpText="{x:Bind ArchitectureExplanation}">
+                            <TextBlock Text="{x:Bind Architecture}"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+                        </ContentControl>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Author"
+                                   Style="{StaticResource FieldLabel}" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="Joe Cox"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Built in"
+                                   Style="{StaticResource FieldLabel}" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="Scunthorpe, England"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Spacing="18">
+                        <HyperlinkButton Content="GitHub repository"
+                                         NavigateUri="https://github.com/BootBlock/Deguffer"
+                                         Padding="0" />
+                        <HyperlinkButton Content="bootblock.co.uk"
+                                         NavigateUri="https://bootblock.co.uk"
+                                         Padding="0" />
+                        <HyperlinkButton Content="BootBlock on GitHub"
+                                         NavigateUri="https://github.com/BootBlock?tab=repositories"
+                                         Padding="0" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
@@ -101,13 +171,8 @@
             </Border>
 
             <Border Style="{StaticResource CardStyle}" Margin="0,14,0,0">
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                               Text="Open source under the MIT licence." />
-                    <HyperlinkButton Content="github.com/BootBlock/Deguffer"
-                                     NavigateUri="https://github.com/BootBlock/Deguffer"
-                                     Padding="0" />
-                </StackPanel>
+                <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                           Text="Open source under the MIT licence." />
             </Border>
         </StackPanel>
     </ScrollViewer>
