@@ -171,4 +171,29 @@ public sealed class CleanupProviderBaseTests : IDisposable
         // stamp is what the executor reads.
         Assert.True(plan.Keep.IsOn);
     }
+
+    /// <summary>
+    /// The plan carries which kind of zero a row has, so the shell never has to guess from the
+    /// setting. Deriving it from the guard being on puts "nothing old enough" on every empty row.
+    /// </summary>
+    [Fact]
+    public async Task SaysWhetherAZeroRowIsEmptyOrWhollyTooRecent()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        Directory.CreateDirectory(caches);
+        File.WriteAllBytes(Path.Combine(caches, "written-just-now.bin"), new byte[4096]);
+
+        var guard = MinimumAge.WithinHours(8, DateTime.UtcNow);
+        var wholesaleRecent = await Provider().PlanAsync(guard);
+
+        Assert.Equal(0, wholesaleRecent.EstimatedBytes);
+        Assert.True(wholesaleRecent.HasRecentContentHeldBack);
+
+        // The same provider with an empty cache measures the same zero and claims nothing.
+        File.Delete(Path.Combine(caches, "written-just-now.bin"));
+        var genuinelyEmpty = await Provider().PlanAsync(guard);
+
+        Assert.Equal(0, genuinelyEmpty.EstimatedBytes);
+        Assert.False(genuinelyEmpty.HasRecentContentHeldBack);
+    }
 }

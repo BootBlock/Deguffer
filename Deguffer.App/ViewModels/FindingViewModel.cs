@@ -152,13 +152,16 @@ public sealed partial class FindingViewModel : ObservableObject
         : !Finding.HasReclaimableSpace
             // "Already clear" is a claim about the folder, and there are two states it must not be
             // made in. One is a folder Windows would not let Deguffer list. The other is a guard on
-            // recently changed files: everything in the location can be inside the window, and the
-            // row would then say the cache is empty while it is full. Both leave the figure at zero
-            // and neither is emptiness. The row's Contents tab carries the reason in each case.
+            // whose every file is inside the guard window: it measures zero and it is full.
+            //
+            // The second asks the plan what the measurement actually withheld, never whether a
+            // guard is switched on. Driving the real window settled that: with the guard at seven
+            // days, deriving it from the setting put "Nothing old enough" on twelve rows, most of
+            // them simply empty — the same false claim wearing the opposite costume.
             ? Finding.Plan switch
             {
                 { HasUnreadableRoot: true } => "Could not be read",
-                { Keep.IsOn: true } => "Nothing old enough",
+                { HasRecentContentHeldBack: true } => "Nothing old enough",
                 _ => "Already clear",
             }
             : CanBeSelected

@@ -30,8 +30,18 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// stepped over rather than summed, so that this total and the deletion that follows it
     /// describe the same set of files.
     /// </param>
-    public ScanSize? TryMeasure(IReadOnlyList<string> relativePath, MinimumAge keep = default)
+    /// <param name="withheldRecent">
+    /// Whether <paramref name="keep"/> left at least one real file out of the total. Reported
+    /// because a zero is otherwise ambiguous — see <see cref="ScanResult.WithheldRecent"/> for the
+    /// claim that rests on telling an empty location from a wholly recent one.
+    /// </param>
+    public ScanSize? TryMeasure(
+        IReadOnlyList<string> relativePath,
+        MinimumAge keep,
+        out bool withheldRecent)
     {
+        withheldRecent = false;
+
         if (TryResolve(relativePath) is not { } record)
         {
             return null;
@@ -39,7 +49,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         if (tree.IsDirectory[record])
         {
-            return SumSubtree(record, keep);
+            return SumSubtree(record, keep, out withheldRecent);
         }
 
         if (tree.SizeUnknown[record])
@@ -47,10 +57,18 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             return null;
         }
 
-        return keep.Protects(tree.Newest[record])
-            ? ScanSize.Zero
-            : new ScanSize(tree.Allocated[record], tree.Logical[record]);
+        if (!keep.Protects(tree.Newest[record]))
+        {
+            return new ScanSize(tree.Allocated[record], tree.Logical[record]);
+        }
+
+        withheldRecent = true;
+        return ScanSize.Zero;
     }
+
+    /// <summary>The same, where the caller has no guard and so nothing to be told about.</summary>
+    public ScanSize? TryMeasure(IReadOnlyList<string> relativePath) =>
+        TryMeasure(relativePath, MinimumAge.Off, out _);
 
     /// <summary>
     /// Every directory on the volume called <paramref name="name"/>, as components below the volume
@@ -234,10 +252,12 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// nothing downstream can tell it from a correct one. The cost is that this path takes the walk;
     /// the alternative cost is a cache reported as clear when it is not.
     /// </summary>
-    private ScanSize? SumSubtree(uint root, MinimumAge keep)
+    private ScanSize? SumSubtree(uint root, MinimumAge keep, out bool withheldRecent)
     {
         long allocated = 0;
         long logical = 0;
+
+        withheldRecent = false;
 
         var stack = new Stack<uint>();
         stack.Push(root);
@@ -263,7 +283,11 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // The directories themselves need no exemption — a directory's size in this table is
             // zero by construction (MftRecordParser hands ScanSize.Zero for one, because its
             // contents are counted through their own records), so withholding it withholds nothing.
-            if (!keep.Protects(tree.Newest[node]))
+            if (keep.Protects(tree.Newest[node]))
+            {
+                withheldRecent = true;
+            }
+            else
             {
                 allocated += tree.Allocated[node];
                 logical += tree.Logical[node];

@@ -62,6 +62,22 @@ public sealed record CleanupPlan
     public MinimumAge Keep { get; init; }
 
     /// <summary>
+    /// Whether the guard left something real out of this plan's figures.
+    ///
+    /// <para>The same shape as <see cref="HasUnreadableRoot"/>, and there for the same reason: a
+    /// row with nothing to reclaim renders as "Already clear", and that is a claim about the
+    /// folder. A cache whose every file is inside the window measures zero and is full, so the
+    /// claim would be false. Deriving it from <see cref="Keep"/> alone is wrong in the other
+    /// direction — it puts "nothing old enough" on every genuinely empty row the moment the user
+    /// switches the guard on, which on an ordinary machine is most of them.</para>
+    ///
+    /// <para>Recomputed rather than stored, like <see cref="TargetedPaths"/>: this is a record, and
+    /// a <c>with</c> expression copies backing fields wholesale, so a cached value would survive a
+    /// change to <see cref="Steps"/> and describe the wrong plan.</para>
+    /// </summary>
+    public bool HasRecentContentHeldBack => Steps.Any(s => s.WithheldRecent);
+
+    /// <summary>
     /// Which route measured this plan's paths. <see cref="FallbackReason.None"/> for a plan with
     /// nothing to measure, which is correct: an empty plan gives the user no reason to elevate.
     ///

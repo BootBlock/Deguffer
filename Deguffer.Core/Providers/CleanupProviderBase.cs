@@ -184,6 +184,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CancellationToken ct)
     {
         var sizes = new List<ScanSize>(paths.Count);
+        var withheld = new List<bool>(paths.Count);
         var fallback = FallbackReason.None;
 
         foreach (var path in paths)
@@ -192,6 +193,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
             var measured = await Scanner.MeasureAsync(path, keep, progress: null, ct).ConfigureAwait(false);
             sizes.Add(measured.Size);
+            withheld.Add(measured.WithheldRecent);
 
             // Paths in one plan can sit on different volumes and so take different routes; the
             // first reason to appear is the one the user is shown.
@@ -201,7 +203,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             }
         }
 
-        return new ScanBatch(sizes, fallback);
+        return new ScanBatch(sizes, fallback, withheld);
     }
 
     /// <summary>
@@ -232,6 +234,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 Estimated = measured.Sizes[i],
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
+                WithheldRecent = measured.WithheldRecent[i],
             });
         }
 

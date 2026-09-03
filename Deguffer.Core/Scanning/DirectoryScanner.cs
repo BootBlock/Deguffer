@@ -196,10 +196,14 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // under the index, or the path runs through a link, or something below it does not
         // establish its own size — so ask the slow path rather than reporting zero, which would
         // render as "this cache is already clear" and quietly hide gigabytes.
-        if (index?.TryMeasure(volumePath.Components, keep) is { } size)
+        // Assigned first because the call sits behind a null-conditional, which leaves an out
+        // parameter unassigned on the branch where there is no index to ask.
+        var withheldRecent = false;
+
+        if (index?.TryMeasure(volumePath.Components, keep, out withheldRecent) is { } size)
         {
             progress?.Report(size);
-            return ValueTask.FromResult(ScanResult.Fast(size));
+            return ValueTask.FromResult(ScanResult.Fast(size, withheldRecent));
         }
 
         var fallbackReason = reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : reason;

@@ -58,8 +58,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         CancellationToken ct = default) =>
         new(Task.Run(
             () => TryMeasureFile(path, keep) is { } file
-                ? ScanResult.Direct(file)
-                : ScanResult.Slow(Measure(path, keep, progress, ct), _reason),
+                ? ScanResult.Direct(file.Size, file.WithheldRecent)
+                : Slow(Measure(path, keep, progress, ct)),
             ct));
 
     /// <summary>
@@ -88,7 +88,10 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
-    private static ScanSize Measure(
+    private ScanResult Slow((ScanSize Size, bool WithheldRecent) measured) =>
+        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent);
+
+    private static (ScanSize Size, bool WithheldRecent) Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -96,10 +99,14 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return ScanSize.FromLengths(0);
+            return (ScanSize.FromLengths(0), false);
         }
 
         long total = 0;
+
+        // An int rather than a bool because the walk sets it from several threads at once, and
+        // Interlocked has no bool overload. Only ever moved to 1, so no ordering question arises.
+        var withheld = 0;
 
         BoundedFileWalk.Visit(
             LongPath.Extended(path),
@@ -108,7 +115,11 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             // the guard keeps contributes nothing, because the removal will not take it.
             file =>
             {
-                if (!keep.Protects(file))
+                if (keep.Protects(file))
+                {
+                    Interlocked.Exchange(ref withheld, 1);
+                }
+                else
                 {
                     Interlocked.Add(ref total, file.Length);
                 }
@@ -117,7 +128,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
             ct);
 
-        return ScanSize.FromLengths(Interlocked.Read(ref total));
+        return (ScanSize.FromLengths(Interlocked.Read(ref total)), Volatile.Read(ref withheld) == 1);
     }
 
     /// <summary>
@@ -131,7 +142,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// scanner did — produces a step nobody can select, because a step with nothing to reclaim is
     /// not offerable.
     /// </summary>
-    private static ScanSize? TryMeasureFile(string path, MinimumAge keep)
+    private static (ScanSize Size, bool WithheldRecent)? TryMeasureFile(string path, MinimumAge keep)
     {
         try
         {
@@ -149,7 +160,9 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             // a null that would send the caller off to measure it as a directory. Zero is what the
             // removal will reclaim from it, and a step with nothing to reclaim is not offerable —
             // which is the outcome a protected single file should have.
-            return keep.Protects(file) ? ScanSize.FromLengths(0) : ScanSize.FromLengths(file.Length);
+            return keep.Protects(file)
+                ? (ScanSize.FromLengths(0), true)
+                : (ScanSize.FromLengths(file.Length), false);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {

@@ -201,4 +201,32 @@ public class ParallelEnumerationScannerTests
         Assert.Equal(0, guarded.Size.Reclaimable);
         Assert.Equal(8192, (await Scanner.MeasureAsync(file)).Size.Reclaimable);
     }
+
+    /// <summary>
+    /// A zero is ambiguous once a guard is in force, and the shell makes a claim out of a zero. So
+    /// the measurement says which zero it is: an empty location and one whose every file is inside
+    /// the window are the two cases, and only the walk can tell them apart.
+    /// </summary>
+    [Fact]
+    public async Task SaysWhetherItWithheldAnythingRatherThanLeavingAZeroToBeGuessedAt()
+    {
+        using var temp = new TempDirectory();
+        var empty = temp.CreateDirectory("empty");
+        var recent = temp.CreateDirectory("recent");
+        temp.CreateFile(4096, "recent", "written-just-now.bin");
+
+        var guard = MinimumAge.WithinHours(8, DateTime.UtcNow);
+
+        var wholesaleRecent = await Scanner.MeasureAsync(recent, guard);
+        var genuinelyEmpty = await Scanner.MeasureAsync(empty, guard);
+
+        Assert.Equal(0, wholesaleRecent.Size.Reclaimable);
+        Assert.Equal(0, genuinelyEmpty.Size.Reclaimable);
+
+        Assert.True(wholesaleRecent.WithheldRecent, "a full location was reported as holding nothing back");
+        Assert.False(genuinelyEmpty.WithheldRecent, "an empty location claimed the guard held something");
+
+        // And nothing is claimed where no guard was asked for.
+        Assert.False((await Scanner.MeasureAsync(recent)).WithheldRecent);
+    }
 }

@@ -602,7 +602,7 @@ public class MftVolumeIndexTests
         var path = new[] { "Users", "testuser", ".npm-cache" };
 
         Assert.Equal(1_004_096, index.TryMeasure(path)!.Value.Logical);
-        Assert.Equal(4096, index.TryMeasure(path, MinimumAge.WithinHours(8, now))!.Value.Logical);
+        Assert.Equal(4096, index.TryMeasure(path, MinimumAge.WithinHours(8, now), out _)!.Value.Logical);
     }
 
     /// <summary>
@@ -631,6 +631,30 @@ public class MftVolumeIndexTests
 
         Assert.Equal(
             4096,
-            index.TryMeasure(["Users", "testuser", ".npm-cache"], MinimumAge.WithinHours(8, now))!.Value.Logical);
+            index.TryMeasure(["Users", "testuser", ".npm-cache"], MinimumAge.WithinHours(8, now), out _)!.Value.Logical);
+    }
+
+    /// <summary>
+    /// The fast path answers the same question as the walk. It has to: which route served a
+    /// measurement depends on whether Deguffer is elevated, and a row's sentence must not.
+    /// </summary>
+    [Fact]
+    public void SaysWhetherItWithheldAnythingRatherThanLeavingAZeroToBeGuessedAt()
+    {
+        var now = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var guard = MinimumAge.WithinHours(8, now);
+
+        var index = Build(Tree()
+            .AddFile(20, Cache, "written-just-now.tgz", allocated: 4096, logical: 4096,
+                created: now.AddMinutes(-5), lastWritten: now.AddMinutes(-5)));
+
+        var wholesaleRecent = index.TryMeasure(["Users", "testuser", ".npm-cache"], guard, out var withheld);
+        var genuinelyEmpty = index.TryMeasure(["Users", "testuser", ".config"], guard, out var withheldFromEmpty);
+
+        Assert.Equal(0, wholesaleRecent!.Value.Logical);
+        Assert.Equal(0, genuinelyEmpty!.Value.Logical);
+
+        Assert.True(withheld, "a full location was reported as holding nothing back");
+        Assert.False(withheldFromEmpty, "an empty location claimed the guard held something");
     }
 }

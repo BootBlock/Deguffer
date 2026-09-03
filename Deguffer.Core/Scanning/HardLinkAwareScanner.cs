@@ -41,11 +41,23 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
         MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(
-            () => TryMeasureFile(path, keep) is { } file
-                ? ScanResult.Direct(file)
-                : ScanResult.ByChoice(Measure(path, keep, progress, ct)),
-            ct));
+        new(Task.Run(() => MeasureNow(path, keep, progress, ct), ct));
+
+    private static ScanResult MeasureNow(
+        string path,
+        MinimumAge keep,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct)
+    {
+        if (TryMeasureFile(path, keep) is { } file)
+        {
+            return ScanResult.Direct(file.Size, file.WithheldRecent);
+        }
+
+        var walked = Measure(path, keep, progress, ct);
+
+        return ScanResult.ByChoice(walked.Size, walked.WithheldRecent);
+    }
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
     public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
@@ -62,7 +74,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     {
     }
 
-    private static ScanSize Measure(
+    private static (ScanSize Size, bool WithheldRecent) Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -70,11 +82,15 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return Approximate(0, 0);
+            return (Approximate(0, 0), false);
         }
 
         long allocated = 0;
         long logical = 0;
+
+        // See ParallelEnumerationScanner for why this is an int: the walk sets it from several
+        // threads, and Interlocked has no bool overload.
+        var withheld = 0;
 
         BoundedFileWalk.Visit(
             LongPath.Extended(path),
@@ -85,6 +101,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                 // will not take, so its sole-linked bytes are not reclaimable here.
                 if (keep.Protects(file))
                 {
+                    Interlocked.Exchange(ref withheld, 1);
                     return;
                 }
 
@@ -99,7 +116,9 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                 Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),
             ct);
 
-        return Approximate(Interlocked.Read(ref allocated), Interlocked.Read(ref logical));
+        return (
+            Approximate(Interlocked.Read(ref allocated), Interlocked.Read(ref logical)),
+            Volatile.Read(ref withheld) == 1);
     }
 
     /// <summary>
@@ -116,7 +135,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     /// mirroring <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate
     /// subject, and answering zero for one would make its step unofferable.
     /// </summary>
-    private static ScanSize? TryMeasureFile(string path, MinimumAge keep)
+    private static (ScanSize Size, bool WithheldRecent)? TryMeasureFile(string path, MinimumAge keep)
     {
         if (!LongPath.FileExists(path))
         {
@@ -125,14 +144,16 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         if (keep.ProtectsFile(path))
         {
-            return Approximate(0, 0);
+            return (Approximate(0, 0), true);
         }
 
-        return TryQuery(LongPath.Extended(path)) is { } info
-            ? Approximate(
-                info.NumberOfLinks == 1 ? info.AllocationSize : 0,
-                info.NumberOfLinks == 1 ? info.EndOfFile : 0)
-            : Approximate(0, 0);
+        return (
+            TryQuery(LongPath.Extended(path)) is { } info
+                ? Approximate(
+                    info.NumberOfLinks == 1 ? info.AllocationSize : 0,
+                    info.NumberOfLinks == 1 ? info.EndOfFile : 0)
+                : Approximate(0, 0),
+            false);
     }
 
     /// <summary>
