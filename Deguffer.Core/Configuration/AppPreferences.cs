@@ -12,14 +12,14 @@ public enum AppTheme
 }
 
 /// <summary>
-/// How much of each finding row the Storage page draws. <see cref="Standard"/> is the shipped
-/// view: §7 wants every row to state what happens on next use, and only the full row has room
-/// for that sentence.
+/// How much of each finding row the Storage page draws. <see cref="Compact"/> is the shipped view:
+/// the list is a set of rows to choose between, and a screen that shows all of them beats one that
+/// shows six and explains each.
 ///
-/// <see cref="Compact"/> is the user asking for the list to be scannable instead — name, tier and
-/// size on one line. It hides the sentence rather than retiring it: the row keeps its disclosure,
-/// so the plan, the per-step figures and §5.2's "what was left alone" notes are one click away in
-/// either view.
+/// Compact hides §7's "what happens on next use" sentence rather than retiring it. The sentence is
+/// on the row's tooltip and inside its disclosure, alongside the plan, the per-step figures and
+/// §5.2's "what was left alone" notes. <see cref="Standard"/> is the same list with that sentence
+/// written out under every name.
 /// </summary>
 public enum ViewDensity
 {
@@ -60,6 +60,13 @@ public enum ExploreView
 /// <paramref name="View"/> is: it changes which picture is on screen, never what was scanned and
 /// never what may be removed.
 /// </param>
+/// <param name="ShowNotInstalled">
+/// Whether to list a provider whose toolchain is not on this machine. Off by default: such a row
+/// has nothing to reclaim and nothing to tick, so it lengthens the list without adding a decision
+/// to it. Presentation only, and it hides rather than skips — every provider is still scanned, so
+/// switching it on lists them with no rescan, and one that turns out to be installed after all is
+/// never hidden by it.
+/// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
 /// backdrop fights the user's stated accessibility requirement, and that is not negotiable by a
@@ -86,8 +93,9 @@ public enum ExploreView
 /// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
-    ViewDensity View = ViewDensity.Standard,
+    ViewDensity View = ViewDensity.Compact,
     ExploreView Explore = ExploreView.Treemap,
+    bool ShowNotInstalled = false,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false)

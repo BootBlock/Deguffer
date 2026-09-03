@@ -331,8 +331,20 @@ Deliberate points, and the traps that come with them:
 
 - **Group by cause, sort by size, colour by tier.** The first screen answers "what is eating my
   disk", not "what folders exist".
-- **Every row states what happens on next use**: "re-downloads on next build (~10 GB)" is more
-  useful than a checkbox.
+- **Every row states what happens on next use, and reaches it without a pointer**: "re-downloads on
+  next build (~10 GB)" is more useful than a checkbox. The list has two densities, and the shipped
+  one is **Compact**, which trades the sentence off the row for the whole list being on screen at
+  once — a set of rows to choose between is the thing the first screen is for, and six rows with a
+  paragraph each is not that set. Compact keeps the sentence one activation away: on the row's
+  tooltip for a pointer, and inside the row's own disclosure for a keyboard, a screen reader or a
+  finger. **Standard** writes it out under every name. What is not negotiable in either is that no
+  row may be offered for deletion without its sentence being reachable *from that row*, by whatever
+  the reader is using.
+- **A row that is absent says which kind of absent it is.** "The tool is not on this machine" and
+  "Deguffer has not been told where to look" are opposite in what they ask of the user, and only the
+  second is something they can act on. A list that hides the first kind by default must never hide
+  the second, because build output is usually the largest thing here and that row is the only place
+  the app says so.
 - **Tier 3 says plainly what is unrecoverable**, and by default it is confirmed before deletion.
   *Saying* it is not negotiable. *How hard the confirmation is to give* is the user's to set, and
   the two are separate. Typing a provider's name for every emptied Recycle Bin is transcription

@@ -127,12 +127,23 @@ public sealed class CleanupPlanner
     {
         status?.Report($"Checking {provider.Name}…");
 
-        if (!await provider.IsPresentAsync(ct).ConfigureAwait(false))
+        var present = await provider.IsPresentAsync(ct).ConfigureAwait(false);
+        var awaitingFolders = provider.IsAwaitingSourceFolders;
+
+        // A provider with nowhere approved to look is still asked for its plan, because that plan is
+        // where it says which folder to add. Short-circuiting on presence alone left that sentence
+        // unreachable: the one provider whose absence the user can do something about was the one
+        // that never got to say so.
+        if (!present && !awaitingFolders)
         {
             return new Finding(provider, IsPresent: false, Plan: null);
         }
 
-        return new Finding(provider, IsPresent: true, await provider.PlanAsync(ct).ConfigureAwait(false));
+        return new Finding(
+            provider,
+            present,
+            await provider.PlanAsync(ct).ConfigureAwait(false),
+            awaitingFolders);
     }
 
     /// <summary>

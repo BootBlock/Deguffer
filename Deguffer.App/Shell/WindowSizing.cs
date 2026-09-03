@@ -16,12 +16,18 @@ namespace Deguffer.App.Shell;
 ///
 /// The minimum size needs a window procedure because <see cref="AppWindow"/> exposes no such
 /// property; below it the rail and the command bar start colliding.
+///
+/// The minimum width is set by the compact finding row, which is the shipped view. That row puts
+/// the name, the tier chip and the size on one line, and the name is the only part with no fixed
+/// demand, so it is what gives way. At the old 720 the rail, the card and the right-hand columns
+/// left it about seventy pixels and every name trimmed to an ellipsis — a list of rows that no
+/// longer said which row they were.
 /// </summary>
 public sealed class WindowSizing
 {
     private const int DefaultWidth = 1000;
     private const int DefaultHeight = 700;
-    private const int MinimumWidth = 720;
+    private const int MinimumWidth = 880;
     private const int MinimumHeight = 520;
 
     private const int GwlpWndProc = -4;

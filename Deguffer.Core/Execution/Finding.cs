@@ -6,9 +6,27 @@ namespace Deguffer.Core.Execution;
 
 /// <summary>One provider's contribution to the preview, present or not.</summary>
 /// <param name="Provider">The provider that produced it.</param>
-/// <param name="IsPresent">Whether the toolchain exists on this machine at all.</param>
-/// <param name="Plan">The dry run. Null only when the toolchain is absent.</param>
-public sealed record Finding(ICleanupProvider Provider, bool IsPresent, CleanupPlan? Plan)
+/// <param name="IsPresent">
+/// Whether the provider found what it manages. For a cache provider that is the toolchain; for one
+/// that searches the user's source trees it is whether it has anywhere approved to search, which is
+/// why <paramref name="AwaitingSourceFolders"/> exists to tell the two apart.
+/// </param>
+/// <param name="Plan">
+/// The dry run. Null when there was nothing to ask for one — an absent toolchain. A provider that
+/// is absent only for want of an approved folder still carries a plan, because that plan holds the
+/// sentence naming what to add.
+/// </param>
+/// <param name="AwaitingSourceFolders">
+/// Whether this provider searches only folders the user has approved and has none, so the row has
+/// something to ask for rather than something to report. Recorded here rather than re-asked of the
+/// provider later: approving a folder changes the provider's answer, and a row is a description of
+/// the scan that produced it.
+/// </param>
+public sealed record Finding(
+    ICleanupProvider Provider,
+    bool IsPresent,
+    CleanupPlan? Plan,
+    bool AwaitingSourceFolders = false)
 {
     public long EstimatedBytes => Plan?.EstimatedBytes ?? 0;
 

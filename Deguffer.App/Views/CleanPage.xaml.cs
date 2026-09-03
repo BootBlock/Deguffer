@@ -27,6 +27,7 @@ public sealed partial class CleanPage : Page
         // old value on a failed save, so a trip to Settings and back put the list and the selector
         // silently back to Standard, in the same session and with no explanation.
         ShowFindingsAt(App.Preferences.Current.View);
+        ListNotInstalled(App.Preferences.Current.ShowNotInstalled);
 
         // A scan and its results outlive a trip to Settings; rebuilding the page on the way back
         // would throw away a preview the user has not acted on yet.
@@ -81,6 +82,29 @@ public sealed partial class CleanPage : Page
         ViewSelector.SelectedIndex = (int)density;
         FindingsList.ItemTemplate = (DataTemplate)Resources[
             density == ViewDensity.Compact ? "CompactFinding" : "StandardFinding"];
+    }
+
+    /// <summary>
+    /// List the providers this machine does not have, or stop listing them, and leave the toggle
+    /// agreeing with what is on screen. Read once at construction for the same reason the view is,
+    /// and set on both sides here so neither can be the only one that knows.
+    /// </summary>
+    private void ListNotInstalled(bool show)
+    {
+        NotInstalledToggle.IsChecked = show;
+        ViewModel.ShowNotInstalled = show;
+    }
+
+    /// <summary>
+    /// Applied first and persisted second, exactly as the view is, and for the same reason: it
+    /// decides what is on screen and nothing about what gets deleted.
+    /// </summary>
+    private void OnShowNotInstalledChanged(object sender, RoutedEventArgs e)
+    {
+        var show = NotInstalledToggle.IsChecked == true;
+
+        ListNotInstalled(show);
+        App.Preferences.Update(current => current with { ShowNotInstalled = show });
     }
 
     /// <summary>

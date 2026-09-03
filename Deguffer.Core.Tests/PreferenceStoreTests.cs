@@ -18,7 +18,8 @@ public class PreferenceStoreTests
 
         Assert.True(store.Save(new AppPreferences(
             AppTheme.Dark,
-            ViewDensity.Compact,
+            ViewDensity.Standard,
+            ShowNotInstalled: true,
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true)));
@@ -26,7 +27,8 @@ public class PreferenceStoreTests
         var loaded = store.Load();
 
         Assert.Equal(AppTheme.Dark, loaded.Theme);
-        Assert.Equal(ViewDensity.Compact, loaded.View);
+        Assert.Equal(ViewDensity.Standard, loaded.View);
+        Assert.True(loaded.ShowNotInstalled);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
@@ -37,12 +39,19 @@ public class PreferenceStoreTests
     /// absent key must land on that preference's declared default rather than on whatever the JSON
     /// reader picks for a missing value.
     ///
-    /// <c>ConfirmBeforeCleaning</c> is what proves it, and it is the only preference that can. Its
-    /// declared default is <c>true</c> while <c>default(bool)</c> is <c>false</c>, so the two
-    /// answers differ and the assertion has something to catch. Asserting the same thing about
-    /// <c>RequireTypedConfirmation</c> would prove nothing: both answers there are <c>false</c>.
-    /// It is also the case with the consequence — an upgraded file read as "do not confirm" would
-    /// silently drop the only question a Tier 3 row gets once the typed phrase is off.
+    /// <c>ConfirmBeforeCleaning</c> and <c>View</c> are what prove it here. Their declared defaults,
+    /// <c>true</c> and <c>Compact</c>, differ from <c>default(bool)</c> and
+    /// <c>default(ViewDensity)</c>, so the two answers differ and the assertions have something to
+    /// catch. Asserting the same thing about <c>RequireTypedConfirmation</c> or
+    /// <c>ShowNotInstalled</c> would prove nothing: both answers there are <c>false</c>.
+    ///
+    /// <c>BackdropEnabled</c> could prove it too, and is spent instead as the parse guard below.
+    /// One preference has to be a key the file actually carries, or a wholesale fall through to the
+    /// defaults would satisfy every assertion here for the wrong reason.
+    ///
+    /// <c>ConfirmBeforeCleaning</c> is also the case with the consequence — an upgraded file read
+    /// as "do not confirm" would silently drop the only question a Tier 3 row gets once the typed
+    /// phrase is off.
     /// </summary>
     [Fact]
     public void AFileFromBeforeAPreferenceExistedTakesThatPreferencesDefault()
@@ -63,7 +72,9 @@ public class PreferenceStoreTests
         Assert.False(loaded.BackdropEnabled);
 
         Assert.True(loaded.ConfirmBeforeCleaning);
+        Assert.Equal(ViewDensity.Compact, loaded.View);
         Assert.False(loaded.RequireTypedConfirmation);
+        Assert.False(loaded.ShowNotInstalled);
     }
 
     /// <summary>
@@ -80,14 +91,16 @@ public class PreferenceStoreTests
     }
 
     /// <summary>
-    /// The Storage list is drawn in full on a machine nobody has configured. Compact hides the
-    /// sentence §7 asks every row to state, so it is a view the user opts into rather than one they
-    /// arrive in.
+    /// What the Storage list looks like on a machine nobody has configured: every recognised
+    /// location the machine actually has, one row each. The two defaults are the same judgement
+    /// from both ends — show the whole set of decisions, and do not pad it with rows that carry no
+    /// decision at all.
     /// </summary>
     [Fact]
-    public void TheShippedDefaultDrawsTheFullRow()
+    public void TheShippedDefaultsListEveryInstalledLocationAndNothingElse()
     {
-        Assert.Equal(ViewDensity.Standard, AppPreferences.Default.View);
+        Assert.Equal(ViewDensity.Compact, AppPreferences.Default.View);
+        Assert.False(AppPreferences.Default.ShowNotInstalled);
     }
 
     [Fact]
