@@ -41,10 +41,16 @@ internal static class MftExploreReader
     /// <paramref name="components"/> locates below the volume's own root — empty for the volume
     /// itself.
     ///
-    /// <para>The whole table is read whichever is asked for. The table is addressed by record
-    /// number and says nothing about where a record sits, so the parent links have to be inverted
-    /// before any path can be resolved at all; there is no cheaper pass that answers for a folder
-    /// alone.</para>
+    /// <para>The whole table is read whichever is asked for, and there is no cheaper pass over the
+    /// table that would do. It is addressed by record number, and a record names only its immediate
+    /// parent, so the record holding a folder cannot be found without having read the records that
+    /// lead to it — and which those are is not known until they have been read.</para>
+    ///
+    /// <para>So a folder small enough to walk quickly is answered more slowly this way than by
+    /// walking it. That is the trade §5.5 states in the other direction and it is taken knowingly:
+    /// the route is chosen before anything is known about the folder's size, the table's cost is
+    /// bounded by the volume rather than by the folder, and the case it exists for is the folder
+    /// large enough that walking it is the ten minutes §5.5 measured.</para>
     ///
     /// <para>Best effort by design. A record this cannot read is skipped and the tree says its
     /// totals are lower bounds; a region that cannot be read at all ends the pass and keeps what was
@@ -228,11 +234,22 @@ internal static class MftExploreReader
     }
 
     /// <summary>
-    /// One pass over the table for one path component, which is the same trade
-    /// <see cref="MftVolumeIndex"/> makes when it looks a child up and for the same reason: a path
-    /// has a handful of components, so a name index built across every record on the volume would
-    /// cost far more than these passes ever save (G4). Only the records whose parent matches are
-    /// compared by name.
+    /// A pass over the whole table for one path component.
+    ///
+    /// <para>Deliberately not <see cref="MftVolumeIndex"/>'s shape, which walks one directory's
+    /// child links. Those links are what <see cref="ExploreTree.Create"/> builds, and it cannot run
+    /// until the root is known, so at this point the only thing to scan is the flat parent array. A
+    /// path has a handful of components, and the comparison is an <c>int</c> per record with a name
+    /// compared only where the parent matches — a few million of those against a table read that
+    /// has already cost millions of disk records (G4).</para>
+    ///
+    /// <para>An exact match wins over one that differs only in case, and the fallback is what makes
+    /// a path typed in the wrong case still resolve. NTFS has held per-directory case sensitivity
+    /// since Windows 10 1803, and WSL sets it on the trees it creates, so a directory really can
+    /// hold <c>Cache</c> and <c>cache</c> at once — the same shape
+    /// <see cref="ExploreTree.ChildrenOf"/>'s comparer breaks ties for. Taking the first
+    /// case-insensitive match there would draw the wrong folder under the right folder's name,
+    /// which is the plausible wrong answer this whole class is written to avoid.</para>
     ///
     /// <para>A record naming itself as its parent is no directory's child, which is the rule
     /// <see cref="ExploreTree.Create"/> builds its child lists by. Resolving through one would pick
@@ -241,17 +258,26 @@ internal static class MftExploreReader
     private static int? FindChild(
         int directory, string name, string[] names, int[] parents, bool[] present, int count)
     {
+        int? differingInCase = null;
+
         for (var i = 0; i < count; i++)
         {
-            if (present[i]
-                && parents[i] == directory
-                && i != directory
-                && names[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (!present[i] || parents[i] != directory || i == directory)
+            {
+                continue;
+            }
+
+            if (names[i].Equals(name, StringComparison.Ordinal))
             {
                 return i;
             }
+
+            if (differingInCase is null && names[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                differingInCase = i;
+            }
         }
 
-        return null;
+        return differingInCase;
     }
 }

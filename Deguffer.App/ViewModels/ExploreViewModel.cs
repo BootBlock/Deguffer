@@ -9,46 +9,6 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
 
-/// <summary>One row of the list view, and one entry of any other view's detail.</summary>
-/// <param name="Node">Which node in the tree this stands for.</param>
-/// <param name="Share">
-/// How much of the containing directory this accounts for, 0 to 100. The bar is drawn against the
-/// parent rather than against the largest sibling, because the question the list answers is "what
-/// is this folder made of" and a bar scaled to the biggest child says nothing about that.
-/// </param>
-public sealed record ExploreRow(
-    int Node,
-    string Name,
-    string SizeLabel,
-    double Share,
-    bool IsDirectory,
-    bool IsLink,
-    bool IsApproximate)
-{
-    /// <summary>
-    /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
-    /// distinction — the row is named for a screen reader by <see cref="Description"/>, which says
-    /// it in words.
-    /// </summary>
-    public string Icon => (IsLink, IsDirectory) switch
-    {
-        // Written as escapes rather than as the characters themselves: these are private-use
-        // codepoints, so pasted into a source file they are indistinguishable from each other, and
-        // from nothing at all, in most tooling.
-        (true, _) => "\uE71B",   // Link
-        (_, true) => "\uE8B7",   // Folder
-        _ => "\uE7C3",           // Page
-    };
-
-    /// <summary>What a screen reader should say instead of reading a bar graphic.</summary>
-    public string Description =>
-        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}"
-        + $"{(IsApproximate ? ", at least" : string.Empty)}";
-}
-
-/// <summary>One step of the path back to the root.</summary>
-public sealed record ExploreCrumb(int Node, string Name);
-
 /// <summary>
 /// Drives the Explore page: pick a drive or a folder, scan it, and move around what was found.
 ///
@@ -83,7 +43,6 @@ public sealed partial class ExploreViewModel : ObservableObject
     public ObservableCollection<ExploreCrumb> Trail { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ScanRoot))]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     public partial string? SelectedDrive { get; set; }
 
@@ -95,7 +54,6 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// through one.</para>
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ScanRoot))]
     [NotifyPropertyChangedFor(nameof(IsScopedToFolder))]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     public partial string? ScopeFolder { get; set; }
@@ -104,8 +62,11 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// What the next scan covers: the chosen folder, and the whole drive where none was chosen.
     /// Choosing a folder is the more specific act, so it wins, and the drive box follows it rather
     /// than contradicting it — see <see cref="ScopeTo"/>.
+    ///
+    /// <para>Not bound to anything. The screen states the two halves separately, in the drive box
+    /// and the folder beside it, and this is what the scan is actually pointed at.</para>
     /// </summary>
-    public string? ScanRoot => ScopeFolder ?? SelectedDrive;
+    private string? ScanRoot => ScopeFolder ?? SelectedDrive;
 
     public bool IsScopedToFolder => ScopeFolder is not null;
 

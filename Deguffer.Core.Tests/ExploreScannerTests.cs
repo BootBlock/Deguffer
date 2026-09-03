@@ -6,8 +6,8 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The route choice for a whole volume: which of §5.5's two strategies runs, and what the user is
-/// told about it.
+/// The route choice for a whole volume, or for one folder on it: which of §5.5's two strategies
+/// runs, and what the user is told about it.
 ///
 /// <para>The distinction this exists to pin is that the walk is reached two ways. Usually something
 /// was unavailable and the user can be offered a remedy; sometimes the walk is simply the right
@@ -22,11 +22,18 @@ public class ExploreScannerTests
     private const uint Profile = 7;
     private const uint Cache = 8;
 
+    private const uint Sibling = 9;
+
     private static MftFixture Volume() => new MftFixture()
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
         .AddDirectory(Profile, Users, "testuser")
         .AddDirectory(Cache, Profile, ".npm-cache")
-        .AddFile(20, Cache, "a.tgz", allocated: 8192, logical: 8000);
+        .AddDirectory(Sibling, Profile, ".config")
+        .AddFile(20, Cache, "a.tgz", allocated: 8192, logical: 8000)
+
+        // Outside the folder the scoped tests point at, so their totals say which subtree was read
+        // rather than agreeing with the whole volume's by accident.
+        .AddFile(21, Sibling, "settings.json", allocated: 1024, logical: 1000);
 
     [Fact]
     public async Task ReadsTheTableForAWholeVolumeWhereItCan()
@@ -39,7 +46,7 @@ public class ExploreScannerTests
         Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
         Assert.Equal(FallbackReason.None, scan.Fallback);
         Assert.Null(scan.RouteNote);
-        Assert.Equal(8000, scan.Tree.TotalBytes);
+        Assert.Equal(9000, scan.Tree.TotalBytes);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache\a.tgz", scan.Tree.PathOf(20));
     }
 
@@ -77,7 +84,32 @@ public class ExploreScannerTests
         Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
         Assert.Equal(FallbackReason.None, scan.Fallback);
         Assert.Null(scan.RouteNote);
+        // 8000, not the volume's 9000: the sibling above the scope is outside what was read.
         Assert.Equal(8000, scan.Tree.TotalBytes);
+        Assert.Equal($@"{letter}:\Users\testuser\.npm-cache", scan.Tree.RootPath);
+        Assert.Equal($@"{letter}:\Users\testuser\.npm-cache\a.tgz", scan.Tree.PathOf(20));
+    }
+
+    /// <summary>
+    /// §6.3: every path in Core goes through <c>LongPath</c>, so a root can arrive
+    /// here in extended-length form — and the tree has to name itself in the form a person reads and
+    /// a shell opens.
+    ///
+    /// <para>The form is what is asserted rather than the depth, because a deep tree cannot fail:
+    /// .NET prepends the prefix itself past 260 characters. What discriminates is that the root the
+    /// tree reports, and every path it rebuilds below it, is the one the user would recognise —
+    /// which is also the invariant the file-table route now depends on, since it locates the folder
+    /// by the components of the same parse that produced this string.</para>
+    /// </summary>
+    [Fact]
+    public async Task NamesAFolderInTheFormAPersonReadsWhateverFormItWasGiven()
+    {
+        var letter = UnusedDriveLetter();
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
+
+        var scan = await scanner.ScanAsync($@"\\?\{letter}:\Users\testuser\.npm-cache");
+
+        Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache", scan.Tree.RootPath);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache\a.tgz", scan.Tree.PathOf(20));
     }
@@ -86,11 +118,9 @@ public class ExploreScannerTests
     /// A folder scan that could have used the table and did not is a fallback like any other, so it
     /// says so and offers the rights that would change the answer.
     ///
-    /// <para>This inverts what the scanner used to do. Rooting the table at a subtree was not
-    /// implemented, so a scan below a volume root went straight to the walk and reported
-    /// <see cref="FallbackReason.None"/> with the volume never opened — correct while no route was
-    /// lost, and wrong now that one is. The open is asserted for that reason: it is what separates
-    /// the two answers from a difference of wording.</para>
+    /// <para>The open is asserted because it is what separates this answer from the one below,
+    /// where nothing was lost: a volume that was never opened cannot have had a route taken from
+    /// it.</para>
     /// </summary>
     [Fact]
     public async Task OffersElevationForAFolderScanThatCouldHaveReadTheTable()

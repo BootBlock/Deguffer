@@ -148,7 +148,10 @@ public sealed class ExploreTree
 
             var parent = _parents[current];
 
-            // Only the root is its own parent; anything else claiming to be would loop forever.
+            // A node that is its own parent ends the chain. The scan's root is one, and so is the
+            // volume's own root left above a scan scoped to a folder — which is exactly the node a
+            // walk out of the scope arrives at, and why it ends in the throw below rather than in a
+            // path.
             if (parent == current)
             {
                 break;

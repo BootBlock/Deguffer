@@ -6,7 +6,8 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// §5.5's fast path, applied to a whole volume rather than to a handful of named locations.
+/// §5.5's fast path, applied to a whole volume, or to one folder on it, rather than to a handful
+/// of named locations.
 ///
 /// <para>The reader shares its byte-level half with <see cref="MftVolumeIndexBuilder"/> and answers
 /// to the opposite policy, so most of these tests are contrasts rather than measurements: the same
@@ -493,6 +494,57 @@ public class MftExploreReaderTests
 
         Assert.Null(file.Tree);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, file.Reason);
+    }
+
+    /// <summary>
+    /// Two siblings differing only in case are a real shape, and the folder the user picked is the
+    /// one whose name matches exactly.
+    ///
+    /// <para>NTFS has held per-directory case sensitivity since Windows 10 1803 and WSL sets it on
+    /// the trees it creates, so <c>Cache</c> and <c>cache</c> can sit side by side — the same shape
+    /// <see cref="ExploreTree.ChildrenOf"/>'s comparer already breaks ties for. Taking the first
+    /// case-insensitive match instead draws the wrong folder's contents, totals them, and labels
+    /// the lot with the path the user chose. Nothing on screen would say otherwise.</para>
+    ///
+    /// <para>Asserted in both directions on one fixture, so neither half can pass vacuously: the
+    /// exact match is preferred where one exists, and where none does the case-insensitive match
+    /// still answers — which is what keeps a path typed in the wrong case working.</para>
+    /// </summary>
+    [Fact]
+    public void PrefersTheChildWhoseNameMatchesExactly()
+    {
+        const uint UpperCache = 40;
+        const uint LowerCache = 41;
+
+        // The upper-case one is the lower record number, so a scan that takes the first match
+        // ignoring case reaches it whichever name was asked for.
+        using var source = Tree()
+            .AddDirectory(UpperCache, Profile, "Cache")
+            .AddDirectory(LowerCache, Profile, "cache")
+            .AddFile(42, UpperCache, "upper.bin", allocated: 8192, logical: 8000)
+            .AddFile(43, LowerCache, "lower.bin", allocated: 1024, logical: 1000)
+            .Build();
+
+        var lower = MftExploreReader.Read(
+            source, @"C:\Users\testuser\cache", ["Users", "testuser", "cache"],
+            onProgress: null, default).Tree!;
+
+        Assert.Equal((int)LowerCache, lower.RootNode);
+        Assert.Equal(1000, lower.TotalBytes);
+
+        var upper = MftExploreReader.Read(
+            source, @"C:\Users\testuser\Cache", ["Users", "testuser", "Cache"],
+            onProgress: null, default).Tree!;
+
+        Assert.Equal((int)UpperCache, upper.RootNode);
+        Assert.Equal(8000, upper.TotalBytes);
+
+        // No exact match, so the case-insensitive one still answers rather than the path failing.
+        var neither = MftExploreReader.Read(
+            source, @"C:\Users\testuser\CACHE", ["Users", "testuser", "CACHE"],
+            onProgress: null, default).Tree!;
+
+        Assert.Equal((int)UpperCache, neither.RootNode);
     }
 
     /// <summary>

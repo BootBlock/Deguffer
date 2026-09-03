@@ -17,9 +17,12 @@
             not next to the thing that produced the data.
         -->
         <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+            <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
+                 page would otherwise stop naming the folder it is still scanning. -->
             <ComboBox Grid.Column="0"
                       MinWidth="88"
                       Header="Drive"
+                      IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                       ItemsSource="{x:Bind ViewModel.Drives}"
                       SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
                       AutomationProperties.Name="Drive to scan" />
@@ -66,10 +69,13 @@
                            TextTrimming="CharacterEllipsis"
                            ToolTipService.ToolTip="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}" />
 
+                <!-- This clears the folder; it does not start anything. The accessible name says
+                     so, because it is the only thing a screen reader announces. -->
                 <Button Grid.Column="2"
                         Content="Whole drive"
                         Command="{x:Bind ViewModel.ScanWholeDriveCommand}"
-                        AutomationProperties.Name="Scan the whole drive instead" />
+                        ToolTipService.ToolTip="Clear the folder, so the next scan covers the whole drive"
+                        AutomationProperties.Name="Clear the folder" />
             </Grid>
 
             <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it:
@@ -88,7 +94,7 @@
                       MinWidth="120"
                       Header="View"
                       SelectionChanged="OnViewSelectionChanged"
-                      AutomationProperties.Name="How to draw the drive">
+                      AutomationProperties.Name="How to draw what was scanned">
                 <ComboBoxItem Content="Treemap" />
                 <ComboBoxItem Content="Icicle" />
                 <ComboBoxItem Content="Sunburst" />

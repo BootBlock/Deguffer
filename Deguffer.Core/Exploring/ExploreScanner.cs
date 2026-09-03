@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -82,7 +81,7 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
         {
             try
             {
-                var read = Read(source, root, volume.Components, progress, ct);
+                var read = Read(source, volume, progress, ct);
 
                 if (read.Tree is { } tree)
                 {
@@ -111,20 +110,23 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null)
 
     private static MftExploreRead Read(
         IMftSource source,
-        string root,
-        IReadOnlyList<string> components,
+        VolumePath volume,
         IProgress<ExploreProgress>? progress,
         CancellationToken ct)
     {
         var total = source.RecordCount;
 
-        // No snapshot from this route, and that is not a shortcut. The parent links are inverted
-        // once, after every record has been read, so there is no partial tree to hand over — and
-        // the pass it would interrupt is the whole cost of the route.
+        // Both halves come from the same parse. The tree names its root with the path the user
+        // reads and locates that root by the components, so the two have to describe one location
+        // in one form — see VolumePath.FullPath.
+        //
+        // No snapshot from this route, and that is not a shortcut. The tree is assembled once,
+        // after every record has been read, so there is no partial tree to hand over — and the pass
+        // it would interrupt is the whole cost of the route.
         return MftExploreReader.Read(
             source,
-            LongPath.Display(root),
-            components,
+            volume.FullPath,
+            volume.Components,
             done => progress?.Report(new ExploreProgress(done, total, BytesSeen: 0)),
             ct);
     }

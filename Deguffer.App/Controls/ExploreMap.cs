@@ -98,7 +98,7 @@ public sealed class ExploreMap : UserControl
         // carries what is under the pointer. A screen reader needs the same information without a
         // pointer, which the list view provides in full — so this announces its role and defers.
         IsTabStop = true;
-        AutomationProperties.SetName(this, "Map of the scanned drive");
+        AutomationProperties.SetName(this, "Map of what was scanned");
 
         // Naming where the same content is readable, because deferring to the list view only helps
         // somebody who knows it is there. It is one of four options in the View picker and it is

@@ -80,8 +80,12 @@ public static class ExploreRouteText
                 "Scanned by walking directories: this volume is not NTFS, so it has no file table to read.",
             FallbackReason.VolumeNotAddressable =>
                 "Scanned by walking directories: this location is not on a local volume Deguffer can open.",
+            // Three producers, and one sentence has to be true of all of them: the volume would
+            // not open, the table stopped answering part way through, and the table read cleanly
+            // and holds no record for this folder. "Did not answer" is what they share, and it is
+            // how FallbackReason.MasterFileTableIncomplete defines itself.
             FallbackReason.MasterFileTableIncomplete =>
-                "Scanned by walking directories: the volume's file table did not describe this location.",
+                "Scanned by walking directories: the volume's file table did not answer for this location.",
 
             // Belongs to the executor's after-measure and cannot arise here — a scan that draws a
             // picture never asks for a reading taken across a change to the disk.
