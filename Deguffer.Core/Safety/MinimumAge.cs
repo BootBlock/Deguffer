@@ -172,17 +172,18 @@ public readonly record struct MinimumAge
     }
 
     /// <summary>
-    /// A FILETIME from a <see cref="DateTime"/>, without <c>DateTime.ToFileTimeUtc</c>'s throw for
-    /// anything before 1601. A timestamp NTFS never set arrives as exactly the epoch, and clamping
-    /// it to zero puts it in the same place the master file table's own zero lands.
+    /// A FILETIME from a UTC instant, and deliberately not <c>DateTime.ToFileTimeUtc</c>, which
+    /// throws for anything before 1601 — part-way through a scan, over a timestamp nobody chose.
+    ///
+    /// <para>Nothing is converted here, because both callers have converted already:
+    /// <see cref="Within"/> normalises the clock it is handed before it subtracts the window, and
+    /// <see cref="NewestFileTimeOf"/> reads <see cref="FileSystemInfo"/>'s <c>Utc</c> properties.
+    /// Converting a second time would be a check on a value that cannot be wrong, and it would hide
+    /// the one place the kind genuinely varies — which is <see cref="Within"/>, where a caller may
+    /// pass a local clock and a mutation test can reach it.</para>
+    ///
+    /// <para>A timestamp NTFS never set arrives as exactly the epoch and answers zero, which is
+    /// where the master file table's own zero lands.</para>
     /// </summary>
-    private static long ToFileTime(DateTime value)
-    {
-        // Normalised before the comparison rather than after it. A DateTime compares by its ticks
-        // whatever its kind claims, so testing against the epoch first and converting second would
-        // measure one instant and answer about another.
-        var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
-
-        return utc <= FileTimeEpoch ? 0 : (utc - FileTimeEpoch).Ticks;
-    }
+    private static long ToFileTime(DateTime utc) => (utc - FileTimeEpoch).Ticks;
 }
