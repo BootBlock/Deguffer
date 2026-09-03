@@ -118,7 +118,8 @@ public class ExplorePlaceTests
     /// The file-table route, which is the case the issue behind these tests called out. It publishes
     /// no snapshot and numbers its nodes by record, so a node held from a walked scan lands on a
     /// record that is in range and describes nothing at all. Placing it is refused rather than
-    /// guessed.
+    /// guessed. <c>MftExploreReaderTests</c> is where that refusal is pinned against the shape a
+    /// real volume leaves, which this fixture's blank metadata records do not reproduce.
     /// </summary>
     [Fact]
     public void GoesBackToTheRootWhenTheNodeIsUnreachableInTheNewTree()
@@ -133,8 +134,7 @@ public class ExplorePlaceTests
         var table = MftExploreReader.Read(source, @"C:\", [], onProgress: null, default).Tree!;
         var walked = ProfileTree(@"C:\");
 
-        // Record 1 is in range and was never described, so it has no path — the shape a free or
-        // unreadable record leaves on a real volume.
+        // Record 1 is in range and was never described, so this tree cannot place it.
         Assert.Null(table.TryPathOf(1));
         Assert.Equal(table.RootNode, ExplorePlace.Carry(walked, 1, table));
     }

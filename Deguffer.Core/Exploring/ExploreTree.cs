@@ -23,6 +23,7 @@ public sealed class ExploreTree
     private readonly ExploreTimestamp[] _modified;
     private readonly int[] _childStart;
     private readonly int[] _children;
+    private readonly bool[] _placed;
 
     private ExploreTree(
         string rootPath,
@@ -37,6 +38,7 @@ public sealed class ExploreTree
         ExploreTimestamp[] modified,
         int[] childStart,
         int[] children,
+        bool[] placed,
         ExploreChildOrder childOrder)
     {
         RootPath = rootPath;
@@ -52,6 +54,7 @@ public sealed class ExploreTree
         _modified = modified;
         _childStart = childStart;
         _children = children;
+        _placed = placed;
     }
 
     /// <summary>Where the scan started, as the user picked it — <c>C:\</c>.</summary>
@@ -179,9 +182,11 @@ public sealed class ExploreTree
     /// </summary>
     public string? TryPathOf(int node)
     {
-        // A node number from another tree can be past the end of this one, so the range is part of
-        // the question rather than a precondition on it.
-        if (node < 0 || node >= NodeCount)
+        // Both halves of "this tree cannot place it", asked before the walk rather than discovered
+        // during it. A node number from another tree can be past the end of this one, and a record
+        // the file table never described is in range and holds nothing — see Placed for why walking
+        // out of one of those does not end where it looks as though it should.
+        if (node < 0 || node >= NodeCount || !_placed[node])
         {
             return null;
         }
@@ -192,37 +197,17 @@ public sealed class ExploreTree
         }
 
         var components = new List<string>();
-        var current = node;
 
-        // Bounded by the node count rather than by a chosen depth. A path cannot have more
-        // components than the tree has nodes, so this rejects nothing legitimate however deep a
-        // real tree turns out to be — and a chain longer than that has a cycle in it, which is the
-        // only thing this bound is here to end.
-        for (var depth = 0; depth < NodeCount; depth++)
+        // Unbounded, and it terminates because the node is placed: every ancestor of a placed node
+        // is placed, and the chain of them ends at the root by the definition of reachability.
+        for (var current = node; current != RootNode; current = _parents[current])
         {
             components.Add(_names[current]);
-
-            var parent = _parents[current];
-
-            // A node that is its own parent ends the chain. The scan's root is one, and so is the
-            // volume's own root left above a scan scoped to a folder — which is exactly the node a
-            // walk out of the scope arrives at, and why it ends in the null below rather than in a
-            // path.
-            if (parent == current)
-            {
-                break;
-            }
-
-            current = parent;
-
-            if (current == RootNode)
-            {
-                components.Reverse();
-                return Path.Combine([RootPath, .. components]);
-            }
         }
 
-        return null;
+        components.Reverse();
+
+        return Path.Combine([RootPath, .. components]);
     }
 
     /// <summary>
@@ -268,7 +253,7 @@ public sealed class ExploreTree
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, isDirectory, isLink, sizeUnknown,
-            created, modified, childStart, children, childOrder);
+            created, modified, childStart, children, Placed(order, names.Length), childOrder);
     }
 
     /// <summary>
@@ -344,6 +329,30 @@ public sealed class ExploreTree
         }
 
         return [.. order];
+    }
+
+    /// <summary>
+    /// Which nodes the root can actually reach, taken from the traversal that has just established
+    /// it. A byte per node, so that asking is a lookup rather than a walk.
+    ///
+    /// <para><b>Reachability is not the same question as whether the reader filled the slot, and
+    /// the file table is where they come apart.</b> An undescribed record keeps the array default
+    /// for its parent, which is record zero — and on a real volume record zero is <c>$MFT</c>,
+    /// described, and a child of the volume's root. So a walk up from an undescribed record does
+    /// arrive at the root, through a node that has nothing to do with it, and produces a path that
+    /// looks entirely ordinary. That is the plausible wrong answer <see cref="PathOf"/> exists to
+    /// refuse, and no walk can detect it from the parent links alone.</para>
+    /// </summary>
+    private static bool[] Placed(int[] order, int count)
+    {
+        var placed = new bool[count];
+
+        foreach (var node in order)
+        {
+            placed[node] = true;
+        }
+
+        return placed;
     }
 
     /// <summary>
