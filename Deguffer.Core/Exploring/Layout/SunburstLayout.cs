@@ -150,27 +150,26 @@ public static class SunburstLayout
             var from = (double)placed / total * sweep;
             var to = (double)(placed + size) / total * sweep;
 
-            if ((to - from) * inner >= limits.MinimumTileSize)
+            // Sorted descending, so nothing after this one can be wider.
+            if ((to - from) * inner < limits.MinimumTileSize)
             {
-                pending.Enqueue((child, depth, size, start + from, to - from));
-                placed += size;
-                continue;
+                break;
             }
 
-            // Sorted descending, so nothing after this can be wider. One wedge for the rest,
-            // carrying what it stands for — a gap here would read as space nothing is using rather
-            // than as detail withheld. Enqueued rather than emitted directly so it takes its place
-            // in the ring's angular order, which the hit test depends on.
-            //
-            // What it stands for is everything the drawn children did not account for, not the sum
-            // of the omitted ones. Those differ when a directory totals more than its children do,
-            // and taking the sum would give the wedge a byte count smaller than the angle it fills.
-            if (placed < total)
-            {
-                pending.Enqueue((ExploreSector.Aggregated, depth, total - placed, start + from, sweep - from));
-            }
+            pending.Enqueue((child, depth, size, start + from, to - from));
+            placed += size;
+        }
 
-            return;
+        // One wedge for whatever the drawn children did not account for — a gap here would read as
+        // space nothing is using rather than as bytes nobody itemised. That is not only what was
+        // too narrow to draw: a directory can total more than its children do, and then every child
+        // is drawn and the ring still has a hole in it. Enqueued rather than emitted directly so it
+        // takes its place in the ring's angular order, which the hit test depends on.
+        if (placed < total)
+        {
+            var edge = (double)placed / total * sweep;
+
+            pending.Enqueue((ExploreSector.Aggregated, depth, total - placed, start + edge, sweep - edge));
         }
     }
 }

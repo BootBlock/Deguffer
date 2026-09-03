@@ -147,6 +147,24 @@ public sealed class SunburstLayoutTests
     }
 
     /// <summary>
+    /// The residual wedge is not only for what was too narrow to draw. A directory can total more
+    /// than its children do, and then every child is drawn and the ring still has a hole in it —
+    /// which reads as space nothing is using rather than as bytes nobody itemised.
+    /// </summary>
+    [Fact]
+    public void AParentItsChildrenDoNotAccountForStillClosesItsRing()
+    {
+        var tree = HeavyDirectoryTree(own: 600, child: 400);
+
+        var ring = Layout(tree, Sized(LayoutLimits.Default)).Sectors.Where(s => s.Depth == 2).ToList();
+
+        var aggregate = Assert.Single(ring, s => s.IsAggregate);
+
+        Assert.Equal(600, aggregate.Bytes);
+        Assert.Equal(MathF.Tau, ring.Sum(s => s.SweepAngle), 3);
+    }
+
+    /// <summary>
     /// A wedge is narrowest at its inner edge, so that is where it is measured. One wide enough to
     /// see at the outer edge and a fraction of a pixel across at the inner one cannot reliably be
     /// pointed at, which is as much of what <see cref="LayoutLimits.MinimumTileSize"/> means as
@@ -224,6 +242,25 @@ public sealed class SunburstLayoutTests
     /// carrying a second number that has to be kept in step with the one the layout reads.
     /// </summary>
     private static LayoutLimits Sized(LayoutLimits limits) => limits with { RowHeight = MinimumRing };
+
+    /// <summary>
+    /// A directory carrying bytes of its own beside a child, so that its total is more than its
+    /// children add up to.
+    /// </summary>
+    private static ExploreTree HeavyDirectoryTree(long own, long child)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        var directory = builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [new ExploreChild("dir", IsDirectory: true, IsLink: false, own)]);
+
+        builder.AddChildren(
+            directory,
+            [new ExploreChild("file", IsDirectory: false, IsLink: false, child)]);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
 
     /// <summary>Children in the order a scan still running publishes them.</summary>
     private static ExploreTree NamedTreeOf(params long[] sizes)
