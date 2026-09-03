@@ -69,6 +69,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Scanner.Invalidate();
     }
 
+    /// <summary>
+    /// Nothing, for a provider that owns no directory whose unrecognised children must be
+    /// protected. Most do not: a provider whose target <em>is</em> its cache directory has no
+    /// siblings to spare, and one that finds its roots rather than knowing them cannot answer here
+    /// cheaply. The providers that do own such a root override this.
+    /// </summary>
+    public virtual IReadOnlyList<ToolRoot> ToolRoots => [];
+
     public abstract Task<CleanupPlan> PlanAsync(CancellationToken ct = default);
 
     public Task<CleanupResult> ExecuteAsync(

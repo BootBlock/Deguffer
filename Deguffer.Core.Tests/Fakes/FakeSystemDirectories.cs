@@ -16,12 +16,20 @@ public sealed class FakeSystemDirectories : ISystemDirectories
     {
         WindowsDirectory = Path.Combine(root, "Windows");
         ProgramData = Path.Combine(root, "ProgramData");
+        ProgramFiles = Path.Combine(root, "Program Files");
+        ProgramFilesX86 = Path.Combine(root, "Program Files (x86)");
 
         Directory.CreateDirectory(WindowsDirectory);
         Directory.CreateDirectory(ProgramData);
+        Directory.CreateDirectory(ProgramFiles);
+        Directory.CreateDirectory(ProgramFilesX86);
     }
 
     public string WindowsDirectory { get; }
 
     public string ProgramData { get; }
+
+    public string ProgramFiles { get; }
+
+    public string ProgramFilesX86 { get; }
 }

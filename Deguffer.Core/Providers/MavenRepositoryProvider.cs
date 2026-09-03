@@ -151,6 +151,27 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// ships its own Maven and fills this directory without ever putting the command anywhere
     /// Deguffer would find it.
     /// </summary>
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. The trap is the whole reason this provider names the
+    /// one directory it removes rather than listing the root: <c>settings.xml</c> holds server
+    /// credentials, <c>settings-security.xml</c> holds the master password they are encrypted
+    /// against, and both sit in the same folder as the repository.
+    ///
+    /// <para>The name is fixed rather than read back out of the settings file, so the declaration
+    /// stays string work. A repository relocated inside <c>.m2</c> under another name is then refused
+    /// here while the Storage page still removes it, which is the direction §5.2 requires an
+    /// uncertain classification to fail in.</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            Home,
+            "This is Maven's own folder. Deguffer removes the local repository inside it and "
+            + "nothing else, because your settings, the master password that decrypts your stored "
+            + "server passwords and your toolchains all sit beside it.",
+            static name => name.Equals("repository", StringComparison.OrdinalIgnoreCase)),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryExists(repository));
 

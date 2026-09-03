@@ -63,4 +63,22 @@ public interface ICleanupProvider
 
     /// <summary>§5.6 — assert the survivors.</summary>
     Task<VerificationResult> VerifyAsync(CleanupPlan plan, CancellationToken ct = default);
+
+    /// <summary>
+    /// The directories this provider owns whose unrecognised children are Tier 4, and the test that
+    /// tells one from the other. Empty for a provider that owns no such directory.
+    ///
+    /// <para>§5.2 is enforced inside <see cref="PlanAsync"/> by a
+    /// <see cref="DisposableChildSet"/>, which is enough while a plan is the only route to a
+    /// deletion. §7.1 opens a second: Explore draws every directory on the drive and lets the user
+    /// pick one out of the picture, and §5.2 is not scoped to a page — <c>gradle.properties</c>
+    /// beside <c>.gradle\caches</c> is Tier 4 there exactly as it is here. So the rule is declared
+    /// where something outside the provider can read it, rather than restated by Explore.</para>
+    ///
+    /// <para>Read outside a planning pass, so it must be cheap: a path this provider already knows,
+    /// or resolves from an environment variable. A provider that would have to run a subprocess or
+    /// walk the disk to answer declares nothing, which is correct — it has no root whose siblings
+    /// need protecting, or it finds its roots rather than knowing them.</para>
+    /// </summary>
+    IReadOnlyList<ToolRoot> ToolRoots { get; }
 }

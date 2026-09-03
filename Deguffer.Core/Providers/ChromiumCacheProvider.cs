@@ -128,6 +128,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
     private readonly ChromiumUserDataDiscovery _discovery;
     private IReadOnlyList<ChromiumUserData>? _applications;
+    private IReadOnlyList<ChromiumUserData>? _userData;
+    private IReadOnlyList<ToolRoot>? _toolRoots;
 
     public ChromiumCacheProvider(
         IUserEnvironment? environment = null,
@@ -162,9 +164,44 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     public IReadOnlyList<ChromiumUserData> Applications(CancellationToken ct = default) =>
         _applications ??= [.. _discovery.Discover(ct).Where(app => HasRecognisedCache(app, ct))];
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside: one root per level of every profile of every
+    /// Chromium folder on the machine.
+    ///
+    /// <para>A root per level, on Cargo's reasoning — a declaration is an allow-list over one
+    /// directory's immediate children, and these caches sit two deep. A root per <em>profile</em> as
+    /// well, because a Chromium host repeats the whole layout inside <c>Default</c> and each
+    /// <c>Profile N</c>, and a user-data folder that is not also declared per profile would refuse
+    /// the caches this provider removes.</para>
+    ///
+    /// <para>Built from every folder discovered rather than from <see cref="Applications"/>, which
+    /// keeps only those already holding a recognised cache. That filter is right for planning and
+    /// wrong here: a folder with no cache in it yet still holds <c>Login Data</c> and <c>Cookies</c>,
+    /// and those are the reason this declaration exists.</para>
+    ///
+    /// <para>Memoised beside <see cref="Applications"/>, and invalidated with it. The walk is the
+    /// same one that answers presence, so on an Explore session that never asks about a browser
+    /// folder it is paid for once and not at all if nothing is ever selected (G4).</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+        _toolRoots ??=
+        [
+            .. from application in _userData ??= _discovery.Discover()
+               from profile in application.Profiles
+               from level in Levels
+               select ToolRoot.Of(
+                   level.Resolve(profile),
+                   $"This is inside {application.Name}'s own folder. Deguffer removes the caches in "
+                   + "there from the Storage page, where it knows which of them are caches — the "
+                   + "sign-in cookies, saved passwords and payment cards sit beside them.",
+                   level.Children),
+        ];
+
     public override void InvalidateCaches()
     {
         _applications = null;
+        _userData = null;
+        _toolRoots = null;
         base.InvalidateCaches();
     }
 

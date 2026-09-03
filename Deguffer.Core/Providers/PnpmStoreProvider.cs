@@ -66,6 +66,23 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         LongPath.Configured(Environment.GetEnvironmentVariable("PNPM_HOME"))
             ?? Path.Combine(Environment.LocalAppData, "pnpm");
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside, and here nothing inside the root is disposable.
+    /// pnpm's launcher, the packages installed with <c>pnpm add --global</c> and the per-user
+    /// configuration all live in this folder, and so does the store on a default install — which
+    /// <c>pnpm store prune</c> works inside rather than removing, so it is a survivor too.
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            HomeDirectory,
+            "This is pnpm's own folder. Deguffer removes nothing inside it from here, because pnpm "
+            + "itself, the packages you installed globally and the store every project on this "
+            + "machine links into all live in there. Pruning the store is offered on the Storage "
+            + "page, where pnpm's own command decides what no project still uses.",
+            static _ => false),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("pnpm") is not null);
 
