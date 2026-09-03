@@ -32,6 +32,36 @@ public class MftExploreReaderTests
         .AddDirectory(Sibling, Profile, ".config");
 
     /// <summary>
+    /// A record the table never described has no path, and asking for one must end rather than run.
+    ///
+    /// <para>This route sizes its arrays to the whole record count, and most of those slots are
+    /// never filled — a free record leaves a default parent of zero, and record zero's own parent
+    /// is zero too, which is not the root's record number. Walking that chain to the root therefore
+    /// never arrives. Both <c>PathOf</c> and <c>NodeCount</c> are public, so the obvious loop over
+    /// every node hangs the caller with no exception to catch and no output to look at.</para>
+    ///
+    /// <para>It refuses rather than answering because the caller wants this for a label today and
+    /// to open a folder tomorrow. A guessed path is a wrong path, and the one thing worse than no
+    /// answer is a plausible one.</para>
+    /// </summary>
+    [Fact]
+    public void RefusesAPathForANodeThatDoesNotReachTheRoot()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .Build();
+
+        var tree = MftExploreReader.Read(source, Root, onProgress: null, default);
+
+        // Record 0 is $MFT, which this fixture leaves blank exactly as an unused entry is blank on
+        // a real volume — so the reader never placed it, and nothing links it to anything.
+        Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf(0));
+
+        // The reachable ones still answer, so the guard has not simply refused everything.
+        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+    }
+
+    /// <summary>
     /// The four records NTFS holds back on every volume must not raise the "some of this could not
     /// be read" caveat.
     ///
