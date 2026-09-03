@@ -545,4 +545,41 @@ public class MftVolumeIndexTests
 
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
+
+    /// <summary>
+    /// Two siblings differing only in case are a real shape, and the one the caller named is the
+    /// one whose name matches exactly.
+    ///
+    /// <para>NTFS has held per-directory case sensitivity since Windows 10 1803 and WSL sets it on
+    /// the trees it creates, so <c>Cache</c> and <c>cache</c> can sit side by side — the same shape
+    /// <see cref="Deguffer.Core.Exploring.ExploreTree.ChildrenOf"/>'s comparer already breaks ties
+    /// for. Resolving to the first case-insensitive match totals the other subtree and hands that
+    /// number back for the path the provider named, so the size the user approves a deletion
+    /// against measures a directory that is not the one being deleted.</para>
+    ///
+    /// <para>Asserted in both directions on one fixture, so neither half can pass vacuously: the
+    /// exact match wins where one exists, and where none does the case-insensitive match still
+    /// answers — which is what keeps a path given in the wrong case measurable.</para>
+    /// </summary>
+    [Fact]
+    public void MeasuresTheChildWhoseNameMatchesExactly()
+    {
+        const uint UpperCache = 40;
+        const uint LowerCache = 41;
+
+        // The upper-case one is the lower record number, and child links are built in record
+        // order, so a resolution that takes the first match ignoring case reaches it whichever
+        // name was asked for.
+        var index = Build(Tree()
+            .AddDirectory(UpperCache, Profile, "Cache")
+            .AddDirectory(LowerCache, Profile, "cache")
+            .AddFile(42, UpperCache, "upper.bin", allocated: 8192, logical: 8000)
+            .AddFile(43, LowerCache, "lower.bin", allocated: 1024, logical: 1000));
+
+        Assert.Equal(1024, index.TryMeasure(["Users", "testuser", "cache"])!.Value.Allocated);
+        Assert.Equal(8192, index.TryMeasure(["Users", "testuser", "Cache"])!.Value.Allocated);
+
+        // No exact match, so the case-insensitive one still answers rather than the path failing.
+        Assert.Equal(8192, index.TryMeasure(["Users", "testuser", "CACHE"])!.Value.Allocated);
+    }
 }
