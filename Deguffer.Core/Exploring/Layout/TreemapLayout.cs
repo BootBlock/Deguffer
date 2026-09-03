@@ -118,19 +118,17 @@ public static class TreemapLayout
             var side = Math.Min(remaining.Width, remaining.Height);
             var row = TakeRow(tree, children, index, side, scale, limits.MinimumTileSize);
 
-            // Three ways to reach the end of what can be drawn, and they all take the same exit. The
-            // next child has no area at all; the row it would form is thinner than the floor; or
-            // what is left to lay into is already narrower than the floor along its short side, so
-            // every rectangle cut from it fails the check whatever its thickness.
+            // Two ways to reach the end of what can be drawn, and both take the same exit: the next
+            // child has no area at all, or the row it would form is thinner than the floor. Anything
+            // still unplaced goes to the aggregate, because a blank corner of a treemap reads as
+            // free space rather than as detail withheld.
             //
-            // That third case is the one worth naming. It is not the row that is too small — it is
-            // the space — and without it the loop kept going, LayRow skipped each tile in turn, and
-            // `index` still advanced past them. Real children then left the picture drawn nowhere
-            // and counted in no aggregate, which is precisely the blank corner an aggregate exists
-            // to prevent: it reads as free space rather than as detail withheld.
-            if (row.Count == 0
-                || side < limits.MinimumTileSize
-                || (float)(row.Area / side) < limits.MinimumTileSize)
+            // What is *not* here is a check on each rectangle as it is placed. That is TakeRow's
+            // job now: it refuses to admit a child the row cannot draw, so by this point everything
+            // in the row fits. Checking again down in LayRow was the original bug — a child failing
+            // there was skipped where it stood while `index` advanced past it, so its bytes were
+            // drawn nowhere and counted in no aggregate.
+            if (row.Count == 0 || (float)(row.Area / side) < limits.MinimumTileSize)
             {
                 Aggregate(tree, children[index..], remaining, depth, tiles);
                 return;

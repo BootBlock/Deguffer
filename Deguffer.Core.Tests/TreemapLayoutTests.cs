@@ -161,6 +161,13 @@ public sealed class TreemapLayoutTests
             (400f, 300f, new long[] { 4000, 10 }),
             (1200f, 800f, new long[] { 4000, 10 }),
             (800f, 600f, new long[] { 5000, 900, 80, 7, 1 }),
+
+            // Long and narrow, so the leftover strip runs out along its short side before the
+            // children do. That is the other way a row stops being drawable: not the row that is
+            // too small, but the space left to lay it into.
+            (20f, 400f, new long[] { 900, 400, 120, 60, 30, 12, 5, 3, 2, 1 }),
+            (400f, 20f, new long[] { 900, 400, 120, 60, 30, 12, 5, 3, 2, 1 }),
+            (14f, 900f, new long[] { 5000, 2000, 400, 90, 20, 6, 2, 1 }),
         })
         {
             var tree = TreeOf(sizes);
