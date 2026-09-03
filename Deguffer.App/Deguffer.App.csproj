@@ -123,6 +123,19 @@
         </ItemGroup>
     </Target>
 
+    <!--
+        The About page states when this copy was built, and nothing in the compiled output carries
+        that: a deterministic build writes a content hash into the PE header's timestamp field
+        rather than a date, and a file timestamp is changed by any later copy or restore.
+
+        The date and not the time, deliberately. A value that changed on every build would rewrite
+        the generated assembly attributes each time and force a recompile of the app for nothing.
+        UTC, so the stamp does not depend on how the build machine's clock is set.
+    -->
+    <ItemGroup>
+        <AssemblyMetadata Include="BuildDate" Value="$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))" />
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
