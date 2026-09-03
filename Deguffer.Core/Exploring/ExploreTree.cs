@@ -23,6 +23,7 @@ public sealed class ExploreTree
     private readonly ExploreTimestamp[] _modified;
     private readonly int[] _childStart;
     private readonly int[] _children;
+    private readonly bool[] _placed;
 
     private ExploreTree(
         string rootPath,
@@ -37,6 +38,7 @@ public sealed class ExploreTree
         ExploreTimestamp[] modified,
         int[] childStart,
         int[] children,
+        bool[] placed,
         ExploreChildOrder childOrder)
     {
         RootPath = rootPath;
@@ -52,6 +54,7 @@ public sealed class ExploreTree
         _modified = modified;
         _childStart = childStart;
         _children = children;
+        _placed = placed;
     }
 
     /// <summary>Where the scan started, as the user picked it — <c>C:\</c>.</summary>
@@ -151,59 +154,60 @@ public sealed class ExploreTree
     /// <summary>
     /// The full path of <paramref name="node"/>, rebuilt by walking to the root.
     ///
-    /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
-    /// here combined, and the UI asks for one only when the user points at something.</para>
-    ///
-    /// <para>Throws for a node whose parent chain does not reach the root. Such nodes exist: the
-    /// file-table route sizes its arrays to the whole record count and most of those slots are
-    /// never filled, so their parent is a default zero and the walk would never terminate. Every
-    /// node reachable through <see cref="ChildrenOf"/> from the root is safe by construction, and
-    /// that is the only way anything gets one to pass here.</para>
+    /// <para>Throws for a node this tree cannot place. Such nodes exist: the file-table route sizes
+    /// its arrays to the whole record count and most of those slots are never filled, so their
+    /// parent is a default zero and the walk would never terminate. Every node reachable through
+    /// <see cref="ChildrenOf"/> from the root is safe by construction, and that is the only way
+    /// anything gets one to pass here.</para>
     ///
     /// <para>Throwing rather than answering, because the caller wants this for a label today and to
     /// open a folder tomorrow. A guessed path is a wrong path, and the one thing worse than no
-    /// answer is a plausible one.</para>
+    /// answer is a plausible one. A caller that is asking whether the node has a path at all wants
+    /// <see cref="TryPathOf"/> instead, which is the same walk without the throw.</para>
     /// </summary>
-    public string PathOf(int node)
+    public string PathOf(int node) =>
+        TryPathOf(node) ?? throw new ArgumentOutOfRangeException(
+            nameof(node), node, "This node is not reachable from the root, so it has no path.");
+
+    /// <summary>
+    /// The full path of <paramref name="node"/>, or null where this tree cannot place it: a node
+    /// number it does not hold, or one whose parent chain does not reach the root.
+    ///
+    /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
+    /// here combined, and the UI asks for one only when the user points at something.</para>
+    ///
+    /// <para>Null rather than a throw is for the caller holding a node number from a <i>different</i>
+    /// tree, where being unable to place it is the expected answer rather than a mistake — see
+    /// <see cref="ExplorePlace"/>.</para>
+    /// </summary>
+    public string? TryPathOf(int node)
     {
+        // Both halves of "this tree cannot place it", asked before the walk rather than discovered
+        // during it. A node number from another tree can be past the end of this one, and a record
+        // the file table never described is in range and holds nothing — see Placed for why walking
+        // out of one of those does not end where it looks as though it should.
+        if (node < 0 || node >= NodeCount || !_placed[node])
+        {
+            return null;
+        }
+
         if (node == RootNode)
         {
             return RootPath;
         }
 
         var components = new List<string>();
-        var current = node;
 
-        // Bounded by the node count rather than by a chosen depth. A path cannot have more
-        // components than the tree has nodes, so this rejects nothing legitimate however deep a
-        // real tree turns out to be — and a chain longer than that has a cycle in it, which is the
-        // only thing this bound is here to end.
-        for (var depth = 0; depth < NodeCount; depth++)
+        // Unbounded, and it terminates because the node is placed: every ancestor of a placed node
+        // is placed, and the chain of them ends at the root by the definition of reachability.
+        for (var current = node; current != RootNode; current = _parents[current])
         {
             components.Add(_names[current]);
-
-            var parent = _parents[current];
-
-            // A node that is its own parent ends the chain. The scan's root is one, and so is the
-            // volume's own root left above a scan scoped to a folder — which is exactly the node a
-            // walk out of the scope arrives at, and why it ends in the throw below rather than in a
-            // path.
-            if (parent == current)
-            {
-                break;
-            }
-
-            current = parent;
-
-            if (current == RootNode)
-            {
-                components.Reverse();
-                return Path.Combine([RootPath, .. components]);
-            }
         }
 
-        throw new ArgumentOutOfRangeException(
-            nameof(node), node, "This node is not reachable from the root, so it has no path.");
+        components.Reverse();
+
+        return Path.Combine([RootPath, .. components]);
     }
 
     /// <summary>
@@ -249,7 +253,7 @@ public sealed class ExploreTree
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, isDirectory, isLink, sizeUnknown,
-            created, modified, childStart, children, childOrder);
+            created, modified, childStart, children, Placed(order, names.Length), childOrder);
     }
 
     /// <summary>
@@ -325,6 +329,30 @@ public sealed class ExploreTree
         }
 
         return [.. order];
+    }
+
+    /// <summary>
+    /// Which nodes the root can actually reach, taken from the traversal that has just established
+    /// it. A byte per node, so that asking is a lookup rather than a walk.
+    ///
+    /// <para><b>Reachability is not the same question as whether the reader filled the slot, and
+    /// the file table is where they come apart.</b> An undescribed record keeps the array default
+    /// for its parent, which is record zero — and on a real volume record zero is <c>$MFT</c>,
+    /// described, and a child of the volume's root. So a walk up from an undescribed record does
+    /// arrive at the root, through a node that has nothing to do with it, and produces a path that
+    /// looks entirely ordinary. That is the plausible wrong answer <see cref="PathOf"/> exists to
+    /// refuse, and no walk can detect it from the parent links alone.</para>
+    /// </summary>
+    private static bool[] Placed(int[] order, int count)
+    {
+        var placed = new bool[count];
+
+        foreach (var node in order)
+        {
+            placed[node] = true;
+        }
+
+        return placed;
     }
 
     /// <summary>

@@ -233,7 +233,11 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     public bool HasViewNote => ViewNote is not null;
 
-    /// <summary>Which node the views are drawing. The scan's root until the user descends.</summary>
+    /// <summary>
+    /// Which node the views are drawing. The scan's root until the user descends, and then wherever
+    /// they descended to — including across the partial trees a running scan publishes, which is
+    /// <see cref="ExplorePlace"/>'s job to establish.
+    /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial int CurrentNode { get; set; }
@@ -282,7 +286,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
 
-            Show(scan.Tree, scan.Tree.RootNode);
+            Show(scan.Tree, ExplorePlace.Carry(Tree, CurrentNode, scan.Tree));
 
             RouteNote = scan.RouteNote;
             CanElevate = !ElevatedRelaunch.IsElevated && scan.Fallback == FallbackReason.NotElevated;
@@ -491,7 +495,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // it rather than being merged into it.
         if (progress.Snapshot is { } snapshot)
         {
-            Show(snapshot, snapshot.RootNode);
+            Show(snapshot, ExplorePlace.Carry(Tree, CurrentNode, snapshot));
         }
     }
 
