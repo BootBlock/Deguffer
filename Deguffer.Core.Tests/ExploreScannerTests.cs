@@ -202,6 +202,41 @@ public class ExploreScannerTests
     }
 
     /// <summary>
+    /// A snapshot is ordered by name and the finished tree by size, which is the whole of how the
+    /// map is kept still while a scan runs. The sizes in a partial tree are still growing, so
+    /// ordering siblings by one of them makes every snapshot a different arrangement of the same
+    /// disk; a name does not grow.
+    ///
+    /// <para>Driven the same way as the interval test above, by holding the reporting thread, for
+    /// the same reason: what is needed is elapsed time rather than a fixture large enough to take
+    /// three quarters of a second to walk.</para>
+    /// </summary>
+    [Fact]
+    public async Task OrdersASnapshotByNameAndTheFinishedTreeBySize()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(1000, "cache", "a.bin");
+        temp.CreateFile(2000, "cache", "one", "b.bin");
+        temp.CreateFile(4000, "cache", "one", "two", "c.bin");
+
+        var reports = new List<ExploreProgress>();
+        var progress = new CallbackProgress<ExploreProgress>(report =>
+        {
+            reports.Add(report);
+            Thread.Sleep(400);
+        });
+
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
+        var scan = await scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress);
+
+        var published = reports.Select(report => report.Snapshot).OfType<ExploreTree>().ToList();
+
+        Assert.NotEmpty(published);
+        Assert.All(published, tree => Assert.Equal(ExploreChildOrder.ByName, tree.ChildOrder));
+        Assert.Equal(ExploreChildOrder.BySize, scan.Tree.ChildOrder);
+    }
+
+    /// <summary>
     /// G4: a scan the user cannot abandon is a bug, and it is a bug on both routes. Neither is
     /// interruptible in itself — one is a pass over millions of records, the other a level-by-level
     /// walk — so the token has to reach the loop that drives each of them.

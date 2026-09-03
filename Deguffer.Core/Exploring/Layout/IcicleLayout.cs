@@ -12,10 +12,16 @@ namespace Deguffer.Core.Exploring.Layout;
 /// with the sibling order fixed, a child that grows only widens, so nothing jumps to another
 /// row.</para>
 ///
-/// <para>That last property is why it is the right thing to draw while a scan is still running.
-/// Bederson, Shneiderman and Wattenberg measured layout change under updates across 100 items and
-/// put squarified treemaps at 14.82 against slice-and-dice's 0.25 — a treemap redrawn from a
-/// growing tree rearranges itself continuously, and an icicle does not.</para>
+/// <para>That last property is why this is what the map draws while a scan is still running,
+/// whichever view the user picked. Bederson, Shneiderman and Wattenberg measured layout change
+/// under updates across 100 items and put squarified treemaps at 14.82 against slice-and-dice's
+/// 0.25 — a treemap redrawn from a growing tree rearranges itself continuously, and an icicle does
+/// not. The fixed order the property depends on is <see cref="ExploreChildOrder.ByName"/>, which is
+/// what a snapshot of a scan in progress is built with.</para>
+///
+/// <para>Unlike the treemap this takes its children in whatever order the tree holds them, and it
+/// has to: under a size order the ones too narrow to draw are the tail, and under a name order they
+/// are scattered through the middle.</para>
 /// </summary>
 public static class IcicleLayout
 {
@@ -78,13 +84,20 @@ public static class IcicleLayout
     }
 
     /// <summary>
-    /// Divide one node's width among its children, largest first, and stop at the first child too
-    /// narrow to draw.
+    /// Divide one node's width among its children, in the order the tree holds them, and gather
+    /// whatever is too narrow to draw into one rectangle at the end of the row.
+    ///
+    /// <para>Which children are drawn is settled before the first one is placed, by a byte
+    /// threshold rather than by measuring each rectangle as the row is built. That is what makes
+    /// this work under any sibling order: a child's position is the total of the drawn children
+    /// before it, so it cannot be known until the drawn set is. Under a size order the omitted
+    /// children are the tail and this lays out exactly as stopping at the first narrow one did;
+    /// under a name order they are scattered, and stopping at the first would throw away every
+    /// large child that happened to follow it.</para>
     ///
     /// <para>Boundaries come from a running total rather than from each child's own rounded width.
     /// Rounding each in turn accumulates along the row, and the last child of a wide directory then
-    /// ends either short of the edge or over it. A child too narrow to receive a rectangle still
-    /// advances the running total, so the children after it stay in the right place.</para>
+    /// ends either short of the edge or over it.</para>
     /// </summary>
     private static void Partition(
         ExploreTree tree,
@@ -105,52 +118,40 @@ public static class IcicleLayout
             return;
         }
 
-        double placed = 0;
+        // The smallest child that can have a rectangle of its own at this width. At least one byte,
+        // so an empty file or a link is always gathered rather than given a rectangle of no width
+        // and then descended into.
+        var floor = Math.Max(1, (long)Math.Ceiling((double)limits.MinimumTileSize * total / width));
 
-        for (var i = 0; i < children.Length; i++)
+        long placed = 0;
+
+        foreach (var child in children)
         {
-            var from = (float)(placed / total * width);
-            placed += tree.SizeOf(children[i]);
-            var to = (float)(placed / total * width);
+            var size = tree.SizeOf(child);
 
-            if (to - from >= limits.MinimumTileSize)
+            if (size < floor)
             {
-                pending.Push((children[i], depth, x + from, to - from));
                 continue;
             }
 
-            // Sorted descending, so nothing after this can be wider. One rectangle for the rest,
-            // carrying what it stands for — a gap here would read as empty space rather than as
-            // detail withheld.
-            Aggregate(tree, children[i..], depth, x + from, width - from, rowHeight, tiles);
-            return;
+            var from = (float)((double)placed / total * width);
+            placed += size;
+            var to = (float)((double)placed / total * width);
+
+            pending.Push((child, depth, x + from, to - from));
         }
-    }
 
-    private static void Aggregate(
-        ExploreTree tree,
-        ReadOnlySpan<int> omitted,
-        int depth,
-        float x,
-        float width,
-        float rowHeight,
-        List<ExploreTile> tiles)
-    {
-        long bytes = 0;
-
-        foreach (var node in omitted)
+        // What is left, in the space the drawn children did not take. A gap here would read as
+        // empty space rather than as detail withheld, so the remainder states its own byte count —
+        // and a directory whose omitted children are all empty adds up to nothing and draws
+        // nothing, rather than putting a block over space no child occupies.
+        if (placed < total)
         {
-            bytes += tree.SizeOf(node);
-        }
+            var edge = (float)((double)placed / total * width);
 
-        // Nothing to stand for, so nothing to draw — a block over space its children do not occupy
-        // would invent an occupant.
-        if (bytes == 0)
-        {
-            return;
+            tiles.Add(new ExploreTile(
+                ExploreTile.Aggregated, depth, total - placed,
+                x + edge, depth * rowHeight, width - edge, rowHeight));
         }
-
-        tiles.Add(new ExploreTile(
-            ExploreTile.Aggregated, depth, bytes, x, depth * rowHeight, width, rowHeight));
     }
 }

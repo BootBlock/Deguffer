@@ -33,9 +33,10 @@ public enum ViewDensity
 /// <para><see cref="Treemap"/> is the shipped view: it is what every tool in this category shows by
 /// default, so it is the one a user arrives already able to read. The other two are not decoration
 /// beside it. <see cref="List"/> is the densest answer to "what is biggest", which is the question
-/// most people actually open the page with, and it is the only view that stays readable while a
-/// scan is still filling it in. <see cref="Icicle"/> keeps area exactly proportional at every level
-/// and has room to label several levels at once, which a treemap does not.</para>
+/// most people actually open the page with. <see cref="Icicle"/> keeps area exactly proportional at
+/// every level, has room to label several levels at once, and is the one picture that stays still
+/// while a scan is filling it in — which is why the map draws it, whichever of the two is chosen,
+/// until the scan finishes.</para>
 /// </summary>
 public enum ExploreView
 {

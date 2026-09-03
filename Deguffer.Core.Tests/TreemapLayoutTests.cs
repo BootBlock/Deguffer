@@ -215,6 +215,28 @@ public sealed class TreemapLayoutTests
         Assert.Empty(TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default));
     }
 
+    /// <summary>
+    /// Squarification is defined only over a decreasing sequence, and a snapshot of a scan still
+    /// running is ordered by name so that it stays still. Handed one, this would pack rows out of
+    /// rectangles whose sizes it had no order for — a picture that looks like a treemap and is not
+    /// one — so it refuses instead.
+    /// </summary>
+    [Fact]
+    public void RefusesATreeThatIsNotOrderedBySize()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 100),
+            new ExploreChild("b.bin", IsDirectory: false, IsLink: false, Size: 900),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.ByName);
+
+        Assert.Throws<ArgumentException>(
+            () => TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default));
+    }
+
     private static ExploreTree TreeOf(params long[] sizes)
     {
         var builder = new ExploreTreeBuilder(@"C:\");
@@ -223,7 +245,7 @@ public sealed class TreemapLayoutTests
             ExploreTreeBuilder.RootNode,
             [.. sizes.Select((size, i) => new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, size))]);
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     /// <summary>A chain of directories, each holding one file and one directory.</summary>
@@ -242,6 +264,6 @@ public sealed class TreemapLayoutTests
             parent = first;
         }
 
-        return builder.Build();
+        return builder.Build(ExploreChildOrder.BySize);
     }
 }

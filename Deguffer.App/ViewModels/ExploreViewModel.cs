@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -72,7 +73,10 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>The volumes offered in the picker, as <c>C:\</c> roots.</summary>
     public ObservableCollection<string> Drives { get; } = [];
 
-    /// <summary>What the current node holds, largest first.</summary>
+    /// <summary>
+    /// What the current node holds, in the tree's own order: largest first once a scan has
+    /// finished, and by name while one is still running. See <see cref="ExploreChildOrder"/>.
+    /// </summary>
     public ObservableCollection<ExploreRow> Rows { get; } = [];
 
     /// <summary>The path from the scan's root down to the current node.</summary>
@@ -132,8 +136,45 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTree))]
     [NotifyPropertyChangedFor(nameof(HasNoTree))]
+    [NotifyPropertyChangedFor(nameof(ViewNote))]
+    [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; set; }
+
+    /// <summary>
+    /// Which picture the user asked for.
+    ///
+    /// <para>Here rather than only in the page, because the page is not the only thing that has to
+    /// answer for it. While a scan is running the map draws the icicle whatever this says, and
+    /// <see cref="ViewNote"/> is what keeps that from being a silent substitution.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ViewNote))]
+    [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    public partial ExploreView SelectedView { get; set; }
+
+    /// <summary>
+    /// How what is on screen differs from what the View box names, or null when it does not.
+    ///
+    /// <para>Only ever raised by a partial tree, and every view is affected by one. Its children are
+    /// ordered by name rather than by size, so that a scan in progress stays still, and the treemap
+    /// cannot be drawn from that at all — squarification is defined only over a decreasing
+    /// sequence — so the map substitutes the icicle on top. A scan reading the file table publishes
+    /// no partial tree, so it never says any of this.</para>
+    ///
+    /// <para>The list gets the sentence as much as the pictures do. It reorders itself alphabetically
+    /// and back again, which is a substitution too, and one nobody is told about is the kind a user
+    /// reads as a bug.</para>
+    /// </summary>
+    public string? ViewNote => Tree is { ChildOrder: not ExploreChildOrder.BySize }
+        ? SelectedView == ExploreView.Treemap
+            ? "Drawing the icicle, in name order, while the scan runs. A treemap reorders every "
+              + "folder as it grows, so it follows when the scan finishes."
+            : "In name order while the scan runs, so nothing moves as a folder grows. Largest first "
+              + "when the scan finishes."
+        : null;
+
+    public bool HasViewNote => ViewNote is not null;
 
     /// <summary>Which node the views are drawing. The scan's root until the user descends.</summary>
     [ObservableProperty]
