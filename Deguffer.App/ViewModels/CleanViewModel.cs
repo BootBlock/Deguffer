@@ -20,8 +20,14 @@ public sealed partial class CleanViewModel : ObservableObject
 {
     private readonly CleanupPlanner _planner;
     private readonly IUserEnvironment _environment;
+    private readonly SelectionService _selections;
     private readonly Func<IConfirmationPrompt> _prompt;
 
+    /// <param name="selections">
+    /// What the rows were left ticked as last time, and where a change to that is written back.
+    /// A scan re-plans from scratch, so without this every preview hands the user the same list of
+    /// decisions to make again.
+    /// </param>
     /// <param name="prompt">
     /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
     /// not exist while the view-model is being constructed.
@@ -29,10 +35,12 @@ public sealed partial class CleanViewModel : ObservableObject
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
+        SelectionService selections,
         Func<IConfirmationPrompt> prompt)
     {
         _planner = planner;
         _environment = environment;
+        _selections = selections;
         _prompt = prompt;
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
@@ -404,7 +412,7 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         foreach (var row in Findings)
         {
-            row.SelectionChanged -= UpdateSelectionTotal;
+            row.SelectionChanged -= OnRowSelectionChanged;
         }
 
         Findings.Clear();
@@ -458,7 +466,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private void AddRowInSizeOrder(Finding finding)
     {
-        var row = new FindingViewModel(finding);
+        var row = new FindingViewModel(finding, _selections.Memory);
 
         // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
@@ -467,7 +475,7 @@ public sealed partial class CleanViewModel : ObservableObject
         // One event for both directions: the row's own checkbox and any step within it. Subscribing
         // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays
         // ticked, which is the ordinary case for per-item selection.
-        row.SelectionChanged += UpdateSelectionTotal;
+        row.SelectionChanged += OnRowSelectionChanged;
 
         var index = 0;
         while (index < Findings.Count && Findings[index].Finding.EstimatedBytes >= finding.EstimatedBytes)
@@ -586,6 +594,24 @@ public sealed partial class CleanViewModel : ObservableObject
     /// ticked row no longer implies its whole plan will run, so totalling the finding would promise
     /// back space that the unticked steps within it are not going to release.
     /// </summary>
+    /// <summary>
+    /// One change by the user: retotal, and remember what they chose.
+    ///
+    /// Written on every change rather than at some tidier moment, because there is no reliable
+    /// later one. A scan can be cancelled, a clean re-plans the list from scratch, and the process
+    /// can be replaced outright by the elevated relaunch — all three would lose a choice that was
+    /// only being held until the end.
+    ///
+    /// The result of the write is discarded on the same reasoning the view density is: the info bar
+    /// on this page carries §5.6's verification headline, which is not a thing to displace for a
+    /// tick the user can see took effect.
+    /// </summary>
+    private void OnRowSelectionChanged(FindingViewModel row)
+    {
+        _selections.Remember(row.Finding.Provider.Id, row.ToRemembered());
+        UpdateSelectionTotal();
+    }
+
     private void UpdateSelectionTotal()
     {
         SelectedTotalLabel = FreeSpace.Format(

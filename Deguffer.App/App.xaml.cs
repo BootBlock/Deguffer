@@ -39,6 +39,14 @@ public partial class App : Application
         new(new SourceRootStore(UserEnvironment.Current));
 
     /// <summary>
+    /// What the Storage rows were left ticked as, shared for the same reason the two above are: the
+    /// page reads it as it builds each row and writes it back as the user clicks, so a second
+    /// instance would hand out a copy that is stale by the first tick.
+    /// </summary>
+    public static SelectionService Selections { get; } =
+        new(new SelectionStore(UserEnvironment.Current));
+
+    /// <summary>
     /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no
     /// route to its own window, and a picker without an owner handle throws rather than opening.
     /// </summary>

@@ -10,6 +10,17 @@ public abstract record CleanupStep
     public abstract string Description { get; }
 
     /// <summary>
+    /// What identifies this step from one scan to the next, so a choice the user made about it can
+    /// be matched to the same step later. Unique within one provider's plan; nothing compares keys
+    /// across providers.
+    ///
+    /// Deliberately not <see cref="Description"/>, which is prose: rewording a sentence would
+    /// silently discard every choice the user had made about that step, and the direction it
+    /// discards them in is back towards the pre-selected default.
+    /// </summary>
+    public abstract string SelectionKey { get; }
+
+    /// <summary>
     /// What this step is expected to reclaim, measured at plan time.
     ///
     /// A <see cref="ScanSize"/> rather than a bare count because allocated and logical bytes are
@@ -97,6 +108,13 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     public ScanSize? MeasuredBefore { get; init; }
 
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
+
+    /// <summary>
+    /// The command itself, without where the tool happens to be installed. A tool that moves — an
+    /// upgrade that lands under a new version directory, a PATH entry that resolves elsewhere — is
+    /// running the same command on the same cache, and the user's choice about it still applies.
+    /// </summary>
+    public override string SelectionKey => $"{Path.GetFileName(FileName)} {Arguments}";
 }
 
 /// <summary>
@@ -115,7 +133,14 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 /// </summary>
 /// <param name="Path">The path that will be removed, in display form.</param>
 /// <param name="What">Why it is disposable, written for the user.</param>
-public abstract record DeleteStep(string Path, string What) : CleanupStep;
+public abstract record DeleteStep(string Path, string What) : CleanupStep
+{
+    /// <summary>
+    /// The path, which is the whole of what a deletion is about. Answered here rather than on each
+    /// concrete step so a new kind of deletion cannot arrive keyed on something else.
+    /// </summary>
+    public override string SelectionKey => Path;
+}
 
 /// <summary>
 /// Delete one explicitly recognised directory. Never a tool root — see <see cref="DisposableChildSet"/>.
