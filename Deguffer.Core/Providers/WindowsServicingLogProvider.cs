@@ -81,20 +81,18 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         + "Windows writes a fresh log the next time it services itself, and updating still works "
         + "exactly as before.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
-        Application = "Windows Update, component servicing, and the system file checker",
+        Application = "Windows Update, component servicing, the system file checker, and the WMI "
+            + "service",
         Publisher = "Microsoft",
         Purpose = "Windows records what it did every time it serviced itself: installed an "
-            + "update, repaired a component, or ran sfc. On a machine with a long update history "
-            + "these logs run to gigabytes.",
-        Recommendation = "Only once you are sure. What gets re-created here is the next log, "
-            + "never the ones removed. Somebody diagnosing a failed update is reading exactly "
-            + "these files, so the row stays unticked and each one shows how recently something "
-            + "wrote to it.",
+            + "update, repaired a component, or ran sfc. Beside those it keeps backup trace files "
+            + "for the event sessions the WMI service runs. On a machine with a long update "
+            + "history the four together run to gigabytes.",
+        Recommendation = "What gets re-created here is the next log, never the ones removed. "
+            + "Somebody diagnosing a failed update is reading exactly these files, so the row "
+            + "stays unticked and each one shows how recently something wrote to it.",
     };
 
     /// <summary>

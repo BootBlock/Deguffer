@@ -94,9 +94,6 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         + "archives again as it goes. Libraries already installed stay installed, and the ports, "
         + "triplets and registries are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "vcpkg, a package manager for C and C++ libraries",
@@ -105,10 +102,9 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             + "it need not build the same one twice, and the downloads, buildtrees and packages "
             + "folders inside the vcpkg clone hold the sources and the scratch each build left "
             + "behind.",
-        Recommendation = "Only when you need the space. Restoring a cached entry is a compile "
-            + "rather than a download, and for something the size of Boost or Qt that is tens of "
-            + "minutes to hours. The installed folder every project links against is never "
-            + "touched.",
+        Recommendation = "Restoring a cached entry is a compile rather than a download, and for "
+            + "something the size of Boost or Qt that is tens of minutes to hours. The installed "
+            + "folder every project links against is never touched.",
     };
 
     /// <summary>

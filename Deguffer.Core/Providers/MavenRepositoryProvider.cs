@@ -93,9 +93,6 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         + "never on a remote, so a build depending on one of those fails until you rebuild the "
         + "project that produced it. Your settings, stored server passwords and toolchains are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "Apache Maven, a build tool for Java",
@@ -103,9 +100,9 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         Purpose = "Maven downloads every dependency into one local repository in your profile, "
             + "and every project on the machine resolves against it. Artefacts you built and "
             + "installed yourself land in the same place.",
-        Recommendation = "Only when you need the space. Refilling it is gigabytes over the "
-            + "network for a large project, and anything installed locally with mvn install comes "
-            + "back only by building that project again.",
+        Recommendation = "Refilling it is gigabytes over the network for a large project, and "
+            + "anything installed locally with mvn install comes back only by building that "
+            + "project again.",
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["java", "mvn"];

@@ -153,9 +153,6 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         + "spends longer fetching before it compiles. Registry metadata, the clones of git "
         + "dependencies, your configuration and anything installed with 'cargo install' are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "Cargo, the build tool and package manager for Rust",
@@ -164,9 +161,10 @@ public sealed class CargoCacheProvider : CleanupProviderBase
             + "archives crates.io served, those archives unpacked for the compiler to read, the "
             + "index used to resolve versions, and clones of any dependency pulled straight from a "
             + "git repository.",
-        Recommendation = "Yes. Deguffer removes the archives and the two directories derived from "
-            + "them, all of which Cargo fetches or unpacks again on demand. The registry index is "
-            + "left where it is, because re-fetching that is what would make the next build slow.",
+        Recommendation = "Deguffer removes the downloaded archives, the sources unpacked from "
+            + "them, and the working copies of git dependencies — each of which Cargo fetches, "
+            + "unpacks or checks out again on demand. The registry index and the bare git clones "
+            + "stay: those clones are the only copy of that history on this machine.",
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["cargo", "rustc", "rust-analyzer"];

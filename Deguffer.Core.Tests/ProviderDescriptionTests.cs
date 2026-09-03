@@ -51,15 +51,28 @@ public class ProviderDescriptionTests
     }
 
     /// <summary>
-    /// §7 gives each row a sentence saying what the next use costs. This is the answer to a
-    /// different question, and a provider that fills the explanation in with a second copy of the
-    /// cost has left the first question unanswered.
+    /// §7 gives each row a sentence saying what the next use costs. Neither of these two fields is
+    /// that sentence: one says what the location is, the other why its tier lands where it does. A
+    /// provider that fills either in with a second copy of the cost has left a question unanswered,
+    /// and the dialog then prints the same paragraph twice, one heading apart.
+    ///
+    /// This catches a literal copy and nothing weaker. A paraphrase passes, which is a real limit
+    /// rather than an oversight: the alternative is a similarity threshold, and a hand-tuned number
+    /// deciding whether prose is "too alike" is a test that eventually fails for the wrong reason
+    /// and gets loosened.
     /// </summary>
     [Fact]
-    public void AnExplanationIsNotTheCostSentenceRepeated()
+    public void NeitherFieldIsTheCostSentenceRepeated()
     {
-        Assert.All(Shipped, provider => Assert.NotEqual(
-            provider.WhatHappensOnNextUse, provider.Description.Purpose, StringComparer.Ordinal));
+        Assert.All(Shipped, provider =>
+        {
+            Assert.NotEqual(
+                provider.WhatHappensOnNextUse, provider.Description.Purpose, StringComparer.Ordinal);
+            Assert.NotEqual(
+                provider.WhatHappensOnNextUse,
+                provider.Description.Recommendation,
+                StringComparer.Ordinal);
+        });
     }
 
     /// <summary>
@@ -82,5 +95,12 @@ public class ProviderDescriptionTests
 
         Assert.All(advice, line => Assert.False(string.IsNullOrWhiteSpace(line)));
         Assert.Equal(tiers.Length, advice.Distinct(StringComparer.Ordinal).Count());
+
+        // The switch ends in a fallback returning the enum member's own name, which the two
+        // assertions above accept: it is neither blank nor a duplicate. So a deleted arm passes
+        // both of them and puts "UserData" on screen as the verdict on somebody's Recycle Bin.
+        // This is the assertion that catches it, and a deleted arm is the likelier regression.
+        Assert.All(tiers, tier => Assert.NotEqual(
+            tier.ToString(), tier.ToCleaningAdvice(), StringComparer.Ordinal));
     }
 }

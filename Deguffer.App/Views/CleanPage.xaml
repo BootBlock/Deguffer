@@ -105,7 +105,7 @@
         </DataTemplate>
 
         <!-- One row per named cause (§7), largest first: the checkbox, the sentence saying what
-             happens on next use, the figures, and the disclosure holding the plan. -->
+             happens on next use, the figures, and the link to everything else. -->
         <DataTemplate x:Key="StandardFinding" x:DataType="vm:FindingViewModel">
             <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
 
@@ -137,8 +137,8 @@
                                    Style="{StaticResource SecondaryText}"
                                    FontSize="13" />
 
-                        <!-- Whose folder this is, what it is for, and the plan that used to be
-                             disclosed here. Both halves went to one dialog because they are one
+                        <!-- Whose folder this is, what it is for, and the plan that says what
+                             would happen to it. One dialog holds both, because they are one
                              question — a reader cannot judge a list of paths belonging to a tool
                              they have never heard of. It is a link rather than a button because it
                              opens an explanation and changes nothing. -->

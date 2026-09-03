@@ -151,7 +151,7 @@ public sealed partial class FindingViewModel : ObservableObject
         ? "Not installed on this machine"
         : !Finding.HasReclaimableSpace
             // "Already clear" is a claim, and it must not be made about a folder Windows would not
-            // let Deguffer list. The expander below names which one and why the figure is short.
+            // let Deguffer list. The row's Contents tab names which one and why the figure is short.
             ? Finding.Plan?.HasUnreadableRoot == true ? "Could not be read" : "Already clear"
             : CanBeSelected
                 ? "Ready to clean"
@@ -260,7 +260,7 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool HasNoDetail => !HasDetail;
 
     /// <summary>
-    /// What the disclosure holds, named for which of the three things it is.
+    /// What the Contents tab holds, named for which of the three things it is.
     ///
     /// A row with nowhere approved to look has left nothing alone: it has not looked. Calling its
     /// guidance "what was left alone" borrows §5.2's protected-path vocabulary for a sentence that

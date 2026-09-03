@@ -83,9 +83,6 @@ public sealed class CrashDumpProvider : CleanupProviderBase
         + "attached to a bug report or opened in a debugger afterwards. Windows keeps writing new "
         + "dumps exactly as before, and nothing that is running is affected.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "Windows Error Reporting, and the kernel's own crash dump writer",
@@ -93,9 +90,9 @@ public sealed class CrashDumpProvider : CleanupProviderBase
         Purpose = "When an application or Windows itself fails, what memory held at that moment "
             + "is written here, along with the report queued for sending. A single stop error on a "
             + "machine set to write a complete dump costs as much disk as the machine has memory.",
-        Recommendation = "Only once you are sure you no longer need it. Nothing re-creates a "
-            + "crash dump: it is the record of an event that will not happen again to order, and "
-            + "somebody halfway through a bug report has the only copy of the evidence here.",
+        Recommendation = "Nothing re-creates a crash dump: it is the record of an event that will "
+            + "not happen again to order, and somebody halfway through a bug report has the only "
+            + "copy of the evidence here.",
     };
 
     /// <summary>

@@ -37,9 +37,6 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     public override string WhatHappensOnNextUse =>
         "The next npm install re-downloads packages from the registry. Installed node_modules are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "npm, the package manager bundled with Node.js",
@@ -47,8 +44,8 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         Purpose = "npm keeps a copy of every package archive it downloads in one cache shared by "
             + "all your projects, so installing the same version again is served from disk instead "
             + "of from the registry.",
-        Recommendation = "Yes. Deguffer runs npm's own cache clean, and the cache refills from "
-            + "the registry as installs need it. Anything already installed into a project is "
+        Recommendation = "Deguffer runs npm's own cache clean, and the cache refills from the "
+            + "registry as installs need it. Anything already installed into a project is "
             + "untouched.",
     };
 

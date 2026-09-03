@@ -44,8 +44,9 @@ public sealed partial class ProviderInfoView : UserControl
         Finding = finding;
         InitializeComponent();
 
-        // Bound here rather than in markup because the lists start empty and are filled on demand;
-        // an ItemsSource in the template would have nothing to point at.
+        // Bound here rather than in markup because the two collections are this control's own
+        // working state. Binding them in markup would mean exposing each as a public property for
+        // the sake of one x:Bind that nothing outside this file reads.
         StepList.ItemsSource = _steps;
         NoteList.ItemsSource = _notes;
     }

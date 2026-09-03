@@ -65,9 +65,6 @@ public sealed class GoCacheProvider : CleanupProviderBase
         + "Go toolchain and anything installed with 'go install' are untouched. A module from a "
         + "private or unreachable host can only come back while that host is available.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "the Go toolchain",
@@ -75,9 +72,9 @@ public sealed class GoCacheProvider : CleanupProviderBase
         Purpose = "Go keeps two caches shared by every project on the machine: the module cache, "
             + "holding the source of each dependency version it downloaded, and the build cache, "
             + "holding the compiled result of every package it has built.",
-        Recommendation = "Yes. Deguffer runs go clean rather than deleting paths, and the "
-            + "toolchain re-downloads modules and recompiles packages as the next build needs "
-            + "them. Your own code and your go.mod files are untouched.",
+        Recommendation = "Deguffer runs go clean rather than deleting paths, and the toolchain "
+            + "re-downloads modules and recompiles packages as the next build needs them. Your own "
+            + "code and your go.mod files are untouched.",
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["go", "gopls", "dlv"];

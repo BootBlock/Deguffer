@@ -40,9 +40,6 @@ public sealed class UvCacheProvider : CleanupProviderBase
         "The next uv install re-downloads and re-unpacks packages. Existing virtual environments " +
         "and uv-installed tools are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "uv, a Python package and project manager",
@@ -50,9 +47,9 @@ public sealed class UvCacheProvider : CleanupProviderBase
         Purpose = "uv caches the archives it downloads and the unpacked wheels it builds "
             + "environments from, so creating another environment with the same dependencies costs "
             + "almost nothing.",
-        Recommendation = "Yes. Deguffer runs uv's own cache clean rather than deleting a path, "
-            + "because the folder holding the cache is uv's whole state directory — the tools and "
-            + "Python interpreters uv installed sit beside it and must not go with it.",
+        Recommendation = "Deguffer runs uv's own cache clean rather than deleting a path, because "
+            + "the folder holding the cache is uv's whole state directory — the tools and Python "
+            + "interpreters uv installed sit beside it and must not go with it.",
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["uv", "uvx"];

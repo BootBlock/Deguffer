@@ -54,9 +54,6 @@ public sealed class PipCacheProvider : CleanupProviderBase
         "built from source — which for a package with C extensions means compiling it again. " +
         "Installed packages, virtual environments and site-packages are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "pip, the package installer for Python",
@@ -64,8 +61,8 @@ public sealed class PipCacheProvider : CleanupProviderBase
         Purpose = "pip keeps the archives PyPI served, and separately the wheels it built itself "
             + "from packages that ship only as source, so installing the same version into another "
             + "environment does not fetch or compile it a second time.",
-        Recommendation = "Yes, with one thing worth knowing: a package with C extensions that pip "
-            + "had built from source is compiled again, which is minutes rather than seconds. Your "
+        Recommendation = "One thing is worth knowing: a package with C extensions that pip had "
+            + "built from source is compiled again, which is minutes rather than seconds. Your "
             + "installed packages and virtual environments live elsewhere and are untouched.",
     };
 

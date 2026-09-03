@@ -115,9 +115,6 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         "The driver recompiles each shader the first time it is wanted again, so a game or 3D " +
         "application stutters briefly on its next run and then behaves exactly as before.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "your graphics driver, and Direct3D itself",
@@ -125,9 +122,9 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         Purpose = "Compiling a shader is slow, so the driver keeps the compiled result keyed by "
             + "its own version and reuses it the next time a game or 3D application asks for the "
             + "same one.",
-        Recommendation = "Yes, and this is the least consequential thing Deguffer offers. The "
-            + "driver throws these away itself whenever it is updated, and the only cost of "
-            + "removing one is a few seconds of stutter the first time a scene renders.",
+        Recommendation = "This is the least consequential thing Deguffer offers. The driver "
+            + "throws these away itself whenever it is updated, and the only cost of removing one "
+            + "is a few seconds of stutter the first time a scene renders.",
     };
 
     /// <summary>The vendor root paths on this machine. Exposed so tests can assert none is targeted.</summary>

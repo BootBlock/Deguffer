@@ -49,9 +49,15 @@ C:\Users\<user>\AppData\Local\DriveNet\DriveNet.Cli.exe
   *opens*, which is what verifies the `InitializeWithWindow` interop, but not that a selection
   round-trips. Cover the code behind the picker another way. Close the dialog with `Stop-Process` on
   the `PickerHost` PID, or it blocks the app.
-- **Plan notes and step rows sit inside the collapsed "What this will do" expander.** `find` will
-  not match their text until you `--action expand` that row's button, so an assertion against a note
-  reads as absent when it is merely collapsed.
+- **Plan notes and step rows are two clicks away, inside a modal.** They live on the `Contents` tab
+  of each row's information dialog, so `find` matches none of their text until you open it: in
+  compact, `--action expand` the row's "More about …" button first, then click its
+  `What is …?` `Hyperlink`, then click the `Contents` `TabItem`. Until then an assertion against a
+  note reads as absent when it is merely unopened. The tab fills on demand, so it is empty for a
+  moment after the click.
+- **The dialog's own close button is `--automation-id CloseButton`.** Matching it by the name
+  `Close` also matches the window's title-bar button, and picking that one shuts the app down
+  mid-run — which reads as a crash rather than as a mis-click.
 - **Nav items respond to `--action click`.** Clicking the `Settings` and `Storage` `ListItem`s
   navigates correctly. If a click really does nothing, fall back to `--action setFocus` and then
   `--action sendKeys --keys Enter`. The flag is `--keys`, not `--value`, and the value is a bare

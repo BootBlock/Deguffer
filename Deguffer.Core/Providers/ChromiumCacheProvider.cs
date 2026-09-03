@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -154,9 +154,6 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         "first time it is opened again, so it starts more slowly once. Sign-ins, saved passwords " +
         "and settings are untouched.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "desktop applications that embed the Chromium engine — chat clients, "
@@ -167,9 +164,9 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             + "shaders exactly as a browser does, under its own folder in your profile. Almost no "
             + "cleaner reaches these, so they grow unnoticed across every such application on the "
             + "machine.",
-        Recommendation = "Yes. Deguffer removes six cache directories whose names belong to "
-            + "Chromium itself, and leaves everything else in the folder alone — the sign-ins, "
-            + "saved passwords, saved payment cards and offline data sit right beside them.",
+        Recommendation = "Deguffer removes six cache directories whose names belong to Chromium "
+            + "itself, and leaves everything else in the folder alone — the sign-ins, saved "
+            + "passwords, saved payment cards and offline data sit right beside them.",
     };
 
     /// <summary>

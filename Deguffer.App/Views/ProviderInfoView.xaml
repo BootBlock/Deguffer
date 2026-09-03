@@ -6,11 +6,10 @@
     xmlns:vm="using:Deguffer.App.ViewModels">
 
     <UserControl.Resources>
-        <!-- §7: nothing is deleted without a preview, so the exact steps are inspectable before the
-             user confirms. This template used to sit on the Storage page and be presented by both
-             densities; it is here now because the disclosure it filled has moved into this dialog,
-             and it is still held in one place for the reason it always was — a second copy is how
-             two views come to show different things. -->
+        <!-- §7: nothing is deleted without a preview, so the exact steps are inspectable before
+             the user confirms. Held as one template, and reached from both densities through this
+             dialog, because that inspectability is the same promise in either of them and a second
+             copy is how the two would come to show different things. -->
         <DataTemplate x:Key="PlanStep" x:DataType="vm:StepViewModel">
             <!-- §4.3 and §7: per-workspace data is pruned one item at a time, and age drives that
                  choice more than size does, so the two figures sit together in one right-hand stack
@@ -156,17 +155,6 @@
 
         <PivotItem x:Name="ContentsSection" Header="Contents">
             <Grid>
-                <!-- Raised only once the fill has been running for a second, so a plan that lists
-                     in a blink never flashes a ring at the reader. -->
-                <ProgressRing x:Name="ContentsRing"
-                              IsActive="True"
-                              Visibility="Collapsed"
-                              Width="32"
-                              Height="32"
-                              VerticalAlignment="Center"
-                              HorizontalAlignment="Center"
-                              AutomationProperties.Name="Listing what will be removed" />
-
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
                     <StackPanel Spacing="10">
                         <TextBlock Text="{x:Bind Finding.DetailHeader}"
@@ -191,6 +179,20 @@
                         </ItemsControl>
                     </StackPanel>
                 </ScrollViewer>
+
+                <!-- Raised only once the fill has been running for a second, so a plan that lists
+                     in a blink never flashes a ring at the reader. Declared after the list rather
+                     than before it: Grid children paint in declaration order, and the one case this
+                     ring exists for is the one where rows are already filling the panel behind
+                     it. -->
+                <ProgressRing x:Name="ContentsRing"
+                              IsActive="True"
+                              Visibility="Collapsed"
+                              Width="32"
+                              Height="32"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center"
+                              AutomationProperties.Name="Listing what will be removed" />
             </Grid>
         </PivotItem>
     </Pivot>

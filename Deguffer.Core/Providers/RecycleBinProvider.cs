@@ -109,9 +109,6 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         "Every file waiting in these Recycle Bins is destroyed, so nothing you deleted can be "
         + "restored any more. Deleting a file afterwards works exactly as it did before.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "Windows",
@@ -119,10 +116,9 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         Purpose = "Every volume keeps its own Recycle Bin, so deleting a file on D: fills D:'s "
             + "bin rather than C:'s. Tools that empty the bin almost always mean the system "
             + "drive's, which is why space accumulates unnoticed on the others.",
-        Recommendation = "Only once you are sure. These are files you deleted and can still "
-            + "restore, and emptying the bin is what removes the one thing that could put them "
-            + "back. Deguffer removes your own account's folder on each volume and leaves every "
-            + "other account's alone.",
+        Recommendation = "These are files you deleted and can still restore, and emptying the bin "
+            + "is what removes the one thing that could put them back. Deguffer removes your own "
+            + "account's folder on each fixed volume and leaves every other account's alone.",
     };
 
     /// <summary>

@@ -70,9 +70,6 @@ public sealed class UnityLibraryProvider : BuildDirectoryProvider
         "On a large project that takes many minutes, and any packages it had downloaded are fetched " +
         "again. Nothing is lost — all of it is derived from Assets, Packages and ProjectSettings.";
 
-    /// <summary>
-    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
-    /// </summary>
     public override ProviderDescription Description { get; } = new()
     {
         Application = "the Unity Editor",
@@ -80,9 +77,9 @@ public sealed class UnityLibraryProvider : BuildDirectoryProvider
         Purpose = "Unity imports everything under a project's Assets into an internal form and "
             + "keeps it in a Library folder: the artefact database, the shader and Burst caches, "
             + "the compiled script assemblies, and the packages it resolved.",
-        Recommendation = "Only when you need the space. Nothing in it is anybody's only copy, "
-            + "which is why every Unity .gitignore template excludes it — but reopening the "
-            + "project reimports every asset, and on a large project that is tens of minutes.",
+        Recommendation = "Nothing in it is anybody's only copy, which is why every Unity "
+            + ".gitignore template excludes it — but reopening the project reimports every asset, "
+            + "and on a large project that is tens of minutes.",
     };
 
     protected override string Subject => "Unity imported assets and caches";
