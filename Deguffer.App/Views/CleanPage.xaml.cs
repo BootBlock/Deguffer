@@ -39,7 +39,7 @@ public sealed partial class CleanPage : Page
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
-        if (ElevatedRelaunch.ShouldRescanOnLaunch)
+        if (ElevatedRelaunch.Requested is PreviewRequest)
         {
             // Deferred to Loaded rather than run here: planning posts rows back through the
             // dispatcher, and starting it before the page is live would report into nothing.

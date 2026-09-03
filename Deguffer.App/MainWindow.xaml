@@ -47,7 +47,10 @@
                         SelectionChanged="OnDestinationChanged">
 
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Storage" Tag="Clean" IsSelected="True">
+                <!-- Which item starts selected is set in the window's constructor rather than
+                     here. A markup IsSelected stays true on the item after the rail has been moved
+                     elsewhere, so the rail would report two items selected. -->
+                <NavigationViewItem x:Name="StorageItem" Content="Storage" Tag="Clean">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEDA2;" />
                     </NavigationViewItem.Icon>
@@ -56,7 +59,7 @@
                 <!-- Explore answers "what is using the space"; Storage answers "what is safe to
                      remove". §3 is entirely about those being different questions, so they are
                      different destinations rather than two views of one screen. -->
-                <NavigationViewItem Content="Explore" Tag="Explore">
+                <NavigationViewItem x:Name="ExploreItem" Content="Explore" Tag="Explore">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>

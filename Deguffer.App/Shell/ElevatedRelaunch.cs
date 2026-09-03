@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Principal;
+using Deguffer.Core.Execution;
 
 namespace Deguffer.App.Shell;
 
@@ -21,19 +22,21 @@ public static class ElevatedRelaunch
         new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
 
     /// <summary>
-    /// Whether this instance was started by <see cref="TryRelaunch"/> and should preview
-    /// immediately. The user already asked for a scan by pressing the button; making them press it
-    /// again in the new window is the tool forgetting what it was told.
+    /// What this instance was started by <see cref="TryRelaunch"/> to do, or null for an ordinary
+    /// launch. The user already asked for a scan by pressing the button; making them press it again
+    /// in the new window, on a page they did not leave, is the tool forgetting what it was told.
+    ///
+    /// <para>Index 0 is skipped because it is the executable's own path rather than an argument.</para>
     /// </summary>
-    public static bool ShouldRescanOnLaunch { get; } =
-        Environment.GetCommandLineArgs().Contains(RescanSwitch, StringComparer.OrdinalIgnoreCase);
+    public static ElevationRequest? Requested { get; } =
+        ElevationRequest.From(Environment.GetCommandLineArgs().Skip(1));
 
     /// <summary>
-    /// Ask for elevation and start the replacement process. Returns false when the user dismissed
-    /// the UAC prompt, which is a decision rather than a failure — the caller keeps running
-    /// unelevated and says so.
+    /// Ask for elevation and start the replacement process, telling it to pick up where this one
+    /// left off. Returns false when the user dismissed the UAC prompt, which is a decision rather
+    /// than a failure — the caller keeps running unelevated and says so.
     /// </summary>
-    public static bool TryRelaunch()
+    public static bool TryRelaunch(ElevationRequest request)
     {
         // ProcessPath is the host executable rather than the managed assembly, which is what
         // ShellExecute needs — starting the .dll would find no verb to run it with.
@@ -42,15 +45,23 @@ public static class ElevatedRelaunch
             return false;
         }
 
+        var start = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = AppContext.BaseDirectory,
+        };
+
+        // Through ArgumentList rather than a joined string, so a path with a space in it reaches the
+        // replacement as one argument.
+        foreach (var argument in request.ToArguments())
+        {
+            start.ArgumentList.Add(argument);
+        }
+
         try
         {
-            Process.Start(new ProcessStartInfo(executable)
-            {
-                UseShellExecute = true,
-                Verb = "runas",
-                WorkingDirectory = AppContext.BaseDirectory,
-                ArgumentList = { RescanSwitch },
-            });
+            Process.Start(start);
 
             return true;
         }
@@ -62,6 +73,4 @@ public static class ElevatedRelaunch
     }
 
     private const int ErrorCancelled = 1223;
-
-    private const string RescanSwitch = "--rescan";
 }
