@@ -82,6 +82,22 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         + "exactly as before.";
 
     /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Windows Update, component servicing, and the system file checker",
+        Publisher = "Microsoft",
+        Purpose = "Windows records what it did every time it serviced itself: installed an "
+            + "update, repaired a component, or ran sfc. On a machine with a long update history "
+            + "these logs run to gigabytes.",
+        Recommendation = "Only once you are sure. What gets re-created here is the next log, "
+            + "never the ones removed. Somebody diagnosing a failed update is reading exactly "
+            + "these files, so the row stays unticked and each one shows how recently something "
+            + "wrote to it.",
+    };
+
+    /// <summary>
     /// What this provider names, root by root. Exposed so tests can assert that the Windows
     /// directory is never a target and that §9's exclusions are asserted rather than merely omitted.
     /// </summary>

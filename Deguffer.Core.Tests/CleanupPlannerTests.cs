@@ -455,6 +455,14 @@ public sealed class CleanupPlannerTests
 
         public string WhatHappensOnNextUse => "Nothing.";
 
+        public ProviderDescription Description { get; } = new()
+        {
+            Application = "A stub, standing in for a real toolchain.",
+            Publisher = "Nobody.",
+            Purpose = "Nothing. This provider exists only for this test.",
+            Recommendation = "Nothing to recommend.",
+        };
+
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(present);
 
         public Task<CleanupPlan> PlanAsync(CancellationToken ct = default)

@@ -387,6 +387,14 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         public string WhatHappensOnNextUse => "Nothing.";
 
+        public ProviderDescription Description { get; } = new()
+        {
+            Application = "A stub, standing in for a real toolchain.",
+            Publisher = "Nobody.",
+            Purpose = "Nothing. This provider exists only for this test.",
+            Recommendation = "Nothing to recommend.",
+        };
+
         public bool IsAwaitingSourceFolders => false;
 
         public IReadOnlyList<ToolRoot> ToolRoots => roots;

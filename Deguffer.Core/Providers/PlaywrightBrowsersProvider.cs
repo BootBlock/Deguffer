@@ -71,6 +71,21 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         "roughly a gigabyte of browser builds. Test code, configuration and reports are untouched.";
 
     /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Playwright, a browser automation and testing library",
+        Publisher = "Microsoft",
+        Purpose = "Playwright downloads its own builds of Chromium, Firefox and WebKit rather "
+            + "than using the browsers you have installed, and keeps them in your profile where "
+            + "every project can share them.",
+        Recommendation = "Only when you need the space. Tests stop running until playwright "
+            + "install is run again, which re-downloads roughly a gigabyte of browser builds. Test "
+            + "code, configuration and reports are untouched.",
+    };
+
+    /// <summary>
     /// Deliberately narrow. Playwright drives ordinary <c>chrome.exe</c> and <c>firefox.exe</c>
     /// binaries, so warning on those would fire for the user's everyday browser on almost every
     /// scan — and a warning that is always present is one nobody reads. These two names only exist

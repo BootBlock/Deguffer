@@ -55,6 +55,22 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     public override string WhatHappensOnNextUse =>
         "The next Gradle build re-downloads its dependencies and the wrapper distribution, then runs normally.";
 
+    /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Gradle, the build tool behind most Java, Kotlin and Android projects",
+        Publisher = "Gradle Inc.",
+        Purpose = "Gradle keeps the dependencies it downloads, the Gradle distributions each "
+            + "project's wrapper pins, and the outputs of tasks it has already run, all under one "
+            + "folder in your profile that every project shares.",
+        Recommendation = "Yes. The next build re-downloads what it needs and re-runs what it "
+            + "cannot find, so the cost is one slower build. Deguffer targets the disposable "
+            + "folders inside .gradle and never the folder itself, which also holds "
+            + "gradle.properties.",
+    };
+
     protected override IReadOnlyList<string> ConflictingProcessNames => ["java", "gradle", "studio64"];
 
     /// <summary>The <c>.gradle</c> root. Exposed so tests can assert it is never targeted.</summary>

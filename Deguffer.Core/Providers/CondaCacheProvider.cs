@@ -65,6 +65,21 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         "The next conda install downloads packages and re-fetches the channel index. Your "
         + "environments are untouched: conda keeps every package an environment still links.";
 
+    /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "conda, a package and environment manager for Python and other languages",
+        Publisher = "Anaconda, Inc.",
+        Purpose = "conda keeps the package archives it downloads, and the unpacked copies it "
+            + "builds environments from, in one package cache shared by every environment on the "
+            + "machine.",
+        Recommendation = "Only when you need the space, because refilling it is a download rather "
+            + "than a rebuild. conda keeps any package an existing environment still links, so "
+            + "nothing you have already created stops working.",
+    };
+
     protected override IReadOnlyList<string> ConflictingProcessNames => ["conda", "mamba"];
 
     /// <summary>

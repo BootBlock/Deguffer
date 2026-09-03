@@ -42,6 +42,24 @@ public static class SafetyTierExtensions
     /// <summary>Whether removing this tier destroys something irreplaceable.</summary>
     public static bool IsIrreversibleLoss(this SafetyTier tier) => tier == SafetyTier.UserData;
 
+    /// <summary>
+    /// The headline answer to "should I clean this?", for the reader deciding whether to tick the
+    /// row. It is derived from the tier rather than declared per provider, because §3's tier table
+    /// is already that decision — a provider free to write its own verdict is a provider free to
+    /// recommend cleaning something the table never pre-selects.
+    ///
+    /// The reasoning under it is the provider's own: see
+    /// <see cref="Deguffer.Core.Providers.ProviderDescription.Recommendation"/>.
+    /// </summary>
+    public static string ToCleaningAdvice(this SafetyTier tier) => tier switch
+    {
+        SafetyTier.RegenerableCache => "Generally safe to clean",
+        SafetyTier.RegenerableWithCost => "Clean it when you need the space",
+        SafetyTier.UserData => "Clean it only once you are sure you no longer need what is in it",
+        SafetyTier.DoNotTouch => "Never cleaned by Deguffer",
+        _ => tier.ToString(),
+    };
+
     /// <summary>Short label for the UI.</summary>
     public static string ToDisplayName(this SafetyTier tier) => tier switch
     {

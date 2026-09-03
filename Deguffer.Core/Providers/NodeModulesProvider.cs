@@ -57,6 +57,23 @@ public sealed class NodeModulesProvider : BuildDirectoryProvider
         "your package manager's cache where that still holds it, and from the network where it does " +
         "not.";
 
+    /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "npm, pnpm or yarn — whichever package manager installed the project",
+        Publisher = "each package manager's own publisher; Node.js itself is stewarded by the "
+            + "OpenJS Foundation",
+        Purpose = "A JavaScript project's node_modules holds every dependency it was installed "
+            + "with, unpacked and ready to run. It is routinely both the largest directory in a "
+            + "project and the one with the most files in it.",
+        Recommendation = "Only when you need the space, and only for a project you are not "
+            + "working on: it will not build or run until its dependencies are installed again. "
+            + "Deguffer offers one only where a lock file sits beside it, because without a lock "
+            + "file a reinstall can produce a different tree.",
+    };
+
     protected override string Subject => "installed Node.js dependencies";
 
     protected override string NothingApprovedGuidance =>

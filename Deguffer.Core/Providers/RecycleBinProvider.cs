@@ -110,6 +110,22 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         + "restored any more. Deleting a file afterwards works exactly as it did before.";
 
     /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Windows",
+        Publisher = "Microsoft",
+        Purpose = "Every volume keeps its own Recycle Bin, so deleting a file on D: fills D:'s "
+            + "bin rather than C:'s. Tools that empty the bin almost always mean the system "
+            + "drive's, which is why space accumulates unnoticed on the others.",
+        Recommendation = "Only once you are sure. These are files you deleted and can still "
+            + "restore, and emptying the bin is what removes the one thing that could put them "
+            + "back. Deguffer removes your own account's folder on each volume and leaves every "
+            + "other account's alone.",
+    };
+
+    /// <summary>
     /// The bin roots this provider looks at. Exposed so tests can assert none of them is targeted.
     /// </summary>
     public IReadOnlyList<string> BinRoots => [.. CandidateBins()];

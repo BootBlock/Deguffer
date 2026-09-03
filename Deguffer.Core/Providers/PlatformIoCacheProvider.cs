@@ -46,6 +46,22 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         "The next build re-downloads cached package archives and registry responses. Installed " +
         "platforms, toolchains and your global libraries are untouched.";
 
+    /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "PlatformIO, a build system for embedded development",
+        Publisher = "PlatformIO Labs",
+        Purpose = "PlatformIO caches the package archives it downloads and the registry responses "
+            + "it has already received, inside the same core directory that holds your installed "
+            + "toolchains and libraries.",
+        Recommendation = "Only when you need the space, as embedded toolchains are often fetched "
+            + "over connections where a re-download is a real cost. Deguffer runs PlatformIO's own "
+            + "prune command, which knows the cache from the installed packages that dominate the "
+            + "folder's size.",
+    };
+
     protected override IReadOnlyList<string> ConflictingProcessNames => ["pio", "platformio"];
 
     /// <summary>

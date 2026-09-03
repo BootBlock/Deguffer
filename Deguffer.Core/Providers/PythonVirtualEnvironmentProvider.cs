@@ -58,6 +58,22 @@ public sealed class PythonVirtualEnvironmentProvider : BuildDirectoryProvider
         "holds the wheels. A manifest only lists what somebody wrote down, so check it covers what " +
         "you had installed before removing an environment you still use.";
 
+    /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Python's venv, and the tools built on top of it",
+        Publisher = "the Python Software Foundation",
+        Purpose = "A virtual environment is a private copy of an interpreter and the packages one "
+            + "project installs, kept in a .venv or venv folder beside that project so its "
+            + "dependencies collide with nothing else.",
+        Recommendation = "Only when you need the space, and with one caveat: recreating the "
+            + "environment means running the install again, and a hand-maintained requirements "
+            + "file may not list everything that was in it. Deguffer offers one only where a "
+            + "dependency manifest sits beside the project.",
+    };
+
     protected override string Subject => "a Python virtual environment";
 
     protected override string NothingApprovedGuidance =>

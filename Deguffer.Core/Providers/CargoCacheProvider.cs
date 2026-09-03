@@ -153,6 +153,22 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         + "spends longer fetching before it compiles. Registry metadata, the clones of git "
         + "dependencies, your configuration and anything installed with 'cargo install' are untouched.";
 
+    /// <summary>
+    /// Whose files these are and what they are for. See <see cref="ProviderDescription"/>.
+    /// </summary>
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Cargo, the build tool and package manager for Rust",
+        Publisher = "the Rust project",
+        Purpose = "Every Rust project on the machine shares one Cargo home. It holds the crate "
+            + "archives crates.io served, those archives unpacked for the compiler to read, the "
+            + "index used to resolve versions, and clones of any dependency pulled straight from a "
+            + "git repository.",
+        Recommendation = "Yes. Deguffer removes the archives and the two directories derived from "
+            + "them, all of which Cargo fetches or unpacks again on demand. The registry index is "
+            + "left where it is, because re-fetching that is what would make the next build slow.",
+    };
+
     protected override IReadOnlyList<string> ConflictingProcessNames => ["cargo", "rustc", "rust-analyzer"];
 
     /// <summary>Where Cargo keeps its home when <see cref="HomeVariable"/> is unset.</summary>
