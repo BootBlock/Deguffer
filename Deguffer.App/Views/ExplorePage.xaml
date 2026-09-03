@@ -11,34 +11,76 @@
           RowDefinitions="Auto,Auto,Auto,*,Auto">
 
         <!--
-            The two pickers the issue asks for, and the actions, on one line. The drive sits at the
-            left where the reading starts, and the view sits at the right beside the picture it
-            governs — a control that changes how something is drawn belongs next to the drawing,
+            What to scan, the actions, and how to draw it, on one line. The drive and the folder sit
+            at the left where the reading starts, and the view sits at the right beside the picture
+            it governs — a control that changes how something is drawn belongs next to the drawing,
             not next to the thing that produced the data.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+            <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
+                 page would otherwise stop naming the folder it is still scanning. -->
             <ComboBox Grid.Column="0"
                       MinWidth="88"
                       Header="Drive"
+                      IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                       ItemsSource="{x:Bind ViewModel.Drives}"
                       SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
                       AutomationProperties.Name="Drive to scan" />
 
+            <!-- Scoping to a folder, through the system picker for the reason the source folders
+                 use one: the path is then one the shell confirmed exists rather than a typed
+                 string. -->
             <Button Grid.Column="1"
+                    VerticalAlignment="Bottom"
+                    Content="Folder…"
+                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                    Click="OnChooseFolder"
+                    AutomationProperties.Name="Choose a folder to scan" />
+
+            <Button Grid.Column="2"
                     VerticalAlignment="Bottom"
                     Style="{StaticResource AccentButtonStyle}"
                     Content="Scan"
                     Command="{x:Bind ViewModel.ScanCommand}" />
 
-            <Button Grid.Column="2"
+            <Button Grid.Column="3"
                     VerticalAlignment="Bottom"
                     Content="Cancel"
                     Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ScanCancelCommand}" />
 
+            <!-- The folder a scan is scoped to, beside the drive box it overrides. Here rather than
+                 in the status line below, because it is half of the same choice as the drive — and
+                 a scope stated somewhere else is a scope people scan past. -->
+            <Grid Grid.Column="4"
+                  ColumnSpacing="6"
+                  VerticalAlignment="Bottom"
+                  ColumnDefinitions="Auto,*,Auto"
+                  Visibility="{x:Bind ViewModel.IsScopedToFolder, Mode=OneWay}">
+                <FontIcon Grid.Column="0"
+                          Glyph="&#xE8B7;"
+                          FontSize="14"
+                          VerticalAlignment="Center"
+                          AutomationProperties.AccessibilityView="Raw" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}" />
+
+                <!-- This clears the folder; it does not start anything. The accessible name says
+                     so, because it is the only thing a screen reader announces. -->
+                <Button Grid.Column="2"
+                        Content="Whole drive"
+                        Command="{x:Bind ViewModel.ScanWholeDriveCommand}"
+                        ToolTipService.ToolTip="Clear the folder, so the next scan covers the whole drive"
+                        AutomationProperties.Name="Clear the folder" />
+            </Grid>
+
             <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it:
                  shown only where a scan actually fell back for want of rights. -->
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     VerticalAlignment="Bottom"
                     Content="Elevate and rescan"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
@@ -48,11 +90,11 @@
                  enum. The three pictures come before the list because that is the order they are
                  read in, not because the numbers demand it. -->
             <ComboBox x:Name="ViewSelector"
-                      Grid.Column="5"
+                      Grid.Column="6"
                       MinWidth="120"
                       Header="View"
                       SelectionChanged="OnViewSelectionChanged"
-                      AutomationProperties.Name="How to draw the drive">
+                      AutomationProperties.Name="How to draw what was scanned">
                 <ComboBoxItem Content="Treemap" />
                 <ComboBoxItem Content="Icicle" />
                 <ComboBoxItem Content="Sunburst" />
@@ -164,7 +206,7 @@
                     <TextBlock Text="Nothing scanned yet"
                                HorizontalAlignment="Center"
                                Style="{StaticResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Choose a drive and press Scan. Nothing is changed by looking."
+                    <TextBlock Text="Choose a drive or a folder and press Scan. Nothing is changed by looking."
                                HorizontalAlignment="Center"
                                Style="{StaticResource SecondaryText}" />
                 </StackPanel>

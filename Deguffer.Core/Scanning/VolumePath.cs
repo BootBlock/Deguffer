@@ -6,7 +6,15 @@ namespace Deguffer.Core.Scanning;
 /// A local path split into the volume that holds it and the components below that volume's root —
 /// the form an MFT lookup needs, since the table knows nothing about drive letters.
 /// </summary>
-public readonly record struct VolumePath(char DriveLetter, IReadOnlyList<string> Components)
+/// <param name="FullPath">
+/// The path as <see cref="Path.GetFullPath(string)"/> resolved it, with any extended-length prefix
+/// removed. Kept rather than recomputed because it and <paramref name="Components"/> have to
+/// describe the same location in the same form: a caller that resolves a record by the components
+/// and then labels it with the string it was handed would name the record after a path that no
+/// longer points at it, once a <c>..</c> segment or a drive-relative form is involved.
+/// </param>
+public readonly record struct VolumePath(
+    char DriveLetter, IReadOnlyList<string> Components, string FullPath)
 {
     /// <summary>
     /// Parse a rooted local path. Returns false for anything the MFT route cannot serve — UNC
@@ -42,7 +50,8 @@ public readonly record struct VolumePath(char DriveLetter, IReadOnlyList<string>
 
         result = new VolumePath(
             char.ToUpperInvariant(full[0]),
-            full[2..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries));
+            full[2..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries),
+            full);
 
         return true;
     }

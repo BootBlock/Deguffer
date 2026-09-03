@@ -9,48 +9,8 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
 
-/// <summary>One row of the list view, and one entry of any other view's detail.</summary>
-/// <param name="Node">Which node in the tree this stands for.</param>
-/// <param name="Share">
-/// How much of the containing directory this accounts for, 0 to 100. The bar is drawn against the
-/// parent rather than against the largest sibling, because the question the list answers is "what
-/// is this folder made of" and a bar scaled to the biggest child says nothing about that.
-/// </param>
-public sealed record ExploreRow(
-    int Node,
-    string Name,
-    string SizeLabel,
-    double Share,
-    bool IsDirectory,
-    bool IsLink,
-    bool IsApproximate)
-{
-    /// <summary>
-    /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
-    /// distinction — the row is named for a screen reader by <see cref="Description"/>, which says
-    /// it in words.
-    /// </summary>
-    public string Icon => (IsLink, IsDirectory) switch
-    {
-        // Written as escapes rather than as the characters themselves: these are private-use
-        // codepoints, so pasted into a source file they are indistinguishable from each other, and
-        // from nothing at all, in most tooling.
-        (true, _) => "\uE71B",   // Link
-        (_, true) => "\uE8B7",   // Folder
-        _ => "\uE7C3",           // Page
-    };
-
-    /// <summary>What a screen reader should say instead of reading a bar graphic.</summary>
-    public string Description =>
-        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}"
-        + $"{(IsApproximate ? ", at least" : string.Empty)}";
-}
-
-/// <summary>One step of the path back to the root.</summary>
-public sealed record ExploreCrumb(int Node, string Name);
-
 /// <summary>
-/// Drives the Explore page: pick a drive, scan it, and move around what was found.
+/// Drives the Explore page: pick a drive or a folder, scan it, and move around what was found.
 ///
 /// <para>This orchestrates and formats. It holds no knowledge of how a volume is read — that is
 /// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — and none
@@ -86,10 +46,43 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     public partial string? SelectedDrive { get; set; }
 
+    /// <summary>
+    /// The folder a scan is scoped to, or null for a whole drive.
+    ///
+    /// <para>Set from the system picker rather than from a typed string, so the path is one the
+    /// shell confirmed exists — the same reason <see cref="SettingsViewModel"/>'s source folders go
+    /// through one.</para>
+    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsScopedToFolder))]
+    [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
+    public partial string? ScopeFolder { get; set; }
+
+    /// <summary>
+    /// What the next scan covers: the chosen folder, and the whole drive where none was chosen.
+    /// Choosing a folder is the more specific act, so it wins, and the drive box follows it rather
+    /// than contradicting it — see <see cref="ScopeTo"/>.
+    ///
+    /// <para>Not bound to anything. The screen states the two halves separately, in the drive box
+    /// and the folder beside it, and this is what the scan is actually pointed at.</para>
+    /// </summary>
+    private string? ScanRoot => ScopeFolder ?? SelectedDrive;
+
+    public bool IsScopedToFolder => ScopeFolder is not null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ScanWholeDriveCommand))]
     public partial bool IsBusy { get; set; }
+
+    /// <summary>
+    /// Whether the page will accept a new instruction. The folder picker is opened by the page
+    /// rather than by a command here — it is a WinUI dialog needing a window handle — so it has no
+    /// <c>CanExecute</c> of its own to disable it while a scan runs.
+    /// </summary>
+    public bool IsIdle => !IsBusy;
 
     /// <summary>
     /// How far through, 0 to 1, or null where the route cannot say.
@@ -113,7 +106,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasNoProgressFraction => Progress is null;
 
     [ObservableProperty]
-    public partial string Status { get; set; } = "Choose a drive and scan it to see what is using the space.";
+    public partial string Status { get; set; } =
+        "Choose a drive or a folder and scan it to see what is using the space.";
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]
@@ -214,20 +208,24 @@ public sealed partial class ExploreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan), IncludeCancelCommand = true)]
     private async Task ScanAsync(CancellationToken ct)
     {
-        if (SelectedDrive is not { } drive)
+        if (ScanRoot is not { } target)
         {
             return;
         }
+
+        // Read once, at the start. The scope can be changed while a scan runs, and a sentence
+        // written afterwards would then describe the next scan rather than this one's result.
+        var what = IsScopedToFolder ? "folder" : "drive";
 
         IsBusy = true;
         Progress = null;
         RouteNote = null;
         CanElevate = false;
-        Status = $"Scanning {drive}…";
+        Status = $"Scanning {target}…";
 
         try
         {
-            var scan = await _scanner.ScanAsync(drive, new Progress<ExploreProgress>(Report), ct);
+            var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
 
             Show(scan.Tree, scan.Tree.RootNode);
 
@@ -235,7 +233,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             CanElevate = !ElevatedRelaunch.IsElevated && scan.Fallback == FallbackReason.NotElevated;
 
             Status = scan.Tree.HasUnknownSizes
-                ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this drive could not "
+                ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this {what} could not "
                   + "be read, so the totals are lower bounds."
                 : $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for.";
         }
@@ -257,7 +255,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // A volume that went away mid-scan, or one the account cannot open at all. Neither is
             // worth taking the window down for, and the page is read-only — there is nothing
             // half-done to report.
-            Status = $"Could not scan {drive}: {ex.Message}";
+            Status = $"Could not scan {target}: {ex.Message}";
         }
         finally
         {
@@ -265,6 +263,44 @@ public sealed partial class ExploreViewModel : ObservableObject
             Progress = null;
         }
     }
+
+    /// <summary>
+    /// Point the next scan at <paramref name="folder"/> and everything below it.
+    ///
+    /// <para>The picking itself belongs to the page: it is a WinUI dialog needing a window handle,
+    /// and this stays testable by knowing only about the path that comes back — the arrangement
+    /// <see cref="SettingsViewModel.AddSourceRoot"/> already uses for the same dialog.</para>
+    /// </summary>
+    public void ScopeTo(string folder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+
+        // The drive box moves to the volume holding the folder, where that volume is one it offers.
+        // The two controls describe a single choice, and a drive box naming a volume the scan is not
+        // on is the kind of disagreement a reader takes for a bug. A folder on a share, or on a
+        // volume the box does not list, has no entry to move to and leaves it as it was.
+        //
+        // Assigned before the folder, because selecting a drive is what drops a folder scope. The
+        // other order would clear the scope this is establishing.
+        if (Path.GetPathRoot(folder) is { } root
+            && Drives.FirstOrDefault(drive => drive.Equals(root, StringComparison.OrdinalIgnoreCase))
+                is { } listed)
+        {
+            SelectedDrive = listed;
+        }
+
+        ScopeFolder = folder;
+    }
+
+    /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
+    [RelayCommand(CanExecute = nameof(CanRun))]
+    private void ScanWholeDrive() => ScopeFolder = null;
+
+    /// <summary>
+    /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
+    /// alternative leaves both set, and the page then states one target while scanning another.
+    /// </summary>
+    partial void OnSelectedDriveChanged(string? value) => ScopeFolder = null;
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
@@ -436,7 +472,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         SelectedDrive = Drives.FirstOrDefault();
     }
 
-    private bool CanScan() => !IsBusy && SelectedDrive is not null;
+    private bool CanScan() => !IsBusy && ScanRoot is not null;
 
     private bool CanRun() => !IsBusy;
 

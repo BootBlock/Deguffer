@@ -53,8 +53,9 @@ public sealed class ExploreTree
 
     /// <summary>
     /// The node <see cref="RootPath"/> names. Not always zero: the master file table addresses its
-    /// root by a fixed record number, and remapping every node to make it zero would cost a pass
-    /// over the whole volume to save an assumption nothing needs.
+    /// root by a fixed record number, and a scan scoped to a folder is rooted at whichever record
+    /// holds that folder. Remapping every node to make it zero would cost a pass over the whole
+    /// volume to save an assumption nothing needs.
     /// </summary>
     public int RootNode { get; }
 
@@ -147,7 +148,10 @@ public sealed class ExploreTree
 
             var parent = _parents[current];
 
-            // Only the root is its own parent; anything else claiming to be would loop forever.
+            // A node that is its own parent ends the chain. The scan's root is one, and so is the
+            // volume's own root left above a scan scoped to a folder — which is exactly the node a
+            // walk out of the scope arrives at, and why it ends in the throw below rather than in a
+            // path.
             if (parent == current)
             {
                 break;
@@ -174,6 +178,11 @@ public sealed class ExploreTree
     /// entirely differently, but what they gather is the same shape, and these three steps are
     /// where a mistake would be invisible in the picture rather than obvious in it.</para>
     ///
+    /// <paramref name="rootNode"/> is where the scan started, which for the file table is a record
+    /// number rather than a position: record 5 for a whole volume, and the record holding the folder
+    /// for a scan scoped to one. Nodes outside that subtree stay in the arrays and are simply never
+    /// reached, so nothing here has to know which case it is in.
+    ///
     /// <paramref name="present"/> says which slots the reader actually filled. The walk fills every
     /// one; the table leaves free and unreadable records empty, and without this those read as a
     /// forest of node-zero children that would attach the whole volume to the root a second time.
@@ -194,7 +203,7 @@ public sealed class ExploreTree
         bool[] present,
         ExploreChildOrder childOrder)
     {
-        var (childStart, children) = InvertParentLinks(parents, present, rootNode);
+        var (childStart, children) = InvertParentLinks(parents, present);
         var order = DepthFirstOrder(childStart, children, rootNode);
 
         RollUp(order, parents, sizes, sizeUnknown, rootNode);
@@ -211,16 +220,22 @@ public sealed class ExploreTree
     /// directory — which on a volume with 240k directories is 240k objects avoided for a structure
     /// that never changes after construction (G4).
     /// </summary>
-    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, bool[] present, int rootNode)
+    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, bool[] present)
     {
         var count = parents.Length;
         var start = new int[count + 1];
 
         for (var i = 0; i < count; i++)
         {
-            // The root is its own parent, so linking it would make the tree cyclic and the walk
-            // below would never terminate.
-            if (present[i] && i != rootNode)
+            // A node that is its own parent is not linked to anything, because linking it would
+            // make the tree cyclic and the walk below would never terminate. Every reader marks its
+            // scan root that way, so this is how the root stays out of its own child list.
+            //
+            // Stated as the shape rather than as "is it the root", because a scan rooted at a
+            // folder leaves the volume's own root somewhere above it — still present, still its own
+            // parent, and still unreachable from the scan's root. Testing the node number alone
+            // would link that one under itself.
+            if (present[i] && parents[i] != i)
             {
                 start[parents[i] + 1]++;
             }
@@ -236,7 +251,7 @@ public sealed class ExploreTree
 
         for (var i = 0; i < count; i++)
         {
-            if (present[i] && i != rootNode)
+            if (present[i] && parents[i] != i)
             {
                 var parent = parents[i];
                 children[start[parent] + cursor[parent]++] = i;
