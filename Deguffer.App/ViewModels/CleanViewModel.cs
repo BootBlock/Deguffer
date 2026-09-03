@@ -439,7 +439,7 @@ public sealed partial class CleanViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRun))]
     private void ElevateAndRescan()
     {
-        if (!ElevatedRelaunch.TryRelaunch())
+        if (!ElevatedRelaunch.TryRelaunch(ElevationRequest.Preview))
         {
             Report(
                 "Deguffer is still running without administrator rights, so scans measure by walking "

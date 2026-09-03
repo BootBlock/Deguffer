@@ -1,5 +1,7 @@
+using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
@@ -45,6 +47,18 @@ public sealed partial class ExplorePage : Page
         // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
         // back would be its own defect.
         NavigationCacheMode = NavigationCacheMode.Required;
+
+        // An elevated replacement opens straight here, pointed where the instance it replaced was
+        // pointed. Only where that target survived the relaunch: PointAt says so, and a drive that
+        // has since gone leaves the page waiting rather than scanning something else.
+        if (ElevatedRelaunch.Requested is ExploreRequest requested
+            && ViewModel.PointAt(requested.Drive, requested.Folder))
+        {
+            // Deferred to Loaded rather than run here, as the Storage page defers its own: the scan
+            // reports back through the dispatcher, and starting it before the page is live would
+            // report into nothing.
+            Loaded += StartRequestedScan;
+        }
     }
 
     public ExploreViewModel ViewModel { get; }
@@ -149,6 +163,17 @@ public sealed partial class ExplorePage : Page
         if (e.ClickedItem is ExploreRow row)
         {
             ViewModel.Descend(row.Node);
+        }
+    }
+
+    /// <summary>Start the scan an elevated replacement was launched to run. See the constructor.</summary>
+    private void StartRequestedScan(object sender, RoutedEventArgs e)
+    {
+        Loaded -= StartRequestedScan;
+
+        if (ViewModel.ScanCommand.CanExecute(null))
+        {
+            ViewModel.ScanCommand.Execute(null);
         }
     }
 }
