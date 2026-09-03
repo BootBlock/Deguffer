@@ -44,7 +44,7 @@ public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, Fallba
 }
 
 /// <summary>
-/// What to tell the user about the route a whole-volume scan took.
+/// What to tell the user about the route an Explore scan took.
 ///
 /// <para>Separate from <see cref="FallbackReasonText"/>, which says the opposite thing for good
 /// reason. That one qualifies the measurement of a dozen named caches, where building the table
@@ -65,21 +65,27 @@ public static class ExploreRouteText
 
         return reason switch
         {
-            // Nothing was fallen back from: the table is read from a volume's root, and this scan
-            // started somewhere below one. Saying a route was unavailable would be an apology for a
-            // choice nobody made.
+            // Nothing was fallen back from, because there was no other route to take. A folder
+            // reached through a junction has no record in the table whose subtree is its content:
+            // whatever the link stands for keeps its own place under its real parent, and the walk,
+            // which the shell resolves the link for, is simply right. Saying a route was
+            // unavailable would be an apology for a choice nobody made.
             FallbackReason.None => null,
 
             FallbackReason.NotElevated =>
                 "Scanned by walking directories. Running Deguffer as administrator lets it read the "
-                + "volume's file table instead, which describes the whole disk in one pass and is "
-                + "much quicker on a full drive.",
+                + "volume's file table instead, which describes every folder on the disk in one pass "
+                + "and is much quicker than walking a large one.",
             FallbackReason.NotNtfsVolume =>
                 "Scanned by walking directories: this volume is not NTFS, so it has no file table to read.",
             FallbackReason.VolumeNotAddressable =>
                 "Scanned by walking directories: this location is not on a local volume Deguffer can open.",
+            // Three producers, and one sentence has to be true of all of them: the volume would
+            // not open, the table stopped answering part way through, and the table read cleanly
+            // and holds no record for this folder. "Did not answer" is what they share, and it is
+            // how FallbackReason.MasterFileTableIncomplete defines itself.
             FallbackReason.MasterFileTableIncomplete =>
-                "Scanned by walking directories: the volume's file table could not be read.",
+                "Scanned by walking directories: the volume's file table did not answer for this location.",
 
             // Belongs to the executor's after-measure and cannot arise here — a scan that draws a
             // picture never asks for a reading taken across a change to the disk.

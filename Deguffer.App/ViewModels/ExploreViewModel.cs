@@ -4,90 +4,26 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
-using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
-using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 namespace Deguffer.App.ViewModels;
 
-/// <summary>One row of the list view, and one entry of any other view's detail.</summary>
-/// <param name="Node">Which node in the tree this stands for.</param>
-/// <param name="Share">
-/// How much of the containing directory this accounts for, 0 to 100. The bar is drawn against the
-/// parent rather than against the largest sibling, because the question the list answers is "what
-/// is this folder made of" and a bar scaled to the biggest child says nothing about that.
-/// </param>
-/// <param name="AgeLabel">
-/// How long ago this was last written, as a sentence — the column the list shows. Relative rather
-/// than a date, because the question is "is this still in use", and "2 years ago" answers it where
-/// "2024-03-11" makes the reader do the subtraction.
-/// </param>
-/// <param name="DatesLabel">
-/// Both exact dates, for the row's tooltip. The column rounds to the week and the year, which is
-/// right for scanning a list and wrong for the one row somebody has stopped on.
-/// </param>
-public sealed record ExploreRow(
-    int Node,
-    string Name,
-    string SizeLabel,
-    double Share,
-    bool IsDirectory,
-    bool IsLink,
-    bool IsApproximate,
-    string AgeLabel,
-    string DatesLabel)
-{
-    /// <summary>
-    /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
-    /// distinction — the row is named for a screen reader by <see cref="Description"/>, which says
-    /// it in words.
-    /// </summary>
-    public string Icon => (IsLink, IsDirectory) switch
-    {
-        // Written as escapes rather than as the characters themselves: these are private-use
-        // codepoints, so pasted into a source file they are indistinguishable from each other, and
-        // from nothing at all, in most tooling.
-        (true, _) => "\uE71B",   // Link
-        (_, true) => "\uE8B7",   // Folder
-        _ => "\uE7C3",           // Page
-    };
-
-    /// <summary>
-    /// What a screen reader should say instead of reading a bar graphic.
-    ///
-    /// <para>The age is in it because it is a column, and a column read as nothing is a column
-    /// somebody cannot use. <see cref="RelativeAge"/> already renders an absent date as "Unknown" in
-    /// words rather than as a blank, which is what makes it safe to read out.</para>
-    ///
-    /// <para>A refusal is now stated once, as a cause, rather than as the bare "at least" that used
-    /// to follow the size. That word was unambiguous while it qualified the only figure on the row;
-    /// with a second figure beside it, and one whose uncertainty runs the other way, naming what
-    /// actually happened is the only reading that stays true of both.</para>
-    /// </summary>
-    public string Description =>
-        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}, last written {AgeLabel}"
-        + (IsApproximate ? ", and some of this could not be read" : string.Empty);
-}
-
-/// <summary>One step of the path back to the root.</summary>
-public sealed record ExploreCrumb(int Node, string Name);
-
-/// <summary>One band of the age legend, ready to draw.</summary>
-/// <param name="Swatch">
-/// The band's colour as a brush. Converted here rather than in Core, which deliberately knows
-/// nothing about the UI framework so that the whole of the drawing stays testable without a window.
-/// </param>
-public sealed record ExploreLegendBand(string Label, SolidColorBrush Swatch);
-
 /// <summary>
-/// Drives the Explore page: pick a drive, scan it, and move around what was found.
+/// Drives the Explore page: pick a drive or a folder, scan it, and move around what was found.
 ///
-/// <para>This orchestrates and formats. It holds no knowledge of how a volume is read — that is
-/// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — and none
-/// of how a rectangle is drawn, which belongs to the layout and the rasteriser in Core. What is
-/// left here is which node is being looked at and what the screen says about it (G2).</para>
+/// <para>This orchestrates. It holds no knowledge of how a volume is read — that is
+/// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — none of
+/// how a rectangle is drawn, which belongs to the layout and the rasteriser in Core, and none of
+/// how a row is worded, which is <see cref="ExploreRowText"/>'s. What is left here is which node is
+/// being looked at (G2).</para>
+///
+/// <para><b>Past G1's 500-line ceiling, and the reason is that what remains does not divide.</b>
+/// Every seam this page had has been cut and lives beside it: the row and crumb values, the wording
+/// of a row, the legend's bands, the drawing, and the scanning. What is left is one page's
+/// controller, and its parts are not independently useful — the scan, the scope, the navigation and
+/// the view selection all read and write the same current tree and current node, so a second type
+/// over them would share that state rather than own any of it.</para>
 /// </summary>
 public sealed partial class ExploreViewModel : ObservableObject
 {
@@ -118,10 +54,43 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     public partial string? SelectedDrive { get; set; }
 
+    /// <summary>
+    /// The folder a scan is scoped to, or null for a whole drive.
+    ///
+    /// <para>Set from the system picker rather than from a typed string, so the path is one the
+    /// shell confirmed exists — the same reason <see cref="SettingsViewModel"/>'s source folders go
+    /// through one.</para>
+    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsScopedToFolder))]
+    [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
+    public partial string? ScopeFolder { get; set; }
+
+    /// <summary>
+    /// What the next scan covers: the chosen folder, and the whole drive where none was chosen.
+    /// Choosing a folder is the more specific act, so it wins, and the drive box follows it rather
+    /// than contradicting it — see <see cref="ScopeTo"/>.
+    ///
+    /// <para>Not bound to anything. The screen states the two halves separately, in the drive box
+    /// and the folder beside it, and this is what the scan is actually pointed at.</para>
+    /// </summary>
+    private string? ScanRoot => ScopeFolder ?? SelectedDrive;
+
+    public bool IsScopedToFolder => ScopeFolder is not null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ScanWholeDriveCommand))]
     public partial bool IsBusy { get; set; }
+
+    /// <summary>
+    /// Whether the page will accept a new instruction. The folder picker is opened by the page
+    /// rather than by a command here — it is a WinUI dialog needing a window handle — so it has no
+    /// <c>CanExecute</c> of its own to disable it while a scan runs.
+    /// </summary>
+    public bool IsIdle => !IsBusy;
 
     /// <summary>
     /// How far through, 0 to 1, or null where the route cannot say.
@@ -145,7 +114,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasNoProgressFraction => Progress is null;
 
     [ObservableProperty]
-    public partial string Status { get; set; } = "Choose a drive and scan it to see what is using the space.";
+    public partial string Status { get; set; } =
+        "Choose a drive or a folder and scan it to see what is using the space.";
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]
@@ -206,12 +176,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// without the scale beside it, and a picture whose colours the reader cannot decode is worse
     /// than one with no colours in it.</para>
     /// </summary>
-    public IReadOnlyList<ExploreLegendBand> AgeLegend { get; } =
-    [
-        .. AgePalette.Bands.Select(band => new ExploreLegendBand(
-            band.Label,
-            new SolidColorBrush(Color.FromArgb(255, band.Colour.Red, band.Colour.Green, band.Colour.Blue)))),
-    ];
+    public IReadOnlyList<ExploreLegendBand> AgeLegend => ExploreLegendBand.All;
 
     /// <summary>
     /// Whether to show that legend: only when the colours are ages, only when there is a picture
@@ -282,20 +247,24 @@ public sealed partial class ExploreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan), IncludeCancelCommand = true)]
     private async Task ScanAsync(CancellationToken ct)
     {
-        if (SelectedDrive is not { } drive)
+        if (ScanRoot is not { } target)
         {
             return;
         }
+
+        // Read once, at the start. The scope can be changed while a scan runs, and a sentence
+        // written afterwards would then describe the next scan rather than this one's result.
+        var what = IsScopedToFolder ? "folder" : "drive";
 
         IsBusy = true;
         Progress = null;
         RouteNote = null;
         CanElevate = false;
-        Status = $"Scanning {drive}…";
+        Status = $"Scanning {target}…";
 
         try
         {
-            var scan = await _scanner.ScanAsync(drive, new Progress<ExploreProgress>(Report), ct);
+            var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
 
             Show(scan.Tree, scan.Tree.RootNode);
 
@@ -303,7 +272,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             CanElevate = !ElevatedRelaunch.IsElevated && scan.Fallback == FallbackReason.NotElevated;
 
             Status = scan.Tree.HasUnknownSizes
-                ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this drive could not "
+                ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this {what} could not "
                   + "be read, so the totals are lower bounds."
                 : $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for.";
         }
@@ -325,7 +294,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // A volume that went away mid-scan, or one the account cannot open at all. Neither is
             // worth taking the window down for, and the page is read-only — there is nothing
             // half-done to report.
-            Status = $"Could not scan {drive}: {ex.Message}";
+            Status = $"Could not scan {target}: {ex.Message}";
         }
         finally
         {
@@ -333,6 +302,44 @@ public sealed partial class ExploreViewModel : ObservableObject
             Progress = null;
         }
     }
+
+    /// <summary>
+    /// Point the next scan at <paramref name="folder"/> and everything below it.
+    ///
+    /// <para>The picking itself belongs to the page: it is a WinUI dialog needing a window handle,
+    /// and this stays testable by knowing only about the path that comes back — the arrangement
+    /// <see cref="SettingsViewModel.AddSourceRoot"/> already uses for the same dialog.</para>
+    /// </summary>
+    public void ScopeTo(string folder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+
+        // The drive box moves to the volume holding the folder, where that volume is one it offers.
+        // The two controls describe a single choice, and a drive box naming a volume the scan is not
+        // on is the kind of disagreement a reader takes for a bug. A folder on a share, or on a
+        // volume the box does not list, has no entry to move to and leaves it as it was.
+        //
+        // Assigned before the folder, because selecting a drive is what drops a folder scope. The
+        // other order would clear the scope this is establishing.
+        if (Path.GetPathRoot(folder) is { } root
+            && Drives.FirstOrDefault(drive => drive.Equals(root, StringComparison.OrdinalIgnoreCase))
+                is { } listed)
+        {
+            SelectedDrive = listed;
+        }
+
+        ScopeFolder = folder;
+    }
+
+    /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
+    [RelayCommand(CanExecute = nameof(CanRun))]
+    private void ScanWholeDrive() => ScopeFolder = null;
+
+    /// <summary>
+    /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
+    /// alternative leaves both set, and the page then states one target while scanning another.
+    /// </summary>
+    partial void OnSelectedDriveChanged(string? value) => ScopeFolder = null;
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
@@ -395,7 +402,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // the colouring to read a date would be a worse answer than showing it always.
             ({ } tree, { } value, _) =>
                 $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}, "
-                + $"last written {Age(tree, value, DateTime.UtcNow)}",
+                + $"last written {ExploreRowText.Age(tree, value, DateTime.UtcNow)}",
 
             _ => string.Empty,
         };
@@ -453,80 +460,15 @@ public sealed partial class ExploreViewModel : ObservableObject
             Rows.Add(new ExploreRow(
                 child,
                 tree.NameOf(child),
-                Size(tree, child),
+                ExploreRowText.Size(tree, child),
                 total > 0 ? 100.0 * tree.SizeOf(child) / total : 0,
                 tree.IsDirectory(child),
                 tree.IsLink(child),
                 tree.HasUnknownSizeBelow(child),
-                Age(tree, child, now),
-                Dates(tree, child)));
+                ExploreRowText.Age(tree, child, now),
+                ExploreRowText.Dates(tree, child)));
         }
     }
-
-    /// <summary>
-    /// A row's age, marked where the scan could not see under it.
-    ///
-    /// <para>A directory the walk was refused contributes only its own timestamp to the roll-up,
-    /// and a directory's own timestamp moves when its layout changes rather than when its contents
-    /// do — so a log being appended to right now behind a refused listing reads as years idle.
-    /// Core's <c>DirectoryAge</c> answers "unknown" in that position rather than risk it, which is
-    /// the right trade for a row that prices a deletion and the wrong one here: nearly
-    /// every drive has some corner it cannot read, so blanking the column would blank the drive
-    /// root and every folder above the refusal.</para>
-    ///
-    /// <para>So the date is kept and qualified, in the direction the error actually runs. The age
-    /// shown can only be too old, never too new — the same asymmetry
-    /// <see cref="Size"/> marks with "≥", and stated in words rather than a symbol because a
-    /// screen reader reads this one aloud.</para>
-    /// </summary>
-    private static string Age(ExploreTree tree, int node, DateTime now)
-    {
-        var written = tree.ModifiedOf(node);
-        var age = RelativeAge.Describe(written.Utc, now);
-
-        return written.IsKnown && tree.HasUnknownSizeBelow(node) ? $"{age} or newer" : age;
-    }
-
-    /// <summary>
-    /// Both of a row's dates in full, for its tooltip.
-    ///
-    /// <para>Local time and the user's own format, because this is the one place the exact instant
-    /// is shown and a reader compares it against what Explorer says beside it. Everything inside the
-    /// tree is UTC, which is what makes two scan routes agree; the conversion belongs here, at the
-    /// last moment before a person reads it.</para>
-    ///
-    /// <para>The two lines say different things and the labels have to keep them apart. Created is
-    /// the node's own date. Modified is the newest write anywhere at or below it, so for a folder it
-    /// is not the folder's own timestamp — see <see cref="ExploreTree.ModifiedOf"/> — and calling it
-    /// "modified" without saying so invites the reader to compare it with a figure Explorer shows
-    /// for something else.</para>
-    /// </summary>
-    private static string Dates(ExploreTree tree, int node)
-    {
-        var created = tree.CreatedOf(node).Utc;
-        var modified = tree.ModifiedOf(node).Utc;
-
-        var newest = tree.IsDirectory(node) ? "Newest write inside" : "Last written";
-
-        return $"Created: {Exact(created)}{Environment.NewLine}{newest}: {Exact(modified)}";
-    }
-
-    private static string Exact(DateTime? when) =>
-        when is { } value ? value.ToLocalTime().ToString("g") : "not known";
-
-    /// <summary>
-    /// A row's size, marked where it is a lower bound.
-    ///
-    /// <para>A directory the walk was refused totals only what it could see, and the plain figure
-    /// reads as a measurement. The page says so once in its status line, which is true and is not
-    /// enough — it is the row for <c>System Volume Information</c> showing "0 B" that a reader
-    /// acts on. <see cref="ExploreRow.Description"/> says the same in words for a screen reader,
-    /// because a symbol read aloud is not a sentence.</para>
-    /// </summary>
-    private static string Size(ExploreTree tree, int node) =>
-        tree.HasUnknownSizeBelow(node)
-            ? "≥ " + FreeSpace.Format(tree.SizeOf(node))
-            : FreeSpace.Format(tree.SizeOf(node));
 
     private void BuildTrail(ExploreTree tree, int node)
     {
@@ -569,7 +511,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         SelectedDrive = Drives.FirstOrDefault();
     }
 
-    private bool CanScan() => !IsBusy && SelectedDrive is not null;
+    private bool CanScan() => !IsBusy && ScanRoot is not null;
 
     private bool CanRun() => !IsBusy;
 

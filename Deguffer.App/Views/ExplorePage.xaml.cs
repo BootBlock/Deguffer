@@ -5,11 +5,12 @@ using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Storage.Pickers;
 
 namespace Deguffer.App.Views;
 
 /// <summary>
-/// The Explore page: pick a drive, see what is on it.
+/// The Explore page: pick a drive or a folder, see what is on it.
 ///
 /// <para>Nothing on this page removes anything. It answers "what is using the space", which §3 is
 /// careful to say is not the same question as "what is safe to remove" — the Storage page answers
@@ -106,6 +107,33 @@ public sealed partial class ExplorePage : Page
 
         ColourAs(colouring);
         App.Preferences.Update(current => current with { ExploreColours = colouring });
+    }
+
+    /// <summary>
+    /// Scope the next scan to a folder, through the system picker.
+    ///
+    /// <para>The picking lives here rather than in the view model for the reason
+    /// <see cref="SettingsPage"/> gives: it is a WinUI dialog needing a window handle, and the view
+    /// model stays testable by knowing only about the path that comes back.</para>
+    /// </summary>
+    private async void OnChooseFolder(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindow is not { } window)
+        {
+            return;
+        }
+
+        var picker = new FolderPicker();
+        picker.FileTypeFilter.Add("*");
+
+        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+
+        if (await picker.PickSingleFolderAsync() is { } folder)
+        {
+            ViewModel.ScopeTo(folder.Path);
+        }
     }
 
     private void OnCrumbClicked(object sender, RoutedEventArgs e)
