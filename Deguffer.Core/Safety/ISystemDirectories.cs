@@ -23,6 +23,19 @@ public interface ISystemDirectories
 
     /// <summary><c>%PROGRAMDATA%</c>, ordinarily <c>C:\ProgramData</c>.</summary>
     string ProgramData { get; }
+
+    /// <summary><c>%PROGRAMFILES%</c>, ordinarily <c>C:\Program Files</c>.</summary>
+    string ProgramFiles { get; }
+
+    /// <summary>
+    /// The 32-bit program directory, ordinarily <c>C:\Program Files (x86)</c>, or empty on a
+    /// 32-bit Windows that has no such directory.
+    ///
+    /// Both are named because §7.1 names "Program Files" and Windows has two of them. A rule that
+    /// knew only the first would refuse half of the installed software on a 64-bit machine and
+    /// allow the other half, which is the shape of hole nobody notices.
+    /// </summary>
+    string ProgramFilesX86 { get; }
 }
 
 /// <inheritdoc />
@@ -40,4 +53,35 @@ public sealed class SystemDirectories : ISystemDirectories
     public string WindowsDirectory { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
     public string ProgramData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+    /// <summary>
+    /// The 64-bit program directory, from the environment rather than from
+    /// <see cref="Environment.SpecialFolder.ProgramFiles"/>.
+    ///
+    /// <para>That folder is the <em>calling process's</em> view: WOW64 answers it with
+    /// <c>C:\Program Files (x86)</c> for a 32-bit process, which would make both of these the same
+    /// directory and leave the 64-bit one named by neither. This app ships an <c>x86</c> platform,
+    /// so that is a configuration somebody runs rather than a hypothetical — and the whole of the
+    /// protection would be gone without a single rule looking wrong.</para>
+    ///
+    /// <para><c>%ProgramW6432%</c> names the 64-bit directory from either process, and is unset on a
+    /// 32-bit Windows, where the special folder is the right answer.</para>
+    /// </summary>
+    public string ProgramFiles { get; } =
+        Value("ProgramW6432") ?? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+
+    /// <summary>
+    /// The 32-bit program directory, read the same way and for the same reason. Empty on a 32-bit
+    /// Windows, which has no such directory to protect.
+    /// </summary>
+    public string ProgramFilesX86 { get; } =
+        Value("ProgramFiles(x86)") ?? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+    /// <summary>
+    /// An environment variable, or null where it is unset <em>or empty</em>. The two are the same
+    /// answer here — neither names a directory — and treating an empty one as a value hands a caller
+    /// a path that matches nothing, or worse, everything.
+    /// </summary>
+    private static string? Value(string name) =>
+        Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
 }

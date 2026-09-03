@@ -57,6 +57,24 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// </summary>
     public string CoreRoot => Path.Combine(Environment.UserProfile, ".platformio");
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside, and this is the provider that needs it most: the
+    /// installed toolchains under <c>packages</c> dominate the core directory's size, so a size
+    /// picture puts them in front of the user before anything else in there.
+    ///
+    /// <para>The cache directory PlatformIO reports is deliberately not declared. It arrives from a
+    /// subprocess, and this is the documented default of the folder holding it.</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            CoreRoot,
+            "This is PlatformIO's own folder. Deguffer clears the download cache inside it and "
+            + "nothing else, because the installed toolchains, the Python that PlatformIO runs on "
+            + "and your global libraries all sit beside that cache.",
+            static name => name.Equals(".cache", StringComparison.OrdinalIgnoreCase)),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("pio") is not null);
 

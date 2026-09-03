@@ -60,6 +60,17 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// <summary>The <c>.gradle</c> root. Exposed so tests can assert it is never targeted.</summary>
     public string RootPath => _root;
 
+    /// <inheritdoc />
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        ToolRoot.Of(
+            _root,
+            "This is Gradle's own folder. Deguffer removes the caches and wrapper distributions "
+            + "inside it and nothing else, because the configuration beside them may hold signing "
+            + "keys and credentials.",
+            DisposableChildren),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryExists(_root));
 

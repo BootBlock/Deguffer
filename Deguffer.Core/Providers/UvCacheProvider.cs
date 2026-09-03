@@ -52,6 +52,24 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// <summary>uv's state directory. Exposed so tests can assert it is never targeted (§5.2).</summary>
     public string StateRoot => Path.Combine(Environment.LocalAppData, "uv");
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. <c>%LOCALAPPDATA%\uv</c> is not a cache directory
+    /// but uv's whole state directory, so the tools the user installed and the interpreters uv
+    /// manages sit beside the one child that is a cache.
+    ///
+    /// <para>The directory <c>uv cache dir</c> reports is deliberately not declared: it arrives from
+    /// a subprocess, and this is the documented default of the folder holding it.</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            StateRoot,
+            "This is uv's own folder. Deguffer clears the cache inside it and nothing else, because "
+            + "the tools you installed with 'uv tool install' and the Python interpreters uv manages "
+            + "sit beside it.",
+            static name => name.Equals("cache", StringComparison.OrdinalIgnoreCase)),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("uv") is not null);
 

@@ -126,6 +126,27 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// machine that has ever integrated vcpkg with Visual Studio, and reading that as a hit would
     /// report a source the plan then has nothing to say about.
     /// </summary>
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. Both of the user's vcpkg directories, because the
+    /// documented search order for the binary cache falls through from the local profile to the
+    /// roaming one, and a cache found under the second still has that second directory's own records
+    /// beside it.
+    ///
+    /// <para>The clone is deliberately absent. Finding it reads three environment variables, probes
+    /// for a marker file and searches <c>PATH</c>, and a declaration Explore consults on every path
+    /// has to be readable without any of that. Nothing under a clone is refused here as a result,
+    /// which is why this provider still names <c>installed</c> a survivor in its own plan.</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        .. _discovery.ProfileDirectories.Select(profile => new ToolRoot(
+            profile,
+            "This is your vcpkg folder. Deguffer removes the binary cache inside it and nothing "
+            + "else, because the record of which vcpkg clone is integrated and the registry clones "
+            + "a manifest resolves versions against both sit beside that cache.",
+            static name => name.Equals("archives", StringComparison.OrdinalIgnoreCase))),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryExists));
 

@@ -73,6 +73,32 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// <summary>Where Go keeps its workspace when it has not been asked.</summary>
     public string DefaultGoPath => Path.Combine(Environment.UserProfile, "go");
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside, one root per level on Cargo's reasoning: the module
+    /// cache is <c>pkg\mod</c> inside the workspace, and a declaration is an allow-list over one
+    /// directory's immediate children. Declaring only the workspace would refuse <c>pkg</c>, and
+    /// <c>pkg\mod</c> with it, which is the one directory <c>go clean -modcache</c> empties.
+    ///
+    /// <para>The locations <c>go env</c> reports are deliberately not declared: they arrive from a
+    /// subprocess, and these are the documented defaults. The build cache is not declared at all,
+    /// because it is the cache itself rather than a folder with configuration beside it.</para>
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            DefaultGoPath,
+            "This is your Go workspace. Deguffer clears the module cache inside it and nothing "
+            + "else, because the binaries you installed with 'go install' and your own source sit "
+            + "beside it.",
+            static _ => false),
+
+        new ToolRoot(
+            Path.Combine(DefaultGoPath, "pkg"),
+            "This is inside your Go workspace. Deguffer clears the module cache in there and "
+            + "nothing else, and leaves whatever Go keeps beside it alone.",
+            static name => name.Equals("mod", StringComparison.OrdinalIgnoreCase)),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("go") is not null);
 
