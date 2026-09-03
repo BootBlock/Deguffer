@@ -32,6 +32,11 @@ are the bulk of the waste, and each needs its own knowledge to clear safely.
 Size alone cannot distinguish them, so ranking directories by size and letting the user guess is
 not a design this can adopt — §3 is the alternative.
 
+That is a statement about how Deguffer decides what to *offer*, not a refusal to show the user
+their own disk. §7.1 adds a view that ranks by size and says so, kept deliberately apart from the
+one that classifies, because the failure this paragraph describes is a size ranking presented as a
+recommendation.
+
 The evidence below comes from auditing one real workstation (Windows 11, ~330 GB system drive) that
 had reached **5.6 GB free**. Targeted cleanup of three package-manager caches recovered **22.9 GB**
 in a few minutes, without touching a single piece of user data.
@@ -47,10 +52,15 @@ in a few minutes, without touching a single piece of user data.
 - Prefer a tool's own eviction command over deleting its folder.
 - Never delete without a preview, and never delete something irreplaceable without saying so.
 - Be fast enough to scan a full drive without the user walking away.
+- **Show where the space actually went**, as a picture of the whole drive, without implying that
+  any of what it shows is safe to remove. See §7.1.
 
 **Non-goals**
 
-- Not a general file manager, duplicate finder, or uninstaller.
+- Not a duplicate finder or an uninstaller.
+- Not a general file manager. Explore (§7.1) opens, reveals and removes an individual file or
+  folder the user has picked out of the picture, because that is the action a size view leads to.
+  It does not browse, move, rename or copy, and it does not aim to replace Explorer.
 - No automatic/scheduled deletion in v1. Nothing is removed without explicit confirmation.
 - Not a Windows component cleaner — `WinSxS` and `Windows\Installer` are deliberately out of scope
   (see §9).
@@ -352,6 +362,45 @@ Deliberate points, and the traps that come with them:
 - **The Acrylic backdrop (§6.5) is decoration, never information.** Tier, risk and selection state
   must all read correctly on a flat solid background, because on plenty of machines that is exactly
   what the user will see.
+
+### 7.1 Explore — the other question
+
+Storage answers **"what is safe to remove"**. Explore answers **"where did the space go"**. §1 says
+plainly that the second question cannot be allowed to answer the first: size alone cannot tell a
+package cache from eleven gigabytes of chat history, and §3 exists because a size-ranked list would
+have recommended deleting the second.
+
+Both questions are real, and a tool that answers only the first sends the user to a different
+program the moment its providers do not recognise what filled the disk. So Explore is a separate
+destination, and the separation is the design.
+
+As with the rest of this document, what follows is the target rather than a description of the code.
+Explore currently draws and navigates; it removes nothing. The rules below govern the work that
+makes it act, which is issue #22.
+
+- **Explore never classifies.** It reports a name and a number. It never says a thing is safe, never
+  pre-selects anything, and never orders anything by how removable it is.
+- **Explore never pre-selects and never acts on more than the user picked out by hand.** Storage
+  offers a plan; Explore acts on a selection, one item at a time, and there is no "clean everything
+  here".
+- **Explore refuses whatever the tier model would call Tier 4**, and it does not get to decide what
+  that is. §5.2 is unconditional and is not scoped to a page: an unrecognised child of a tool's root
+  *is* Tier 4, so `gradle.properties` beside `.gradle\caches` is refused here exactly as it is
+  refused there. So are the §9 exclusions, `C:\Windows`, `Program Files`, and every path a provider
+  names as protected.
+- **What Explore shows and what Explore will act on are different sets**, and the second is much
+  smaller. Drawing a rectangle for a path says only that the bytes are there. It is not a
+  classification, it is not an offer, and the UI must never let a user read it as one — which is why
+  Explore has no bulk action and no pre-selection, and why the refusals above are stated with their
+  reason rather than by greying something out.
+- **Removal from Explore goes to the Recycle Bin by default.** §8's fourth question concludes that
+  undo is impossible at cache sizes, and that is true of a ten-gigabyte tree. It is not true of the
+  one file a user picked out of a picture, and where recovery is available it is not optional.
+  Removing permanently stays available as a deliberate second choice, and says what it is.
+- **§5.6 still applies.** Every removal asserts afterwards that what should have survived did.
+- **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
+  Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
+  acceptable where it draws a picture — provided the picture states which it is.
 
 ---
 

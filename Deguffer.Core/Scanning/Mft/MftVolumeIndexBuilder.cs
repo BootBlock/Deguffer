@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -10,8 +8,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public static class MftVolumeIndexBuilder
 {
-    private const int RecordsPerBatch = 1024;
-
     /// <summary>
     /// Build the index for <paramref name="source"/>.
     ///
@@ -35,7 +31,7 @@ public static class MftVolumeIndexBuilder
         var count = (int)Math.Min(source.RecordCount, int.MaxValue);
         var tree = new MftVolumeTree(count);
 
-        if (!ReadAllRecords(source, tree, ct))
+        if (!MftRecordStream.TryReadAll(source, count, (number, outcome, in record) => Place(tree, number, outcome, in record), ct))
         {
             return false;
         }
@@ -44,95 +40,63 @@ public static class MftVolumeIndexBuilder
         return true;
     }
 
-    private static bool ReadAllRecords(IMftSource source, MftVolumeTree tree, CancellationToken ct)
+    /// <summary>
+    /// Put one record into the tree, or say why the whole volume has to be abandoned.
+    ///
+    /// Returning false here takes the index down, and the two cases where it does not are the whole
+    /// of this method's judgement.
+    /// </summary>
+    private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record)
     {
-        var batchBytes = RecordsPerBatch * source.BytesPerRecord;
-        var buffer = ArrayPool<byte>.Shared.Rent(batchBytes);
-
-        try
+        // Both are skipped, and the index cannot tell them apart usefully. A record whose name lives
+        // in an extension record is a real file this reader cannot place, so the directory above it
+        // totals short and the total is not marked approximate — a compromise this builder has
+        // always made, because refusing instead would take the fast path off any volume holding one,
+        // which on a system drive means always. Following the attribute list is the fix, and it is
+        // after-the-scanner.md item 6.
+        if (outcome is MftParseOutcome.NotAnEntry or MftParseOutcome.IdentityElsewhere)
         {
-            long next = 0;
-
-            while (next < tree.Count)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                var read = source.ReadBatch(next, buffer.AsSpan(0, batchBytes));
-                if (read <= 0)
-                {
-                    // Skipping ahead would leave a hole in the tree that no later check can see:
-                    // the files in the missed range simply never get added, and every directory
-                    // above them totals short. Abandon the index instead.
-                    return false;
-                }
-
-                for (var i = 0; i < read; i++)
-                {
-                    var slice = buffer.AsSpan(i * source.BytesPerRecord, source.BytesPerRecord);
-                    var outcome = MftRecordParser.Parse(slice, source.BytesPerSector, out var record);
-
-                    if (outcome == MftParseOutcome.NotAnEntry)
-                    {
-                        continue;
-                    }
-
-                    // A record in use that this reader cannot place is the same loss as a region it
-                    // could not read: a file exists, the tree cannot hold it, and every directory
-                    // above it would total short with nothing to show for it.
-                    //
-                    // The whole volume goes with it, and on a live read that can be one record
-                    // caught mid-write — the condition the update sequence array exists to detect,
-                    // and one a second read of that record alone would very likely settle. Retrying
-                    // is the improvement this wants; refusing is the answer that is never wrong.
-                    // …except across records 12 to 15, where this shape is not damage but the
-                    // format. NTFS holds those four back for future metadata, marks them in use and
-                    // gives them no name, so the refusal below fired on record 12 of every NTFS
-                    // volume and took the index with it — measured on a real volume: those four
-                    // records, and no others in three million. §5.5's fast path could therefore
-                    // never engage on a real machine, and an elevated run walked every path exactly
-                    // as an unelevated one did.
-                    //
-                    // Skipping them loses nothing. A record that is never added is absent from the
-                    // child links entirely rather than present as a zero, so no subtree total can be
-                    // short by a byte — and these four have no $FILE_NAME, so they name no parent to
-                    // hang off in the first place.
-                    //
-                    // The bound is both-ended on purpose. Records 0 to 11 are the named metadata
-                    // files and parse like anything else, so an unreadable one there is damage —
-                    // a torn $MFT is a real file of real size, and skipping it would answer short
-                    // for the volume root while claiming a complete index.
-                    if (outcome == MftParseOutcome.Unreadable
-                        && next + i >= MftRecord.FirstUnnamedReservedRecord
-                        && next + i < MftRecord.ReservedRecordCount)
-                    {
-                        continue;
-                    }
-
-                    if (outcome == MftParseOutcome.Unreadable)
-                    {
-                        return false;
-                    }
-
-                    // A parent outside the table is a different thing entirely, and an ordinary one
-                    // on a live volume: a directory removed mid-read, or a table that grew after its
-                    // size was measured. Such a record is unreachable from the root, so it cannot be
-                    // inside anything this index will be asked to total, and dropping it costs
-                    // nothing.
-                    if (record.ParentRecordNumber < tree.Count)
-                    {
-                        tree.Set(next + i, record);
-                    }
-                }
-
-                next += read;
-            }
-
             return true;
         }
-        finally
+
+        // A record in use that this reader cannot place is the same loss as a region it could not
+        // read: a file exists, the tree cannot hold it, and every directory above it would total
+        // short with nothing to show for it.
+        //
+        // The whole volume goes with it, and on a live read that can be one record caught mid-write
+        // — the condition the update sequence array exists to detect, and one a second read of that
+        // record alone would very likely settle. Retrying is the improvement this wants; refusing is
+        // the answer that is never wrong.
+        // …except across records 12 to 15, where this shape is not damage but the format. NTFS holds
+        // those four back for future metadata, marks them in use and gives them no name, so the
+        // refusal below fired on record 12 of every NTFS volume and took the index with it —
+        // measured on a real volume: those four records, and no others in three million. §5.5's fast
+        // path could therefore never engage on a real machine, and an elevated run walked every path
+        // exactly as an unelevated one did.
+        //
+        // Skipping them loses nothing. A record that is never added is absent from the child links
+        // entirely rather than present as a zero, so no subtree total can be short by a byte — and
+        // these four have no $FILE_NAME, so they name no parent to hang off in the first place.
+        //
+        // The bound is both-ended on purpose. Records 0 to 11 are the named metadata files and parse
+        // like anything else, so an unreadable one there is damage — a torn $MFT is a real file of
+        // real size, and skipping it would answer short for the volume root while claiming a
+        // complete index.
+        if (outcome == MftParseOutcome.Unreadable)
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            return number >= MftRecord.FirstUnnamedReservedRecord && number < MftRecord.ReservedRecordCount;
         }
+
+        // A parent outside the table is a different thing entirely, and an ordinary one on a live
+        // volume: a directory removed mid-read, or a table that grew after its size was measured.
+        // Such a record is unreachable from the root, so it cannot be inside anything this index
+        // will be asked to total, and dropping it costs nothing.
+        if (record.ParentRecordNumber < tree.Count)
+        {
+            tree.Set(number, record);
+        }
+
+        return true;
     }
 
     /// <summary>

@@ -142,7 +142,7 @@ internal static class MftRecordParser
             //
             // Without a list, a record in use claims no identity and points nowhere else for one,
             // which no healthy volume produces.
-            return sawAttributeList ? MftParseOutcome.NotAnEntry : MftParseOutcome.Unreadable;
+            return sawAttributeList ? MftParseOutcome.IdentityElsewhere : MftParseOutcome.Unreadable;
         }
 
         if (!sawData)
