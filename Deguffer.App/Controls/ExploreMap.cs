@@ -183,7 +183,7 @@ public sealed class ExploreMap : UserControl
         // is the whole reason the icicle exists beside the treemap: with the order fixed a growing
         // child widens where it is, where a treemap repacks its rows and rearranges the picture on
         // every snapshot. So a scan in progress draws the icicle whichever view was picked, and the
-        // treemap arrives with the finished scan. ExploreViewModel.MapNote says so on screen.
+        // treemap arrives with the finished scan. ExploreViewModel.ViewNote says so on screen.
         var stillFillingIn = tree.ChildOrder != ExploreChildOrder.BySize;
 
         _tiles = _view == ExploreView.Icicle || stillFillingIn

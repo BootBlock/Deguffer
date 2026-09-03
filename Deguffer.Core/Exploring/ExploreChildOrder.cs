@@ -11,8 +11,8 @@ namespace Deguffer.Core.Exploring;
 public enum ExploreChildOrder
 {
     /// <summary>
-    /// Largest first. What a finished scan wants, and what every consumer reads: the treemap
-    /// requires it, the icicle draws its aggregate from it, and the list shows it directly.
+    /// Largest first. What a finished scan wants: the treemap requires it, and the list and the
+    /// icicle both read best in it.
     /// </summary>
     BySize = 0,
 

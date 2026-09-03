@@ -179,11 +179,12 @@
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
 
-            <!-- The one place the picture is not what the View box names. A treemap repacks its
-                 rows every time a folder grows, so a scan in progress is drawn as an icicle — and
-                 a substitution nobody is told about is the kind a user reads as a bug. -->
-            <TextBlock Text="{x:Bind ViewModel.MapNote, Mode=OneWay}"
-                       Visibility="{x:Bind ViewModel.HasMapNote, Mode=OneWay}"
+            <!-- Where what is on screen is not what the View box names. A scan in progress is
+                 ordered by name so that it stays still, and a treemap cannot be drawn from that at
+                 all — so the map substitutes the icicle. A substitution nobody is told about is
+                 the kind a user reads as a bug. -->
+            <TextBlock Text="{x:Bind ViewModel.ViewNote, Mode=OneWay}"
+                       Visibility="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
                        TextWrapping="Wrap"
                        Style="{StaticResource SecondaryText}" />
 

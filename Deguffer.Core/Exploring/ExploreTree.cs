@@ -344,16 +344,22 @@ public sealed class ExploreTree
     }
 
     /// <summary>
-    /// Compare two siblings by name, ordinally and without regard to case.
+    /// Compare two siblings by name, ordinally and without regard to case, and break a tie by node
+    /// number.
     ///
     /// <para>Ordinal so that the same disk draws the same picture on every machine. Without regard
     /// to case because the alternative sorts every capitalised name ahead of every lower-case one,
     /// which reads as no order at all to somebody looking at the list.</para>
     ///
-    /// <para>Two siblings can compare equal, on a directory with case sensitivity enabled. They
-    /// keep the order they were recorded in, by the same stability the size order relies on for
-    /// equal-sized children.</para>
+    /// <para>The tie-break is what makes this a total order rather than one whose equal cases fall
+    /// to whatever the sort does with them. Two siblings can compare equal — a directory with case
+    /// sensitivity enabled holds <c>Cache</c> and <c>cache</c> at once — and the size path three
+    /// lines below says why an unspecified order among equals is not good enough here.</para>
     /// </summary>
     private static Comparison<int> ByName(string[] names) =>
-        (left, right) => string.Compare(names[left], names[right], StringComparison.OrdinalIgnoreCase);
+        (left, right) =>
+        {
+            var byName = string.Compare(names[left], names[right], StringComparison.OrdinalIgnoreCase);
+            return byName != 0 ? byName : left.CompareTo(right);
+        };
 }
