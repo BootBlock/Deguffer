@@ -2,6 +2,16 @@ namespace Deguffer.Core.Safety;
 
 /// <param name="FullName">The entry's path, in whatever form the enumeration returned it.</param>
 /// <param name="Length">Size in bytes; zero for a directory, and for a reparse point.</param>
+/// <param name="NewestFileTime">
+/// The newer of the entry's creation and last-write times, as a FILETIME, for
+/// <see cref="MinimumAge"/> to judge. Taken from the enumeration that produced the entry, so it
+/// costs no further I/O — and it has to travel with the entry, because a removal that re-read the
+/// timestamp would be asking about a file the walk has already classified.
+///
+/// <para>Zero by default, which is what NTFS writes for a timestamp it never set and what no guard
+/// protects. A filesystem implementation that does not answer this leaves every entry deletable,
+/// which is the behaviour with the guard off.</para>
+/// </param>
 /// <remarks>
 /// A struct because these trees run to hundreds of thousands of entries and G4's per-entry
 /// overhead dominates: enumeration already allocates a <see cref="FileSystemInfo"/> apiece, and a
@@ -11,7 +21,8 @@ public readonly record struct FileSystemEntry(
     string FullName,
     bool IsDirectory,
     bool IsReparsePoint,
-    long Length);
+    long Length,
+    long NewestFileTime = 0);
 
 /// <summary>
 /// The filesystem operations a deletion performs, behind an interface so a test can observe the
@@ -56,6 +67,19 @@ public interface IFileSystem
     /// </summary>
     long? TryGetFileLength(string path);
 
+    /// <summary>
+    /// The newer of the file's creation and last-write times as a FILETIME, or null when no file is
+    /// there — the same question <see cref="FileSystemEntry.NewestFileTime"/> answers for an
+    /// enumerated entry, asked of a path nothing enumerated.
+    ///
+    /// <para>Asked by <see cref="Execution.FileRemover"/>, which is handed a single named path. It
+    /// re-asks immediately before deleting rather than trusting the plan, because a plan is made
+    /// minutes before it runs and the file may have been written to in between — and §7.1 already
+    /// settles that a refusal is decided again at the point of deletion rather than only where the
+    /// offer was made.</para>
+    /// </summary>
+    long? TryGetNewestFileTime(string path);
+
     void DeleteFile(string path);
 
     /// <summary>Removes an empty directory; never recursive, so ordering stays the caller's.</summary>
@@ -99,7 +123,8 @@ public sealed class WindowsFileSystem : IFileSystem
                 entry.FullName,
                 entry is DirectoryInfo,
                 entry.Attributes.HasFlag(FileAttributes.ReparsePoint),
-                entry is FileInfo file ? file.Length : 0))
+                entry is FileInfo file ? file.Length : 0,
+                MinimumAge.NewestFileTimeOf(entry)))
             .ToList();
 
     public long? TryGetFileLength(string path)
@@ -107,6 +132,13 @@ public sealed class WindowsFileSystem : IFileSystem
         var file = new FileInfo(path);
 
         return file.Exists ? file.Length : null;
+    }
+
+    public long? TryGetNewestFileTime(string path)
+    {
+        var file = new FileInfo(path);
+
+        return file.Exists ? MinimumAge.NewestFileTimeOf(file) : null;
     }
 
     public void DeleteFile(string path) => File.Delete(path);

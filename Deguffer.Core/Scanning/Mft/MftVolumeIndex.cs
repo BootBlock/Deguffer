@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -23,7 +25,12 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// under it. Both cases mean the same thing to the caller, and neither can be answered with a
     /// number.
     /// </summary>
-    public ScanSize? TryMeasure(IReadOnlyList<string> relativePath)
+    /// <param name="keep">
+    /// Files the user has asked to be left alone because they were touched recently. They are
+    /// stepped over rather than summed, so that this total and the deletion that follows it
+    /// describe the same set of files.
+    /// </param>
+    public ScanSize? TryMeasure(IReadOnlyList<string> relativePath, MinimumAge keep = default)
     {
         if (TryResolve(relativePath) is not { } record)
         {
@@ -32,11 +39,16 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         if (tree.IsDirectory[record])
         {
-            return SumSubtree(record);
+            return SumSubtree(record, keep);
         }
 
-        return tree.SizeUnknown[record]
-            ? null
+        if (tree.SizeUnknown[record])
+        {
+            return null;
+        }
+
+        return keep.Protects(tree.Newest[record])
+            ? ScanSize.Zero
             : new ScanSize(tree.Allocated[record], tree.Logical[record]);
     }
 
@@ -222,7 +234,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// nothing downstream can tell it from a correct one. The cost is that this path takes the walk;
     /// the alternative cost is a cache reported as clear when it is not.
     /// </summary>
-    private ScanSize? SumSubtree(uint root)
+    private ScanSize? SumSubtree(uint root, MinimumAge keep)
     {
         long allocated = 0;
         long logical = 0;
@@ -244,8 +256,16 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 return null;
             }
 
-            allocated += tree.Allocated[node];
-            logical += tree.Logical[node];
+            // The guard withholds a file's bytes; it never prunes the traversal. A directory is
+            // descended into whatever its own age, because NTFS moves a directory's timestamp when
+            // an entry is added or removed — so testing one the way a file is tested would drop a
+            // whole subtree because something was written next to it. See MinimumAge for why the
+            // rule is about files.
+            if (tree.IsDirectory[node] || !keep.Protects(tree.Newest[node]))
+            {
+                allocated += tree.Allocated[node];
+                logical += tree.Logical[node];
+            }
 
             for (var i = links.Start[node]; i < links.Start[node + 1]; i++)
             {

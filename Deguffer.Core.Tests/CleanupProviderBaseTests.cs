@@ -1,4 +1,6 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -55,4 +57,62 @@ public sealed class CleanupProviderBaseTests : IDisposable
             n.Message.Contains("caches", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The guard is stamped onto whatever a provider hands back, rather than by each provider.
+    ///
+    /// There are fifty places a provider constructs a plan, and a plan that reached the executor
+    /// without <see cref="CleanupPlan.Keep"/> would be carried out as though no guard existed. That
+    /// is a deletion the preview said would not happen, so it must not be something a new provider
+    /// can forget.
+    /// </summary>
+    [Fact]
+    public async Task EveryPlanCarriesTheGuardItWasBuiltUnder()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        Directory.CreateDirectory(caches);
+        TempDirectory.Age(_temp.CreateFile(4096, ".gradle", "caches", "a.bin"), TimeSpan.FromDays(30));
+
+        var keep = MinimumAge.WithinHours(8, DateTime.UtcNow);
+        var plan = await Provider().PlanAsync(keep);
+
+        Assert.Equal(keep, plan.Keep);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("8 hours", StringComparison.Ordinal));
+
+        // And an unguarded plan says nothing about a setting the user did not turn on.
+        var unguarded = await Provider().PlanAsync();
+
+        Assert.False(unguarded.Keep.IsOn);
+        Assert.DoesNotContain(unguarded.Notes, n => n.Message.Contains("hours", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.1 keeps a tool's own eviction command as the preferred route, and that command decides for
+    /// itself what it removes — so the guard does not reach it. The alternative is to stop using the
+    /// command, which would replace the tool's knowledge of its own cache with ours: NuGet's own
+    /// clear reached two locations that were not under <c>.nuget</c> at all.
+    ///
+    /// <para>Saying so is then the whole of what can be done, and it has to be a warning rather than
+    /// a remark. A guard whose gap is unstated is worse than no guard.</para>
+    /// </summary>
+    [Fact]
+    public async Task WarnsThatAToolsOwnCleanIsNotCoveredByTheGuard()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        Directory.CreateDirectory(Path.Combine(cache, "_cacache", "content-v2"));
+        File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Contains(plan.Steps, s => s is RunCommandStep);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning &&
+            n.Message.Contains("its own tool", StringComparison.Ordinal));
+    }
+
+    private GradleCacheProvider Provider() =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
 }

@@ -86,7 +86,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryExists(_root));
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
@@ -146,7 +146,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             targets.Add(new DeletionTarget(LongPath.Display(child.FullName), classification.Reason));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

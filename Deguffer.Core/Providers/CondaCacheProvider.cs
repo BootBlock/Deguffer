@@ -110,7 +110,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var conda = FindConda();
         if (conda is null)
@@ -149,13 +149,13 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         // Deguffer's own probe of the same directories, for the after-run delta. It is a far
         // larger number than the estimate, because it counts everything the environments link,
         // and that is exactly why the step carries both — see RunCommandStep.MeasuredBefore.
-        var probed = await MeasureAllAsync(packageCaches, ct).ConfigureAwait(false);
+        var probed = await MeasureAllAsync(packageCaches, keep, ct).ConfigureAwait(false);
 
         var indexCaches = packageCaches
             .Select(directory => Path.Combine(directory, "cache"))
             .Where(LongPath.DirectoryExists)
             .ToList();
-        var indexMeasured = await MeasureAllAsync(indexCaches, ct).ConfigureAwait(false);
+        var indexMeasured = await MeasureAllAsync(indexCaches, keep, ct).ConfigureAwait(false);
 
         var estimated = ScanSize.Approximate(preview.TarballBytes + preview.PackageBytes)
             + indexMeasured.Total;

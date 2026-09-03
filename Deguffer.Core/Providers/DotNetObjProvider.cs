@@ -124,7 +124,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// </summary>
     public override bool IsAwaitingSourceFolders => ApprovedRoots.Count == 0;
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (ApprovedRoots.Count == 0)
         {
@@ -208,6 +208,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                     $"Intermediate build output for {t.Project.ProjectName}",
                     DirectoryAge.Of(t.Path, ct))),
             ],
+            keep,
             ct).ConfigureAwait(false);
 
         return new CleanupPlan

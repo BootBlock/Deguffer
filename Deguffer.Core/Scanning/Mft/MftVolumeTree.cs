@@ -34,6 +34,21 @@ public sealed class MftVolumeTree(int count)
     public bool[] IsReparsePoint { get; } = new bool[count];
 
     /// <summary>
+    /// The newer of each record's creation and last-write times, as a FILETIME.
+    ///
+    /// <para>One array rather than two, because the two are never wanted apart: the only question
+    /// asked of them is <see cref="Safety.MinimumAge.Protects(long, long)"/>, which takes the newer
+    /// of the pair. Derived once here, where the record is already in hand, it costs eight bytes a
+    /// record instead of sixteen — and this is sized by the volume, where a full disk runs to
+    /// millions of entries.</para>
+    ///
+    /// <para>Left at zero for every record while no guard is in force, which is what an unset NTFS
+    /// timestamp reads as anyway, and what <see cref="Safety.MinimumAge.Off"/> compares against to
+    /// protect nothing.</para>
+    /// </summary>
+    public long[] Newest { get; } = new long[count];
+
+    /// <summary>
     /// Names are kept for directories only. Path resolution never needs a file's name — a subtree
     /// total is the sum of its records regardless of what they are called — and skipping them is
     /// the difference between tens of megabytes of strings and hundreds on a full volume.
@@ -55,6 +70,7 @@ public sealed class MftVolumeTree(int count)
         SizeUnknown[number] = record.Size is null;
         IsDirectory[number] = record.IsDirectory;
         IsReparsePoint[number] = record.IsReparsePoint;
+        Newest[number] = Math.Max(record.CreatedFileTime, record.LastWrittenFileTime);
         Present[number] = true;
 
         if (record.IsDirectory)

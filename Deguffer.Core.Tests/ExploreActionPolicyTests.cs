@@ -405,7 +405,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         {
         }
 
-        public Task<Execution.CleanupPlan> PlanAsync(CancellationToken ct = default) =>
+        public Task<Execution.CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
             throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
 
         public Task<Execution.CleanupResult> ExecuteAsync(

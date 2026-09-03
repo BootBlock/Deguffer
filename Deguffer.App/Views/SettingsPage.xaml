@@ -73,6 +73,29 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- The third setting that changes what gets deleted rather than how the window looks,
+                 and the only one that can make a plan smaller than the disk. §5.3 already refuses
+                 anything Windows is holding open; this covers the process that wrote a file,
+                 closed it, and will want it back within the hour. The description names the one
+                 case it cannot cover, because §5.1 leaves a tool's own clean deciding for itself
+                 what it removes — a guard whose gap is unstated is worse than no guard. -->
+            <views:SettingsRow Glyph="&#xE81C;"
+                               Title="Leave recently changed files alone"
+                               Description="A file written in the last few hours may still be in use, and nothing else about it says so. Set how many hours to leave such files alone, or 0 for none. A tool that clears its own cache is not covered: it decides for itself what it removes.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind ViewModel.KeepFilesChangedWithinHours, Mode=TwoWay}"
+                               Minimum="0"
+                               Maximum="{x:Bind ViewModel.MaximumKeepHours}"
+                               SmallChange="1"
+                               LargeChange="8"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Hours"
+                               AutomationProperties.Name="Hours to leave recently changed files alone" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <!-- The only settings on this page that change what Deguffer will delete rather than
                  how it looks. Stated as scope rather than as a preference, because an empty list
                  is not a disabled feature — it is Deguffer having nowhere it is allowed to look. -->

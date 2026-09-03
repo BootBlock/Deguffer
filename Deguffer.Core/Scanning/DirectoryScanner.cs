@@ -45,6 +45,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     public async ValueTask<ScanResult> MeasureAsync(
         string path,
+        MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
@@ -53,14 +54,25 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // §5.5's "re-opening the tool is instant": show last run's figure straight away, then
         // correct it. Only ever reported through progress — the returned result is always freshly
         // measured, because callers subtract it to report reclaimed space.
-        if (_estimates?.TryGet(path) is { } remembered)
+        //
+        // The remembered figure is for the whole path, so a run with the guard on neither reads it
+        // nor writes it. Reading it would flash a total this run is not going to reclaim, and
+        // writing it would leave the next run — where the user may have turned the guard off —
+        // opening on a number that is short by however much was held back.
+        var remember = !keep.IsOn;
+
+        if (remember && _estimates?.TryGet(path) is { } remembered)
         {
             progress?.Report(remembered);
         }
 
-        var result = await MeasureFreshAsync(path, progress, ct).ConfigureAwait(false);
+        var result = await MeasureFreshAsync(path, keep, progress, ct).ConfigureAwait(false);
 
-        _estimates?.Set(path, result.Size);
+        if (remember)
+        {
+            _estimates?.Set(path, result.Size);
+        }
+
         return result;
     }
 
@@ -74,7 +86,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         var result = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
-            .MeasureAsync(path, progress: null, ct)
+            .MeasureAsync(path, MinimumAge.Off, progress: null, ct)
             .ConfigureAwait(false);
 
         _estimates?.Set(path, result.Size);
@@ -167,12 +179,15 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     private ValueTask<ScanResult> MeasureFreshAsync(
         string path,
+        MinimumAge keep,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
         if (!VolumePath.TryParse(path, out var volumePath))
         {
-            return _fallback.Because(FallbackReason.VolumeNotAddressable).MeasureAsync(path, progress, ct);
+            return _fallback
+                .Because(FallbackReason.VolumeNotAddressable)
+                .MeasureAsync(path, keep, progress, ct);
         }
 
         var index = _volumes.Get(volumePath.DriveLetter, out var reason, ct);
@@ -181,14 +196,14 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // under the index, or the path runs through a link, or something below it does not
         // establish its own size — so ask the slow path rather than reporting zero, which would
         // render as "this cache is already clear" and quietly hide gigabytes.
-        if (index?.TryMeasure(volumePath.Components) is { } size)
+        if (index?.TryMeasure(volumePath.Components, keep) is { } size)
         {
             progress?.Report(size);
             return ValueTask.FromResult(ScanResult.Fast(size));
         }
 
         var fallbackReason = reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : reason;
-        return _fallback.Because(fallbackReason).MeasureAsync(path, progress, ct);
+        return _fallback.Because(fallbackReason).MeasureAsync(path, keep, progress, ct);
     }
 
     /// <summary>

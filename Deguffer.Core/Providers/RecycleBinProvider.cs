@@ -157,7 +157,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         _volumes.Invalidate();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.UserSecurityIdentifier is null)
         {
@@ -215,7 +215,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             return EmptyPlan("No volume on this machine holds a Recycle Bin for this user.");
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

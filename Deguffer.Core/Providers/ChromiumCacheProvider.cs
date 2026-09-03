@@ -236,7 +236,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Applications(ct).Count > 0 || _discovery.UnreadableRoots.Count > 0);
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var applications = Applications(ct);
 
@@ -331,7 +331,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             return EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.");
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

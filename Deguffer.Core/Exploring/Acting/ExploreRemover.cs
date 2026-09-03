@@ -250,7 +250,11 @@ public static class ExploreRemover
 
         if (!item.IsDirectory)
         {
-            var file = await FileRemover.RemoveAsync(item.Path, ct, fs).ConfigureAwait(false);
+            // MinimumAge.Off, and deliberately. §7.1 has Explore act on one item the user picked
+            // out of the picture by hand, and a blanket guard would refuse that pick silently — the
+            // page has no row on which to say why. The guard belongs to Storage, which offers a plan
+            // the user did not assemble item by item.
+            var file = await FileRemover.RemoveAsync(item.Path, MinimumAge.Off, ct, fs).ConfigureAwait(false);
 
             return new ExploreItemOutcome(
                 item.Path,
@@ -262,7 +266,7 @@ public static class ExploreRemover
                       + "this account may not touch are the same answer from here.");
         }
 
-        var tree = await DirectoryRemover.RemoveAsync(item.Path, progress: null, ct, fs).ConfigureAwait(false);
+        var tree = await DirectoryRemover.RemoveAsync(item.Path, MinimumAge.Off, progress: null, ct, fs).ConfigureAwait(false);
 
         return new ExploreItemOutcome(
             item.Path,

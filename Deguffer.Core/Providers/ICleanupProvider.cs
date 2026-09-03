@@ -67,7 +67,13 @@ public interface ICleanupProvider
     /// duplicate this work to return one number that <see cref="CleanupPlan.EstimatedBytes"/>
     /// already carries.
     /// </summary>
-    Task<CleanupPlan> PlanAsync(CancellationToken ct = default);
+    /// <param name="keep">
+    /// The user's guard on recently touched files, if they set one. It reaches planning rather than
+    /// only execution because the estimate and the deletion have to describe the same set of files:
+    /// a preview naming bytes the clean will not take is §5.4's broken promise arriving from the
+    /// other direction. <see cref="MinimumAge.Off"/> by default, which is the shipped preference.
+    /// </param>
+    Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default);
 
     Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default);
 

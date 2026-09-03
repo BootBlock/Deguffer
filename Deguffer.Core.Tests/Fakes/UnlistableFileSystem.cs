@@ -23,6 +23,8 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 
+    public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
+
     public void DeleteFile(string path) => inner.DeleteFile(path);
 
     public void DeleteDirectory(string path) => inner.DeleteDirectory(path);

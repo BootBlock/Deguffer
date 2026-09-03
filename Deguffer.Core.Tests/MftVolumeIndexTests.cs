@@ -1,4 +1,5 @@
-﻿using Deguffer.Core.Scanning.Mft;
+﻿using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning.Mft;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -581,5 +582,49 @@ public class MftVolumeIndexTests
 
         // No exact match, so the case-insensitive one still answers rather than the path failing.
         Assert.Equal(8192, index.TryMeasure(["Users", "testuser", "CACHE"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// §5.5's fast path, with the guard applied. The two routes have to agree about what is coming
+    /// out, or the number a user sees would depend on whether Deguffer happened to be elevated.
+    /// </summary>
+    [Fact]
+    public void LeavesFilesInsideTheGuardWindowOutOfTheTotal()
+    {
+        var now = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var index = Build(Tree()
+            .AddFile(20, Cache, "stale.tgz", allocated: 4096, logical: 4096,
+                created: now.AddDays(-40), lastWritten: now.AddDays(-30))
+            .AddFile(21, Nested, "written-just-now.tgz", allocated: 1_000_000, logical: 1_000_000,
+                created: now.AddYears(-3), lastWritten: now.AddMinutes(-5)));
+
+        var path = new[] { "Users", "testuser", ".npm-cache" };
+
+        Assert.Equal(1_004_096, index.TryMeasure(path)!.Value.Logical);
+        Assert.Equal(4096, index.TryMeasure(path, MinimumAge.WithinHours(8, now))!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A directory's own timestamp moves whenever an entry is added, removed or renamed, so a folder
+    /// that gained a file this morning looks brand new whatever is inside it. Judging one the way a
+    /// file is judged would withhold the whole subtree under it — and the guard is about files.
+    /// </summary>
+    [Fact]
+    public void JudgesFilesRatherThanTheDirectoriesHoldingThem()
+    {
+        var now = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var index = Build(new MftFixture()
+            .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
+            .AddDirectory(Profile, Users, "testuser")
+            .AddDirectory(Cache, Profile, ".npm-cache", created: now.AddYears(-2), lastWritten: now.AddMinutes(-1))
+            .AddDirectory(Nested, Cache, "content-v2", created: now.AddYears(-2), lastWritten: now.AddMinutes(-1))
+            .AddFile(20, Nested, "stale.tgz", allocated: 4096, logical: 4096,
+                created: now.AddDays(-40), lastWritten: now.AddDays(-30)));
+
+        Assert.Equal(
+            4096,
+            index.TryMeasure(["Users", "testuser", ".npm-cache"], MinimumAge.WithinHours(8, now))!.Value.Logical);
     }
 }

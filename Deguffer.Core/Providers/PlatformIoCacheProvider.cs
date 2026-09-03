@@ -101,7 +101,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var pio = Environment.FindExecutable("pio");
         if (pio is null)
@@ -117,7 +117,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 $"PlatformIO is installed but its cache directory does not exist yet ({cacheDirectory}).");
         }
 
-        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([cacheDirectory], keep, ct).ConfigureAwait(false);
 
         // --cache scopes prune to the cache alone. Without it, prune also removes "unnecessary"
         // core and platform packages — a judgement about installed toolchains that belongs to the

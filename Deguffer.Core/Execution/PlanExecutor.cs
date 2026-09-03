@@ -37,8 +37,8 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
             outcomes.Add(step switch
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
-                DeleteDirectoryStep delete => await DeleteAsync(delete, stepProgress, ct).ConfigureAwait(false),
-                DeleteFileStep delete => await DeleteAsync(delete, stepProgress, ct).ConfigureAwait(false),
+                DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
@@ -111,39 +111,77 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
 
     private static async Task<StepOutcome> DeleteAsync(
         DeleteDirectoryStep step,
+        MinimumAge keep,
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        var removal = await DirectoryRemover.RemoveAsync(step.Path, progress, ct).ConfigureAwait(false);
+        var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
         // Skipped items are not a failure (§5.3). The step only fails if the directory survived
         // intact and nothing at all was reclaimed — that is, we achieved nothing.
-        var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0;
+        //
+        // A file the guard held back counts as something achieved, because it is the outcome the
+        // user asked for. A directory holding nothing else reclaims no bytes and keeps its root, so
+        // without this the setting working exactly as intended would be reported as a failed step.
+        var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0;
 
         var message = succeeded
-            ? removal.Skipped == 0
-                ? "Removed."
-                : $"Removed, {removal.Skipped} item(s) left in place because they were in use."
+            ? $"Removed{Qualifier(removal.Skipped, removal.Kept)}."
             : WhyNothingHappened(removal.Skipped);
 
-        return new StepOutcome(step.Description, succeeded, removal.BytesReclaimed, removal.Skipped, message);
+        return new StepOutcome(
+            step.Description,
+            succeeded,
+            removal.BytesReclaimed,
+            removal.Skipped,
+            message,
+            removal.Kept);
     }
 
     private static async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,
+        MinimumAge keep,
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        var removal = await FileRemover.RemoveAsync(step.Path, ct).ConfigureAwait(false);
+        var removal = await FileRemover.RemoveAsync(step.Path, keep, ct).ConfigureAwait(false);
 
         // One file, so there is no fraction to report along the way — only the end of it.
         progress?.Report(1.0);
+
+        // Kept is a success for the same reason it is on a directory: nothing was removed because
+        // nothing was meant to be. There is only the one file, so the whole message says so rather
+        // than qualifying a removal that did not happen.
+        if (removal.Kept)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: true,
+                BytesReclaimed: 0,
+                Skipped: 0,
+                "Left alone: it changed too recently.",
+                Kept: 1);
+        }
 
         var message = removal.Removed ? "Removed." : WhyNothingHappened(removal.Skipped);
 
         return new StepOutcome(
             step.Description, removal.Removed, removal.BytesReclaimed, removal.Skipped, message);
     }
+
+    /// <summary>
+    /// What a successful removal has to add about what it left behind, or nothing where it left
+    /// nothing. The two causes are named separately because they ask different things of the
+    /// reader: one is a process they can close, and the other is a setting they chose.
+    /// </summary>
+    private static string Qualifier(int skipped, int kept) => (skipped, kept) switch
+    {
+        (0, 0) => string.Empty,
+        (_, 0) => $", {skipped} item(s) left in place because they were in use",
+        (0, _) => $", {kept} file(s) left alone because they changed recently",
+        _ => $", {skipped} item(s) left in place because they were in use and "
+             + $"{kept} because they changed recently",
+    };
 
     /// <summary>
     /// The sentence for a deletion that achieved nothing.

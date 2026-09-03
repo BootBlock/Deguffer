@@ -107,7 +107,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var pnpm = Environment.FindExecutable("pnpm");
         if (pnpm is null)
@@ -129,7 +129,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             return EmptyPlan($"pnpm is installed but its store does not exist yet ({store}).");
         }
 
-        var measured = await MeasureAllAsync([store], ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([store], keep, ct).ConfigureAwait(false);
 
         var notes = new List<PlanNote>
         {

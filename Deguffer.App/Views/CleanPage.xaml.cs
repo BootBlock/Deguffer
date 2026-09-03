@@ -68,14 +68,14 @@ public sealed partial class CleanPage : Page
     /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyConfirmationPreferences();
+        ApplyRunPreferences();
         App.Preferences.Changed += OnPreferencesChanged;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) =>
         App.Preferences.Changed -= OnPreferencesChanged;
 
-    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyConfirmationPreferences();
+    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyRunPreferences();
 
     /// <summary>
     /// Draw the list at <paramref name="density"/>, and leave the selector agreeing with what is on
@@ -136,16 +136,23 @@ public sealed partial class CleanPage : Page
     }
 
     /// <summary>
-    /// Both confirmation preferences, applied together. They are one decision from the user's side —
-    /// what gets asked before a deletion — and applying only one of them here is how a Tier 3 row
-    /// would come to be asked about by neither.
+    /// Every preference that changes what a run does, pushed across together.
+    ///
+    /// The two confirmation settings are one decision from the user's side — what gets asked before
+    /// a deletion — and applying only one of them here is how a Tier 3 row would come to be asked
+    /// about by neither. The guard on recently changed files joins them because it is applied at
+    /// the same two moments and would go just as silently stale on its own: it is read when the
+    /// next preview runs, so a change made in Settings takes effect from that preview onwards
+    /// rather than retrospectively.
     /// </summary>
-    private void ApplyConfirmationPreferences()
+    private void ApplyRunPreferences()
     {
         var preferences = App.Preferences.Current;
 
         ViewModel.ConfirmCleanAsync = preferences.ConfirmBeforeCleaning ? ConfirmCleanAsync : null;
         ViewModel.RequireTypedConfirmation = preferences.RequireTypedConfirmation;
+        ViewModel.KeepFilesChangedWithin = TimeSpan.FromHours(
+            Math.Max(0, preferences.KeepFilesChangedWithinHours));
     }
 
     private async Task<bool> ConfirmCleanAsync(CleanConfirmation confirmation)

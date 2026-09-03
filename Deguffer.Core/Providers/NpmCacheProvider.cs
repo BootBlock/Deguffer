@@ -86,7 +86,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var npm = Environment.FindExecutable("npm");
         if (npm is null)
@@ -103,7 +103,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             return EmptyPlan($"npm is installed but its cache directory does not exist yet ({cacheDirectory}).");
         }
 
-        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([cacheDirectory], keep, ct).ConfigureAwait(false);
 
         steps.Add(new RunCommandStep(npm, "cache clean --force", "Clear the npm cache using npm's own command")
         {

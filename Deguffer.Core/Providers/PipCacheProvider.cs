@@ -112,7 +112,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (FindPip() is not { } pip)
         {
@@ -126,7 +126,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
             return EmptyPlan($"pip is installed but its cache directory does not exist yet ({cacheDirectory}).");
         }
 
-        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([cacheDirectory], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>
         {

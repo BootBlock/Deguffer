@@ -72,6 +72,19 @@ public sealed partial class CleanViewModel : ObservableObject
     public bool RequireTypedConfirmation { get; set; } = true;
 
     /// <summary>
+    /// How recently a file must have been touched for the user to want it left alone, or
+    /// <see cref="TimeSpan.Zero"/> for no such guard. The view sets it from the preference, the same
+    /// way it supplies <see cref="ConfirmCleanAsync"/>.
+    ///
+    /// <para>A window rather than the instant it becomes, because the instant belongs to a preview
+    /// rather than to a setting. <see cref="LoadPreviewAsync"/> turns it into a
+    /// <see cref="MinimumAge"/> once, at the top of the pass, so every provider protects the same
+    /// files and the clean afterwards protects those same files again — however long the preview
+    /// sat on screen first.</para>
+    /// </summary>
+    public TimeSpan KeepFilesChangedWithin { get; set; }
+
+    /// <summary>
     /// Whether to list a provider whose toolchain is not on this machine. The view sets it from the
     /// preference, the same way it supplies <see cref="ConfirmCleanAsync"/>, so this type still
     /// knows nothing about settings.
@@ -425,7 +438,10 @@ public sealed partial class CleanViewModel : ObservableObject
         var progress = new Progress<string>(message => Report(message));
         var found = new Progress<Finding>(AddRowInSizeOrder);
 
-        await Task.Run(() => _planner.PlanAllAsync(progress, found, ct), ct);
+        // Fixed here, once, for the whole pass. See KeepFilesChangedWithin.
+        var keep = MinimumAge.Within(KeepFilesChangedWithin, DateTime.UtcNow);
+
+        await Task.Run(() => _planner.PlanAllAsync(keep, progress, found, ct), ct);
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));

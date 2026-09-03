@@ -119,7 +119,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryExists(_root));
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (!LongPath.DirectoryExists(_root))
         {
@@ -178,7 +178,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
                 isPerWorkspace ? DirectoryAge.Of(child.FullName, ct) : null));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

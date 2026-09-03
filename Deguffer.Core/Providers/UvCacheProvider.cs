@@ -96,7 +96,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var uv = Environment.FindExecutable("uv");
         if (uv is null)
@@ -111,7 +111,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
             return EmptyPlan($"uv is installed but its cache directory does not exist yet ({cacheDirectory}).");
         }
 
-        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([cacheDirectory], keep, ct).ConfigureAwait(false);
         var notes = new List<PlanNote>();
 
         // Deliberately not --force: that flag tells uv to ignore its own in-use checks, and §5.3

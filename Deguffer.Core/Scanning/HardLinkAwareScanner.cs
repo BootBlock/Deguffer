@@ -38,12 +38,13 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
     public ValueTask<ScanResult> MeasureAsync(
         string path,
+        MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
         new(Task.Run(
-            () => TryMeasureFile(path) is { } file
+            () => TryMeasureFile(path, keep) is { } file
                 ? ScanResult.Direct(file)
-                : ScanResult.ByChoice(Measure(path, progress, ct)),
+                : ScanResult.ByChoice(Measure(path, keep, progress, ct)),
             ct));
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
@@ -54,14 +55,18 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
     /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
     public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
-        MeasureAsync(path, progress: null, ct);
+        MeasureAsync(path, MinimumAge.Off, progress: null, ct);
 
     /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
     public void Invalidate()
     {
     }
 
-    private static ScanSize Measure(string path, IProgress<ScanSize>? progress, CancellationToken ct)
+    private static ScanSize Measure(
+        string path,
+        MinimumAge keep,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct)
     {
         if (!LongPath.DirectoryExists(path))
         {
@@ -75,6 +80,14 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
             LongPath.Extended(path),
             file =>
             {
+                // Asked before the handle is opened, because the guard is the cheaper question and
+                // the answer is the same either way: a file it keeps is one this store's eviction
+                // will not take, so its sole-linked bytes are not reclaimable here.
+                if (keep.Protects(file))
+                {
+                    return;
+                }
+
                 if (TryQuery(file.FullName) is { NumberOfLinks: 1 } sole)
                 {
                     Interlocked.Add(ref allocated, sole.AllocationSize);
@@ -103,11 +116,16 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     /// mirroring <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate
     /// subject, and answering zero for one would make its step unofferable.
     /// </summary>
-    private static ScanSize? TryMeasureFile(string path)
+    private static ScanSize? TryMeasureFile(string path, MinimumAge keep)
     {
         if (!LongPath.FileExists(path))
         {
             return null;
+        }
+
+        if (keep.ProtectsFile(path))
+        {
+            return Approximate(0, 0);
         }
 
         return TryQuery(LongPath.Extended(path)) is { } info

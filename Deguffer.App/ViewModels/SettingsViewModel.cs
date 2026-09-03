@@ -94,6 +94,35 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// A week. Bound by the control as well as used by the clamp below, so the box and the value it
+    /// produces cannot disagree — a number typed past the maximum is otherwise accepted by one and
+    /// silently rewritten by the other.
+    ///
+    /// <para>A week rather than no limit at all: past that the guard stops being "leave what is in
+    /// use alone" and becomes a second, invisible answer to what Deguffer will ever delete, which
+    /// is a decision the row it sits on does not make.</para>
+    /// </summary>
+    public double MaximumKeepHours => 168;
+
+    /// <summary>
+    /// The guard on recently changed files, in whole hours, as a <see cref="double"/> because that
+    /// is what a <c>NumberBox</c> exposes.
+    ///
+    /// <para>An emptied box reports <see cref="double.NaN"/> rather than zero, and NaN survives
+    /// every comparison in <see cref="Math.Clamp(double, double, double)"/> — so it is answered
+    /// first, as off. Without that, clearing the field would store NaN's cast, and the guard would
+    /// be set to something nobody chose.</para>
+    /// </summary>
+    public double KeepFilesChangedWithinHours
+    {
+        get => _preferences.Current.KeepFilesChangedWithinHours;
+        set => Apply(current => current with { KeepFilesChangedWithinHours = WholeHours(value) });
+    }
+
+    private int WholeHours(double value) =>
+        double.IsNaN(value) ? 0 : (int)Math.Clamp(Math.Round(value), 0, MaximumKeepHours);
+
+    /// <summary>
     /// Shown only when a write failed. A settings page that silently discards a choice is worse
     /// than one that never offered it — the user has no way to tell it did not take.
     /// </summary>

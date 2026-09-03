@@ -137,7 +137,7 @@ public class ParallelEnumerationScannerTests
 
         var progress = new ProgressRecorder<ScanSize>();
 
-        var result = await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), progress);
+        var result = await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress);
 
         // §5.5: partial totals reach the caller as the walk descends, rather than one number at
         // the end. The tree is three levels deep, so there is more than one level to report.
@@ -160,6 +160,45 @@ public class ParallelEnumerationScannerTests
         await cancelled.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), progress: null, cancelled.Token));
+            async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress: null, cancelled.Token));
+    }
+
+    /// <summary>
+    /// §5.5's walk, with the guard applied. The figure and the deletion have to describe the same
+    /// set of files: a preview naming bytes the clean will not take is §5.4's broken promise
+    /// arriving from the other direction.
+    /// </summary>
+    [Fact]
+    public async Task ExcludesFilesInsideTheGuardWindowFromTheTotal()
+    {
+        using var temp = new TempDirectory();
+        TempDirectory.Age(temp.CreateFile(4096, "cache", "stale.bin"), TimeSpan.FromDays(30));
+        temp.CreateFile(1_000_000, "cache", "deep", "written-just-now.bin");
+
+        var cache = Path.Combine(temp.Path, "cache");
+
+        var unguarded = await Scanner.MeasureAsync(cache);
+        var guarded = await Scanner.MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(1_004_096, unguarded.Size.Reclaimable);
+        Assert.Equal(4096, guarded.Size.Reclaimable);
+    }
+
+    /// <summary>
+    /// A single named file is measured on its own path (<see cref="ScanStrategy.DirectRead"/>), so
+    /// the guard has to be applied there too. Without it a protected <c>MEMORY.DMP</c> would preview
+    /// as gigabytes the run is not going to take.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresAGuardedSingleFileAsNothing()
+    {
+        using var temp = new TempDirectory();
+        var file = temp.CreateFile(8192, "dumps", "MEMORY.DMP");
+
+        var guarded = await Scanner.MeasureAsync(file, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(ScanStrategy.DirectRead, guarded.Strategy);
+        Assert.Equal(0, guarded.Size.Reclaimable);
+        Assert.Equal(8192, (await Scanner.MeasureAsync(file)).Size.Reclaimable);
     }
 }

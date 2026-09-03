@@ -47,6 +47,21 @@ public sealed record CleanupPlan
     public IReadOnlyList<PlanNote> Notes { get; init; } = [];
 
     /// <summary>
+    /// The user's guard on recently touched files, fixed when this plan was made.
+    ///
+    /// <para>It travels on the plan rather than being read again at execution, and that is what
+    /// makes the preview a promise. The cut-off is an instant (see <see cref="MinimumAge"/>), so
+    /// the set of files it protects is the same set the estimate above excluded, however long the
+    /// preview sits on screen before the user presses Clean. Re-deriving it from the clock at
+    /// deletion would quietly delete files the preview said would stay.</para>
+    ///
+    /// <para>Stamped by <see cref="Providers.CleanupProviderBase.PlanAsync"/> on every plan a
+    /// provider returns, rather than by each provider, so a provider that builds its plan by hand
+    /// cannot ship one the executor would treat as unguarded.</para>
+    /// </summary>
+    public MinimumAge Keep { get; init; }
+
+    /// <summary>
     /// Which route measured this plan's paths. <see cref="FallbackReason.None"/> for a plan with
     /// nothing to measure, which is correct: an empty plan gives the user no reason to elevate.
     ///
