@@ -4,50 +4,11 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
-
-/// <summary>One row of the list view, and one entry of any other view's detail.</summary>
-/// <param name="Node">Which node in the tree this stands for.</param>
-/// <param name="Share">
-/// How much of the containing directory this accounts for, 0 to 100. The bar is drawn against the
-/// parent rather than against the largest sibling, because the question the list answers is "what
-/// is this folder made of" and a bar scaled to the biggest child says nothing about that.
-/// </param>
-public sealed record ExploreRow(
-    int Node,
-    string Name,
-    string SizeLabel,
-    double Share,
-    bool IsDirectory,
-    bool IsLink,
-    bool IsApproximate)
-{
-    /// <summary>
-    /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
-    /// distinction — the row is named for a screen reader by <see cref="Description"/>, which says
-    /// it in words.
-    /// </summary>
-    public string Icon => (IsLink, IsDirectory) switch
-    {
-        // Written as escapes rather than as the characters themselves: these are private-use
-        // codepoints, so pasted into a source file they are indistinguishable from each other, and
-        // from nothing at all, in most tooling.
-        (true, _) => "\uE71B",   // Link
-        (_, true) => "\uE8B7",   // Folder
-        _ => "\uE7C3",           // Page
-    };
-
-    /// <summary>What a screen reader should say instead of reading a bar graphic.</summary>
-    public string Description =>
-        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}"
-        + $"{(IsApproximate ? ", at least" : string.Empty)}";
-}
-
-/// <summary>One step of the path back to the root.</summary>
-public sealed record ExploreCrumb(int Node, string Name);
 
 /// <summary>
 /// Drives the Explore page: pick a drive, scan it, and move around what was found.
@@ -62,13 +23,25 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly ExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
 
-    public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes)
+    public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions)
     {
         _scanner = scanner;
         _volumes = volumes;
 
+        Selection = new ExploreSelection(actions);
+
+        // A removal and a scan of the same drive have no business overlapping, so each stands the
+        // other down through the one busy flag. One direction each, rather than a flag both write:
+        // the selection says when it is working, and this says when the page is free to act.
+        Selection.Working += (_, working) => IsBusy = working;
+        Selection.Reported += (_, sentence) => Status = sentence;
+        Selection.Changed += (_, _) => Refresh();
+
         RefreshDrives();
     }
+
+    /// <summary>What the user picked out by hand, and what §7.1 lets them do with it.</summary>
+    public ExploreSelection Selection { get; }
 
     /// <summary>The volumes offered in the picker, as <c>C:\</c> roots.</summary>
     public ObservableCollection<string> Drives { get; } = [];
@@ -90,6 +63,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     public partial bool IsBusy { get; set; }
+
+    partial void OnIsBusyChanged(bool value) => Selection.CanAct = !value;
 
     /// <summary>
     /// How far through, 0 to 1, or null where the route cannot say.
@@ -229,6 +204,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             var scan = await _scanner.ScanAsync(drive, new Progress<ExploreProgress>(Report), ct);
 
+            Selection.Reset(scan.Tree);
             Show(scan.Tree, scan.Tree.RootNode);
 
             RouteNote = scan.RouteNote;
@@ -246,6 +222,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // navigates exactly like a finished scan — so leaving it on screen states a total for
             // the drive that is wrong by however much was left.
             Tree = null;
+            Selection.Reset(null);
             Rows.Clear();
             Trail.Clear();
             ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -286,7 +263,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Show what is inside <paramref name="node"/>. Ignored for anything with nothing in it.</summary>
     public void Descend(int node)
     {
-        if (Tree is not { } tree || !tree.IsDirectory(node) || tree.ChildrenOf(node).Length == 0)
+        if (Tree is not { } tree || Selection.WasRemoved(node) || !tree.IsDirectory(node)
+            || tree.ChildrenOf(node).Length == 0)
         {
             return;
         }
@@ -355,10 +333,22 @@ public sealed partial class ExploreViewModel : ObservableObject
         Tree = tree;
         CurrentNode = node;
 
+        Selection.Show(tree);
         BuildRows(tree, node);
         BuildTrail(tree, node);
 
         Hovered = string.Empty;
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Rebuild the list and the picture from what is left, without rescanning.</summary>
+    private void Refresh()
+    {
+        if (Tree is { } tree)
+        {
+            BuildRows(tree, CurrentNode);
+        }
+
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -370,6 +360,11 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         foreach (var child in tree.ChildrenOf(node))
         {
+            if (Selection.WasRemoved(child))
+            {
+                continue;
+            }
+
             Rows.Add(new ExploreRow(
                 child,
                 tree.NameOf(child),

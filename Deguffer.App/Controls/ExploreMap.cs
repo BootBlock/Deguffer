@@ -66,6 +66,12 @@ public sealed class ExploreMap : UserControl
         PointerExited += OnPointerExited;
         DoubleTapped += OnDoubleTapped;
 
+        // Picking is separate from opening, on the file-manager idiom: one click says which one, two
+        // says go in. A right-click picks as well, so the menu that follows is about the shape under
+        // the pointer rather than about whatever was picked last.
+        Tapped += OnTapped;
+        RightTapped += OnRightTapped;
+
         // Dragged to a differently scaled display, the control's size in device-independent units
         // does not change, so nothing above fires and the bitmap stays at the old resolution.
         // The scale is read from the XamlRoot rather than from this element: the identically
@@ -111,6 +117,21 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>The node the user asked to open, by double-clicking a shape.</summary>
     public event EventHandler<int>? Activated;
+
+    /// <summary>
+    /// The node the user picked out by hand, or null where they clicked nothing.
+    ///
+    /// <para>Null matters: clicking empty space clears the selection, and §7.1 requires Explore to
+    /// act only on what was picked. A pick that could not be cleared would leave a stale one behind
+    /// for the menu to act on.</para>
+    /// </summary>
+    public event EventHandler<int?>? Picked;
+
+    /// <summary>
+    /// The user asked for the menu, at this point in the control's own coordinates. Raised after
+    /// <see cref="Picked"/>, so the menu opens on a selection that already matches the pointer.
+    /// </summary>
+    public event EventHandler<Point>? MenuRequested;
 
     /// <summary>
     /// What the pointer moved over: a node, or a byte count where it is over the block standing in
@@ -273,6 +294,34 @@ public sealed class ExploreMap : UserControl
     {
         _hovered = null;
         Hovered?.Invoke(this, (null, null));
+    }
+
+    private void OnTapped(object sender, TappedRoutedEventArgs e) => Pick(e.GetPosition(this));
+
+    private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        var point = e.GetPosition(this);
+
+        Pick(point);
+        MenuRequested?.Invoke(this, point);
+    }
+
+    /// <summary>
+    /// Say what is at <paramref name="point"/>. The block standing in for items too small to draw
+    /// picks nothing: it is several thousand files at once, and §7.1 has no bulk action.
+    /// </summary>
+    private void Pick(Point point)
+    {
+        if (_drawing is not { } drawing)
+        {
+            return;
+        }
+
+        Picked?.Invoke(this, drawing.At((float)(point.X * _scale), (float)(point.Y * _scale)) switch
+        {
+            { IsAggregate: false } hit => hit.Node,
+            _ => null,
+        });
     }
 
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

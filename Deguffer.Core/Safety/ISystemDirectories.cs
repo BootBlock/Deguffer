@@ -23,6 +23,18 @@ public interface ISystemDirectories
 
     /// <summary><c>%PROGRAMDATA%</c>, ordinarily <c>C:\ProgramData</c>.</summary>
     string ProgramData { get; }
+
+    /// <summary><c>%PROGRAMFILES%</c>, ordinarily <c>C:\Program Files</c>.</summary>
+    string ProgramFiles { get; }
+
+    /// <summary>
+    /// The 32-bit program directory, ordinarily <c>C:\Program Files (x86)</c>.
+    ///
+    /// Both are named because §7.1 names "Program Files" and Windows has two of them. A rule that
+    /// knew only the first would refuse half of the installed software on a 64-bit machine and
+    /// allow the other half, which is the shape of hole nobody notices.
+    /// </summary>
+    string ProgramFilesX86 { get; }
 }
 
 /// <inheritdoc />
@@ -40,4 +52,8 @@ public sealed class SystemDirectories : ISystemDirectories
     public string WindowsDirectory { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
     public string ProgramData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+    public string ProgramFiles { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+
+    public string ProgramFilesX86 { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 }

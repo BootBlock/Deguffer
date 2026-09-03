@@ -175,6 +175,28 @@ public sealed class CargoCacheProvider : CleanupProviderBase
             : DefaultHome;
 
     /// <summary>
+    /// One root per level, because that is how Cargo's own declaration is written: <c>registry</c>
+    /// and <c>git</c> are Tier 4 containers at the home's level and classify their own children at
+    /// theirs. Declaring only the home would refuse <c>registry\cache</c>, which Deguffer removes.
+    ///
+    /// Empty where <see cref="HomeVariable"/> names something that is not a full path. There is no
+    /// directory to make a claim about, and guessing one is the §5.2 failure this whole declaration
+    /// exists to prevent.
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+        ResolveHome() is { } home
+            ?
+            [
+                .. Levels.Select(level => ToolRoot.Of(
+                    level.Resolve(home),
+                    "This is inside Cargo's own folder. Deguffer removes the downloaded archives, "
+                    + "the sources unpacked from them and the git checkouts, and nothing else — the "
+                    + "registry index, the bare clones and the credentials beside them all stay.",
+                    level.Children)),
+            ]
+            : [];
+
+    /// <summary>
     /// Presence is a cache actually on disk, never the home existing. Installing rustup creates
     /// <c>.cargo</c> with nothing in it but <c>bin</c>, and reporting that as a source would offer
     /// the user a row the plan then has nothing to say about.

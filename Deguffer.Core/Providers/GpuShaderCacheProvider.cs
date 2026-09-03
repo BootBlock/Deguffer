@@ -119,6 +119,17 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     public IReadOnlyList<string> RootPaths =>
         [.. Roots.Select(r => Path.Combine(Environment.LocalAppData, r.DirectoryName))];
 
+    /// <inheritdoc />
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        .. Roots.Select(root => ToolRoot.Of(
+            Path.Combine(Environment.LocalAppData, root.DirectoryName),
+            $"This is {root.DirectoryName}'s own folder. Deguffer removes the shader caches inside "
+            + "it and nothing else — a graphics vendor keeps driver settings and profiles in the "
+            + "same place.",
+            root.Children)),
+    ];
+
     /// <summary>
     /// Presence is a cache actually on disk, never a vendor directory existing.
     /// <c>%LOCALAPPDATA%\Intel</c> is present on machines with no Intel graphics cache at all, and

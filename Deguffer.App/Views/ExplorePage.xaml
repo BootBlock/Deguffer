@@ -7,6 +7,65 @@
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent">
 
+    <Page.Resources>
+        <!--
+            One menu, shown from the list and from the map. The four actions are what §7.1 lets
+            Explore do with something the user picked out by hand: three that change nothing, and a
+            removal that goes to the Recycle Bin unless the user asks for the other one by name.
+
+            The accelerators are declared on the two surfaces rather than here, because a flyout
+            item's accelerator only fires while the flyout is open — which is exactly when the
+            keyboard is not what the user is reaching for. These carry the text so the menu still
+            teaches them.
+        -->
+        <MenuFlyout x:Key="ItemMenu">
+            <MenuFlyoutItem Text="Open"
+                            Command="{x:Bind ViewModel.Selection.OpenCommand}"
+                            KeyboardAcceleratorTextOverride="Enter">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE8E5;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+
+            <MenuFlyoutItem Text="Open containing folder"
+                            Command="{x:Bind ViewModel.Selection.RevealCommand}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xEC50;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+
+            <MenuFlyoutSeparator />
+
+            <MenuFlyoutItem Text="Delete"
+                            Command="{x:Bind ViewModel.Selection.DeleteCommand}"
+                            KeyboardAcceleratorTextOverride="Del">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE74D;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+
+            <!-- Named for what it does, not for a modifier key. §7.1 makes this the deliberate
+                 second choice, and a choice the user has to infer is not a deliberate one. -->
+            <MenuFlyoutItem Text="Delete permanently"
+                            Command="{x:Bind ViewModel.Selection.DeletePermanentlyCommand}"
+                            KeyboardAcceleratorTextOverride="Shift+Del">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE74B;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+
+            <MenuFlyoutSeparator />
+
+            <MenuFlyoutItem Text="Properties"
+                            Command="{x:Bind ViewModel.Selection.PropertiesCommand}"
+                            KeyboardAcceleratorTextOverride="Alt+Enter">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE946;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+        </MenuFlyout>
+    </Page.Resources>
+
     <Grid Padding="20,12,20,16" RowSpacing="10"
           RowDefinitions="Auto,Auto,Auto,*,Auto">
 
@@ -115,14 +174,34 @@
                 BorderThickness="1"
                 CornerRadius="6">
             <Grid>
-                <controls:ExploreMap x:Name="Map" />
+                <controls:ExploreMap x:Name="Map">
+                    <controls:ExploreMap.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
+                        <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
+                        <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
+                        <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
+                    </controls:ExploreMap.KeyboardAccelerators>
+                </controls:ExploreMap>
 
+                <!--
+                    Extended selection, so §7.1's "one selection at a time" can still be several
+                    files the user picked out by hand. Clicking selects and double-clicking descends,
+                    which is the file-manager idiom and the only arrangement that leaves a single
+                    click free to mean "this one".
+                -->
                 <ListView x:Name="RowsList"
                           Visibility="Collapsed"
-                          SelectionMode="None"
-                          IsItemClickEnabled="True"
-                          ItemClick="OnRowClicked"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnRowSelectionChanged"
+                          DoubleTapped="OnRowsDoubleTapped"
+                          ContextFlyout="{StaticResource ItemMenu}"
                           ItemsSource="{x:Bind ViewModel.Rows}">
+                    <ListView.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
+                        <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
+                        <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
+                        <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
+                    </ListView.KeyboardAccelerators>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExploreRow">
                             <Grid ColumnSpacing="12" Padding="0,4"
@@ -179,9 +258,31 @@
                        TextTrimming="CharacterEllipsis"
                        MinHeight="20" />
 
+            <!-- What is picked. The three pictures have no selection outline, so without this a
+                 right-click on a tile would open a menu about something nothing on screen names. -->
+            <TextBlock Text="{x:Bind ViewModel.Selection.Label, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       TextTrimming="CharacterEllipsis" />
+
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
+
+            <!-- §7.1: a refusal is stated with its reason rather than by greying something out.
+                 Said as soon as something is selected, because a menu item that does nothing
+                 teaches nothing. -->
+            <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Informational"
+                     Message="{x:Bind ViewModel.Selection.Note, Mode=OneWay}" />
+
+            <!-- The picture stops matching the disk the moment something is removed from it, and
+                 rebuilding it means rescanning the drive. §7.1 allows the numbers to be off
+                 provided the picture says which way. -->
+            <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Message="{x:Bind ViewModel.Selection.StaleNote, Mode=OneWay}" />
 
             <!-- Where what is on screen is not what the View box names. A scan in progress is
                  ordered by name so that it stays still, and a treemap cannot be drawn from that at

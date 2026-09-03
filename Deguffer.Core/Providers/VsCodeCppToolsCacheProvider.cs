@@ -94,6 +94,16 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
     /// <summary>The cpptools root. Exposed so tests can assert it is never targeted.</summary>
     public string RootPath => _root;
 
+    /// <inheritdoc />
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        ToolRoot.Of(
+            _root,
+            "This is the C/C++ extension's own folder. Deguffer removes the IntelliSense caches "
+            + "inside it and nothing else, because the extension's own state sits beside them.",
+            DisposableChildren),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryExists(_root));
 

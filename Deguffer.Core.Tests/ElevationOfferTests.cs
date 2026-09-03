@@ -138,6 +138,8 @@ public sealed class ElevationOfferTests
     {
         public bool IsAwaitingSourceFolders => false;
 
+        public IReadOnlyList<ToolRoot> ToolRoots => [];
+
         public string Id => "stub";
 
         public string Name => "Stub cache";
