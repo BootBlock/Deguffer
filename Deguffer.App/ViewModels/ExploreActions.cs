@@ -43,7 +43,6 @@ public sealed class ExploreActions
             new Lazy<ExploreActionPolicy>(() => ExploreActionPolicy.For(
                 SystemDirectories.Current,
                 UserEnvironment.Current,
-                VolumeInventory.Current,
                 CleanupPlanner.CreateDefault().Providers)),
             prompt);
 

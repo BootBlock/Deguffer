@@ -204,7 +204,6 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             var scan = await _scanner.ScanAsync(drive, new Progress<ExploreProgress>(Report), ct);
 
-            Selection.Reset(scan.Tree);
             Show(scan.Tree, scan.Tree.RootNode);
 
             RouteNote = scan.RouteNote;
@@ -222,7 +221,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // navigates exactly like a finished scan — so leaving it on screen states a total for
             // the drive that is wrong by however much was left.
             Tree = null;
-            Selection.Reset(null);
+            Selection.Show(null);
             Rows.Clear();
             Trail.Clear();
             ViewChanged?.Invoke(this, EventArgs.Empty);

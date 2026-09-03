@@ -128,10 +128,15 @@ public sealed partial class ExplorePage : Page
     /// <summary>
     /// Two clicks go in. A folder is descended into and a file is opened, which is what a double
     /// click means everywhere else the user has done this.
+    ///
+    /// <para>Taken from the row the gesture landed on, not from the selection. The handler sits on
+    /// the list, whose background is hit-testable, so a double-click on the empty space below the
+    /// last row arrives here too — and reading the selection instead would open whatever was
+    /// highlighted, from a gesture that landed on nothing.</para>
     /// </summary>
     private void OnRowsDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (RowsList.SelectedItems.OfType<ExploreRow>().ToList() is not [{ } row])
+        if (Container(e.OriginalSource) is not { Content: ExploreRow row })
         {
             return;
         }
@@ -159,12 +164,18 @@ public sealed partial class ExplorePage : Page
     /// than attached with <c>ContextFlyout</c>. Both were measured: an attached flyout never
     /// appears, <c>ContextRequested</c> does not arrive at all, and a plain <c>RightTapped</c>
     /// handler does not run because a <c>ListViewItem</c> marks the gesture handled first. The
-    /// keyboard reaches every one of these actions through the accelerators instead.</para>
+    /// keyboard reaches all five of these actions through the accelerators instead.</para>
     /// </summary>
     private void OnRowsRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (Container(e.OriginalSource) is { Content: ExploreRow row } container
-            && !RowsList.SelectedItems.Contains(row))
+        if (Container(e.OriginalSource) is not { Content: ExploreRow row } container)
+        {
+            // The gesture landed on the list's own background. Clearing is what the map does on the
+            // same miss, and the alternative is a menu positioned at the pointer whose Delete is
+            // live against a row somewhere else on screen.
+            RowsList.SelectedItem = null;
+        }
+        else if (!RowsList.SelectedItems.Contains(row))
         {
             RowsList.SelectedItem = row;
             container.Focus(FocusState.Programmatic);
@@ -227,6 +238,9 @@ public sealed partial class ExplorePage : Page
 
     private void OnPropertiesInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
         args.Handled = Invoke(ViewModel.Selection.PropertiesCommand);
+
+    private void OnRevealInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
+        args.Handled = Invoke(ViewModel.Selection.RevealCommand);
 
     /// <summary>
     /// Run the command if it will run, and say whether it did.

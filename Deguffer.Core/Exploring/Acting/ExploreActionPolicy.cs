@@ -12,8 +12,9 @@ namespace Deguffer.Core.Exploring.Acting;
 /// nothing can test.</para>
 ///
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
-/// The first is a table of regions — the operating system's own directories, the drive roots, the
-/// signed-in user's profile — which is a fact about Windows and is stated here. The second is
+/// The first is a table of regions — the operating system's own directories and the signed-in
+/// user's profile — plus what Windows reserves at the top of any volume, which is read from the path
+/// rather than from a list of drives. All of that is a fact about Windows and is stated here. The second is
 /// §5.2, which is a fact about a tool and belongs to whichever provider knows the tool: Explore
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
 /// twice is one that gets changed once.</para>
@@ -42,10 +43,17 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
 
+        // A region whose path will not resolve is dropped, not kept with the value it arrived
+        // with. An empty one is the case that matters: LongPath.Contains("", candidate) builds the
+        // prefix "\\" and so matches every UNC path, which would refuse a whole network share with a
+        // sentence naming no directory at all. A path that names nothing protects nothing, and
+        // %ProgramFiles(x86)% is genuinely empty on a 32-bit Windows.
         _regions =
         [
             .. regions
-                .Select(r => r with { Path = LongPath.Configured(r.Path) ?? r.Path })
+                .Select(r => (Region: r, Path: LongPath.Configured(r.Path)))
+                .Where(r => r.Path is not null)
+                .Select(r => r.Region with { Path = r.Path! })
                 .OrderByDescending(r => r.Path.Length)
                 .ThenBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1),
         ];
@@ -54,27 +62,26 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
-    /// The policy for this machine: Windows' own directories, the mounted volumes, the signed-in
-    /// user's profile, and every §5.2 declaration the providers make.
+    /// The policy for this machine: Windows' own directories, the signed-in user's profile, and
+    /// every §5.2 declaration the providers make. What sits at the top of a volume is decided from
+    /// the path instead, so no list of drives has to be kept current.
     ///
-    /// <para>Assembled from the three seams rather than from <see cref="Environment"/> directly, so
-    /// the whole of §7.1's refusal set is provable against a synthetic profile and synthetic drives
-    /// — which is what G1's dependency inversion is for, and the only way these assertions can run
-    /// on a machine where nobody may delete anything in <c>C:\Windows</c>.</para>
+    /// <para>Assembled from the two seams rather than from <see cref="Environment"/> directly, so
+    /// the whole of §7.1's refusal set is provable against a synthetic profile — which is what G1's
+    /// dependency inversion is for, and the only way these assertions can run on a machine where
+    /// nobody may delete anything in <c>C:\Windows</c>.</para>
     /// </summary>
     public static ExploreActionPolicy For(
         ISystemDirectories system,
         IUserEnvironment environment,
-        IVolumeInventory volumes,
         IEnumerable<ICleanupProvider> providers)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(environment);
-        ArgumentNullException.ThrowIfNull(volumes);
         ArgumentNullException.ThrowIfNull(providers);
 
         return new ExploreActionPolicy(
-            Regions(system, environment, volumes),
+            Regions(system, environment),
             providers.SelectMany(p => p.ToolRoots));
     }
 
@@ -97,13 +104,18 @@ public sealed class ExploreActionPolicy
                 "Deguffer could not make sense of that path, so it will not act on it.");
         }
 
-        // A whole volume, or something that has no containing directory. Neither is a thing to
-        // remove, and the table below names the drive roots it was told about — this catches the
-        // one it was not, such as a drive mounted after the page was opened.
+        // A whole volume, or something with no containing directory at all. Neither is a thing to
+        // remove, and asking the path rather than a list of drives means a volume mounted after this
+        // policy was built is covered exactly as one mounted before it.
         if (Path.GetDirectoryName(target) is null)
         {
             return ExploreVerdict.Refuse(
                 $"'{target}' is a whole drive. Explore removes things from a drive, never the drive itself.");
+        }
+
+        if (AtAVolumeRoot(target) is { } reserved)
+        {
+            return reserved;
         }
 
         foreach (var region in _regions)
@@ -118,20 +130,89 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
-    /// §5.2, asked of every tool root the providers declared, or the unclassified answer when none
-    /// of them contains this path.
+    /// What Windows keeps at the top of a volume, refused wherever the volume is.
+    ///
+    /// <para>Decided from the path rather than from a list of drives, and that is the point. A table
+    /// built from <see cref="IVolumeInventory"/> is a snapshot: Explore re-reads its drive list
+    /// whenever the page refreshes, so a volume mounted after the policy was built would be
+    /// scannable with its paging file and its restore points unprotected. The question "is this a
+    /// direct child of its own volume root, named one of these?" needs no inventory and is right on
+    /// every drive, mounted before or after.</para>
+    ///
+    /// <para>They are named at all because Explore draws them.
+    /// <c>System Volume Information</c> and the paging files are among the largest items on a drive,
+    /// so they are exactly what a size picture puts in front of somebody — and "access denied" from
+    /// a deletion the app offered is a worse answer than not offering it.</para>
+    /// </summary>
+    private static ExploreVerdict? AtAVolumeRoot(string target)
+    {
+        if (!string.Equals(
+                Path.GetDirectoryName(target),
+                Path.TrimEndingDirectorySeparator(Path.GetPathRoot(target) ?? string.Empty),
+                StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
+                Path.GetDirectoryName(target), Path.GetPathRoot(target), StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Path.GetFileName(target).ToLowerInvariant() switch
+        {
+            "system volume information" => ExploreVerdict.Refuse(
+                "Windows keeps this drive's restore points, indexing data and change journal here. "
+                + "It belongs to the operating system, and Windows is what should reclaim it."),
+
+            "$recycle.bin" => ExploreVerdict.Refuse(
+                "This is the drive's Recycle Bin. Emptying it is offered on the Storage page, where "
+                + "Deguffer can tell your own deleted files from another account's."),
+
+            "pagefile.sys" => Managed("the paging file"),
+            "swapfile.sys" => Managed("the swap file"),
+            "hiberfil.sys" => Managed("the hibernation file"),
+
+            _ => null,
+        };
+    }
+
+    private static ExploreVerdict Managed(string what) => ExploreVerdict.Refuse(
+        $"This is {what}. Windows manages it, and its size is changed through the system settings "
+        + "rather than by deleting it.");
+
+    /// <summary>
+    /// §5.2, asked of the <em>innermost</em> tool root containing this path, or the unclassified
+    /// answer when none of them does.
+    ///
+    /// <para>Innermost, not first, and the difference is the whole of the nested case. A provider
+    /// whose caches sit below its root declares a root per level — Cargo's <c>.cargo</c>,
+    /// <c>.cargo\registry</c> and <c>.cargo\git</c>, and Chromium's user-data folder and each
+    /// profile under it — because §5.2's declaration is an allow-list over one directory's
+    /// <em>immediate</em> children and cannot reach deeper. Asking the outermost root about
+    /// <c>.cargo\registry\cache</c> asks it about <c>registry</c>, which that level declares Tier 4
+    /// precisely so that only what is named inside it goes. The answer would be a refusal, and it
+    /// would refuse the one directory the provider removes.</para>
+    ///
+    /// <para>It is also the ordering the region table above uses, for the same reason: a rule and
+    /// the narrower rule inside it are both true, and the narrower one is the one that was written
+    /// about this path.</para>
     /// </summary>
     private ExploreVerdict Below(string target)
     {
+        ToolRoot? innermost = null;
+        var depth = -1;
+
         foreach (var root in _toolRoots)
         {
-            if (Refusal(root, target) is { } refusal)
+            if (LongPath.Configured(root.Path) is { } path
+                && LongPath.Contains(path, target)
+                && path.Length > depth)
             {
-                return refusal;
+                innermost = root;
+                depth = path.Length;
             }
         }
 
-        return ExploreVerdict.Unclassified;
+        return innermost is { } owner ? Refusal(owner, target) ?? ExploreVerdict.Unclassified
+            : ExploreVerdict.Unclassified;
     }
 
     private static bool Covers(ProtectedRegion region, string target) =>
@@ -147,9 +228,13 @@ public sealed class ExploreActionPolicy
     /// and <c>.gradle\init.d\anything</c> is inside an unrecognised one and does not — asking about
     /// the leaf instead would refuse the first and allow the second, which is exactly backwards.</para>
     /// </summary>
+    /// <param name="root">
+    /// The innermost root containing <paramref name="target"/>, already established by
+    /// <see cref="Below"/> — so this re-resolves the path rather than re-checking containment.
+    /// </param>
     private static ExploreVerdict? Refusal(ToolRoot root, string target)
     {
-        if (LongPath.Configured(root.Path) is not { } rootPath || !LongPath.Contains(rootPath, target))
+        if (LongPath.Configured(root.Path) is not { } rootPath)
         {
             return null;
         }
@@ -182,8 +267,7 @@ public sealed class ExploreActionPolicy
     /// </summary>
     private static IEnumerable<ProtectedRegion> Regions(
         ISystemDirectories system,
-        IUserEnvironment environment,
-        IVolumeInventory volumes)
+        IUserEnvironment environment)
     {
         yield return ProtectedRegion.Refusing(
             system.WindowsDirectory,
@@ -232,56 +316,5 @@ public sealed class ExploreActionPolicy
             "This is your whole profile — your documents, your settings and everything Deguffer "
             + "would otherwise offer to clean. Explore removes things from inside it, never the "
             + "profile itself.");
-
-        foreach (var volume in volumes.Volumes)
-        {
-            foreach (var region in VolumeRegions(volume.RootPath))
-            {
-                yield return region;
-            }
-        }
-    }
-
-    /// <summary>
-    /// What is refused on every mounted volume: the root itself, and the four things Windows keeps
-    /// at a volume root that are not the user's to remove.
-    ///
-    /// <para>They are named rather than left to the operating system's own refusal because Explore
-    /// draws them. <c>System Volume Information</c> and the paging files are among the largest
-    /// items on a drive, so they are precisely what a size picture puts in front of somebody — and
-    /// "access denied" from a deletion the app offered is a worse answer than not offering it.</para>
-    /// </summary>
-    private static IEnumerable<ProtectedRegion> VolumeRegions(string root)
-    {
-        yield return ProtectedRegion.Refusing(
-            root,
-            RegionScope.PathOnly,
-            $"'{root}' is a whole drive. Explore removes things from a drive, never the drive itself.");
-
-        yield return ProtectedRegion.Refusing(
-            Path.Combine(root, "System Volume Information"),
-            RegionScope.PathAndBelow,
-            "Windows keeps this drive's restore points, indexing data and change journal here. It "
-            + "belongs to the operating system, and Windows is what should reclaim it.");
-
-        yield return ProtectedRegion.Refusing(
-            Path.Combine(root, "$Recycle.Bin"),
-            RegionScope.PathAndBelow,
-            "This is the drive's Recycle Bin. Emptying it is offered on the Storage page, where "
-            + "Deguffer can tell your own deleted files from another account's.");
-
-        foreach (var (name, what) in new[]
-        {
-            ("pagefile.sys", "the paging file"),
-            ("swapfile.sys", "the swap file"),
-            ("hiberfil.sys", "the hibernation file"),
-        })
-        {
-            yield return ProtectedRegion.Refusing(
-                Path.Combine(root, name),
-                RegionScope.PathAndBelow,
-                $"This is {what}. Windows manages it, and its size is changed through the system "
-                + "settings rather than by deleting it.");
-        }
     }
 }

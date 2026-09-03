@@ -23,8 +23,7 @@ public sealed class ExploreRemoverTests : IDisposable
         _system = new FakeSystemDirectories(_temp.Path);
         _environment = new FakeUserEnvironment(_temp.Path);
 
-        _policy = ExploreActionPolicy.For(
-            _system, _environment, new FakeVolumeInventory().With(_temp.Path), []);
+        _policy = ExploreActionPolicy.For(_system, _environment, []);
     }
 
     public void Dispose() => _temp.Dispose();
@@ -231,7 +230,66 @@ public sealed class ExploreRemoverTests : IDisposable
             c => c.Detail.Contains("'keep-one.bin'", StringComparison.Ordinal));
 
         // The user is told, not merely a report field. A negative assertion nobody reads is not one.
-        Assert.Contains("did not survive", report.Summary, StringComparison.Ordinal);
+        Assert.Contains("did not pass", report.Summary, StringComparison.Ordinal);
+        Assert.Contains("Look at the folder", report.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A same-named neighbour in a different folder is not excused.
+    ///
+    /// <para>The removed set is keyed by whole path rather than by leaf name. Pooling the names
+    /// meant removing <c>one\junk</c> also excused <c>two\junk</c> going missing — which is exactly
+    /// the over-broad removal §5.6 exists to catch, hidden by the check meant to catch it.</para>
+    /// </summary>
+    [Fact]
+    public async Task ANeighbourSharingItsNameWithARemovedItemIsStillAsserted()
+    {
+        var target = _temp.CreateFile(8, "profile", "one", "junk.bin");
+        _temp.CreateFile(8, "profile", "two", "junk.bin");
+        var second = _temp.CreateFile(8, "profile", "two", "other.bin");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [
+                new ExploreItem(target, IsDirectory: false, Bytes: 8),
+                new ExploreItem(second, IsDirectory: false, Bytes: 8),
+            ],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            FakeRecycleBin.TakingAlso("junk.bin"));
+
+        Assert.False(report.Verification.Passed);
+        Assert.Contains(
+            report.Verification.Failures,
+            c => c.Detail.Contains("'junk.bin'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A folder that would not list its contents leaves §5.6 with nothing to compare against, and
+    /// that is recorded as a failure rather than as a pass.
+    ///
+    /// <para>A non-assertion filed as evidence is the one thing that undoes §5.6, and it would have
+    /// been invisible: a passing report says nothing at all, so the sentence explaining that the
+    /// folder was never read would have reached nobody.</para>
+    /// </summary>
+    [Fact]
+    public async Task AFolderThatWillNotListItsContentsIsNotEvidence()
+    {
+        var target = _temp.CreateFile(8, "profile", "Downloads", "big.bin");
+        var parent = Path.GetDirectoryName(target)!;
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            new FakeRecycleBin(),
+            new UnlistableFileSystem(WindowsFileSystem.Default, parent));
+
+        Assert.Single(report.Removed);
+        Assert.False(report.Verification.Passed);
+        Assert.Contains(
+            report.Verification.Failures,
+            c => c.Detail.StartsWith("NOT ESTABLISHED", StringComparison.Ordinal));
+        Assert.Contains("did not pass", report.Summary, StringComparison.Ordinal);
     }
 
     /// <summary>

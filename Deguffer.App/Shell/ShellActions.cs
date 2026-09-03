@@ -21,13 +21,12 @@ namespace Deguffer.App.Shell;
 public static class ShellActions
 {
     private const int SeeMaskInvokeIdList = 0x0000000C;
-    private const int SeeMaskFlagNoUi = 0x00000400;
 
     /// <summary>
     /// Open the item with whatever handles it: the default program for a file, an Explorer window
     /// for a folder. Null on success, or a sentence for the user.
     /// </summary>
-    public static string? Open(string path) => Start(new ProcessStartInfo(Display(path))
+    public static string? Open(string path) => Start(() => new ProcessStartInfo(Display(path))
     {
         // The shell's own resolution, which is the whole point: without it this would try to
         // execute the file rather than open it with the program the user has chosen.
@@ -38,7 +37,7 @@ public static class ShellActions
     /// Show the item where it lives: Explorer at the parent with a file selected, and at the folder
     /// itself for a folder. Null on success, or a sentence for the user.
     /// </summary>
-    public static string? Reveal(string path, bool isDirectory)
+    public static string? Reveal(string path, bool isDirectory) => Start(() =>
     {
         var display = Display(path);
 
@@ -46,12 +45,13 @@ public static class ShellActions
         // argument itself. The comma after /select is Explorer's own syntax and is not a typo.
         var arguments = isDirectory ? $"\"{display}\"" : $"/select,\"{display}\"";
 
-        return Start(new ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true });
-    }
+        return new ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true };
+    });
 
     /// <summary>
-    /// The standard Windows properties sheet. Always null: the sheet is put up on a thread of its
-    /// own, so there is no outcome to report back by the time this returns.
+    /// The standard Windows properties sheet. Always null, because the failure is reported by
+    /// Windows rather than by this: the sheet goes up on a thread of its own, so by the time this
+    /// returns there is no outcome left to hand back.
     ///
     /// <para>Through <c>ShellExecuteEx</c> rather than <see cref="Process"/>, because the verb needs
     /// the item's shell identifier list to work at all — <c>SEE_MASK_INVOKEIDLIST</c> is what makes
@@ -63,9 +63,12 @@ public static class ShellActions
     /// all and left that thread unable to open a flyout afterwards, so the context menu the sheet
     /// was invoked from stopped working for the rest of the session.</para>
     ///
-    /// <para>The thread is deliberately not joined. It lives exactly as long as the sheet does, which
-    /// is what keeps the sheet on screen — and waiting for it would block the caller until the user
-    /// closed a window they opened to look at.</para>
+    /// <para>The thread is deliberately not joined. It lives exactly as long as the sheet does,
+    /// which is what keeps the sheet on screen — and waiting for it would block the caller until the
+    /// user closed a window they opened to look at. That is also why <c>SEE_MASK_FLAG_NO_UI</c> is
+    /// <em>not</em> set: with nothing able to carry a failure back across that thread, suppressing
+    /// the shell's own error message would make a refused invocation indistinguishable from a
+    /// successful one, and the class comment above promises the opposite.</para>
     /// </summary>
     public static string? Properties(string path)
     {
@@ -76,7 +79,7 @@ public static class ShellActions
             var info = new ShellExecuteInfo
             {
                 Size = Marshal.SizeOf<ShellExecuteInfo>(),
-                Mask = SeeMaskInvokeIdList | SeeMaskFlagNoUi,
+                Mask = SeeMaskInvokeIdList,
                 Verb = "properties",
                 File = file,
                 Show = 1,
@@ -104,11 +107,16 @@ public static class ShellActions
     /// </summary>
     private static string Display(string path) => LongPath.Display(LongPath.Extended(path));
 
-    private static string? Start(ProcessStartInfo info)
+    /// <param name="info">
+    /// Built inside the guard rather than passed in, because <see cref="Display"/> can itself refuse
+    /// a path — and a helper that promises to return what went wrong should not throw while working
+    /// out what to run.
+    /// </param>
+    private static string? Start(Func<ProcessStartInfo> info)
     {
         try
         {
-            using var process = Process.Start(info);
+            using var process = Process.Start(info());
             return null;
         }
         catch (System.ComponentModel.Win32Exception ex)
@@ -117,9 +125,10 @@ public static class ShellActions
             // Windows' own message is more specific than anything this could write.
             return ex.Message;
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException)
         {
-            // A path the shell would not accept as a target at all.
+            // A path the shell would not accept as a target at all, or one LongPath refused to
+            // resolve. Both are ordinary on a machine Explore is pointed at.
             return ex.Message;
         }
     }

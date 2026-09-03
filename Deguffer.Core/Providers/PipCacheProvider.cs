@@ -63,6 +63,30 @@ public sealed class PipCacheProvider : CleanupProviderBase
     /// </summary>
     public string DefaultCacheDirectory => Path.Combine(Environment.LocalAppData, "pip", "Cache");
 
+    /// <summary>pip's local directory. Never a target, and what §5.6 asserts survived.</summary>
+    public string LocalRoot => Path.Combine(Environment.LocalAppData, "pip");
+
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside. <c>pip.ini</c> is the one thing under
+    /// <c>%LOCALAPPDATA%\pip</c> that is not cache, and pip reads a second copy of it from the
+    /// roaming profile — a folder this provider never reaches into, so that copy is declared as a
+    /// root of its own with nothing inside it.
+    /// </summary>
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        new ToolRoot(
+            LocalRoot,
+            "This is pip's own folder. Deguffer clears the cache inside it and nothing else, because "
+            + "the pip.ini beside it may hold private index URLs and credentials.",
+            static name => name.Equals("Cache", StringComparison.OrdinalIgnoreCase)),
+
+        new ToolRoot(
+            Path.Combine(Environment.RoamingAppData, "pip", "pip.ini"),
+            "This is your roaming pip configuration, and it may hold private index URLs and "
+            + "credentials. Deguffer never removes it.",
+            static _ => false),
+    ];
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(FindPip() is not null);
 

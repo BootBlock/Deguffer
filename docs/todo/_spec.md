@@ -384,8 +384,9 @@ not the shell asked.
 - **Explore never classifies.** It reports a name and a number. It never says a thing is safe, never
   pre-selects anything, and never orders anything by how removable it is.
 - **Explore never pre-selects and never acts on more than the user picked out by hand.** Storage
-  offers a plan; Explore acts on a selection, one item at a time, and there is no "clean everything
-  here".
+  offers a plan; Explore acts on one selection at a time, and there is no "clean everything here".
+  A selection may hold more than one item, because the user picked each of them out by hand; what it
+  may never hold is anything they did not.
 - **Explore refuses whatever the tier model would call Tier 4**, and it does not get to decide what
   that is. §5.2 is unconditional and is not scoped to a page: an unrecognised child of a tool's root
   *is* Tier 4, so `gradle.properties` beside `.gradle\caches` is refused here exactly as it is

@@ -35,10 +35,16 @@ public sealed record ExploreItem(string Path, bool IsDirectory, long Bytes);
 public sealed record ExploreItemOutcome(string Path, bool Removed, long Bytes, string Message);
 
 /// <summary>What one Explore removal did, and the §5.6 evidence that it did no more.</summary>
+/// <param name="Cancelled">
+/// Whether the run was stopped before it reached every item it was handed. The report still carries
+/// what happened and what was verified up to that point, because §5.6's assertion is most needed
+/// exactly when a removal ended somewhere nobody chose.
+/// </param>
 public sealed record ExploreRemovalReport(
     ExploreRemovalMode Mode,
     IReadOnlyList<ExploreItemOutcome> Items,
-    VerificationResult Verification)
+    VerificationResult Verification,
+    bool Cancelled = false)
 {
     public IReadOnlyList<ExploreItemOutcome> Removed => [.. Items.Where(i => i.Removed)];
 
@@ -78,9 +84,19 @@ public sealed record ExploreRemovalReport(
                 (_, var refused) => $"{Did()} {refused} items were refused.",
             };
 
+            if (Cancelled)
+            {
+                sentence = $"Stopped part-way. {sentence}";
+            }
+
+            // VerificationResult.Summary is deliberately not used: its wording is PlanVerifier's,
+            // and it would describe a folder that could not be listed as one whose contents "did
+            // not survive", which is a different and much stronger claim.
             return Verification.Passed
                 ? sentence
-                : $"{sentence} {Verification.Summary} Check the folder before doing anything else.";
+                : $"{sentence} {Verification.Failures.Count} of {Verification.Checks.Count} "
+                  + "check(s) on what should have survived did not pass. Look at the folder before "
+                  + "doing anything else.";
         }
     }
 
@@ -117,7 +133,6 @@ public static class ExploreRemover
         ExploreActionPolicy policy,
         IRecycleBin? recycleBin = null,
         IFileSystem? fileSystem = null,
-        IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -135,21 +150,37 @@ public static class ExploreRemover
         //
         // Listed before anything is deleted, because a survivor set gathered afterwards can only
         // describe what is left, which would agree with any removal however over-broad.
-        var before = Containers(allowed, fs);
+        //
+        // Off the calling thread, and that is the purpose of the Task.Run rather than a detail of
+        // it. The caller is a shell resuming on the UI thread after its own dialog, and this listing
+        // is of a folder that may hold two hundred thousand entries. Everything after this stays on
+        // the pool, because every await below is ConfigureAwait(false).
+        var before = await Task.Run(() => Containers(allowed, fs), ct).ConfigureAwait(false);
 
         var outcomes = new List<ExploreItemOutcome>(items.Count);
+        var cancelled = false;
 
-        for (var i = 0; i < allowed.Count; i++)
+        try
         {
-            ct.ThrowIfCancellationRequested();
+            foreach (var item in allowed)
+            {
+                ct.ThrowIfCancellationRequested();
 
-            outcomes.Add(await RemoveOneAsync(allowed[i], mode, bin, fs, ct).ConfigureAwait(false));
-            progress?.Report((double)(i + 1) / allowed.Count);
+                outcomes.Add(await RemoveOneAsync(item, mode, bin, fs, ct).ConfigureAwait(false));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Reported rather than thrown. §5.6 applies to a run that stopped part-way as much as to
+            // one that finished, and more so: items are already gone, and letting the cancellation
+            // unwind past the verification is the one moment the user would have no evidence at all
+            // about what went with them.
+            cancelled = true;
         }
 
         outcomes.AddRange(refused);
 
-        return new ExploreRemovalReport(mode, outcomes, Verify(before, outcomes, fs));
+        return new ExploreRemovalReport(mode, outcomes, Verify(before, outcomes, fs), cancelled);
     }
 
     /// <summary>
@@ -161,6 +192,14 @@ public static class ExploreRemover
     /// <see cref="RemoveAsync"/> partitions again through this same method, so a caller that
     /// skipped it removes exactly as much.</para>
     /// </summary>
+    /// <para>The allowed items come back with their paths <em>normalised</em>, which is not a
+    /// tidy-up. Everything §5.6 asserts is derived from the path by splitting it: the container from
+    /// <see cref="Path.GetDirectoryName(string)"/> and the leaf from
+    /// <see cref="Path.GetFileName(string)"/>. A trailing separator makes the first return the item
+    /// itself and the second return nothing, so the evidence would describe the directory being
+    /// removed rather than the one it sits in, and a wholly correct removal would report as a
+    /// failure. <see cref="LongPath.Configured"/> documents that trap where a provider's configured
+    /// root meets it; a path arriving from a caller meets it here.</para>
     public static (IReadOnlyList<ExploreItem> Allowed, IReadOnlyList<ExploreItemOutcome> Refused) Partition(
         IReadOnlyList<ExploreItem> items,
         ExploreActionPolicy policy)
@@ -176,11 +215,12 @@ public static class ExploreRemover
             if (policy.MayRemove(item.Path) is { IsAllowed: false } verdict)
             {
                 refused.Add(new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, verdict.Reason));
+                continue;
             }
-            else
-            {
-                allowed.Add(item);
-            }
+
+            // Non-null by construction: the policy refuses outright anything Configured cannot
+            // resolve, so a path that reaches this line has already been through it once.
+            allowed.Add(item with { Path = LongPath.Configured(item.Path)! });
         }
 
         return (allowed, refused);
@@ -216,7 +256,10 @@ public static class ExploreRemover
                 item.Path,
                 file.Removed,
                 file.BytesReclaimed,
-                file.Removed ? "Deleted." : "Left in place — something else is using it.");
+                file.Removed
+                    ? "Deleted."
+                    : "Left in place: Deguffer was refused. A file something else holds open and one "
+                      + "this account may not touch are the same answer from here.");
         }
 
         var tree = await DirectoryRemover.RemoveAsync(item.Path, progress: null, ct, fs).ConfigureAwait(false);
@@ -285,9 +328,13 @@ public static class ExploreRemover
         IReadOnlyList<ExploreItemOutcome> outcomes,
         IFileSystem fs)
     {
+        // Keyed by the whole path rather than by the leaf name. Pooling names across containers
+        // excuses a same-named sibling somewhere else: with 'projA\bin' removed, a removal that also
+        // took 'projB\bin' would pass, and that is exactly the over-broad case this check exists
+        // for.
         var removed = outcomes
             .Where(o => o.Removed)
-            .Select(o => Path.GetFileName(o.Path))
+            .Select(o => o.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var checks = new List<VerificationCheck>(before.Count * 2);
@@ -302,13 +349,18 @@ public static class ExploreRemover
                 survives,
                 survives ? "Still present." : "MISSING — it was there before the removal."));
 
+            // A listing that never happened is recorded as a failure rather than as a pass. §5.6
+            // is what turns "I think it worked" into evidence, and filing a non-assertion as
+            // evidence is the one thing that undoes it — the more so here, because a passing report
+            // says nothing at all, so the sentence explaining that this folder was never read would
+            // reach nobody.
             checks.Add(names is null
                 ? new VerificationCheck(
                     parent,
                     "Everything beside the removed item must survive.",
-                    Passed: true,
-                    "Not established: this folder would not list its contents, so there was nothing "
-                    + "to compare against.")
+                    Passed: false,
+                    "NOT ESTABLISHED — this folder would not list its contents, so nothing beside "
+                    + "the removed item could be checked.")
                 : SiblingsSurvived(parent, names, removed, fs));
         }
 
@@ -331,9 +383,11 @@ public static class ExploreRemover
                 + "not afterwards.");
         }
 
+        bool WasRemoved(string name) => removed.Contains(Path.Combine(parent, name));
+
         var standing = after.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missing = before.Where(n => !removed.Contains(n) && !standing.Contains(n)).ToList();
-        var expected = before.Count(n => !removed.Contains(n));
+        var missing = before.Where(n => !WasRemoved(n) && !standing.Contains(n)).ToList();
+        var expected = before.Count(n => !WasRemoved(n));
 
         return missing.Count == 0
             ? new VerificationCheck(

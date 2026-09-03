@@ -34,6 +34,18 @@ public sealed partial class ExploreSelection : ObservableObject
     private readonly HashSet<int> _removed = [];
 
     private ExploreTree? _tree;
+
+    /// <summary>
+    /// The tree <see cref="_removed"/>'s indices belong to.
+    ///
+    /// <para>A node index means nothing outside the tree it came from, and the trees are replaced
+    /// wholesale — on every mid-scan snapshot as well as at the end of a scan. Without this, a
+    /// rescan filtered the new tree's children through the old tree's indices, so a directory that
+    /// is genuinely on the disk vanished from the list and could not be opened, while the stale
+    /// note claimed items had been removed since a scan that had only just started.</para>
+    /// </summary>
+    private ExploreTree? _removedFrom;
+
     private IReadOnlyList<int> _nodes = [];
 
     public ExploreSelection(ExploreActions actions) => _actions = actions;
@@ -93,7 +105,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// How the picture now differs from the disk, or null while they still agree. See
     /// <see cref="_removed"/>.
     /// </summary>
-    public string? StaleNote => _removed.Count == 0
+    public string? StaleNote => !ReferenceEquals(_tree, _removedFrom) || _removed.Count == 0
         ? null
         : $"{_removed.Count} item(s) have been removed since this scan. The sizes above still count "
           + "them, and the map still draws them. Scan again for a current picture.";
@@ -101,7 +113,8 @@ public sealed partial class ExploreSelection : ObservableObject
     public bool HasStaleNote => StaleNote is not null;
 
     /// <summary>Whether this node has been removed, so the list should stop showing it.</summary>
-    public bool WasRemoved(int node) => _removed.Contains(node);
+    public bool WasRemoved(int node) =>
+        ReferenceEquals(_tree, _removedFrom) && _removed.Contains(node);
 
     /// <summary>
     /// Point at a tree and select nothing. Called on every navigation, because a selection made in
@@ -111,16 +124,6 @@ public sealed partial class ExploreSelection : ObservableObject
     {
         _tree = tree;
         Select([]);
-    }
-
-    /// <summary>
-    /// Point at a freshly scanned tree. The record of what was removed goes with the old one: the
-    /// new tree describes the disk as it is now, so it is no longer a correction to anything.
-    /// </summary>
-    public void Reset(ExploreTree? tree)
-    {
-        _removed.Clear();
-        Show(tree);
         Stale();
     }
 
@@ -138,7 +141,7 @@ public sealed partial class ExploreSelection : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        _nodes = [.. nodes.Where(n => !_removed.Contains(n))];
+        _nodes = [.. nodes.Where(n => !WasRemoved(n))];
 
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(Note));
@@ -199,6 +202,13 @@ public sealed partial class ExploreSelection : ObservableObject
                 return;
             }
 
+            // Recorded against the tree they are indices into, so a later tree cannot inherit them.
+            if (!ReferenceEquals(_tree, _removedFrom))
+            {
+                _removed.Clear();
+                _removedFrom = _tree;
+            }
+
             foreach (var node in _nodes.Where(n => report.Removed.Any(r => IsNode(n, r.Path))))
             {
                 _removed.Add(node);
@@ -209,9 +219,13 @@ public sealed partial class ExploreSelection : ObservableObject
             Stale();
             Changed?.Invoke(this, EventArgs.Empty);
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or NotSupportedException or ArgumentException)
         {
-            Reported?.Invoke(this, "The removal was cancelled. Anything already removed has gone.");
+            // The command is an AsyncRelayCommand without FlowExceptionsToTaskScheduler, so anything
+            // escaping here is rethrown on the UI thread and takes the process down mid-deletion.
+            // The Storage page's clean flow guards itself the same way and for the same reason.
+            Reported?.Invoke(this, $"The removal stopped: {ex.Message}");
         }
         finally
         {

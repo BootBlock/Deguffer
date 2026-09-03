@@ -59,17 +59,29 @@ public sealed class ShellRecycleBin : IRecycleBin
 {
     public static ShellRecycleBin Default { get; } = new();
 
-    // FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI, with FOFX_EARLYFAILURE.
+    // FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI, with FOFX_RECYCLEONDELETE
+    // and FOFX_EARLYFAILURE.
     //
-    // FOF_ALLOWUNDO is the one that makes this a Recycle Bin removal rather than a delete. The rest
-    // suppress the shell's own windows: this app has already asked the user, and a second modal
-    // dialog it does not own — parentless, because handing an HWND down here would put a UI concept
-    // in Core — is a dialog appearing behind the window that caused it.
+    // FOF_ALLOWUNDO alone is not enough, and that is the whole reason FOFX_RECYCLEONDELETE is here.
+    // ALLOWUNDO *asks* for the Recycle Bin; the shell falls back to deleting outright whenever the
+    // item cannot go there — over the volume's bin quota, the bin switched off for that volume, a
+    // removable or network volume with no bin at all. Ordinarily it warns first, and the three
+    // suppression flags below are exactly what silences that warning. So without RECYCLEONDELETE
+    // this route would report "moved to the Recycle Bin" about a file that no longer exists
+    // anywhere, and §5.6 would not catch it because the siblings genuinely did survive. Explore
+    // ranks by size and points the user at the largest thing on the drive, which is precisely what
+    // exceeds a default bin allocation. With the flag the operation fails instead, and a failure is
+    // something this reports.
     //
-    // FOFX_EARLYFAILURE stops the operation at the first refusal instead of carrying on. The caller
-    // recycles one item per call, so what it actually buys is that a failure is reported as one
-    // rather than swallowed into an aborted flag.
-    private const uint OperationFlags = 0x0004 | 0x0010 | 0x0040 | 0x0400 | 0x00100000;
+    // The suppression flags cover the shell's own windows: this app has already asked the user, and
+    // a second modal dialog it does not own — parentless, because handing an HWND down here would
+    // put a UI concept in Core — is a dialog appearing behind the window that caused it.
+    //
+    // FOFX_EARLYFAILURE stops at the first refusal rather than carrying on. The caller recycles one
+    // item per call, so what it buys is that a failure is reported as one rather than swallowed into
+    // an aborted flag.
+    private const uint OperationFlags =
+        0x0004 | 0x0010 | 0x0040 | 0x0400 | 0x00080000 | 0x00100000;
 
     private static readonly Guid FileOperationClass = new("3ad05575-8857-4850-9277-11b85bdb8e09");
 

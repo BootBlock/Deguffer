@@ -121,6 +121,7 @@
                         <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
                         <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
                         <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
+                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
                     </controls:ExploreMap.KeyboardAccelerators>
                 </controls:ExploreMap>
 
@@ -172,7 +173,8 @@
                         </MenuFlyoutItem>
 
                         <MenuFlyoutItem Text="Open containing folder"
-                                        Command="{x:Bind ViewModel.Selection.RevealCommand}">
+                                        Command="{x:Bind ViewModel.Selection.RevealCommand}"
+                                        KeyboardAcceleratorTextOverride="Ctrl+Enter">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xEC50;" />
                             </MenuFlyoutItem.Icon>
@@ -194,7 +196,12 @@
                                         Command="{x:Bind ViewModel.Selection.DeletePermanentlyCommand}"
                                         KeyboardAcceleratorTextOverride="Shift+Del">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE74B;" />
+                                <!-- The same glyph as Delete above, deliberately. These are two
+                                     deletions and the words are what tell them apart; the codepoint
+                                     next to it in the font is an arrow, and a wrong picture beside
+                                     the one irreversible action is worse than a repeated right
+                                     one. -->
+                                <FontIcon Glyph="&#xE74D;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
 
@@ -215,6 +222,7 @@
                         <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
                         <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
                         <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
+                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
                     </ListView.KeyboardAccelerators>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExploreRow">

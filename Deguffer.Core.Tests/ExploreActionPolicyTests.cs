@@ -19,13 +19,11 @@ public sealed class ExploreActionPolicyTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeSystemDirectories _system;
     private readonly FakeUserEnvironment _environment;
-    private readonly FakeVolumeInventory _volumes;
 
     public ExploreActionPolicyTests()
     {
         _system = new FakeSystemDirectories(_temp.Path);
         _environment = new FakeUserEnvironment(_temp.Path);
-        _volumes = new FakeVolumeInventory().With(_temp.Path);
     }
 
     public void Dispose() => _temp.Dispose();
@@ -107,15 +105,56 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(Policy().MayRemove(Path.Combine(users, "someone-else", "Documents")).IsAllowed);
     }
 
+    /// <summary>
+    /// What Windows reserves at the top of a volume, on a drive the policy was never told about.
+    ///
+    /// <para>The drive is the point. These were once a table built from
+    /// <see cref="Deguffer.Core.Safety.IVolumeInventory"/>, which is a snapshot — so a volume mounted
+    /// after the page opened was scannable with its paging file and its restore points unprotected.
+    /// Reading it from the path needs no inventory, and this asserts it against a letter no fake ever
+    /// mentioned.</para>
+    /// </summary>
     [Theory]
     [InlineData("System Volume Information")]
     [InlineData("$Recycle.Bin")]
     [InlineData("pagefile.sys")]
     [InlineData("swapfile.sys")]
     [InlineData("hiberfil.sys")]
-    public void WhatWindowsKeepsAtAVolumeRootIsRefused(string name)
+    [InlineData("SYSTEM VOLUME INFORMATION")]
+    public void WhatWindowsKeepsAtAVolumeRootIsRefusedOnAnyDrive(string name)
     {
         Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, name)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same names one level down are ordinary. A folder somebody called
+    /// <c>System Volume Information</c> inside their own Documents is theirs, and the rule is about
+    /// the reserved place rather than the word.
+    /// </summary>
+    [Fact]
+    public void TheSameNameInsideAFolderIsNotReserved()
+    {
+        Assert.True(Policy()
+            .MayRemove(Path.Combine(_environment.UserProfile, "Documents", "System Volume Information"))
+            .IsAllowed);
+    }
+
+    /// <summary>
+    /// A region whose path will not resolve is dropped rather than kept with the value it arrived
+    /// with. An empty one prefix-matches every UNC path, so admitting it would refuse a whole network
+    /// share with a sentence naming no directory at all — and <c>%ProgramFiles(x86)%</c> is genuinely
+    /// empty on a 32-bit Windows.
+    /// </summary>
+    [Fact]
+    public void ARegionThatNamesNothingProtectsNothing()
+    {
+        var policy = new ExploreActionPolicy(
+            [ProtectedRegion.Refusing(string.Empty, RegionScope.PathAndBelow, "Nowhere.")],
+            []);
+
+        Assert.True(policy.MayRemove(@"\\server\share\folder").IsAllowed);
+        Assert.True(policy.MayRemove(@"C:\anywhere\at\all").IsAllowed);
     }
 
     [Fact]
@@ -200,6 +239,120 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A provider whose caches sit below its root declares a root per level, and the <em>innermost</em>
+    /// one decides.
+    ///
+    /// <para>Cargo is the case. <c>registry</c> is Tier 4 at the home's level, precisely so that only
+    /// what is named inside it goes — so asking the outer root about <c>registry\cache</c> refuses
+    /// the one directory the provider removes. Asking the level that was written about that
+    /// directory is the whole point of declaring one per level.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                        // the home itself
+    [InlineData("registry", false)]                // a Tier 4 container
+    [InlineData("git", false)]
+    [InlineData("bin", false)]                     // installed executables
+    [InlineData(@"registry\cache", true)]          // what Cargo re-downloads
+    [InlineData(@"registry\src", true)]
+    [InlineData(@"registry\cache\github.com-1", true)]
+    [InlineData(@"registry\index", false)]         // metadata Deguffer leaves
+    [InlineData(@"git\checkouts", true)]
+    [InlineData(@"git\db", false)]                 // the only copy of that history
+    [InlineData("credentials.toml", false)]        // unrecognised, so left alone
+    public void TheInnermostToolRootDecidesANestedPath(string relative, bool allowed)
+    {
+        var provider = new CargoCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var home = Path.Combine(_environment.UserProfile, ".cargo");
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? home : Path.Combine(home, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
+    /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
+    /// and repeats the whole layout inside every profile.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                             // the user-data folder itself
+    [InlineData("Local State", false)]                  // the key that decrypts the rest
+    [InlineData("Login Data", false)]                   // saved passwords
+    [InlineData("Default", false)]                      // a whole profile
+    [InlineData(@"Default\Cookies", false)]
+    [InlineData(@"Default\Web Data", false)]            // saved payment cards
+    [InlineData(@"Default\Network", false)]
+    [InlineData("GPUCache", true)]                      // a recognised cache
+    [InlineData(@"Default\GPUCache", true)]
+    [InlineData(@"Default\Cache\Cache_Data", true)]
+    [InlineData(@"Default\Cache", false)]               // the container, which stays
+    [InlineData(@"Default\Service Worker\CacheStorage", true)]
+    public void AChromiumProfileIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        var browser = _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser");
+        _temp.CreateFile(1, "profile", "AppData", "Local", "TestBrowser", "Local State");
+        _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default");
+
+        var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? browser : Path.Combine(browser, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
+    /// the root itself.
+    ///
+    /// <para>G8 asks for the unrecognised case on every tier classification, because that is the
+    /// direction that loses data. The names below are each taken from what the provider's own plan
+    /// asserts must survive, so this is the §5.6 promise read back through the second deletion
+    /// route.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("gradle", "gradle.properties")]              // signing keys and credentials
+    [InlineData("cargo", "credentials.toml")]                // registry tokens
+    [InlineData("nuget", "NuGet.Config")]                    // private feed credentials
+    [InlineData("maven", "settings-security.xml")]           // the master password
+    [InlineData("platformio", "packages")]                   // the installed toolchains
+    [InlineData("uv", "tools")]                              // what 'uv tool install' put there
+    [InlineData("pip", "pip.ini")]                           // private index URLs
+    [InlineData("go", "src")]                                // the user's own code
+    [InlineData("vscode-cpptools", "something-unrecognised")]
+    [InlineData("playwright", ".links")]                     // how Playwright resolves a build
+    [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
+    public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
+    {
+        var provider = Providers().Single(p => p.Id == providerId);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        Assert.NotEmpty(provider.ToolRoots);
+
+        foreach (var root in provider.ToolRoots)
+        {
+            Assert.False(policy.MayRemove(root.Path).IsAllowed);
+        }
+
+        Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
+    }
+
+    private IReadOnlyList<ICleanupProvider> Providers() =>
+    [
+        new GradleCacheProvider(_environment),
+        new CargoCacheProvider(_environment),
+        new NuGetCacheProvider(_environment),
+        new MavenRepositoryProvider(_environment),
+        new PlatformIoCacheProvider(_environment),
+        new UvCacheProvider(_environment),
+        new PipCacheProvider(_environment),
+        new GoCacheProvider(_environment),
+        new VsCodeCppToolsCacheProvider(_environment),
+        new PlaywrightBrowsersProvider(_environment),
+        new GpuShaderCacheProvider(_environment),
+    ];
+
+    /// <summary>
     /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.For"/> reads §5.2
     /// out of the providers rather than restating it, so a provider's own declaration is what
     /// Explore enforces.
@@ -208,7 +361,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void ThePolicyReadsSection52OutOfTheProvidersThemselves()
     {
         var provider = new GradleCacheProvider(_environment);
-        var policy = ExploreActionPolicy.For(_system, _environment, _volumes, [provider]);
+        var policy = ExploreActionPolicy.For(_system, _environment, [provider]);
 
         Assert.Equal(GradleRoot, provider.RootPath);
         Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
@@ -222,7 +375,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
 
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
-        ExploreActionPolicy.For(_system, _environment, _volumes, [new StubProvider(toolRoots)]);
+        ExploreActionPolicy.For(_system, _environment, [new StubProvider(toolRoots)]);
 
     private sealed class StubProvider(IReadOnlyList<ToolRoot> roots) : ICleanupProvider
     {
