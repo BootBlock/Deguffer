@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
@@ -337,15 +338,58 @@ public sealed partial class ExploreViewModel : ObservableObject
         //
         // Assigned before the folder, because selecting a drive is what drops a folder scope. The
         // other order would clear the scope this is establishing.
-        if (Path.GetPathRoot(folder) is { } root
-            && Drives.FirstOrDefault(drive => drive.Equals(root, StringComparison.OrdinalIgnoreCase))
-                is { } listed)
+        if (Offered(Path.GetPathRoot(folder)) is { } listed)
         {
             SelectedDrive = listed;
         }
 
         ScopeFolder = folder;
     }
+
+    /// <summary>
+    /// Point the page where an earlier instance was pointed, so an elevated replacement resumes the
+    /// scan the user asked for instead of starting from nothing. See <see cref="ExploreRequest"/>.
+    ///
+    /// <para>A drive that is no longer mounted, and so is not in <see cref="Drives"/>, is left
+    /// alone rather than forced into the box: the picker would then name a volume it cannot
+    /// offer.</para>
+    /// </summary>
+    /// <returns>
+    /// Whether the page is now pointed at what was asked for. False means nothing was restored —
+    /// the drive has gone and no folder was named — and the caller must not scan on the strength of
+    /// it. The box still holds whichever volume it defaulted to, and scanning a volume the user
+    /// never chose is worse than scanning nothing.
+    /// </returns>
+    public bool PointAt(string? drive, string? folder)
+    {
+        var pointed = false;
+
+        // The drive first, for the reason ScopeTo gives: selecting one drops any folder scope, so
+        // the other order would clear the scope this is restoring.
+        if (Offered(drive) is { } mounted)
+        {
+            SelectedDrive = mounted;
+            pointed = true;
+        }
+
+        if (folder is not null)
+        {
+            ScopeFolder = folder;
+            pointed = true;
+        }
+
+        return pointed;
+    }
+
+    /// <summary>
+    /// The entry in <see cref="Drives"/> naming <paramref name="volume"/>, or null where the box
+    /// does not offer it. Null in, null out, so a path with no root and an absent drive are one case
+    /// here rather than two at each caller.
+    /// </summary>
+    private string? Offered(string? volume) =>
+        volume is null
+            ? null
+            : Drives.FirstOrDefault(listed => listed.Equals(volume, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
@@ -360,11 +404,20 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
     /// and stands down — the same mechanism the Storage page uses, and for the same reason.
+    ///
+    /// <para>The replacement is told where this page was pointed, so it opens on Explore and scans
+    /// it. The button says "rescan", and landing the user on another page with the drive box back at
+    /// its default, and a picked folder thrown away, would not be that.</para>
+    ///
+    /// <para>What travels is what the page is pointed at now rather than what the last scan
+    /// covered. The picker is on screen and <see cref="ScanCommand"/> beside it would use exactly
+    /// these two values, so a second, hidden idea of the target is one the page could then
+    /// contradict.</para>
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
     private void ElevateAndRescan()
     {
-        if (!ElevatedRelaunch.TryRelaunch())
+        if (!ElevatedRelaunch.TryRelaunch(new ExploreRequest(SelectedDrive, ScopeFolder)))
         {
             Status = "Deguffer is still running without administrator rights, so it scans by walking "
                 + "directories. Everything else works exactly the same.";

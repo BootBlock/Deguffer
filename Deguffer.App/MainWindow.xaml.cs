@@ -1,6 +1,7 @@
 using Deguffer.App.Shell;
 using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -27,7 +28,36 @@ public sealed partial class MainWindow : Window
         ApplyPreferences();
         App.Preferences.Changed += (_, _) => ApplyPreferences();
 
-        ContentFrame.Navigate(typeof(CleanPage));
+        OpenWhereTheLaunchAsked();
+    }
+
+    /// <summary>
+    /// Open on the destination this instance was started for: Storage ordinarily, and Explore where
+    /// an elevated replacement was told to resume there.
+    ///
+    /// <para>An elevated instance always replaces one the user was already using, because §6.3 does
+    /// not elevate at startup. Opening it at the default destination throws away where they were,
+    /// and on Explore that includes a folder they chose through a dialog. See
+    /// <see cref="ElevationRequest"/> for what survives the relaunch.</para>
+    ///
+    /// <para>Two measurements shape how the rail is moved, and neither reports an error when it is
+    /// got wrong. Setting <c>IsSelected</c> on the item from here does not move the rail at all: it
+    /// settles its selection later, and the window opened on Storage regardless. And a markup
+    /// <c>IsSelected</c> stays true on its item after the rail has moved elsewhere, so the rail then
+    /// reported both items selected. Hence the rail's own property, assigned here, and no starting
+    /// selection in the markup.</para>
+    /// </summary>
+    private void OpenWhereTheLaunchAsked()
+    {
+        var explore = ElevatedRelaunch.Requested is ExploreRequest;
+
+        ContentFrame.Navigate(explore ? typeof(ExplorePage) : typeof(CleanPage));
+
+        // The rail second. Assigning it raises OnDestinationChanged, which finds the frame already
+        // where it is going and does nothing further. The selection is what the user reads as "where
+        // am I", and a frame showing Explore under a rail highlighting Storage is worse than either
+        // of them alone.
+        Navigation.SelectedItem = explore ? ExploreItem : StorageItem;
     }
 
     /// <summary>
