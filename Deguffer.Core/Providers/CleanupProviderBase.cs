@@ -79,7 +79,33 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     public virtual IReadOnlyList<ToolRoot> ToolRoots => [];
 
-    public abstract Task<CleanupPlan> PlanAsync(CancellationToken ct = default);
+    /// <summary>
+    /// The plan this provider builds, with the user's guard on recently touched files stamped onto
+    /// it and its consequences applied.
+    ///
+    /// <para>Sealed here rather than left to each provider, because both halves of the guard are
+    /// things a provider must not be able to forget. A plan that did not carry
+    /// <see cref="CleanupPlan.Keep"/> would be executed as though no guard existed, and a provider
+    /// constructs one in sixty-nine places across this project — twenty-two <c>new CleanupPlan</c>
+    /// and forty-seven <see cref="EmptyPlan"/>. So it is stamped once, on whatever comes back.</para>
+    /// </summary>
+    public async Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
+    {
+        var plan = await BuildPlanAsync(keep, ct).ConfigureAwait(false);
+
+        return keep.IsOn ? Guarded(plan, keep) : plan;
+    }
+
+    /// <summary>
+    /// What this provider would remove. Called by <see cref="PlanAsync"/> and by nothing else.
+    ///
+    /// <paramref name="keep"/> is handed on to <see cref="PlanDeletionsAsync"/>, so the figures for
+    /// paths Deguffer deletes itself exclude what the removal will not take. It is deliberately not
+    /// handed to <see cref="MeasureAllAsync"/>, which measures a §5.1 command step's probe — see
+    /// there for why that one is never guarded. A provider that measures nothing has nothing to do
+    /// with it.
+    /// </summary>
+    protected abstract Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct);
 
     public Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
@@ -127,24 +153,47 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunningProcessNotice.For(Inspector, ConflictingProcessNames);
 
     /// <summary>
-    /// Measure every path a plan cares about, and produce the note that goes with them.
+    /// Measure the paths a §5.1 command step reports against, and produce the note that goes with
+    /// them.
     ///
-    /// The note is not optional: §5.5 requires the fallback to be observable, and a slow scan is
-    /// otherwise indistinguishable from a large directory — the user is never told that elevating
+    /// <para>The note is not optional: §5.5 requires the fallback to be observable, and a slow scan
+    /// is otherwise indistinguishable from a large directory — the user is never told that elevating
     /// would make it quick. Bundling it with the measurement is what stops a new provider silently
-    /// losing that by forgetting a separate call.
+    /// losing that by forgetting a separate call.</para>
+    ///
+    /// <para><b>The guard is not an argument here, and that is the point.</b> §5.1 leaves a tool's
+    /// own eviction command deciding what it removes, so a figure that withheld recent files would
+    /// describe a deletion nobody is going to perform. Worse, it is the figure
+    /// <see cref="PlanExecutor"/> subtracts an after-measure from to report what the command
+    /// reclaimed — and that after-measure comes from
+    /// <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>, which is unguarded for the same reason.
+    /// The two sides would then be measured on different bases: the reclaim would come out short,
+    /// and where the command frees less than the guard withheld it would come out negative and
+    /// report that the cache grew.</para>
+    ///
+    /// <para>Every provider call site is a command step's probe, so refusing the argument is what
+    /// makes that unmistakable. The guarded measurement is <see cref="PlanDeletionsAsync"/>'s, and
+    /// it is guarded because those paths are ones Deguffer deletes itself.</para>
     /// </summary>
-    protected async Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
+    protected Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
+        MeasureAllAsync(paths, MinimumAge.Off, ct);
+
+    private async Task<ScanBatch> MeasureAllAsync(
+        IReadOnlyList<string> paths,
+        MinimumAge keep,
+        CancellationToken ct)
     {
         var sizes = new List<ScanSize>(paths.Count);
+        var withheld = new List<bool>(paths.Count);
         var fallback = FallbackReason.None;
 
         foreach (var path in paths)
         {
             ct.ThrowIfCancellationRequested();
 
-            var measured = await Scanner.MeasureAsync(path, progress: null, ct).ConfigureAwait(false);
+            var measured = await Scanner.MeasureAsync(path, keep, progress: null, ct).ConfigureAwait(false);
             sizes.Add(measured.Size);
+            withheld.Add(measured.WithheldRecent);
 
             // Paths in one plan can sit on different volumes and so take different routes; the
             // first reason to appear is the one the user is shown.
@@ -154,7 +203,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             }
         }
 
-        return new ScanBatch(sizes, fallback);
+        return new ScanBatch(sizes, fallback, withheld);
     }
 
     /// <summary>
@@ -166,9 +215,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     protected async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured)> PlanDeletionsAsync(
         IReadOnlyList<DeletionTarget> targets,
+        MinimumAge keep,
         CancellationToken ct)
     {
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
         for (var i = 0; i < targets.Count; i++)
@@ -184,9 +234,73 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 Estimated = measured.Sizes[i],
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
+                WithheldRecent = measured.WithheldRecent[i],
             });
         }
 
         return (steps, measured);
+    }
+
+    /// <summary>
+    /// The guard applied to a finished plan: carried onto it, said out loud, and — for a step whose
+    /// whole subject is one recent file — acted on by withdrawing the offer.
+    ///
+    /// <para>A directory needs no withdrawing. Its recent files are already out of the estimate,
+    /// and <see cref="DirectoryRemover"/> leaves them where they are, so the step stays and does
+    /// less. A <see cref="DeleteFileStep"/> has nothing left to do once its one file is protected,
+    /// and offering a row that will reclaim nothing is worse than not offering it — so it is
+    /// withdrawn, and §5.6 is told to prove the file is still there afterwards.</para>
+    /// </summary>
+    private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep)
+    {
+        var withdrawn = plan.Steps
+            .OfType<DeleteFileStep>()
+            .Where(step => keep.ProtectsFile(step.Path))
+            .ToList();
+
+        var notes = new List<PlanNote>(plan.Notes);
+
+        // Only where there is something to say it about. Every plan comes through here, including
+        // the empty one a provider returns for a toolchain that is not installed — and "the sizes
+        // here already exclude those files" under "Go is not installed on this machine" describes
+        // sizes that do not exist, on the majority of rows on an ordinary machine.
+        if (plan.Steps.Count > 0)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Leaving anything changed in the last {keep.Describe()} alone, as you asked. The "
+                + "sizes here already exclude those files."));
+        }
+
+        // §5.1 keeps a tool's own eviction command as the preferred route, and that command decides
+        // for itself what it removes. Saying so is the whole of what can be done about it: the
+        // alternative is to stop using the command while the guard is on, which would replace the
+        // tool's knowledge of its own cache with ours — the exact substitution §5.2 exists to
+        // refuse. NuGet's own clear reached two locations that were not under .nuget at all.
+        if (plan.Steps.OfType<RunCommandStep>().Any())
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"{plan.ProviderName} is cleared by running its own tool, and that tool decides what "
+                + "it removes. Recent files are not protected from it."));
+        }
+
+        return plan with
+        {
+            Keep = keep,
+            Steps = [.. plan.Steps.Except(withdrawn)],
+            Notes = notes,
+            ProtectedPaths =
+            [
+                .. plan.ProtectedPaths,
+                .. withdrawn.Select(step => new ProtectedPath(
+                    step.Path,
+                    $"Left alone because it changed in the last {keep.Describe()}.",
+                    // Measured during planning, so it was there when the plan was made — the same
+                    // claim, and the same reasoning, as CleanupPlan.NarrowedTo makes for a step the
+                    // user declined.
+                    ExistedBefore: true)),
+            ],
+        };
     }
 }

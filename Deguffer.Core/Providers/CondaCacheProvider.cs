@@ -110,7 +110,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var conda = FindConda();
         if (conda is null)

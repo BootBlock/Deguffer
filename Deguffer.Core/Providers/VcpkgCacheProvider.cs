@@ -163,7 +163,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryExists));
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var located = Locate();
         var refused = new List<string>();
@@ -201,7 +201,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                       + "it are covered too."));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(scan.Targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

@@ -1,4 +1,6 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -54,5 +56,144 @@ public sealed class CleanupProviderBaseTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("caches", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The guard is stamped onto whatever a provider hands back, rather than by each provider.
+    ///
+    /// There are fifty places a provider constructs a plan, and a plan that reached the executor
+    /// without <see cref="CleanupPlan.Keep"/> would be carried out as though no guard existed. That
+    /// is a deletion the preview said would not happen, so it must not be something a new provider
+    /// can forget.
+    /// </summary>
+    [Fact]
+    public async Task EveryPlanCarriesTheGuardItWasBuiltUnder()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        Directory.CreateDirectory(caches);
+        TempDirectory.Age(_temp.CreateFile(4096, ".gradle", "caches", "a.bin"), TimeSpan.FromDays(30));
+
+        var keep = MinimumAge.WithinHours(8, DateTime.UtcNow);
+        var plan = await Provider().PlanAsync(keep);
+
+        Assert.Equal(keep, plan.Keep);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("8 hours", StringComparison.Ordinal));
+
+        // And an unguarded plan says nothing about a setting the user did not turn on.
+        var unguarded = await Provider().PlanAsync();
+
+        Assert.False(unguarded.Keep.IsOn);
+        Assert.DoesNotContain(unguarded.Notes, n => n.Message.Contains("hours", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.1 keeps a tool's own eviction command as the preferred route, and that command decides for
+    /// itself what it removes — so the guard does not reach it. The alternative is to stop using the
+    /// command, which would replace the tool's knowledge of its own cache with ours: NuGet's own
+    /// clear reached two locations that were not under <c>.nuget</c> at all.
+    ///
+    /// <para>Saying so is then the whole of what can be done, and it has to be a warning rather than
+    /// a remark. A guard whose gap is unstated is worse than no guard.</para>
+    /// </summary>
+    [Fact]
+    public async Task WarnsThatAToolsOwnCleanIsNotCoveredByTheGuard()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        Directory.CreateDirectory(Path.Combine(cache, "_cacache", "content-v2"));
+        File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Contains(plan.Steps, s => s is RunCommandStep);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning &&
+            n.Message.Contains("its own tool", StringComparison.Ordinal));
+    }
+
+    private GradleCacheProvider Provider() =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+    /// <summary>
+    /// A §5.1 command step's estimate is never guard-filtered, however the guard is set.
+    ///
+    /// <para>The step is cleared by the tool's own command, which decides for itself what it
+    /// removes — the plan says so in as many words. A figure that withheld recent files would then
+    /// describe a deletion nobody is going to perform, and it is also the figure
+    /// <see cref="PlanExecutor"/> subtracts an unguarded after-measure from to report what the
+    /// command reclaimed. Guarded, that subtraction mixes two bases: it reports short, and where the
+    /// command frees less than was withheld it goes negative and tells the user the cache grew.</para>
+    /// </summary>
+    [Fact]
+    public async Task MeasuresACommandStepAgainstTheWholeCacheHoweverTheGuardIsSet()
+    {
+        var content = Path.Combine(_environment.LocalAppData, "npm-cache", "_cacache", "content-v2");
+        Directory.CreateDirectory(content);
+
+        var stale = Path.Combine(content, "stale");
+        File.WriteAllBytes(stale, new byte[4096]);
+        TempDirectory.Age(stale, TimeSpan.FromDays(30));
+
+        File.WriteAllBytes(Path.Combine(content, "written-just-now"), new byte[1024]);
+
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        var unguarded = await provider.PlanAsync();
+        var guarded = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(5120, unguarded.EstimatedBytes);
+        Assert.Equal(unguarded.EstimatedBytes, guarded.EstimatedBytes);
+    }
+
+    /// <summary>
+    /// A plan with no steps has no sizes, so the note that qualifies them says nothing true about
+    /// it. Every plan comes through the same stamp, including the empty one a provider returns for a
+    /// toolchain that is not installed — which on an ordinary machine is most of the rows.
+    /// </summary>
+    [Fact]
+    public async Task SaysNothingAboutTheGuardOnAPlanWithNoSizesToQualify()
+    {
+        var provider = new GradleCacheProvider(
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+        var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.True(plan.IsEmpty);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("8 hours", StringComparison.Ordinal));
+
+        // The guard is still on the plan: nothing about an empty plan makes it untrue, and the
+        // stamp is what the executor reads.
+        Assert.True(plan.Keep.IsOn);
+    }
+
+    /// <summary>
+    /// The plan carries which kind of zero a row has, so the shell never has to guess from the
+    /// setting. Deriving it from the guard being on puts "nothing old enough" on every empty row.
+    /// </summary>
+    [Fact]
+    public async Task SaysWhetherAZeroRowIsEmptyOrWhollyTooRecent()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        Directory.CreateDirectory(caches);
+        File.WriteAllBytes(Path.Combine(caches, "written-just-now.bin"), new byte[4096]);
+
+        var guard = MinimumAge.WithinHours(8, DateTime.UtcNow);
+        var wholesaleRecent = await Provider().PlanAsync(guard);
+
+        Assert.Equal(0, wholesaleRecent.EstimatedBytes);
+        Assert.True(wholesaleRecent.HasRecentContentHeldBack);
+
+        // The same provider with an empty cache measures the same zero and claims nothing.
+        File.Delete(Path.Combine(caches, "written-just-now.bin"));
+        var genuinelyEmpty = await Provider().PlanAsync(guard);
+
+        Assert.Equal(0, genuinelyEmpty.EstimatedBytes);
+        Assert.False(genuinelyEmpty.HasRecentContentHeldBack);
     }
 }

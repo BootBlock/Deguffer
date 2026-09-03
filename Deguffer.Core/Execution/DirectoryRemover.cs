@@ -5,7 +5,15 @@ namespace Deguffer.Core.Execution;
 /// <param name="BytesReclaimed">Bytes of files actually deleted.</param>
 /// <param name="Skipped">Entries left in place because something held them (§5.3).</param>
 /// <param name="RootRemoved">Whether the target directory itself is gone.</param>
-public sealed record RemovalOutcome(long BytesReclaimed, int Skipped, bool RootRemoved);
+/// <param name="Kept">
+/// Files left in place because the user asked for anything touched recently to be left alone.
+///
+/// Counted apart from <paramref name="Skipped"/> rather than added to it, because the two are
+/// different sentences to the reader: a skip is Windows refusing, which the user can act on by
+/// closing something, and this is Deguffer honouring a setting they chose. Reporting a deliberate
+/// choice as an obstruction would send them looking for a process that is not there.
+/// </param>
+public sealed record RemovalOutcome(long BytesReclaimed, int Skipped, bool RootRemoved, int Kept = 0);
 
 /// <summary>
 /// Deletes a directory tree.
@@ -21,15 +29,23 @@ public static class DirectoryRemover
     /// the boundary is in extended-length form — see <see cref="IFileSystem"/> for why the outcome
     /// of a removal cannot prove that on its own.
     /// </param>
+    /// <param name="keep">
+    /// Files the user has asked to be left alone because they were touched recently. A directory
+    /// still holding one is then left standing by the existing rule that an unempty directory
+    /// cannot be removed — the same outcome a locked file already produces — so nothing here has to
+    /// reason about ancestors.
+    /// </param>
     public static Task<RemovalOutcome> RemoveAsync(
         string path,
+        MinimumAge keep = default,
         IProgress<double>? progress = null,
         CancellationToken ct = default,
         IFileSystem? fileSystem = null) =>
-        Task.Run(() => Remove(path, progress, fileSystem ?? WindowsFileSystem.Default, ct), ct);
+        Task.Run(() => Remove(path, keep, progress, fileSystem ?? WindowsFileSystem.Default, ct), ct);
 
     private static RemovalOutcome Remove(
         string path,
+        MinimumAge keep,
         IProgress<double>? progress,
         IFileSystem fs,
         CancellationToken ct)
@@ -59,7 +75,7 @@ public static class DirectoryRemover
         // leave us deleting a partially-understood tree.
         var directories = new List<string>();
         var files = new List<(string Path, long Length)>();
-        Gather(extended, directories, files, fs, ct);
+        var kept = Gather(extended, keep, directories, files, fs, ct);
 
         long reclaimed = 0;
         var skipped = 0;
@@ -103,11 +119,21 @@ public static class DirectoryRemover
         progress?.Report(1.0);
 
         // The root is in `directories`, so the loop above has already attempted it.
-        return new RemovalOutcome(reclaimed, skipped, RootRemoved: !fs.DirectoryExists(extended));
+        return new RemovalOutcome(reclaimed, skipped, RootRemoved: !fs.DirectoryExists(extended), kept);
     }
 
-    private static void Gather(
+    /// <summary>
+    /// Collect the tree, and return how many files the guard held back.
+    ///
+    /// The guard is applied here rather than in the deletion pass because this is where the
+    /// timestamp already is: the enumeration that classified the entry read it, and gathering is
+    /// also where a file the removal must not touch stops being a candidate at all. A file filtered
+    /// out here is never handed to <see cref="TryDeleteFile"/>, so there is no second place holding
+    /// the same rule.
+    /// </summary>
+    private static int Gather(
         string extendedDirectory,
+        MinimumAge keep,
         List<string> directories,
         List<(string, long)> files,
         IFileSystem fs,
@@ -124,8 +150,10 @@ public static class DirectoryRemover
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
             // Unreadable directory: nothing to gather, and §5.3 says skip rather than fail.
-            return;
+            return 0;
         }
+
+        var kept = 0;
 
         foreach (var entry in entries)
         {
@@ -147,13 +175,19 @@ public static class DirectoryRemover
 
             if (entry.IsDirectory)
             {
-                Gather(entry.FullName, directories, files, fs, ct);
+                kept += Gather(entry.FullName, keep, directories, files, fs, ct);
+            }
+            else if (keep.Protects(entry.NewestFileTime))
+            {
+                kept++;
             }
             else
             {
                 files.Add((entry.FullName, entry.Length));
             }
         }
+
+        return kept;
     }
 
     private static bool TryDeleteFile(string extendedPath, IFileSystem fs)

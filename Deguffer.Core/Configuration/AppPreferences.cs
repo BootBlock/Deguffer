@@ -131,6 +131,21 @@ public enum ExploreColouring
 /// the preview and Tier 3 never being pre-selected as what stands between the user and the
 /// deletion.
 /// </param>
+/// <param name="KeepFilesChangedWithinHours">
+/// Leave any file touched inside this many hours where it is, however the row it sits in is
+/// classified. Zero is off, and off is the default.
+///
+/// <para>One of the two settings that change what gets deleted rather than how the window looks,
+/// the approved source folders being the other, and the only one that can make a plan smaller than
+/// what is actually on the disk. §5.3 already refuses anything Windows
+/// is holding open, which covers a process with a file still on it — this covers the one that
+/// wrote a file, closed it, and will want it again in an hour. Nothing distinguishes such a file
+/// from a stale one by name, place or size, so an age is the only signal there is.</para>
+///
+/// <para>Stored as whole hours because that is what the user chose, not as the instant it becomes:
+/// the instant is fixed once per preview, so that the clean deletes exactly the files the preview
+/// said it would. See <see cref="Safety.MinimumAge"/>.</para>
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Compact,
@@ -139,7 +154,8 @@ public sealed record AppPreferences(
     bool ShowNotInstalled = false,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
-    bool RequireTypedConfirmation = false)
+    bool RequireTypedConfirmation = false,
+    int KeepFilesChangedWithinHours = 0)
 {
     public static readonly AppPreferences Default = new();
 }

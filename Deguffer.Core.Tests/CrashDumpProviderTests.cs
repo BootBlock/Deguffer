@@ -418,4 +418,51 @@ public sealed class CrashDumpProviderTests : IDisposable
         // per-step elevation claim a real distinction rather than a constant.
         Assert.Contains(provider.Roots, r => !r.RequiresElevation);
     }
+
+    /// <summary>
+    /// A step whose whole subject is one recent file has nothing left to do, so the offer is
+    /// withdrawn rather than left on the screen to reclaim nothing — and §5.6 is told to prove the
+    /// file is still there afterwards.
+    ///
+    /// <para>The negative is the assertion that matters. That the row is gone is a display fact;
+    /// that <c>MEMORY.DMP</c> is still on the disk after a run is the promise the setting made.</para>
+    /// </summary>
+    [Fact]
+    public async Task WithdrawsTheKernelDumpWhileItIsInsideTheGuardWindowAndProvesItSurvived()
+    {
+        var memoryDump = Path.Combine(Windows, "MEMORY.DMP");
+        File.WriteAllBytes(memoryDump, new byte[131072]);
+
+        var plan = await CreateProvider().PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.DoesNotContain(plan.Steps, s => s is DeleteFileStep);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == memoryDump && p.ExistedBefore);
+
+        var result = await CreateProvider().ExecuteAsync(plan);
+
+        Assert.True(File.Exists(memoryDump), "a file inside the guard window was deleted");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The same dump, older than the window, is offered and removed exactly as before. A guard that
+    /// held everything back would be indistinguishable from one that worked.
+    /// </summary>
+    [Fact]
+    public async Task StillRemovesAKernelDumpOlderThanTheGuardWindow()
+    {
+        var memoryDump = Path.Combine(Windows, "MEMORY.DMP");
+        File.WriteAllBytes(memoryDump, new byte[131072]);
+        TempDirectory.Age(memoryDump, TimeSpan.FromDays(11));
+
+        var plan = await CreateProvider().PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        var file = Assert.IsType<DeleteFileStep>(Assert.Single(plan.Steps));
+        Assert.Equal(131072, file.EstimatedBytes);
+
+        var result = await CreateProvider().ExecuteAsync(plan);
+
+        Assert.False(File.Exists(memoryDump));
+        Assert.Equal(131072, result.BytesReclaimed);
+    }
 }

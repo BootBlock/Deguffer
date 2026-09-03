@@ -47,6 +47,37 @@ public sealed record CleanupPlan
     public IReadOnlyList<PlanNote> Notes { get; init; } = [];
 
     /// <summary>
+    /// The user's guard on recently touched files, fixed when this plan was made.
+    ///
+    /// <para>It travels on the plan rather than being read again at execution, and that is what
+    /// makes the preview a promise. The cut-off is an instant (see <see cref="MinimumAge"/>), so
+    /// the set of files it protects is the same set the estimate above excluded, however long the
+    /// preview sits on screen before the user presses Clean. Re-deriving it from the clock at
+    /// deletion would quietly delete files the preview said would stay.</para>
+    ///
+    /// <para>Stamped by <see cref="Providers.CleanupProviderBase.PlanAsync"/> on every plan a
+    /// provider returns, rather than by each provider, so a provider that builds its plan by hand
+    /// cannot ship one the executor would treat as unguarded.</para>
+    /// </summary>
+    public MinimumAge Keep { get; init; }
+
+    /// <summary>
+    /// Whether the guard left something real out of this plan's figures.
+    ///
+    /// <para>The same shape as <see cref="HasUnreadableRoot"/>, and there for the same reason: a
+    /// row with nothing to reclaim renders as "Already clear", and that is a claim about the
+    /// folder. A cache whose every file is inside the window measures zero and is full, so the
+    /// claim would be false. Deriving it from <see cref="Keep"/> alone is wrong in the other
+    /// direction — it puts "nothing old enough" on every genuinely empty row the moment the user
+    /// switches the guard on, which on an ordinary machine is most of them.</para>
+    ///
+    /// <para>Recomputed rather than stored, like <see cref="TargetedPaths"/>: this is a record, and
+    /// a <c>with</c> expression copies backing fields wholesale, so a cached value would survive a
+    /// change to <see cref="Steps"/> and describe the wrong plan.</para>
+    /// </summary>
+    public bool HasRecentContentHeldBack => Steps.Any(s => s.WithheldRecent);
+
+    /// <summary>
     /// Which route measured this plan's paths. <see cref="FallbackReason.None"/> for a plan with
     /// nothing to measure, which is correct: an empty plan gives the user no reason to elevate.
     ///
@@ -127,19 +158,22 @@ public sealed record CleanupPlan
     /// <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1), and
     /// asserting the tool left them alone would be asserting something this plan never controlled.
     /// </summary>
-    public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> keep)
+    public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> chosen)
     {
-        ArgumentNullException.ThrowIfNull(keep);
+        ArgumentNullException.ThrowIfNull(chosen);
 
-        var kept = Steps.Where(keep.Contains).ToList();
+        // Named for the user's choice rather than for what is kept, because "keep" now means the
+        // guard on recently changed files everywhere else in this project, and the two decide
+        // different things about the same plan.
+        var selected = Steps.Where(chosen.Contains).ToList();
 
-        if (kept.Count == Steps.Count)
+        if (selected.Count == Steps.Count)
         {
             return this;
         }
 
         var declined = Steps
-            .Except(kept)
+            .Except(selected)
             .OfType<DeleteStep>()
             .Select(s => new ProtectedPath(
                 s.Path,
@@ -151,7 +185,7 @@ public sealed record CleanupPlan
 
         return this with
         {
-            Steps = kept,
+            Steps = selected,
             ProtectedPaths = [.. ProtectedPaths, .. declined],
         };
     }

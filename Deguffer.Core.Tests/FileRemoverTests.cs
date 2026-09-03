@@ -147,7 +147,7 @@ public sealed class FileRemoverTests : IDisposable
         var file = _temp.CreateFile(2048, "dumps", "MEMORY.DMP");
 
         var outcome = await FileRemover.RemoveAsync(
-            file, default, new VanishingFileSystem(WindowsFileSystem.Default, thrown));
+            file, MinimumAge.Off, default, new VanishingFileSystem(WindowsFileSystem.Default, thrown));
 
         Assert.True(outcome.Removed);
         Assert.Equal(0, outcome.Skipped);
@@ -168,6 +168,8 @@ public sealed class FileRemoverTests : IDisposable
             inner.EnumerateEntries(directory);
 
         public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
+
+        public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
 
         public void DeleteFile(string path) => throw (Exception)Activator.CreateInstance(thrown)!;
 
@@ -200,7 +202,7 @@ public sealed class FileRemoverTests : IDisposable
         File.SetAttributes(LongPath.Extended(file), FileAttributes.ReadOnly);
 
         var recorder = new RecordingFileSystem(WindowsFileSystem.Default);
-        var outcome = await FileRemover.RemoveAsync(file, default, recorder);
+        var outcome = await FileRemover.RemoveAsync(file, MinimumAge.Off, default, recorder);
 
         Assert.True(outcome.Removed);
         Assert.Equal(4096, outcome.BytesReclaimed);
@@ -208,5 +210,37 @@ public sealed class FileRemoverTests : IDisposable
         Assert.All(
             recorder.Paths,
             path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The guard is asked again here, at the point of deletion, rather than trusted from the plan.
+    /// A plan is made minutes before it runs, and §7.1 already settles that a refusal is decided
+    /// again immediately before anything is removed.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFileThatChangedInsideTheWindow()
+    {
+        var file = _temp.CreateFile(4096, "dumps", "MEMORY.DMP");
+
+        var outcome = await FileRemover.RemoveAsync(file, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.True(File.Exists(file), "a file inside the guard window was deleted");
+        Assert.True(outcome.Kept);
+        Assert.False(outcome.Removed);
+        Assert.Equal(0, outcome.Skipped);
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    [Fact]
+    public async Task RemovesAFileOlderThanTheWindow()
+    {
+        var file = TempDirectory.Age(_temp.CreateFile(4096, "dumps", "MEMORY.DMP"), TimeSpan.FromDays(9));
+
+        var outcome = await FileRemover.RemoveAsync(file, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.False(File.Exists(file));
+        Assert.False(outcome.Kept);
+        Assert.True(outcome.Removed);
+        Assert.Equal(4096, outcome.BytesReclaimed);
     }
 }

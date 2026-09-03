@@ -194,4 +194,43 @@ public sealed class HardLinkAwareScannerTests : IDisposable
 
     [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool CreateHardLink(string fileName, string existingFileName, nint securityAttributes);
+
+    /// <summary>
+    /// The third measurement route, and the pnpm store's only one. It has to exclude a recent file
+    /// exactly as the other two do: a figure that disagreed with them would make the number a user
+    /// sees depend on which provider they were looking at.
+    /// </summary>
+    [Fact]
+    public async Task ExcludesFilesInsideTheGuardWindowFromTheTotal()
+    {
+        using var temp = new TempDirectory();
+        var stale = TempDirectory.Age(temp.CreateFile(4096, "store", "stale.bin"), TimeSpan.FromDays(30));
+        temp.CreateFile(1_000_000, "store", "v3", "written-just-now.bin");
+
+        var store = Path.Combine(temp.Path, "store");
+
+        var unguarded = await HardLinkAwareScanner.Default.MeasureAsync(store);
+        var guarded = await HardLinkAwareScanner.Default
+            .MeasureAsync(store, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(1_004_096, unguarded.Size.Reclaimable);
+        Assert.Equal(new FileInfo(stale).Length, guarded.Size.Reclaimable);
+    }
+
+    /// <summary>
+    /// The same for a single named file, which this scanner answers on its own path rather than by
+    /// walking — the branch <see cref="ParallelEnumerationScannerTests"/> covers for the other route.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresAGuardedSingleFileAsNothing()
+    {
+        using var temp = new TempDirectory();
+        var file = temp.CreateFile(8192, "store", "blob.bin");
+
+        var guarded = await HardLinkAwareScanner.Default
+            .MeasureAsync(file, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(0, guarded.Size.Reclaimable);
+        Assert.Equal(8192, (await HardLinkAwareScanner.Default.MeasureAsync(file)).Size.Reclaimable);
+    }
 }

@@ -68,6 +68,20 @@ public abstract record CleanupStep
     /// is actually running under.
     /// </summary>
     public bool RequiresElevation { get; init; }
+
+    /// <summary>
+    /// Whether the user's guard on recently changed files left something real out of
+    /// <see cref="Estimated"/>.
+    ///
+    /// <para>It sits here rather than on the plan because only the measurement knows it, and
+    /// measuring happens per path. <see cref="CleanupPlan.HasRecentContentHeldBack"/> is the
+    /// question the shell actually asks, and it is that question asked over these.</para>
+    ///
+    /// <para>False on a <see cref="RunCommandStep"/>, always: §5.1 leaves the tool's own eviction
+    /// command deciding what it removes, so nothing is held back from it and its figure is the
+    /// whole cache.</para>
+    /// </summary>
+    public bool WithheldRecent { get; init; }
 }
 
 /// <summary>

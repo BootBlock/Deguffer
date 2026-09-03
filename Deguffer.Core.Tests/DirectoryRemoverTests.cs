@@ -212,7 +212,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         File.WriteAllBytes(LongPath.Extended(Path.Combine(deep, "payload.bin")), new byte[4096]);
 
         var recorder = new RecordingFileSystem(WindowsFileSystem.Default);
-        var outcome = await DirectoryRemover.RemoveAsync(root, progress: null, default, recorder);
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, default, recorder);
 
         Assert.True(outcome.RootRemoved);
         Assert.NotEmpty(recorder.Paths);
@@ -285,7 +285,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => DirectoryRemover.RemoveAsync(root, progress: null, cts.Token));
+            () => DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, cts.Token));
     }
 
     [Fact]
@@ -298,11 +298,76 @@ public sealed class DirectoryRemoverTests : IDisposable
         }
 
         var reported = new List<double>();
-        await DirectoryRemover.RemoveAsync(root, new Progress<double>(reported.Add));
+        await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, new Progress<double>(reported.Add));
 
         // Progress is marshalled asynchronously, so only the terminal report is guaranteed —
         // asserting on intermediate values here would be a flaky test.
         Assert.True(Directory.Exists(root) is false);
         Assert.All(reported, value => Assert.InRange(value, 0.0, 1.0));
+    }
+
+    /// <summary>
+    /// The guard the user set, applied where a deletion actually happens.
+    ///
+    /// §5.6's negative is the whole assertion here: proving the stale file went is half a test, and
+    /// the half that cannot fail. What has to hold is that the recent file is still on the disk
+    /// afterwards, and that the folder around it stayed with it.
+    /// </summary>
+    [Fact]
+    public async Task LeavesARecentFileAndTheFolderHoldingItWhereTheyAre()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var stale = TempDirectory.Age(_temp.CreateFile(1024, "cache", "old", "a.bin"), TimeSpan.FromDays(30));
+        var recent = _temp.CreateFile(2048, "cache", "live", "scratch.bin");
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.True(File.Exists(recent), "a file inside the guard window was deleted");
+        Assert.True(Directory.Exists(Path.GetDirectoryName(recent)!), "the folder holding it was removed");
+        Assert.True(Directory.Exists(root), "the root went, so the kept file was orphaned or lost");
+
+        Assert.False(File.Exists(stale), "a file well outside the window was kept");
+        Assert.False(Directory.Exists(Path.GetDirectoryName(stale)!));
+
+        Assert.Equal(1024, outcome.BytesReclaimed);
+        Assert.Equal(1, outcome.Kept);
+        Assert.Equal(0, outcome.Skipped);
+        Assert.False(outcome.RootRemoved);
+    }
+
+    /// <summary>
+    /// Kept and skipped are counted apart because they are different sentences to the reader: one is
+    /// Windows refusing, which they can act on, and the other is a setting they chose.
+    /// </summary>
+    [Fact]
+    public async Task CountsWhatTheGuardKeptSeparatelyFromWhatWasInUse()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(64, "cache", "fresh-one.bin");
+        _temp.CreateFile(64, "cache", "fresh-two.bin");
+        TempDirectory.Age(_temp.CreateFile(4096, "cache", "stale.bin"), TimeSpan.FromDays(2));
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.WithinHours(1, DateTime.UtcNow));
+
+        Assert.Equal(2, outcome.Kept);
+        Assert.Equal(0, outcome.Skipped);
+        Assert.Equal(4096, outcome.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// With no guard set, the removal is the one it always was. Every seam defaults its guard
+    /// parameter, so this is the behaviour every existing caller still gets.
+    /// </summary>
+    [Fact]
+    public async Task RemovesEverythingWhenNoGuardIsSet()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(2048, "cache", "written-just-now.bin");
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.Equal(0, outcome.Kept);
+        Assert.Equal(2048, outcome.BytesReclaimed);
     }
 }
