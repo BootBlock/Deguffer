@@ -135,8 +135,9 @@ public enum ExploreColouring
 /// Leave any file touched inside this many hours where it is, however the row it sits in is
 /// classified. Zero is off, and off is the default.
 ///
-/// <para>The third setting that changes what gets deleted rather than how the window looks, and
-/// the only one that can make a plan smaller than the disk. §5.3 already refuses anything Windows
+/// <para>One of the two settings that change what gets deleted rather than how the window looks,
+/// the approved source folders being the other, and the only one that can make a plan smaller than
+/// what is actually on the disk. §5.3 already refuses anything Windows
 /// is holding open, which covers a process with a file still on it — this covers the one that
 /// wrote a file, closed it, and will want it again in an hour. Nothing distinguishes such a file
 /// from a stale one by name, place or size, so an age is the only signal there is.</para>

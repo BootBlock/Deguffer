@@ -117,7 +117,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 $"PlatformIO is installed but its cache directory does not exist yet ({cacheDirectory}).");
         }
 
-        var measured = await MeasureAllAsync([cacheDirectory], keep, ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
 
         // --cache scopes prune to the cache alone. Without it, prune also removes "unnecessary"
         // core and platform packages — a judgement about installed toolchains that belongs to the

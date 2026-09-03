@@ -61,9 +61,9 @@ public class MinimumAgeTests
         var longAgo = Now.AddYears(-3).ToFileTimeUtc();
         var justNow = Now.AddMinutes(-5).ToFileTimeUtc();
 
-        Assert.True(guard.Protects(createdFileTime: justNow, lastWrittenFileTime: longAgo));
-        Assert.True(guard.Protects(createdFileTime: longAgo, lastWrittenFileTime: justNow));
-        Assert.False(guard.Protects(createdFileTime: longAgo, lastWrittenFileTime: longAgo));
+        Assert.True(guard.Protects(MinimumAge.NewestFileTimeOf(justNow, longAgo)));
+        Assert.True(guard.Protects(MinimumAge.NewestFileTimeOf(longAgo, justNow)));
+        Assert.False(guard.Protects(MinimumAge.NewestFileTimeOf(longAgo, longAgo)));
     }
 
     /// <summary>
@@ -98,18 +98,22 @@ public class MinimumAgeTests
     }
 
     /// <summary>
-    /// The clock is an argument, and nothing says it arrives in UTC. A local instant has to be
-    /// converted before it is compared: a <see cref="DateTime"/> compares on raw ticks whatever its
-    /// kind claims, so normalising afterwards would set the cut-off an offset's worth away from the
-    /// one the caller asked for — an hour of files kept or deleted by mistake, depending on the
-    /// sign.
+    /// The cut-off is the clock the caller gave, less the window they asked for. Nothing subtler,
+    /// and pinned because everything else in this type is derived from it.
+    ///
+    /// <para><b>What this does not prove, stated rather than implied.</b> <c>Within</c> also
+    /// normalises a clock that is not already UTC, and dropping that normalisation would move the
+    /// cut-off by the host's offset — which protects <em>fewer</em> files, the direction that loses
+    /// data. No test here can discriminate on it: the only way to reach the branch is to pass a
+    /// local instant, and on a host whose local time is UTC — a build agent, and this project's own
+    /// time zone every winter — the conversion is the identity. G8 asks for that to be said outright
+    /// rather than covered by a test that passes on a property of the machine.</para>
     /// </summary>
     [Fact]
-    public void ReadsTheClockItIsGivenAsTheInstantItStandsFor()
+    public void TakesTheCutOffFromTheClockItIsGiven()
     {
-        Assert.Equal(
-            MinimumAge.WithinHours(8, Now).KeepFromUtc,
-            MinimumAge.WithinHours(8, Now.ToLocalTime()).KeepFromUtc);
+        Assert.Equal(Now.AddHours(-8), MinimumAge.WithinHours(8, Now).KeepFromUtc);
+        Assert.Equal(Now - TimeSpan.FromMinutes(90), MinimumAge.Within(TimeSpan.FromMinutes(90), Now).KeepFromUtc);
     }
 
     [Fact]
@@ -118,9 +122,15 @@ public class MinimumAgeTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => MinimumAge.Within(MinimumAge.MaximumWindow + TimeSpan.FromDays(1), Now));
 
-        // The hours entry point clamps rather than throwing: it is fed by a stored preference, and
-        // a settings file somebody edited by hand must not stop the app planning.
-        Assert.True(MinimumAge.WithinHours(int.MaxValue, Now).IsOn);
+        // WithinHours clamps rather than throwing, and it is the entry point the app takes for
+        // exactly that reason: the number comes off disk, nothing validates preferences.json on the
+        // way in, and a file somebody edited by hand must not stop the app planning. int.MaxValue
+        // hours is also past what TimeSpan.FromHours can represent at all, so a caller converting
+        // before this point would overflow before reaching the clamp.
+        var clamped = MinimumAge.WithinHours(int.MaxValue, Now);
+
+        Assert.True(clamped.IsOn);
+        Assert.Equal(Now - MinimumAge.MaximumWindow, clamped.KeepFromUtc);
     }
 
     [Theory]

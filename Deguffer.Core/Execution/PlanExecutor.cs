@@ -125,9 +125,19 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
         // without this the setting working exactly as intended would be reported as a failed step.
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0;
 
-        var message = succeeded
-            ? $"Removed{Qualifier(removal.Skipped, removal.Kept)}."
-            : WhyNothingHappened(removal.Skipped);
+        var message = succeeded switch
+        {
+            false => WhyNothingHappened(removal.Skipped),
+
+            // Nothing came out and the folder is still standing, which is the guard's own case: it
+            // held back everything this step named. Saying "Removed" here would be a false statement
+            // about the user's disk, and the qualifier would not rescue it — the sentence has to be
+            // about what stayed, because that is all that happened.
+            _ when removal is { BytesReclaimed: 0, RootRemoved: false } =>
+                $"Left alone: {removal.Kept} file(s) changed too recently.",
+
+            _ => $"Removed{Qualifier(removal.Skipped, removal.Kept)}.",
+        };
 
         return new StepOutcome(
             step.Description,

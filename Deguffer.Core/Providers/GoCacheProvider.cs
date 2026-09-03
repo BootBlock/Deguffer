@@ -161,7 +161,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
                 $"Go is installed but has cached nothing yet ({buildCache} and {moduleCache} are both absent).");
         }
 
-        var measured = await MeasureAllAsync([.. locations.Select(l => l.Path)], keep, ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([.. locations.Select(l => l.Path)], ct).ConfigureAwait(false);
 
         // Zipped rather than indexed: pairing a location with the wrong size would attribute one
         // cache's bytes to the other command, and nothing downstream could tell.

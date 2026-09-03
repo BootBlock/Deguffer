@@ -256,12 +256,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 return null;
             }
 
-            // The guard withholds a file's bytes; it never prunes the traversal. A directory is
-            // descended into whatever its own age, because NTFS moves a directory's timestamp when
-            // an entry is added or removed — so testing one the way a file is tested would drop a
-            // whole subtree because something was written next to it. See MinimumAge for why the
-            // rule is about files.
-            if (tree.IsDirectory[node] || !keep.Protects(tree.Newest[node]))
+            // The guard withholds bytes. It never prunes the traversal, and the descent below is
+            // deliberately outside this test rather than inside it: NTFS moves a directory's
+            // timestamp whenever an entry is added, removed or renamed, so a `continue` here would
+            // drop a whole subtree of stale files because one recent thing was written beside them.
+            // The directories themselves need no exemption — a directory's size in this table is
+            // zero by construction (MftRecordParser hands ScanSize.Zero for one, because its
+            // contents are counted through their own records), so withholding it withholds nothing.
+            if (!keep.Protects(tree.Newest[node]))
             {
                 allocated += tree.Allocated[node];
                 logical += tree.Logical[node];

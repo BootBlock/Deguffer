@@ -607,11 +607,17 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// A directory's own timestamp moves whenever an entry is added, removed or renamed, so a folder
-    /// that gained a file this morning looks brand new whatever is inside it. Judging one the way a
-    /// file is judged would withhold the whole subtree under it — and the guard is about files.
+    /// that gained a file a minute ago looks brand new whatever is inside it. The guard is about
+    /// files, so a stale file underneath such a folder still counts.
+    ///
+    /// <para>What this catches is the guard pruning the walk rather than withholding bytes — a
+    /// <c>continue</c> where the accumulation should have been skipped, which drops every record
+    /// below the folder. It is worth stating what it does <em>not</em> catch: exempting a directory
+    /// from the byte test changes no total, because a directory's size in this table is zero by
+    /// construction. That exemption was written and then removed for exactly that reason.</para>
     /// </summary>
     [Fact]
-    public void JudgesFilesRatherThanTheDirectoriesHoldingThem()
+    public void CountsAStaleFileUnderADirectoryThatWasTouchedAMinuteAgo()
     {
         var now = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 

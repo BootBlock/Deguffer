@@ -72,17 +72,19 @@ public sealed partial class CleanViewModel : ObservableObject
     public bool RequireTypedConfirmation { get; set; } = true;
 
     /// <summary>
-    /// How recently a file must have been touched for the user to want it left alone, or
-    /// <see cref="TimeSpan.Zero"/> for no such guard. The view sets it from the preference, the same
-    /// way it supplies <see cref="ConfirmCleanAsync"/>.
+    /// How recently a file must have been touched for the user to want it left alone, in whole
+    /// hours, or zero for no such guard. The view sets it from the preference, the same way it
+    /// supplies <see cref="ConfirmCleanAsync"/>.
     ///
-    /// <para>A window rather than the instant it becomes, because the instant belongs to a preview
-    /// rather than to a setting. <see cref="LoadPreviewAsync"/> turns it into a
-    /// <see cref="MinimumAge"/> once, at the top of the pass, so every provider protects the same
-    /// files and the clean afterwards protects those same files again — however long the preview
-    /// sat on screen first.</para>
+    /// <para>The stored hours rather than the instant they become, and rather than a
+    /// <see cref="TimeSpan"/>. The instant belongs to a preview rather than to a setting:
+    /// <see cref="LoadPreviewAsync"/> asks <see cref="MinimumAge.WithinHours"/> for it once, at the
+    /// top of the pass, so every provider protects the same files and the clean afterwards protects
+    /// those same files again — however long the preview sat on screen first. Keeping it as hours is
+    /// what puts that conversion behind the entry point that clamps, rather than in front of one
+    /// that throws on a preferences file somebody edited by hand.</para>
     /// </summary>
-    public TimeSpan KeepFilesChangedWithin { get; set; }
+    public int KeepFilesChangedWithinHours { get; set; }
 
     /// <summary>
     /// Whether to list a provider whose toolchain is not on this machine. The view sets it from the
@@ -438,8 +440,8 @@ public sealed partial class CleanViewModel : ObservableObject
         var progress = new Progress<string>(message => Report(message));
         var found = new Progress<Finding>(AddRowInSizeOrder);
 
-        // Fixed here, once, for the whole pass. See KeepFilesChangedWithin.
-        var keep = MinimumAge.Within(KeepFilesChangedWithin, DateTime.UtcNow);
+        // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
+        var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
         await Task.Run(() => _planner.PlanAllAsync(keep, progress, found, ct), ct);
 
@@ -547,9 +549,17 @@ public sealed partial class CleanViewModel : ObservableObject
         }
 
         var skipped = results.Sum(r => r.SkippedCount);
+
+        // Reported beside the skipped count and never folded into it. One is Windows refusing, which
+        // the user can act on by closing something; the other is Deguffer honouring the setting they
+        // chose. Saying nothing about the second leaves a run that reclaimed less than the preview
+        // implied with no stated reason on screen at all.
+        var kept = results.Sum(r => r.KeptCount);
+
         Report(
             $"Removed {RemovedLabel}. All protected paths survived." +
-            (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty),
+            (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty) +
+            (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty),
             InfoBarSeverity.Success);
     }
 

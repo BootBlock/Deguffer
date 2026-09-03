@@ -26,9 +26,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The folders Deguffer may look for build output in. Unlike everything else on this page these
-    /// change what gets deleted rather than how the window looks, which is why the page states where
-    /// Deguffer will and will not look rather than presenting them as another preference.
+    /// The folders Deguffer may look for build output in. Along with the guard on recently changed
+    /// files, these change what gets deleted rather than how the window looks — and they are the
+    /// pair that decides what Deguffer may even look at, which is why the page states where it will
+    /// and will not look rather than presenting them as another preference.
     /// </summary>
     public ObservableCollection<string> SourceRoots { get; }
 

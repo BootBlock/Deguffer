@@ -115,4 +115,60 @@ public sealed class CleanupProviderBaseTests : IDisposable
 
     private GradleCacheProvider Provider() =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+    /// <summary>
+    /// A §5.1 command step's estimate is never guard-filtered, however the guard is set.
+    ///
+    /// <para>The step is cleared by the tool's own command, which decides for itself what it
+    /// removes — the plan says so in as many words. A figure that withheld recent files would then
+    /// describe a deletion nobody is going to perform, and it is also the figure
+    /// <see cref="PlanExecutor"/> subtracts an unguarded after-measure from to report what the
+    /// command reclaimed. Guarded, that subtraction mixes two bases: it reports short, and where the
+    /// command frees less than was withheld it goes negative and tells the user the cache grew.</para>
+    /// </summary>
+    [Fact]
+    public async Task MeasuresACommandStepAgainstTheWholeCacheHoweverTheGuardIsSet()
+    {
+        var content = Path.Combine(_environment.LocalAppData, "npm-cache", "_cacache", "content-v2");
+        Directory.CreateDirectory(content);
+
+        var stale = Path.Combine(content, "stale");
+        File.WriteAllBytes(stale, new byte[4096]);
+        TempDirectory.Age(stale, TimeSpan.FromDays(30));
+
+        File.WriteAllBytes(Path.Combine(content, "written-just-now"), new byte[1024]);
+
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        var unguarded = await provider.PlanAsync();
+        var guarded = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(5120, unguarded.EstimatedBytes);
+        Assert.Equal(unguarded.EstimatedBytes, guarded.EstimatedBytes);
+    }
+
+    /// <summary>
+    /// A plan with no steps has no sizes, so the note that qualifies them says nothing true about
+    /// it. Every plan comes through the same stamp, including the empty one a provider returns for a
+    /// toolchain that is not installed — which on an ordinary machine is most of the rows.
+    /// </summary>
+    [Fact]
+    public async Task SaysNothingAboutTheGuardOnAPlanWithNoSizesToQualify()
+    {
+        var provider = new GradleCacheProvider(
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+        var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.True(plan.IsEmpty);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("8 hours", StringComparison.Ordinal));
+
+        // The guard is still on the plan: nothing about an empty plan makes it untrue, and the
+        // stamp is what the executor reads.
+        Assert.True(plan.Keep.IsOn);
+    }
 }

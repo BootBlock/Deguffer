@@ -129,7 +129,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             return EmptyPlan($"pnpm is installed but its store does not exist yet ({store}).");
         }
 
-        var measured = await MeasureAllAsync([store], keep, ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync([store], ct).ConfigureAwait(false);
 
         var notes = new List<PlanNote>
         {

@@ -142,19 +142,22 @@ public sealed record CleanupPlan
     /// <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1), and
     /// asserting the tool left them alone would be asserting something this plan never controlled.
     /// </summary>
-    public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> keep)
+    public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> chosen)
     {
-        ArgumentNullException.ThrowIfNull(keep);
+        ArgumentNullException.ThrowIfNull(chosen);
 
-        var kept = Steps.Where(keep.Contains).ToList();
+        // Named for the user's choice rather than for what is kept, because "keep" now means the
+        // guard on recently changed files everywhere else in this project, and the two decide
+        // different things about the same plan.
+        var selected = Steps.Where(chosen.Contains).ToList();
 
-        if (kept.Count == Steps.Count)
+        if (selected.Count == Steps.Count)
         {
             return this;
         }
 
         var declined = Steps
-            .Except(kept)
+            .Except(selected)
             .OfType<DeleteStep>()
             .Select(s => new ProtectedPath(
                 s.Path,
@@ -166,7 +169,7 @@ public sealed record CleanupPlan
 
         return this with
         {
-            Steps = kept,
+            Steps = selected,
             ProtectedPaths = [.. ProtectedPaths, .. declined],
         };
     }

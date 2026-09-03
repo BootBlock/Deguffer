@@ -151,8 +151,7 @@ public sealed partial class CleanPage : Page
 
         ViewModel.ConfirmCleanAsync = preferences.ConfirmBeforeCleaning ? ConfirmCleanAsync : null;
         ViewModel.RequireTypedConfirmation = preferences.RequireTypedConfirmation;
-        ViewModel.KeepFilesChangedWithin = TimeSpan.FromHours(
-            Math.Max(0, preferences.KeepFilesChangedWithinHours));
+        ViewModel.KeepFilesChangedWithinHours = preferences.KeepFilesChangedWithinHours;
     }
 
     private async Task<bool> ConfirmCleanAsync(CleanConfirmation confirmation)

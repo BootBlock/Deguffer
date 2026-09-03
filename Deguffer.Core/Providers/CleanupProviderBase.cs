@@ -85,9 +85,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
     ///
     /// <para>Sealed here rather than left to each provider, because both halves of the guard are
     /// things a provider must not be able to forget. A plan that did not carry
-    /// <see cref="CleanupPlan.Keep"/> would be executed as though no guard existed, and there are
-    /// fifty places a provider constructs a plan — so it is stamped once, on whatever comes back,
-    /// instead of fifty times by hand.</para>
+    /// <see cref="CleanupPlan.Keep"/> would be executed as though no guard existed, and a provider
+    /// constructs one in sixty-nine places across this project — twenty-two <c>new CleanupPlan</c>
+    /// and forty-seven <see cref="EmptyPlan"/>. So it is stamped once, on whatever comes back.</para>
     /// </summary>
     public async Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
     {
@@ -99,9 +99,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <summary>
     /// What this provider would remove. Called by <see cref="PlanAsync"/> and by nothing else.
     ///
-    /// <paramref name="keep"/> is handed on to <see cref="MeasureAllAsync"/> and
-    /// <see cref="PlanDeletionsAsync"/> so the figures exclude what the removal will not take. A
-    /// provider that measures nothing has nothing to do with it.
+    /// <paramref name="keep"/> is handed on to <see cref="PlanDeletionsAsync"/>, so the figures for
+    /// paths Deguffer deletes itself exclude what the removal will not take. It is deliberately not
+    /// handed to <see cref="MeasureAllAsync"/>, which measures a §5.1 command step's probe — see
+    /// there for why that one is never guarded. A provider that measures nothing has nothing to do
+    /// with it.
     /// </summary>
     protected abstract Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct);
 
@@ -151,14 +153,32 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunningProcessNotice.For(Inspector, ConflictingProcessNames);
 
     /// <summary>
-    /// Measure every path a plan cares about, and produce the note that goes with them.
+    /// Measure the paths a §5.1 command step reports against, and produce the note that goes with
+    /// them.
     ///
-    /// The note is not optional: §5.5 requires the fallback to be observable, and a slow scan is
-    /// otherwise indistinguishable from a large directory — the user is never told that elevating
+    /// <para>The note is not optional: §5.5 requires the fallback to be observable, and a slow scan
+    /// is otherwise indistinguishable from a large directory — the user is never told that elevating
     /// would make it quick. Bundling it with the measurement is what stops a new provider silently
-    /// losing that by forgetting a separate call.
+    /// losing that by forgetting a separate call.</para>
+    ///
+    /// <para><b>The guard is not an argument here, and that is the point.</b> §5.1 leaves a tool's
+    /// own eviction command deciding what it removes, so a figure that withheld recent files would
+    /// describe a deletion nobody is going to perform. Worse, it is the figure
+    /// <see cref="PlanExecutor"/> subtracts an after-measure from to report what the command
+    /// reclaimed — and that after-measure comes from
+    /// <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>, which is unguarded for the same reason.
+    /// The two sides would then be measured on different bases: the reclaim would come out short,
+    /// and where the command frees less than the guard withheld it would come out negative and
+    /// report that the cache grew.</para>
+    ///
+    /// <para>Every provider call site is a command step's probe, so refusing the argument is what
+    /// makes that unmistakable. The guarded measurement is <see cref="PlanDeletionsAsync"/>'s, and
+    /// it is guarded because those paths are ones Deguffer deletes itself.</para>
     /// </summary>
-    protected async Task<ScanBatch> MeasureAllAsync(
+    protected Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
+        MeasureAllAsync(paths, MinimumAge.Off, ct);
+
+    private async Task<ScanBatch> MeasureAllAsync(
         IReadOnlyList<string> paths,
         MinimumAge keep,
         CancellationToken ct)
@@ -235,12 +255,19 @@ public abstract class CleanupProviderBase : ICleanupProvider
             .Where(step => keep.ProtectsFile(step.Path))
             .ToList();
 
-        var notes = new List<PlanNote>(plan.Notes)
+        var notes = new List<PlanNote>(plan.Notes);
+
+        // Only where there is something to say it about. Every plan comes through here, including
+        // the empty one a provider returns for a toolchain that is not installed — and "the sizes
+        // here already exclude those files" under "Go is not installed on this machine" describes
+        // sizes that do not exist, on the majority of rows on an ordinary machine.
+        if (plan.Steps.Count > 0)
         {
-            new(PlanNoteSeverity.Information,
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
                 $"Leaving anything changed in the last {keep.Describe()} alone, as you asked. The "
-                + "sizes here already exclude those files."),
-        };
+                + "sizes here already exclude those files."));
+        }
 
         // §5.1 keeps a tool's own eviction command as the preferred route, and that command decides
         // for itself what it removes. Saying so is the whole of what can be done about it: the

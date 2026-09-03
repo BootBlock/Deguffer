@@ -316,7 +316,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(1, step.Kept);
         Assert.Equal(0, step.BytesReclaimed);
         Assert.Equal(1, result.KeptCount);
-        Assert.Contains("changed recently", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
         Assert.True(Directory.Exists(cache), "the guard kept a file and the folder around it went");
     }
 
@@ -346,5 +346,36 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(0, result.KeptCount);
         Assert.Equal(4096, result.BytesReclaimed);
         Assert.False(Directory.Exists(cache));
+    }
+
+    /// <summary>
+    /// A directory the guard emptied of candidates is still standing, so the step must not say it
+    /// was removed. The success classification is right — Deguffer did what it was asked — but
+    /// "Removed" is a claim about the user's disk, and here it is false.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayRemovedAboutADirectoryThatIsStillThere()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "written-just-now.bin");
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Keep = MinimumAge.WithinHours(8, DateTime.UtcNow),
+            Steps = [new DeleteDirectoryStep(cache, "A cache")],
+        };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(Directory.Exists(cache));
+        Assert.DoesNotContain("Removed", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
     }
 }

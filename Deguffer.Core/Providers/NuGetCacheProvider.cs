@@ -124,7 +124,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
             return EmptyPlan("The .NET SDK is installed but none of its NuGet cache locations exist yet.");
         }
 
-        var measured = await MeasureAllAsync(present, keep, ct).ConfigureAwait(false);
+        var measured = await MeasureAllAsync(present, ct).ConfigureAwait(false);
 
         var notes = new List<PlanNote>
         {

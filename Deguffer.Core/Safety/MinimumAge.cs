@@ -55,10 +55,11 @@ public readonly record struct MinimumAge
     }
 
     /// <summary>
-    /// What the user asked for, kept beside the instant it produced so that a plan can say
-    /// "the last 8 hours" rather than quoting a timestamp back at them. Zero when the guard is off.
+    /// What the user asked for, kept beside the instant it produced so that <see cref="Describe"/>
+    /// can say "the last 8 hours" rather than quoting a timestamp back at them. Zero when the guard
+    /// is off.
     /// </summary>
-    public TimeSpan Window { get; }
+    private TimeSpan Window { get; }
 
     /// <summary>
     /// Files written or created at or after this instant are left alone. Null when the guard is off.
@@ -66,16 +67,17 @@ public readonly record struct MinimumAge
     public DateTime? KeepFromUtc { get; }
 
     /// <summary>
-    /// The same instant as a FILETIME, so the comparison against a record read straight out of the
-    /// master file table is an integer one. Zero when the guard is off.
+    /// The same instant as a FILETIME, so that <see cref="Protects(long)"/> is an integer
+    /// comparison against a record read straight out of the master file table. Zero when the guard
+    /// is off, which is what makes that method's first clause the test for "off".
     ///
     /// The table runs to millions of records and <see cref="Scanning.Mft.MftVolumeIndex"/> tests
-    /// every one it sums, so converting each record's timestamps into a <see cref="DateTime"/> to
+    /// every one it sums, so converting each record's timestamp into a <see cref="DateTime"/> to
     /// ask this question would be per-record work for an answer the constructor can compute once
     /// (G4). It is also the safer direction: a garbled timestamp is a long that compares, where
     /// <c>DateTime.FromFileTimeUtc</c> would throw part-way through a scan.
     /// </summary>
-    public long KeepFromFileTime { get; }
+    private long KeepFromFileTime { get; }
 
     public bool IsOn => KeepFromUtc is not null;
 
@@ -95,8 +97,16 @@ public readonly record struct MinimumAge
     }
 
     /// <summary>
-    /// The same, from the whole hours the settings page stores. Zero means off, which is what an
-    /// unset preference deserialises to.
+    /// The same, from the whole hours the settings file stores, which is the entry point the app
+    /// takes. Zero means off, and that is what an unset preference deserialises to.
+    ///
+    /// <para>It clamps where <see cref="Within"/> throws, and that difference is the reason it
+    /// exists rather than leaving the caller to convert. The settings box will not write a number
+    /// above its own maximum, but nothing validates <c>preferences.json</c> on the way in — so a
+    /// file somebody edited by hand reaches here, and a preference nobody can read must not stop the
+    /// app planning. Converting in the caller instead put <c>TimeSpan.FromHours</c> in front of an
+    /// unbounded <see cref="int"/>, where a large enough one overflows before any of this is
+    /// reached.</para>
     /// </summary>
     public static MinimumAge WithinHours(int hours, DateTime nowUtc) =>
         hours <= 0 ? Off : Within(TimeSpan.FromHours(Math.Min(hours, MaximumWindow.TotalHours)), nowUtc);
@@ -108,12 +118,16 @@ public readonly record struct MinimumAge
     public bool Protects(long newestFileTime) =>
         KeepFromFileTime != 0 && newestFileTime >= KeepFromFileTime;
 
-    /// <summary>The same, from the two timestamps NTFS stores separately.</summary>
-    public bool Protects(long createdFileTime, long lastWrittenFileTime) =>
-        Protects(Math.Max(createdFileTime, lastWrittenFileTime));
-
     /// <summary>The same question of a file the walk is holding, which costs no further I/O.</summary>
     public bool Protects(FileSystemInfo entry) => Protects(NewestFileTimeOf(entry));
+
+    /// <summary>
+    /// The newer of the two timestamps NTFS stores separately, which is the one number this guard
+    /// reads. Both callers reduce a pair to it: this is where "created, or last written, whichever
+    /// is later" is decided, and <see cref="Protects(long)"/> then knows only about one number.
+    /// </summary>
+    public static long NewestFileTimeOf(long createdFileTime, long lastWrittenFileTime) =>
+        Math.Max(createdFileTime, lastWrittenFileTime);
 
     /// <summary>
     /// The one number this guard reads, from an entry an enumeration has already materialised.
@@ -127,7 +141,7 @@ public readonly record struct MinimumAge
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        return Math.Max(ToFileTime(entry.CreationTimeUtc), ToFileTime(entry.LastWriteTimeUtc));
+        return NewestFileTimeOf(ToFileTime(entry.CreationTimeUtc), ToFileTime(entry.LastWriteTimeUtc));
     }
 
     /// <summary>
@@ -159,11 +173,10 @@ public readonly record struct MinimumAge
     {
         var hours = (int)Math.Round(Window.TotalHours);
 
+        // Asked only of a guard that is on, because it is asked only where a plan is saying what the
+        // guard is doing. An off guard would answer "0 hours", which is true and never rendered.
         return hours switch
         {
-            // Unreachable while the guard is on, and answered rather than thrown: a phrase is not
-            // worth failing a plan over.
-            <= 0 => "no time at all",
             1 => "hour",
             < 48 => $"{hours} hours",
             _ when hours % 24 == 0 => $"{hours / 24} days",

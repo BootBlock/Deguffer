@@ -73,7 +73,7 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
-            <!-- The third setting that changes what gets deleted rather than how the window looks,
+            <!-- One of the two settings that change what gets deleted rather than how the window looks,
                  and the only one that can make a plan smaller than the disk. §5.3 already refuses
                  anything Windows is holding open; this covers the process that wrote a file,
                  closed it, and will want it back within the hour. The description names the one
@@ -96,9 +96,10 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
-            <!-- The only settings on this page that change what Deguffer will delete rather than
-                 how it looks. Stated as scope rather than as a preference, because an empty list
-                 is not a disabled feature — it is Deguffer having nowhere it is allowed to look. -->
+            <!-- The other setting on this page that changes what Deguffer will delete rather than
+                 how it looks, the guard above being the first. Stated as scope rather than as a
+                 preference, because an empty list is not a disabled feature — it is Deguffer having
+                 nowhere it is allowed to look. -->
             <TextBlock Text="Source folders" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
 
             <views:SettingsRow Glyph="&#xE8B7;"

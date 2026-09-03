@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -34,17 +36,22 @@ public sealed class MftVolumeTree(int count)
     public bool[] IsReparsePoint { get; } = new bool[count];
 
     /// <summary>
-    /// The newer of each record's creation and last-write times, as a FILETIME.
+    /// The newer of each record's creation and last-write times, as a FILETIME, for
+    /// <see cref="Safety.MinimumAge"/> to judge.
     ///
-    /// <para>One array rather than two, because the two are never wanted apart: the only question
-    /// asked of them is <see cref="Safety.MinimumAge.Protects(long, long)"/>, which takes the newer
-    /// of the pair. Derived once here, where the record is already in hand, it costs eight bytes a
-    /// record instead of sixteen — and this is sized by the volume, where a full disk runs to
-    /// millions of entries.</para>
+    /// <para>One array rather than two, because the two are never wanted apart. Reducing the pair is
+    /// the guard's own rule, so <see cref="Safety.MinimumAge.NewestFileTimeOf(long, long)"/> does it
+    /// rather than this type — and doing it here, where the record is already in hand, costs eight
+    /// bytes a record instead of sixteen. This structure is sized by the volume, where a full disk
+    /// runs to millions of entries.</para>
     ///
-    /// <para>Left at zero for every record while no guard is in force, which is what an unset NTFS
-    /// timestamp reads as anyway, and what <see cref="Safety.MinimumAge.Off"/> compares against to
-    /// protect nothing.</para>
+    /// <para>Populated for every record, whether or not a guard is ever asked about it. The table is
+    /// built once per volume and cached across planning passes, and a guard the user switches on
+    /// afterwards must not need it rebuilt. A record whose <c>$STANDARD_INFORMATION</c> the parser
+    /// could not read lands at zero, which is the start of the NTFS epoch and older than any window
+    /// — so its bytes count as reclaimable. That is the fail-open direction, and it is confined to a
+    /// size estimate: nothing deletes from this table, and both removers re-read the real timestamp
+    /// through <see cref="Safety.IFileSystem"/> before they touch anything.</para>
     /// </summary>
     public long[] Newest { get; } = new long[count];
 
@@ -70,7 +77,7 @@ public sealed class MftVolumeTree(int count)
         SizeUnknown[number] = record.Size is null;
         IsDirectory[number] = record.IsDirectory;
         IsReparsePoint[number] = record.IsReparsePoint;
-        Newest[number] = Math.Max(record.CreatedFileTime, record.LastWrittenFileTime);
+        Newest[number] = MinimumAge.NewestFileTimeOf(record.CreatedFileTime, record.LastWrittenFileTime);
         Present[number] = true;
 
         if (record.IsDirectory)
