@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -15,12 +16,25 @@ public sealed partial class FindingViewModel : ObservableObject
     /// Guards the two directions of the roll-up against each other. The row checkbox writes every
     /// step, and any step writes the row checkbox back; without this the first write re-enters and
     /// the second one fights it.
+    ///
+    /// It also decides who raises <see cref="SelectionChanged"/>: whoever set it is the outermost
+    /// change, so the inner writes stay quiet and the event fires once per thing the user did.
+    /// Firing per step made one click on a row with forty workspaces forty separate events, which
+    /// is forty recalculated totals and forty writes of the remembered selection to disk.
     /// </summary>
     private bool _syncingSelection;
 
-    public FindingViewModel(Finding finding)
+    /// <param name="memory">
+    /// What this row and its steps were last left ticked as. It answers per step as well as per
+    /// row, so restoring a ticked row does not re-tick the individual workspaces the user had
+    /// unticked inside it.
+    /// </param>
+    public FindingViewModel(Finding finding, SelectionMemory memory)
     {
         Finding = finding;
+
+        var provider = finding.Provider;
+        var startsSelected = memory.RowStartsSelected(provider.Id, provider.Tier, finding.IsPreSelectedByDefault);
 
         // Materialised once. These are bound per row, and rebuilding a list inside a property
         // getter puts an allocation on every binding evaluation.
@@ -35,7 +49,9 @@ public sealed partial class FindingViewModel : ObservableObject
             // was a copy, and it went stale the moment a second reason to disable a checkbox
             // arrived — a step needing administrator rights would have started ticked, rendered
             // disabled, and been skipped by the loop that clears the row.
-            .. finding.Plan?.Steps.Select(s => new StepViewModel(s, finding.IsPreSelectedByDefault)
+            .. finding.Plan?.Steps.Select(s => new StepViewModel(
+                s,
+                memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected))
             {
                 // Only meaningful once the whole set is known, and a single step is the whole row.
                 IsIndividuallySelectable = finding.Plan.Steps.Count > 1,
@@ -51,14 +67,26 @@ public sealed partial class FindingViewModel : ObservableObject
             step.PropertyChanged += OnStepChanged;
         }
 
-        IsSelected = finding.IsPreSelectedByDefault;
+        // Under the guard, because the steps already carry their own restored state and the setter
+        // below would otherwise overwrite every one of them with this single value.
+        //
+        // Rolled up from the steps rather than taken from the row's own remembered value, which is
+        // the invariant the rest of this type holds: a row is selected when a step in it is. The
+        // remembered value would tick a row that cannot contribute anything — one whose every step
+        // is disabled for want of administrator rights, or one with no plan at all because the
+        // toolchain has gone since the choice was made. Both render with a ticked, disabled
+        // checkbox that nothing can clear, and both enable Clean against nothing.
+        _syncingSelection = true;
+        IsSelected = Steps.Any(s => s.IsSelected);
+        _syncingSelection = false;
     }
 
     /// <summary>
-    /// Raised when this row's contribution to the selected total changes, whether that came from the
-    /// row's own checkbox or from one step within it.
+    /// Raised once when this row's contribution to the selected total changes, whether that came
+    /// from the row's own checkbox or from one step within it. It carries the row because the
+    /// listener has to know which one to remember.
     /// </summary>
-    public event Action? SelectionChanged;
+    public event Action<FindingViewModel>? SelectionChanged;
 
     /// <summary>
     /// §3's "Default" column decides the initial value; the rule itself lives on
@@ -187,6 +215,19 @@ public sealed partial class FindingViewModel : ObservableObject
     public IReadOnlyList<string> Notes { get; }
 
     /// <summary>
+    /// What to remember about this row, so a later scan starts where the user left it.
+    ///
+    /// This states the row's steps; which of them are worth recording is
+    /// <see cref="RememberedSelection.Of"/>'s rule, and it lives there so it can be held to a test.
+    ///
+    /// A method rather than a property because it builds a map every time it is asked, and the
+    /// steps of a build-output row are one per workspace.
+    /// </summary>
+    public RememberedSelection ToRemembered() => RememberedSelection.Of(
+        IsSelected,
+        Steps.Select(s => (s.Step.SelectionKey, s.IsSelected, s.CanBeSelected)));
+
+    /// <summary>
     /// Shown whenever there is anything to say — including for a tool with nothing to reclaim.
     /// A provider that decided to leave children alone under §5.2 has recorded *why*, and that
     /// reasoning is the audit trail; hiding it because the tool happens to be clean would throw
@@ -222,19 +263,23 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <summary>Ticking the row ticks everything in it; unticking it clears the lot.</summary>
     partial void OnIsSelectedChanged(bool value)
     {
-        if (!_syncingSelection)
+        if (_syncingSelection)
         {
-            _syncingSelection = true;
-
-            foreach (var step in Steps.Where(s => s.CanBeSelected))
-            {
-                step.IsSelected = value;
-            }
-
-            _syncingSelection = false;
+            // Written by the roll-up below, or by the constructor restoring what was remembered.
+            // Whoever set the guard reports the change once it is finished.
+            return;
         }
 
-        SelectionChanged?.Invoke();
+        _syncingSelection = true;
+
+        foreach (var step in Steps.Where(s => s.CanBeSelected))
+        {
+            step.IsSelected = value;
+        }
+
+        _syncingSelection = false;
+
+        SelectionChanged?.Invoke(this);
     }
 
     /// <summary>
@@ -251,14 +296,19 @@ public sealed partial class FindingViewModel : ObservableObject
 
     private void OnStepSelectionChanged()
     {
-        if (!_syncingSelection)
+        // Raised for every step, guard or no guard: the figure beside the row is bound to it, and
+        // it moves as each step of a row-wide toggle lands.
+        OnPropertyChanged(nameof(SelectedSize));
+
+        if (_syncingSelection)
         {
-            _syncingSelection = true;
-            IsSelected = Steps.Any(s => s.IsSelected);
-            _syncingSelection = false;
+            return;
         }
 
-        OnPropertyChanged(nameof(SelectedSize));
-        SelectionChanged?.Invoke();
+        _syncingSelection = true;
+        IsSelected = Steps.Any(s => s.IsSelected);
+        _syncingSelection = false;
+
+        SelectionChanged?.Invoke(this);
     }
 }
