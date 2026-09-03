@@ -138,8 +138,14 @@
                           ItemsSource="{x:Bind ViewModel.Rows}">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExploreRow">
+                            <!-- Transparent rather than unset, so the whole row carries the
+                                 tooltip. A panel with no background is not hit-tested, so the
+                                 gaps between the columns fall through and the exact dates are
+                                 reachable only by landing on a word — which is precisely where a
+                                 reader is not pointing when they are reading the age column. -->
                             <Grid ColumnSpacing="12" Padding="0,4"
-                                  ColumnDefinitions="16,*,120,90,110"
+                                  Background="Transparent"
+                                  ColumnDefinitions="16,*,120,90,150"
                                   AutomationProperties.Name="{x:Bind Description}"
                                   ToolTipService.ToolTip="{x:Bind DatesLabel}">
                                 <FontIcon Grid.Column="0"
@@ -207,19 +213,26 @@
             <!-- What the colours mean, when they mean an age. A hue per branch needs no legend,
                  because the branch it names is the shape it is inside; an age band means nothing
                  at all without the scale beside it. -->
+            <!-- One row that scrolls rather than a wrapping one. ItemsWrapGrid gives every cell
+                 the width of the first, so "Today" sized the whole legend and clipped every band
+                 after it; the panels that size each item to its own content are not in the
+                 framework. A narrow window scrolls this instead, which is what the rest of the app
+                 does with content too wide for its container. -->
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          VerticalScrollMode="Disabled"
+                          Visibility="{x:Bind ViewModel.ShowsAgeLegend, Mode=OneWay}">
             <ItemsControl ItemsSource="{x:Bind ViewModel.AgeLegend}"
-                          Visibility="{x:Bind ViewModel.ShowsAgeLegend, Mode=OneWay}"
                           AutomationProperties.Name="What the map's colours mean">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <!-- Wrapping, because eight bands and a narrow window do not fit on one
-                             line, and a legend clipped at the edge explains nothing. -->
-                        <ItemsWrapGrid Orientation="Horizontal" />
+                        <StackPanel Orientation="Horizontal" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ExploreLegendBand">
-                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,12,4"
+                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,12,0"
                                     AutomationProperties.Name="{x:Bind Label}">
                             <Border Width="12" Height="12" CornerRadius="2"
                                     VerticalAlignment="Center"
@@ -232,6 +245,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            </ScrollViewer>
 
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"

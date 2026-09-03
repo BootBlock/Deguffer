@@ -58,12 +58,17 @@ public sealed record ExploreRow(
     /// What a screen reader should say instead of reading a bar graphic.
     ///
     /// <para>The age is in it because it is a column, and a column read as nothing is a column
-    /// somebody cannot use. <see cref="RelativeAge"/> already renders an absent date as
-    /// "Unknown" in words rather than as a blank, which is what makes it safe to read out.</para>
+    /// somebody cannot use. <see cref="RelativeAge"/> already renders an absent date as "Unknown" in
+    /// words rather than as a blank, which is what makes it safe to read out.</para>
+    ///
+    /// <para>A refusal is now stated once, as a cause, rather than as the bare "at least" that used
+    /// to follow the size. That word was unambiguous while it qualified the only figure on the row;
+    /// with a second figure beside it, and one whose uncertainty runs the other way, naming what
+    /// actually happened is the only reading that stays true of both.</para>
     /// </summary>
     public string Description =>
-        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}"
-        + $"{(IsApproximate ? ", at least" : string.Empty)}, last written {AgeLabel}";
+        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}, last written {AgeLabel}"
+        + (IsApproximate ? ", and some of this could not be read" : string.Empty);
 }
 
 /// <summary>One step of the path back to the root.</summary>
@@ -165,6 +170,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasNoTree))]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; set; }
 
@@ -208,11 +214,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     ];
 
     /// <summary>
-    /// Whether to show that legend: only when the colours are ages, and only when there is a picture
-    /// for them to explain. The list view carries the same fact as a column of words.
+    /// Whether to show that legend: only when the colours are ages, only when there is a picture
+    /// rather than a list, and only once something has been scanned into it. A scale beside an
+    /// empty card explains nothing and reads as part of the empty state.
     /// </summary>
     public bool ShowsAgeLegend =>
-        SelectedColouring == ExploreColouring.Age && SelectedView != ExploreView.List;
+        SelectedColouring == ExploreColouring.Age && SelectedView != ExploreView.List && HasTree;
 
     /// <summary>
     /// How what is on screen differs from what the View box names, or null when it does not.
@@ -388,7 +395,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // the colouring to read a date would be a worse answer than showing it always.
             ({ } tree, { } value, _) =>
                 $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}, "
-                + $"last written {RelativeAge.Describe(tree.ModifiedOf(value).Utc, DateTime.UtcNow)}",
+                + $"last written {Age(tree, value, DateTime.UtcNow)}",
 
             _ => string.Empty,
         };
@@ -451,9 +458,33 @@ public sealed partial class ExploreViewModel : ObservableObject
                 tree.IsDirectory(child),
                 tree.IsLink(child),
                 tree.HasUnknownSizeBelow(child),
-                RelativeAge.Describe(tree.ModifiedOf(child).Utc, now),
+                Age(tree, child, now),
                 Dates(tree, child)));
         }
+    }
+
+    /// <summary>
+    /// A row's age, marked where the scan could not see under it.
+    ///
+    /// <para>A directory the walk was refused contributes only its own timestamp to the roll-up,
+    /// and a directory's own timestamp moves when its layout changes rather than when its contents
+    /// do — so a log being appended to right now behind a refused listing reads as years idle.
+    /// <see cref="Providers.DirectoryAge"/> answers "unknown" in that position rather than risk it,
+    /// which is the right trade for a row that prices a deletion and the wrong one here: nearly
+    /// every drive has some corner it cannot read, so blanking the column would blank the drive
+    /// root and every folder above the refusal.</para>
+    ///
+    /// <para>So the date is kept and qualified, in the direction the error actually runs. The age
+    /// shown can only be too old, never too new — the same asymmetry
+    /// <see cref="Size"/> marks with "≥", and stated in words rather than a symbol because a
+    /// screen reader reads this one aloud.</para>
+    /// </summary>
+    private static string Age(ExploreTree tree, int node, DateTime now)
+    {
+        var written = tree.ModifiedOf(node);
+        var age = RelativeAge.Describe(written.Utc, now);
+
+        return written.IsKnown && tree.HasUnknownSizeBelow(node) ? $"{age} or newer" : age;
     }
 
     /// <summary>
