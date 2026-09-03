@@ -409,7 +409,34 @@
                  IsOpen="True"
                  IsClosable="False"
                  Severity="{x:Bind ViewModel.StatusSeverity, Mode=OneWay}"
-                 Message="{x:Bind ViewModel.Status, Mode=OneWay}" />
+                 Message="{x:Bind ViewModel.Status, Mode=OneWay}">
+
+            <!-- How far through the run, under the line naming which cause is being cleaned.
+                 Determinate because a clean knows its own extent before it starts, unlike a
+                 scan, which keeps the ring beside the Selected figure. Shown only while that run
+                 is in flight, so nothing here is drawn against a message about anything else.
+
+                 The percentage is written out beside it for the same reason the capacity bar
+                 above carries its figures: §6.5 forbids anything that can only be read as a
+                 graphic. -->
+            <InfoBar.Content>
+                <Grid Margin="0,0,16,16"
+                      ColumnSpacing="12"
+                      ColumnDefinitions="*,Auto"
+                      Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
+                    <ProgressBar Grid.Column="0"
+                                 Value="{x:Bind ViewModel.CleanPercent, Mode=OneWay}"
+                                 Maximum="100"
+                                 VerticalAlignment="Center"
+                                 AutomationProperties.Name="Cleaning progress" />
+                    <TextBlock Grid.Column="1"
+                               Text="{x:Bind ViewModel.CleanPercentLabel, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               AutomationProperties.AccessibilityView="Raw" />
+                </Grid>
+            </InfoBar.Content>
+        </InfoBar>
 
         <!-- One row per named cause (§7), largest first, sharing a single surface. Carding every
              row individually produced a column of identical boxes with no sense of a list;

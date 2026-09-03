@@ -18,13 +18,21 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
         var stopwatch = Stopwatch.StartNew();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
 
+        // The same weighting the planner applies to whole plans, for the same reason: one obj
+        // directory of 4 GB and five of 20 MB are six steps, and splitting the bar six ways would
+        // crawl through the first sixth and then jump the rest.
+        var weights = ProgressWeights.For(plan.Steps.Select(s => s.EstimatedBytes));
+        var total = weights.Sum();
+        var done = 0.0;
+
         for (var i = 0; i < plan.Steps.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
 
             var step = plan.Steps[i];
-            var stepProgress = new Progress<double>(fraction =>
-                progress?.Report((i + fraction) / plan.Steps.Count));
+
+            // Each step's own 0-to-1 becomes its slice of this plan's 0-to-1.
+            var stepProgress = ScaledProgress.Within(progress, done / total, weights[i] / total);
 
             outcomes.Add(step switch
             {
@@ -34,7 +42,11 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
-            progress?.Report((double)(i + 1) / plan.Steps.Count);
+            // Reported from here rather than trusted from the step: a command step reports nothing
+            // at all while it runs, and a removal that ends early would leave a gap that never
+            // closes.
+            done += weights[i];
+            progress?.Report(done / total);
         }
 
         stopwatch.Stop();
@@ -99,7 +111,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
 
     private static async Task<StepOutcome> DeleteAsync(
         DeleteDirectoryStep step,
-        IProgress<double> progress,
+        IProgress<double>? progress,
         CancellationToken ct)
     {
         var removal = await DirectoryRemover.RemoveAsync(step.Path, progress, ct).ConfigureAwait(false);
@@ -119,13 +131,13 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
 
     private static async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,
-        IProgress<double> progress,
+        IProgress<double>? progress,
         CancellationToken ct)
     {
         var removal = await FileRemover.RemoveAsync(step.Path, ct).ConfigureAwait(false);
 
         // One file, so there is no fraction to report along the way — only the end of it.
-        progress.Report(1.0);
+        progress?.Report(1.0);
 
         var message = removal.Removed ? "Removed." : WhyNothingHappened(removal.Skipped);
 

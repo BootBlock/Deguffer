@@ -161,27 +161,41 @@ public sealed class CleanupPlanner
     /// demanding an answer would turn the preference into a refusal to clean. It defaults to the
     /// strict rule, so a caller that says nothing about it fails closed.
     /// </param>
+    /// <param name="progress">
+    /// How far through the whole run, 0 to 1. Unlike planning, execution knows its own extent
+    /// before it starts, so this is a fraction rather than a sentence.
+    /// </param>
     public async Task<IReadOnlyList<CleanupResult>> ExecuteAsync(
         IReadOnlyList<Finding> selected,
         IReadOnlyList<Confirmation>? confirmations = null,
         bool requireTypedPhrase = true,
         IProgress<string>? status = null,
+        IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
 
         confirmations ??= [];
 
-        var results = new List<CleanupResult>(selected.Count);
+        // A finding with nothing to remove is not part of the run, so it is dropped before the
+        // weights are worked out rather than skipped inside the loop. Otherwise every empty
+        // selection would claim a share of the bar and then complete instantly.
+        var plans = selected
+            .Select(f => (Finding: f, Plan: f.Plan))
+            .Where(p => p.Plan is { IsEmpty: false })
+            .Select(p => (p.Finding, Plan: p.Plan!))
+            .ToList();
 
-        foreach (var finding in selected)
+        var weights = ProgressWeights.For(plans.Select(p => p.Plan.EstimatedBytes));
+        var total = weights.Sum();
+        var results = new List<CleanupResult>(plans.Count);
+        var done = 0.0;
+
+        for (var i = 0; i < plans.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (finding.Plan is not { IsEmpty: false } plan)
-            {
-                continue;
-            }
+            var (finding, plan) = plans[i];
 
             // §7's extra confirmation for anything above Tier 1. The requirement is derived here
             // rather than trusted from the caller: a shell that forgot to ask, or asked for the
@@ -194,7 +208,16 @@ public sealed class CleanupPlanner
             }
 
             status?.Report($"Cleaning {finding.Provider.Name}…");
-            results.Add(await finding.Provider.ExecuteAsync(plan, progress: null, ct).ConfigureAwait(false));
+
+            results.Add(await finding.Provider
+                .ExecuteAsync(plan, ScaledProgress.Within(progress, done / total, weights[i] / total), ct)
+                .ConfigureAwait(false));
+
+            // Reported from here rather than trusted from the provider: a provider that reports
+            // nothing would otherwise leave the bar wherever the previous one left it, and one that
+            // stops short of 1 would leave a gap that never closes.
+            done += weights[i];
+            progress?.Report(done / total);
         }
 
         return results;
