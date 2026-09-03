@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
 
@@ -45,6 +46,13 @@ public sealed partial class ExplorePage : Page
         ViewModel.ViewChanged += (_, _) => ShowCurrentNode();
 
         InitializeComponent();
+
+        // Subscribed past the handled flag, because a ListViewItem marks the right-tap handled on
+        // its way past and an ordinary handler on the list never runs. Measured: an attached
+        // ContextFlyout never appears either, and ContextRequested does not arrive at all. The map
+        // needs none of this — nothing between it and the pointer handles anything.
+        RowsList.AddHandler(
+            RightTappedEvent, new RightTappedEventHandler(OnRowsRightTapped), handledEventsToo: true);
 
         Map.Hovered += (_, what) => ViewModel.Hover(what.Node, what.AggregateBytes);
         Map.Activated += (_, node) => ViewModel.Descend(node);
@@ -139,16 +147,73 @@ public sealed partial class ExplorePage : Page
     }
 
     /// <summary>
-    /// Open the same menu the list uses, where the pointer is. The map has already reported what is
-    /// under it, so the menu is about the shape the user right-clicked rather than about whatever
-    /// was picked before.
+    /// Open the menu on the row the pointer landed on, moving the selection there first when that
+    /// row is not already in it.
+    ///
+    /// <para>Moving the selection is the safety-relevant half. Without it the menu would act on
+    /// whatever was highlighted before, so a right-click on one row could delete another — which is
+    /// exactly the mistake <see cref="Deguffer.Core.Exploring.Acting.ExploreRemover"/> re-checks the
+    /// policy to survive, and it should not be made here in the first place.</para>
+    ///
+    /// <para>Subscribed in the constructor rather than declared in XAML, and shown by hand rather
+    /// than attached with <c>ContextFlyout</c>. Both were measured: an attached flyout never
+    /// appears, <c>ContextRequested</c> does not arrive at all, and a plain <c>RightTapped</c>
+    /// handler does not run because a <c>ListViewItem</c> marks the gesture handled first. The
+    /// keyboard reaches every one of these actions through the accelerators instead.</para>
     /// </summary>
-    private void OnMapMenuRequested(object? sender, Point point)
+    private void OnRowsRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (Resources["ItemMenu"] is MenuFlyout menu)
+        if (Container(e.OriginalSource) is { Content: ExploreRow row } container
+            && !RowsList.SelectedItems.Contains(row))
         {
-            menu.ShowAt(Map, new FlyoutShowOptions { Position = point });
+            RowsList.SelectedItem = row;
+            container.Focus(FocusState.Programmatic);
         }
+
+        e.Handled = Show(RowsList, e.GetPosition(RowsList));
+    }
+
+    /// <summary>
+    /// Open the same menu where the pointer is on the map. The map has already reported what is
+    /// under it, so this is about the shape the user right-clicked rather than about whatever was
+    /// picked before.
+    /// </summary>
+    private void OnMapMenuRequested(object? sender, Point point) => Show(Map, point);
+
+    private bool Show(FrameworkElement at, Point? point)
+    {
+        // The list owns the flyout, and the map borrows it. One menu rather than two, because two
+        // is how the treemap comes to offer an action the list has stopped offering.
+        if (RowsList.ContextFlyout is not MenuFlyout menu)
+        {
+            return false;
+        }
+
+        // A keyboard-raised request has no position, and placing the menu at the pointer's last
+        // location would put it wherever the mouse happens to be sitting.
+        menu.ShowAt(at, point is { } p ? new FlyoutShowOptions { Position = p } : new FlyoutShowOptions());
+
+        return true;
+    }
+
+    /// <summary>
+    /// The list container the event started in, or null when the click missed every row.
+    ///
+    /// Walked up the visual tree because the source is whichever <c>TextBlock</c> or icon was under
+    /// the pointer, and the row is several levels above it.
+    /// </summary>
+    private static ListViewItem? Container(object? source)
+    {
+        for (var element = source as DependencyObject; element is not null;
+             element = VisualTreeHelper.GetParent(element))
+        {
+            if (element is ListViewItem container)
+            {
+                return container;
+            }
+        }
+
+        return null;
     }
 
     private void OnDeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>

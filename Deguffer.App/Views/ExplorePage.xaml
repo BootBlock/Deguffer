@@ -7,65 +7,6 @@
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent">
 
-    <Page.Resources>
-        <!--
-            One menu, shown from the list and from the map. The four actions are what §7.1 lets
-            Explore do with something the user picked out by hand: three that change nothing, and a
-            removal that goes to the Recycle Bin unless the user asks for the other one by name.
-
-            The accelerators are declared on the two surfaces rather than here, because a flyout
-            item's accelerator only fires while the flyout is open — which is exactly when the
-            keyboard is not what the user is reaching for. These carry the text so the menu still
-            teaches them.
-        -->
-        <MenuFlyout x:Key="ItemMenu">
-            <MenuFlyoutItem Text="Open"
-                            Command="{x:Bind ViewModel.Selection.OpenCommand}"
-                            KeyboardAcceleratorTextOverride="Enter">
-                <MenuFlyoutItem.Icon>
-                    <FontIcon Glyph="&#xE8E5;" />
-                </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-
-            <MenuFlyoutItem Text="Open containing folder"
-                            Command="{x:Bind ViewModel.Selection.RevealCommand}">
-                <MenuFlyoutItem.Icon>
-                    <FontIcon Glyph="&#xEC50;" />
-                </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem Text="Delete"
-                            Command="{x:Bind ViewModel.Selection.DeleteCommand}"
-                            KeyboardAcceleratorTextOverride="Del">
-                <MenuFlyoutItem.Icon>
-                    <FontIcon Glyph="&#xE74D;" />
-                </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-
-            <!-- Named for what it does, not for a modifier key. §7.1 makes this the deliberate
-                 second choice, and a choice the user has to infer is not a deliberate one. -->
-            <MenuFlyoutItem Text="Delete permanently"
-                            Command="{x:Bind ViewModel.Selection.DeletePermanentlyCommand}"
-                            KeyboardAcceleratorTextOverride="Shift+Del">
-                <MenuFlyoutItem.Icon>
-                    <FontIcon Glyph="&#xE74B;" />
-                </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem Text="Properties"
-                            Command="{x:Bind ViewModel.Selection.PropertiesCommand}"
-                            KeyboardAcceleratorTextOverride="Alt+Enter">
-                <MenuFlyoutItem.Icon>
-                    <FontIcon Glyph="&#xE946;" />
-                </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-        </MenuFlyout>
-    </Page.Resources>
-
     <Grid Padding="20,12,20,16" RowSpacing="10"
           RowDefinitions="Auto,Auto,Auto,*,Auto">
 
@@ -194,8 +135,81 @@
                           SelectionMode="Extended"
                           SelectionChanged="OnRowSelectionChanged"
                           DoubleTapped="OnRowsDoubleTapped"
-                          ContextFlyout="{StaticResource ItemMenu}"
                           ItemsSource="{x:Bind ViewModel.Rows}">
+                    <ListView.ContextFlyout>
+                        <!--
+                        One menu, opened by hand from the list and from the map. Two things forced
+                        that, both measured rather than reasoned about: an attached ContextFlyout on
+                        this ListView never appears, and neither ContextRequested nor RightTapped
+                        reaches an ordinary handler on it, because a ListViewItem marks the gesture
+                        handled on its way past. The page subscribes past that in code, which is why
+                        no right-click handler is declared here.
+
+                        It is still declared here, and not as a page resource, because that is what
+                        gives it a lifetime: a StaticResource flyout is built on first use, and the
+                        x:Bind below runs when the page loads — which crashed the app outright,
+                        setting Command on an item that did not exist yet.
+
+                        Showing it by hand is also what lets the right-click move the selection onto
+                        the row it landed on first.
+
+                        The four actions are what §7.1 lets Explore do with something the user picked
+                        out by hand: three that change nothing, and a removal that goes to the
+                        Recycle Bin unless the user asks for the other one by name.
+
+                        The accelerators are declared on the two surfaces rather than here, because a
+                        flyout item's accelerator only fires while the flyout is open — which is
+                        exactly when the keyboard is not what the user is reaching for. These carry
+                        the text so the menu still teaches them.
+                    -->
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="Open"
+                                        Command="{x:Bind ViewModel.Selection.OpenCommand}"
+                                        KeyboardAcceleratorTextOverride="Enter">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8E5;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+
+                        <MenuFlyoutItem Text="Open containing folder"
+                                        Command="{x:Bind ViewModel.Selection.RevealCommand}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xEC50;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+
+                        <MenuFlyoutSeparator />
+
+                        <MenuFlyoutItem Text="Delete"
+                                        Command="{x:Bind ViewModel.Selection.DeleteCommand}"
+                                        KeyboardAcceleratorTextOverride="Del">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE74D;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+
+                        <!-- Named for what it does, not for a modifier key. §7.1 makes this the deliberate
+                             second choice, and a choice the user has to infer is not a deliberate one. -->
+                        <MenuFlyoutItem Text="Delete permanently"
+                                        Command="{x:Bind ViewModel.Selection.DeletePermanentlyCommand}"
+                                        KeyboardAcceleratorTextOverride="Shift+Del">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE74B;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+
+                        <MenuFlyoutSeparator />
+
+                        <MenuFlyoutItem Text="Properties"
+                                        Command="{x:Bind ViewModel.Selection.PropertiesCommand}"
+                                        KeyboardAcceleratorTextOverride="Alt+Enter">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE946;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                    </ListView.ContextFlyout>
+
                     <ListView.KeyboardAccelerators>
                         <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
                         <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />

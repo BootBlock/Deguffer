@@ -50,26 +50,49 @@ public static class ShellActions
     }
 
     /// <summary>
-    /// The standard Windows properties sheet. Null on success, or a sentence for the user.
+    /// The standard Windows properties sheet. Always null: the sheet is put up on a thread of its
+    /// own, so there is no outcome to report back by the time this returns.
     ///
     /// <para>Through <c>ShellExecuteEx</c> rather than <see cref="Process"/>, because the verb needs
     /// the item's shell identifier list to work at all — <c>SEE_MASK_INVOKEIDLIST</c> is what makes
     /// "properties" resolve, and .NET's own process start does not set it.</para>
+    ///
+    /// <para><b>Never on the UI thread</b>, and that is measured rather than precautionary. The
+    /// sheet runs its own modal message loop on whichever thread invokes the verb, and it is
+    /// destroyed when that thread ends. Called from the window's own thread it put up no sheet at
+    /// all and left that thread unable to open a flyout afterwards, so the context menu the sheet
+    /// was invoked from stopped working for the rest of the session.</para>
+    ///
+    /// <para>The thread is deliberately not joined. It lives exactly as long as the sheet does, which
+    /// is what keeps the sheet on screen — and waiting for it would block the caller until the user
+    /// closed a window they opened to look at.</para>
     /// </summary>
     public static string? Properties(string path)
     {
-        var info = new ShellExecuteInfo
+        var file = Display(path);
+
+        var thread = new Thread(() =>
         {
-            Size = Marshal.SizeOf<ShellExecuteInfo>(),
-            Mask = SeeMaskInvokeIdList | SeeMaskFlagNoUi,
-            Verb = "properties",
-            File = Display(path),
-            Show = 1,
+            var info = new ShellExecuteInfo
+            {
+                Size = Marshal.SizeOf<ShellExecuteInfo>(),
+                Mask = SeeMaskInvokeIdList | SeeMaskFlagNoUi,
+                Verb = "properties",
+                File = file,
+                Show = 1,
+            };
+
+            ShellExecuteEx(ref info);
+        })
+        {
+            // Nothing waits for it, so it must not hold the process open once the window has gone.
+            IsBackground = true,
         };
 
-        return ShellExecuteEx(ref info)
-            ? null
-            : $"Windows would not show the properties for this (0x{Marshal.GetLastWin32Error():X8}).";
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        return null;
     }
 
     /// <summary>
