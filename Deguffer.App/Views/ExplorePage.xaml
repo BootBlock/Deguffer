@@ -44,6 +44,9 @@
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateAndRescanCommand}" />
 
+            <!-- These are indexed against ExploreView, so the order here is the order of that
+                 enum. The three pictures come before the list because that is the order they are
+                 read in, not because the numbers demand it. -->
             <ComboBox x:Name="ViewSelector"
                       Grid.Column="5"
                       MinWidth="120"
@@ -52,6 +55,7 @@
                       AutomationProperties.Name="How to draw the drive">
                 <ComboBoxItem Content="Treemap" />
                 <ComboBoxItem Content="Icicle" />
+                <ComboBoxItem Content="Sunburst" />
                 <ComboBoxItem Content="List" />
             </ComboBox>
         </Grid>

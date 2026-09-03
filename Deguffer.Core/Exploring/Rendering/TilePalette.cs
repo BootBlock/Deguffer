@@ -33,6 +33,14 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
     public TileColour Scaled(double factor) => new(
         Clamp(Red * factor), Clamp(Green * factor), Clamp(Blue * factor));
 
+    /// <summary>
+    /// Written out rather than left to the record, whose generated version walks every public
+    /// property — <see cref="ContrastingText"/> among them, which is another
+    /// <see cref="TileColour"/>. That recurses until the stack runs out, so a failing assertion on
+    /// a colour took the test host down instead of reporting which colour it got.
+    /// </summary>
+    public override string ToString() => $"#{Red:X2}{Green:X2}{Blue:X2}";
+
     private static byte Clamp(double value) => (byte)Math.Clamp(value, 0, 255);
 
     private static double Linear(byte channel)
