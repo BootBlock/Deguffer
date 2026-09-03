@@ -22,18 +22,23 @@ public sealed class SelectionService
     public SelectionMemory Memory { get; }
 
     /// <summary>
-    /// Record one row's choice. Returns whether it reached disk.
+    /// Record one row's choice.
     ///
     /// Applied first and persisted second, which inverts <see cref="SourceRootService"/> and does so
     /// deliberately. The user has already ticked the box: the choice is in effect on screen whether
     /// or not a file can be written, and refusing to hold it in memory would only make a rescan in
     /// this session undo what they just did. A failed write therefore costs them the choice at the
     /// next launch and nothing sooner.
+    ///
+    /// That is also why this reports nothing, where the other two services return whether the write
+    /// took. There is nowhere useful to report it to: the Storage page's info bar carries §5.6's
+    /// verification headline, which is not a thing to displace for a tick the user can see took
+    /// effect.
     /// </summary>
-    public bool Remember(string providerId, RememberedSelection selection)
+    public void Remember(string providerId, RememberedSelection selection)
     {
         Memory.Remember(providerId, selection);
 
-        return _store.Save(Memory.Entries);
+        _store.Save(Memory.Entries);
     }
 }

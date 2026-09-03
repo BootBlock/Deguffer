@@ -590,21 +590,12 @@ public sealed partial class CleanViewModel : ObservableObject
     private bool CanRun() => !IsBusy;
 
     /// <summary>
-    /// Sums the selected <em>steps</em> rather than the selected rows. With per-item selection a
-    /// ticked row no longer implies its whole plan will run, so totalling the finding would promise
-    /// back space that the unticked steps within it are not going to release.
-    /// </summary>
-    /// <summary>
     /// One change by the user: retotal, and remember what they chose.
     ///
     /// Written on every change rather than at some tidier moment, because there is no reliable
     /// later one. A scan can be cancelled, a clean re-plans the list from scratch, and the process
     /// can be replaced outright by the elevated relaunch — all three would lose a choice that was
     /// only being held until the end.
-    ///
-    /// The result of the write is discarded on the same reasoning the view density is: the info bar
-    /// on this page carries §5.6's verification headline, which is not a thing to displace for a
-    /// tick the user can see took effect.
     /// </summary>
     private void OnRowSelectionChanged(FindingViewModel row)
     {
@@ -612,6 +603,11 @@ public sealed partial class CleanViewModel : ObservableObject
         UpdateSelectionTotal();
     }
 
+    /// <summary>
+    /// Sums the selected <em>steps</em> rather than the selected rows. With per-item selection a
+    /// ticked row no longer implies its whole plan will run, so totalling the finding would promise
+    /// back space that the unticked steps within it are not going to release.
+    /// </summary>
     private void UpdateSelectionTotal()
     {
         SelectedTotalLabel = FreeSpace.Format(

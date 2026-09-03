@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using Deguffer.Core.Safety;
 
@@ -23,8 +24,17 @@ public sealed class SelectionStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
-    /// <summary>Nothing remembered — every failure below lands here.</summary>
-    private static readonly Dictionary<string, RememberedSelection> Empty = [];
+    /// <summary>
+    /// Nothing remembered — every failure below lands here, and every step-less entry gets the
+    /// second one. Both are shared, so they are the immutable empties rather than a
+    /// <see cref="Dictionary{TKey, TValue}"/> handed out behind a read-only interface that anything
+    /// could cast away and write into for the life of the process.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, RememberedSelection> Empty =
+        ReadOnlyDictionary<string, RememberedSelection>.Empty;
+
+    private static readonly IReadOnlyDictionary<string, bool> NoSteps =
+        ReadOnlyDictionary<string, bool>.Empty;
 
     private readonly string _directory;
     private readonly string _file;
@@ -44,14 +54,48 @@ public sealed class SelectionStore
         {
             var json = File.ReadAllText(LongPath.Extended(_file));
 
-            return JsonSerializer.Deserialize<Dictionary<string, RememberedSelection>>(json, SerializerOptions)
-                ?? Empty;
+            return Usable(
+                JsonSerializer.Deserialize<Dictionary<string, RememberedSelection>>(json, SerializerOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             // Missing on first run, unreadable, or hand-edited into nonsense.
             return Empty;
         }
+    }
+
+    /// <summary>
+    /// What was read, in the shape <see cref="RememberedSelection"/> declares.
+    ///
+    /// <c>{"npm": null}</c> and <c>{"npm": {"IsSelected": false}}</c> are both well-formed JSON, so
+    /// neither reaches the catch above; they arrive as a null entry and a null step map, against
+    /// two members that say they are never null. Read straight out, the first stops the app opening
+    /// — the memory is built from a static initialiser — and the second throws at the first row the
+    /// preview draws. One bad line costs the provider it names, and nothing else.
+    ///
+    /// Answered here rather than by a guard further down, so the declared types are true of every
+    /// value anything downstream is handed.
+    /// </summary>
+    private static IReadOnlyDictionary<string, RememberedSelection> Usable(
+        Dictionary<string, RememberedSelection>? stored)
+    {
+        if (stored is null)
+        {
+            // The literal `null` document.
+            return Empty;
+        }
+
+        Dictionary<string, RememberedSelection> usable = new(StringComparer.Ordinal);
+
+        foreach (var (providerId, selection) in stored)
+        {
+            if (selection is not null)
+            {
+                usable[providerId] = selection with { Steps = selection.Steps ?? NoSteps };
+            }
+        }
+
+        return usable;
     }
 
     /// <summary>

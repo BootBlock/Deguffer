@@ -70,12 +70,14 @@ public sealed partial class FindingViewModel : ObservableObject
         // Under the guard, because the steps already carry their own restored state and the setter
         // below would otherwise overwrite every one of them with this single value.
         //
-        // Rolled up from the steps wherever there are any, which is the invariant the rest of this
-        // type holds: a row is selected when a step in it is. Taking the row's own restored value
-        // here would tick a row whose every step is disabled — the Windows servicing logs on an
-        // unelevated run — leaving a ticked row that contributes nothing and enables Clean.
+        // Rolled up from the steps rather than taken from the row's own remembered value, which is
+        // the invariant the rest of this type holds: a row is selected when a step in it is. The
+        // remembered value would tick a row that cannot contribute anything — one whose every step
+        // is disabled for want of administrator rights, or one with no plan at all because the
+        // toolchain has gone since the choice was made. Both render with a ticked, disabled
+        // checkbox that nothing can clear, and both enable Clean against nothing.
         _syncingSelection = true;
-        IsSelected = Steps.Count > 0 ? Steps.Any(s => s.IsSelected) : startsSelected;
+        IsSelected = Steps.Any(s => s.IsSelected);
         _syncingSelection = false;
     }
 
@@ -215,20 +217,15 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <summary>
     /// What to remember about this row, so a later scan starts where the user left it.
     ///
-    /// A method rather than a property because it builds the map every time it is asked, and the
+    /// This states the row's steps; which of them are worth recording is
+    /// <see cref="RememberedSelection.Of"/>'s rule, and it lives there so it can be held to a test.
+    ///
+    /// A method rather than a property because it builds a map every time it is asked, and the
     /// steps of a build-output row are one per workspace.
     /// </summary>
-    public RememberedSelection ToRemembered()
-    {
-        Dictionary<string, bool> steps = new(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var step in Steps)
-        {
-            steps[step.Step.SelectionKey] = step.IsSelected;
-        }
-
-        return new RememberedSelection(IsSelected, steps);
-    }
+    public RememberedSelection ToRemembered() => RememberedSelection.Of(
+        IsSelected,
+        Steps.Select(s => (s.Step.SelectionKey, s.IsSelected, s.CanBeSelected)));
 
     /// <summary>
     /// Shown whenever there is anything to say — including for a tool with nothing to reclaim.

@@ -12,7 +12,9 @@ namespace Deguffer.Core.Tests;
 public class SelectionMemoryTests
 {
     private const string Npm = "npm";
+    private const string NodeModules = "node-modules";
     private const string CacheStep = @"C:\Users\testuser\AppData\Local\npm-cache\_cacache";
+    private const string Fresh = @"C:\Users\testuser\src\gamma\node_modules";
 
     private static SelectionMemory Remembering(
         string providerId,
@@ -62,7 +64,7 @@ public class SelectionMemoryTests
 
         Assert.False(memory.RowStartsSelected("recycle-bin", SafetyTier.UserData, byDefault: false));
         Assert.False(memory.StepStartsSelected(
-            "recycle-bin", SafetyTier.UserData, @"C:\$Recycle.Bin", byDefault: true));
+            "recycle-bin", SafetyTier.UserData, @"C:\$Recycle.Bin", rowStartsSelected: true));
     }
 
     /// <summary>
@@ -75,31 +77,65 @@ public class SelectionMemoryTests
         const string Kept = @"C:\Users\testuser\src\alpha\node_modules";
         const string Cleared = @"C:\Users\testuser\src\beta\node_modules";
 
-        var memory = Remembering("node-modules", isSelected: true, (Kept, true), (Cleared, false));
+        var memory = Remembering(NodeModules, isSelected: true, (Kept, true), (Cleared, false));
 
-        var row = memory.RowStartsSelected("node-modules", SafetyTier.RegenerableCache, byDefault: true);
+        // Tier 2 with the tier default against it, which is what the provider really is. Both
+        // answers here are the user's own, so both have to beat that default.
+        var row = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, byDefault: false);
 
         Assert.True(row);
-        Assert.True(memory.StepStartsSelected("node-modules", SafetyTier.RegenerableCache, Kept, row));
-        Assert.False(memory.StepStartsSelected("node-modules", SafetyTier.RegenerableCache, Cleared, row));
+        Assert.True(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, Kept, row));
+        Assert.False(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, Cleared, row));
     }
 
     /// <summary>
-    /// A workspace that appeared since the last scan has no remembered answer, so it follows the
-    /// row. Falling back to the tier default instead would tick a new folder inside a row the user
-    /// had cleared.
+    /// A workspace that appeared since the last scan has no remembered answer, and the row is what
+    /// holds it back. Tier 1 deliberately, so the tier default is <c>true</c> and only the cleared
+    /// row can produce the expected answer.
     /// </summary>
     [Fact]
-    public void StartsAStepItHasNeverSeenWhereTheRowIs()
+    public void LeavesAnUnseenStepClearInsideAClearedRow()
     {
-        const string Fresh = @"C:\Users\testuser\src\gamma\node_modules";
+        var memory = Remembering(NodeModules, isSelected: false);
 
-        var memory = Remembering("node-modules", isSelected: false);
-
-        var row = memory.RowStartsSelected("node-modules", SafetyTier.RegenerableCache, byDefault: true);
+        var row = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableCache, byDefault: true);
 
         Assert.False(row);
-        Assert.False(memory.StepStartsSelected("node-modules", SafetyTier.RegenerableCache, Fresh, row));
+        Assert.False(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableCache, Fresh, row));
+    }
+
+    /// <summary>
+    /// The other half, and the direction that widens. §3 offers Tier 2 without pre-selecting it,
+    /// and a workspace cloned since the last scan is not a choice the user made — so the row's
+    /// remembered tick does not reach it. Tier 1 is unaffected, because its default agrees.
+    /// </summary>
+    [Fact]
+    public void LeavesAnUnseenStepClearInsideATickedTierTwoRow()
+    {
+        var memory = Remembering(NodeModules, isSelected: true);
+
+        var tierTwo = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, byDefault: false);
+        var tierOne = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableCache, byDefault: true);
+
+        Assert.True(tierTwo);
+        Assert.False(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, Fresh, tierTwo));
+
+        Assert.True(tierOne);
+        Assert.True(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableCache, Fresh, tierOne));
+    }
+
+    /// <summary>
+    /// §7: "No preference reaches Tier 4, which stays excluded however the settings are left." No
+    /// provider declares that tier today, so this guards the rule rather than a live path — and the
+    /// code this class replaced could not have ticked such a row at all.
+    /// </summary>
+    [Fact]
+    public void NeverRestoresATickOnADoNotTouchRow()
+    {
+        var memory = Remembering("hypothetical", isSelected: true, (Fresh, true));
+
+        Assert.False(memory.RowStartsSelected("hypothetical", SafetyTier.DoNotTouch, byDefault: true));
+        Assert.False(memory.StepStartsSelected("hypothetical", SafetyTier.DoNotTouch, Fresh, rowStartsSelected: true));
     }
 
     /// <summary>
@@ -113,7 +149,7 @@ public class SelectionMemoryTests
         var memory = Remembering(Npm, isSelected: true, (CacheStep, false));
 
         Assert.False(memory.StepStartsSelected(
-            Npm, SafetyTier.RegenerableCache, CacheStep.ToUpperInvariant(), byDefault: true));
+            Npm, SafetyTier.RegenerableCache, CacheStep.ToUpperInvariant(), rowStartsSelected: true));
     }
 
     [Fact]
@@ -122,30 +158,14 @@ public class SelectionMemoryTests
         const string Gone = @"C:\Users\testuser\src\alpha\node_modules";
         const string Current = @"C:\Users\testuser\src\beta\node_modules";
 
-        var memory = Remembering("node-modules", isSelected: true, (Gone, false));
+        var memory = Remembering(NodeModules, isSelected: true, (Gone, false));
 
-        memory.Remember("node-modules", new RememberedSelection(
+        memory.Remember(NodeModules, new RememberedSelection(
             IsSelected: true,
             new Dictionary<string, bool> { [Current] = false }));
 
         // The vanished workspace is not carried forward, so the file tracks the machine rather than
         // every path Deguffer has ever planned.
-        Assert.Equal([Current], memory.Entries["node-modules"].Steps.Keys);
-    }
-
-    /// <summary>
-    /// A hand-edited entry that names no steps is well-formed JSON and reaches the record as a null.
-    /// Every read of it has to survive that, or one stray edit crashes the preview.
-    /// </summary>
-    [Fact]
-    public void ReadsAnEntryWhoseStepsAreMissingEntirely()
-    {
-        var memory = new SelectionMemory(new Dictionary<string, RememberedSelection>
-        {
-            [Npm] = new(IsSelected: false, Steps: null!),
-        });
-
-        Assert.False(memory.RowStartsSelected(Npm, SafetyTier.RegenerableCache, byDefault: true));
-        Assert.True(memory.StepStartsSelected(Npm, SafetyTier.RegenerableCache, CacheStep, byDefault: true));
+        Assert.Equal([Current], memory.Entries[NodeModules].Steps.Keys);
     }
 }

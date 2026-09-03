@@ -41,18 +41,24 @@ public sealed class SelectionMemory
         Permitted(tier, _byProvider.TryGetValue(providerId, out var remembered) ? remembered.IsSelected : byDefault);
 
     /// <summary>Whether one step of that row starts ticked.</summary>
-    /// <param name="byDefault">
-    /// What the row resolved to, which is the answer for a step this memory has not seen. A folder
-    /// that appeared since the last scan therefore follows the choice the user made about the row
-    /// it belongs to, rather than arriving with an opinion of its own.
+    /// <param name="rowStartsSelected">
+    /// What <see cref="RowStartsSelected"/> answered for the row this step belongs to. A step this
+    /// memory has not seen follows the row, but only as far as §3's default for the tier allows.
+    ///
+    /// Both halves are needed, and each catches a case the other misses. Without the row, a
+    /// workspace cloned since the last scan would arrive ticked inside a row the user had cleared.
+    /// Without the tier, it would arrive ticked inside a Tier 2 row the user had ticked — and §3
+    /// offers Tier 2 without pre-selecting it, which applies to a directory nobody has seen yet
+    /// exactly as it does on a first run. Ticking the row is an answer about the workspaces that
+    /// were in it, not a standing instruction about every one that appears later.
     /// </param>
-    public bool StepStartsSelected(string providerId, SafetyTier tier, string stepKey, bool byDefault) =>
+    public bool StepStartsSelected(string providerId, SafetyTier tier, string stepKey, bool rowStartsSelected) =>
         Permitted(
             tier,
             _byProvider.TryGetValue(providerId, out var remembered)
             && remembered.Steps.TryGetValue(stepKey, out var selected)
                 ? selected
-                : byDefault);
+                : rowStartsSelected && tier.IsPreSelectedByDefault());
 
     /// <summary>
     /// Record what one row is ticked as now, replacing whatever was remembered about it.
@@ -68,10 +74,18 @@ public sealed class SelectionMemory
     }
 
     /// <summary>
-    /// §3 and §7: Tier 3 is shown and never pre-selected. Applied to the remembered answer and to
-    /// the default alike, so the rule has one place to hold rather than two that have to agree.
+    /// §3's two absolutes, which no remembered answer may move: Tier 4 is excluded from the UI
+    /// entirely, and Tier 3 is shown and never pre-selected. §7 leans on the second as what stands
+    /// between the user and an irreversible deletion once both confirmations are switched off.
+    ///
+    /// Applied to the remembered answer and to the default alike, so each rule has one place to
+    /// hold rather than two that have to agree. Tier 4 reaches no row today, because no provider
+    /// declares it and §5.2's unrecognised children are refused inside the provider long before a
+    /// step exists. It is stated because this class is a new route to a ticked row, and the code it
+    /// replaced could not produce one for either tier.
     /// </summary>
-    private static bool Permitted(SafetyTier tier, bool selected) => selected && !tier.IsIrreversibleLoss();
+    private static bool Permitted(SafetyTier tier, bool selected) =>
+        selected && tier.IsOfferable() && !tier.IsIrreversibleLoss();
 
     /// <summary>
     /// Most step keys are paths, and NTFS does not distinguish their case. A scan reporting
@@ -83,16 +97,9 @@ public sealed class SelectionMemory
     /// hand-edited file may hold two keys that differ only in case, and that is not worth throwing
     /// the whole memory away over.
     /// </summary>
-    private static Dictionary<string, bool> KeyedForLookup(IReadOnlyDictionary<string, bool>? steps)
+    private static Dictionary<string, bool> KeyedForLookup(IReadOnlyDictionary<string, bool> steps)
     {
         Dictionary<string, bool> keyed = new(StringComparer.OrdinalIgnoreCase);
-
-        if (steps is null)
-        {
-            // A hand-edited file may leave the key out altogether, and deserialisation puts that
-            // null straight onto the record.
-            return keyed;
-        }
 
         foreach (var (key, selected) in steps)
         {

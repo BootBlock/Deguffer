@@ -16,4 +16,41 @@ namespace Deguffer.Core.Configuration;
 /// accumulating every path Deguffer has ever planned. A step the map does not mention is one this
 /// entry knows nothing about, and it starts at whatever the row says.
 /// </param>
-public sealed record RememberedSelection(bool IsSelected, IReadOnlyDictionary<string, bool> Steps);
+public sealed record RememberedSelection(bool IsSelected, IReadOnlyDictionary<string, bool> Steps)
+{
+    /// <summary>
+    /// What to record about a row, from its steps as they stand.
+    /// </summary>
+    /// <param name="steps">
+    /// Each step's key, whether it is ticked, and whether the user could have ticked it.
+    /// </param>
+    /// <remarks>
+    /// A step the run disabled is left out rather than recorded as unticked. It is unticked because
+    /// Deguffer unticked it — it has nothing to reclaim yet, or it needs administrator rights this
+    /// process does not have — and writing that down as the user's answer carries it into the run
+    /// where the step finally can be acted on. A Tier 1 provider is enough to show it: a recognised
+    /// child that happens to be empty is a nought-byte step today, and once the tool writes into it
+    /// the user's ticked row would quietly exclude it, with nothing on screen to say so.
+    ///
+    /// Left out, it has no answer, and <see cref="SelectionMemory.StepStartsSelected"/> starts it
+    /// from the row instead.
+    /// </remarks>
+    public static RememberedSelection Of(
+        bool isSelected,
+        IEnumerable<(string Key, bool Selected, bool CanBeSelected)> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        Dictionary<string, bool> recorded = [];
+
+        foreach (var (key, selected, canBeSelected) in steps)
+        {
+            if (canBeSelected)
+            {
+                recorded[key] = selected;
+            }
+        }
+
+        return new RememberedSelection(isSelected, recorded);
+    }
+}

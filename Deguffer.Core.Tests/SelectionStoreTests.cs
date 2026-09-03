@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -80,8 +81,12 @@ public sealed class SelectionStoreTests : IDisposable
     }
 
     /// <summary>
-    /// A hand-edited entry with no step map at all is well-formed JSON, so it reaches the record
-    /// rather than the catch above, and it arrives as a null the rest of the code would dereference.
+    /// A hand-edited entry with no step map is well-formed JSON, so it reaches the record rather
+    /// than the catch above, and it arrives as a null against a member that says it is never null.
+    /// Read straight out it throws at the first row the preview draws.
+    ///
+    /// Asserted through <see cref="SelectionMemory"/> as well as on the value, because that is what
+    /// actually consumes it, and it is the thing that would have thrown.
     /// </summary>
     [Fact]
     public void ReadsAnEntryThatNamesNoSteps()
@@ -91,7 +96,30 @@ public sealed class SelectionStoreTests : IDisposable
 
         var loaded = CreateStore().Load();
 
-        Assert.False(loaded["npm"].IsSelected);
-        Assert.Null(loaded["npm"].Steps);
+        Assert.Empty(loaded["npm"].Steps);
+        Assert.False(new SelectionMemory(loaded)
+            .RowStartsSelected("npm", SafetyTier.RegenerableCache, byDefault: true));
+    }
+
+    /// <summary>
+    /// A null entry is well-formed JSON too. This one is read from a static initialiser at startup,
+    /// so carrying it forward would stop the app opening at all until the user found the file and
+    /// deleted it by hand. One bad line costs the provider it names, and nothing else.
+    /// </summary>
+    [Fact]
+    public void DropsANullEntryAndKeepsTheRest()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(StoreFile)!);
+        File.WriteAllText(StoreFile, "{\"npm\": null, \"maven\": {\"IsSelected\": true}}");
+
+        var loaded = CreateStore().Load();
+
+        Assert.DoesNotContain("npm", loaded.Keys);
+        Assert.True(loaded["maven"].IsSelected);
+
+        // The half that matters: the memory is built from this at startup, and a null here took the
+        // whole app down rather than one row's answer.
+        Assert.True(new SelectionMemory(loaded)
+            .RowStartsSelected("maven", SafetyTier.RegenerableWithCost, byDefault: false));
     }
 }
