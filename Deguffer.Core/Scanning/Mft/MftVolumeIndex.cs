@@ -169,9 +169,21 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// A linear scan of one directory's children. Directories hold tens to low thousands of
     /// entries and Deguffer resolves a handful of paths per run, so an index keyed by name would
     /// cost more to build across the whole volume than these scans ever save.
+    ///
+    /// <para>An exact match wins over one that differs only in case, and the fallback is what keeps
+    /// a path given in the wrong case measurable. NTFS has held per-directory case sensitivity
+    /// since Windows 10 1803, and WSL sets it on the trees it creates, so a directory really can
+    /// hold <c>Cache</c> and <c>cache</c> at once — the same shape
+    /// <see cref="Deguffer.Core.Exploring.ExploreTree.ChildrenOf"/>'s comparer breaks ties for.
+    /// Child links are in record order, so taking the first case-insensitive match returns
+    /// whichever of the two was created first. The number that comes back is then a total of the
+    /// sibling, reported for the path the caller named — and that path is the one the user approves
+    /// a deletion against.</para>
     /// </summary>
     private uint? TryFindChild(uint directory, string name)
     {
+        uint? differingInCase = null;
+
         for (var i = links.Start[directory]; i < links.Start[directory + 1]; i++)
         {
             var child = links.Children[i];
@@ -180,14 +192,23 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // one file — C:\Windows\MEMORY.DMP — and this is why that measurement takes the walk:
             // naming every file on a volume would cost a string per record, which is a poor trade
             // for a single stat. See ScanStrategy.DirectRead, which is how the walk reports it.
-            if (tree.Names[child] is { } candidate
-                && candidate.Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (tree.Names[child] is not { } candidate)
+            {
+                continue;
+            }
+
+            if (candidate.Equals(name, StringComparison.Ordinal))
             {
                 return child;
             }
+
+            if (differingInCase is null && candidate.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                differingInCase = child;
+            }
         }
 
-        return null;
+        return differingInCase;
     }
 
     /// <summary>
