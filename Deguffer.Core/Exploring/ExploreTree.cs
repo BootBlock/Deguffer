@@ -151,21 +151,41 @@ public sealed class ExploreTree
     /// <summary>
     /// The full path of <paramref name="node"/>, rebuilt by walking to the root.
     ///
-    /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
-    /// here combined, and the UI asks for one only when the user points at something.</para>
-    ///
-    /// <para>Throws for a node whose parent chain does not reach the root. Such nodes exist: the
-    /// file-table route sizes its arrays to the whole record count and most of those slots are
-    /// never filled, so their parent is a default zero and the walk would never terminate. Every
-    /// node reachable through <see cref="ChildrenOf"/> from the root is safe by construction, and
-    /// that is the only way anything gets one to pass here.</para>
+    /// <para>Throws for a node this tree cannot place. Such nodes exist: the file-table route sizes
+    /// its arrays to the whole record count and most of those slots are never filled, so their
+    /// parent is a default zero and the walk would never terminate. Every node reachable through
+    /// <see cref="ChildrenOf"/> from the root is safe by construction, and that is the only way
+    /// anything gets one to pass here.</para>
     ///
     /// <para>Throwing rather than answering, because the caller wants this for a label today and to
     /// open a folder tomorrow. A guessed path is a wrong path, and the one thing worse than no
-    /// answer is a plausible one.</para>
+    /// answer is a plausible one. A caller that is asking whether the node has a path at all wants
+    /// <see cref="TryPathOf"/> instead, which is the same walk without the throw.</para>
     /// </summary>
-    public string PathOf(int node)
+    public string PathOf(int node) =>
+        TryPathOf(node) ?? throw new ArgumentOutOfRangeException(
+            nameof(node), node, "This node is not reachable from the root, so it has no path.");
+
+    /// <summary>
+    /// The full path of <paramref name="node"/>, or null where this tree cannot place it: a node
+    /// number it does not hold, or one whose parent chain does not reach the root.
+    ///
+    /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
+    /// here combined, and the UI asks for one only when the user points at something.</para>
+    ///
+    /// <para>Null rather than a throw is for the caller holding a node number from a <i>different</i>
+    /// tree, where being unable to place it is the expected answer rather than a mistake — see
+    /// <see cref="ExplorePlace"/>.</para>
+    /// </summary>
+    public string? TryPathOf(int node)
     {
+        // A node number from another tree can be past the end of this one, so the range is part of
+        // the question rather than a precondition on it.
+        if (node < 0 || node >= NodeCount)
+        {
+            return null;
+        }
+
         if (node == RootNode)
         {
             return RootPath;
@@ -186,7 +206,7 @@ public sealed class ExploreTree
 
             // A node that is its own parent ends the chain. The scan's root is one, and so is the
             // volume's own root left above a scan scoped to a folder — which is exactly the node a
-            // walk out of the scope arrives at, and why it ends in the throw below rather than in a
+            // walk out of the scope arrives at, and why it ends in the null below rather than in a
             // path.
             if (parent == current)
             {
@@ -202,8 +222,7 @@ public sealed class ExploreTree
             }
         }
 
-        throw new ArgumentOutOfRangeException(
-            nameof(node), node, "This node is not reachable from the root, so it has no path.");
+        return null;
     }
 
     /// <summary>
