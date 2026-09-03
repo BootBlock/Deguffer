@@ -24,6 +24,63 @@ public sealed class ElevationOfferTests
     }
 
     /// <summary>
+    /// Before any scan there is nothing to read, so the one fact available decides it. Withholding
+    /// the offer until a scan has run puts the elevated scan behind the unelevated one it exists to
+    /// replace, which is the whole of the complaint in issue #12.
+    /// </summary>
+    [Fact]
+    public void OffersBeforeAnythingHasBeenScanned()
+    {
+        Assert.True(ElevationOffer.ShouldOffer(isElevated: false));
+    }
+
+    /// <summary>Already elevated, so there is nothing to relaunch for whatever a scan later finds.</summary>
+    [Fact]
+    public void DoesNotOfferBeforeAnythingHasBeenScannedWhenAlreadyElevated()
+    {
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: true));
+    }
+
+    /// <summary>Explore's own scan, which has one route and so one reason rather than a plan each.</summary>
+    [Fact]
+    public void OffersWhenAnExploreScanWalkedForWantOfRights()
+    {
+        Assert.True(ElevationOffer.ShouldOffer(isElevated: false, FallbackReason.NotElevated));
+    }
+
+    /// <summary>
+    /// The dangerous direction again, on the page that draws a whole volume: none of these is fixed
+    /// by rights, and <see cref="FallbackReason.None"/> means the table already answered.
+    /// </summary>
+    [Theory]
+    [InlineData(FallbackReason.None)]
+    [InlineData(FallbackReason.NotNtfsVolume)]
+    [InlineData(FallbackReason.VolumeNotAddressable)]
+    [InlineData(FallbackReason.MasterFileTableIncomplete)]
+    public void DoesNotOfferForAnExploreFallbackElevationCannotFix(FallbackReason reason)
+    {
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, reason));
+    }
+
+    /// <summary>The relaunched instance must not be offered the relaunch it already performed.</summary>
+    [Fact]
+    public void DoesNotOfferForAnExploreScanWhenAlreadyElevated()
+    {
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: true, FallbackReason.NotElevated));
+    }
+
+    /// <summary>
+    /// The wording follows the same state the offer does. A button offering to redo a scan the user
+    /// has not run yet is what made the elevated scan read as a second step.
+    /// </summary>
+    [Fact]
+    public void SaysScanBeforeAScanHasRunAndRescanAfterwards()
+    {
+        Assert.Equal("Elevate and scan", ElevationOffer.Label(hasScanned: false));
+        Assert.Equal("Elevate and rescan", ElevationOffer.Label(hasScanned: true));
+    }
+
+    /// <summary>
     /// The fast path already ran, so there is nothing to offer. Also the state the relaunched
     /// instance lands in: the button must not survive the restart that satisfied it.
     /// </summary>
