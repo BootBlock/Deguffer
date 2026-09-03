@@ -69,13 +69,13 @@ public enum ExploreView
 /// </summary>
 public enum ExploreColouring
 {
-    /// <summary>A hue per top-level branch, shaded by depth. See <see cref="Rendering.TilePalette"/>.</summary>
+    /// <summary>A hue per top-level branch, shaded by depth. See <c>TilePalette</c>.</summary>
     Branch = 0,
 
     /// <summary>
-    /// A band per age, by the newest write anywhere at or below the shape. See
-    /// <see cref="Rendering.AgePalette"/>, and <see cref="ExploreTree.ModifiedOf"/> for why it is
-    /// the newest write below rather than the shape's own date.
+    /// A band per age, by the newest write anywhere at or below the shape. See <c>AgePalette</c>,
+    /// and <c>ExploreTree.ModifiedOf</c> for why it is the newest write below rather than the
+    /// shape's own date.
     /// </summary>
     Age = 1,
 }

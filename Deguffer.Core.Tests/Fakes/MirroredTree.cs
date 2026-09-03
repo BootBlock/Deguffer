@@ -100,7 +100,8 @@ public static class MirroredTree
 
                     if (file.Resident)
                     {
-                        Fixture.AddResidentFile(number, parent, file.Name, file.Bytes);
+                        Fixture.AddResidentFile(
+                            number, parent, file.Name, file.Bytes, file.Created, file.Modified);
                     }
                     else
                     {

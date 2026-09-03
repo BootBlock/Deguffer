@@ -162,6 +162,97 @@ public class AgeColouringTests
         }
     }
 
+    /// <summary>
+    /// A shape standing in for siblings too small to draw is painted neither scheme's colour.
+    ///
+    /// <para>It is not a thing on the disk: it belongs to no branch and has no single date, so
+    /// giving it a colour that reads as either would invite the user to act on it. Asserted through
+    /// the surface because that is where the decision now lives — it used to sit inside both
+    /// rasterisers, and the rendering tests that covered it there now supply their own colouring and
+    /// would agree with themselves whatever the surface did.</para>
+    ///
+    /// <para>Both colourings, because the two failures are different. Under branch hues the
+    /// aggregate would take a neighbour's colour; under age it would take the band of whatever date
+    /// an absent node reports, which is "not known" — a grey close enough to this one to look right
+    /// while meaning something else entirely.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreColouring.Branch)]
+    [InlineData(ExploreColouring.Age)]
+    public void AShapeStandingInForTheTooSmallIsPaintedOutsideBothSchemes(ExploreColouring colouring)
+    {
+        // Five hundred equal children on a canvas 60 pixels square: each would be under three
+        // pixels across, which is the floor below which the layout draws a stand-in instead. The
+        // same numbers ExploreSurfaceTests uses to reach this case.
+        const int Small = 60;
+
+        var tree = ManyEqualChildren(500);
+
+        var surface = ExploreSurface.Create(
+            tree, tree.RootNode, ExploreView.Treemap, Small, Small, scale: 1, colouring, Now);
+
+        var pixels = new byte[PixelBuffer.LengthFor(Small, Small)];
+        surface.Paint(pixels, new TileColour(0, 0, 0));
+
+        // Found through the surface's own hit test rather than guessed at. Where the aggregate lands
+        // is the layout's business, and a fixed coordinate would quietly start sampling a drawn tile
+        // the first time that changed.
+        var (x, y) = FirstAggregatePoint(surface, Small);
+        var painted = At(pixels, x, y, Small);
+
+        // Neutral, so it is neither a branch hue nor any dated band — every one of those is
+        // chromatic. Compared channel to channel rather than against the palette entry, because the
+        // rasteriser shades even a flat shape and the stored colour is not what reaches the buffer.
+        Assert.Equal(painted.Red, painted.Green);
+        Assert.Equal(painted.Green, painted.Blue);
+
+        // And darker than the one other neutral in play. "Not known" is what an undated node takes,
+        // which is exactly where an aggregate would land if it were treated as a node at all — and
+        // the shading scales both by the same factor, so the order between them survives it.
+        Assert.True(
+            painted.Red < AgePalette.For(ExploreTimestamp.Unknown, Now).Red,
+            $"Painted {painted.Red}, which is not darker than the 'not known' grey.");
+    }
+
+    /// <summary>
+    /// The first canvas point the surface reports an aggregate at, searched on a coarse grid.
+    ///
+    /// <para>Fails loudly rather than returning nothing, because a tree that produced no aggregate
+    /// would make the test above pass by sampling whatever else happened to be there.</para>
+    /// </summary>
+    private static (int X, int Y) FirstAggregatePoint(ExploreSurface surface, int size)
+    {
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                if (surface.At(x, y) is { IsAggregate: true })
+                {
+                    return (x, y);
+                }
+            }
+        }
+
+        throw new InvalidOperationException(
+            "This tree drew no aggregate, so there is nothing here to assert a colour about.");
+    }
+
+    /// <summary>
+    /// Enough equal children that none of them clears the layout's minimum size, which is what makes
+    /// the treemap emit an aggregate rather than draw them.
+    /// </summary>
+    private static ExploreTree ManyEqualChildren(int count)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [.. Enumerable.Range(0, count).Select(i =>
+                new ExploreChild($"file-{i}", IsDirectory: false, IsLink: false, 1000, Written(0), Written(0)))]);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
     private static ExploreTimestamp Written(int daysAgo) =>
         ExploreTimestamp.FromUtc(Now.AddDays(-daysAgo));
 
@@ -193,9 +284,11 @@ public class AgeColouringTests
         return pixels;
     }
 
-    private static TileColour At(byte[] pixels, int x, int y)
+    private static TileColour At(byte[] pixels, int x, int y) => At(pixels, x, y, Width);
+
+    private static TileColour At(byte[] pixels, int x, int y, int stride)
     {
-        var offset = ((y * Width) + x) * 4;
+        var offset = ((y * stride) + x) * 4;
 
         return new TileColour(pixels[offset + 2], pixels[offset + 1], pixels[offset]);
     }

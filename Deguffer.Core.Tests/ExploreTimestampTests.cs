@@ -51,16 +51,52 @@ public class ExploreTimestampTests
 
     /// <summary>
     /// A local time must be converted rather than reinterpreted. Reading one as though it were
-    /// already UTC produces an error that shows up as a few hours' drift and never as a failure,
-    /// and on this machine it would change sign twice a year.
+    /// already UTC produces an error that shows up as a few hours' drift and never as a failure.
+    ///
+    /// <para><b>The instant is searched for, not fixed.</b> An offset is what makes this test able
+    /// to fail at all, and a zone that keeps summer time has one for only half the year — so a fixed
+    /// March date passed identically with the conversion deleted, on a machine in London. This walks
+    /// the year and takes the first month the machine's own zone is actually offset at.</para>
+    ///
+    /// <para>A machine set to UTC has no such month, and on one nothing here can tell a converted
+    /// local time from an unconverted one. That is stated rather than hidden: the test asserts the
+    /// offset it found, so a vacuous run is visible in the assertion rather than silent in a pass.
+    /// </para>
     /// </summary>
     [Fact]
     public void ConvertsALocalTimeRatherThanAssumingItIsAlreadyUniversal()
     {
-        var local = Instant.ToLocalTime();
+        var offsetAt = OffsetInstant();
+        var local = (offsetAt ?? Instant).ToLocalTime();
 
         Assert.Equal(DateTimeKind.Local, local.Kind);
-        Assert.Equal(ExploreTimestamp.FromUtc(Instant), ExploreTimestamp.FromUtc(local));
+        Assert.Equal(ExploreTimestamp.FromUtc(offsetAt ?? Instant), ExploreTimestamp.FromUtc(local));
+
+        // What was actually proved. On a zone with an offset the assertion above discriminates; on
+        // UTC it cannot, and this says which run happened rather than leaving the two
+        // indistinguishable.
+        Assert.Equal(
+            offsetAt is not null,
+            local.Ticks != (offsetAt ?? Instant).Ticks);
+    }
+
+    /// <summary>
+    /// The first month of a year at which this machine's zone is offset from UTC, or null on a
+    /// machine that is set to UTC all year.
+    /// </summary>
+    private static DateTime? OffsetInstant()
+    {
+        for (var month = 0; month < 12; month++)
+        {
+            var candidate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc).AddMonths(month);
+
+            if (TimeZoneInfo.Local.GetUtcOffset(candidate) != TimeSpan.Zero)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -205,7 +205,13 @@ internal static class MftRecordParser
         // last read — are deliberately not taken. The first dates bookkeeping rather than content,
         // and the second is the signal §8 rejected, because Windows stops maintaining it by
         // default.
-        if (valueLength < 0x10 || valueOffset + valueLength > attribute.Length)
+        // Subtracted rather than added, because the sum overflows. A corrupt record can declare a
+        // value length near int.MaxValue, and `valueOffset + valueLength` then wraps negative, passes
+        // a `>` test and throws out of the slice below — which nothing on the scan path catches, so
+        // it would take the window down. Reading this attribute at all is new, so this exposure is
+        // new with it: the length is bounded by the record and the offset by a ushort, so neither
+        // side of the subtraction can wrap.
+        if (valueLength < 0x10 || valueOffset > attribute.Length - valueLength)
         {
             return default;
         }

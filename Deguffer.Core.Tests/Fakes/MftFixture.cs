@@ -137,9 +137,16 @@ public sealed class MftFixture
     /// A file small enough to live inside its own MFT record. It occupies no clusters, so deleting
     /// it frees no extents — allocated is genuinely zero.
     /// </summary>
-    public MftFixture AddResidentFile(uint number, uint parent, string name, int length) =>
+    public MftFixture AddResidentFile(
+        uint number,
+        uint parent,
+        string name,
+        int length,
+        DateTime? created = null,
+        DateTime? lastWritten = null) =>
         Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: length, DataPlacement.Resident));
+            Reference(parent), name, isDirectory: false, allocated: 0, logical: length, DataPlacement.Resident,
+            reparseTag: 0, FileTime(created), FileTime(lastWritten)));
 
     /// <summary>
     /// A file with no unnamed <c>$DATA</c> at all, as a symbolic link has: its content is somewhere

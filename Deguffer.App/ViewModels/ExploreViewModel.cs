@@ -469,8 +469,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>A directory the walk was refused contributes only its own timestamp to the roll-up,
     /// and a directory's own timestamp moves when its layout changes rather than when its contents
     /// do — so a log being appended to right now behind a refused listing reads as years idle.
-    /// <see cref="Providers.DirectoryAge"/> answers "unknown" in that position rather than risk it,
-    /// which is the right trade for a row that prices a deletion and the wrong one here: nearly
+    /// Core's <c>DirectoryAge</c> answers "unknown" in that position rather than risk it, which is
+    /// the right trade for a row that prices a deletion and the wrong one here: nearly
     /// every drive has some corner it cannot read, so blanking the column would blank the drive
     /// root and every folder above the refusal.</para>
     ///
