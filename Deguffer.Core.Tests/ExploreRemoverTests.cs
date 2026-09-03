@@ -204,6 +204,37 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// The same assertion against the narrower failure, which is the one the comparison of two
+    /// listings actually exists for. When a removal takes the whole folder the check fails because
+    /// there is nothing left to list; when it takes one neighbour and leaves the folder standing,
+    /// only comparing what was there before with what is there now finds it.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalThatTakesANeighbourFailsVerification()
+    {
+        var target = _temp.CreateFile(8, "profile", "Downloads", "target.bin");
+        _temp.CreateFile(8, "profile", "Downloads", "keep-one.bin");
+        _temp.CreateFile(8, "profile", "Downloads", "keep-two.bin");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            FakeRecycleBin.TakingAlso("keep-one.bin"));
+
+        Assert.True(LongPath.DirectoryExists(Path.GetDirectoryName(target)!));
+        Assert.True(LongPath.FileExists(Path.Combine(Path.GetDirectoryName(target)!, "keep-two.bin")));
+
+        Assert.False(report.Verification.Passed);
+        Assert.Contains(
+            report.Verification.Failures,
+            c => c.Detail.Contains("'keep-one.bin'", StringComparison.Ordinal));
+
+        // The user is told, not merely a report field. A negative assertion nobody reads is not one.
+        Assert.Contains("did not survive", report.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A refusal from the shell is reported rather than escalated. Falling back to an outright
     /// delete would give the user the irreversible removal they did not ask for.
     /// </summary>

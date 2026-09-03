@@ -46,6 +46,21 @@ public sealed class FakeRecycleBin : IRecycleBin
         return new RecycleOutcome(Removed: true);
     });
 
+    /// <summary>
+    /// A bin that takes one named neighbour along with the item, leaving the folder standing.
+    ///
+    /// <para>The narrower over-broad removal, and the one worth testing separately: when the whole
+    /// folder goes, the survivor check fails because the folder cannot be listed at all, which is a
+    /// different branch from the comparison that finds a missing neighbour.</para>
+    /// </summary>
+    public static FakeRecycleBin TakingAlso(string neighbour) => new(path =>
+    {
+        File.Delete(path);
+        File.Delete(Path.Combine(Path.GetDirectoryName(path)!, neighbour));
+
+        return new RecycleOutcome(Removed: true);
+    });
+
     /// <summary>A bin that refuses, as the shell does for a path it will not parse.</summary>
     public static FakeRecycleBin Refusing(string message) =>
         new(_ => new RecycleOutcome(Removed: false, message));
