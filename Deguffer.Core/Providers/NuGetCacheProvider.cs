@@ -39,6 +39,18 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
     public override string WhatHappensOnNextUse =>
         "The next restore re-downloads packages from your configured feeds. Projects and their configuration are untouched.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "NuGet, the package manager for .NET",
+        Publisher = "Microsoft and the .NET Foundation",
+        Purpose = "NuGet keeps several caches in your profile: the downloaded package archives, "
+            + "the extracted global packages folder every project builds against, and the "
+            + "responses from the feeds it has queried.",
+        Recommendation = "Deguffer asks the .NET SDK to clear them with its own command, which "
+            + "reaches locations a path-based rule would miss. A restore fetches whatever is "
+            + "missing from the feeds the machine is already configured for.",
+    };
+
     protected override IReadOnlyList<string> ConflictingProcessNames => ["devenv", "MSBuild", "VBCSCompiler"];
 
     /// <summary>

@@ -70,6 +70,18 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         "Playwright tests stop running until 'playwright install' is run again, which re-downloads " +
         "roughly a gigabyte of browser builds. Test code, configuration and reports are untouched.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Playwright, a browser automation and testing library",
+        Publisher = "Microsoft",
+        Purpose = "Playwright downloads its own builds of Chromium, Firefox and WebKit rather "
+            + "than using the browsers you have installed, and keeps them in your profile where "
+            + "every project can share them.",
+        Recommendation = "Nothing here is yours: every file is a browser build Playwright "
+            + "downloaded and pins by version, so running its installer again restores exactly "
+            + "what was removed. Choose a moment when you are not about to run a test suite.",
+    };
+
     /// <summary>
     /// Deliberately narrow. Playwright drives ordinary <c>chrome.exe</c> and <c>firefox.exe</c>
     /// binaries, so warning on those would fire for the user's everyday browser on almost every

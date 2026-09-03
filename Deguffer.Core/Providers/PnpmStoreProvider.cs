@@ -55,6 +55,17 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         "A later install that needs a removed package downloads it again. Projects and their "
         + "node_modules are untouched: anything a project still links stays in the store.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "pnpm, an alternative package manager for Node.js",
+        Publisher = "the open-source pnpm project",
+        Purpose = "pnpm keeps one copy of each package version in a global store and links it "
+            + "into every project that uses it, which is what makes its installs small and fast.",
+        Recommendation = "Deguffer runs pnpm's own store prune, which removes only the packages "
+            + "no project on the machine still links, so nothing an installed project depends on "
+            + "is taken.",
+    };
+
     protected override IReadOnlyList<string> ConflictingProcessNames => ["node", "pnpm"];
 
     /// <summary>

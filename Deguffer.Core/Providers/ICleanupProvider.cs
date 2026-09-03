@@ -20,6 +20,16 @@ public interface ICleanupProvider
     /// <summary>§7: what the user pays for this, stated up front.</summary>
     string WhatHappensOnNextUse { get; }
 
+    /// <summary>
+    /// What this location is, for a reader who does not use the toolchain that wrote it. See
+    /// <see cref="ProviderDescription"/> for why it is separate from
+    /// <see cref="WhatHappensOnNextUse"/>.
+    ///
+    /// Required of every provider rather than defaulted, because a default would ship a row that
+    /// names no publisher and explains nothing, and it would do so silently.
+    /// </summary>
+    ProviderDescription Description { get; }
+
     /// <summary>Whether this toolchain is installed at all on this machine.</summary>
     Task<bool> IsPresentAsync(CancellationToken ct = default);
 

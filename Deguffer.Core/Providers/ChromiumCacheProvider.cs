@@ -154,6 +154,21 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         "first time it is opened again, so it starts more slowly once. Sign-ins, saved passwords " +
         "and settings are untouched.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "desktop applications that embed the Chromium engine — chat clients, "
+            + "editors and other Electron apps",
+        Publisher = "each application's own vendor; the cache format belongs to the Chromium "
+            + "project",
+        Purpose = "An application built on Chromium caches web content, compiled scripts and GPU "
+            + "shaders exactly as a browser does, under its own folder in your profile. Almost no "
+            + "cleaner reaches these, so they grow unnoticed across every such application on the "
+            + "machine.",
+        Recommendation = "Deguffer removes six cache directories whose names belong to Chromium "
+            + "itself, and leaves everything else in the folder alone — the sign-ins, saved "
+            + "passwords, saved payment cards and offline data sit right beside them.",
+    };
+
     /// <summary>
     /// The applications whose folders hold at least one recognised cache, memoised for the life of
     /// a planning pass (G4). Presence and planning ask the same question of the same disk, and the

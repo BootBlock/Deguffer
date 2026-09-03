@@ -84,6 +84,18 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         "The next time a C++ project is opened, the extension rebuilds its precompiled headers. " +
         "IntelliSense is slower until that finishes.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "the C/C++ extension for Visual Studio Code",
+        Publisher = "Microsoft",
+        Purpose = "The extension keeps a browse database and precompiled headers for every "
+            + "workspace you have opened C or C++ files in, which is what makes go-to-definition "
+            + "and completion answer quickly.",
+        Recommendation = "The extension rebuilds the database for a workspace the next time you "
+            + "open it, so the cost is a slower first few minutes in that project and nothing "
+            + "else.",
+    };
+
     /// <summary>
     /// §5.3. The workspace databases are SQLite with write-ahead logs, and the extension keeps them
     /// open; Microsoft's own guidance is to clear this after closing the editor.

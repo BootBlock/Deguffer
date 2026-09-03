@@ -74,6 +74,19 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         "If you also clear the NuGet cache in this run, the next restore needs the network, and a " +
         "project whose feed is unreachable will not rebuild until that is resolved.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "the .NET SDK and MSBuild",
+        Publisher = "Microsoft",
+        Purpose = "Every .NET project keeps an obj directory beside it, holding what a build "
+            + "produces on its way to the final output: compiled fragments, generated source, and "
+            + "the record of which packages were restored.",
+        Recommendation = "Nothing in a recognised obj is unique — it is derived from your source "
+            + "and the NuGet cache, and both of those stay. Deguffer looks only inside source "
+            + "folders you have approved, and only removes a directory whose contents agree on "
+            + "which project they belong to.",
+    };
+
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
     public IReadOnlyList<string> ApprovedRoots => _approved ??= _roots.Load();
 

@@ -70,6 +70,18 @@ public sealed class UnityLibraryProvider : BuildDirectoryProvider
         "On a large project that takes many minutes, and any packages it had downloaded are fetched " +
         "again. Nothing is lost — all of it is derived from Assets, Packages and ProjectSettings.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "the Unity Editor",
+        Publisher = "Unity Technologies",
+        Purpose = "Unity imports everything under a project's Assets into an internal form and "
+            + "keeps it in a Library folder: the artefact database, the shader and Burst caches, "
+            + "the compiled script assemblies, and the packages it resolved.",
+        Recommendation = "Nothing in it is anybody's only copy, which is why every Unity "
+            + ".gitignore template excludes it — but reopening the project reimports every asset, "
+            + "and on a large project that is tens of minutes.",
+    };
+
     protected override string Subject => "Unity imported assets and caches";
 
     protected override string NothingApprovedGuidance =>

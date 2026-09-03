@@ -148,6 +148,14 @@ public sealed class ElevationOfferTests
 
         public string WhatHappensOnNextUse => "Nothing.";
 
+        public ProviderDescription Description { get; } = new()
+        {
+            Application = "A stub, standing in for a real toolchain.",
+            Publisher = "Nobody.",
+            Purpose = "Nothing. This provider exists only for this test.",
+            Recommendation = "Nothing to recommend.",
+        };
+
         public void InvalidateCaches() { }
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);

@@ -94,6 +94,19 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         + "archives again as it goes. Libraries already installed stay installed, and the ports, "
         + "triplets and registries are untouched.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "vcpkg, a package manager for C and C++ libraries",
+        Publisher = "Microsoft",
+        Purpose = "vcpkg builds every library from source. The binary cache keeps the result so "
+            + "it need not build the same one twice, and the downloads, buildtrees and packages "
+            + "folders inside the vcpkg clone hold the sources and the scratch each build left "
+            + "behind.",
+        Recommendation = "Restoring a cached entry is a compile rather than a download, and for "
+            + "something the size of Boost or Qt that is tens of minutes to hours. The installed "
+            + "folder every project links against is never touched.",
+    };
+
     /// <summary>
     /// §5.3. Only vcpkg's own name, deliberately: the compilers and build tools it drives are the
     /// user's everyday ones, so warning on those would fire on almost every scan, and a warning

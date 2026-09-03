@@ -73,6 +73,19 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
         "cache where that is still present, and from the network where it is not. Anything you built " +
         "and are running from target goes with it.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Cargo, the build tool and package manager for Rust",
+        Publisher = "the Rust project",
+        Purpose = "Each Rust project keeps everything cargo build produced in a target directory "
+            + "beside its manifest: compiled dependencies, intermediate artefacts and the binaries "
+            + "themselves, separately for every profile and feature set it has been built with.",
+        Recommendation = "Restoring one is not a slower build, it is the build — every dependency "
+            + "is compiled from source again, which is where the gigabytes came from. Deguffer "
+            + "offers a target directory only where a Cargo.toml sits beside it and a tool has "
+            + "marked it as a cache.",
+    };
+
     protected override string Subject => "Rust build output";
 
     protected override string NothingApprovedGuidance =>

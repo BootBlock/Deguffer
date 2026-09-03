@@ -11,6 +11,13 @@ namespace Deguffer.App.Views;
 
 public sealed partial class CleanPage : Page
 {
+    /// <summary>
+    /// How much of the window the row information dialog takes, in each direction. Large enough for
+    /// a plan to be read as a list rather than through a slot, and small enough that the page it
+    /// came from is still visible around it.
+    /// </summary>
+    private const double ShareOfWindow = 0.75;
+
     public CleanPage()
     {
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
@@ -168,6 +175,62 @@ public sealed partial class CleanPage : Page
         };
 
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    /// <summary>
+    /// Open the row's own explanation: whose folder it is, what it is for, whether it is worth
+    /// cleaning, and the plan §7 requires to be inspectable before anything is deleted.
+    ///
+    /// The row arrives on the link's Tag rather than through its DataContext, which is how the
+    /// Explore page's breadcrumbs already hand a template's item to its page.
+    /// </summary>
+    private async void OnWhatIsThisClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is HyperlinkButton { Tag: FindingViewModel finding })
+        {
+            await ShowProviderInfoAsync(finding);
+        }
+    }
+
+    private async Task ShowProviderInfoAsync(FindingViewModel finding)
+    {
+        var dialog = new ContentDialog
+        {
+            // A dialog built in code inherits no window; without the page's XamlRoot it has
+            // nowhere to open.
+            XamlRoot = XamlRoot,
+
+            // It opens in the popup layer rather than inside this page, so it does not inherit the
+            // theme applied to the window root — without this it renders dark over a light window.
+            RequestedTheme = ActualTheme,
+
+            Title = finding.Name,
+            Content = new ProviderInfoView(finding),
+            CloseButtonText = "Close",
+            DefaultButton = ContentDialogButton.Close,
+
+            // The pivot has to fill what the sizing below gives it, and a ContentDialog centres
+            // its content at its natural size unless told otherwise.
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+        };
+
+        // Three quarters of the window, in both directions. The dialog's template sizes itself from
+        // these four theme resources, and pinning each pair to the same number is what turns a
+        // maximum into an exact size — a dialog left to its own 548px maximum would put a plan with
+        // one step per workspace in a column narrower than the page it came from.
+        //
+        // Resolved against the dialog's own dictionary rather than the application's, so nothing
+        // else that opens later inherits this one's dimensions.
+        var width = XamlRoot.Size.Width * ShareOfWindow;
+        var height = XamlRoot.Size.Height * ShareOfWindow;
+
+        dialog.Resources["ContentDialogMinWidth"] = width;
+        dialog.Resources["ContentDialogMaxWidth"] = width;
+        dialog.Resources["ContentDialogMinHeight"] = height;
+        dialog.Resources["ContentDialogMaxHeight"] = height;
+
+        await dialog.ShowAsync();
     }
 
     private void StartRequestedRescan(object sender, RoutedEventArgs e)

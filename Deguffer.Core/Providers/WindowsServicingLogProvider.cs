@@ -81,6 +81,20 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         + "Windows writes a fresh log the next time it services itself, and updating still works "
         + "exactly as before.";
 
+    public override ProviderDescription Description { get; } = new()
+    {
+        Application = "Windows Update, component servicing, the system file checker, and the WMI "
+            + "service",
+        Publisher = "Microsoft",
+        Purpose = "Windows records what it did every time it serviced itself: installed an "
+            + "update, repaired a component, or ran sfc. Beside those it keeps backup trace files "
+            + "for the event sessions the WMI service runs. On a machine with a long update "
+            + "history the four together run to gigabytes.",
+        Recommendation = "What gets re-created here is the next log, never the ones removed. "
+            + "Somebody diagnosing a failed update is reading exactly these files, so the row "
+            + "stays unticked and each one shows how recently something wrote to it.",
+    };
+
     /// <summary>
     /// What this provider names, root by root. Exposed so tests can assert that the Windows
     /// directory is never a target and that §9's exclusions are asserted rather than merely omitted.
