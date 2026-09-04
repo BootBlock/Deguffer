@@ -394,22 +394,150 @@
                                HorizontalAlignment="Center"
                                Style="{StaticResource SecondaryText}" />
                 </StackPanel>
+
+                <!--
+                    The notes, over the picture rather than under it.
+
+                    Every one of these opens and closes while the user is reading the card above:
+                    a refusal arrives and goes with each click, and the substitution note comes and
+                    goes with every snapshot a running scan publishes. Below the card they were
+                    part of the status area's height, so the card was given a new size on each one
+                    and the drawing inside it was rebuilt at that size — and a size picture that
+                    changes size while it is being read is a picture nobody can read.
+
+                    So they cover rather than displace, and nothing the user does to what is on
+                    the card can resize it. What is left above it still can: the progress bar and
+                    the breadcrumb appear and go with a scan, and the colour legend below follows
+                    the Colour and View boxes. Each of those is a deliberate act at a moment the
+                    picture is being rebuilt anyway, which is the opposite of what this fixes.
+
+                    Nothing here takes the pointer. The map has no keyboard way round a shape, and
+                    the stale note stands until the next scan rather than until the next click, so
+                    a hit-testable strip over the drawing would put part of the picture out of
+                    reach for the rest of the session. These are four sentences with nothing to
+                    click, so they let the pointer through to the shapes they are drawn over, and
+                    the hover line goes on naming whatever is under it.
+
+                    The list is the one view that cannot be covered, because rows underneath one
+                    are rows nothing can retrieve, so OnNotesResized ends it above them.
+
+                    The opaque backing is what makes them readable, and it is not optional: an
+                    InfoBar's severity colour is a tint over whatever is behind it, so on a page it
+                    reads against the page and here it read against a treemap — measured, and the
+                    text was all but gone against a yellow tile. §6.5 asks the UI to be legible
+                    without the backdrop helping, and a control sitting on a drawing has to bring
+                    its own ground.
+                -->
+                <Border x:Name="Notes"
+                        VerticalAlignment="Bottom"
+                        Margin="12"
+                        CornerRadius="{ThemeResource ControlCornerRadius}"
+                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                        IsHitTestVisible="False"
+                        SizeChanged="OnNotesResized">
+                    <!--
+                        Each note states its visibility as well as opening, and the two say the
+                        same thing on purpose. A closed InfoBar collapses its template's content
+                        and stays Visible itself, so a StackPanel still spaces it against its
+                        neighbours: four closed notes left an 18px bar of the backing painted
+                        across the map at all times, and took thirty pixels off the list for
+                        nothing. Collapsed, they cost the spacing as well as the height.
+                    -->
+                    <StackPanel Spacing="6">
+                        <!-- §7.1: a refusal is stated with its reason rather than by greying something
+                             out. Said as soon as something is selected, because a menu item that does
+                             nothing teaches nothing. -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
+                                 IsClosable="False"
+                                 Severity="Informational"
+                                 Message="{x:Bind ViewModel.Selection.Note, Mode=OneWay}" />
+
+                        <!-- The picture stops matching the disk the moment something is removed from
+                             it, and rebuilding it means rescanning the drive. §7.1 allows the numbers
+                             to be off provided the picture says which way. -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
+                                 IsClosable="False"
+                                 Severity="Warning"
+                                 Message="{x:Bind ViewModel.Selection.StaleNote, Mode=OneWay}" />
+
+                        <!-- Where what is on screen is not what the View box names. A scan in progress
+                             is ordered by name so that it stays still, and a treemap cannot be drawn
+                             from that at all — so the map substitutes the icicle. A substitution
+                             nobody is told about is the kind a user reads as a bug.
+
+                             An InfoBar rather than the bare line this was, because it has joined
+                             a stack of three of them. A line of secondary text between two InfoBars
+                             has no icon, no padding and no severity, so it reads as something that
+                             failed to render rather than as the fourth note. -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
+                                 IsClosable="False"
+                                 Severity="Informational"
+                                 Message="{x:Bind ViewModel.ViewNote, Mode=OneWay}" />
+
+                        <!-- §5.5: the fallback must be observable, not inferred from how long the scan
+                             took. -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
+                                 IsClosable="False"
+                                 Severity="Informational"
+                                 Message="{x:Bind ViewModel.RouteNote, Mode=OneWay}" />
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
         <StackPanel Grid.Row="4" Spacing="6">
             <!-- What the pointer is over. A status line rather than a floating tooltip: over tens
-                 of thousands of rectangles a popup that follows the pointer never settles. -->
-            <TextBlock Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
-                       Style="{StaticResource SecondaryText}"
-                       TextTrimming="CharacterEllipsis"
-                       MinHeight="20" />
+                 of thousands of rectangles a popup that follows the pointer never settles.
+
+                 One line, and the same one line whatever it says. SecondaryText wraps, so this took
+                 a second line for a path long enough to need one and gave it back over the next
+                 shape — which is the card above being handed a new size on every pointer move.
+
+                 The figures sit in a column of their own so that what a long path costs is its own
+                 tail rather than the size beside it. The size is the answer this page exists to
+                 give, and the trimmed tail is the part the map has already drawn on the shape
+                 itself. -->
+            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto" MinHeight="20">
+                <TextBlock Grid.Column="0"
+                           Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="{x:Bind ViewModel.Hovered, Mode=OneWay}" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.HoveredFigures, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           TextWrapping="NoWrap" />
+            </Grid>
 
             <!-- What is picked. The three pictures have no selection outline, so without this a
-                 right-click on a tile would open a menu about something nothing on screen names. -->
-            <TextBlock Text="{x:Bind ViewModel.Selection.Label, Mode=OneWay}"
-                       Style="{StaticResource SecondaryText}"
-                       TextTrimming="CharacterEllipsis" />
+                 right-click on a tile would open a menu about something nothing on screen names.
+
+                 Two reserved lines, and it wraps into them rather than trimming. That is the
+                 difference between this line and the hover line above: that one is a readout that
+                 changes with the pointer, and this one names what Delete will act on. §7.1 turns
+                 on the user having picked the thing out by hand, so a path this cut short at the
+                 leaf — the one segment that tells two folders apart — would be the page naming
+                 something other than the target. Two lines hold every path either picture is
+                 likely to draw, and the floor keeps them there whether or not anything is
+                 selected. -->
+            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto" MinHeight="40">
+                <TextBlock Grid.Column="0"
+                           Text="{x:Bind ViewModel.Selection.Label, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           TextWrapping="Wrap" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.Selection.Figures, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           VerticalAlignment="Top"
+                           TextWrapping="NoWrap" />
+            </Grid>
 
             <!-- What the colours mean, when they mean an age. A hue per branch needs no legend,
                  because the branch it names is the shape it is inside; an age band means nothing
@@ -448,40 +576,17 @@
             </ItemsControl>
             </ScrollViewer>
 
+            <!-- Wraps as far as it needs to, and is never cut short. This is the one surface
+                 that carries what a removal did: §5.6's verification result arrives appended to
+                 the end of that sentence, and a wholly refused selection reports the policy's
+                 reason here verbatim rather than through a dialog. Trimming the tail would take
+                 the sentence saying a deletion may have removed something it was not asked to,
+                 and leave the part saying it worked. So this one is allowed to change height, and
+                 it does so when a scan starts or ends or a removal reports — never while the map
+                 is being read. -->
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
-
-            <!-- §7.1: a refusal is stated with its reason rather than by greying something out.
-                 Said as soon as something is selected, because a menu item that does nothing
-                 teaches nothing. -->
-            <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Informational"
-                     Message="{x:Bind ViewModel.Selection.Note, Mode=OneWay}" />
-
-            <!-- The picture stops matching the disk the moment something is removed from it, and
-                 rebuilding it means rescanning the drive. §7.1 allows the numbers to be off
-                 provided the picture says which way. -->
-            <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Message="{x:Bind ViewModel.Selection.StaleNote, Mode=OneWay}" />
-
-            <!-- Where what is on screen is not what the View box names. A scan in progress is
-                 ordered by name so that it stays still, and a treemap cannot be drawn from that at
-                 all — so the map substitutes the icicle. A substitution nobody is told about is
-                 the kind a user reads as a bug. -->
-            <TextBlock Text="{x:Bind ViewModel.ViewNote, Mode=OneWay}"
-                       Visibility="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
-                       TextWrapping="Wrap"
-                       Style="{StaticResource SecondaryText}" />
-
-            <!-- §5.5: the fallback must be observable, not inferred from how long the scan took. -->
-            <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Informational"
-                     Message="{x:Bind ViewModel.RouteNote, Mode=OneWay}" />
         </StackPanel>
     </Grid>
 </Page>
