@@ -228,6 +228,13 @@ public sealed partial class FindingViewModel : ObservableObject
     /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
     /// let Deguffer list, and one whose every file is inside the guard on recently changed files.
     /// Both stay listed, because each is a thing the user may want to act on.
+    ///
+    /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
+    /// the label needs <see cref="Finding.HasReclaimableSpace"/> to be false, that is the sum of
+    /// every step's reclaimable bytes, and no step is negative — so every step measures zero, and
+    /// <see cref="StepViewModel.CanBeSelected"/> refuses each one. The proof holds only while both
+    /// sides count the same bytes. Moving either to <c>ScanSize.Allocated</c> would break it, and a
+    /// selected row would then be hidden by a filter that is on by default.</para>
     /// </summary>
     public bool IsAlreadyClear => StatusLabel == AlreadyClear;
 

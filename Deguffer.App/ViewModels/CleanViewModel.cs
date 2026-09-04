@@ -50,7 +50,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Rows arrive one provider at a time and are cleared wholesale between runs; subscribing
         // covers both without every mutation site having to remember to raise this.
-        Findings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoFindings));
+        Findings.CollectionChanged += (_, _) => NotifyEmptyStateChanged();
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
@@ -164,6 +164,10 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             row.IsListed = IsListed(row);
         }
+
+        // The collection did not change, so the subscription above raises nothing. Without this a
+        // filter that empties the list leaves the empty state collapsed behind it.
+        NotifyEmptyStateChanged();
     }
 
     /// <summary>
@@ -243,8 +247,36 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// Whether to show the empty state instead of the list. On launch the list is a large blank
     /// card, which reads as a screen that has failed rather than one waiting to be told to start.
+    ///
+    /// <para>Asked of what is drawn rather than of what was found, because a filter can empty the
+    /// list under a scan that found plenty. The commonest case is the one that follows success:
+    /// clean everything, let the run re-plan, and every row is then either clear or absent — both
+    /// hidden by default. Counting rows instead put a blank card at the end of a run that
+    /// worked.</para>
     /// </summary>
-    public bool HasNoFindings => Findings.Count == 0;
+    public bool HasNothingListed => !Findings.Any(f => f.IsListed);
+
+    /// <summary>
+    /// Whether that empty list is the filters' doing rather than an empty machine. The two need
+    /// different words: one says what to press, and the other says why a scan that finished is
+    /// showing nothing, and where to switch it back on.
+    /// </summary>
+    private bool IsHiddenByFilters => Findings.Count > 0 && HasNothingListed;
+
+    public string EmptyStateTitle => IsHiddenByFilters ? "Every row is hidden" : "Nothing scanned yet";
+
+    public string EmptyStateMessage => IsHiddenByFilters
+        ? "The scan found locations, and the filters are hiding all of them. Tick “Show items not "
+          + "installed” above, or switch on “Show items that are already clear” in Settings."
+        : "Preview looks at the locations Deguffer recognises and reports what each one holds. It "
+          + "reads only — nothing is removed until you choose to.";
+
+    private void NotifyEmptyStateChanged()
+    {
+        OnPropertyChanged(nameof(HasNothingListed));
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateMessage));
+    }
 
     public bool CanClean => HasPreview && !IsBusy && Findings.Any(f => f.IsSelected);
 

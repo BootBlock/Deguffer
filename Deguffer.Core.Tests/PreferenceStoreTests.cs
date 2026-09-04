@@ -60,8 +60,8 @@ public class PreferenceStoreTests
     /// <c>true</c> and <c>Compact</c>, differ from <c>default(bool)</c> and
     /// <c>default(ViewDensity)</c>, so the two answers differ and the assertions have something to
     /// catch. Asserting the same thing about <c>RequireTypedConfirmation</c>,
-    /// <c>ShowNotInstalled</c> or <c>ShowAlreadyClear</c> would prove nothing: both answers there
-    /// are <c>false</c>.
+    /// <c>ShowNotInstalled</c> or <c>ShowAlreadyClear</c> would prove nothing: for all three, both
+    /// answers are <c>false</c>.
     ///
     /// <c>BackdropEnabled</c> could prove it too, and is spent instead as the parse guard below.
     /// One preference has to be a key the file actually carries, or a wholesale fall through to the
