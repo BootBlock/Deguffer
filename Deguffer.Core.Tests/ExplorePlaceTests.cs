@@ -148,6 +148,44 @@ public class ExplorePlaceTests
         Assert.Equal(arriving.RootNode, ExplorePlace.Carry(standing: null, 3, arriving));
     }
 
+    /// <summary>
+    /// The selection's rule, and the whole of what separates it from the page's. A node the user
+    /// picked out by hand is kept only where it still names what it named, and answering the root
+    /// instead — which is what the page wants — would select a drive nobody asked to select.
+    /// </summary>
+    [Fact]
+    public void CarriesNothingWhenTheNodeNamesSomethingElse()
+    {
+        var before = ProfileTree(@"C:\Users\testuser");
+        var after = ProfileTree(@"D:\Users\testuser");
+
+        Assert.Null(ExplorePlace.TryCarry(before, 1, after));
+    }
+
+    /// <summary>
+    /// The case a selection has to survive: the walk publishes a partial tree every so often, and
+    /// what was picked out of one is the same thing in the next.
+    /// </summary>
+    [Fact]
+    public void CarriesTheNodeAcrossTheSnapshotsOfOneWalk()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        var cache = builder.AddChildren(ExploreTreeBuilder.RootNode, [Folder("npm-cache")]);
+        var snapshot = builder.Build(ExploreChildOrder.ByName);
+
+        builder.AddChildren(cache, [Entry("a.tgz", 4096)]);
+
+        Assert.Equal(cache, ExplorePlace.TryCarry(snapshot, cache, builder.Build(ExploreChildOrder.BySize)));
+    }
+
+    /// <summary>Nothing on screen to have picked anything out of.</summary>
+    [Fact]
+    public void CarriesNothingWhenNothingWasBeingShown()
+    {
+        Assert.Null(ExplorePlace.TryCarry(standing: null, 3, ProfileTree(Root)));
+    }
+
     /// <summary>A whole small tree, built the way the walk builds one.</summary>
     private static ExploreTree ProfileTree(string root)
     {

@@ -31,6 +31,9 @@ namespace Deguffer.App.Views;
 /// </summary>
 public sealed partial class ExplorePage : Page
 {
+    /// <summary>Whether <see cref="ShowSelectedRows"/> is writing the list's selection.</summary>
+    private bool _showingSelectedRows;
+
     public ExplorePage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -45,7 +48,11 @@ public sealed partial class ExplorePage : Page
                 () => new ContentDialogExploreConfirmation(XamlRoot, ActualTheme)));
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
-        ViewModel.ViewChanged += (_, _) => ShowCurrentNode();
+        ViewModel.ViewChanged += (_, _) =>
+        {
+            ShowCurrentNode();
+            ShowSelectedRows();
+        };
 
         InitializeComponent();
 
@@ -58,7 +65,16 @@ public sealed partial class ExplorePage : Page
 
         Map.Hovered += (_, what) => ViewModel.Hover(what.Node, what.AggregateBytes);
         Map.Activated += (_, node) => ViewModel.Descend(node);
-        Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
+        Map.Picked += (_, node) =>
+        {
+            ViewModel.Selection.Select(node is { } picked ? [picked] : []);
+
+            // The list is not on screen while the map is, and it keeps whatever was highlighted in
+            // it until something says otherwise. Saying so here rather than when the list comes
+            // back: the two are one selection, and leaving them to disagree in the meantime is a
+            // Delete pointed at a row the map never picked.
+            ShowSelectedRows();
+        };
         Map.MenuRequested += OnMapMenuRequested;
 
         // Read once, here, and never again — the same rule the Storage page's density selector
@@ -127,6 +143,51 @@ public sealed partial class ExplorePage : Page
         Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView, ViewModel.SelectedColouring);
 
     /// <summary>
+    /// Put the list's highlight back on what the view model says is selected.
+    ///
+    /// <para>The two are separate copies of one fact, and only the view model's survives a change
+    /// to the rows: a <c>ListView</c> drops an item from <c>SelectedItems</c> when the collection
+    /// under it stops holding that item where it was, which is every rebuild and every removal.
+    /// They also part company with no change to the rows at all, because the map selects while the
+    /// list is not on screen. Leaving them to disagree is the safety-relevant half — the menu and
+    /// the accelerators act on the view model's selection, so a highlight that has quietly gone, or
+    /// one left on the wrong row, is a Delete pointed at something nothing on screen
+    /// identifies.</para>
+    ///
+    /// <para>One way only. The view model's copy can name a node with no row at all, because a map
+    /// hit lands on descendants several levels below the current node, so the list is a subset of
+    /// it by design rather than a second opinion on it.</para>
+    /// </summary>
+    private void ShowSelectedRows()
+    {
+        var picked = ViewModel.Selection.Nodes;
+
+        if (RowsList.SelectedItems.OfType<ExploreRow>().Select(row => row.Node).ToHashSet().SetEquals(picked))
+        {
+            return;
+        }
+
+        // Writing these back raises SelectionChanged, once for the clear and once per row. That is
+        // this method's own doing rather than the user's, and letting it round-trip would report a
+        // half-applied selection back to the view model as a gesture.
+        _showingSelectedRows = true;
+
+        try
+        {
+            RowsList.SelectedItems.Clear();
+
+            foreach (var row in ViewModel.Rows.Where(row => picked.Contains(row.Node)))
+            {
+                RowsList.SelectedItems.Add(row);
+            }
+        }
+        finally
+        {
+            _showingSelectedRows = false;
+        }
+    }
+
+    /// <summary>
     /// The view is applied first and persisted second, so it takes effect whether or not the
     /// preferences file can be written — <see cref="Shell.PreferenceService"/>'s usual order is
     /// inverted here on the same reasoning the Storage page gives: that order exists so a rejected
@@ -189,8 +250,27 @@ public sealed partial class ExplorePage : Page
     /// The list's selection is the view-model's selection. Sent as nodes rather than as rows,
     /// because the map selects things that have no row.
     /// </summary>
-    private void OnRowSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+    private void OnRowSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsUserSelecting)
+        {
+            return;
+        }
+
         ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<ExploreRow>().Select(r => r.Node)]);
+    }
+
+    /// <summary>
+    /// Whether a selection change arriving from the list is the user's doing.
+    ///
+    /// <para>Two windows are not, and both are this page's own writing. While the view model is
+    /// rewriting the rows, the ListView drops every item it can no longer place and reports each
+    /// drop; while <see cref="ShowSelectedRows"/> is writing the highlight, so does every
+    /// intermediate state of that write. Taken for a gesture, either replaces the selection the
+    /// user made with whatever the rewrite had reached — and on a rescan those are node numbers
+    /// belonging to the tree before it, which the arriving one cannot place at all.</para>
+    /// </summary>
+    private bool IsUserSelecting => !_showingSelectedRows && !ViewModel.IsShowingRows;
 
     /// <summary>
     /// Two clicks go in. A folder is descended into and a file is opened, which is what a double

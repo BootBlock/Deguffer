@@ -72,6 +72,16 @@ public sealed partial class ExploreSelection : ObservableObject
     public event EventHandler? Changed;
 
     /// <summary>
+    /// What is selected, by node.
+    ///
+    /// <para>Named so the list can be put back in step with it. A <c>ListView</c> keeps its own
+    /// copy of the selection and drops an item from it when the collection under it stops holding
+    /// that item where it was, then reports that back as though the user had cleared it — so
+    /// something has to say which of the two copies is right, and it is this one.</para>
+    /// </summary>
+    public IReadOnlyList<int> Nodes => _nodes;
+
+    /// <summary>
     /// What is selected, named so the map's user can see it too.
     ///
     /// <para>The three pictures have no selection outline — the geometry is a bitmap, and a
@@ -128,14 +138,45 @@ public sealed partial class ExploreSelection : ObservableObject
     }
 
     /// <summary>
+    /// Move to a tree that continues the one on screen, keeping whatever is still selected.
+    ///
+    /// <para>The other half of <see cref="Show"/>, and what separates them is what the replacement
+    /// meant. Stepping into a folder is a new subject, so the selection goes with the old one; a
+    /// snapshot arriving mid-scan is the same subject measured again, and dropping the selection
+    /// every time one lands is what made a folder impossible to pick while a scan ran.</para>
+    ///
+    /// <para>A node is kept only where it still names what it named, which is
+    /// <see cref="ExplorePlace.TryCarry"/>'s rule and the same one that decides where the page is
+    /// standing. One that does not carry is dropped rather than replaced: §7.1 lets this act only on
+    /// what the user picked out by hand, and putting something else in its place would be the tool
+    /// choosing the target.</para>
+    /// </summary>
+    public void Carry(ExploreTree tree)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        // Read against the tree the numbers belong to, before that becomes the arriving one.
+        var kept = _nodes.Where(node => ExplorePlace.TryCarry(_tree, node, tree) is not null).ToArray();
+
+        _tree = tree;
+
+        Select(kept);
+        Stale();
+    }
+
+    /// <summary>
     /// What the user picked out by hand, by node.
     ///
     /// <para>By node rather than by row, because the list is not the only view that can select. A
     /// map hit can land on a descendant several levels below the current node, which has no row at
     /// all — and §7.1's actions are the same actions whichever picture the user was reading.</para>
     ///
-    /// <para>Never set by anything but a user gesture. §7.1: Explore never pre-selects, and never
-    /// acts on more than what was picked out by hand.</para>
+    /// <para>§7.1: Explore never pre-selects, and never acts on more than what was picked out by
+    /// hand. A gesture is the only thing that may widen this, and the page holds every change the
+    /// list reports while the rows are being rewritten, so what a rewrite left behind never arrives
+    /// here as one. The callers that are not gestures only ever narrow: <see cref="Show"/> and the
+    /// end of a removal empty it outright, and <see cref="Carry"/> drops whatever no longer names
+    /// what it named.</para>
     /// </summary>
     public void Select(IReadOnlyList<int> nodes)
     {

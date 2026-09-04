@@ -276,9 +276,21 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasNoTree => Tree is null;
 
     /// <summary>
-    /// Raised when the tree or the current node changed, so the map redraws. An event rather than
-    /// the control watching several properties: a redraw is expensive and must happen once per
-    /// change, not once per property that took part in it.
+    /// Whether the rows are being rewritten from here.
+    ///
+    /// <para>Read by the page, because a bound <c>ListView</c> drops an item from its own
+    /// selection when the collection under it stops holding that item where it was, and reports
+    /// that back as a selection change. Taken for a gesture, it overwrites the selection with
+    /// whatever the rewrite happened to leave behind — on a rescan that is a node number belonging
+    /// to the tree before it, and asking the arriving tree for its path throws.</para>
+    /// </summary>
+    public bool IsShowingRows { get; private set; }
+
+    /// <summary>
+    /// Raised once the tree, the current node or the rows have changed, so the map redraws and the
+    /// list's own selection is put back in step with <see cref="ExploreSelection.Nodes"/>. An event
+    /// rather than the control watching several properties: a redraw is expensive and must happen
+    /// once per change, not once per property that took part in it.
     /// </summary>
     public event EventHandler? ViewChanged;
 
@@ -575,11 +587,31 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private void Show(ExploreTree tree, int node)
     {
+        var standing = Tree;
+
+        // Whether what is on screen is still about the same directory. A snapshot landing mid-scan
+        // is: it measures again what the page is already standing in. Stepping into a folder is
+        // not, and neither is a scan that came back rooted somewhere else.
+        var continuing = ExplorePlace.TryCarry(standing, CurrentNode, tree) == node;
+
         Tree = tree;
         CurrentNode = node;
 
-        Selection.Show(tree);
-        BuildRows(tree, node);
+        if (continuing)
+        {
+            Selection.Carry(tree);
+        }
+        else
+        {
+            Selection.Show(tree);
+        }
+
+        // Brought up to date in place only while the list is the same list: the same directory, in
+        // the same order. A finished tree arrives with its children in size order after a walk's
+        // snapshots delivered them in name order, and that is a different list rather than this one
+        // changed — every row has moved, so reconciling it would be a move per entry, and the scroll
+        // position it would preserve is a position in content that is no longer there.
+        ShowRows(tree, node, continuing && standing?.ChildOrder == tree.ChildOrder);
         BuildTrail(tree, node);
 
         Hovered = string.Empty;
@@ -591,15 +623,52 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree)
         {
-            BuildRows(tree, CurrentNode);
+            // The same directory of the same tree, with something taken out of it, so the rows are
+            // brought up to date rather than rebuilt and the list stays where the user left it.
+            ShowRows(tree, CurrentNode, reconcile: true);
         }
 
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void BuildRows(ExploreTree tree, int node)
+    /// <summary>
+    /// Bring <see cref="Rows"/> to what <paramref name="node"/> holds in <paramref name="tree"/>.
+    /// </summary>
+    /// <param name="reconcile">
+    /// Whether the rows already there are about this same directory.
+    ///
+    /// <para>Clearing the collection is a Reset for the bound <c>ListView</c>, and a Reset throws
+    /// away the scroll position and the selection with it — which, on a walked scan publishing a
+    /// snapshot every few hundred milliseconds, made reading a long list or picking a folder out of
+    /// one impossible while the scan ran. So a list still about the same thing is brought up to
+    /// date in place: the rows that stay are the same objects, and the <c>ListView</c> is told
+    /// nothing it has to recover from.</para>
+    ///
+    /// <para>A list about something else is rebuilt. The identities are unrelated, so matching them
+    /// up would keep a highlight the user put on a different folder, and the scroll position is
+    /// about content that is no longer there.</para>
+    /// </summary>
+    private void ShowRows(ExploreTree tree, int node, bool reconcile)
     {
-        Rows.Clear();
+        IsShowingRows = true;
+
+        try
+        {
+            Rewrite(tree, node, reconcile);
+        }
+        finally
+        {
+            IsShowingRows = false;
+        }
+    }
+
+    /// <summary>The pass itself. See <see cref="ShowRows"/>, which is what holds the gate open.</summary>
+    private void Rewrite(ExploreTree tree, int node, bool reconcile)
+    {
+        if (!reconcile)
+        {
+            Rows.Clear();
+        }
 
         var total = tree.SizeOf(node);
 
@@ -608,6 +677,8 @@ public sealed partial class ExploreViewModel : ObservableObject
         // land in different days (G5).
         var now = DateTime.UtcNow;
 
+        var at = 0;
+
         foreach (var child in tree.ChildrenOf(node))
         {
             if (Selection.WasRemoved(child))
@@ -615,17 +686,56 @@ public sealed partial class ExploreViewModel : ObservableObject
                 continue;
             }
 
-            Rows.Add(new ExploreRow(
-                child,
-                tree.NameOf(child),
-                ExploreRowText.Size(tree, child),
-                total > 0 ? 100.0 * tree.SizeOf(child) / total : 0,
-                tree.IsDirectory(child),
-                tree.IsLink(child),
-                tree.HasUnknownSizeBelow(child),
-                ExploreRowText.Age(tree, child, now),
-                ExploreRowText.Dates(tree, child)));
+            if (at < Rows.Count && Rows[at].Is(tree, child))
+            {
+                Rows[at].Describe(tree, total, now);
+            }
+            else if (RowFor(tree, child, at) is { } sits)
+            {
+                Rows.Move(sits, at);
+                Rows[at].Describe(tree, total, now);
+            }
+            else
+            {
+                Rows.Insert(at, new ExploreRow(tree, child, total, now));
+            }
+
+            at++;
         }
+
+        // Whatever the pass above did not claim: rows for things that have been removed, and the
+        // tail left behind when a directory holds fewer entries than it did.
+        while (Rows.Count > at)
+        {
+            Rows.RemoveAt(Rows.Count - 1);
+        }
+    }
+
+    /// <summary>
+    /// Where the row for <paramref name="child"/> sits at or after <paramref name="from"/>, or null
+    /// where none of them is about it. Everything before <paramref name="from"/> is already settled,
+    /// so the search starts there.
+    ///
+    /// <para>The search starts where the row would be if nothing had moved, so what the pass around
+    /// it costs is how far the rows actually travelled: nothing at all while the sequence is
+    /// unchanged, which is every snapshot of one walk, and one step each after an entry is removed
+    /// from the directory on screen. It is quadratic only where most of the list has moved, and
+    /// <see cref="Show"/> keeps the one case that guarantees that — a finished tree in size order
+    /// replacing snapshots in name order — out of here entirely. What is left is two scans of one
+    /// volume, which agree on the order they are in and disagree only about whatever changed size
+    /// between them (G4).</para>
+    /// </summary>
+    private int? RowFor(ExploreTree tree, int child, int from)
+    {
+        for (var i = from; i < Rows.Count; i++)
+        {
+            if (Rows[i].Is(tree, child))
+            {
+                return i;
+            }
+        }
+
+        return null;
     }
 
     private void BuildTrail(ExploreTree tree, int node)

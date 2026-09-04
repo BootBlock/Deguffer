@@ -290,8 +290,8 @@
                             <Grid ColumnSpacing="12" Padding="0,4"
                                   Background="Transparent"
                                   ColumnDefinitions="16,*,120,90,150"
-                                  AutomationProperties.Name="{x:Bind Description}"
-                                  ToolTipService.ToolTip="{x:Bind DatesLabel}">
+                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
+                                  ToolTipService.ToolTip="{x:Bind DatesLabel, Mode=OneWay}">
                                 <FontIcon Grid.Column="0"
                                           FontSize="14"
                                           Glyph="{x:Bind Icon}"
@@ -308,11 +308,11 @@
                                 <ProgressBar Grid.Column="2"
                                              VerticalAlignment="Center"
                                              Maximum="100"
-                                             Value="{x:Bind Share}"
+                                             Value="{x:Bind Share, Mode=OneWay}"
                                              AutomationProperties.AccessibilityView="Raw" />
 
                                 <TextBlock Grid.Column="3"
-                                           Text="{x:Bind SizeLabel}"
+                                           Text="{x:Bind SizeLabel, Mode=OneWay}"
                                            TextAlignment="Right"
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
@@ -322,7 +322,7 @@
                                      and stands still while its contents are rewritten. The exact
                                      dates, and which is which, are on the row's tooltip. -->
                                 <TextBlock Grid.Column="4"
-                                           Text="{x:Bind AgeLabel}"
+                                           Text="{x:Bind AgeLabel, Mode=OneWay}"
                                            TextAlignment="Right"
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
