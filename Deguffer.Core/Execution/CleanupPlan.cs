@@ -105,6 +105,39 @@ public sealed record CleanupPlan
     public bool HasUnreadableRoot { get; init; }
 
     /// <summary>
+    /// Whether this plan's zero fails to describe its subject, because Deguffer would not look
+    /// through part of it and found nothing to offer in the rest.
+    ///
+    /// <para>The counterpart to <see cref="HasUnreadableRoot"/>, and deliberately not the same flag:
+    /// the two send the reader to different places. That one is Windows refusing a listing, and the
+    /// answer to it is permissions. This one is Deguffer's own decision — a root that turned out to
+    /// be a link, or a tool that would not say where its cache is — and there are no permissions to
+    /// check. Relocating a cache onto another drive with a junction is a thing developers do on
+    /// purpose, so "could not be read" would send one hunting a fault that is not there.</para>
+    ///
+    /// <para>What it shares with that flag is the reason it exists at all: a present row with
+    /// nothing to reclaim renders as "Already clear", and that is a claim about the location. It is
+    /// no more true of a folder nobody looked in than of one nobody was allowed to read, and the
+    /// junctioned root behind it is routinely the largest thing this tool would have found.</para>
+    ///
+    /// <para><b>The test is "nothing targeted, and something declined", never "nothing examined".</b>
+    /// A provider reaches this state by two routes, and only the first one examines nothing at all:
+    /// an early return before it looked (a junctioned root, a tool that would not name its cache),
+    /// or a full pass that classified what it could and declined every candidate it would have
+    /// offered. Both leave a figure of zero that excludes an amount nobody can state, which is the
+    /// thing the row must not present as clear. The second route is why the condition does not ask
+    /// whether examining happened: a folder holding one junction and three children Deguffer read
+    /// and left alone has been examined, and its zero is still not the whole story.</para>
+    ///
+    /// <para>Nothing targeted is the load-bearing half. A plan with a step has a size and reads
+    /// "Ready to clean", so widening the declined half can never hide a real total. It is asked of
+    /// the targets rather than the steps, so that a plan the guard on recently changed files
+    /// emptied stays <see cref="HasRecentContentHeldBack"/>'s to describe rather than this one's.
+    /// </para>
+    /// </summary>
+    public bool WasNotExamined { get; init; }
+
+    /// <summary>
     /// Whether any step here cannot be carried out without administrator rights.
     ///
     /// Separate from <see cref="Fallback"/> on purpose: that one is about how a size was arrived at,

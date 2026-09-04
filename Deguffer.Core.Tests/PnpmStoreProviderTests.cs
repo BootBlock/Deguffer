@@ -103,10 +103,21 @@ public sealed class PnpmStoreProviderTests : IDisposable
     {
         foreach (var answer in new[] { "", "not-a-path", "relative\\store" })
         {
-            var plan = await CreateProvider(new FakeProcessRunner().Responding("store path", answer)).PlanAsync();
+            var provider = CreateProvider(new FakeProcessRunner().Responding("store path", answer));
+
+            // pnpm is on the machine, so the row is present with nothing to reclaim — and the
+            // store behind it, wherever it is, would be reported as "Already clear".
+            Assert.True(await provider.IsPresentAsync());
+
+            var plan = await provider.PlanAsync();
 
             Assert.True(plan.IsEmpty);
             Assert.Contains(plan.Notes, n => n.Message.Contains("did not say where", StringComparison.Ordinal));
+
+            // An admission rather than a clean bill of health. Not HasUnreadableRoot: nothing
+            // refused Deguffer anything, it was never told where to look.
+            Assert.True(plan.WasNotExamined);
+            Assert.False(plan.HasUnreadableRoot);
         }
     }
 
@@ -120,6 +131,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
         var plan = await CreateProvider(new FakeProcessRunner().Responding("store path", @"C:\")).PlanAsync();
 
         Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
     }
 
     [Fact]
@@ -133,6 +145,10 @@ public sealed class PnpmStoreProviderTests : IDisposable
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("does not exist yet", StringComparison.Ordinal));
+
+        // The other side of the boundary: pnpm said where its store is and it is not there yet, so
+        // "Already clear" is the true answer and must stay available.
+        Assert.False(plan.WasNotExamined);
     }
 
     /// <summary>

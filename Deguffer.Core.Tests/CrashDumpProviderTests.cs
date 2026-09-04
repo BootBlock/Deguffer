@@ -263,6 +263,9 @@ public sealed class CrashDumpProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
 
+        // Nothing targeted and something declined, so the row must not read "Already clear".
+        Assert.True(plan.WasNotExamined);
+
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(bystander), "a junctioned target was deleted through");
@@ -289,6 +292,8 @@ public sealed class CrashDumpProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("Microsoft", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
+
+        Assert.True(plan.WasNotExamined);
 
         await provider.ExecuteAsync(plan);
 

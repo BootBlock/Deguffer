@@ -167,11 +167,22 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Populate(DefaultRepository);
         WriteSettings(configured);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        // The configured directory is on disk, so the row is present with nothing to reclaim — and
+        // a full repository behind it would otherwise be reported as "Already clear".
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("holds your Maven configuration", StringComparison.Ordinal));
+
+        // Not HasUnreadableRoot: Windows refused nothing. Deguffer refused to target the value it
+        // was given, so nothing under it was examined.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>
@@ -185,10 +196,15 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Populate(Path.Combine(Home, "wrapper", "dists"));
         WriteSettings("${user.home}/.m2/wrapper");
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains("'wrapper'", StringComparison.Ordinal));
+        Assert.True(plan.WasNotExamined);
     }
 
     /// <summary>
@@ -204,6 +220,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
     }
 
     /// <summary>
@@ -285,11 +302,20 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Directory.CreateDirectory(Home);
         Directory.CreateSymbolicLink(DefaultRepository, outside);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        // The probe follows the junction, so the row is present with nothing to reclaim. The whole
+        // repository sits on the far side, and "Already clear" about it is the claim
+        // CleanupPlan.WasNotExamined exists to stop.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
         Assert.True(Directory.Exists(outside));
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>

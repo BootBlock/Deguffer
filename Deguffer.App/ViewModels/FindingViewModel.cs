@@ -156,17 +156,20 @@ public sealed partial class FindingViewModel : ObservableObject
         : !Finding.IsPresent
         ? "Not installed on this machine"
         : !Finding.HasReclaimableSpace
-            // "Already clear" is a claim about the folder, and there are two states it must not be
-            // made in. One is a folder Windows would not let Deguffer list. The other is a guard on
-            // whose every file is inside the guard window: it measures zero and it is full.
+            // "Already clear" is a claim about the folder, and there are three states it must not
+            // be made in. One is a folder Windows would not let Deguffer list. One is a location
+            // Deguffer declined to look at, or could not locate — the zero beside it is about what
+            // was examined, and nothing was. The last is a cache whose every file is inside the
+            // guard window: it measures zero and it is full.
             //
-            // The second asks the plan what the measurement actually withheld, never whether a
+            // That last one asks the plan what the measurement actually withheld, never whether a
             // guard is switched on. Driving the real window settled that: with the guard at seven
             // days, deriving it from the setting put "Nothing old enough" on twelve rows, most of
             // them simply empty — the same false claim wearing the opposite costume.
             ? Finding.Plan switch
             {
                 { HasUnreadableRoot: true } => "Could not be read",
+                { WasNotExamined: true } => "Not examined",
                 { HasRecentContentHeldBack: true } => "Nothing old enough",
                 _ => AlreadyClear,
             }
@@ -224,10 +227,11 @@ public sealed partial class FindingViewModel : ObservableObject
     ///
     /// Read off <see cref="StatusLabel"/> rather than restating the condition that produces it,
     /// because a second copy of that condition is free to disagree with the words on screen — and
-    /// what this filter promises is that it hides exactly the rows saying "Already clear". The two
+    /// what this filter promises is that it hides exactly the rows saying "Already clear". The three
     /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
-    /// let Deguffer list, and one whose every file is inside the guard on recently changed files.
-    /// Both stay listed, because each is a thing the user may want to act on.
+    /// let Deguffer list, a location Deguffer declined to look at or could not locate, and a cache
+    /// whose every file is inside the guard on recently changed files. All three stay listed,
+    /// because each is a thing the user may want to act on.
     ///
     /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
     /// the label needs <see cref="Finding.HasReclaimableSpace"/> to be false, that is the sum of

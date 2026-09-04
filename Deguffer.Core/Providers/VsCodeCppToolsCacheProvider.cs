@@ -201,6 +201,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
+            WasNotExamined = targets.Count == 0 && declined.Count > 0,
         };
     }
 

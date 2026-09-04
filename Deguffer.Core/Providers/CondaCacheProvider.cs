@@ -121,7 +121,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         var installation = await ResolveInstallationAsync(conda, ct).ConfigureAwait(false);
         if (installation is null)
         {
-            return EmptyPlan("conda did not describe where its package caches are, so nothing is offered rather than guessed.");
+            return UnexaminedPlan("conda did not describe where its package caches are, so nothing is offered rather than guessed.");
         }
 
         var packageCaches = installation.PackageCacheDirs.Where(LongPath.DirectoryExists).ToList();
@@ -140,7 +140,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         var preview = CondaReport.TryReadCleanPreview(outcome.StandardOutput);
         if (preview is null)
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 "conda did not report what its own clean command would remove, so nothing is "
                 + "offered — measuring the caches directly would count the packages your "
                 + "environments still use.");
