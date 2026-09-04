@@ -4,7 +4,7 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// What every account on the machine shares: the installed programs, and the data those programs
 /// keep for the computer rather than for one person.
 ///
-/// <para>The three roots here are the ones §7.1 refuses outright, so their entries have an extra
+/// <para>The four roots here are ones §7.1 refuses outright, so their entries have an extra
 /// job. A reader who has just found ten gigabytes under <c>ProgramData</c> and cannot delete it is
 /// owed the reason rather than a refusal, and where a supported route exists the line names it —
 /// which for installed software is nearly always the program's own uninstaller.</para>

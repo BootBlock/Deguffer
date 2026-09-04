@@ -18,8 +18,14 @@ namespace Deguffer.Core.Exploring.Knowledge;
 ///
 /// <para>It explains. It permits nothing. <see cref="Acting.ExploreActionPolicy"/> decides what
 /// Explore will remove, and it is asked again immediately before anything is deleted; nothing here
-/// is read by either. An entry saying a folder is safe to clear is a statement about the folder,
-/// never a licence.</para>
+/// is read by either.</para>
+///
+/// <para><b>No entry uses the word "safe", and §7.1 is why.</b> "Explore never classifies. It
+/// reports a name and a number. It never says a thing is safe" — so a verdict here says what
+/// deleting something <em>costs</em> and what the supported route is, and leaves the judgement where
+/// <see cref="Acting.ExploreVerdict.Unclassified"/> already leaves it. The difference is not
+/// pedantry: a size picture that blesses a folder is the failure §1 wrote the tier model to
+/// prevent.</para>
 /// </summary>
 public static class KnownItems
 {

@@ -5,9 +5,15 @@ namespace Deguffer.Core.Safety;
 ///
 /// <para>Read from the path rather than from a list of drives, and that is the whole point of it.
 /// A table built from <see cref="IVolumeInventory"/> is a snapshot, so a volume mounted after it
-/// was built would answer wrongly. The two callers are the one that refuses to delete a volume's
-/// paging file and the one that explains to the reader what a paging file is, and both have to be
-/// right on a drive plugged in a moment ago.</para>
+/// was built would answer wrongly. Its callers are the policy that refuses to delete a volume's
+/// paging file or NTFS's own records, and the reference that explains to a reader what those are,
+/// and all of them have to be right on a drive plugged in a moment ago.</para>
+///
+/// <para>Extracted from <see cref="Exploring.Acting.ExploreActionPolicy"/> rather than restated
+/// beside it. It answers a question about a path's position that two unrelated parts of the app
+/// need, and a safety rule written twice is one that gets changed once. The extraction preserves
+/// what that policy did: for every path it can receive, which is every path
+/// <see cref="LongPath.Configured(string?)"/> has already normalised, the answers agree.</para>
 ///
 /// <para>Its own type rather than a member on <see cref="LongPath"/>, which is about a path's
 /// <em>length</em> and the <c>\\?\</c> prefix §6.3 requires. This is about a path's position in a
@@ -32,6 +38,13 @@ public static class VolumeRoot
     /// A fully qualified path, ordinarily one <see cref="LongPath.Configured(string?)"/> has already
     /// normalised. Anything else answers null, because working a remainder out from a path that is
     /// not anchored anywhere would be inventing where it is.
+    ///
+    /// <para>Checked here rather than assumed, and that is a contract on a public type rather than
+    /// the re-validation G3 bans. Every caller today arrives through
+    /// <see cref="LongPath.Configured(string?)"/>, so the check is unreachable from any of them —
+    /// but <c>C:pagefile.sys</c> is the shape that makes it worth stating: it is drive-relative
+    /// rather than qualified, and its root and its remainder are indistinguishable from a path that
+    /// really is at a volume root.</para>
     /// </param>
     public static string? Below(string path)
     {

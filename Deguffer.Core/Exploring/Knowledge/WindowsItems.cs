@@ -67,9 +67,9 @@ internal static class WindowsItems
             + "along with the catalogue and the history the update agent keeps. It is scratch "
             + "space: the record of what is actually installed lives elsewhere.",
 
-            "Clearing it loses only update history and costs a slower first scan, and the supported "
-            + "route is Disk Cleanup's 'Windows Update Cleanup' rather than deleting the folder "
-            + "under a running service."),
+            "Clearing it loses only update history and costs a slower first scan, and the documented "
+            + "way is to stop the update service first rather than delete the folder under a "
+            + "running one."),
 
         new(
             KnownPlace.WindowsDirectory,
@@ -109,9 +109,8 @@ internal static class WindowsItems
             + "are supposed to clear up after themselves here and many do not, so it accumulates "
             + "indefinitely.",
 
-            "Its contents are safe to clear — Microsoft's own rule is anything not written in the "
-            + "past week, because a newer file may belong to an installer still running — and "
-            + "Storage Sense and Disk Cleanup both do it."),
+            "Disk Cleanup clears it and leaves anything written in the past week alone, because a "
+            + "newer file may belong to an installer that is still running."),
 
         new(
             KnownPlace.WindowsDirectory,
@@ -183,8 +182,8 @@ internal static class WindowsItems
             + "log of the Windows HTTP service and the odd system component; on a server it may "
             + "also hold web-server logs.",
 
-            "Old, rotated log files are safe to delete, and a log a service currently has open is "
-            + "not."),
+            "Deleting an old, rotated log costs the record of what happened, and a log a service "
+            + "currently has open cannot be deleted at all."),
 
         new(
             KnownPlace.WindowsDirectory,
@@ -222,11 +221,11 @@ internal static class WindowsItems
             KnownPlace.WindowsDirectory,
             "Minidump",
             "A small memory dump per blue screen, kept as a history so a pattern of crashes can be "
-            + "investigated. Windows keeps the most recent fifty by default and discards the rest, "
-            + "so this folder does not grow without limit.",
+            + "investigated. Each one is tens of kilobytes rather than the hundreds of megabytes "
+            + "the single large dump beside it takes.",
 
-            "They are safe to delete and cost only crash history, though the single large "
-            + "MEMORY.DMP beside them is usually the file worth looking at first."),
+            "Nothing reads them back, so deleting them costs the crash history and nothing else — "
+            + "though the single large MEMORY.DMP beside them holds far more of the space."),
 
         new(
             KnownPlace.WindowsDirectory,
@@ -236,8 +235,8 @@ internal static class WindowsItems
             + "dump runs to a few hundred megabytes, and a complete one is the size of the "
             + "machine's memory.",
 
-            "It is safe to delete and is often the single largest recoverable file in the Windows "
-            + "directory, at the cost of not being able to investigate the last crash."),
+            "Nothing reads it back once the crash has been looked at, so deleting it recovers its "
+            + "space and costs the ability to investigate that crash."),
 
         new(
             KnownPlace.WindowsDirectory,
@@ -311,7 +310,7 @@ internal static class WindowsItems
             + "to display a page. Nothing on a modern machine puts anything here, so it is normally "
             + "empty or nearly so.",
 
-            "It is safe to clear, Disk Cleanup has a category for exactly this, and there is almost "
+            "Disk Cleanup has a category for exactly this, and on a modern machine there is almost "
             + "never anything in it to recover."),
 
         new(

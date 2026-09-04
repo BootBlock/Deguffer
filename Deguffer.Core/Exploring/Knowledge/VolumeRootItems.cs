@@ -142,8 +142,8 @@ internal static class VolumeRootItems
             + "quotas have been switched on, which on an ordinary desktop they have not, and it "
             + "occupies nothing at all when they are off.",
 
-            "It cannot be deleted. Quotas are switched off with 'fsutil quota disable', which stops "
-            + "the tracking rather than recovering any measurable space."),
+            "It cannot be deleted. Quotas are switched off with 'fsutil quota disable <drive>:', which "
+            + "stops the tracking rather than recovering any measurable space."),
 
         Reserved(
             @"$Extend\$Reparse",
@@ -162,9 +162,9 @@ internal static class VolumeRootItems
             + "drive again. It grows with how busy the drive is, and Windows trims it back towards "
             + "a configured size.",
 
-            "It cannot be deleted as a file, and 'fsutil usn createjournal m=<size>' caps its "
-            + "growth without the long, disruptive rebuild that deleting the journal outright "
-            + "forces on everything reading it."),
+            "It cannot be deleted as a file, and 'fsutil usn createjournal m=<maxsize> a=<delta> "
+            + "<drive>:' caps its growth without the long, disruptive rebuild that deleting the "
+            + "journal outright forces on everything reading it."),
 
         Reserved(
             @"$Extend\$RmMetadata",

@@ -18,6 +18,12 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// <c>DumpStack.log</c>, <c>OneDriveTemp</c> and the rest of the family — are left out. Each is
 /// widely written about and none of it is first-party, and Deguffer's silence is the honest answer
 /// to a question it cannot source.</para>
+///
+/// <para>Where Microsoft documents the <em>component</em> and not the folder it leaves behind,
+/// <c>$WinREAgent</c> being the one here, the entry says which of the two is documented and stops.
+/// That is a narrower thing than an exception to the rule above: the reader is told what the name
+/// belongs to and told that nothing else about it is stated anywhere, rather than being handed a
+/// purpose somebody inferred.</para>
 /// </summary>
 internal static class VolumeItems
 {
@@ -42,8 +48,8 @@ internal static class VolumeItems
             + "is so often far larger than the bin appears to be: what is shown is only the signed-in "
             + "account's own deleted files, and every other account's are in here too.",
 
-            "Emptying the recycle bin is what clears it properly, and Storage Sense already removes "
-            + "anything left in it for thirty days."),
+            "Emptying the recycle bin clears this account's share of it and nobody else's, so another "
+            + "account's deleted files go only when that account empties its own."),
 
         new(
             KnownPlace.VolumeRoot,
@@ -108,8 +114,8 @@ internal static class VolumeItems
             + "during an update. Microsoft documents the component but not this folder, so what is "
             + "inside it and when it is cleared away are not stated anywhere first-party.",
 
-            "It is scratch space rather than anything Windows reads back, but with no documented "
-            + "route it should be left alone while any update is waiting to restart."),
+            "Microsoft documents no way to clear it and says nothing about what removing it costs, "
+            + "so Deguffer will not guess either."),
 
         new(
             KnownPlace.VolumeRoot,
@@ -183,8 +189,8 @@ internal static class VolumeItems
             + "is from an installation that did not complete — unless somebody chose it as the "
             + "place to install to.",
 
-            "AMD states that nothing installed depends on it, so it is safe to remove once no "
-            + "installation is running and it does not look like an installed program."),
+            "AMD states that nothing installed depends on it, so removing it costs only the unpacked "
+            + "copy — unless it is where somebody chose to install to, which is what to check first."),
 
         new(
             KnownPlace.VolumeRoot,

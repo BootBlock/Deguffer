@@ -365,7 +365,8 @@
                             <Grid ColumnSpacing="12" Padding="0,4"
                                   Background="Transparent"
                                   ColumnDefinitions="16,*,120,90,150"
-                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
+                                  AutomationProperties.HelpText="{x:Bind Tip, Mode=OneWay}">
                                 <!--
                                     The two dates, and where the app knows the name, what the thing
                                     is and whether deleting it recovers anything.
@@ -373,6 +374,15 @@
                                     Wrapped by hand, because a tooltip's default presenter does not
                                     wrap: an explanation set on it as a plain string is one line as
                                     wide as the sentence, off the side of the window.
+
+                                    Said again as help text above, because a tooltip is not an
+                                    accessible surface here. Measured: a plain-string tooltip
+                                    elsewhere on this page reports no HelpText either, so this is not
+                                    a WPF-style fallback that templating the content took away —
+                                    WinUI simply does not carry a tooltip into the automation tree,
+                                    and the same row of text has to be given twice. It is the rule
+                                    ExploreRowText already states for the size column: what only the
+                                    eye can reach gets said in words as well.
                                 -->
                                 <ToolTipService.ToolTip>
                                     <ToolTip MaxWidth="420" Content="{x:Bind Tip, Mode=OneWay}">

@@ -156,9 +156,8 @@ internal static class ProfileItems
             + "scratch here and are supposed to clear up afterwards; a great many do not, so it "
             + "grows without limit and is frequently gigabytes.",
 
-            "It is the best routine reclaim on a drive, and Storage Sense and Disk Cleanup both "
-            + "clear it — anything written in the past week may belong to something still running "
-            + "and is left alone."),
+            "Disk Cleanup clears it and leaves the past week alone, because a newer file may belong "
+            + "to something still running, and Storage Sense clears it too once it is switched on."),
 
         new(
             KnownPlace.LocalAppData,

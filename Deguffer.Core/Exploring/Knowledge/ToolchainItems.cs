@@ -142,8 +142,8 @@ internal static class ToolchainItems
             + "megabytes and hundreds of thousands of tiny files for a single project, and a "
             + "machine used for web work carries dozens of them.",
 
-            "It can be rebuilt with 'npm ci' only where the project's lock file is intact and the "
-            + "registry is reachable, so it is safe to remove for a project that has one and "
-            + "destructive for a project that does not."),
+            "A project with a lock file rebuilds it exactly with 'npm ci', so removing it costs a "
+            + "reinstall; without one, 'npm install' still rebuilds it from package.json, but the "
+            + "versions it resolves may differ from what was there."),
     ];
 }

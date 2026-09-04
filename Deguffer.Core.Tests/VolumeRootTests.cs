@@ -35,8 +35,10 @@ public sealed class VolumeRootTests
     public void ARootItselfIsNot(string path) => Assert.False(VolumeRoot.Holds(path));
 
     /// <summary>
-    /// The share case, which is the one that fails if the trailing separator is compared as it
-    /// arrives: <c>GetPathRoot</c> keeps it here and <c>GetDirectoryName</c> does not.
+    /// A share, where the root's shape is not the drive's. <see cref="Path.GetPathRoot(string?)"/>
+    /// answers <c>C:\</c> with its separator and <c>\\server\share</c> without one, so the remainder
+    /// below the root carries a leading separator here and not there. Taking the remainder as it
+    /// comes answers correctly for a drive and wrongly for a share.
     /// </summary>
     [Fact]
     public void ADirectChildOfAShareIsAtTheRoot() =>

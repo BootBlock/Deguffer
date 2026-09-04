@@ -141,6 +141,82 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// NTFS's own records, which §7.1 puts out of reach: they are live filesystem state, so the tier
+    /// model calls them Tier 4 and Explore refuses them without getting to decide otherwise.
+    ///
+    /// <para>They are here because §5.5's file-table route draws them. A directory walk never sees
+    /// these names, so before that route existed nothing could put one in front of a user; reading
+    /// the table directly puts <c>$MFT</c> at the top of a scanned drive at several hundred
+    /// megabytes.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("$MFT")]
+    [InlineData("$MFTMirr")]
+    [InlineData("$LogFile")]
+    [InlineData("$Volume")]
+    [InlineData("$AttrDef")]
+    [InlineData("$Bitmap")]
+    [InlineData("$Boot")]
+    [InlineData("$BadClus")]
+    [InlineData("$Secure")]
+    [InlineData("$UpCase")]
+    [InlineData("$Extend")]
+    [InlineData("$mft")]
+    public void WhatNtfsReservesIsRefusedOnAnyDrive(string name)
+    {
+        Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, name)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+    }
+
+    /// <summary>
+    /// And everything under <c>$Extend</c>, where NTFS keeps the features that are not part of the
+    /// core on-disk format. The change journal is the one that grows, so it is the one a size
+    /// picture is most likely to surface — and it is a level below the root, which is why the rule
+    /// asks about the first segment rather than about a direct child.
+    /// </summary>
+    [Theory]
+    [InlineData(@"$Extend\$UsnJrnl")]
+    [InlineData(@"$Extend\$RmMetadata")]
+    [InlineData(@"$Extend\$RmMetadata\$Tops")]
+    public void EverythingBelowTheExtendDirectoryIsRefused(string relative)
+    {
+        Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The negative half, and the half that matters. The rule is about the names NTFS reserves at a
+    /// volume root, so it must not reach a folder that merely starts with a dollar, nor an upgrade
+    /// leftover somebody may legitimately want gone — refusing those would take a capability away
+    /// rather than add a protection.
+    ///
+    /// <para>Asserted on a drive the region table says nothing about, so what is being measured is
+    /// this rule and not another one. The synthetic profile lives under the temp directory, and
+    /// everything beside it there is refused as another account's.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("$WinREAgent")]
+    [InlineData("$Windows.~BT")]
+    [InlineData("$GetCurrent")]
+    [InlineData("$MFTBackup")]
+    [InlineData("MFT")]
+    public void ANameNtfsDoesNotReserveIsNotRefusedForThatReason(string name)
+    {
+        Assert.True(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+    }
+
+    /// <summary>
+    /// And not one level down either. A folder somebody called <c>$MFT</c> inside their own
+    /// documents is theirs, and the rule is about the reserved place rather than the word.
+    /// </summary>
+    [Fact]
+    public void AReservedNameInsideAFolderIsOrdinary()
+    {
+        Assert.True(Policy()
+            .MayRemove(Path.Combine(_environment.UserProfile, "Documents", "$MFT"))
+            .IsAllowed);
+    }
+
+    /// <summary>
     /// A region whose path will not resolve is dropped rather than kept with the value it arrived
     /// with. An empty one prefix-matches every UNC path, so admitting it would refuse a whole network
     /// share with a sentence naming no directory at all — and <c>%ProgramFiles(x86)%</c> is genuinely
