@@ -36,10 +36,26 @@ public static class CushionShading
     private const double LightZ = 0.9759;
 
     /// <summary>
+    /// The ridge height at every depth a real tree reaches, worked out once.
+    ///
+    /// <para><see cref="RidgeAt"/> is asked per pixel of a sunburst and per rectangle per band of a
+    /// treemap, which is millions of times a repaint, and <see cref="Math.Pow(double, double)"/> is
+    /// nowhere near cheap enough to be asked that often (G4/G5). Sixty-four levels is past the point
+    /// where the ridge is flat to within a byte of a colour channel, and a deeper shape than that
+    /// falls back to the arithmetic rather than to a wrong answer.</para>
+    /// </summary>
+    private static readonly double[] Ridges = Enumerable
+        .Range(0, 64)
+        .Select(depth => 4 * RidgeHeight * Math.Pow(DepthScale, depth))
+        .ToArray();
+
+    /// <summary>
     /// How far the surface tilts at the edges of a shape at this depth. The ridge flattens as it
     /// goes down, so a nested shape reads as sitting on its parent rather than competing with it.
     /// </summary>
-    public static double RidgeAt(int depth) => 4 * RidgeHeight * Math.Pow(DepthScale, depth);
+    public static double RidgeAt(int depth) => (uint)depth < (uint)Ridges.Length
+        ? Ridges[depth]
+        : 4 * RidgeHeight * Math.Pow(DepthScale, depth);
 
     /// <summary>
     /// How brightly a point whose surface normal tilts by <paramref name="nx"/> and

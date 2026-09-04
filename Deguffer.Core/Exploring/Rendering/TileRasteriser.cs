@@ -59,15 +59,51 @@ public static class TileRasteriser
                 nameof(pixels));
         }
 
-        PixelBuffer.Fill(pixels, background);
+        // One colour per rectangle, before a single pixel is written, as SectorRasteriser does. The
+        // reason is sharper here: each band below walks the whole list, so resolving a colour inside
+        // that loop would climb a node's ancestors once per band as well as once per rectangle (G4).
+        var colours = new TileColour[tiles.Count];
 
-        foreach (var tile in tiles)
+        for (var i = 0; i < tiles.Count; i++)
         {
-            Cushion(pixels, width, height, tile, colourOf(tile.Node, tile.Depth));
+            colours[i] = colourOf(tiles[i].Node, tiles[i].Depth);
         }
+
+        // Split by rows, not by rectangle. Handing each rectangle to Parallel.For in turn — which is
+        // what painting one shape at a time amounted to — only ever cleared the threshold for the
+        // handful of large ones, so a canvas made of fifty thousand small rectangles was shaded on a
+        // single thread while every other core sat idle. It also built a closure per rectangle.
+        //
+        // A band owns its rows outright, and every rectangle is offered to every band in the order
+        // the layout gave, clipped to the rows that band holds. So the nesting still comes out of
+        // the painting order and the picture is the one a single thread would have produced.
+        PixelBuffer.Bands(0, height, width * height, (from, to) =>
+        {
+            PixelBuffer.Fill(pixels, width, from, to, background);
+
+            for (var i = 0; i < tiles.Count; i++)
+            {
+                Cushion(pixels, width, height, from, to, tiles[i], colours[i]);
+            }
+        });
     }
 
-    private static void Cushion(byte[] pixels, int width, int height, ExploreTile tile, TileColour colour)
+    /// <summary>
+    /// Shade one rectangle into the rows between <paramref name="bandTop"/> and
+    /// <paramref name="bandBottom"/>.
+    ///
+    /// <para>The cushion is measured across the whole rectangle and only <em>drawn</em> within the
+    /// band. Measuring it within the band instead would restart the gradient at every band boundary
+    /// and put a seam across the picture wherever one fell.</para>
+    /// </summary>
+    private static void Cushion(
+        byte[] pixels,
+        int width,
+        int height,
+        int bandTop,
+        int bandBottom,
+        ExploreTile tile,
+        TileColour colour)
     {
         var left = Math.Max(0, (int)MathF.Round(tile.X));
         var top = Math.Max(0, (int)MathF.Round(tile.Y));
@@ -75,6 +111,14 @@ public static class TileRasteriser
         var bottom = Math.Min(height, (int)MathF.Round(tile.Y + tile.Height));
 
         if (right <= left || bottom <= top)
+        {
+            return;
+        }
+
+        var firstRow = Math.Max(top, bandTop);
+        var lastRow = Math.Min(bottom, bandBottom);
+
+        if (lastRow <= firstRow)
         {
             return;
         }
@@ -91,21 +135,20 @@ public static class TileRasteriser
         var spanWidth = right - left;
         var spanHeight = bottom - top;
 
-        void Row(int y)
+        for (var y = firstRow; y < lastRow; y++)
         {
             var v = spanHeight <= 1 ? 0.5 : (double)(y - top) / (spanHeight - 1);
             var ny = ridge * ((2 * v) - 1);
+            var offset = ((y * width) + left) * 4;
 
             for (var x = left; x < right; x++)
             {
                 var u = spanWidth <= 1 ? 0.5 : (double)(x - left) / (spanWidth - 1);
                 var nx = ridge * ((2 * u) - 1);
 
-                CushionShading.Write(
-                    pixels, ((y * width) + x) * 4, colour, CushionShading.LightAt(nx, ny));
+                CushionShading.Write(pixels, offset, colour, CushionShading.LightAt(nx, ny));
+                offset += 4;
             }
         }
-
-        PixelBuffer.Rows(top, bottom, spanWidth * spanHeight, Row);
     }
 }
