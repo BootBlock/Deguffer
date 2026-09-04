@@ -21,6 +21,7 @@ public class PreferenceStoreTests
             ViewDensity.Standard,
             ExploreView.List,
             ExploreColouring.Age,
+            ExploreNotesDismissed: true,
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
             BackdropEnabled: false,
@@ -39,6 +40,12 @@ public class PreferenceStoreTests
 
         // Not the default either, and for the same reason: Branch is zero.
         Assert.Equal(ExploreColouring.Age, loaded.ExploreColours);
+
+        // Not the default, for the reason the two above give: false is what the record declares and
+        // what a missing key deserialises to, so asserting false would pass with the preference
+        // deleted outright.
+        Assert.True(loaded.ExploreNotesDismissed);
+
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);
         Assert.False(loaded.BackdropEnabled);

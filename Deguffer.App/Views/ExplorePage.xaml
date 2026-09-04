@@ -398,12 +398,11 @@
                 <!--
                     The notes, over the picture rather than under it.
 
-                    Every one of these opens and closes while the user is reading the card above:
-                    a refusal arrives and goes with each click, and the substitution note comes and
-                    goes with every snapshot a running scan publishes. Below the card they were
-                    part of the status area's height, so the card was given a new size on each one
-                    and the drawing inside it was rebuilt at that size — and a size picture that
-                    changes size while it is being read is a picture nobody can read.
+                    A refusal arrives and goes with each click, and the other three open and close
+                    across a scan. Below the card they were part of the status area's height, so the
+                    card was given a new size on each one and the drawing inside it was rebuilt at
+                    that size — and a size picture that changes size while it is being read is a
+                    picture nobody can read.
 
                     So they cover rather than displace, and nothing the user does to what is on
                     the card can resize it. What is left above it still can: the progress bar and
@@ -411,12 +410,19 @@
                     the Colour and View boxes. Each of those is a deliberate act at a moment the
                     picture is being rebuilt anyway, which is the opposite of what this fixes.
 
-                    Nothing here takes the pointer. The map has no keyboard way round a shape, and
-                    the stale note stands until the next scan rather than until the next click, so
-                    a hit-testable strip over the drawing would put part of the picture out of
-                    reach for the rest of the session. These are four sentences with nothing to
-                    click, so they let the pointer through to the shapes they are drawn over, and
-                    the hover line goes on naming whatever is under it.
+                    The sentences let the pointer through, and only the button that closes them
+                    takes it. The map has no keyboard way round a shape, and the stale note stands
+                    until the next scan rather than until the next click, so a hit-testable strip
+                    over the drawing would put part of the picture out of reach for the rest of the
+                    session. Text has nothing to click anyway, so the shapes underneath stay
+                    reachable and the hover line goes on naming whatever is under the pointer.
+
+                    The reader can put the whole panel away, and it stays away across launches. It
+                    collapses to the button below rather than going, so nothing it was carrying is
+                    lost — §7.1's refusal and §5.5's route sentence become one activation away, which
+                    is the standard §7 already sets for a Storage row's own disclosure. Nothing but
+                    the reader reopens it: a note arriving later brings the button back, never the
+                    panel.
 
                     The list is the one view that cannot be covered, because rows underneath one
                     are rows nothing can retrieve, so OnNotesResized ends it above them.
@@ -428,64 +434,124 @@
                     without the backdrop helping, and a control sitting on a drawing has to bring
                     its own ground.
                 -->
-                <Border x:Name="Notes"
-                        VerticalAlignment="Bottom"
-                        Margin="12"
-                        CornerRadius="{ThemeResource ControlCornerRadius}"
-                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                        IsHitTestVisible="False"
-                        SizeChanged="OnNotesResized">
+                <Grid x:Name="Notes"
+                      VerticalAlignment="Bottom"
+                      Margin="12"
+                      SizeChanged="OnNotesResized">
                     <!--
-                        Each note states its visibility as well as opening, and the two say the
-                        same thing on purpose. A closed InfoBar collapses its template's content
-                        and stays Visible itself, so a StackPanel still spaces it against its
-                        neighbours: four closed notes left an 18px bar of the backing painted
-                        across the map at all times, and took thirty pixels off the list for
-                        nothing. Collapsed, they cost the spacing as well as the height.
+                        The panel and the button that closes it are siblings rather than parent and
+                        child, because IsHitTestVisible is not a property a child can win back: set on
+                        the panel, it takes the whole subtree inside it with it. This grid paints
+                        nothing, so it is not hit-tested either and the shapes underneath stay
+                        reachable through it.
                     -->
-                    <StackPanel Spacing="6">
-                        <!-- §7.1: a refusal is stated with its reason rather than by greying something
-                             out. Said as soon as something is selected, because a menu item that does
-                             nothing teaches nothing. -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
-                                 Visibility="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
-                                 IsClosable="False"
-                                 Severity="Informational"
-                                 Message="{x:Bind ViewModel.Selection.Note, Mode=OneWay}" />
+                    <Border CornerRadius="{ThemeResource ControlCornerRadius}"
+                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            Padding="0,0,36,0"
+                            IsHitTestVisible="False"
+                            Visibility="{x:Bind ViewModel.ShowsNotes, Mode=OneWay}">
+                        <!--
+                            Each note states its visibility as well as opening, and the two say the
+                            same thing on purpose. A closed InfoBar collapses its template's content
+                            and stays Visible itself, so a StackPanel still spaces it against its
+                            neighbours: four closed notes left an 18px bar of the backing painted
+                            across the map at all times, and took thirty pixels off the list for
+                            nothing. Collapsed, they cost the spacing as well as the height.
+                        -->
+                        <StackPanel Spacing="6">
+                            <!-- §7.1: a refusal is stated with its reason rather than by greying something
+                                 out. Said as soon as something is selected, because a menu item that does
+                                 nothing teaches nothing. -->
+                            <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.Selection.HasNote, Mode=OneWay}"
+                                     IsClosable="False"
+                                     Severity="Informational"
+                                     Message="{x:Bind ViewModel.Selection.Note, Mode=OneWay}" />
 
-                        <!-- The picture stops matching the disk the moment something is removed from
-                             it, and rebuilding it means rescanning the drive. §7.1 allows the numbers
-                             to be off provided the picture says which way. -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
-                                 Visibility="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
-                                 IsClosable="False"
-                                 Severity="Warning"
-                                 Message="{x:Bind ViewModel.Selection.StaleNote, Mode=OneWay}" />
+                            <!-- The picture stops matching the disk the moment something is removed from
+                                 it, and rebuilding it means rescanning the drive. §7.1 allows the numbers
+                                 to be off provided the picture says which way. -->
+                            <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
+                                     IsClosable="False"
+                                     Severity="Warning"
+                                     Message="{x:Bind ViewModel.Selection.StaleNote, Mode=OneWay}" />
 
-                        <!-- Where what is on screen is not what the View box names. A scan in progress
-                             is ordered by name so that it stays still, and a treemap cannot be drawn
-                             from that at all — so the map substitutes the icicle. A substitution
-                             nobody is told about is the kind a user reads as a bug.
+                            <!-- Where what is on screen is not what the View box names. A scan in progress
+                                 is ordered by name so that it stays still, and a treemap cannot be drawn
+                                 from that at all — so the map substitutes the icicle. A substitution
+                                 nobody is told about is the kind a user reads as a bug.
 
-                             An InfoBar rather than the bare line this was, because it has joined
-                             a stack of three of them. A line of secondary text between two InfoBars
-                             has no icon, no padding and no severity, so it reads as something that
-                             failed to render rather than as the fourth note. -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
-                                 Visibility="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
-                                 IsClosable="False"
-                                 Severity="Informational"
-                                 Message="{x:Bind ViewModel.ViewNote, Mode=OneWay}" />
+                                 An InfoBar rather than the bare line this was, because it has joined
+                                 a stack of three of them. A line of secondary text between two InfoBars
+                                 has no icon, no padding and no severity, so it reads as something that
+                                 failed to render rather than as the fourth note. -->
+                            <InfoBar IsOpen="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.HasViewNote, Mode=OneWay}"
+                                     IsClosable="False"
+                                     Severity="Informational"
+                                     Message="{x:Bind ViewModel.ViewNote, Mode=OneWay}" />
 
-                        <!-- §5.5: the fallback must be observable, not inferred from how long the scan
-                             took. -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
-                                 Visibility="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
-                                 IsClosable="False"
-                                 Severity="Informational"
-                                 Message="{x:Bind ViewModel.RouteNote, Mode=OneWay}" />
-                    </StackPanel>
-                </Border>
+                            <!-- §5.5: the fallback must be observable, not inferred from how long the scan
+                                 took. -->
+                            <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
+                                     IsClosable="False"
+                                     Severity="Informational"
+                                     Message="{x:Bind ViewModel.RouteNote, Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!--
+                        Closes the lot, rather than one note at a time. What the reader is turning down
+                        is the panel over their picture, not this sentence as against that one, and four
+                        close buttons would ask them to say it four times. The gutter above is what it
+                        sits in, so it is never over a word.
+                    -->
+                    <Button Visibility="{x:Bind ViewModel.ShowsNotes, Mode=OneWay}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,4,4,0"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="OnDismissNotes"
+                            ToolTipService.ToolTip="Hide these notes. They stay one click away."
+                            AutomationProperties.Name="Hide these notes">
+                        <FontIcon Glyph="&#xE8BB;" FontSize="12" />
+                    </Button>
+
+                    <!--
+                        What the panel collapses to, in the corner the panel had, and inside the
+                        same container so that one measurement covers both. Over the map it
+                        reserves nothing, which is the point of it. Over the list it does, because
+                        this grid is what ends the list: a button sitting on the last row's date is
+                        not out of the way, and a row underneath one is a row nothing can retrieve.
+
+                        On its own opaque ground for §6.5's reason, the one the panel has: a
+                        button's own fill is a tint, and a tint over a treemap is not a button
+                        anybody can find. This is also the one thing here that takes the pointer,
+                        because it is the one thing here meant to be clicked.
+                    -->
+                    <Border HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            CornerRadius="16"
+                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            Visibility="{x:Bind ViewModel.ShowsNotesButton, Mode=OneWay}">
+                        <Button Width="32"
+                                Height="32"
+                                Padding="0"
+                                CornerRadius="16"
+                                Click="OnShowNotes"
+                                ToolTipService.ToolTip="Show the notes about this scan"
+                                AutomationProperties.Name="Show the notes about this scan">
+                            <FontIcon Glyph="&#xE946;" FontSize="14" />
+                        </Button>
+                    </Border>
+                </Grid>
+
             </Grid>
         </Border>
 
