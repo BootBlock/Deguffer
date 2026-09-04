@@ -9,7 +9,13 @@ namespace Deguffer.Core.Execution;
 /// from here, which is the distinction <see cref="PlanExecutor"/> is careful not to assert either.
 /// </param>
 /// <param name="Removed">Whether the file is gone.</param>
-public sealed record FileRemovalOutcome(long BytesReclaimed, int Skipped, bool Removed);
+/// <param name="Kept">
+/// Whether it was left alone because the user asked for anything touched recently to be left. A
+/// separate answer from <paramref name="Skipped"/> for the reason
+/// <see cref="RemovalOutcome.Kept"/> gives: one is Windows refusing and the other is Deguffer
+/// obeying, and they are different sentences to whoever reads the result.
+/// </param>
+public sealed record FileRemovalOutcome(long BytesReclaimed, int Skipped, bool Removed, bool Kept = false);
 
 /// <summary>
 /// Deletes one named file.
@@ -31,13 +37,19 @@ public static class FileRemover
     /// <see cref="DirectoryRemover"/>'s is: §6.3's requirement is about the *form* of the path that
     /// crosses into Win32, which no outcome can demonstrate.
     /// </param>
+    /// <param name="keep">
+    /// The user's guard on recently touched files. Asked here as well as when the step was planned,
+    /// because the two moments are minutes apart and the file may have been written in between —
+    /// the same reason §7.1 has Explore decide a refusal again at the point of deletion.
+    /// </param>
     public static Task<FileRemovalOutcome> RemoveAsync(
         string path,
+        MinimumAge keep = default,
         CancellationToken ct = default,
         IFileSystem? fileSystem = null) =>
-        Task.Run(() => Remove(path, fileSystem ?? WindowsFileSystem.Default), ct);
+        Task.Run(() => Remove(path, keep, fileSystem ?? WindowsFileSystem.Default), ct);
 
-    private static FileRemovalOutcome Remove(string path, IFileSystem fs)
+    private static FileRemovalOutcome Remove(string path, MinimumAge keep, IFileSystem fs)
     {
         var extended = LongPath.Extended(path);
 
@@ -61,6 +73,13 @@ public static class FileRemover
         if (fs.DirectoryExists(extended))
         {
             return new FileRemovalOutcome(0, 0, Removed: false);
+        }
+
+        // The guard, on the file this step actually names. Asked after the link and directory
+        // branches above, so the timestamp read is the one belonging to the thing being removed.
+        if (fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest))
+        {
+            return new FileRemovalOutcome(0, 0, Removed: false, Kept: true);
         }
 
         // Measured before the deletion, because afterwards there is nothing to ask. An unknown

@@ -187,7 +187,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryExists(repository));
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (ResolveLocalRepository() is not { } repository)
         {
@@ -237,7 +237,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>(scan.Notes);
 
-        var (steps, measured) = await PlanDeletionsAsync(scan.Targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
@@ -18,8 +20,18 @@ public interface IDirectoryScanner
     /// A path that does not exist measures zero rather than throwing — an absent cache is a normal
     /// answer, not an error.
     /// </summary>
+    /// <param name="keep">
+    /// Files the user has asked to be left alone because they were touched recently, which are then
+    /// not part of the total either. The figure and the deletion have to agree about what is coming
+    /// out, or the preview promises bytes the clean will not take — §5.4's "prune, see no change,
+    /// lose trust" arriving from the opposite direction.
+    ///
+    /// <para><see cref="MinimumAge.Off"/> by default, which is the shipped preference, so a caller
+    /// that says nothing measures the whole tree exactly as before.</para>
+    /// </param>
     ValueTask<ScanResult> MeasureAsync(
         string path,
+        MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default);
 

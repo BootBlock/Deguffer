@@ -11,12 +11,20 @@ namespace Deguffer.Core.Providers;
 /// the elevation prompt with nothing to catch it.
 /// </summary>
 /// <param name="Sizes">One entry per path measured, in the order they were given.</param>
+/// <param name="WithheldRecent">
+/// One entry per path, saying whether the user's guard left a real file out of that path's
+/// figure. Per path rather than one flag for the batch, because it becomes a property of the step
+/// that deletes that path.
+/// </param>
 /// <param name="Fallback">
 /// Which route served the measurement. Carried as the enum rather than only its sentence because
 /// the UI has to decide whether elevating would actually help, and matching on display text to
 /// answer that is how a reworded string silently disables the offer.
 /// </param>
-public sealed record ScanBatch(IReadOnlyList<ScanSize> Sizes, FallbackReason Fallback)
+public sealed record ScanBatch(
+    IReadOnlyList<ScanSize> Sizes,
+    FallbackReason Fallback,
+    IReadOnlyList<bool> WithheldRecent)
 {
     public ScanSize Total => Sizes.Aggregate(ScanSize.Zero, (sum, size) => sum + size);
 

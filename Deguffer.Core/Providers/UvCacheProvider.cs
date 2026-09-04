@@ -96,7 +96,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var uv = Environment.FindExecutable("uv");
         if (uv is null)

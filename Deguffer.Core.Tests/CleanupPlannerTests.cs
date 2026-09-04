@@ -39,7 +39,7 @@ public sealed class CleanupPlannerTests
 
         var found = new ProgressRecorder<Finding>();
 
-        var findings = await planner.PlanAllAsync(status: null, found, CancellationToken.None);
+        var findings = await planner.PlanAllAsync(MinimumAge.Off, status: null, found, CancellationToken.None);
 
         // Reported in the order they were planned, not the order they are finally sorted into.
         Assert.Equal(["first", "second"], found.Reports.Select(f => f.Provider.Id));
@@ -465,7 +465,7 @@ public sealed class CleanupPlannerTests
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(present);
 
-        public Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
         {
             journal?.Add($"plan:{id}");
             return Task.FromResult(NewPlan());

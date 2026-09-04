@@ -149,7 +149,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveRoot() is { } root && LongPath.DirectoryExists(root));
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (ResolveRoot() is not { } root)
         {
@@ -220,7 +220,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
                 $"Playwright browser build '{child.Name}', re-downloaded by 'playwright install'."));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

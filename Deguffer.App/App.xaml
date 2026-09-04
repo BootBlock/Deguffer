@@ -38,7 +38,13 @@
                             <Border Background="{TemplateBinding Background}"
                                     CornerRadius="{TemplateBinding CornerRadius}"
                                     Padding="{TemplateBinding Padding}">
-                                <ContentPresenter />
+                                <!-- The chip itself is what a screen reader reads, because that
+                                     is what carries the tier's explanation as help text. The
+                                     label inside it is the same words again, so it is kept out of
+                                     the accessibility tree rather than announced twice — which
+                                     means every chip has to set AutomationProperties.Name, or it
+                                     is announced with no name at all. -->
+                                <ContentPresenter AutomationProperties.AccessibilityView="Raw" />
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>

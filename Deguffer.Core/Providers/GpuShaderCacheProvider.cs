@@ -150,7 +150,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryExists));
 
-    public override async Task<CleanupPlan> PlanAsync(CancellationToken ct = default)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
@@ -232,7 +232,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             Environment.LocalAppData,
             "The profile's local application data must survive — only named shader caches inside it are removed."));
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

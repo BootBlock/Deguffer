@@ -5,12 +5,18 @@ namespace Deguffer.Core.Execution;
 /// §5.3: access denied is not a failure. A locked file is the OS protecting live state, and it
 /// is recorded rather than escalated.
 /// </param>
+/// <param name="Kept">
+/// Files left alone because the user asked for anything touched recently to be left. Reported apart
+/// from <paramref name="Skipped"/> because it is a setting being honoured rather than Windows
+/// refusing, and only one of the two is something the user might want to act on.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
     long BytesReclaimed,
     int Skipped,
-    string? Message = null);
+    string? Message = null,
+    int Kept = 0);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -29,6 +35,9 @@ public sealed record CleanupResult
 
     /// <summary>Items left in place because something held them open (§5.3).</summary>
     public int SkippedCount => Steps.Sum(s => s.Skipped);
+
+    /// <summary>Files left alone because they had been touched inside the user's guard window.</summary>
+    public int KeptCount => Steps.Sum(s => s.Kept);
 
     public bool Succeeded => Steps.All(s => s.Succeeded);
 }

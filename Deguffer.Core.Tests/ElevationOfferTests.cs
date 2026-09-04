@@ -218,7 +218,8 @@ public sealed class ElevationOfferTests
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
 
         // These tests hand the offer a plan directly; nothing here is ever planned, run or verified.
-        public Task<CleanupPlan> PlanAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
+            throw new NotSupportedException();
 
         public Task<CleanupResult> ExecuteAsync(
             CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default) =>

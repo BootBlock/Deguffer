@@ -90,7 +90,13 @@ public sealed class CleanupPlanner
     /// fill in as it goes rather than staying blank until the slowest provider finishes (§5.5:
     /// never block on a complete scan). The returned list is the same findings, sorted.
     /// </summary>
+    /// <param name="keep">
+    /// The user's guard on recently touched files. One value for the whole pass, and one instant
+    /// inside it: every provider then agrees about which files are recent, and a plan previewed at
+    /// the top of the pass protects the same files as one previewed at the bottom.
+    /// </param>
     public async Task<IReadOnlyList<Finding>> PlanAllAsync(
+        MinimumAge keep = default,
         IProgress<string>? status = null,
         IProgress<Finding>? found = null,
         CancellationToken ct = default)
@@ -110,7 +116,7 @@ public sealed class CleanupPlanner
         {
             ct.ThrowIfCancellationRequested();
 
-            var finding = await PlanOneAsync(provider, status, ct).ConfigureAwait(false);
+            var finding = await PlanOneAsync(provider, keep, status, ct).ConfigureAwait(false);
 
             findings.Add(finding);
             found?.Report(finding);
@@ -122,6 +128,7 @@ public sealed class CleanupPlanner
 
     private static async Task<Finding> PlanOneAsync(
         ICleanupProvider provider,
+        MinimumAge keep,
         IProgress<string>? status,
         CancellationToken ct)
     {
@@ -142,7 +149,7 @@ public sealed class CleanupPlanner
         return new Finding(
             provider,
             present,
-            await provider.PlanAsync(ct).ConfigureAwait(false),
+            await provider.PlanAsync(keep, ct).ConfigureAwait(false),
             awaitingFolders);
     }
 

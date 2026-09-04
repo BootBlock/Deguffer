@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -34,6 +36,26 @@ public sealed class MftVolumeTree(int count)
     public bool[] IsReparsePoint { get; } = new bool[count];
 
     /// <summary>
+    /// The newer of each record's creation and last-write times, as a FILETIME, for
+    /// <see cref="Safety.MinimumAge"/> to judge.
+    ///
+    /// <para>One array rather than two, because the two are never wanted apart. Reducing the pair is
+    /// the guard's own rule, so <see cref="Safety.MinimumAge.NewestFileTimeOf(long, long)"/> does it
+    /// rather than this type — and doing it here, where the record is already in hand, costs eight
+    /// bytes a record instead of sixteen. This structure is sized by the volume, where a full disk
+    /// runs to millions of entries.</para>
+    ///
+    /// <para>Populated for every record, whether or not a guard is ever asked about it. The table is
+    /// built once per volume and cached across planning passes, and a guard the user switches on
+    /// afterwards must not need it rebuilt. A record whose <c>$STANDARD_INFORMATION</c> the parser
+    /// could not read lands at zero, which is the start of the NTFS epoch and older than any window
+    /// — so its bytes count as reclaimable. That is the fail-open direction, and it is confined to a
+    /// size estimate: nothing deletes from this table, and both removers re-read the real timestamp
+    /// through <see cref="Safety.IFileSystem"/> before they touch anything.</para>
+    /// </summary>
+    public long[] Newest { get; } = new long[count];
+
+    /// <summary>
     /// Names are kept for directories only. Path resolution never needs a file's name — a subtree
     /// total is the sum of its records regardless of what they are called — and skipping them is
     /// the difference between tens of megabytes of strings and hundreds on a full volume.
@@ -55,6 +77,7 @@ public sealed class MftVolumeTree(int count)
         SizeUnknown[number] = record.Size is null;
         IsDirectory[number] = record.IsDirectory;
         IsReparsePoint[number] = record.IsReparsePoint;
+        Newest[number] = MinimumAge.NewestFileTimeOf(record.CreatedFileTime, record.LastWrittenFileTime);
         Present[number] = true;
 
         if (record.IsDirectory)

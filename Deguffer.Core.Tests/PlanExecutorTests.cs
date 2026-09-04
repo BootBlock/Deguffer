@@ -284,4 +284,98 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     private static char VolumeLetter(string path) => char.ToUpperInvariant(path[0]);
+
+    /// <summary>
+    /// A directory whose files are all inside the guard window reclaims nothing and keeps its root,
+    /// which is the shape the executor otherwise reads as a step that achieved nothing. It is the
+    /// setting working, so it reports success and says what it left — a red row for correct
+    /// behaviour would teach the user to distrust the report.
+    /// </summary>
+    [Fact]
+    public async Task ReportsAStepThatKeptEverythingAsSuccessRatherThanFailure()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "written-just-now.bin");
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Keep = MinimumAge.WithinHours(8, DateTime.UtcNow),
+            Steps = [new DeleteDirectoryStep(cache, "A cache")],
+        };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(1, step.Kept);
+        Assert.Equal(0, step.BytesReclaimed);
+        Assert.Equal(1, result.KeptCount);
+        Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(cache), "the guard kept a file and the folder around it went");
+    }
+
+    /// <summary>
+    /// The guard travels on the plan, so a plan made without one deletes exactly what it always did.
+    /// Reading the setting again at execution is what this rules out: the cut-off would then have
+    /// moved, and the clean would take files the preview promised to leave.
+    /// </summary>
+    [Fact]
+    public async Task DeletesEverythingWhenThePlanCarriesNoGuard()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "written-just-now.bin");
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Steps = [new DeleteDirectoryStep(cache, "A cache")],
+        };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+
+        Assert.Equal(0, result.KeptCount);
+        Assert.Equal(4096, result.BytesReclaimed);
+        Assert.False(Directory.Exists(cache));
+    }
+
+    /// <summary>
+    /// A directory the guard emptied of candidates is still standing, so the step must not say it
+    /// was removed. The success classification is right — Deguffer did what it was asked — but
+    /// "Removed" is a claim about the user's disk, and here it is false.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayRemovedAboutADirectoryThatIsStillThere()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "written-just-now.bin");
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = "test",
+            ProviderName = "Test",
+            Tier = SafetyTier.RegenerableCache,
+            WhatHappensOnNextUse = "Nothing.",
+            Keep = MinimumAge.WithinHours(8, DateTime.UtcNow),
+            Steps = [new DeleteDirectoryStep(cache, "A cache")],
+        };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(Directory.Exists(cache));
+        Assert.DoesNotContain("Removed", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
+    }
 }

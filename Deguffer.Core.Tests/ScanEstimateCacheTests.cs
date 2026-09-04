@@ -29,7 +29,7 @@ public class ScanEstimateCacheTests
         await Reopen(environment).MeasureAsync(cache);
 
         var progress = new ProgressRecorder<ScanSize>();
-        await Reopen(environment).MeasureAsync(cache, progress);
+        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
 
         // The first thing the second run reports is last run's number, before any walking.
         Assert.Equal(1000, progress.Reports[0].Logical);
@@ -53,7 +53,7 @@ public class ScanEstimateCacheTests
         File.WriteAllBytes(Path.Combine(cache, "b.bin"), new byte[5000]);
 
         var progress = new ProgressRecorder<ScanSize>();
-        var result = await Reopen(environment).MeasureAsync(cache, progress);
+        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
 
         Assert.Equal(6000, result.Size.Logical);
         Assert.Equal(1000, progress.Reports[0].Logical);
@@ -78,7 +78,7 @@ public class ScanEstimateCacheTests
         scanner.Invalidate();
 
         var progress = new ProgressRecorder<ScanSize>();
-        await scanner.MeasureAsync(cache, progress);
+        await scanner.MeasureAsync(cache, MinimumAge.Off, progress);
 
         Assert.Equal(2048, progress.Reports[0].Logical);
     }
@@ -92,7 +92,7 @@ public class ScanEstimateCacheTests
         File.WriteAllBytes(Path.Combine(cache, "a.bin"), new byte[512]);
 
         var progress = new ProgressRecorder<ScanSize>();
-        var result = await Reopen(environment).MeasureAsync(cache, progress);
+        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
 
         Assert.Equal(512, result.Size.Logical);
         Assert.Equal(512, progress.Reports[0].Logical);
@@ -119,5 +119,40 @@ public class ScanEstimateCacheTests
         var result = await Reopen(environment).MeasureAsync(cache);
 
         Assert.Equal(4096, result.Size.Logical);
+    }
+
+    /// <summary>
+    /// A remembered size is the whole path's, so a run with the guard on must neither show one nor
+    /// leave one behind.
+    ///
+    /// <para>Showing it would flash a total this run is not going to reclaim. Storing the guarded
+    /// figure would be worse and quieter: the next run, where the user may well have turned the
+    /// guard off, would open on a number short by however much was held back — and §5.5's whole
+    /// claim for that number is that it is last run's measurement of the same tree.</para>
+    /// </summary>
+    [Fact]
+    public async Task NeitherShowsNorStoresARememberedSizeWhileTheGuardIsOn()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var cache = temp.CreateDirectory("npm-cache");
+        TempDirectory.Age(temp.CreateFile(1000, "npm-cache", "a.bin"), TimeSpan.FromDays(30));
+        temp.CreateFile(5000, "npm-cache", "written-just-now.bin");
+
+        // An ordinary run, which remembers the whole tree: 6000 bytes.
+        await Reopen(environment).MeasureAsync(cache);
+
+        var guarded = new ProgressRecorder<ScanSize>();
+        var result = await Reopen(environment)
+            .MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow), guarded);
+
+        Assert.Equal(1000, result.Size.Logical);
+        Assert.DoesNotContain(guarded.Reports, r => r.Logical == 6000);
+
+        // And the run after it still opens on the full measurement rather than on the guarded one.
+        var unguarded = new ProgressRecorder<ScanSize>();
+        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, unguarded);
+
+        Assert.Equal(6000, unguarded.Reports[0].Logical);
     }
 }

@@ -122,6 +122,12 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string TierLabel => Finding.Provider.Tier.ToDisplayName();
 
+    /// <summary>
+    /// What the badge's tier means, for the reader who has never opened the About page. §3's
+    /// classification is the product, and a two-word chip states it without explaining it.
+    /// </summary>
+    public string TierExplanation => Finding.Provider.Tier.ToExplanation();
+
     public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
 
     /// <summary>
@@ -150,9 +156,20 @@ public sealed partial class FindingViewModel : ObservableObject
         : !Finding.IsPresent
         ? "Not installed on this machine"
         : !Finding.HasReclaimableSpace
-            // "Already clear" is a claim, and it must not be made about a folder Windows would not
-            // let Deguffer list. The row's Contents tab names which one and why the figure is short.
-            ? Finding.Plan?.HasUnreadableRoot == true ? "Could not be read" : "Already clear"
+            // "Already clear" is a claim about the folder, and there are two states it must not be
+            // made in. One is a folder Windows would not let Deguffer list. The other is a guard on
+            // whose every file is inside the guard window: it measures zero and it is full.
+            //
+            // The second asks the plan what the measurement actually withheld, never whether a
+            // guard is switched on. Driving the real window settled that: with the guard at seven
+            // days, deriving it from the setting put "Nothing old enough" on twelve rows, most of
+            // them simply empty — the same false claim wearing the opposite costume.
+            ? Finding.Plan switch
+            {
+                { HasUnreadableRoot: true } => "Could not be read",
+                { HasRecentContentHeldBack: true } => "Nothing old enough",
+                _ => "Already clear",
+            }
             : CanBeSelected
                 ? "Ready to clean"
                 // Nothing in the row can be acted on as Deguffer is running, so "Ready to clean"

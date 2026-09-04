@@ -28,6 +28,23 @@ public sealed class TempDirectory : IDisposable
         return full;
     }
 
+    /// <summary>
+    /// Push a file's creation and last-write times back by <paramref name="by"/>, and return it.
+    ///
+    /// Both, because <see cref="Safety.MinimumAge"/> takes the newer of the two — a fixture that
+    /// moved only the last-write time would leave every file it aged still protected by its
+    /// creation time, and every test built on it would pass for the wrong reason.
+    /// </summary>
+    public static string Age(string path, TimeSpan by)
+    {
+        var when = DateTime.UtcNow - by;
+
+        File.SetCreationTimeUtc(Safety.LongPath.Extended(path), when);
+        File.SetLastWriteTimeUtc(Safety.LongPath.Extended(path), when);
+
+        return path;
+    }
+
     public void Dispose()
     {
         try

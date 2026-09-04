@@ -53,17 +53,25 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// </summary>
     public ValueTask<ScanResult> MeasureAsync(
         string path,
+        MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
         new(Task.Run(
-            () => TryMeasureFile(path) is { } file
-                ? ScanResult.Direct(file)
-                : ScanResult.Slow(Measure(path, progress, ct), _reason),
+            () => TryMeasureFile(path, keep) is { } file
+                ? ScanResult.Direct(file.Size, file.WithheldRecent)
+                : Slow(Measure(path, keep, progress, ct)),
             ct));
 
-    /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
+    /// <summary>
+    /// Nothing is remembered here, so every reading is already taken from the disk.
+    ///
+    /// The guard is deliberately absent. This member exists for the executor's before-and-after
+    /// around a tool's own eviction command, and §5.1 leaves that command the authority on what it
+    /// removes — a total that excluded recent files would then be subtracted from one the command
+    /// did not respect.
+    /// </summary>
     public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
-        MeasureAsync(path, progress: null, ct);
+        MeasureAsync(path, MinimumAge.Off, progress: null, ct);
 
     /// <summary>
     /// Always null: this scanner holds no index, so it has nothing to search. Answering by walking
@@ -80,23 +88,47 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
-    private static ScanSize Measure(string path, IProgress<ScanSize>? progress, CancellationToken ct)
+    private ScanResult Slow((ScanSize Size, bool WithheldRecent) measured) =>
+        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent);
+
+    private static (ScanSize Size, bool WithheldRecent) Measure(
+        string path,
+        MinimumAge keep,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct)
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return ScanSize.FromLengths(0);
+            return (ScanSize.FromLengths(0), false);
         }
 
         long total = 0;
 
+        // An int rather than a bool because the walk sets it from several threads at once, and
+        // Interlocked has no bool overload. Only ever moved to 1, so no ordering question arises.
+        var withheld = 0;
+
         BoundedFileWalk.Visit(
             LongPath.Extended(path),
-            file => Interlocked.Add(ref total, file.Length),
+            // The walk hands over a FileInfo whose attributes and timestamps were populated by the
+            // enumeration that found it, so asking its age here costs no further I/O (G4). A file
+            // the guard keeps contributes nothing, because the removal will not take it.
+            file =>
+            {
+                if (keep.Protects(file))
+                {
+                    Interlocked.Exchange(ref withheld, 1);
+                }
+                else
+                {
+                    Interlocked.Add(ref total, file.Length);
+                }
+            },
             // §5.5: stream partial results. One report per breadth-first level, not per file.
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
             ct);
 
-        return ScanSize.FromLengths(Interlocked.Read(ref total));
+        return (ScanSize.FromLengths(Interlocked.Read(ref total)), Volatile.Read(ref withheld) == 1);
     }
 
     /// <summary>
@@ -110,7 +142,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// scanner did — produces a step nobody can select, because a step with nothing to reclaim is
     /// not offerable.
     /// </summary>
-    private static ScanSize? TryMeasureFile(string path)
+    private static (ScanSize Size, bool WithheldRecent)? TryMeasureFile(string path, MinimumAge keep)
     {
         try
         {
@@ -119,9 +151,18 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             // A link's length is its own, not its target's, and following one would count a tree
             // this scanner never looked inside — the same rule BoundedFileWalk applies to every
             // entry it enumerates.
-            return file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint)
-                ? ScanSize.FromLengths(file.Length)
-                : null;
+            if (!file.Exists || file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                return null;
+            }
+
+            // A file the guard keeps is still a file, so this stays an answer rather than becoming
+            // a null that would send the caller off to measure it as a directory. Zero is what the
+            // removal will reclaim from it, and a step with nothing to reclaim is not offerable —
+            // which is the outcome a protected single file should have.
+            return keep.Protects(file)
+                ? (ScanSize.FromLengths(0), true)
+                : (ScanSize.FromLengths(file.Length), false);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {

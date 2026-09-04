@@ -61,11 +61,49 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        // Record 0 is $MFT, which this fixture leaves blank exactly as an unused entry is blank on
-        // a real volume — so the reader never placed it, and nothing links it to anything.
+        // Record 0 is blank here, which is what an unused entry looks like — so the reader never
+        // placed it, and nothing links it to anything. The test below covers the shape a real
+        // volume leaves instead, where record 0 is described and the walk alone cannot tell.
         Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf(0));
 
         // The reachable ones still answer, so the guard has not simply refused everything.
+        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+    }
+
+    /// <summary>
+    /// The same refusal on the shape a real volume actually leaves, where following the parent
+    /// links produces a path rather than running out of them.
+    ///
+    /// <para>An undescribed record keeps the array default for its parent, which is record zero.
+    /// On a real volume record zero is <c>$MFT</c>: it parses, it carries a name, and its own
+    /// parent is the volume's root. So the chain from an undescribed record does arrive at the
+    /// root, through a file that has nothing to do with it, and the answer is <c>C:\$MFT</c> — a
+    /// path that is entirely well formed and belongs to something else. That is the plausible
+    /// wrong answer this refusal exists to stop, and no walk over the parent links can detect
+    /// it.</para>
+    ///
+    /// <para>The distinction reaches past a label. <see cref="ExplorePlace"/> asks two trees for
+    /// the same node's path to decide whether the user is still standing where they were, and a
+    /// fabricated path is an answer it cannot tell from a real one.</para>
+    /// </summary>
+    [Fact]
+    public void RefusesAPathForAnUndescribedRecordWhoseParentChainRunsThroughMetadata()
+    {
+        using var source = Tree()
+            .AddFile(0, MftRecord.RootRecordNumber, "$MFT", allocated: 4096, logical: 4096)
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        // The metadata file itself is a real record, so it keeps its real path.
+        Assert.Equal(@"C:\$MFT", tree.PathOf(0));
+
+        // Record 1 is $MFTMirr's slot, left undescribed. Its parent is the default zero, so the
+        // chain reaches the root through $MFT and would otherwise answer C:\$MFT for it too.
+        Assert.Null(tree.TryPathOf(1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf(1));
+
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
     }
 
