@@ -40,6 +40,35 @@ public sealed class TiledSurface : ExploreSurface
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;
 
+    public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        var outlines = new List<ExploreOutline>();
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.IsAggregate || !nodes.Contains(tile.Node))
+            {
+                continue;
+            }
+
+            var right = tile.X + tile.Width;
+            var bottom = tile.Y + tile.Height;
+
+            outlines.Add(new ExploreOutline(tile.Node, [
+                new ExplorePoint(tile.X, tile.Y),
+                new ExplorePoint(right, tile.Y),
+                new ExplorePoint(right, bottom),
+                new ExplorePoint(tile.X, bottom),
+            ]));
+        }
+
+        return outlines;
+    }
+
     /// <summary>
     /// Lay the labels over the finished bitmap.
     ///

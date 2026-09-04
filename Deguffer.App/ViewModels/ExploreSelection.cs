@@ -47,6 +47,8 @@ public sealed partial class ExploreSelection : ObservableObject
     private ExploreTree? _removedFrom;
 
     private IReadOnlyList<int> _nodes = [];
+    private string _label = string.Empty;
+    private string? _note;
 
     public ExploreSelection(ExploreActions actions) => _actions = actions;
 
@@ -74,27 +76,27 @@ public sealed partial class ExploreSelection : ObservableObject
     /// <summary>
     /// What is selected, by node.
     ///
-    /// <para>Named so the list can be put back in step with it. A <c>ListView</c> keeps its own
-    /// copy of the selection and drops an item from it when the collection under it stops holding
-    /// that item where it was, then reports that back as though the user had cleared it — so
-    /// something has to say which of the two copies is right, and it is this one.</para>
+    /// <para>Named so the list and the map can be put back in step with it. A <c>ListView</c> keeps
+    /// its own copy of the selection and drops an item from it when the collection under it stops
+    /// holding that item where it was, then reports that back as though the user had cleared it — so
+    /// something has to say which of the two copies is right, and it is this one. The map holds no
+    /// copy at all: it is told what to outline.</para>
+    ///
+    /// <para>Raises a change of its own, which is the one signal every screen that shows the
+    /// selection can follow. Without it each caller of <see cref="Select"/> has to remember to tell
+    /// each of them, and the one that gets forgotten is a highlight left on something that is no
+    /// longer selected.</para>
     /// </summary>
     public IReadOnlyList<int> Nodes => _nodes;
 
     /// <summary>
-    /// What is selected, named so the map's user can see it too.
+    /// What is selected, in words.
     ///
-    /// <para>The three pictures have no selection outline — the geometry is a bitmap, and a
-    /// highlight would be a Core layout concern rather than a control one — so without this a
-    /// right-click on a treemap tile would offer a menu about an item nothing on screen identified.
-    /// The path is the identification.</para>
+    /// <para>The only thing that <em>names</em> what is selected. The map draws a line round the
+    /// shape, which says which one; this says which folder. A menu offering to delete something has
+    /// to answer the second question as well as the first.</para>
     /// </summary>
-    public string Label => Items() switch
-    {
-        [] => string.Empty,
-        [var only] => $"Selected: {only.Path} — {FreeSpace.Format(only.Bytes)}",
-        var many => $"Selected: {many.Count} items — {FreeSpace.Format(many.Sum(i => i.Bytes))}",
-    };
+    public string Label => _label;
 
     /// <summary>
     /// Why the selection will not be removed, or null when nothing stands in the way.
@@ -104,12 +106,9 @@ public sealed partial class ExploreSelection : ObservableObject
     /// item that does nothing teaches nothing — least of all somebody reading a size picture, who
     /// has no way to guess which of several rules applies.</para>
     /// </summary>
-    public string? Note =>
-        Items() is [var first, ..] items
-            ? items.Count == 1 ? Refusal(first) : Refusals(items)
-            : null;
+    public string? Note => _note;
 
-    public bool HasNote => Note is not null;
+    public bool HasNote => _note is not null;
 
     /// <summary>
     /// How the picture now differs from the disk, or null while they still agree. See
@@ -122,9 +121,47 @@ public sealed partial class ExploreSelection : ObservableObject
 
     public bool HasStaleNote => StaleNote is not null;
 
-    /// <summary>Whether this node has been removed, so the list should stop showing it.</summary>
-    public bool WasRemoved(int node) =>
-        ReferenceEquals(_tree, _removedFrom) && _removed.Contains(node);
+    /// <summary>
+    /// Whether this node has gone since the scan, so nothing on screen may offer it.
+    ///
+    /// <para>The list stops showing such a node; the map cannot, because the tree behind the
+    /// picture is not rebuilt for a deletion — see <see cref="_removed"/> — so the shape stays where
+    /// it was. What both must stop doing is <em>acting</em> on it, and the map must stop marking it
+    /// out under the pointer, which reads as an offer to pick something that can only select
+    /// nothing (§7.1).</para>
+    ///
+    /// <para><b>Walked up, because a removal takes everything inside it.</b> The set holds what the
+    /// user picked out by hand, which is a handful of folders; what went with them is every file
+    /// under each. A deleted directory of ten thousand entries would otherwise leave every one of
+    /// them looking present, pickable and deletable — and the map is where that shows, because it
+    /// draws descendants the list never lists.</para>
+    /// </summary>
+    public bool WasRemoved(int node)
+    {
+        if (_removed.Count == 0 || !ReferenceEquals(_tree, _removedFrom) || _tree is not { } tree)
+        {
+            return false;
+        }
+
+        for (var current = node; ;)
+        {
+            if (_removed.Contains(current))
+            {
+                return true;
+            }
+
+            var parent = tree.ParentOf(current);
+
+            // Every reader marks its scan root as its own parent, so this is where the walk ends —
+            // and it ends for a node outside the scanned subtree too, rather than never.
+            if (parent == current)
+            {
+                return false;
+            }
+
+            current = parent;
+        }
+    }
 
     /// <summary>
     /// Point at a tree and select nothing. Called on every navigation, because a selection made in
@@ -184,6 +221,24 @@ public sealed partial class ExploreSelection : ObservableObject
 
         _nodes = [.. nodes.Where(n => !WasRemoved(n))];
 
+        // Worked out once, here, rather than on each read. Each of the three walks the selection
+        // rebuilding a path per node, and the note asks the policy for a verdict on top of that, so
+        // computing them lazily does the same work three times for every change — over a list view
+        // that selects any number of rows at once (G4).
+        var items = Items();
+
+        _label = items switch
+        {
+            [] => string.Empty,
+            [var only] => $"Selected: {only.Path} — {FreeSpace.Format(only.Bytes)}",
+            var many => $"Selected: {many.Count} items — {FreeSpace.Format(many.Sum(i => i.Bytes))}",
+        };
+
+        _note = items is [var first, ..]
+            ? items.Count == 1 ? Refusal(first) : Refusals(items)
+            : null;
+
+        OnPropertyChanged(nameof(Nodes));
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(Note));
         OnPropertyChanged(nameof(HasNote));
