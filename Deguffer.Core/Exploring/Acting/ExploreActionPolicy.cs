@@ -29,6 +29,16 @@ public sealed class ExploreActionPolicy
     private static readonly char[] Separators =
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
+    /// <summary>
+    /// The names NTFS reserves in a volume's root directory, from <c>[MS-FSCC]</c>. See
+    /// <see cref="ReservedByTheFilesystem"/> for why they are refused and why the set stops here.
+    /// </summary>
+    private static readonly HashSet<string> NtfsReserved = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "$MFT", "$MFTMirr", "$LogFile", "$Volume", "$AttrDef", "$Bitmap",
+        "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend",
+    };
+
     private readonly IReadOnlyList<ProtectedRegion> _regions;
     private readonly IReadOnlyList<ToolRoot> _toolRoots;
 
@@ -113,6 +123,11 @@ public sealed class ExploreActionPolicy
                 $"'{target}' is a whole drive. Explore removes things from a drive, never the drive itself.");
         }
 
+        if (ReservedByTheFilesystem(target) is { } filesystem)
+        {
+            return filesystem;
+        }
+
         if (AtAVolumeRoot(target) is { } reserved)
         {
             return reserved;
@@ -137,7 +152,8 @@ public sealed class ExploreActionPolicy
     /// whenever the page refreshes, so a volume mounted after the policy was built would be
     /// scannable with its paging file and its restore points unprotected. The question "is this a
     /// direct child of its own volume root, named one of these?" needs no inventory and is right on
-    /// every drive, mounted before or after.</para>
+    /// every drive, mounted before or after. <see cref="VolumeRoot"/> answers the first half of it,
+    /// where <see cref="Knowledge.ItemGuide"/> can read the same rule rather than restate it.</para>
     ///
     /// <para>They are named at all because Explore draws them.
     /// <c>System Volume Information</c> and the paging files are among the largest items on a drive,
@@ -146,12 +162,7 @@ public sealed class ExploreActionPolicy
     /// </summary>
     private static ExploreVerdict? AtAVolumeRoot(string target)
     {
-        if (!string.Equals(
-                Path.GetDirectoryName(target),
-                Path.TrimEndingDirectorySeparator(Path.GetPathRoot(target) ?? string.Empty),
-                StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(
-                Path.GetDirectoryName(target), Path.GetPathRoot(target), StringComparison.OrdinalIgnoreCase))
+        if (!VolumeRoot.Holds(target))
         {
             return null;
         }
@@ -173,6 +184,41 @@ public sealed class ExploreActionPolicy
             _ => null,
         };
     }
+
+    /// <summary>
+    /// NTFS's own records, which §7.1 puts out of reach: they are live filesystem state, so the tier
+    /// model calls them Tier 4, and Explore "refuses whatever the tier model would call Tier 4, and
+    /// it does not get to decide what that is".
+    ///
+    /// <para>Separate from <see cref="AtAVolumeRoot"/> and not folded into it, because the two ask
+    /// different questions. That one is about a <em>direct child</em> of a volume root, which is
+    /// where Windows keeps the paging file and the restore points. NTFS's optional features live a
+    /// level down in <c>$Extend</c>, so this asks about the first segment below the root and covers
+    /// everything under it.</para>
+    ///
+    /// <para>They are refused at all because §5.5's file-table route <em>draws</em> them. A walk
+    /// never sees these names — Windows hides the reserved records from directory enumeration — but
+    /// reading the table directly puts <c>$MFT</c> at the top of a scanned drive at several hundred
+    /// megabytes, which is exactly the shape of thing a size picture invites somebody to act on.
+    /// Offering a deletion the filesystem will refuse teaches a user that saying yes is how you find
+    /// out what happens, and §7.1 wants the reason stated instead.</para>
+    ///
+    /// <para>The set is closed and comes from the filesystem's own specification rather than from
+    /// observation, so it needs no maintenance: <c>[MS-FSCC]</c> names what NTFS reserves in a
+    /// volume's root directory. It is deliberately <em>not</em> every name beginning with <c>$</c>.
+    /// <c>$Recycle.Bin</c> is Windows' rather than NTFS's and is refused below for its own reason,
+    /// and <c>$WinREAgent</c> and <c>$Windows.~BT</c> are ordinary leftovers a user may legitimately
+    /// want gone — refusing those would take away a capability rather than add a protection.</para>
+    /// </summary>
+    private static ExploreVerdict? ReservedByTheFilesystem(string target) =>
+        VolumeRoot.Below(target) is { } below
+        && below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
+        && NtfsReserved.Contains(first)
+            ? ExploreVerdict.Refuse(
+                $"'{first}' is part of NTFS itself rather than something stored on the drive — it is "
+                + "how the filesystem records where every other file is. Windows does not let it be "
+                + "deleted, and the space it holds is not recoverable while the drive is in use.")
+            : null;
 
     private static ExploreVerdict Managed(string what) => ExploreVerdict.Refuse(
         $"This is {what}. Windows manages it, and its size is changed through the system settings "

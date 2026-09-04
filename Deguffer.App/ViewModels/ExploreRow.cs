@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
@@ -17,6 +18,15 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ExploreRow : ObservableObject
 {
+    /// <summary>
+    /// What Deguffer knows about this entry, or null where it is an ordinary file or folder — which
+    /// is nearly everything on a disk, and is not a failure.
+    ///
+    /// <para>Settled once with the name and the kind, because which entry this is decides it and no
+    /// later tree can change it. See the class summary for that split.</para>
+    /// </summary>
+    private readonly KnownItem? _known;
+
     /// <param name="parentTotal">
     /// Bytes in the containing directory, which <see cref="Share"/> is measured against.
     /// </param>
@@ -24,9 +34,16 @@ public sealed partial class ExploreRow : ObservableObject
     /// The instant every age in one list is measured from. Passed in rather than read here, so two
     /// rows a millisecond apart cannot land in different days.
     /// </param>
-    public ExploreRow(ExploreTree tree, int node, long parentTotal, DateTime now)
+    /// <param name="guide">
+    /// What the app knows about well-known files and folders. Asked once here rather than on every
+    /// hover, so pointing down a list of a thousand rows costs nothing (G4).
+    /// </param>
+    public ExploreRow(ExploreTree tree, int node, long parentTotal, DateTime now, ItemGuide guide)
     {
         ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(guide);
+
+        _known = guide.Describe(tree.TryPathOf(node));
 
         Node = node;
         Name = tree.NameOf(node);
@@ -80,7 +97,18 @@ public sealed partial class ExploreRow : ObservableObject
     /// is right for scanning a list and wrong for the one row somebody has stopped on.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Tip))]
     public partial string DatesLabel { get; set; }
+
+    /// <summary>
+    /// What the row tells somebody who has stopped on it: what the thing is, its two dates in full,
+    /// and one line saying whether deleting it recovers any space.
+    ///
+    /// <para>The dates alone where the name means nothing to Deguffer, which is nearly every row. A
+    /// tooltip is worth stopping for because it is rare, and one that appeared over everything with
+    /// nothing to add would teach the reader to ignore the ones that have something.</para>
+    /// </summary>
+    public string Tip => _known?.Tip(DatesLabel) ?? DatesLabel;
 
     /// <summary>
     /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
