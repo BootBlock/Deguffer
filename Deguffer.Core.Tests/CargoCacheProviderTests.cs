@@ -224,6 +224,10 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(link, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n => n.Message.Contains("linked", StringComparison.Ordinal));
+
+        // The boundary on CleanupPlan.WasNotExamined: a decline beside real targets leaves a row
+        // with a size, which reads "Ready to clean" and states nothing about the link.
+        Assert.False(plan.WasNotExamined);
     }
 
     /// <summary>
@@ -248,6 +252,33 @@ public sealed class CargoCacheProviderTests : IDisposable
         Assert.Equal(
             1,
             plan.Notes.Count(n => n.Message.StartsWith("Leaving 'git' alone: A link", StringComparison.Ordinal)));
+
+        Assert.False(plan.WasNotExamined);
+    }
+
+    /// <summary>
+    /// The same decline with nothing else to offer, which is the state the shell gets wrong. The
+    /// probe resolves <c>git\checkouts</c> through the junction, so the row is present, and every
+    /// candidate this home had was declined — a figure of zero that excludes the whole of it.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedContainerWithNothingElseToOfferIsNotCalledClear()
+    {
+        Directory.CreateDirectory(Home);
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Populate(Path.Combine(outside, "checkouts"));
+        Directory.CreateSymbolicLink(Path.Combine(Home, "git"), outside);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>

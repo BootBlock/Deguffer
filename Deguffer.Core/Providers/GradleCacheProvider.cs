@@ -169,6 +169,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
+            WasNotExamined = targets.Count == 0 && scan.Links.Count > 0,
         };
     }
 

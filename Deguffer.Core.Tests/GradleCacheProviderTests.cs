@@ -106,6 +106,30 @@ public sealed class GradleCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The boundary the widened <see cref="CleanupPlan.WasNotExamined"/> must not cross. An
+    /// unrecognised child is read, classified and ruled out, so a root holding only those was
+    /// examined in full and its zero is the whole story. "Already clear" is the true answer here,
+    /// and a rule that fired on "nothing to offer" alone would take it away from every honestly
+    /// empty row on the machine.
+    /// </summary>
+    [Fact]
+    public async Task ARootHoldingOnlyUnrecognisedChildrenIsStillCalledClear()
+    {
+        var root = CreateGradleHome();
+        CreateAt(root, "daemon", 8192);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.False(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+    }
+
+    /// <summary>
     /// Moving <c>.gradle</c> onto another drive with a junction is common, and the enumeration
     /// never classifies the directory it is handed — so a junctioned root would hand back the far
     /// side's ordinary children, target the recognised ones, and pass every §5.6 assertion, because
@@ -134,6 +158,35 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         // Not HasUnreadableRoot: Windows refused nothing here. Deguffer declined, and the two
         // states send the reader to different places.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+    }
+
+    /// <summary>
+    /// The same decline one level in, and with nothing left to offer. Every recognised child having
+    /// been relocated by junction is how a developer moves a Gradle cache onto another drive without
+    /// moving the rest of <c>.gradle</c>, and the plan it produces is present, empty and about
+    /// nothing that was looked at.
+    /// </summary>
+    [Fact]
+    public async Task ARootWhoseEveryRecognisedChildIsALinkIsNotCalledClear()
+    {
+        var root = CreateGradleHome();
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var stranger = CreateAt(outside, "payload", 65536);
+
+        Directory.CreateSymbolicLink(Path.Combine(root, "caches"), outside);
+        Directory.CreateSymbolicLink(Path.Combine(root, "wrapper"), outside);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(stranger));
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
     }

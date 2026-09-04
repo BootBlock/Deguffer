@@ -293,6 +293,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
+            WasNotExamined = targets.Count == 0 && declined.Count > 0,
         };
     }
 

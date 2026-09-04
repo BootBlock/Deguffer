@@ -75,6 +75,33 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Assert.False(plan.HasUnreadableRoot);
     }
 
+    /// <summary>
+    /// The same decline one level in, and with nothing left to offer. A browser build relocated by
+    /// junction leaves a root that is present, measures zero, and says nothing about the gigabytes
+    /// on the far side.
+    /// </summary>
+    [Fact]
+    public async Task ARootWhoseEveryBuildIsALinkIsNotCalledClear()
+    {
+        var root = CreateRoot();
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Directory.CreateDirectory(outside);
+        File.WriteAllBytes(Path.Combine(outside, "chrome.exe"), new byte[65536]);
+
+        Directory.CreateSymbolicLink(Path.Combine(root, "chromium-1228"), outside);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+    }
+
     [Fact]
     public async Task ReportsNotPresentWhenPlaywrightNeverDownloadedABrowser()
     {

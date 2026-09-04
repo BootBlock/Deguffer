@@ -461,6 +461,41 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Assert.DoesNotContain(Path.Combine(root, "buildtrees"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
         Assert.True(Directory.Exists(outside));
+
+        // The boundary on CleanupPlan.WasNotExamined: downloads and packages are still targeted, so
+        // the row has a size and reads "Ready to clean".
+        Assert.False(plan.WasNotExamined);
+    }
+
+    /// <summary>
+    /// The same decline over every declared directory at once, which is what a clone relocated onto
+    /// a scratch drive by junction looks like. The probe resolves through the links, so the row is
+    /// present, measures zero, and its figure covers none of the subject.
+    /// </summary>
+    [Fact]
+    public async Task ACloneWhoseEveryDeclaredDirectoryIsALinkIsNotCalledClear()
+    {
+        var root = CreateClone();
+
+        var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
+
+        foreach (var name in new[] { "buildtrees", "downloads", "packages" })
+        {
+            Directory.Delete(Path.Combine(root, name), recursive: true);
+            Directory.CreateSymbolicLink(Path.Combine(root, name), outside);
+        }
+
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>

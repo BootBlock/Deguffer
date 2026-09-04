@@ -259,6 +259,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             ProtectedPaths = Protect([.. scan.Protected]),
             Notes = notes,
             Fallback = measured.Fallback,
+            WasNotExamined = scan.NothingWasExamined,
         };
     }
 

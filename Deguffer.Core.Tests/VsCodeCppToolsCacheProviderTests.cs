@@ -62,6 +62,12 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
         Assert.True(File.Exists(bystander), "a file outside the tool root was destroyed");
+
+        // This fixture leaves the link as the root's only child, so the plan offers nothing while
+        // excluding everything the link points at. The row is present and measures zero, and
+        // CleanupPlan.WasNotExamined is what stops the shell calling that clear.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     [Fact]

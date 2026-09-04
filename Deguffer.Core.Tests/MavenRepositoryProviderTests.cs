@@ -302,11 +302,20 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Directory.CreateDirectory(Home);
         Directory.CreateSymbolicLink(DefaultRepository, outside);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        // The probe follows the junction, so the row is present with nothing to reclaim. The whole
+        // repository sits on the far side, and "Already clear" about it is the claim
+        // CleanupPlan.WasNotExamined exists to stop.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
         Assert.True(Directory.Exists(outside));
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>

@@ -243,6 +243,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
+            WasNotExamined = targets.Count == 0 && scan.Links.Count > 0,
         };
     }
 

@@ -306,6 +306,9 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.Single(declines);
         Assert.Contains("Logs", declines[0].Message, StringComparison.Ordinal);
 
+        // Nothing targeted and something declined, so the row must not read "Already clear".
+        Assert.True(plan.WasNotExamined);
+
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(bystander), "planning looked through a junctioned container");
