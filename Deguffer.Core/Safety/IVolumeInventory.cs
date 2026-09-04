@@ -14,14 +14,14 @@ namespace Deguffer.Core.Safety;
 /// card are both mounted and both answer no, and reading anything else about them throws.
 /// </param>
 /// <param name="Label">
-/// What the volume is called, or null where it has no label or would not say. Null rather than an
-/// empty string, so "unlabelled" is one case at every caller instead of two.
+/// What the volume is called, or null where it has no label, would not say, or was not asked. Null
+/// rather than an empty string, so "unlabelled" is one case at every caller instead of two.
 /// </param>
-/// <param name="TotalBytes">Capacity, or null where the volume would not say.</param>
+/// <param name="TotalBytes">Capacity, on the same terms.</param>
 /// <param name="FreeBytes">
-/// What is left of that capacity for this user, or null where the volume would not say. The figure
-/// a quota allows rather than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are
-/// read by the same app and must not disagree.
+/// What is left of that capacity for this user, on the same terms. The figure a quota allows rather
+/// than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are read by the same app and
+/// must not disagree.
 /// </param>
 public readonly record struct LocalVolume(
     string RootPath,
@@ -109,14 +109,20 @@ public sealed class VolumeInventory : IVolumeInventory
     /// <summary>
     /// IsReady is the one member that answers for an empty drive instead of throwing, which is why
     /// it gates everything else read here.
+    ///
+    /// <para>A network volume is described by its mount point alone. The label and the two space
+    /// figures each cost a round trip to the server, <see cref="Volumes"/> is read under a lock and
+    /// on the UI thread, and no caller wants them for a share: the picker refuses network volumes
+    /// outright and <c>RecycleBinProvider</c> takes fixed ones only. This declines a cost, and
+    /// filters nothing — which kinds a caller may act on stays that caller's decision.</para>
     /// </summary>
     private static LocalVolume Describe(DriveInfo drive)
     {
         var root = drive.RootDirectory.FullName;
 
-        if (!drive.IsReady)
+        if (!drive.IsReady || drive.DriveType == DriveType.Network)
         {
-            return new LocalVolume(root, drive.DriveType, IsReady: false);
+            return new LocalVolume(root, drive.DriveType, drive.IsReady);
         }
 
         try

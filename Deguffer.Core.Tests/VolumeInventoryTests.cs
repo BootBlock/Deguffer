@@ -22,9 +22,19 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
-    /// The label and the two space figures are what the Explore picker offers a drive by, and they
-    /// come from the same reading as the mount point. A fixed volume that is ready always answers
-    /// all three, so a null here means the reading was never made.
+    /// The space figures the Explore picker offers a drive by come from the same reading as the
+    /// mount point. A ready fixed volume answers both, so a null here means the reading was never
+    /// made.
+    ///
+    /// <para>This one test does depend on the machine, unlike the rest of the class: it asserts a
+    /// ready fixed volume exists so that <see cref="Assert.All{T}"/> cannot pass over an empty
+    /// list and prove nothing. That is a claim about a <em>kind</em> of volume, which the machine
+    /// running the suite necessarily has, and still no claim about which letter it wears.</para>
+    ///
+    /// <para><b>The label is not asserted, because nothing here could discriminate it.</b> The
+    /// empty-to-null mapping only shows on a volume that has no label, and whether the machine has
+    /// one of those is not a property of this code. Asserting the shape of whatever labels happen
+    /// to be present would pass identically with the mapping deleted.</para>
     /// </summary>
     [Fact]
     public void ReadsTheSpaceEveryReadyFixedVolumeReports()
@@ -41,9 +51,6 @@ public sealed class VolumeInventoryTests
             Assert.NotNull(v.FreeBytes);
             Assert.True(v.TotalBytes > 0, v.RootPath);
             Assert.InRange(v.FreeBytes!.Value, 0, v.TotalBytes!.Value);
-
-            // Null or a real name, never the empty string a volume with no label reports.
-            Assert.True(v.Label is null or { Length: > 0 }, v.RootPath);
         });
     }
 

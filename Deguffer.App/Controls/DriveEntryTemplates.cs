@@ -7,10 +7,10 @@ namespace Deguffer.App.Controls;
 /// Draws a drive one way in the picker's list and another in the box above it.
 ///
 /// <para>A combo box draws the chosen entry with the same template as the list, and the Explore
-/// toolbar has no room for the wide one: at the window's own default width, a box carrying the
-/// space figures pushes the Colour picker off the end. The list is where the choice is made, so
-/// that is where the figures belong, and the box states which drive is chosen and nothing more.
-/// </para>
+/// toolbar has no room for the wide one. At the window's own default width, a box carrying the
+/// space figures pushes the Colour picker off the end, and one carrying merely the volume label
+/// pushes the folder scope's own button off it. The list is where the choice is made, so that is
+/// where everything but the mount point belongs.</para>
 ///
 /// <para>The container is the only thing that tells the two apart. WinUI passes the
 /// <see cref="ComboBoxItem"/> when it is filling the list, and nothing of the sort when it is

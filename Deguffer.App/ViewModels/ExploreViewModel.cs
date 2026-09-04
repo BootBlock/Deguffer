@@ -40,6 +40,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private bool _hasScanned;
 
+    /// <summary>
+    /// True while <see cref="RefreshDrives"/> is rebuilding the list.
+    ///
+    /// <para>Emptying an <c>ItemsSource</c> makes the picker write null back through its two-way
+    /// binding, before this has put the selection back. Taken at face value that is the user
+    /// choosing a different drive, so it drops the folder scope — and the refresh happens as the
+    /// picker opens, which is to say every time somebody looks at the list without touching
+    /// it.</para>
+    /// </summary>
+    private bool _rebuildingDrives;
+
     public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions)
     {
         _scanner = scanner;
@@ -427,9 +438,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>
     /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
     /// alternative leaves both set, and the page then states one target while scanning another.
+    ///
+    /// <para>Only where a person chose it. See <see cref="_rebuildingDrives"/> for the writes that
+    /// come from rebuilding the list rather than from the picker.</para>
     /// </summary>
     partial void OnSelectedDriveChanged(DriveChoice? value)
     {
+        if (_rebuildingDrives)
+        {
+            return;
+        }
+
         ScopeFolder = null;
 
         // Called here as well as from the scope's own handler below. Assigning null over null
@@ -652,21 +671,44 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
     }
 
-    private void RefreshDrives()
+    /// <summary>
+    /// Read the volumes again, so the picker offers what is mounted now and states how full it is
+    /// now.
+    ///
+    /// <para>Called whenever the picker is about to be read rather than once at startup. A mount
+    /// point does not go stale, but the space figures beside it do: a build, a download or a
+    /// removal through this very page moves them, and a picker still quoting the figures from when
+    /// the app opened is worse than one quoting none.</para>
+    ///
+    /// <para>The chosen volume survives the rebuild. It is found again by mount point, because the
+    /// entry that replaces it carries newer figures and so is not the same value.</para>
+    /// </summary>
+    public void RefreshDrives()
     {
-        _volumes.Invalidate();
+        var chosen = SelectedDrive?.RootPath;
 
-        Drives.Clear();
+        _rebuildingDrives = true;
 
-        // Only volumes that can actually be read. An optical drive with no disc and a card reader
-        // with no card are both mounted and both answer no, and offering them is offering a scan
-        // that cannot start.
-        foreach (var volume in _volumes.Volumes.Where(v => v.IsReady && v.Kind != DriveType.Network))
+        try
         {
-            Drives.Add(DriveChoice.From(volume));
-        }
+            _volumes.Invalidate();
 
-        SelectedDrive = Drives.FirstOrDefault();
+            Drives.Clear();
+
+            // Only volumes that can actually be read. An optical drive with no disc and a card
+            // reader with no card are both mounted and both answer no, and offering them is
+            // offering a scan that cannot start.
+            foreach (var volume in _volumes.Volumes.Where(v => v.IsReady && v.Kind != DriveType.Network))
+            {
+                Drives.Add(DriveChoice.From(volume));
+            }
+
+            SelectedDrive = Offered(chosen) ?? Drives.FirstOrDefault();
+        }
+        finally
+        {
+            _rebuildingDrives = false;
+        }
     }
 
     private bool CanScan() => !IsBusy && ScanRoot is not null;

@@ -11,21 +11,13 @@
     <Page.Resources>
         <!--
             Two ways of drawing one drive. The list is where the choice is made, so it carries the
-            label and the three space figures; the box above it says which drive is chosen and
-            nothing more, because the Explore toolbar has no room for the wide form. See
+            label and the three space figures. The box states the mount point alone, at exactly the
+            width it always had: the toolbar has no room to spare at the window's default size, and
+            a box carrying the label pushed the scope chip's button off the end of it. See
             DriveEntryTemplates for how the two are told apart.
         -->
         <DataTemplate x:Key="DriveChosen" x:DataType="exploring:DriveChoice">
-            <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto"
-                  AutomationProperties.Name="{x:Bind Description}">
-                <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
-
-                <TextBlock Grid.Column="1"
-                           Text="{x:Bind LabelText}"
-                           MaxWidth="116"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Grid>
+            <TextBlock Text="{x:Bind RootPath}" />
         </DataTemplate>
 
         <!--
@@ -75,6 +67,7 @@
                       ItemsSource="{x:Bind ViewModel.Drives}"
                       SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
                       ItemTemplateSelector="{StaticResource DriveEntry}"
+                      DropDownOpened="OnDriveListOpened"
                       AutomationProperties.Name="Drive to scan" />
 
             <!-- Scoping to a folder, through the system picker for the reason the source folders

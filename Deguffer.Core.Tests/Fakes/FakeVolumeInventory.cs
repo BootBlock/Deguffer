@@ -16,18 +16,15 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 
     /// <summary>
     /// Pretend <paramref name="rootPath"/> is a mounted volume. It defaults to the fixed, ready
-    /// case with nothing known about its label or its space, so a test that names any of those is
-    /// visibly testing them.
+    /// case, so a test that names another kind is visibly testing that kind.
+    ///
+    /// <para>Says nothing about the label or the space a volume reports. Those are read inside
+    /// <see cref="VolumeInventory"/> from a real <c>DriveInfo</c>, and no rule that decides a
+    /// deletion consults them, so there is nothing here for a fake to stand in for yet.</para>
     /// </summary>
-    public FakeVolumeInventory With(
-        string rootPath,
-        DriveType kind = DriveType.Fixed,
-        bool isReady = true,
-        string? label = null,
-        long? totalBytes = null,
-        long? freeBytes = null)
+    public FakeVolumeInventory With(string rootPath, DriveType kind = DriveType.Fixed, bool isReady = true)
     {
-        _volumes.Add(new LocalVolume(rootPath, kind, isReady, label, totalBytes, freeBytes));
+        _volumes.Add(new LocalVolume(rootPath, kind, isReady));
         return this;
     }
 
