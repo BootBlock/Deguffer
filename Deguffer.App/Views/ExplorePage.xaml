@@ -426,12 +426,17 @@
                     The list is the one view that cannot be covered, because rows underneath one
                     are rows nothing can retrieve, so OnNotesResized ends it above them.
 
-                    The opaque backing is what makes them readable, and it is not optional: an
-                    InfoBar's severity colour is a tint over whatever is behind it, so on a page it
-                    reads against the page and here it read against a treemap — measured, and the
-                    text was all but gone against a yellow tile. §6.5 asks the UI to be legible
-                    without the backdrop helping, and a control sitting on a drawing has to bring
-                    its own ground.
+                    The ground under them is what makes them readable at all. An InfoBar's
+                    severity colour is a tint over whatever is behind it, so on a page it reads
+                    against the page and here it read against a treemap — measured, and with no
+                    ground of its own the text was all but gone against a yellow tile.
+
+                    That ground is now carried at three quarters, and the button below it at a
+                    half, which the maintainer asked for and which gives back some of the contrast
+                    the measurement bought. §6.5 is untouched by it either way: that section is
+                    about the backdrop going away, and nothing here reads any differently when it
+                    does. Anyone lowering these further should measure again rather than reason
+                    about it.
                 -->
                 <Grid x:Name="Notes"
                       VerticalAlignment="Bottom"
@@ -534,11 +539,12 @@
                         this grid is what ends the list: a button sitting on the last row's date is
                         not out of the way, and a row underneath one is a row nothing can retrieve.
 
-                        On its own ground for §6.5's reason, the one the panel has: a button's own
-                        fill is a tint, and a tint over a treemap is not a button anybody can find.
-
-                        Half opaque, at the maintainer's asking, so that it sits back from the
-                        picture it is drawn on.
+                        On a ground of its own, for the reason the panel has one: a button's own
+                        fill is a tint, and a tint alone over a treemap is not a button anybody can
+                        find. Half opaque over that, at the maintainer's asking, so that it sits
+                        back from the picture it is drawn on — which is the smallest target here
+                        and the one that carries the warning glyph, so it is the first place to
+                        look if these values are ever lowered again.
                     -->
                     <Border HorizontalAlignment="Right"
                             VerticalAlignment="Bottom"
