@@ -11,7 +11,7 @@ would be, and what one would cost.
 
 **The short answer: a preview has countable structure, but not one number.** The pass has an exact
 provider count that nothing uses; one of its two measurement routes states its own record count and
-that count is thrown away; the other route has no denominator at any layer. The rule the *clean*
+reports nothing against it; the other route has no denominator at any layer. The rule the *clean*
 uses to build its bar — weight each part by the bytes it expects to move — was measured here against
 a preview and is actively wrong for one.
 
@@ -19,18 +19,24 @@ a preview and is actively wrong for one.
 
 | Surface | While scanning | While cleaning |
 | --- | --- | --- |
-| Clean page | `ProgressRing`, indeterminate, bound to `IsBusy` | determinate `ProgressBar` and a written percentage |
+| Clean page | `ProgressRing`, indeterminate, bound to `IsBusy` | the same ring, plus a determinate `ProgressBar` and a written percentage |
 | Explore page | determinate on the file-table route, indeterminate on the walk | — |
 
 Explore already answers this question for a whole-volume scan, and answers it both ways in one
 control. `ExploreScanner` reads `IMftSource.RecordCount` before its first record and reports a real
 fraction against it; the walk reports a rising item count with `Total: null`, and the same bar goes
-indeterminate. The rule is written down in five places in the tree — `ExploreScan.cs`,
-`ExploreViewModel.cs`, `ExplorePage.xaml`, `CleanViewModel.cs` and `CleanPage.xaml` — all saying the
-same thing:
+indeterminate. `ExploreScan.cs` states why:
 
 > a walk cannot know how many directories it has yet to open, so that one is honest about being
 > indeterminate rather than inventing a denominator.
+
+`ExploreViewModel.cs` and `ExplorePage.xaml` paraphrase it, both warning of a bar that "runs to
+nine tenths and stops there". `CleanViewModel.cs` and `CleanPage.xaml` argue something related but
+stronger, and about the preview rather than the walk: *"Only the clean has a knowable extent, so
+only the clean gets a bar; a preview keeps the ring, which is the honest shape for an operation that
+cannot say how much is left."* The distinction matters below, because the Clean pair are not
+arguing from a missing denominator. They are arguing that the pass does not know its own extent,
+which is the harder claim to answer.
 
 Nothing in [_spec.md](_spec.md) requires a bar anywhere. §5.5's only clause about a running scan is
 "**Stream partial results to the UI — never block on a complete scan**", and §6.5 is why every
@@ -43,8 +49,10 @@ at independently.
 
 **WinDirStat refuses a percentage when its total is untrustworthy, and does so in code.** Its
 denominator is *bytes in use on the volume*, from `GetDiskFreeSpaceEx`, which is known before the
-walk starts; `GetProgressRange()` returns `0` for a folder or a file. When junctions or mount points
-are not being excluded, [`MainFrame.cpp`](https://raw.githubusercontent.com/windirstat/windirstat/master/windirstat/MainFrame.cpp)
+walk starts; `GetProgressRange()` returns `0` for a folder or a file, both in
+[`Item.Extended.cpp`](https://raw.githubusercontent.com/windirstat/windirstat/master/windirstat/Item.Extended.cpp).
+When junctions or mount points are not being excluded,
+[`MainFrame.cpp`](https://raw.githubusercontent.com/windirstat/windirstat/master/windirstat/MainFrame.cpp)
 sets the range to zero deliberately, with the comment *"Directory structure may contain other volume
 or internal loops so set range to indicate there is no range so display pacman"*, and shows the
 Pacman animation instead of a bar. The numerator is clamped, too, because hard-linked files count
@@ -55,15 +63,20 @@ records fixing a bar that dropped *"from 100% back to 99% at scan completion"*.
 scanned is known only if you select a drive, the progress bar is shown only if you select a drive
 path. In all other cases, a simple message will be displayed."*
 
-**Everything's author says the problem in as many words.** On the voidtools forum
+**Everything's author says the problem in as many words**, about two different operations. Asked for
+a progress bar on a *folder* rescan
 ([t=11623](https://www.voidtools.com/forum/viewtopic.php?t=11623)): *"Displaying a progress bar is
 difficult because Everything doesn't know how many files/folders there are until the scan
-completes."* Its indexing bar therefore counts **steps, not files** — *"x of y volumes indexed"* —
-and the author adds that it *"is not really accurate"*. A user
-([t=12793](https://www.voidtools.com/forum/viewtopic.php?t=12793)) reported it stuck at 33% and then
-75% for days; the shipped fix was to read folders alphabetically so that the *displayed path* became
-the usable progress signal. That is a fix to the readout rather than to the percentage, and it is
-the failure mode a made-up denominator produces.
+completes."* Asked in the same thread about the *volume* rebuild, he says that bar *"is not really
+accurate"* and that it *"shows the completed steps, eg: x of y volumes indexed"* — steps rather than
+files, which is the same shape as counting providers here.
+
+The folder scan is where it went wrong in practice. A user
+([t=12793](https://www.voidtools.com/forum/viewtopic.php?t=12793)) reported a scan that read 33% for
+its whole duration and then sat at 75% for a day. The shipped fix was to read folders in
+alphabetical order, so that the *displayed path* became the usable progress signal. That is a fix to
+the readout rather than to the percentage, and it is the failure mode a made-up denominator
+produces.
 
 **The tools with no denominator show a count or an elapsed time instead.** Filelight shows
 `"N Files, <size>"` beside an indeterminate placeholder. QDirStat shows `"Reading… <elapsed time>"`,
@@ -112,11 +125,11 @@ states none of them, and reframes the choice around whether the operation blocks
 **A misleading bar measurably costs more than no bar.** Conrad, Couper, Tourangeau and Peytchev,
 *The impact of progress indicators on task completion* (*Interacting with Computers* 22(5), 2010,
 [open access](https://pmc.ncbi.nlm.nih.gov/articles/PMC2910434/)), measured abandonment against
-progress feedback: a bar that started slow and sped up produced **21.8%** breakoff, one that started
-fast and slowed produced **11.3%**, and **no feedback at all produced 12.7%**. The bar whose early
-behaviour understated progress was roughly twice as bad as no bar. That is the measured version of
-the instinct already in the tree, and it is the reason a wrong denominator is not a small cosmetic
-error.
+progress feedback across four conditions: a bar that started slow and sped up produced **21.8%**
+breakoff, one that started fast and slowed produced **11.3%**, a constant one **14.4%**, and **no
+feedback at all 12.7%**. The bar whose early behaviour understated progress was the worst of the
+four, and over 70% worse than showing nothing at all. That is the measured version of the instinct
+already in the tree, and it is the reason a wrong denominator is not a small cosmetic error.
 
 **The perceptual work is narrower than its reputation.** Harrison et al., *Rethinking the Progress
 Bar* (UIST 2007, [PDF](https://chrisharrison.net/projects/progressbars/ProgBarHarrison.pdf)), found
@@ -131,12 +144,15 @@ find constant as good as accelerating). **The finding that survives every study 
 bar that appears to stall, especially late, is the reliably bad case.**
 
 Two figures that circulate widely — "MIT Media Lab: 28% longer perceived duration" and "CMU: 37%
-higher error rates" — have no traceable source and should not be repeated.
+higher error rates" — have no traceable source. Both lead back to one machine-written marketing
+page, which gives no title, author, venue or DOI for either, and no such study exists in the
+literature. They should not be repeated.
 
 **A count with no denominator is a recognised answer, not a consolation prize.** Jakob Nielsen, on
 [progress indicators](https://www.uxtigers.com/post/progress-indicators), uses a file-scanning
 example: *"when the total is unknowable, show the running count anyway: 'Scanned 3,142 files so far'
-is a numerator without a denominator, yet it still beats a naked spinner."* GNOME's HIG asks for a
+is a numerator without a denominator, yet it still beats a naked spinner, because it proves motion
+and hints at scale."* GNOME's HIG asks for a
 label describing how much is done, with examples in exactly that form (*"13 of 19 images rotated"*).
 No guidance treats a bare count as a substitute for *something moving*, though: all of them pair the
 text with an indicator.
@@ -153,8 +169,10 @@ live UI.
 One thing could not be established and needs observing rather than researching: **what Narrator
 actually announces for a WinUI indeterminate `ProgressBar`.** Microsoft documents none of it, and
 [microsoft-ui-xaml#1746](https://github.com/microsoft/microsoft-ui-xaml/issues/1746), reporting that
-it announces *"0% progress bar"*, was closed as not planned. Given §6.5, that is worth driving
-before any decision here is called finished.
+it announces *"0% progress bar"*, was closed as not planned and labelled `area-External`, so it was
+put out of scope rather than answered. No spec section covers this either — §6.5 is
+about the Acrylic backdrop, and legibility without it — so this is a gap in the spec as much as in
+the knowledge, and it is worth driving before any decision here is called finished.
 
 ## 4. Measured: where a preview's time actually goes
 
@@ -190,6 +208,11 @@ and the bytes each provider reported.
 | Python virtual environments | 0 | 0 | 0 | 0 |
 | **Whole pass** | **4982** | **5274** | **4725** | |
 
+Rows are in the order `CleanupPlanner.CreateDefault()` runs them, which is the order the errors
+below are computed against. The whole-pass figure is wall-clock and is a few milliseconds more than
+its column sums, because the `InvalidateCaches` sweep before the loop and the sort after it fall
+outside "between consecutive findings".
+
 These are the *warm, unelevated* shape, and a later pass in a live process is not a first pass in a
 fresh one. [after-the-scanner.md](after-the-scanner.md) item 7 has the cold figures from a watched
 run: an unelevated preview at 15.5 seconds, an elevated one at 28.8, of which building the volume
@@ -206,8 +229,10 @@ author's users reported — a bar that reaches a number and sits there.
 
 **Elapsed time does not track bytes.** Across the thirteen providers that found anything, the
 Spearman rank correlation between elapsed milliseconds and estimated bytes is **-0.005**: no
-relationship at all. Playwright measured 1.09 GB in 7 ms; NuGet measured 6.30 GB in 255 ms; conda
-measured nothing whatever in 950 ms. A bar weighted by `ProgressWeights.For(...)`, the rule the
+relationship at all in this sample. Playwright measured 1.09 GB in 7 ms; NuGet measured 6.30 GB in
+255 ms; conda measured nothing whatever in 1005 ms, and PlatformIO measured 0.95 MB in 950 ms.
+Thirteen points is a small sample, and the coefficient alone would not carry the argument — the
+counterexamples and the weighting error below are what carry it. A bar weighted by `ProgressWeights.For(...)`, the rule the
 clean uses, would stand at **75% after six of twenty-four providers**, with 37% of the time gone.
 Its worst error is 38 percentage points, and its error is in the direction Conrad et al. measured as
 the expensive one.
@@ -236,7 +261,7 @@ orders of magnitude in both directions.
 | `CleanupPlanner.PlanAllAsync` | 24 providers | before the pass | reported, but only as one sentence per provider |
 | `CleanupProviderBase.MeasureAllAsync` | how many paths | before its loop | present, unreported |
 | `MftVolumeIndexBuilder.TryBuild` | `source.RecordCount` | at volume open | known; **no callback exists** |
-| `MftRecordStream.TryReadAll` | records read so far | per record | the handler already receives it; the builder discards it |
+| `MftRecordStream.TryReadAll` | records read so far | per record | the builder's handler already receives it, and reports nothing against it |
 | `BoundedFileWalk.Visit` | this level's directory count | at each level | present, unreported |
 | `ParallelEnumerationScanner` | bytes so far | per level | reported; **there is no entry count** |
 | `ScanEstimateCache` | last measured size per path | at start-up | the only cross-run signal that exists |
@@ -287,17 +312,22 @@ walk and not on an elevated run. That asymmetry is a fact about the two routes r
 
 This is the one place a Clean preview has an exact denominator. `IMftSource.RecordCount` is known
 the moment the volume opens, `MftRecordStream` already hands a record number to its handler, and
-`MftExploreReader` already reports against exactly that every 65,536 records.
-`MftVolumeIndexBuilder` discards the number it is given; adding a callback is one delegate
-parameter, mirroring code that already exists a directory away.
+`MftExploreReader` already publishes that record number every 65,536 records, which `ExploreScanner`
+pairs with `RecordCount` to make the fraction. `MftVolumeIndexBuilder`'s handler receives the same
+number and uses it as the tree slot, but reports nothing against it; adding a callback is one
+delegate parameter, mirroring code that already exists a directory away.
 
 It is worth more than it looks. On an elevated run the index build is the single largest lump — 9.9
 seconds of a 28.8-second preview across seven volumes — and it currently happens silently inside
 whichever provider first touches each volume. `RecycleBinProvider` names a bin on every fixed
 volume, so on a multi-drive machine every drive gets indexed.
 
-Two things qualify it. The denominator is *allocated* records, not records in use: NTFS never
-shrinks the table, and one published forensic image showed 45% of its records free. That is the
+Two things qualify it. The denominator is *allocated* records, not records in use. Microsoft
+documents why: *"When files are deleted from an NTFS volume, their MFT entries are marked as free
+and may be reused, but the MFT does not shrink"*
+([KB174619](https://learn.microsoft.com/en-us/troubleshoot/windows-server/backup-and-storage/ntfs-reserves-space-for-mft)),
+so free records accumulate for the life of a volume and the count overstates the files on it by an
+unknown margin. No survey of that margin was found, so no figure is offered for one. It is still the
 right denominator for "records read", since the reader reads them all and a free record is cheap to
 skip, but it is not a file count and must not be labelled as one. And it covers one phase of an
 elevated run and nothing at all on an unelevated one, which §6.3 makes the ordinary case. A bar that
@@ -310,9 +340,10 @@ the total is known.
 The only route to a genuine end-to-end fraction. Record each provider's elapsed time, keep it beside
 the sizes in `ScanEstimateCache`, and weight the next pass by it. §4 says the input would be stable
 enough to be worth something, and there is shipped precedent: Jenkins estimates a build from the
-last three successful ones and returns `-1` when it has no history, so the bar goes indeterminate
-rather than lying; TeamCity requires five matching builds and disqualifies a history whose durations
-are inconsistent.
+last few stable ones and returns `-1` when it has no history at all, so the bar goes indeterminate
+rather than lying. TeamCity wants five matching builds with consistent durations, and where it
+cannot find them it widens to the whole configuration's recent history rather than declining — which
+makes it the weaker of the two precedents, because widening is itself a guess.
 
 It is also the largest change, and the one with the most ways to be wrong:
 
@@ -322,8 +353,8 @@ It is also the largest change, and the one with the most ways to be wrong:
   unmeasured part. Jenkins's `-1` is the same decision.
 - **`ScanEstimateCache`'s file format changes.** `Load` treats a `JsonException` as a cache miss, so
   an incompatible file degrades to a cold start silently. Its `unchanged` short-circuit compares
-  only the three size fields before skipping the save, so a duration that changed while the size did
-  not would never be written.
+  the three size fields and the entry's staleness before skipping the save, so a duration that
+  changed while the size did not would not be written until the entry aged past its seven days.
 - **`MeasureFromDiskAsync` is a different population.** It runs after a deletion, against a
   near-empty tree, and feeding its timings into a scan-cost model would poison it.
 - **A duration is not a size**, so it sits inside rather than against the cache's stated rule that
@@ -345,7 +376,8 @@ It is also the largest change, and the one with the most ways to be wrong:
 - **A flat `k / N` bar over providers.** A 27-point worst error, reading 4% at the moment 31% of the
   work is done.
 - **A denominator derived from the walk's level queue.** Not monotone, so the bar goes backwards.
-- **An elapsed-time or "time remaining" estimate.** Nothing records elapsed time today, and a scan
+- **An elapsed-time or "time remaining" estimate.** Nothing times a provider or a path today —
+  `PlanExecutor` times a whole clean, and that is all — and a scan
   whose cost is dominated by other programs' start-up is a poor thing to extrapolate from. The
   Win32 guide's own rule is to withhold an estimate rather than show an inaccurate one.
 - **Drawing a partial picture as the progress indicator**, on the Clean page. DaisyDisk tried and
@@ -361,7 +393,7 @@ the eighth of twenty-four locations, and that location is up to 2.1 GB so far" �
 would have communicated, and none of what it would have got wrong.
 
 Two things should be settled before any of it is built. The first is what Narrator announces for the
-ring today, which is a §6.5 question and needs driving rather than reading. The second is whether
+ring today, which needs driving rather than reading, and which no spec section currently covers. The second is whether
 the Win32 guide's *"don't choose an indeterminate progress bar based only on the possible lack of
 accuracy alone"* changes the position stated in five places in the tree. On the evidence here it
 does not — a preview pass genuinely accesses an unknown number of objects, which is that page's own
