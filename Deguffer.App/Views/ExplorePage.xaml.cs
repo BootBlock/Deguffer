@@ -51,6 +51,10 @@ public sealed partial class ExplorePage : Page
         ViewModel.ViewChanged += (_, _) =>
         {
             ShowCurrentNode();
+
+            // The rows changed rather than the selection, so this is the other direction of the same
+            // agreement: the highlight goes back onto whichever of the new rows the selection still
+            // names. ShowCurrentNode has already put the map's outlines on the new drawing.
             ShowSelectedRows();
         };
 
@@ -63,18 +67,23 @@ public sealed partial class ExplorePage : Page
         RowsList.AddHandler(
             RightTappedEvent, new RightTappedEventHandler(OnRowsRightTapped), handledEventsToo: true);
 
+        // One signal, followed by both screens that show a selection. The list is not on screen
+        // while the map is and keeps whatever was highlighted in it until something says otherwise,
+        // and the map draws an outline round what was picked — so a change reaching only one of them
+        // is a Delete pointed at something the other one is still showing. Here rather than at each
+        // call site, because the callers are five and growing: a map click, a row click, a
+        // navigation, a snapshot carried over mid-scan, and the end of a removal.
+        ViewModel.Selection.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(ExploreSelection.Nodes))
+            {
+                ShowSelection();
+            }
+        };
+
         Map.Hovered += (_, what) => ViewModel.Hover(what.Node, what.AggregateBytes);
         Map.Activated += (_, node) => ViewModel.Descend(node);
-        Map.Picked += (_, node) =>
-        {
-            ViewModel.Selection.Select(node is { } picked ? [picked] : []);
-
-            // The list is not on screen while the map is, and it keeps whatever was highlighted in
-            // it until something says otherwise. Saying so here rather than when the list comes
-            // back: the two are one selection, and leaving them to disagree in the meantime is a
-            // Delete pointed at a row the map never picked.
-            ShowSelectedRows();
-        };
+        Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
 
         // Read once, here, and never again — the same rule the Storage page's density selector
@@ -139,8 +148,22 @@ public sealed partial class ExplorePage : Page
         ShowCurrentNode();
     }
 
+    /// <summary>
+    /// Draw the map. It puts its own outlines back on the new drawing, because it was told what is
+    /// selected when the selection last changed and that has not stopped being true.
+    /// </summary>
     private void ShowCurrentNode() =>
         Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView, ViewModel.SelectedColouring);
+
+    /// <summary>
+    /// Put both screens back in step with what is actually selected: the outline on the map, and the
+    /// highlight in the list.
+    /// </summary>
+    private void ShowSelection()
+    {
+        Map.Select(ViewModel.Selection.Nodes);
+        ShowSelectedRows();
+    }
 
     /// <summary>
     /// Put the list's highlight back on what the view model says is selected.

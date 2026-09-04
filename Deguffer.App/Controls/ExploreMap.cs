@@ -65,7 +65,19 @@ public sealed class ExploreMap : UserControl
         IsHitTestVisible = false,
     };
 
+    private readonly ExploreHighlight _highlight = new();
+
     private readonly DispatcherQueueTimer _settled;
+
+    /// <summary>What the user picked, as a set because it is asked of every shape in the drawing.</summary>
+    private readonly HashSet<int> _picked = [];
+
+    /// <summary>
+    /// The one node under the pointer, in the shape <see cref="ExploreSurface.Outlines"/> wants.
+    /// Kept and rewritten rather than built per move: a pointer crosses a treemap's shapes many
+    /// times a second, and each crossing would otherwise be an allocation (G5).
+    /// </summary>
+    private readonly HashSet<int> _under = [];
 
     private ExploreTree? _tree;
     private int _node;
@@ -79,7 +91,10 @@ public sealed class ExploreMap : UserControl
 
     public ExploreMap()
     {
-        Content = new Grid { Children = { _surface, _labels } };
+        // The outlines go over the picture and under the labels. A label is inset from its shape's
+        // edge and an outline runs along it, so the two rarely meet — and where they do, the name
+        // of the thing is worth more than the last pixel of the line round it.
+        Content = new Grid { Children = { _surface, _highlight, _labels } };
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -201,6 +216,33 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
+    /// Mark <paramref name="nodes"/> out on the picture, as what the user picked.
+    ///
+    /// <para>Told rather than remembered, because the selection is not the map's to hold. The list
+    /// view selects the same things, a scan snapshot carries some of them and drops the rest, and a
+    /// removal empties it — so the one copy that decides what Delete acts on lives in the view
+    /// model, and this draws whatever that copy currently says (§7.1).</para>
+    /// </summary>
+    public void Select(IReadOnlyList<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        if (_picked.SetEquals(nodes))
+        {
+            return;
+        }
+
+        _picked.Clear();
+        _picked.UnionWith(nodes);
+
+        ShowPicked();
+
+        // What the pointer is over may have just become what is picked, in which case it stops
+        // being outlined separately. See ShowHovered.
+        ShowHovered();
+    }
+
+    /// <summary>
     /// Wait for the drag to stop before redrawing, on the terms
     /// <see cref="ResizeSettleTime"/> gives.
     ///
@@ -222,10 +264,25 @@ public sealed class ExploreMap : UserControl
         // layout that puts them where they belong.
         _labels.Visibility = Visibility.Collapsed;
 
+        // The outlines do stretch with it, because a polygon scales exactly where a line of text
+        // does not, so they go on marking out the same shapes throughout the drag.
+        StretchHighlight();
+
         // Stopped and started rather than started, so each size change puts the whole wait back and
         // a drag that is still moving never reaches the end of one.
         _settled.Stop();
         _settled.Start();
+    }
+
+    /// <summary>
+    /// Put the outlines over the bitmap wherever it is currently drawn, which is the whole control.
+    /// </summary>
+    private void StretchHighlight()
+    {
+        if (_drawing is { } drawing)
+        {
+            _highlight.StretchOver(drawing.Width, drawing.Height, ActualWidth, ActualHeight);
+        }
     }
 
     private void Redraw()
@@ -259,6 +316,7 @@ public sealed class ExploreMap : UserControl
             _pixels = null;
             _drawing = null;
             _labels.Children.Clear();
+            _highlight.Clear();
             return;
         }
 
@@ -287,6 +345,14 @@ public sealed class ExploreMap : UserControl
         bitmap.Invalidate();
 
         DrawLabels(tree, drawing);
+
+        // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
+        // now. The hovered outline goes rather than moves, because `_hovered` was cleared above:
+        // the pointer has not been told the picture changed under it, and OnPointerMoved reports
+        // again the moment it does move.
+        StretchHighlight();
+        ShowPicked();
+        ShowHovered();
     }
 
     /// <summary>
@@ -386,6 +452,31 @@ public sealed class ExploreMap : UserControl
         return text;
     }
 
+    /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
+    private void ShowPicked() =>
+        _highlight.ShowPicked(_drawing is { } drawing ? drawing.Outlines(_picked) : []);
+
+    /// <summary>
+    /// Draw the fainter outline round whatever the pointer is over.
+    ///
+    /// <para>Nothing is drawn for a shape that is already picked, or for the block standing in for
+    /// items too small to draw. The first would put two outlines on one shape and leave the weaker
+    /// claim on top of the stronger one; the second cannot be picked at all (§7.1), so offering it a
+    /// highlight would invite a click that does nothing.</para>
+    /// </summary>
+    private void ShowHovered()
+    {
+        _under.Clear();
+
+        if (_hovered is { IsAggregate: false } hit && !_picked.Contains(hit.Node))
+        {
+            _under.Add(hit.Node);
+        }
+
+        _highlight.ShowHovered(
+            _under.Count > 0 && _drawing is { } drawing ? drawing.Outlines(_under) : []);
+    }
+
     /// <summary>
     /// What is under <paramref name="point"/>, in the control's own coordinates.
     ///
@@ -426,6 +517,8 @@ public sealed class ExploreMap : UserControl
 
         _hovered = hit;
 
+        ShowHovered();
+
         Hovered?.Invoke(this, hit switch
         {
             { IsAggregate: true } aggregate => (null, aggregate.Bytes),
@@ -450,6 +543,9 @@ public sealed class ExploreMap : UserControl
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
         _hovered = null;
+
+        ShowHovered();
+
         Hovered?.Invoke(this, (null, null));
     }
 

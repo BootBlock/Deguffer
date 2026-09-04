@@ -36,6 +36,74 @@ public sealed class SunburstSurface : ExploreSurface
             ? new ExploreHit(_hits.Sunburst.Sectors[index].Node, _hits.Sunburst.Sectors[index].Bytes)
             : null;
 
+    public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        var sunburst = _hits.Sunburst;
+        var sectors = sunburst.Sectors;
+        var outlines = new List<ExploreOutline>();
+
+        for (var i = 0; i < sectors.Count; i++)
+        {
+            var sector = sectors[i];
+
+            if (!sector.IsAggregate && nodes.Contains(sector.Node))
+            {
+                outlines.Add(new ExploreOutline(sector.Node, Outline(sunburst, sector)));
+            }
+        }
+
+        return outlines;
+    }
+
+    /// <summary>
+    /// One annular sector as a closed polygon: out along the far edge, and back along the near one.
+    ///
+    /// <para>Two shapes in this picture are not annular sectors, and both need saying rather than
+    /// falling out of the arithmetic. A sector that closes on itself is a ring, and walking back
+    /// along an inner edge that meets its own start would trace the ring twice. The disc in the
+    /// middle has no inner edge at all, so its near side is the centre point.</para>
+    /// </summary>
+    private static IReadOnlyList<ExplorePoint> Outline(Sunburst sunburst, ExploreSector sector)
+    {
+        // One point per degree of sweep. At the radii a sunburst is drawn at that is a tenth of a
+        // pixel from the true arc, which is below what a stroke a pixel or two wide can show.
+        var steps = Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);
+        var points = new List<ExplorePoint>((steps + 1) * 2);
+
+        for (var i = 0; i <= steps; i++)
+        {
+            points.Add(At(sunburst, sector.OuterRadius, sector.StartAngle + (sector.SweepAngle * i / steps)));
+        }
+
+        if (sector.IsWholeCircle)
+        {
+            return points;
+        }
+
+        if (sector.InnerRadius <= 0)
+        {
+            points.Add(new ExplorePoint(sunburst.CentreX, sunburst.CentreY));
+            return points;
+        }
+
+        for (var i = steps; i >= 0; i--)
+        {
+            points.Add(At(sunburst, sector.InnerRadius, sector.StartAngle + (sector.SweepAngle * i / steps)));
+        }
+
+        return points;
+    }
+
+    /// <summary>
+    /// A point on the canvas at this radius and angle. Angles run clockwise from twelve o'clock, and
+    /// the canvas's y axis runs downwards, which is where the subtraction comes from.
+    /// </summary>
+    private static ExplorePoint At(Sunburst sunburst, float radius, float angle) => new(
+        sunburst.CentreX + (radius * MathF.Sin(angle)),
+        sunburst.CentreY - (radius * MathF.Cos(angle)));
+
     /// <summary>
     /// Put each label along its own ring, turned so it lies with the sector rather than across it.
     ///

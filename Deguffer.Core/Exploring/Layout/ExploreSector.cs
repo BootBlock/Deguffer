@@ -38,7 +38,20 @@ public readonly record struct ExploreSector(
     /// </summary>
     public const int Aggregated = ExploreTile.Aggregated;
 
+    /// <summary>
+    /// A sweep at or above which a sector meets its own start, so it has no angular edges.
+    ///
+    /// <para>Two things need to know this and they need to agree, which is why it is here rather
+    /// than in either of them. A ring shaded as though it had edges gets a seam at twelve o'clock,
+    /// most visibly on the disc in the middle; a ring outlined as though it had edges is traced
+    /// twice, once each way round.</para>
+    /// </summary>
+    private const float WholeCircle = MathF.Tau - 0.0001f;
+
     public bool IsAggregate => Node == Aggregated;
+
+    /// <summary>Whether this sector closes on itself, so that it is a ring rather than a wedge.</summary>
+    public bool IsWholeCircle => SweepAngle >= WholeCircle;
 
     /// <summary>Half way across the ring, which is where a label sits.</summary>
     public float MidRadius => (InnerRadius + OuterRadius) / 2;
