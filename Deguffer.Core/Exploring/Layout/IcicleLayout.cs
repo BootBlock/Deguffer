@@ -32,6 +32,10 @@ public static class IcicleLayout
     /// second is not a failure to draw everything — an icicle over a deep tree is meant to be
     /// scrolled or descended into, and inventing thinner rows to fit would trade the one thing the
     /// layout is good at for the one thing it is not.</para>
+    ///
+    /// <para>An array rather than the list it is built in, for the reason
+    /// <see cref="TreemapLayout.Compute"/> gives: both layouts feed the same rasteriser, and it
+    /// indexes what it is given once per rectangle per band of every repaint.</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
         ExploreTree tree,
@@ -48,7 +52,7 @@ public static class IcicleLayout
 
         if (width <= 0 || height < rowHeight || tree.SizeOf(root) <= 0)
         {
-            return tiles;
+            return tiles.ToArray();
         }
 
         // The canvas is the limit here, and <see cref="LayoutLimits.MaximumDepth"/> deliberately is
@@ -80,7 +84,7 @@ public static class IcicleLayout
             Partition(tree, frame.Node, frame.Depth + 1, frame.X, frame.Width, rowHeight, limits, tiles, pending);
         }
 
-        return tiles;
+        return tiles.ToArray();
     }
 
     /// <summary>

@@ -108,6 +108,18 @@ public sealed class ExploreMap : UserControl
             {
                 root.Changed += OnRootChanged;
             }
+
+            // A resize that arrived while this was on screen, and was still waiting to be drawn
+            // when the page was navigated away from, is dropped below rather than rasterised for a
+            // page nobody is looking at. Coming back at that same size raises no SizeChanged, so
+            // this is the only place that owes the redraw — and without it the map stays stretched
+            // over the old canvas for as long as the page is open.
+            if (_drawing is { } drawing
+                && (drawing.Width != DevicePixels(ActualWidth)
+                    || drawing.Height != DevicePixels(ActualHeight)))
+            {
+                Redraw();
+            }
         };
 
         Unloaded += (_, _) =>
@@ -115,6 +127,12 @@ public sealed class ExploreMap : UserControl
             // A pending redraw for a size this control is no longer showing at. Left running it
             // would rasterise a whole volume for a page that has been navigated away from.
             _settled.Stop();
+
+            // The labels go back with it. Dropping the redraw drops the thing that would have put
+            // them back, and Loaded only redraws where the size has actually moved — so without
+            // this a map returned to at the size it was last drawn at comes back with no names on
+            // it at all, and nothing on the page would put them there.
+            _labels.Visibility = Visibility.Visible;
 
             if (XamlRoot is { } root)
             {
@@ -198,6 +216,12 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
+        // The bitmap stretches with the control and the labels do not, because they are real
+        // controls at fixed positions rather than part of the picture. Left visible they would sit
+        // over whichever shape had moved under them, naming it wrongly. They come back with the
+        // layout that puts them where they belong.
+        _labels.Visibility = Visibility.Collapsed;
+
         // Stopped and started rather than started, so each size change puts the whole wait back and
         // a drag that is still moving never reaches the end of one.
         _settled.Stop();
@@ -209,12 +233,22 @@ public sealed class ExploreMap : UserControl
         // Whatever brought us here is more current than a size change still waiting to be drawn.
         _settled.Stop();
 
+        // Nothing can see it, and the page asks again as it brings the map back. ExplorePage
+        // collapses this for the List view and calls Show() in the same breath, so without this a
+        // switch to List rasterises a whole volume into a control nobody is looking at — and the
+        // zero-size path below would then drop the bitmap and the buffer, so switching back
+        // allocates 33 MB of both again (G5).
+        if (Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
         _hovered = null;
 
         _scale = XamlRoot?.RasterizationScale ?? 1;
 
-        var width = (int)Math.Round(ActualWidth * _scale);
-        var height = (int)Math.Round(ActualHeight * _scale);
+        var width = DevicePixels(ActualWidth);
+        var height = DevicePixels(ActualHeight);
 
         if (_tree is not { } tree || width <= 0 || height <= 0 || tree.SizeOf(_node) <= 0)
         {
@@ -256,6 +290,14 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
+    /// How many bitmap pixels a control extent of <paramref name="extent"/> device-independent
+    /// pixels asks for. One expression, so that a caller asking whether the drawing still matches
+    /// the control gets the same answer <see cref="Redraw"/> would lay out to.
+    /// </summary>
+    private int DevicePixels(double extent) =>
+        (int)Math.Round(extent * (XamlRoot?.RasterizationScale ?? 1));
+
+    /// <summary>
     /// The canvas ground, taken from the theme rather than fixed.
     ///
     /// <para>§6.5 requires the UI to read correctly on a flat background in either theme, and this
@@ -286,6 +328,8 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void DrawLabels(ExploreTree tree, ExploreSurface drawing)
     {
+        _labels.Visibility = Visibility.Visible;
+
         while (_labels.Children.Count < drawing.Labels.Count)
         {
             _labels.Children.Add(NewLabel());
@@ -342,6 +386,27 @@ public sealed class ExploreMap : UserControl
         return text;
     }
 
+    /// <summary>
+    /// What is under <paramref name="point"/>, in the control's own coordinates.
+    ///
+    /// <para>Mapped through the drawing's own dimensions rather than through the display scale,
+    /// because the two part company for as long as a resize is still settling. The bitmap is
+    /// stretched over the control's new bounds in the meantime, so what is on screen is the old
+    /// canvas scaled to fit, and a pointer mapped by the display scale would answer from geometry
+    /// that is no longer where it is drawn.</para>
+    ///
+    /// <para>§7.1 makes that a safety question rather than a cosmetic one. A right-click picks
+    /// what the menu then acts on, so a pick that disagrees with the picture is a Delete aimed at
+    /// something the user never pointed at — the same mistake <c>ExplorePage</c> avoids by picking
+    /// from the row under the pointer rather than from the last selection.</para>
+    /// </summary>
+    private ExploreHit? At(ExploreSurface drawing, Point point) =>
+        ActualWidth > 0 && ActualHeight > 0
+            ? drawing.At(
+                (float)(point.X * drawing.Width / ActualWidth),
+                (float)(point.Y * drawing.Height / ActualHeight))
+            : null;
+
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (_drawing is not { } drawing)
@@ -349,8 +414,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var point = e.GetCurrentPoint(this).Position;
-        var hit = drawing.At((float)(point.X * _scale), (float)(point.Y * _scale));
+        var hit = At(drawing, e.GetCurrentPoint(this).Position);
 
         // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
         // shape for most of that, so reporting every move would rebuild the same string sixty times
@@ -410,7 +474,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        Picked?.Invoke(this, drawing.At((float)(point.X * _scale), (float)(point.Y * _scale)) switch
+        Picked?.Invoke(this, At(drawing, point) switch
         {
             { IsAggregate: false } hit => hit.Node,
             _ => null,
@@ -424,10 +488,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var point = e.GetPosition(this);
-
-        if (drawing.At((float)(point.X * _scale), (float)(point.Y * _scale))
-            is { IsAggregate: false } hit)
+        if (At(drawing, e.GetPosition(this)) is { IsAggregate: false } hit)
         {
             Activated?.Invoke(this, hit.Node);
         }

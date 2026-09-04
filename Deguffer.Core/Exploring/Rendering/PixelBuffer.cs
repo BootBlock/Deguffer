@@ -113,20 +113,17 @@ public static class PixelBuffer
             return;
         }
 
+        // Never more bands than rows, so every band holds at least one row and none of them is
+        // handed an empty span.
         var bands = Math.Min(rows, RowOptions.MaxDegreeOfParallelism * BandsPerThread);
 
         Parallel.For(0, bands, RowOptions, band =>
         {
-            // From the band number rather than by accumulating a height, so the last band ends
-            // exactly on `bottom` however the division rounds. The multiplication is done in long
-            // because rows times bands overflows an int on a tall canvas cut finely.
-            var from = top + (int)((long)rows * band / bands);
-            var to = top + (int)((long)rows * (band + 1) / bands);
-
-            if (to > from)
-            {
-                paint(from, to);
-            }
+            // From the band number rather than by accumulating a height, so one band's end is the
+            // same expression as the next one's start. That is what makes the bands tile the span
+            // exactly, with no gap and no overlap, however the division rounds — and the last one
+            // ends on `bottom` rather than a rounding error short of it.
+            paint(top + (rows * band / bands), top + (rows * (band + 1) / bands));
         });
     }
 

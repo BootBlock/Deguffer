@@ -30,8 +30,11 @@ public static class TileRasteriser
     /// large-object-heap allocation, and the heap is not compacted by default — so allocating per
     /// repaint would leak tens of megabytes a second for the length of a scan.</para>
     ///
-    /// <para>Tiles are painted in the order given, which the layouts produce parent-first — so a
-    /// child covers its parent and the nesting comes out right without sorting anything here.</para>
+    /// <para>Tiles are walked from the end of the list towards the start, and the first shape to
+    /// claim a pixel keeps it. That is the same picture as painting them in the order given, where
+    /// a later shape covers an earlier one: whichever of two overlapping shapes comes later wins
+    /// under both rules. What it avoids is shading a pixel once for every level above it — see
+    /// <see cref="ClaimedPixels"/> for what that costs on a real volume.</para>
     ///
     /// <paramref name="colourOf"/> answers what one shape is painted, given its node and its
     /// depth. Supplied rather than decided here because what a colour means is the surface's choice
@@ -69,39 +72,49 @@ public static class TileRasteriser
             colours[i] = colourOf(tiles[i].Node, tiles[i].Depth);
         }
 
-        // Split by rows, not by rectangle. Handing each rectangle to Parallel.For in turn — which is
-        // what painting one shape at a time amounted to — only ever cleared the threshold for the
-        // handful of large ones, so a canvas made of fifty thousand small rectangles was shaded on a
-        // single thread while every other core sat idle. It also built a closure per rectangle.
+        // Indexed as an array below rather than through the interface. Every band walks the whole
+        // list, so on a 4K canvas of thirty thousand rectangles that is a couple of million calls
+        // through an interface indexer returning a 32-byte struct, per repaint (G4). The layouts
+        // hand back arrays, so the copy is the fallback rather than the usual case.
+        var shapes = tiles as ExploreTile[] ?? [.. tiles];
+
+        // Split by rows, not by rectangle. A treemap of a real volume is tens of thousands of small
+        // rectangles and a handful of large ones, so a partition drawn around each rectangle in
+        // turn leaves almost every one of them below any threshold worth handing to a second
+        // thread — and the canvas is shaded on one core while the rest sit idle (G4).
         //
-        // A band owns its rows outright, and every rectangle is offered to every band in the order
-        // the layout gave, clipped to the rows that band holds. So the nesting still comes out of
-        // the painting order and the picture is the one a single thread would have produced.
+        // A band owns its rows outright, and every rectangle is offered to every band, clipped to
+        // the rows that band holds. So the picture is the one a single thread would have produced.
         PixelBuffer.Bands(0, height, width * height, (from, to) =>
         {
             PixelBuffer.Fill(pixels, width, from, to, background);
 
-            for (var i = 0; i < tiles.Count; i++)
+            var claimed = new ClaimedPixels(width, from, to);
+
+            // Backwards, and stopping the moment the band is entirely spoken for. Both are the
+            // same argument: a shape can only show where nothing nested inside it already does.
+            for (var i = shapes.Length - 1; i >= 0 && !claimed.IsFull; i--)
             {
-                Cushion(pixels, width, height, from, to, tiles[i], colours[i]);
+                Cushion(pixels, claimed, width, height, shapes[i], colours[i]);
             }
         });
     }
 
     /// <summary>
-    /// Shade one rectangle into the rows between <paramref name="bandTop"/> and
-    /// <paramref name="bandBottom"/>.
+    /// Shade one rectangle into whichever of <paramref name="claimed"/>'s rows and pixels are still
+    /// free.
     ///
-    /// <para>The cushion is measured across the whole rectangle and only <em>drawn</em> within the
-    /// band. Measuring it within the band instead would restart the gradient at every band boundary
-    /// and put a seam across the picture wherever one fell.</para>
+    /// <para>The cushion is measured across the whole rectangle and only <em>drawn</em> where it
+    /// shows. Measuring it within the band instead would restart the gradient at every band
+    /// boundary and put a seam across the picture wherever one fell; measuring it across only the
+    /// unclaimed part would stretch a shape's whole cushion into the sliver of it that is
+    /// visible.</para>
     /// </summary>
     private static void Cushion(
         byte[] pixels,
+        ClaimedPixels claimed,
         int width,
         int height,
-        int bandTop,
-        int bandBottom,
         ExploreTile tile,
         TileColour colour)
     {
@@ -115,8 +128,8 @@ public static class TileRasteriser
             return;
         }
 
-        var firstRow = Math.Max(top, bandTop);
-        var lastRow = Math.Min(bottom, bandBottom);
+        var firstRow = Math.Max(top, claimed.Top);
+        var lastRow = Math.Min(bottom, claimed.Bottom);
 
         if (lastRow <= firstRow)
         {
@@ -143,10 +156,14 @@ public static class TileRasteriser
 
             for (var x = left; x < right; x++)
             {
-                var u = spanWidth <= 1 ? 0.5 : (double)(x - left) / (spanWidth - 1);
-                var nx = ridge * ((2 * u) - 1);
+                if (claimed.Claim(x, y))
+                {
+                    var u = spanWidth <= 1 ? 0.5 : (double)(x - left) / (spanWidth - 1);
+                    var nx = ridge * ((2 * u) - 1);
 
-                CushionShading.Write(pixels, offset, colour, CushionShading.LightAt(nx, ny));
+                    CushionShading.Write(pixels, offset, colour, CushionShading.LightAt(nx, ny));
+                }
+
                 offset += 4;
             }
         }
