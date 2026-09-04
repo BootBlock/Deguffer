@@ -276,6 +276,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasNoTree => Tree is null;
 
     /// <summary>
+    /// Whether the rows are being rewritten from here.
+    ///
+    /// <para>Read by the page, because a bound <c>ListView</c> drops an item from its own
+    /// selection when the collection under it stops holding that item where it was, and reports
+    /// that back as a selection change. Taken for a gesture, it overwrites the selection with
+    /// whatever the rewrite happened to leave behind — on a rescan that is a node number belonging
+    /// to the tree before it, and asking the arriving tree for its path throws.</para>
+    /// </summary>
+    public bool IsShowingRows { get; private set; }
+
+    /// <summary>
     /// Raised once the tree, the current node or the rows have changed, so the map redraws and the
     /// list's own selection is put back in step with <see cref="ExploreSelection.Nodes"/>. An event
     /// rather than the control watching several properties: a redraw is expensive and must happen
@@ -576,10 +587,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private void Show(ExploreTree tree, int node)
     {
+        var standing = Tree;
+
         // Whether what is on screen is still about the same directory. A snapshot landing mid-scan
         // is: it measures again what the page is already standing in. Stepping into a folder is
         // not, and neither is a scan that came back rooted somewhere else.
-        var continuing = ExplorePlace.TryCarry(Tree, CurrentNode, tree) == node;
+        var continuing = ExplorePlace.TryCarry(standing, CurrentNode, tree) == node;
 
         Tree = tree;
         CurrentNode = node;
@@ -593,16 +606,12 @@ public sealed partial class ExploreViewModel : ObservableObject
             Selection.Show(tree);
         }
 
-        // Read before the rows are touched and asserted again after. Rebuilding the collection
-        // makes the bound ListView drop its own selection, which arrives back here as a gesture
-        // clearing this one — and a rebuild nobody asked for is not a gesture. The page puts the
-        // highlight back from this when it hears ViewChanged.
-        var picked = Selection.Nodes.ToArray();
-
-        ShowRows(tree, node, continuing);
-
-        Selection.Select(picked);
-
+        // Brought up to date in place only while the list is the same list: the same directory, in
+        // the same order. A finished tree arrives with its children in size order after a walk's
+        // snapshots delivered them in name order, and that is a different list rather than this one
+        // changed — every row has moved, so reconciling it would be a move per entry, and the scroll
+        // position it would preserve is a position in content that is no longer there.
+        ShowRows(tree, node, continuing && standing?.ChildOrder == tree.ChildOrder);
         BuildTrail(tree, node);
 
         Hovered = string.Empty;
@@ -640,6 +649,21 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// about content that is no longer there.</para>
     /// </summary>
     private void ShowRows(ExploreTree tree, int node, bool reconcile)
+    {
+        IsShowingRows = true;
+
+        try
+        {
+            Rewrite(tree, node, reconcile);
+        }
+        finally
+        {
+            IsShowingRows = false;
+        }
+    }
+
+    /// <summary>The pass itself. See <see cref="ShowRows"/>, which is what holds the gate open.</summary>
+    private void Rewrite(ExploreTree tree, int node, bool reconcile)
     {
         if (!reconcile)
         {
@@ -692,11 +716,14 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// where none of them is about it. Everything before <paramref name="from"/> is already settled,
     /// so the search starts there.
     ///
-    /// <para>A linear search, and it is only reached where the order changed — which through the
-    /// snapshots of one walk it never does, because a directory's children are recorded in one call
-    /// and the snapshots are all in name order. The one pass that does reorder is the finished tree
-    /// arriving in size order, and its cost is bounded by the number of entries in the one directory
-    /// on screen (G4).</para>
+    /// <para>The search starts where the row would be if nothing had moved, so what the pass around
+    /// it costs is how far the rows actually travelled: nothing at all while the sequence is
+    /// unchanged, which is every snapshot of one walk, and one step each after an entry is removed
+    /// from the directory on screen. It is quadratic only where most of the list has moved, and
+    /// <see cref="Show"/> keeps the one case that guarantees that — a finished tree in size order
+    /// replacing snapshots in name order — out of here entirely. What is left is two scans of one
+    /// volume, which agree on the order they are in and disagree only about whatever changed size
+    /// between them (G4).</para>
     /// </summary>
     private int? RowFor(ExploreTree tree, int child, int from)
     {

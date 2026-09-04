@@ -75,9 +75,9 @@ public sealed partial class ExploreSelection : ObservableObject
     /// What is selected, by node.
     ///
     /// <para>Named so the list can be put back in step with it. A <c>ListView</c> keeps its own
-    /// copy of the selection and drops it whenever the collection under it changes, then reports
-    /// that back as though the user had cleared it — so something has to say which of the two
-    /// copies is right, and it is this one.</para>
+    /// copy of the selection and drops an item from it when the collection under it stops holding
+    /// that item where it was, then reports that back as though the user had cleared it — so
+    /// something has to say which of the two copies is right, and it is this one.</para>
     /// </summary>
     public IReadOnlyList<int> Nodes => _nodes;
 
@@ -171,8 +171,12 @@ public sealed partial class ExploreSelection : ObservableObject
     /// map hit can land on a descendant several levels below the current node, which has no row at
     /// all — and §7.1's actions are the same actions whichever picture the user was reading.</para>
     ///
-    /// <para>Never set by anything but a user gesture. §7.1: Explore never pre-selects, and never
-    /// acts on more than what was picked out by hand.</para>
+    /// <para>§7.1: Explore never pre-selects, and never acts on more than what was picked out by
+    /// hand. A gesture is the only thing that may widen this, and the page holds every change the
+    /// list reports while the rows are being rewritten, so what a rewrite left behind never arrives
+    /// here as one. The callers that are not gestures only ever narrow: <see cref="Show"/> and the
+    /// end of a removal empty it outright, and <see cref="Carry"/> drops whatever no longer names
+    /// what it named.</para>
     /// </summary>
     public void Select(IReadOnlyList<int> nodes)
     {
