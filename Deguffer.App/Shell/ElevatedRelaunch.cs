@@ -9,9 +9,13 @@ namespace Deguffer.App.Shell;
 /// Restarts Deguffer with administrator rights so §5.5's fast path becomes reachable.
 ///
 /// §6.3 deliberately does not elevate at startup — the tool reads the whole of the user's disk,
-/// and asking for administrator before the user has been shown anything is exactly the posture it
-/// is trying not to have. Elevation is therefore something the user opts into, once they can see
-/// what it buys them.
+/// and taking administrator rights before the user has asked for anything is exactly the posture it
+/// is trying not to have. Elevation is therefore something the user opts into, and nothing here
+/// runs until they press the button.
+///
+/// That button is on screen from the start rather than only after a scan has reported what
+/// elevating would buy. Reaching the elevated scan solely through the unelevated one it replaces is
+/// not an opt-in, and <see cref="ElevationOffer"/> is where that judgement is made.
 ///
 /// This relaunches unpackaged via ShellExecute, which is the only way to raise the UAC prompt: a
 /// process cannot gain rights it started without.

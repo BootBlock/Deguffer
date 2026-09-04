@@ -69,8 +69,8 @@ public static class ElevationOffer
     /// has not done yet reads as a screen that has lost track of what happened on it, and it is the
     /// wording — not the button — that made the elevated scan look like a second step.</para>
     ///
-    /// <para>Here rather than in each page's markup so the two agree, and so the sentences that
-    /// name the button in prose have one label to name.</para>
+    /// <para>Here rather than in each page's markup, so the two buttons and the sentence that names
+    /// one of them cannot come to disagree.</para>
     /// </summary>
     public static string Label(bool hasScanned) =>
         hasScanned ? "Elevate and rescan" : "Elevate and scan";

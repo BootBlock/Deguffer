@@ -45,7 +45,7 @@
                          running. Text rather than a disabled checkbox alone (§6.5): a control that
                          is simply greyed out states no reason, and the reason is the whole of what
                          the user needs in order to act. -->
-                    <TextBlock Text="Needs administrator rights — use Elevate and rescan"
+                    <TextBlock Text="Needs administrator rights — use the Elevate button"
                                Visibility="{x:Bind NeedsElevationFirst}"
                                Style="{StaticResource SecondaryText}"
                                TextWrapping="Wrap"

@@ -33,9 +33,10 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly IVolumeInventory _volumes;
 
     /// <summary>
-    /// Whether a scan has finished on this page. Not <see cref="Tree"/>, which a snapshot fills in
-    /// while a scan is still running (see <see cref="Report"/>) — a half-drawn map is not a scan the
-    /// offer may be read from. Written only by <see cref="OfferElevation"/>.
+    /// Whether a finished scan covers what the page is pointed at now. Not <see cref="Tree"/>, which
+    /// a snapshot fills in while a scan is still running (see <see cref="Report"/>) — a half-drawn
+    /// map is not a scan the offer may be read from. Written only by
+    /// <see cref="OfferElevation"/>.
     /// </summary>
     private bool _hasScanned;
 
@@ -423,15 +424,33 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
     /// alternative leaves both set, and the page then states one target while scanning another.
     /// </summary>
-    partial void OnSelectedDriveChanged(string? value) => ScopeFolder = null;
+    partial void OnSelectedDriveChanged(string? value)
+    {
+        ScopeFolder = null;
+
+        // Called here as well as from the scope's own handler below. Assigning null over null
+        // raises nothing, so a drive chosen while no folder was scoped would otherwise leave the
+        // offer describing somewhere the page is no longer pointed.
+        OfferElevation(null);
+    }
+
+    /// <summary>
+    /// The offer describes what pressing the button would scan, not what is drawn on screen, so
+    /// moving the target puts it back to the state before anything was measured.
+    ///
+    /// <para>Leaving it alone is how the button comes to be hidden for a volume nothing has looked
+    /// at, which is the whole of the defect it was just changed to fix, and how it comes to offer a
+    /// rescan of a drive that was never scanned.</para>
+    /// </summary>
+    partial void OnScopeFolderChanged(string? value) => OfferElevation(null);
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
     /// and stands down — the same mechanism the Storage page uses, and for the same reason.
     ///
     /// <para>The replacement is told where this page was pointed, so it opens on Explore and scans
-    /// it. The button says "rescan", and landing the user on another page with the drive box back at
-    /// its default, and a picked folder thrown away, would not be that.</para>
+    /// it. The user pressed this while pointed somewhere, and landing them on another page with the
+    /// drive box back at its default, and a picked folder thrown away, would not be that.</para>
     ///
     /// <para>What travels is what the page is pointed at now rather than what the last scan
     /// covered. The picker is on screen and <see cref="ScanCommand"/> beside it would use exactly

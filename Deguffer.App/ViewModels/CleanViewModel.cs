@@ -453,8 +453,8 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
-    /// and stands down. The new instance re-previews on launch — the button says "rescan", and
-    /// landing the user on an empty window to press Preview again would not be that.
+    /// and stands down. The new instance previews on launch: the user asked for a scan by pressing
+    /// this, and landing them on an empty window to press Preview again would not be that.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
     private void ElevateAndRescan()

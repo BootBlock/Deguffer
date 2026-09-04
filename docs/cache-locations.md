@@ -1087,7 +1087,7 @@ finishes, and Deguffer checks that they are.
 
 **Most of it needs administrator rights.** Only `%LOCALAPPDATA%\CrashDumps` is yours to clear.
 Deguffer shows the rest either way, tells you which they are, and leaves them unticked until you
-restart it as administrator with **Elevate and rescan**. It does not hide them, because a folder you
+restart it as administrator with the **Elevate** button. It does not hide them, because a folder you
 are never told about is one you can never decide about.
 
 Each row carries the date something last wrote to it. For `MEMORY.DMP` that date is the moment the
