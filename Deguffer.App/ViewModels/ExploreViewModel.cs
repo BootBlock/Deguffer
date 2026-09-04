@@ -6,6 +6,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -33,6 +34,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly IVolumeInventory _volumes;
 
     /// <summary>
+    /// What the app knows about well-known files and folders, resolved against this machine once
+    /// and read from here on (G5). Held rather than reached for statically, so a test that hands the
+    /// page a synthetic profile gets a page that explains that profile's contents.
+    /// </summary>
+    private readonly ItemGuide _guide;
+
+    /// <summary>
     /// Whether a finished scan covers what the page is pointed at now. Not <see cref="Tree"/>, which
     /// a snapshot fills in while a scan is still running (see <see cref="Report"/>) — a half-drawn
     /// map is not a scan the offer may be read from. Written only by
@@ -51,10 +59,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private bool _rebuildingDrives;
 
-    public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions)
+    public ExploreViewModel(
+        ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions, ItemGuide guide)
     {
         _scanner = scanner;
         _volumes = volumes;
+        _guide = guide;
 
         Selection = new ExploreSelection(actions);
 
@@ -361,6 +371,25 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     public partial string HoveredFigures { get; set; } = string.Empty;
 
+    /// <summary>
+    /// What Deguffer knows about the thing under the pointer, ready to show, or empty where it
+    /// knows nothing about it — which is nearly every shape on a map.
+    ///
+    /// <para>Only what the reference says, and not the size or the date: those are already on the
+    /// status line under the picture, where they can be read without waiting for anything to
+    /// appear. This is the part that has nowhere else to go.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHoveredNote))]
+    public partial string HoveredNote { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether there is anything to say about what the pointer is over. The map's tooltip is
+    /// collapsed by this, so nothing appears over the shapes Deguffer has nothing to add about —
+    /// which is nearly all of them.
+    /// </summary>
+    public bool HasHoveredNote => HoveredNote.Length > 0;
+
     public bool HasTree => Tree is not null;
 
     /// <summary>
@@ -648,20 +677,38 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     public void Hover(int? node, long? aggregateBytes)
     {
-        (Hovered, HoveredFigures) = (Tree, node, aggregateBytes) switch
+        (Hovered, HoveredFigures, HoveredNote) = (Tree, node, aggregateBytes) switch
         {
-            (_, _, { } bytes) => ("Items too small to draw separately", FreeSpace.Format(bytes)),
+            (_, _, { } bytes) => (
+                "Items too small to draw separately", FreeSpace.Format(bytes), string.Empty),
 
-            // The age is on this line whichever colouring is on, not only when the map is drawn by
-            // age. A pointer is how somebody checks one shape against the rest, and having to change
-            // the colouring to read a date would be a worse answer than showing it always.
-            ({ } tree, { } value, _) => (
-                tree.PathOf(value),
-                $"{FreeSpace.Format(tree.SizeOf(value))}, "
-                + $"last written {ExploreRowText.Age(tree, value, DateTime.UtcNow)}"),
+            ({ } tree, { } value, _) => Over(tree, value),
 
-            _ => (string.Empty, string.Empty),
+            _ => (string.Empty, string.Empty, string.Empty),
         };
+    }
+
+    /// <summary>
+    /// The three things a pointer settling on one shape says: where it is, how big and how old it
+    /// is, and what it is.
+    ///
+    /// <para>The age is here whichever colouring is on, not only when the map is drawn by age. A
+    /// pointer is how somebody checks one shape against the rest, and having to change the
+    /// colouring to read a date would be a worse answer than showing it always.</para>
+    ///
+    /// <para>The path is built once and the reference is asked with it. Both need it, and walking
+    /// the parent chain twice for one pointer move is the kind of cost this method's caller cannot
+    /// afford (G4).</para>
+    /// </summary>
+    private (string Path, string Figures, string Note) Over(ExploreTree tree, int node)
+    {
+        var path = tree.PathOf(node);
+
+        return (
+            path,
+            $"{FreeSpace.Format(tree.SizeOf(node))}, "
+            + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}",
+            _guide.Describe(path)?.Tip() ?? string.Empty);
     }
 
     /// <summary>Say that what the notes hold has changed, whichever of the four it was.</summary>
@@ -728,6 +775,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Hovered = string.Empty;
         HoveredFigures = string.Empty;
+        HoveredNote = string.Empty;
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -810,7 +858,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             }
             else
             {
-                Rows.Insert(at, new ExploreRow(tree, child, total, now));
+                Rows.Insert(at, new ExploreRow(tree, child, total, now, _guide));
             }
 
             at++;

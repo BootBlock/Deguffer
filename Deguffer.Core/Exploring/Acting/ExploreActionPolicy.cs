@@ -137,7 +137,8 @@ public sealed class ExploreActionPolicy
     /// whenever the page refreshes, so a volume mounted after the policy was built would be
     /// scannable with its paging file and its restore points unprotected. The question "is this a
     /// direct child of its own volume root, named one of these?" needs no inventory and is right on
-    /// every drive, mounted before or after.</para>
+    /// every drive, mounted before or after. <see cref="VolumeRoot"/> answers the first half of it,
+    /// where <see cref="Knowledge.ItemGuide"/> can read the same rule rather than restate it.</para>
     ///
     /// <para>They are named at all because Explore draws them.
     /// <c>System Volume Information</c> and the paging files are among the largest items on a drive,
@@ -146,12 +147,7 @@ public sealed class ExploreActionPolicy
     /// </summary>
     private static ExploreVerdict? AtAVolumeRoot(string target)
     {
-        if (!string.Equals(
-                Path.GetDirectoryName(target),
-                Path.TrimEndingDirectorySeparator(Path.GetPathRoot(target) ?? string.Empty),
-                StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(
-                Path.GetDirectoryName(target), Path.GetPathRoot(target), StringComparison.OrdinalIgnoreCase))
+        if (!VolumeRoot.Holds(target))
         {
             return null;
         }

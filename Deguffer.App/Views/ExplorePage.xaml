@@ -222,6 +222,30 @@
             <Grid>
                 <controls:ExploreMap x:Name="Map"
                                      KeyboardAcceleratorPlacementMode="Hidden">
+                    <!--
+                        What the thing under the pointer actually is, where the app knows. Not the
+                        size and not the date, which are on the status line below and are read
+                        without waiting for anything.
+
+                        A floating tooltip, where the readout below deliberately is not, and the
+                        difference is how often it appears. A path and a size change on every shape,
+                        so a popup carrying those never settles; this one has something to say about
+                        a handful of shapes on a whole drive, and stays away over the rest. That is
+                        what the collapse below does — a ToolTip with nothing in it is still a
+                        rounded box that follows the pointer.
+                    -->
+                    <ToolTipService.ToolTip>
+                        <ToolTip MaxWidth="420"
+                                 Content="{x:Bind ViewModel.HoveredNote, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.HasHoveredNote, Mode=OneWay}">
+                            <ToolTip.ContentTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </ToolTip.ContentTemplate>
+                        </ToolTip>
+                    </ToolTipService.ToolTip>
+
                     <controls:ExploreMap.KeyboardAccelerators>
                         <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
                         <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
@@ -341,8 +365,25 @@
                             <Grid ColumnSpacing="12" Padding="0,4"
                                   Background="Transparent"
                                   ColumnDefinitions="16,*,120,90,150"
-                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
-                                  ToolTipService.ToolTip="{x:Bind DatesLabel, Mode=OneWay}">
+                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                                <!--
+                                    The two dates, and where the app knows the name, what the thing
+                                    is and whether deleting it recovers anything.
+
+                                    Wrapped by hand, because a tooltip's default presenter does not
+                                    wrap: an explanation set on it as a plain string is one line as
+                                    wide as the sentence, off the side of the window.
+                                -->
+                                <ToolTipService.ToolTip>
+                                    <ToolTip MaxWidth="420" Content="{x:Bind Tip, Mode=OneWay}">
+                                        <ToolTip.ContentTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                                            </DataTemplate>
+                                        </ToolTip.ContentTemplate>
+                                    </ToolTip>
+                                </ToolTipService.ToolTip>
+
                                 <FontIcon Grid.Column="0"
                                           FontSize="14"
                                           Glyph="{x:Bind Icon}"
