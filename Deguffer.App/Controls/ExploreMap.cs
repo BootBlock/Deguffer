@@ -2,17 +2,14 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Rendering;
-using Deguffer.Core.Scanning;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
-using Windows.UI;
 
 namespace Deguffer.App.Controls;
 
@@ -24,10 +21,10 @@ namespace Deguffer.App.Controls;
 /// become an image instead — which is also what every reference implementation does, WinDirStat
 /// rendering into a cached surface and blitting it rather than keeping a shape per file.</para>
 ///
-/// <para>The labels are not in the bitmap. They are real text controls laid over it, so they scale
-/// with the user's text size and a screen reader can read them — none of which text burnt into a
-/// bitmap offers. There are only ever a few dozen, because a shape too small to read is a shape
-/// with no label.</para>
+/// <para>Two things are not in the bitmap, and each has a control of its own:
+/// <see cref="ExploreLabels"/> for the names, so they scale with the user's text size, and
+/// <see cref="ExploreHighlight"/> for the lines round what is picked and what the pointer is over,
+/// so a click moves a line rather than rasterising a volume again.</para>
 ///
 /// <para>Nothing here knows what a drive is, how one is scanned, or how any of the views are laid
 /// out. It is handed a tree, a node and a view, it asks Core for the matching
@@ -58,12 +55,7 @@ public sealed class ExploreMap : UserControl
         Stretch = Stretch.Fill,
     };
 
-    private readonly Canvas _labels = new()
-    {
-        // Labels sit over the map and are never the thing being clicked: a click that landed on a
-        // label rather than the shape under it would select whatever the label happened to overlap.
-        IsHitTestVisible = false,
-    };
+    private readonly ExploreLabels _labels = new();
 
     private readonly ExploreHighlight _highlight = new();
 
@@ -88,6 +80,9 @@ public sealed class ExploreMap : UserControl
     private byte[]? _pixels;
     private double _scale = 1;
     private ExploreHit? _hovered;
+
+    /// <summary>Whether a node has gone since the scan. See <see cref="Excluding"/>.</summary>
+    private Func<int, bool> _gone = _ => false;
 
     public ExploreMap()
     {
@@ -147,7 +142,7 @@ public sealed class ExploreMap : UserControl
             // them back, and Loaded only redraws where the size has actually moved — so without
             // this a map returned to at the size it was last drawn at comes back with no names on
             // it at all, and nothing on the page would put them there.
-            _labels.Visibility = Visibility.Visible;
+            _labels.Reveal();
 
             if (XamlRoot is { } root)
             {
@@ -243,6 +238,26 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
+    /// How to tell whether a node has gone since the scan, so the map stops offering it.
+    ///
+    /// <para>The rule rather than a list of nodes, and told rather than worked out. A removal takes
+    /// everything inside it, so the list would be every file under a deleted directory; and §7.1
+    /// allows one answer to "may this be acted on", which is <see cref="ExploreSelection"/>'s to
+    /// give. A second copy here would be a second answer.</para>
+    ///
+    /// <para>Given once, because the rule does not change — only what it answers, as things are
+    /// removed.</para>
+    /// </summary>
+    public void Excluding(Func<int, bool> gone)
+    {
+        ArgumentNullException.ThrowIfNull(gone);
+
+        _gone = gone;
+
+        ShowHovered();
+    }
+
+    /// <summary>
     /// Wait for the drag to stop before redrawing, on the terms
     /// <see cref="ResizeSettleTime"/> gives.
     ///
@@ -262,7 +277,7 @@ public sealed class ExploreMap : UserControl
         // controls at fixed positions rather than part of the picture. Left visible they would sit
         // over whichever shape had moved under them, naming it wrongly. They come back with the
         // layout that puts them where they belong.
-        _labels.Visibility = Visibility.Collapsed;
+        _labels.Hide();
 
         // The outlines do stretch with it, because a polygon scales exactly where a line of text
         // does not, so they go on marking out the same shapes throughout the drag.
@@ -315,7 +330,7 @@ public sealed class ExploreMap : UserControl
             _bitmap = null;
             _pixels = null;
             _drawing = null;
-            _labels.Children.Clear();
+            _labels.Clear();
             _highlight.Clear();
             return;
         }
@@ -344,7 +359,7 @@ public sealed class ExploreMap : UserControl
         _pixels!.CopyTo(0, bitmap.PixelBuffer, 0, _pixels!.Length);
         bitmap.Invalidate();
 
-        DrawLabels(tree, drawing);
+        _labels.Show(tree, drawing, _scale);
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now. The hovered outline goes rather than moves, because `_hovered` was cleared above:
@@ -380,78 +395,6 @@ public sealed class ExploreMap : UserControl
         ? new TileColour(32, 32, 32)
         : new TileColour(243, 243, 243);
 
-    /// <summary>
-    /// Lay the labels over the finished bitmap, where the surface said they go.
-    ///
-    /// <para>Which shapes are worth labelling is the drawing's decision and is made in Core, where
-    /// it can be tested. What is left here is the part that is a control: the text, the colour, and
-    /// the turn a sunburst's labels take to lie along their own ring.</para>
-    ///
-    /// <para>The text blocks are kept and written over rather than rebuilt. A scan repaints this
-    /// several times a second, and each rebuild would throw away a few dozen controls and their
-    /// brushes and make the framework measure and arrange a fresh set of them, for text that has
-    /// usually not changed (G5).</para>
-    /// </summary>
-    private void DrawLabels(ExploreTree tree, ExploreSurface drawing)
-    {
-        _labels.Visibility = Visibility.Visible;
-
-        while (_labels.Children.Count < drawing.Labels.Count)
-        {
-            _labels.Children.Add(NewLabel());
-        }
-
-        while (_labels.Children.Count > drawing.Labels.Count)
-        {
-            _labels.Children.RemoveAt(_labels.Children.Count - 1);
-        }
-
-        for (var i = 0; i < drawing.Labels.Count; i++)
-        {
-            var label = drawing.Labels[i];
-            var text = (TextBlock)_labels.Children[i];
-
-            text.Text = $"{tree.NameOf(label.Node)}  {FreeSpace.Format(tree.SizeOf(label.Node))}";
-            text.TextAlignment = label.Centred ? TextAlignment.Center : TextAlignment.Left;
-            text.Width = label.Width / _scale;
-
-            ((SolidColorBrush)text.Foreground).Color = Color.FromArgb(
-                255, label.Colour.Red, label.Colour.Green, label.Colour.Blue);
-
-            ((RotateTransform)text.RenderTransform).Angle = label.Rotation;
-
-            Canvas.SetLeft(text, label.X / _scale);
-            Canvas.SetTop(text, label.Y / _scale);
-        }
-    }
-
-    /// <summary>
-    /// One reusable piece of label text, with everything a repaint never changes already set —
-    /// including the brush and the transform, which are written through rather than replaced.
-    /// </summary>
-    private static TextBlock NewLabel()
-    {
-        var text = new TextBlock
-        {
-            FontSize = 12,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            Foreground = new SolidColorBrush(),
-
-            // Zero for anything in rectangles, and per label for a sunburst, which turns each one to
-            // lie along its own ring. Always present rather than attached only where it turns: a
-            // transform of no degrees costs nothing to keep, and a branch here would mean a label
-            // reused from a sunburst kept its angle on a treemap.
-            RenderTransformOrigin = new Point(0.5, 0.5),
-            RenderTransform = new RotateTransform(),
-        };
-
-        // Announced through the list view instead: a label here duplicates a row there, and a
-        // screen reader reading fifty fragments of a picture helps nobody.
-        AutomationProperties.SetAccessibilityView(text, AccessibilityView.Raw);
-
-        return text;
-    }
-
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
     private void ShowPicked() =>
         _highlight.ShowPicked(_drawing is { } drawing ? drawing.Outlines(_picked) : []);
@@ -459,16 +402,19 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Draw the fainter outline round whatever the pointer is over.
     ///
-    /// <para>Nothing is drawn for a shape that is already picked, or for the block standing in for
-    /// items too small to draw. The first would put two outlines on one shape and leave the weaker
-    /// claim on top of the stronger one; the second cannot be picked at all (§7.1), so offering it a
-    /// highlight would invite a click that does nothing.</para>
+    /// <para>Three shapes get nothing. One already picked would carry two outlines, leaving the
+    /// weaker claim on top of the stronger one. The other two cannot be picked at all (§7.1), so
+    /// marking either out would invite a click that selects nothing: the block standing in for items
+    /// too small to draw, and anything removed since the scan, which the picture goes on showing
+    /// because the tree behind it is not rebuilt for a deletion.</para>
     /// </summary>
     private void ShowHovered()
     {
         _under.Clear();
 
-        if (_hovered is { IsAggregate: false } hit && !_picked.Contains(hit.Node))
+        if (_hovered is { IsAggregate: false } hit
+            && !_picked.Contains(hit.Node)
+            && !_gone(hit.Node))
         {
             _under.Add(hit.Node);
         }

@@ -48,15 +48,15 @@ public sealed class ExploreOutlineTests
     }
 
     /// <summary>
-    /// One pass over the shapes, whichever view, and every asked-for node that was drawn comes back
-    /// exactly once. A node drawn twice would be outlined twice, and one missed is a selection the
-    /// user cannot see.
+    /// One pass over the shapes, whichever view, and every asked-for node that was drawn comes back.
+    /// A node missed is a selection the user cannot see, and one nobody asked for is a line round a
+    /// shape they did not pick.
     /// </summary>
     [Theory]
     [InlineData(ExploreView.Treemap)]
     [InlineData(ExploreView.Icicle)]
     [InlineData(ExploreView.Sunburst)]
-    public void EveryPickedNodeThatWasDrawnIsOutlinedOnce(ExploreView view)
+    public void EveryPickedNodeThatWasDrawnIsOutlined(ExploreView view)
     {
         var tree = FlatTree(6);
         var surface = Surface(tree, view);
@@ -64,8 +64,11 @@ public sealed class ExploreOutlineTests
 
         var outlines = surface.Outlines(picked);
 
-        Assert.Equal(picked.Order(), outlines.Select(o => o.Node).Order());
+        Assert.Equal(picked.Order(), outlines.Select(o => o.Node).Distinct().Order());
         Assert.All(outlines, outline => Assert.True(outline.Points.Count >= 3, "an outline needs an area"));
+
+        // None of these shapes is a ring, so none of them has a boundary in two pieces.
+        Assert.Equal(picked.Count, outlines.Count);
     }
 
     [Theory]
@@ -95,9 +98,9 @@ public sealed class ExploreOutlineTests
     /// The block standing in for items too small to draw is never outlined. §7.1 has no bulk action,
     /// so it cannot be picked, and a highlight on it would invite a click that does nothing.
     ///
-    /// <para>Each of these two proves its own fixture first. A tree the layout does not actually
-    /// aggregate makes the assertion below vacuously true, which is how the treemap half of this
-    /// went green against a version that outlined aggregates.</para>
+    /// <para>Each of these two proves its own fixture first. Equal children never aggregate — they
+    /// all fit or none of them does — so a tree chosen carelessly makes the assertion below
+    /// vacuously true and the test cannot fail.</para>
     /// </summary>
     [Fact]
     public void TheBlockStandingInForSmallItemsIsNeverOutlinedOnATreemap()
@@ -177,6 +180,81 @@ public sealed class ExploreOutlineTests
                 disc.OuterRadius + 0.5f));
     }
 
+    /// <summary>
+    /// The outline spans the wedge's own sweep and no more. Radii alone do not settle this: an
+    /// outline traced round the wrong wedge of the right ring passes every radius check there is,
+    /// and §7.1's menu — Delete included — acts on whatever the outline claims to mark.
+    /// </summary>
+    [Fact]
+    public void AWedgeIsOutlinedAcrossItsOwnSweepAndNoWider()
+    {
+        var tree = FlatTree(6);
+        var sunburst = SunburstLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
+
+        // Not the first child, whose sweep starts at twelve o'clock: an outline that ignored the
+        // start angle altogether would land exactly right on that one and prove nothing.
+        var sector = sunburst.Sectors.Single(s => s.Node == tree.ChildrenOf(tree.RootNode)[1]);
+
+        Assert.True(sector.StartAngle > 0.01f, "the fixture put this wedge at twelve o'clock");
+
+        var outline = Assert.Single(Sunburst(tree).Outlines(new HashSet<int> { sector.Node }));
+
+        var swept = outline.Points
+            .Select(p => SectorHitTest.AngleOf(p.X - sunburst.CentreX, p.Y - sunburst.CentreY))
+            .Select(angle => angle - sector.StartAngle < -0.001f
+                ? angle - sector.StartAngle + MathF.Tau
+                : angle - sector.StartAngle)
+            .ToList();
+
+        Assert.All(swept, angle => Assert.InRange(angle, -0.001f, sector.SweepAngle + 0.001f));
+
+        // And it reaches both ends of the sweep, rather than covering part of it.
+        Assert.Contains(swept, angle => angle < 0.01f);
+        Assert.Contains(swept, angle => angle > sector.SweepAngle - 0.01f);
+    }
+
+    /// <summary>
+    /// A ring — what a directory holding one child draws — is two circles, not one.
+    ///
+    /// <para>Outlined by its outer circle alone, the line goes round the hole as well as round the
+    /// ring, marking out the parent sitting inside it. That is a line round a shape the user did not
+    /// pick, on a picture whose menu deletes what is picked (§7.1).</para>
+    /// </summary>
+    [Fact]
+    public void ARingIsOutlinedAsTwoCirclesRatherThanOneLineRoundItsHole()
+    {
+        var tree = RingTree();
+        var sunburst = SunburstLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
+        var ring = sunburst.Sectors.Single(s => s.Depth == 1);
+
+        Assert.True(ring.IsWholeCircle, "the fixture did not produce a ring");
+        Assert.True(ring.InnerRadius > 0, "a ring needs a hole");
+
+        var outlines = Sunburst(tree).Outlines(new HashSet<int> { ring.Node });
+
+        Assert.Equal(2, outlines.Count);
+        Assert.All(outlines, outline => Assert.Equal(ring.Node, outline.Node));
+
+        var radii = outlines
+            .Select(outline => outline.Points.Average(p => Radius(sunburst, p)))
+            .Order()
+            .ToList();
+
+        Assert.Equal(ring.InnerRadius, radii[0], tolerance: 0.5);
+        Assert.Equal(ring.OuterRadius, radii[1], tolerance: 0.5);
+
+        // Nothing reaches into the hole, which is where a single-circle outline would have run.
+        Assert.All(
+            outlines.SelectMany(outline => outline.Points),
+            point => Assert.True(
+                Radius(sunburst, point) > ring.InnerRadius - 0.5f,
+                "the outline crossed into the ring's hole"));
+    }
+
+    private static double Radius(Sunburst sunburst, ExplorePoint point) => MathF.Sqrt(
+        ((point.X - sunburst.CentreX) * (point.X - sunburst.CentreX))
+        + ((point.Y - sunburst.CentreY) * (point.Y - sunburst.CentreY)));
+
     private static ExploreSurface Surface(ExploreTree tree, ExploreView view) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, ExploreColouring.Branch, Now);
@@ -193,6 +271,26 @@ public sealed class ExploreOutlineTests
             ExploreTreeBuilder.RootNode,
             [.. Enumerable.Range(0, children).Select(i =>
                 new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>
+    /// A chain of single children, so every ring below the middle holds all of its parent's bytes
+    /// and sweeps the whole circle. Common on a real disk: a package cache or a build output is
+    /// usually one folder deep before it branches.
+    /// </summary>
+    private static ExploreTree RingTree()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        var only = builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [new ExploreChild("only", IsDirectory: true, IsLink: false, Size: 0)]);
+
+        builder.AddChildren(
+            only,
+            [new ExploreChild("leaf", IsDirectory: false, IsLink: false, Size: 1000)]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }

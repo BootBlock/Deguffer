@@ -81,6 +81,11 @@ public sealed partial class ExplorePage : Page
             }
         };
 
+        // Once, because the rule does not change — only what it answers, as things are removed. The
+        // map draws descendants the list never lists, so it is the one screen that can put a shape
+        // under the pointer whose folder has already gone.
+        Map.Excluding(ViewModel.Selection.WasRemoved);
+
         Map.Hovered += (_, what) => ViewModel.Hover(what.Node, what.AggregateBytes);
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
@@ -183,7 +188,10 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void ShowSelectedRows()
     {
-        var picked = ViewModel.Selection.Nodes;
+        // A set, because the loop below asks it once per row. As a list that is a scan of the whole
+        // selection per row — a folder of five thousand entries against a few hundred picked ones is
+        // over a million comparisons, on a path that runs at every click (G4).
+        var picked = ViewModel.Selection.Nodes.ToHashSet();
 
         if (RowsList.SelectedItems.OfType<ExploreRow>().Select(row => row.Node).ToHashSet().SetEquals(picked))
         {

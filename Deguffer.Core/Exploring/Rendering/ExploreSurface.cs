@@ -45,7 +45,7 @@ public readonly record struct ExploreLabel(
 public readonly record struct ExplorePoint(float X, float Y);
 
 /// <summary>
-/// Where one node's shape is, as a closed outline the shell can draw round it.
+/// One closed boundary of one node's shape, for a caller that wants to draw a line round it.
 ///
 /// <para>An outline rather than a filled shape, because the point of it is to say which shape is
 /// selected without hiding what the shape says. A wash over the top would change the colour the
@@ -53,8 +53,14 @@ public readonly record struct ExplorePoint(float X, float Y);
 ///
 /// <para>A polygon rather than a rectangle or a sector, so the shell has one thing to draw for all
 /// three views. A sunburst's arcs come out as enough short segments that the curve reads as a
-/// curve — a tenth of a pixel from true at the radii drawn here — and the alternative is a shape
-/// union the shell would have to take apart again.</para>
+/// curve — a hundredth of a pixel from true at the radii drawn here — and the alternative is a
+/// shape union the shell would have to take apart again.</para>
+///
+/// <para><b>One boundary, not one shape.</b> A ring has two, an inner and an outer, and joining
+/// them would draw a radial line across it that is not there. So a node can come back more than
+/// once, which is also why each of these names the node it belongs to: the answer is a partial
+/// mapping — a node this drawing did not draw is simply absent — and without the name a caller
+/// cannot tell which shape it was handed, nor a test tell a right answer from a wrong one.</para>
 /// </summary>
 public readonly record struct ExploreOutline(int Node, IReadOnlyList<ExplorePoint> Points);
 
@@ -204,7 +210,8 @@ public abstract class ExploreSurface
     /// <para>Only the nodes this drawing actually drew come back, so a selection made in a folder
     /// the user has since left, or one below the depth this view descends to, is silently absent
     /// rather than an error. An aggregate is never outlined: it stands for a run of siblings rather
-    /// than for anything the user could have picked (§7.1).</para>
+    /// than for anything the user could have picked (§7.1). A node whose shape has more than one
+    /// boundary comes back once per boundary — see <see cref="ExploreOutline"/>.</para>
     ///
     /// <para>A set rather than a list, because the answer is found by one pass over the shapes and
     /// the alternative is a pass per node. A treemap of a volume is tens of thousands of shapes and

@@ -50,7 +50,7 @@ public sealed class SunburstSurface : ExploreSurface
 
             if (!sector.IsAggregate && nodes.Contains(sector.Node))
             {
-                outlines.Add(new ExploreOutline(sector.Node, Outline(sunburst, sector)));
+                Trace(sunburst, sector, outlines);
             }
         }
 
@@ -58,43 +58,79 @@ public sealed class SunburstSurface : ExploreSurface
     }
 
     /// <summary>
-    /// One annular sector as a closed polygon: out along the far edge, and back along the near one.
+    /// The boundary of one sector, added to <paramref name="outlines"/>.
     ///
-    /// <para>Two shapes in this picture are not annular sectors, and both need saying rather than
-    /// falling out of the arithmetic. A sector that closes on itself is a ring, and walking back
-    /// along an inner edge that meets its own start would trace the ring twice. The disc in the
-    /// middle has no inner edge at all, so its near side is the centre point.</para>
+    /// <para>Three shapes, not one. A <b>wedge</b> is a single closed shape: out along the far edge
+    /// and back along the near one. The <b>disc</b> in the middle has no near edge, so its rim is
+    /// the whole of it. A <b>ring</b> — a sector that closes on itself with something inside it,
+    /// which is what a directory holding one child produces — has a boundary in two separate
+    /// pieces, and that is why this adds rather than returns.</para>
+    ///
+    /// <para>The ring is the case worth stating. Its two circles cannot be joined into one shape
+    /// without a radial line across the ring at twelve o'clock, which reads as a division that is
+    /// not there; and outlining only its outer circle draws a line round the hole as well as round
+    /// the ring, marking out a shape the user did not pick (§7.1).</para>
     /// </summary>
-    private static IReadOnlyList<ExplorePoint> Outline(Sunburst sunburst, ExploreSector sector)
+    private static void Trace(Sunburst sunburst, ExploreSector sector, List<ExploreOutline> outlines)
     {
-        // One point per degree of sweep. At the radii a sunburst is drawn at that is a tenth of a
-        // pixel from the true arc, which is below what a stroke a pixel or two wide can show.
+        // One point per degree of sweep. At the radii a sunburst is drawn at that is a hundredth of
+        // a pixel from the true arc, which is far below what a stroke a pixel or two wide can show.
         var steps = Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);
+
+        if (sector.IsWholeCircle)
+        {
+            outlines.Add(new ExploreOutline(sector.Node, Circle(sunburst, sector, sector.OuterRadius, steps)));
+
+            if (sector.InnerRadius > 0)
+            {
+                outlines.Add(new ExploreOutline(sector.Node, Circle(sunburst, sector, sector.InnerRadius, steps)));
+            }
+
+            return;
+        }
+
         var points = new List<ExplorePoint>((steps + 1) * 2);
 
         for (var i = 0; i <= steps; i++)
         {
-            points.Add(At(sunburst, sector.OuterRadius, sector.StartAngle + (sector.SweepAngle * i / steps)));
-        }
-
-        if (sector.IsWholeCircle)
-        {
-            return points;
+            points.Add(At(sunburst, sector.OuterRadius, Angle(sector, i, steps)));
         }
 
         if (sector.InnerRadius <= 0)
         {
             points.Add(new ExplorePoint(sunburst.CentreX, sunburst.CentreY));
-            return points;
+        }
+        else
+        {
+            for (var i = steps; i >= 0; i--)
+            {
+                points.Add(At(sunburst, sector.InnerRadius, Angle(sector, i, steps)));
+            }
         }
 
-        for (var i = steps; i >= 0; i--)
+        outlines.Add(new ExploreOutline(sector.Node, points));
+    }
+
+    /// <summary>
+    /// A closed circle at this radius. One point short of a full turn, because the shape closes on
+    /// itself and repeating the start as the end would leave a segment of no length in it.
+    /// </summary>
+    private static IReadOnlyList<ExplorePoint> Circle(
+        Sunburst sunburst, ExploreSector sector, float radius, int steps)
+    {
+        var points = new List<ExplorePoint>(steps);
+
+        for (var i = 0; i < steps; i++)
         {
-            points.Add(At(sunburst, sector.InnerRadius, sector.StartAngle + (sector.SweepAngle * i / steps)));
+            points.Add(At(sunburst, radius, Angle(sector, i, steps)));
         }
 
         return points;
     }
+
+    /// <summary>Where step <paramref name="step"/> of <paramref name="steps"/> falls across the sweep.</summary>
+    private static float Angle(ExploreSector sector, int step, int steps) =>
+        sector.StartAngle + (sector.SweepAngle * step / steps);
 
     /// <summary>
     /// A point on the canvas at this radius and angle. Angles run clockwise from twelve o'clock, and
@@ -153,14 +189,13 @@ public sealed class SunburstSurface : ExploreSurface
             }
 
             var angle = sector.MidAngle;
-            var x = sunburst.CentreX + (sector.MidRadius * MathF.Sin(angle));
-            var y = sunburst.CentreY - (sector.MidRadius * MathF.Cos(angle));
+            var middle = At(sunburst, sector.MidRadius, angle);
             var width = chord - (Limits.LabelPadding * 2);
 
             labels.Add(new ExploreLabel(
                 sector.Node,
-                x - (width / 2),
-                y - (Limits.MinimumLabelHeight / 2),
+                middle.X - (width / 2),
+                middle.Y - (Limits.MinimumLabelHeight / 2),
                 width,
                 RotationAt(angle),
                 Centred: true,

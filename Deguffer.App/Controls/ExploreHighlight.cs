@@ -105,9 +105,10 @@ internal sealed class ExploreHighlight : Canvas
         _stretch.ScaleX = width / canvasWidth;
         _stretch.ScaleY = height / canvasHeight;
 
-        // From the narrower of the two, so a line is the width it was asked for at its thinnest
-        // rather than at its thickest. The two differ only while a resize is settling, and an
-        // outline briefly a shade thin reads better than one briefly heavy.
+        // Divided by the larger of the two, which makes the asked-for width an upper bound: the
+        // line is exactly that on the axis stretched most and a shade under it on the other. The
+        // two differ only while a resize is settling, and an outline briefly a shade thin reads
+        // better than one briefly heavy — heavy is what swamps a shape a few pixels across.
         var scale = Math.Max(0.0001, Math.Max(_stretch.ScaleX, _stretch.ScaleY));
 
         _hoveredHalo.StrokeThickness = HoveredHaloWidth / scale;
