@@ -22,6 +22,7 @@ public class PreferenceStoreTests
             ExploreView.List,
             ExploreColouring.Age,
             ShowNotInstalled: true,
+            ShowAlreadyClear: true,
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true,
@@ -39,6 +40,7 @@ public class PreferenceStoreTests
         // Not the default either, and for the same reason: Branch is zero.
         Assert.Equal(ExploreColouring.Age, loaded.ExploreColours);
         Assert.True(loaded.ShowNotInstalled);
+        Assert.True(loaded.ShowAlreadyClear);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
@@ -57,8 +59,9 @@ public class PreferenceStoreTests
     /// <c>ConfirmBeforeCleaning</c> and <c>View</c> are what prove it here. Their declared defaults,
     /// <c>true</c> and <c>Compact</c>, differ from <c>default(bool)</c> and
     /// <c>default(ViewDensity)</c>, so the two answers differ and the assertions have something to
-    /// catch. Asserting the same thing about <c>RequireTypedConfirmation</c> or
-    /// <c>ShowNotInstalled</c> would prove nothing: both answers there are <c>false</c>.
+    /// catch. Asserting the same thing about <c>RequireTypedConfirmation</c>,
+    /// <c>ShowNotInstalled</c> or <c>ShowAlreadyClear</c> would prove nothing: both answers there
+    /// are <c>false</c>.
     ///
     /// <c>BackdropEnabled</c> could prove it too, and is spent instead as the parse guard below.
     /// One preference has to be a key the file actually carries, or a wholesale fall through to the
@@ -90,6 +93,7 @@ public class PreferenceStoreTests
         Assert.Equal(ViewDensity.Compact, loaded.View);
         Assert.False(loaded.RequireTypedConfirmation);
         Assert.False(loaded.ShowNotInstalled);
+        Assert.False(loaded.ShowAlreadyClear);
 
         // Off, which is the one direction this preference may default in: a guard nobody asked for
         // would quietly shrink every plan on an upgraded machine.
@@ -110,16 +114,21 @@ public class PreferenceStoreTests
     }
 
     /// <summary>
-    /// What the Storage list looks like on a machine nobody has configured: every recognised
-    /// location the machine actually has, one row each. The two defaults are the same judgement
-    /// from both ends — show the whole set of decisions, and do not pad it with rows that carry no
-    /// decision at all.
+    /// What the Storage list looks like on a machine nobody has configured: one row per decision
+    /// the user actually has to make, and nothing else. The three defaults are the same judgement
+    /// reached from three directions — a location this machine does not have and a location with
+    /// nothing left to reclaim both offer nothing to decide, and the rows that do are worth more of
+    /// the screen than either.
+    ///
+    /// Neither filter is a claim that the hidden row is uninteresting. Each is still scanned, still
+    /// counted, and one switch away from being listed.
     /// </summary>
     [Fact]
-    public void TheShippedDefaultsListEveryInstalledLocationAndNothingElse()
+    public void TheShippedDefaultsListOnlyTheRowsThatCarryADecision()
     {
         Assert.Equal(ViewDensity.Compact, AppPreferences.Default.View);
         Assert.False(AppPreferences.Default.ShowNotInstalled);
+        Assert.False(AppPreferences.Default.ShowAlreadyClear);
     }
 
     [Fact]

@@ -168,7 +168,7 @@ public sealed partial class FindingViewModel : ObservableObject
             {
                 { HasUnreadableRoot: true } => "Could not be read",
                 { HasRecentContentHeldBack: true } => "Nothing old enough",
-                _ => "Already clear",
+                _ => AlreadyClear,
             }
             : CanBeSelected
                 ? "Ready to clean"
@@ -216,6 +216,20 @@ public sealed partial class FindingViewModel : ObservableObject
     /// largest reclaimable thing on the disk is one setting away.
     /// </summary>
     public bool IsToolchainMissing => !Finding.IsPresent && !Finding.AwaitingSourceFolders;
+
+    private const string AlreadyClear = "Already clear";
+
+    /// <summary>
+    /// Whether this row is one the "show items already clear" filter hides.
+    ///
+    /// Read off <see cref="StatusLabel"/> rather than restating the condition that produces it,
+    /// because a second copy of that condition is free to disagree with the words on screen — and
+    /// what this filter promises is that it hides exactly the rows saying "Already clear". The two
+    /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
+    /// let Deguffer list, and one whose every file is inside the guard on recently changed files.
+    /// Both stay listed, because each is a thing the user may want to act on.
+    /// </summary>
+    public bool IsAlreadyClear => StatusLabel == AlreadyClear;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }

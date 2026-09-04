@@ -82,6 +82,17 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { BackdropEnabled = value });
     }
 
+    /// <summary>
+    /// Whether the Storage list draws a location with nothing left to reclaim. Presentation only,
+    /// and it takes effect on the list that is already on screen — nothing is rescanned to hide or
+    /// show a row.
+    /// </summary>
+    public bool ShowAlreadyClear
+    {
+        get => _preferences.Current.ShowAlreadyClear;
+        set => Apply(current => current with { ShowAlreadyClear = value });
+    }
+
     public bool ConfirmBeforeCleaning
     {
         get => _preferences.Current.ConfirmBeforeCleaning;

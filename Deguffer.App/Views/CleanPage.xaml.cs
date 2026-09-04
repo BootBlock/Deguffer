@@ -68,14 +68,39 @@ public sealed partial class CleanPage : Page
     /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyRunPreferences();
+        ApplyPreferences();
         App.Preferences.Changed += OnPreferencesChanged;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) =>
         App.Preferences.Changed -= OnPreferencesChanged;
 
-    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyRunPreferences();
+    private void OnPreferencesChanged(object? sender, EventArgs e) => ApplyPreferences();
+
+    /// <summary>
+    /// Everything the Settings page can change under this one, pushed across together.
+    ///
+    /// Run on both edges deliberately. The subscription only exists while the page is on screen, so
+    /// a change made in Settings arrives on the way back rather than as it is made — which is the
+    /// same moment either way, because this page is the only thing that draws the result.
+    /// </summary>
+    private void ApplyPreferences()
+    {
+        ApplyRunPreferences();
+        ApplyListPreferences();
+    }
+
+    /// <summary>
+    /// Which rows the list draws, for the filters whose control lives on the Settings page.
+    ///
+    /// Re-read on every visit, unlike the view and the not-installed filter above. Those two are
+    /// set from this page and applied before they are persisted, so re-reading them would undo a
+    /// choice whose write to disk had failed. This one is set on a page that persists first and
+    /// applies second, so <see cref="PreferenceService.Current"/> is never anything but what took
+    /// effect.
+    /// </summary>
+    private void ApplyListPreferences() =>
+        ViewModel.ShowAlreadyClear = App.Preferences.Current.ShowAlreadyClear;
 
     /// <summary>
     /// Draw the list at <paramref name="density"/>, and leave the selector agreeing with what is on

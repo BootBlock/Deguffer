@@ -103,6 +103,14 @@ public sealed partial class CleanViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ShowNotInstalled { get; set; }
 
+    /// <summary>
+    /// Whether to list a location that is installed, readable and has nothing left to reclaim. Set
+    /// from the preference by the view, exactly as <see cref="ShowNotInstalled"/> is, and hiding
+    /// rather than skipping for the same reason: a row switched back on has to be there already.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowAlreadyClear { get; set; }
+
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
 
     [ObservableProperty]
@@ -142,18 +150,31 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     public string CleanPercentLabel => $"{CleanPercent:0}%";
 
+    partial void OnShowNotInstalledChanged(bool value) => RefilterRows();
+
+    partial void OnShowAlreadyClearChanged(bool value) => RefilterRows();
+
     /// <summary>
-    /// A row is drawn when its toolchain is on this machine, or when the user asked to see the ones
-    /// that are not. Applied to every row rather than only to new ones, because the filter changes
+    /// Re-apply both filters to every row, rather than to new ones only, because either can change
     /// under a list that is already built.
     /// </summary>
-    partial void OnShowNotInstalledChanged(bool value)
+    private void RefilterRows()
     {
         foreach (var row in Findings)
         {
-            row.IsListed = value || !row.IsToolchainMissing;
+            row.IsListed = IsListed(row);
         }
     }
+
+    /// <summary>
+    /// A row is drawn unless a filter the user left on hides it. Both hide a row that offers no
+    /// decision: one whose toolchain this machine does not have, and one with nothing left to
+    /// reclaim. Neither hides a row that has something to say, so the two are asked together and
+    /// a row has to pass both.
+    /// </summary>
+    private bool IsListed(FindingViewModel row) =>
+        (ShowNotInstalled || !row.IsToolchainMissing)
+        && (ShowAlreadyClear || !row.IsAlreadyClear);
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
@@ -500,7 +521,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
-        row.IsListed = ShowNotInstalled || !row.IsToolchainMissing;
+        row.IsListed = IsListed(row);
 
         // One event for both directions: the row's own checkbox and any step within it. Subscribing
         // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays
