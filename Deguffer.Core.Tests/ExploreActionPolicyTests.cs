@@ -173,6 +173,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// core on-disk format. The change journal is the one that grows, so it is the one a size
     /// picture is most likely to surface — and it is a level below the root, which is why the rule
     /// asks about the first segment rather than about a direct child.
+    ///
+    /// <para>On a drive the region table says nothing about, so what is being measured is this rule
+    /// and not another one. The synthetic profile lives under the temp directory, and everything
+    /// beside it there is already refused as another account's.</para>
     /// </summary>
     [Theory]
     [InlineData(@"$Extend\$UsnJrnl")]
@@ -180,7 +184,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"$Extend\$RmMetadata\$Tops")]
     public void EverythingBelowTheExtendDirectoryIsRefused(string relative)
     {
-        Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, relative)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", relative)).IsAllowed);
     }
 
     /// <summary>
