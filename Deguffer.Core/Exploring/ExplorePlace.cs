@@ -40,19 +40,40 @@ public static class ExplorePlace
     /// walking to the root, so a node without that property would not draw wrongly — it would not
     /// finish.
     /// </returns>
-    public static int Carry(ExploreTree? standing, int node, ExploreTree arriving)
+    public static int Carry(ExploreTree? standing, int node, ExploreTree arriving) =>
+        TryCarry(standing, node, arriving) ?? arriving.RootNode;
+
+    /// <summary>
+    /// The node of <paramref name="arriving"/> that stands where <paramref name="node"/> stood in
+    /// <paramref name="standing"/>, or null where nothing does.
+    ///
+    /// <para>The same question as <see cref="Carry"/> and the same answer, without the fallback.
+    /// A view standing on one node has to stand somewhere, so that one substitutes the root; a
+    /// node picked out by hand has no such obligation, and substituting the root for it would
+    /// select a drive nobody asked to select. Both callers need the rule, and only one of them
+    /// wants a node whatever happens.</para>
+    /// </summary>
+    /// <param name="standing">The tree on screen, or null where nothing has been scanned yet.</param>
+    /// <param name="node">The node being looked at in <paramref name="standing"/>.</param>
+    /// <param name="arriving">The tree replacing it.</param>
+    /// <returns>
+    /// <paramref name="node"/> itself where it still names what it named, and null otherwise. The
+    /// number never changes: this says whether it still means the same thing, not what to renumber
+    /// it to.
+    /// </returns>
+    public static int? TryCarry(ExploreTree? standing, int node, ExploreTree arriving)
     {
         ArgumentNullException.ThrowIfNull(arriving);
 
         if (standing is null)
         {
-            return arriving.RootNode;
+            return null;
         }
 
         return standing.TryPathOf(node) is { } was
             && arriving.TryPathOf(node) is { } now
             && string.Equals(was, now, StringComparison.OrdinalIgnoreCase)
                 ? node
-                : arriving.RootNode;
+                : null;
     }
 }

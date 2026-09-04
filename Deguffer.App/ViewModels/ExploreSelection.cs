@@ -72,6 +72,16 @@ public sealed partial class ExploreSelection : ObservableObject
     public event EventHandler? Changed;
 
     /// <summary>
+    /// What is selected, by node.
+    ///
+    /// <para>Named so the list can be put back in step with it. A <c>ListView</c> keeps its own
+    /// copy of the selection and drops it whenever the collection under it changes, then reports
+    /// that back as though the user had cleared it — so something has to say which of the two
+    /// copies is right, and it is this one.</para>
+    /// </summary>
+    public IReadOnlyList<int> Nodes => _nodes;
+
+    /// <summary>
     /// What is selected, named so the map's user can see it too.
     ///
     /// <para>The three pictures have no selection outline — the geometry is a bitmap, and a
@@ -124,6 +134,33 @@ public sealed partial class ExploreSelection : ObservableObject
     {
         _tree = tree;
         Select([]);
+        Stale();
+    }
+
+    /// <summary>
+    /// Move to a tree that continues the one on screen, keeping whatever is still selected.
+    ///
+    /// <para>The other half of <see cref="Show"/>, and what separates them is what the replacement
+    /// meant. Stepping into a folder is a new subject, so the selection goes with the old one; a
+    /// snapshot arriving mid-scan is the same subject measured again, and dropping the selection
+    /// every time one lands is what made a folder impossible to pick while a scan ran.</para>
+    ///
+    /// <para>A node is kept only where it still names what it named, which is
+    /// <see cref="ExplorePlace.TryCarry"/>'s rule and the same one that decides where the page is
+    /// standing. One that does not carry is dropped rather than replaced: §7.1 lets this act only on
+    /// what the user picked out by hand, and putting something else in its place would be the tool
+    /// choosing the target.</para>
+    /// </summary>
+    public void Carry(ExploreTree tree)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        // Read against the tree the numbers belong to, before that becomes the arriving one.
+        var kept = _nodes.Where(node => ExplorePlace.TryCarry(_tree, node, tree) is not null).ToArray();
+
+        _tree = tree;
+
+        Select(kept);
         Stale();
     }
 
