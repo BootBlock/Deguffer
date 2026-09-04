@@ -123,7 +123,10 @@
                              must survive a flat background and a high-contrast theme (§6.5). -->
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <ContentControl Content="{x:Bind Finding.TierLabel}"
-                                            Style="{x:Bind Finding.Tier, Converter={StaticResource TierChipStyle}}" />
+                                            Style="{x:Bind Finding.Tier, Converter={StaticResource TierChipStyle}}"
+                                            ToolTipService.ToolTip="{x:Bind Finding.TierExplanation}"
+                                            AutomationProperties.Name="{x:Bind Finding.TierLabel}"
+                                            AutomationProperties.HelpText="{x:Bind Finding.TierExplanation}" />
                             <TextBlock Text="{x:Bind Finding.CleaningAdvice}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        FontWeight="SemiBold"

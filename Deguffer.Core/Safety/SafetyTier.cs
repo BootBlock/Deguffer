@@ -60,6 +60,29 @@ public static class SafetyTierExtensions
         _ => tier.ToString(),
     };
 
+    /// <summary>
+    /// What the tier itself means, for a reader who has met the badge and not the tier table. The
+    /// About page states all four together; a badge on a row states only its own, so both read it
+    /// from here rather than each carrying its own wording.
+    /// </summary>
+    public static string ToExplanation(this SafetyTier tier) => tier switch
+    {
+        SafetyTier.RegenerableCache =>
+            "Whatever made it re-creates it on demand. Deleting costs a slower next use and " +
+            "nothing else, so these are selected for you by default.",
+        SafetyTier.RegenerableWithCost =>
+            "Re-created only by re-downloading gigabytes or re-indexing for minutes. Offered, but " +
+            "never selected for you.",
+        SafetyTier.UserData =>
+            "Logs, histories and saved sessions living in a folder called cache. Deleting loses " +
+            "them permanently.",
+        SafetyTier.DoNotTouch =>
+            "Config, credentials, live state, and anything Deguffer cannot prove is idle. Never " +
+            "offered — a child a provider does not recognise lands here rather than being " +
+            "assumed safe.",
+        _ => tier.ToString(),
+    };
+
     /// <summary>Short label for the UI.</summary>
     public static string ToDisplayName(this SafetyTier tier) => tier switch
     {

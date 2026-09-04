@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Deguffer.App.Shell;
+using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml.Controls;
 using RuntimeArchitecture = System.Runtime.InteropServices.Architecture;
 
@@ -64,6 +65,22 @@ public sealed partial class AboutPage : Page
     public string ScanMode { get; } = ElevatedRelaunch.IsElevated
         ? "Running as administrator, so Deguffer can read the volume's file table. Locations it accounts for are measured from it instead of being walked; anything it does not account for is walked, and the plan says which happened."
         : "Running without administrator rights, so every location is measured by walking it. The sizes are the same either way — the Storage page offers to restart elevated where reading the file table would reach further.";
+
+    /// <summary>
+    /// §3's four tiers, in the same words the badge on a Storage row explains itself with. The
+    /// page states all four side by side and a badge states one; neither owns the wording, so both
+    /// read it from <see cref="SafetyTierExtensions.ToExplanation"/>.
+    /// </summary>
+    public string RegenerableCacheExplanation { get; } = SafetyTier.RegenerableCache.ToExplanation();
+
+    /// <inheritdoc cref="RegenerableCacheExplanation" />
+    public string RegenerableWithCostExplanation { get; } = SafetyTier.RegenerableWithCost.ToExplanation();
+
+    /// <inheritdoc cref="RegenerableCacheExplanation" />
+    public string UserDataExplanation { get; } = SafetyTier.UserData.ToExplanation();
+
+    /// <inheritdoc cref="RegenerableCacheExplanation" />
+    public string DoNotTouchExplanation { get; } = SafetyTier.DoNotTouch.ToExplanation();
 
     private static string ReadStampedBuildDate()
     {
