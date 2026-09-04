@@ -48,6 +48,7 @@ public sealed partial class ExploreSelection : ObservableObject
 
     private IReadOnlyList<int> _nodes = [];
     private string _label = string.Empty;
+    private string _figures = string.Empty;
     private string? _note;
 
     public ExploreSelection(ExploreActions actions) => _actions = actions;
@@ -97,6 +98,15 @@ public sealed partial class ExploreSelection : ObservableObject
     /// to answer the second question as well as the first.</para>
     /// </summary>
     public string Label => _label;
+
+    /// <summary>
+    /// How big it is, said apart from what it is.
+    ///
+    /// <para>Split from <see cref="Label"/> for the reason
+    /// <see cref="ExploreViewModel.HoveredFigures"/> gives: the two share one line, and a path long
+    /// enough to fill it would otherwise push the size off the end.</para>
+    /// </summary>
+    public string Figures => _figures;
 
     /// <summary>
     /// Why the selection will not be removed, or null when nothing stands in the way.
@@ -227,11 +237,11 @@ public sealed partial class ExploreSelection : ObservableObject
         // that selects any number of rows at once (G4).
         var items = Items();
 
-        _label = items switch
+        (_label, _figures) = items switch
         {
-            [] => string.Empty,
-            [var only] => $"Selected: {only.Path} — {FreeSpace.Format(only.Bytes)}",
-            var many => $"Selected: {many.Count} items — {FreeSpace.Format(many.Sum(i => i.Bytes))}",
+            [] => (string.Empty, string.Empty),
+            [var only] => ($"Selected: {only.Path}", FreeSpace.Format(only.Bytes)),
+            var many => ($"Selected: {many.Count} items", FreeSpace.Format(many.Sum(i => i.Bytes))),
         };
 
         _note = items is [var first, ..]
@@ -240,6 +250,7 @@ public sealed partial class ExploreSelection : ObservableObject
 
         OnPropertyChanged(nameof(Nodes));
         OnPropertyChanged(nameof(Label));
+        OnPropertyChanged(nameof(Figures));
         OnPropertyChanged(nameof(Note));
         OnPropertyChanged(nameof(HasNote));
 

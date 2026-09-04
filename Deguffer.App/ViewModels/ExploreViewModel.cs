@@ -278,6 +278,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     public partial string Hovered { get; set; } = string.Empty;
 
+    /// <summary>
+    /// How big that is, and how old, said apart from the path.
+    ///
+    /// <para>Two properties for one sentence, because the line they share holds one line's worth
+    /// and a path is what overruns it. Written as one string, a deep path pushed the size off the
+    /// end — and the size is the answer to the question the whole page exists to ask. Split, the
+    /// figures take the width they need and the path trims into what is left.</para>
+    /// </summary>
+    [ObservableProperty]
+    public partial string HoveredFigures { get; set; } = string.Empty;
+
     public bool HasTree => Tree is not null;
 
     /// <summary>
@@ -565,18 +576,19 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     public void Hover(int? node, long? aggregateBytes)
     {
-        Hovered = (Tree, node, aggregateBytes) switch
+        (Hovered, HoveredFigures) = (Tree, node, aggregateBytes) switch
         {
-            (_, _, { } bytes) => $"{FreeSpace.Format(bytes)} in items too small to draw separately",
+            (_, _, { } bytes) => ("Items too small to draw separately", FreeSpace.Format(bytes)),
 
             // The age is on this line whichever colouring is on, not only when the map is drawn by
             // age. A pointer is how somebody checks one shape against the rest, and having to change
             // the colouring to read a date would be a worse answer than showing it always.
-            ({ } tree, { } value, _) =>
-                $"{tree.PathOf(value)} — {FreeSpace.Format(tree.SizeOf(value))}, "
-                + $"last written {ExploreRowText.Age(tree, value, DateTime.UtcNow)}",
+            ({ } tree, { } value, _) => (
+                tree.PathOf(value),
+                $"{FreeSpace.Format(tree.SizeOf(value))}, "
+                + $"last written {ExploreRowText.Age(tree, value, DateTime.UtcNow)}"),
 
-            _ => string.Empty,
+            _ => (string.Empty, string.Empty),
         };
     }
 
@@ -634,6 +646,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         BuildTrail(tree, node);
 
         Hovered = string.Empty;
+        HoveredFigures = string.Empty;
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 

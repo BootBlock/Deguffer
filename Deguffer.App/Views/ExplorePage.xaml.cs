@@ -34,6 +34,12 @@ public sealed partial class ExplorePage : Page
     /// <summary>Whether <see cref="ShowSelectedRows"/> is writing the list's selection.</summary>
     private bool _showingSelectedRows;
 
+    /// <summary>
+    /// Where the list sits before <see cref="OnNotesResized"/> moves its bottom edge. Read once,
+    /// because every later read would be of a value this page had already written.
+    /// </summary>
+    private readonly Thickness _rowsMargin;
+
     public ExplorePage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -59,6 +65,8 @@ public sealed partial class ExplorePage : Page
         };
 
         InitializeComponent();
+
+        _rowsMargin = RowsList.Margin;
 
         // Subscribed past the handled flag, because a ListViewItem marks the right-tap handled on
         // its way past and an ordinary handler on the list never runs. Measured: an attached
@@ -217,6 +225,29 @@ public sealed partial class ExplorePage : Page
             _showingSelectedRows = false;
         }
     }
+
+    /// <summary>
+    /// End the list above whatever the notes are covering.
+    ///
+    /// <para>The notes float over the card rather than sitting below it, so that opening one cannot
+    /// resize the drawing underneath — see the comment on <c>Notes</c> in the XAML. The map keeps
+    /// working underneath them, because they let the pointer through. The list cannot be treated
+    /// that way: a row under a note is a row nothing can retrieve, since <c>ScrollIntoView</c> and
+    /// the keyboard both stop as soon as a row is anywhere inside the viewport. Extending what the
+    /// list may scroll through is therefore not enough, and the viewport itself has to end above
+    /// them.</para>
+    ///
+    /// <para>Measured against what they occupy rather than against the worst case, so the list gives
+    /// the room up only while there is something in them. Nothing here can loop: the notes are
+    /// bottom-aligned in the same grid and take their size from their own content, so the list's
+    /// height is not an input to theirs.</para>
+    /// </summary>
+    private void OnNotesResized(object sender, SizeChangedEventArgs e) =>
+        RowsList.Margin = new Thickness(
+            _rowsMargin.Left,
+            _rowsMargin.Top,
+            _rowsMargin.Right,
+            _rowsMargin.Bottom + (e.NewSize.Height > 0 ? e.NewSize.Height + Notes.Margin.Bottom : 0));
 
     /// <summary>
     /// The view is applied first and persisted second, so it takes effect whether or not the
