@@ -32,6 +32,14 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly ExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
 
+    /// <summary>
+    /// Whether a finished scan covers what the page is pointed at now. Not <see cref="Tree"/>, which
+    /// a snapshot fills in while a scan is still running (see <see cref="Report"/>) — a half-drawn
+    /// map is not a scan the offer may be read from. Written only by
+    /// <see cref="OfferElevation"/>.
+    /// </summary>
+    private bool _hasScanned;
+
     public ExploreViewModel(ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions)
     {
         _scanner = scanner;
@@ -47,6 +55,10 @@ public sealed partial class ExploreViewModel : ObservableObject
         Selection.Changed += (_, _) => Refresh();
 
         RefreshDrives();
+
+        // Offered before anything has been scanned, so an elevated scan does not have to be reached
+        // through the walked one it replaces.
+        OfferElevation(null);
     }
 
     /// <summary>What the user picked out by hand, and what §7.1 lets them do with it.</summary>
@@ -66,6 +78,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     public partial string? SelectedDrive { get; set; }
 
     /// <summary>
@@ -78,6 +91,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsScopedToFolder))]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     public partial string? ScopeFolder { get; set; }
 
     /// <summary>
@@ -142,10 +156,17 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// Whether to offer a relaunch as administrator, on the same terms the Storage page offers it:
-    /// only where a scan actually fell back for want of rights.
+    /// before anything is scanned, and afterwards only where the scan actually fell back for want
+    /// of rights.
+    ///
+    /// <para>This says whether elevating would help, not whether the page is free to act on it —
+    /// that is the command's own <c>CanExecute</c>.</para>
     /// </summary>
     [ObservableProperty]
     public partial bool CanElevate { get; set; }
+
+    /// <summary>What that button says. See <see cref="ElevationOffer.Label"/>.</summary>
+    public string ElevateLabel => ElevationOffer.Label(_hasScanned);
 
     /// <summary>
     /// The scan that is on screen. Replaced wholesale rather than mutated, so a snapshot arriving
@@ -279,7 +300,11 @@ public sealed partial class ExploreViewModel : ObservableObject
         IsBusy = true;
         Progress = null;
         RouteNote = null;
-        CanElevate = false;
+
+        // Back to what is known before anything is measured. The previous scan's fallback reason is
+        // about to be replaced, and a cancelled or failed scan never reaches the offer below.
+        OfferElevation(null);
+
         Status = $"Scanning {target}…";
 
         try
@@ -289,7 +314,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             Show(scan.Tree, ExplorePlace.Carry(Tree, CurrentNode, scan.Tree));
 
             RouteNote = scan.RouteNote;
-            CanElevate = !ElevatedRelaunch.IsElevated && scan.Fallback == FallbackReason.NotElevated;
+            OfferElevation(scan.Fallback);
 
             Status = scan.Tree.HasUnknownSizes
                 ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this {what} could not "
@@ -403,22 +428,42 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
     /// alternative leaves both set, and the page then states one target while scanning another.
     /// </summary>
-    partial void OnSelectedDriveChanged(string? value) => ScopeFolder = null;
+    partial void OnSelectedDriveChanged(string? value)
+    {
+        ScopeFolder = null;
+
+        // Called here as well as from the scope's own handler below. Assigning null over null
+        // raises nothing, so a drive chosen while no folder was scoped would otherwise leave the
+        // offer describing somewhere the page is no longer pointed.
+        OfferElevation(null);
+    }
+
+    /// <summary>
+    /// The offer describes what pressing the button would scan, not what is drawn on screen, so
+    /// moving the target puts it back to the state before anything was measured.
+    ///
+    /// <para>Leaving it alone is how the button comes to be hidden for a volume nothing has looked
+    /// at, which is the whole of the defect it was just changed to fix, and how it comes to offer a
+    /// rescan of a drive that was never scanned.</para>
+    /// </summary>
+    partial void OnScopeFolderChanged(string? value) => OfferElevation(null);
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
     /// and stands down — the same mechanism the Storage page uses, and for the same reason.
     ///
     /// <para>The replacement is told where this page was pointed, so it opens on Explore and scans
-    /// it. The button says "rescan", and landing the user on another page with the drive box back at
-    /// its default, and a picked folder thrown away, would not be that.</para>
+    /// it. The user pressed this while pointed somewhere, and landing them on another page with the
+    /// drive box back at its default, and a picked folder thrown away, would not be that.</para>
     ///
     /// <para>What travels is what the page is pointed at now rather than what the last scan
     /// covered. The picker is on screen and <see cref="ScanCommand"/> beside it would use exactly
     /// these two values, so a second, hidden idea of the target is one the page could then
-    /// contradict.</para>
+    /// contradict — and it is why this shares that command's <c>CanExecute</c> rather than only
+    /// asking whether the page is busy. A relaunch with nothing to point at leaves the replacement
+    /// waiting on a page the user did not ask to be on.</para>
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanRun))]
+    [RelayCommand(CanExecute = nameof(CanScan))]
     private void ElevateAndRescan()
     {
         if (!ElevatedRelaunch.TryRelaunch(new ExploreRequest(SelectedDrive, ScopeFolder)))
@@ -429,6 +474,28 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
 
         ReplacedByElevatedInstance?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Say whether elevating would help, from whatever is known at the point of asking.
+    ///
+    /// <para>One place, because the two halves of the answer are one fact: what the button offers
+    /// and what it says both turn on whether a scan has finished, and setting them apart is how a
+    /// button comes to offer a rescan of a scan that never ran.</para>
+    /// </summary>
+    /// <param name="found">
+    /// Why the finished scan walked, or null where no scan has finished — which is the state before
+    /// the first one, and the state a cancelled or failed one returns the page to.
+    /// </param>
+    private void OfferElevation(FallbackReason? found)
+    {
+        _hasScanned = found is not null;
+
+        CanElevate = found is { } fallback
+            ? ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, fallback)
+            : ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+
+        OnPropertyChanged(nameof(ElevateLabel));
     }
 
     /// <summary>Show what is inside <paramref name="node"/>. Ignored for anything with nothing in it.</summary>

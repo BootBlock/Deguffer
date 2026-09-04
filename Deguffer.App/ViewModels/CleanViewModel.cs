@@ -51,6 +51,10 @@ public sealed partial class CleanViewModel : ObservableObject
         // Rows arrive one provider at a time and are cleared wholesale between runs; subscribing
         // covers both without every mutation site having to remember to raise this.
         Findings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoFindings));
+
+        // Offered before anything has been scanned, so an elevated preview does not have to be
+        // reached through the unelevated one it replaces.
+        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
     }
 
     /// <summary>
@@ -154,6 +158,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
+    [NotifyPropertyChangedFor(nameof(ElevateLabel))]
     public partial bool HasPreview { get; set; }
 
     /// <summary>
@@ -185,9 +190,16 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Whether to offer a relaunch as administrator. §5.5 made the slow scan observable; without
     /// this the app diagnoses the problem and leaves the user to solve it by knowing to right-click
     /// the executable.
+    ///
+    /// <para>This says whether elevating would help, not whether the page is free to act on it —
+    /// that is the command's own <c>CanExecute</c>. Keeping the two apart is what stops the button
+    /// disappearing for the length of every scan and returning afterwards.</para>
     /// </summary>
     [ObservableProperty]
     public partial bool CanElevate { get; set; }
+
+    /// <summary>What that button says. See <see cref="ElevationOffer.Label"/>.</summary>
+    public string ElevateLabel => ElevationOffer.Label(HasPreview);
 
     /// <summary>
     /// §5.4: two different numbers, reported separately. What Deguffer measured itself removing,
@@ -219,7 +231,6 @@ public sealed partial class CleanViewModel : ObservableObject
     private async Task PreviewAsync(CancellationToken ct)
     {
         IsBusy = true;
-        HasPreview = false;
 
         // A previous run's figures describe a machine state this preview is about to replace.
         ClearRunResult();
@@ -236,7 +247,7 @@ public sealed partial class CleanViewModel : ObservableObject
                     ? $"{SelectedTotalLabel} can be reclaimed. Review the rows, then Clean."
                     : Findings.Any(f => f.Finding.HasReclaimableSpace)
                         ? "Nothing here can be cleared without administrator rights. "
-                          + "Use Elevate and rescan."
+                          + $"Use {ElevateLabel}."
                         : "Nothing to reclaim — these caches are already clear.");
         }
         catch (OperationCanceledException)
@@ -432,10 +443,11 @@ public sealed partial class CleanViewModel : ObservableObject
 
         Findings.Clear();
 
-        // Cleared up front, not just reassigned at the end: a preview that is cancelled or fails
-        // never reaches the assignment below, and a stale offer would advertise a speed-up for a
-        // scan whose rows have already been thrown away.
-        CanElevate = false;
+        // Back to what is known before anything is measured, not just reassigned at the end: a
+        // preview that is cancelled or fails never reaches the assignment below, and the rows whose
+        // fallback reasons the old offer was read from have already been thrown away.
+        HasPreview = false;
+        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
 
         var progress = new Progress<string>(message => Report(message));
         var found = new Progress<Finding>(AddRowInSizeOrder);
@@ -459,8 +471,8 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
-    /// and stands down. The new instance re-previews on launch — the button says "rescan", and
-    /// landing the user on an empty window to press Preview again would not be that.
+    /// and stands down. The new instance previews on launch: the user asked for a scan by pressing
+    /// this, and landing them on an empty window to press Preview again would not be that.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
     private void ElevateAndRescan()

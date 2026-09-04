@@ -63,7 +63,7 @@ public sealed partial class StepViewModel : ObservableObject
     ///
     /// Shown beside the step, because the two alternatives are worse: a step that fails at execution
     /// time explains nothing, and a location dropped from an unelevated preview is a folder the user
-    /// never learns about. "Elevate and rescan" is already on screen whenever this is true —
+    /// never learns about. The Elevate button is already on screen whenever this is true —
     /// <see cref="Deguffer.Core.Execution.ElevationOffer"/> reads the same claim.
     /// </summary>
     public bool NeedsElevationFirst => Step.RequiresElevation && !ElevatedRelaunch.IsElevated;

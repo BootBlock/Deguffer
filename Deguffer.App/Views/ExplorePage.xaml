@@ -79,10 +79,11 @@
             </Grid>
 
             <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it:
-                 shown only where a scan actually fell back for want of rights. -->
+                 offered from the start, and withdrawn once a scan has shown that elevating would
+                 not help. -->
             <Button Grid.Column="5"
                     VerticalAlignment="Bottom"
-                    Content="Elevate and rescan"
+                    Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateAndRescanCommand}" />
 
