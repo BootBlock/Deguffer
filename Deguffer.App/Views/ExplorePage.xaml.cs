@@ -202,6 +202,12 @@ public sealed partial class ExplorePage : Page
         App.Preferences.Update(current => current with { Explore = view });
     }
 
+    /// <summary>
+    /// Read the volumes again as the picker opens, so its space figures describe the disk now
+    /// rather than when the app started. See <see cref="ExploreViewModel.RefreshDrives"/>.
+    /// </summary>
+    private void OnDriveListOpened(object sender, object e) => ViewModel.RefreshDrives();
+
     /// <summary>Applied first and persisted second, for the reason above.</summary>
     private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e)
     {

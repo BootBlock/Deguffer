@@ -13,7 +13,23 @@ namespace Deguffer.Core.Safety;
 /// Whether the volume can be read at all. An optical drive with no disc and a card reader with no
 /// card are both mounted and both answer no, and reading anything else about them throws.
 /// </param>
-public readonly record struct LocalVolume(string RootPath, DriveType Kind, bool IsReady);
+/// <param name="Label">
+/// What the volume is called, or null where it has no label, would not say, or was not asked. Null
+/// rather than an empty string, so "unlabelled" is one case at every caller instead of two.
+/// </param>
+/// <param name="TotalBytes">Capacity, on the same terms.</param>
+/// <param name="FreeBytes">
+/// What is left of that capacity for this user, on the same terms. The figure a quota allows rather
+/// than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are read by the same app and
+/// must not disagree.
+/// </param>
+public readonly record struct LocalVolume(
+    string RootPath,
+    DriveType Kind,
+    bool IsReady,
+    string? Label = null,
+    long? TotalBytes = null,
+    long? FreeBytes = null);
 
 /// <summary>
 /// The machine's volumes, behind an interface so a provider that works per volume is testable
@@ -87,8 +103,49 @@ public sealed class VolumeInventory : IVolumeInventory
             return [];
         }
 
-        // IsReady is the one member that answers for an empty drive instead of throwing, which is
-        // why it is read here and everything else about an unready volume is left alone.
-        return [.. drives.Select(d => new LocalVolume(d.RootDirectory.FullName, d.DriveType, d.IsReady))];
+        return [.. drives.Select(Describe)];
+    }
+
+    /// <summary>
+    /// IsReady is the one member that answers for an empty drive instead of throwing, which is why
+    /// it gates everything else read here.
+    ///
+    /// <para>A network volume is described by its mount point alone. The label and the two space
+    /// figures each cost a round trip to the server, <see cref="Volumes"/> is read under a lock and
+    /// on the UI thread, and no caller wants them for a share: the picker refuses network volumes
+    /// outright and <c>RecycleBinProvider</c> takes fixed ones only. This declines a cost, and
+    /// filters nothing — which kinds a caller may act on stays that caller's decision.</para>
+    /// </summary>
+    private static LocalVolume Describe(DriveInfo drive)
+    {
+        var root = drive.RootDirectory.FullName;
+
+        // Read once. IsReady probes the volume rather than reading a field, and on a share that
+        // probe is the round trip this method exists to spend as few of as it can. Two reads can
+        // also disagree, which would report a volume as ready with nothing else known about it.
+        var ready = drive.IsReady;
+
+        if (!ready || drive.DriveType == DriveType.Network)
+        {
+            return new LocalVolume(root, drive.DriveType, ready);
+        }
+
+        try
+        {
+            return new LocalVolume(
+                root,
+                drive.DriveType,
+                IsReady: true,
+                Label: string.IsNullOrWhiteSpace(drive.VolumeLabel) ? null : drive.VolumeLabel,
+                TotalBytes: drive.TotalSize,
+                FreeBytes: drive.AvailableFreeSpace);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The medium can go away between IsReady and these reads, and a volume can refuse the
+            // label query outright. Where it is mounted is still true, and it is the part callers
+            // act on, so the volume is reported without the detail rather than dropped.
+            return new LocalVolume(root, drive.DriveType, IsReady: true);
+        }
     }
 }
