@@ -104,6 +104,8 @@ public sealed partial class ExplorePage : Page
         // write to disk failed, silently and in the same session.
         var preferences = App.Preferences.Current;
 
+        ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
+
         // The colouring first, because ShowAs draws the map and the map has to be told what its
         // colours mean before it paints rather than after.
         ColourAs(preferences.ExploreColours);
@@ -248,6 +250,32 @@ public sealed partial class ExplorePage : Page
             _rowsMargin.Top,
             _rowsMargin.Right,
             _rowsMargin.Bottom + (e.NewSize.Height > 0 ? e.NewSize.Height + Notes.Margin.Bottom : 0));
+
+    /// <summary>
+    /// Put the notes away, leaving the button that brings them back.
+    ///
+    /// <para>Applied first and persisted second, on the reasoning the two selectors below give:
+    /// that order is inverted from <see cref="Shell.PreferenceService"/>'s usual one for a setting
+    /// that governs what is drawn rather than what is deleted, and a reader closing something that
+    /// is over their picture should not find it still there because a file could not be
+    /// written.</para>
+    /// </summary>
+    private void OnDismissNotes(object sender, RoutedEventArgs e) => KeepNotes(dismissed: true);
+
+    /// <summary>Ask for them back. The other half of <see cref="OnDismissNotes"/>.</summary>
+    private void OnShowNotes(object sender, RoutedEventArgs e) => KeepNotes(dismissed: false);
+
+    private void KeepNotes(bool dismissed)
+    {
+        ViewModel.NotesDismissed = dismissed;
+        App.Preferences.Update(current => current with { ExploreNotesDismissed = dismissed });
+
+        // The button that was just pressed is the one that has gone, so focus would be left on a
+        // collapsed element and the reader would have to cross the whole page to reach the other.
+        // §7 asks for a sentence to stay reachable "by whatever the reader is using", and a keyboard
+        // is one of those. The corner keeps the focus instead, whichever way the toggle went.
+        _ = (dismissed ? ShowNotes : DismissNotes).Focus(FocusState.Programmatic);
+    }
 
     /// <summary>
     /// The view is applied first and persisted second, so it takes effect whether or not the

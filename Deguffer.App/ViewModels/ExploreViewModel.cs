@@ -65,6 +65,19 @@ public sealed partial class ExploreViewModel : ObservableObject
         Selection.Reported += (_, sentence) => Status = sentence;
         Selection.Changed += (_, _) => Refresh();
 
+        // Two of the four notes are the selection's, so what the card shows in their corner turns
+        // partly on a type this one does not speak for. Without following it, picking something
+        // Explore will not remove while the notes are collapsed would leave no button offering to
+        // say why (§7.1).
+        Selection.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName is nameof(ExploreSelection.HasNote)
+                or nameof(ExploreSelection.HasStaleNote))
+            {
+                NotesChanged();
+            }
+        };
+
         RefreshDrives();
 
         // Offered before anything has been scanned, so an elevated scan does not have to be reached
@@ -161,9 +174,64 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRouteNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotes))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     public partial string? RouteNote { get; set; }
 
     public bool HasRouteNote => !string.IsNullOrEmpty(RouteNote);
+
+    /// <summary>
+    /// Whether the reader has collapsed the notes into their button.
+    ///
+    /// <para>Theirs to set and nobody else's. Nothing in a scan, a selection or a removal writes
+    /// it, so a note arriving afterwards does not put the panel back over the picture — it brings
+    /// the button back, which is where the sentence then is.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsNotes))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
+    public partial bool NotesDismissed { get; set; }
+
+    /// <summary>
+    /// What the collapsed button shows, and what it is called.
+    ///
+    /// <para>Two states rather than one, because one of the four notes is a warning and the other
+    /// three are not. §7.1 lets Explore's totals be lower bounds "provided the picture states which
+    /// it is", and after a removal the stale note is the whole of that statement: the sizes on
+    /// screen still count what has gone. Collapsed behind a fixed <c>i</c> it would arrive with
+    /// nothing on screen changing, because the route note usually has the button on screen already.
+    /// So the glyph and the name change with it, and neither is colour alone.</para>
+    /// </summary>
+    public string NotesButtonGlyph => Selection.HasStaleNote ? WarningGlyph : InfoGlyph;
+
+    /// <inheritdoc cref="NotesButtonGlyph"/>
+    public string NotesButtonLabel => Selection.HasStaleNote
+        ? "Show the notes about this scan. One of them is a warning."
+        : "Show the notes about this scan";
+
+    /// <summary>
+    /// Whether the notes are on the card. See <see cref="ShowsNotesButton"/> for the other half.
+    /// </summary>
+    public bool ShowsNotes => HasNotes && !NotesDismissed;
+
+    /// <summary>
+    /// Whether the button that brings them back is on the card.
+    ///
+    /// <para>The two are exclusive, and both are false while there is nothing to read. That is what
+    /// makes the button itself the signal: it is in the notes' corner exactly when a sentence is
+    /// waiting behind it, so a collapsed panel with something to say never looks like a collapsed
+    /// panel with nothing.</para>
+    /// </summary>
+    public bool ShowsNotesButton => HasNotes && NotesDismissed;
+
+    /// <summary>Whether any of the four notes has something to say.</summary>
+    private bool HasNotes =>
+        Selection.HasNote || Selection.HasStaleNote || HasViewNote || HasRouteNote;
+
+    // Segoe Fluent Icons, by code point rather than pasted: a private-use glyph reads back as
+    // nothing at all through a file tool, so the literal is the one form that can be checked.
+    private const string InfoGlyph = "\uE946";
+    private const string WarningGlyph = "\uE7BA";
 
     /// <summary>
     /// Whether to offer a relaunch as administrator, on the same terms the Storage page offers it:
@@ -189,6 +257,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotes))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; set; }
 
@@ -203,6 +273,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotes))]
+    [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     public partial ExploreView SelectedView { get; set; }
 
     /// <summary>
@@ -590,6 +662,15 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             _ => (string.Empty, string.Empty),
         };
+    }
+
+    /// <summary>Say that what the notes hold has changed, whichever of the four it was.</summary>
+    private void NotesChanged()
+    {
+        OnPropertyChanged(nameof(ShowsNotes));
+        OnPropertyChanged(nameof(ShowsNotesButton));
+        OnPropertyChanged(nameof(NotesButtonGlyph));
+        OnPropertyChanged(nameof(NotesButtonLabel));
     }
 
     private void Report(ExploreProgress progress)

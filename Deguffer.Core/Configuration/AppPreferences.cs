@@ -120,6 +120,19 @@ public enum ExploreColouring
 /// <paramref name="ShowNotInstalled"/>: every provider is still scanned, so switching it on lists
 /// them with no rescan.
 /// </param>
+/// <param name="ExploreNotesDismissed">
+/// Whether Explore's notes are collapsed to the button that brings them back. Off by default, and
+/// only the reader ever turns it on.
+///
+/// <para>Stored rather than held for the session, because it answers "I have read these" rather
+/// than "not just now". Somebody who has decided the walked-scan sentence is not for them should
+/// not have to decide it again at every launch.</para>
+///
+/// <para>Presentation only, and it collapses rather than silences: the button stands in the notes'
+/// own corner whenever any of them has something to say, so §7.1's refusal and §5.5's route
+/// sentence stay one activation away rather than going. What it cannot do is arrive over the
+/// picture uninvited, which is the whole of what it was asked for.</para>
+/// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
 /// backdrop fights the user's stated accessibility requirement, and that is not negotiable by a
@@ -164,6 +177,7 @@ public sealed record AppPreferences(
     ViewDensity View = ViewDensity.Compact,
     ExploreView Explore = ExploreView.Treemap,
     ExploreColouring ExploreColours = ExploreColouring.Branch,
+    bool ExploreNotesDismissed = false,
     bool ShowNotInstalled = false,
     bool ShowAlreadyClear = false,
     bool BackdropEnabled = true,
