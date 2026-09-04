@@ -37,9 +37,10 @@ public sealed class ItemGuide
 
     /// <param name="entries">The catalogue. Ordinarily <see cref="KnownItems.All"/>.</param>
     /// <param name="anchors">
-    /// Where each place is on this machine. A place missing from here contributes nothing, which is
-    /// the right answer for <c>%ProgramFiles(x86)%</c> on a 32-bit Windows: it names no directory,
-    /// so there is nothing there to explain.
+    /// Where each place is on this machine. A place missing from here, or present with a value that
+    /// names no directory, contributes nothing — which is the right answer for
+    /// <c>%ProgramFiles(x86)%</c> on a 32-bit Windows, where it is empty and there is nothing there
+    /// to explain.
     /// </param>
     public ItemGuide(IEnumerable<KnownItem> entries, IReadOnlyDictionary<KnownPlace, string> anchors)
     {
@@ -126,10 +127,15 @@ public sealed class ItemGuide
     /// trusted, for the reason that method exists: the anchors come from the environment, and a
     /// trailing separator or a <c>..</c> in one would make the key compare equal to nothing at
     /// all — an entry silently absent from the catalogue rather than a visible failure.</para>
+    ///
+    /// <para>It is also what makes an anchor naming no directory answer null here, with no separate
+    /// check: <c>%ProgramFiles(x86)%</c> is empty on a 32-bit Windows, and combining an empty anchor
+    /// with a relative path gives a path that is not fully qualified, which
+    /// <see cref="LongPath.Configured(string?)"/> refuses.</para>
     /// </summary>
     private static string? Resolve(
         IReadOnlyDictionary<KnownPlace, string> anchors, KnownItem entry) =>
-        anchors.TryGetValue(entry.Place, out var anchor) && anchor.Length > 0
+        anchors.TryGetValue(entry.Place, out var anchor)
             ? LongPath.Configured(
                 entry.RelativePath.Length == 0 ? anchor : Path.Combine(anchor, entry.RelativePath))
             : null;

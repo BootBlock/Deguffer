@@ -55,4 +55,13 @@ public sealed class VolumeRootTests
     [InlineData("pagefile.sys")]
     [InlineData(@"folder\pagefile.sys")]
     public void ARelativePathIsNot(string path) => Assert.False(VolumeRoot.Holds(path));
+
+    /// <summary>
+    /// The drive-relative form, which is the one that looks qualified and is not. <c>C:pagefile.sys</c>
+    /// means "pagefile.sys in whatever directory this process is standing in on C:", so its root
+    /// answers <c>C:</c> and the remainder answers a single segment — the exact shape of a path that
+    /// <em>is</em> at a volume root. Nothing here may take that for one.
+    /// </summary>
+    [Fact]
+    public void ADriveRelativePathIsNot() => Assert.False(VolumeRoot.Holds("C:pagefile.sys"));
 }
