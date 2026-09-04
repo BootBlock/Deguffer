@@ -22,6 +22,32 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// The label and the two space figures are what the Explore picker offers a drive by, and they
+    /// come from the same reading as the mount point. A fixed volume that is ready always answers
+    /// all three, so a null here means the reading was never made.
+    /// </summary>
+    [Fact]
+    public void ReadsTheSpaceEveryReadyFixedVolumeReports()
+    {
+        var fixedVolumes = VolumeInventory.Current.Volumes
+            .Where(v => v.IsReady && v.Kind == DriveType.Fixed)
+            .ToList();
+
+        Assert.NotEmpty(fixedVolumes);
+
+        Assert.All(fixedVolumes, v =>
+        {
+            Assert.NotNull(v.TotalBytes);
+            Assert.NotNull(v.FreeBytes);
+            Assert.True(v.TotalBytes > 0, v.RootPath);
+            Assert.InRange(v.FreeBytes!.Value, 0, v.TotalBytes!.Value);
+
+            // Null or a real name, never the empty string a volume with no label reports.
+            Assert.True(v.Label is null or { Length: > 0 }, v.RootPath);
+        });
+    }
+
+    /// <summary>
     /// The list is remembered for the life of a pass (G4), so the same instance has to come back
     /// until it is dropped — and a drive mounted while the app was open has to be seen after.
     /// </summary>

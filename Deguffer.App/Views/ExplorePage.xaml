@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
+    xmlns:exploring="using:Deguffer.Core.Exploring"
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent">
 
@@ -25,7 +26,33 @@
                       IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                       ItemsSource="{x:Bind ViewModel.Drives}"
                       SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
-                      AutomationProperties.Name="Drive to scan" />
+                      AutomationProperties.Name="Drive to scan">
+                <!-- The label and the three space figures, so the choice is made in the list
+                     rather than by remembering which letter is the large disk. One line, because
+                     a combo box draws the chosen entry with this same template: a second line
+                     would make the closed box twice its height and break the row it sits in.
+
+                     The name is stated on the row because a templated item otherwise announces
+                     its parts in layout order with nothing between them. -->
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="exploring:DriveChoice">
+                        <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto"
+                              AutomationProperties.Name="{x:Bind Description}">
+                            <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind LabelText}"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxWidth="140"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <TextBlock Grid.Column="2"
+                                       Text="{x:Bind Sizes}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
 
             <!-- Scoping to a folder, through the system picker for the reason the source folders
                  use one: the path is then one the shell confirmed exists rather than a typed

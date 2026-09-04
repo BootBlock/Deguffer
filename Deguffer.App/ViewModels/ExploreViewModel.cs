@@ -64,8 +64,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>What the user picked out by hand, and what §7.1 lets them do with it.</summary>
     public ExploreSelection Selection { get; }
 
-    /// <summary>The volumes offered in the picker, as <c>C:\</c> roots.</summary>
-    public ObservableCollection<string> Drives { get; } = [];
+    /// <summary>The volumes offered in the picker, each with what it is called and how full it is.</summary>
+    public ObservableCollection<DriveChoice> Drives { get; } = [];
 
     /// <summary>
     /// What the current node holds, in the tree's own order: largest first once a scan has
@@ -79,7 +79,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
-    public partial string? SelectedDrive { get; set; }
+    public partial DriveChoice? SelectedDrive { get; set; }
 
     /// <summary>
     /// The folder a scan is scoped to, or null for a whole drive.
@@ -102,7 +102,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>Not bound to anything. The screen states the two halves separately, in the drive box
     /// and the folder beside it, and this is what the scan is actually pointed at.</para>
     /// </summary>
-    private string? ScanRoot => ScopeFolder ?? SelectedDrive;
+    private string? ScanRoot => ScopeFolder ?? SelectedDrive?.RootPath;
 
     public bool IsScopedToFolder => ScopeFolder is not null;
 
@@ -415,10 +415,10 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// does not offer it. Null in, null out, so a path with no root and an absent drive are one case
     /// here rather than two at each caller.
     /// </summary>
-    private string? Offered(string? volume) =>
+    private DriveChoice? Offered(string? volume) =>
         volume is null
             ? null
-            : Drives.FirstOrDefault(listed => listed.Equals(volume, StringComparison.OrdinalIgnoreCase));
+            : Drives.FirstOrDefault(listed => listed.RootPath.Equals(volume, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
@@ -428,7 +428,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
     /// alternative leaves both set, and the page then states one target while scanning another.
     /// </summary>
-    partial void OnSelectedDriveChanged(string? value)
+    partial void OnSelectedDriveChanged(DriveChoice? value)
     {
         ScopeFolder = null;
 
@@ -466,7 +466,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan))]
     private void ElevateAndRescan()
     {
-        if (!ElevatedRelaunch.TryRelaunch(new ExploreRequest(SelectedDrive, ScopeFolder)))
+        if (!ElevatedRelaunch.TryRelaunch(new ExploreRequest(SelectedDrive?.RootPath, ScopeFolder)))
         {
             Status = "Deguffer is still running without administrator rights, so it scans by walking "
                 + "directories. Everything else works exactly the same.";
@@ -663,7 +663,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // that cannot start.
         foreach (var volume in _volumes.Volumes.Where(v => v.IsReady && v.Kind != DriveType.Network))
         {
-            Drives.Add(volume.RootPath);
+            Drives.Add(DriveChoice.From(volume));
         }
 
         SelectedDrive = Drives.FirstOrDefault();

@@ -13,7 +13,23 @@ namespace Deguffer.Core.Safety;
 /// Whether the volume can be read at all. An optical drive with no disc and a card reader with no
 /// card are both mounted and both answer no, and reading anything else about them throws.
 /// </param>
-public readonly record struct LocalVolume(string RootPath, DriveType Kind, bool IsReady);
+/// <param name="Label">
+/// What the volume is called, or null where it has no label or would not say. Null rather than an
+/// empty string, so "unlabelled" is one case at every caller instead of two.
+/// </param>
+/// <param name="TotalBytes">Capacity, or null where the volume would not say.</param>
+/// <param name="FreeBytes">
+/// What is left of that capacity for this user, or null where the volume would not say. The figure
+/// a quota allows rather than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are
+/// read by the same app and must not disagree.
+/// </param>
+public readonly record struct LocalVolume(
+    string RootPath,
+    DriveType Kind,
+    bool IsReady,
+    string? Label = null,
+    long? TotalBytes = null,
+    long? FreeBytes = null);
 
 /// <summary>
 /// The machine's volumes, behind an interface so a provider that works per volume is testable
@@ -87,8 +103,38 @@ public sealed class VolumeInventory : IVolumeInventory
             return [];
         }
 
-        // IsReady is the one member that answers for an empty drive instead of throwing, which is
-        // why it is read here and everything else about an unready volume is left alone.
-        return [.. drives.Select(d => new LocalVolume(d.RootDirectory.FullName, d.DriveType, d.IsReady))];
+        return [.. drives.Select(Describe)];
+    }
+
+    /// <summary>
+    /// IsReady is the one member that answers for an empty drive instead of throwing, which is why
+    /// it gates everything else read here.
+    /// </summary>
+    private static LocalVolume Describe(DriveInfo drive)
+    {
+        var root = drive.RootDirectory.FullName;
+
+        if (!drive.IsReady)
+        {
+            return new LocalVolume(root, drive.DriveType, IsReady: false);
+        }
+
+        try
+        {
+            return new LocalVolume(
+                root,
+                drive.DriveType,
+                IsReady: true,
+                Label: string.IsNullOrWhiteSpace(drive.VolumeLabel) ? null : drive.VolumeLabel,
+                TotalBytes: drive.TotalSize,
+                FreeBytes: drive.AvailableFreeSpace);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The medium can go away between IsReady and these reads, and a volume can refuse the
+            // label query outright. Where it is mounted is still true, and it is the part callers
+            // act on, so the volume is reported without the detail rather than dropped.
+            return new LocalVolume(root, drive.DriveType, IsReady: true);
+        }
     }
 }
