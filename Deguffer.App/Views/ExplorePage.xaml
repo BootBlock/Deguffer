@@ -410,8 +410,7 @@
                     the Colour and View boxes. Each of those is a deliberate act at a moment the
                     picture is being rebuilt anyway, which is the opposite of what this fixes.
 
-                    The sentences let the pointer through, and only the button that closes them
-                    takes it. The map has no keyboard way round a shape, and the stale note stands
+                    The sentences let the pointer through, and only the two buttons take it. The map has no keyboard way round a shape, and the stale note stands
                     until the next scan rather than until the next click, so a hit-testable strip
                     over the drawing would put part of the picture out of reach for the rest of the
                     session. Text has nothing to click anyway, so the shapes underneath stay
@@ -508,15 +507,14 @@
                         close buttons would ask them to say it four times. The gutter above is what it
                         sits in, so it is never over a word.
                     -->
-                    <Button Visibility="{x:Bind ViewModel.ShowsNotes, Mode=OneWay}"
+                    <Button x:Name="DismissNotes"
+                            Visibility="{x:Bind ViewModel.ShowsNotes, Mode=OneWay}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top"
                             Margin="0,4,4,0"
                             Width="28"
                             Height="28"
                             Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
                             Click="OnDismissNotes"
                             ToolTipService.ToolTip="Hide these notes. They stay one click away."
                             AutomationProperties.Name="Hide these notes">
@@ -532,22 +530,22 @@
 
                         On its own opaque ground for §6.5's reason, the one the panel has: a
                         button's own fill is a tint, and a tint over a treemap is not a button
-                        anybody can find. This is also the one thing here that takes the pointer,
-                        because it is the one thing here meant to be clicked.
+                        anybody can find.
                     -->
                     <Border HorizontalAlignment="Right"
                             VerticalAlignment="Bottom"
                             CornerRadius="16"
                             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                             Visibility="{x:Bind ViewModel.ShowsNotesButton, Mode=OneWay}">
-                        <Button Width="32"
+                        <Button x:Name="ShowNotes"
+                                Width="32"
                                 Height="32"
                                 Padding="0"
                                 CornerRadius="16"
                                 Click="OnShowNotes"
-                                ToolTipService.ToolTip="Show the notes about this scan"
-                                AutomationProperties.Name="Show the notes about this scan">
-                            <FontIcon Glyph="&#xE946;" FontSize="14" />
+                                ToolTipService.ToolTip="{x:Bind ViewModel.NotesButtonLabel, Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind ViewModel.NotesButtonLabel, Mode=OneWay}">
+                            <FontIcon Glyph="{x:Bind ViewModel.NotesButtonGlyph, Mode=OneWay}" FontSize="14" />
                         </Button>
                     </Border>
                 </Grid>

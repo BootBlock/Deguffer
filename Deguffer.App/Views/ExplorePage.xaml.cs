@@ -269,6 +269,12 @@ public sealed partial class ExplorePage : Page
     {
         ViewModel.NotesDismissed = dismissed;
         App.Preferences.Update(current => current with { ExploreNotesDismissed = dismissed });
+
+        // The button that was just pressed is the one that has gone, so focus would be left on a
+        // collapsed element and the reader would have to cross the whole page to reach the other.
+        // §7 asks for a sentence to stay reachable "by whatever the reader is using", and a keyboard
+        // is one of those. The corner keeps the focus instead, whichever way the toggle went.
+        _ = (dismissed ? ShowNotes : DismissNotes).Focus(FocusState.Programmatic);
     }
 
     /// <summary>

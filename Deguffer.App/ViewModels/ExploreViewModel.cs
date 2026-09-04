@@ -193,6 +193,23 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial bool NotesDismissed { get; set; }
 
     /// <summary>
+    /// What the collapsed button shows, and what it is called.
+    ///
+    /// <para>Two states rather than one, because one of the four notes is a warning and the other
+    /// three are not. §7.1 lets Explore's totals be lower bounds "provided the picture states which
+    /// it is", and after a removal the stale note is the whole of that statement: the sizes on
+    /// screen still count what has gone. Collapsed behind a fixed <c>i</c> it would arrive with
+    /// nothing on screen changing, because the route note usually has the button on screen already.
+    /// So the glyph and the name change with it, and neither is colour alone.</para>
+    /// </summary>
+    public string NotesButtonGlyph => Selection.HasStaleNote ? WarningGlyph : InfoGlyph;
+
+    /// <inheritdoc cref="NotesButtonGlyph"/>
+    public string NotesButtonLabel => Selection.HasStaleNote
+        ? "Show the notes about this scan. One of them is a warning."
+        : "Show the notes about this scan";
+
+    /// <summary>
     /// Whether the notes are on the card. See <see cref="ShowsNotesButton"/> for the other half.
     /// </summary>
     public bool ShowsNotes => HasNotes && !NotesDismissed;
@@ -210,6 +227,11 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Whether any of the four notes has something to say.</summary>
     private bool HasNotes =>
         Selection.HasNote || Selection.HasStaleNote || HasViewNote || HasRouteNote;
+
+    // Segoe Fluent Icons, by code point rather than pasted: a private-use glyph reads back as
+    // nothing at all through a file tool, so the literal is the one form that can be checked.
+    private const string InfoGlyph = "\uE946";
+    private const string WarningGlyph = "\uE7BA";
 
     /// <summary>
     /// Whether to offer a relaunch as administrator, on the same terms the Storage page offers it:
@@ -647,6 +669,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowsNotes));
         OnPropertyChanged(nameof(ShowsNotesButton));
+        OnPropertyChanged(nameof(NotesButtonGlyph));
+        OnPropertyChanged(nameof(NotesButtonLabel));
     }
 
     private void Report(ExploreProgress progress)
