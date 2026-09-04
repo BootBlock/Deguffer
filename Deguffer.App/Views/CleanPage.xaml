@@ -88,11 +88,19 @@
                            VerticalAlignment="Center" />
 
                 <!-- Tier is text on a tinted chip, never colour alone: the classification must
-                     survive a flat background and a high-contrast theme (§6.5). -->
+                     survive a flat background and a high-contrast theme (§6.5).
+
+                     Two words name the tier and do not explain it, so the explanation the About
+                     page gives is on the chip itself. The chip is not a tab stop, so a tooltip
+                     alone would leave a screen reader with the two words: the same sentence is
+                     its help text. -->
                 <ContentControl Grid.Column="3"
                                 HorizontalAlignment="Right"
                                 Content="{x:Bind TierLabel}"
-                                Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
+                                Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
+                                ToolTipService.ToolTip="{x:Bind TierExplanation}"
+                                AutomationProperties.Name="{x:Bind TierLabel}"
+                                AutomationProperties.HelpText="{x:Bind TierExplanation}" />
 
                 <TextBlock Grid.Column="4"
                            Text="{x:Bind SizeLabel}"
@@ -128,9 +136,15 @@
 
                             <!-- Tier is text on a tinted chip, never colour alone:
                                  the classification must survive a flat background
-                                 and a high-contrast theme (§6.5). -->
+                                 and a high-contrast theme (§6.5). The chip carries
+                                 the tier's own explanation, by pointer and by help
+                                 text, because two words name it without saying what
+                                 it means. -->
                             <ContentControl Content="{x:Bind TierLabel}"
-                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}" />
+                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
+                                            ToolTipService.ToolTip="{x:Bind TierExplanation}"
+                                            AutomationProperties.Name="{x:Bind TierLabel}"
+                                            AutomationProperties.HelpText="{x:Bind TierExplanation}" />
                         </StackPanel>
 
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"

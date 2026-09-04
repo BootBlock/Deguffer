@@ -122,6 +122,12 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string TierLabel => Finding.Provider.Tier.ToDisplayName();
 
+    /// <summary>
+    /// What the badge's tier means, for the reader who has never opened the About page. §3's
+    /// classification is the product, and a two-word chip states it without explaining it.
+    /// </summary>
+    public string TierExplanation => Finding.Provider.Tier.ToExplanation();
+
     public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
 
     /// <summary>

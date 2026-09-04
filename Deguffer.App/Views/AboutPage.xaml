@@ -116,34 +116,38 @@
 
                     <StackPanel Spacing="4">
                         <ContentControl Content="Regenerable cache"
+                                        AutomationProperties.Name="Regenerable cache"
                                         Style="{StaticResource TierChipRegenerableCache}"
                                         HorizontalAlignment="Left" />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="Whatever made it re-creates it on demand. Deleting costs a slower next use and nothing else, so these are selected for you by default." />
+                                   Text="{x:Bind RegenerableCacheExplanation}" />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
                         <ContentControl Content="Regenerable, with cost"
+                                        AutomationProperties.Name="Regenerable, with cost"
                                         Style="{StaticResource TierChipRegenerableWithCost}"
                                         HorizontalAlignment="Left" />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="Re-created only by re-downloading gigabytes or re-indexing for minutes. Offered, but never selected for you." />
+                                   Text="{x:Bind RegenerableWithCostExplanation}" />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
                         <ContentControl Content="User data"
+                                        AutomationProperties.Name="User data"
                                         Style="{StaticResource TierChipUserData}"
                                         HorizontalAlignment="Left" />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="Logs, histories and saved sessions living in a folder called cache. Deleting loses them permanently." />
+                                   Text="{x:Bind UserDataExplanation}" />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
                         <ContentControl Content="Do not touch"
+                                        AutomationProperties.Name="Do not touch"
                                         Style="{StaticResource TierChipDoNotTouch}"
                                         HorizontalAlignment="Left" />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="Config, credentials, live state, and anything Deguffer cannot prove is idle. Never offered — a child a provider does not recognise lands here rather than being assumed safe." />
+                                   Text="{x:Bind DoNotTouchExplanation}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
