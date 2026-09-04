@@ -79,6 +79,13 @@ public static class FindingStatusExtensions
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.
         FindingStatus.NeedsElevation => "Needs administrator rights",
-        _ => status.ToString(),
+        // Throwing rather than falling back on the member's own name, which is what the enum-to-UI
+        // extensions elsewhere do. A name is a plausible-looking label, so a state added without
+        // words of its own would reach a row reading "RecentContentHeldBack" while every test in
+        // FindingStatusTests stayed green — the identifier is non-empty and distinct, which is all
+        // they can check. The arm itself is unreachable: FindingViewModel.Status only ever returns
+        // a named member, and CS8524 is why it has to be written at all.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(status), status, "This status has no words of its own yet."),
     };
 }

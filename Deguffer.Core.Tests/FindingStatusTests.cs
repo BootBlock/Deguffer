@@ -13,8 +13,8 @@ public sealed class FindingStatusTests
 {
     /// <summary>
     /// The dangerous direction: exactly one state may claim the folder is clear. The three
-    /// neighbouring states measure zero as well, and the "show items already clear" filter hides a
-    /// row on this label alone.
+    /// neighbouring states measure zero as well, and telling the user a folder is clear when
+    /// Deguffer never read it is the whole of issue #38.
     /// </summary>
     [Theory]
     [InlineData(FindingStatus.AwaitingSourceFolders)]
