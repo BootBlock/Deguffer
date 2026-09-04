@@ -240,7 +240,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         // link and passes — §5.6's negative made vacuous, in the worst of its forms.
         if (LongPath.IsReparsePoint(home))
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 $"Leaving '{home}' alone: it is a link to somewhere else, and Deguffer does not look "
                 + "through a link.");
         }
@@ -293,6 +293,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
+            WasNotExamined = targets.Count == 0 && declined.Count > 0,
         };
     }
 

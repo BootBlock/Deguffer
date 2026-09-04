@@ -231,6 +231,9 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
 
+        // Nothing targeted and something declined, so the row must not read "Already clear".
+        Assert.True(plan.WasNotExamined);
+
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(bystander), "planning looked through a junctioned bin root");
@@ -258,6 +261,8 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains(Sid, StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
+
+        Assert.True(plan.WasNotExamined);
 
         await provider.ExecuteAsync(plan);
 

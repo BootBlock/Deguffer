@@ -149,6 +149,7 @@ public sealed class CrashDumpProvider : CleanupProviderBase
             ProtectedPaths = Protect([.. scan.Protected]),
             Notes = notes,
             Fallback = measured.Fallback,
+            WasNotExamined = scan.NothingWasExamined,
         };
     }
 

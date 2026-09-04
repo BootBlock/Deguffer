@@ -174,7 +174,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         // for this root resolved through the same link and passed.
         if (LongPath.IsReparsePoint(root))
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "
                 + "through a link.");
         }
@@ -243,6 +243,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
+            WasNotExamined = targets.Count == 0 && scan.Links.Count > 0,
         };
     }
 

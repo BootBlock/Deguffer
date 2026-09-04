@@ -203,21 +203,37 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         foreach (var answer in new[] { "", "not json at all", "{ \"success\": false }", "{ \"success\":" })
         {
-            var plan = await CreateProvider(Reporting(clean: answer)).PlanAsync();
+            var provider = CreateProvider(Reporting(clean: answer));
+
+            // conda is installed, so the row is present with nothing to reclaim — and 64 KB of
+            // cache sits behind a plan the shell would otherwise render as "Already clear".
+            Assert.True(await provider.IsPresentAsync());
+
+            var plan = await provider.PlanAsync();
 
             Assert.True(plan.IsEmpty);
             Assert.Contains(plan.Notes, n =>
                 n.Message.Contains("would count the packages", StringComparison.Ordinal));
+            Assert.True(plan.WasNotExamined);
         }
     }
 
     [Fact]
     public async Task OffersNothingWhenCondaDoesNotSayWhereItsCachesAre()
     {
-        var plan = await CreateProvider(Reporting(info: "not json")).PlanAsync();
+        var provider = CreateProvider(Reporting(info: "not json"));
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("did not describe", StringComparison.Ordinal));
+
+        // An admission rather than a clean bill of health: conda would not say where to look, so
+        // nothing here was examined.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     [Fact]
@@ -227,6 +243,10 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("cached nothing yet", StringComparison.Ordinal));
+
+        // The other side of the boundary: the caches were located and are genuinely empty, so
+        // "Already clear" is the true answer and must stay available.
+        Assert.False(plan.WasNotExamined);
     }
 
     [Fact]
@@ -238,6 +258,7 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("nothing unused", StringComparison.Ordinal));
+        Assert.False(plan.WasNotExamined);
     }
 
     /// <summary>

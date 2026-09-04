@@ -180,6 +180,9 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
             n.Message.Contains("NVIDIA", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
 
+        // Nothing targeted and something declined, so the row must not read "Already clear".
+        Assert.True(plan.WasNotExamined);
+
         await provider.ExecuteAsync(plan);
 
         Assert.True(
@@ -213,6 +216,8 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("DXCache", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
+
+        Assert.True(plan.WasNotExamined);
 
         await provider.ExecuteAsync(plan);
 

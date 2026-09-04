@@ -121,7 +121,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             // No documented default to fall back on: the store directory carries a layout version
             // in its name (v3, v10, …) that moves between pnpm releases, so a guessed path would
             // either miss the store or measure a superseded one beside it.
-            return EmptyPlan("pnpm did not say where its store is, so nothing is offered rather than guessed.");
+            return UnexaminedPlan("pnpm did not say where its store is, so nothing is offered rather than guessed.");
         }
 
         if (!LongPath.DirectoryExists(store))

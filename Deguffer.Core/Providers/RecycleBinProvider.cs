@@ -233,6 +233,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
+            WasNotExamined = targets.Count == 0 && declined.Count > 0,
         };
     }
 

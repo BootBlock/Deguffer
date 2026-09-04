@@ -631,6 +631,11 @@ public sealed class ChromiumCacheProviderTests : IDisposable
             n.Message.Contains("GPUCache", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
 
+        // The same reasoning as the note above, carried to the row: nothing was targeted and this
+        // application's only cache was declined, so the shell must not call the row clear.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+
         await provider.ExecuteAsync(plan);
 
         Assert.True(

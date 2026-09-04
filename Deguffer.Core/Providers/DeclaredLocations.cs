@@ -26,6 +26,18 @@ public sealed record DeclaredLocationScan(
 {
     /// <summary>Whether this machine gave the provider anything at all to say.</summary>
     public bool FoundNothing => Targets.Count == 0 && Declined.Count == 0;
+
+    /// <summary>
+    /// Whether a plan built from this scan would offer nothing while leaving a declared path
+    /// unexamined — the combination <see cref="FoundNothing"/> deliberately excludes.
+    ///
+    /// <para>A scan with a decline and no target passes the "nothing found" gate, so the provider
+    /// builds its ordinary plan and that plan has no steps. See
+    /// <see cref="CleanupPlan.WasNotExamined"/> for why a row in that state must not read
+    /// "Already clear": a junctioned local repository is present, measures zero, and holds
+    /// everything.</para>
+    /// </summary>
+    public bool NothingWasExamined => Targets.Count == 0 && Declined.Count > 0;
 }
 
 /// <summary>
