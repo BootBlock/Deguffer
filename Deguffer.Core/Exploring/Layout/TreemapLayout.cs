@@ -34,6 +34,11 @@ public static class TreemapLayout
     /// <para>Throws for a tree whose children are not ordered by size. See
     /// <see cref="ExploreChildOrder"/>: a scan still running publishes a tree ordered by name, and
     /// this would lay one out into rectangles that look like a treemap and are not one.</para>
+    ///
+    /// <para>An array rather than the list it is built in, because every consumer indexes it and
+    /// <see cref="Rendering.TileRasteriser"/> does so once per rectangle per band of every repaint.
+    /// That is a couple of million reads a frame on a full canvas, and an interface indexer
+    /// returning a 32-byte struct is not free at that count (G4).</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
         ExploreTree tree,
@@ -59,7 +64,7 @@ public static class TreemapLayout
 
         if (width <= 0 || height <= 0 || tree.SizeOf(root) <= 0)
         {
-            return tiles;
+            return tiles.ToArray();
         }
 
         var pending = new Stack<(int Node, int Depth, float X, float Y, float Width, float Height)>();
@@ -92,7 +97,7 @@ public static class TreemapLayout
             Place(tree, frame.Node, frame.Depth + 1, area, limits, tiles, pending);
         }
 
-        return tiles;
+        return tiles.ToArray();
     }
 
     /// <summary>

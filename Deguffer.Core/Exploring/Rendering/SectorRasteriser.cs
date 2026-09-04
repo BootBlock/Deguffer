@@ -67,8 +67,8 @@ public static class SectorRasteriser
 
         // One colour per sector, before a single pixel is written. Resolving it inside the loop
         // instead would walk a node's ancestors and index the palette three million times per
-        // repaint on a 4K canvas, for an answer that changes only with the sector (G4). This is what
-        // TileRasteriser gets for free by painting one shape at a time.
+        // repaint on a 4K canvas, for an answer that changes only with the sector (G4).
+        // TileRasteriser hoists its colours the same way, for the same reason.
         var colours = new TileColour[sectors.Count];
 
         for (var i = 0; i < sectors.Count; i++)

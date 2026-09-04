@@ -43,9 +43,14 @@ public sealed class TileHitTest
         // object per cell for a structure that never changes after construction.
         for (var i = 0; i < tiles.Count; i++)
         {
-            foreach (var cell in CellsOf(tiles[i]))
+            var (left, top, right, bottom) = CellsOf(tiles[i]);
+
+            for (var row = top; row <= bottom; row++)
             {
-                _cellStart[cell + 1]++;
+                for (var column = left; column <= right; column++)
+                {
+                    _cellStart[(row * _columns) + column + 1]++;
+                }
             }
         }
 
@@ -59,9 +64,15 @@ public sealed class TileHitTest
 
         for (var i = 0; i < tiles.Count; i++)
         {
-            foreach (var cell in CellsOf(tiles[i]))
+            var (left, top, right, bottom) = CellsOf(tiles[i]);
+
+            for (var row = top; row <= bottom; row++)
             {
-                _entries[_cellStart[cell] + cursor[cell]++] = i;
+                for (var column = left; column <= right; column++)
+                {
+                    var cell = (row * _columns) + column;
+                    _entries[_cellStart[cell] + cursor[cell]++] = i;
+                }
             }
         }
     }
@@ -107,24 +118,20 @@ public sealed class TileHitTest
     private static bool Contains(ExploreTile tile, float x, float y) =>
         x >= tile.X && x < tile.X + tile.Width && y >= tile.Y && y < tile.Y + tile.Height;
 
-    /// <summary>Every cell this tile overlaps, clipped to the canvas.</summary>
-    private IEnumerable<int> CellsOf(ExploreTile tile)
-    {
-        var left = Math.Max(0, (int)(tile.X / CellSize));
-        var top = Math.Max(0, (int)(tile.Y / CellSize));
+    /// <summary>
+    /// The inclusive block of cells this tile overlaps, clipped to the canvas.
+    ///
+    /// <para>Bounds rather than the cells themselves. Both passes above walk them, and an iterator
+    /// would allocate a state machine per tile per pass — a hundred thousand of them for a treemap
+    /// of a real volume, rebuilt whenever the map is laid out again (G5).</para>
+    /// </summary>
+    private (int Left, int Top, int Right, int Bottom) CellsOf(ExploreTile tile) => (
+        Math.Max(0, (int)(tile.X / CellSize)),
+        Math.Max(0, (int)(tile.Y / CellSize)),
 
         // The right and bottom edges are exclusive, so a tile ending exactly on a cell boundary
         // must not claim the cell beyond it — subtracting an epsilon of a pixel is what keeps the
         // index agreeing with Contains rather than holding entries it will always reject.
-        var right = Math.Min(_columns - 1, (int)((tile.X + tile.Width - 0.001f) / CellSize));
-        var bottom = Math.Min(_rows - 1, (int)((tile.Y + tile.Height - 0.001f) / CellSize));
-
-        for (var row = top; row <= bottom; row++)
-        {
-            for (var column = left; column <= right; column++)
-            {
-                yield return (row * _columns) + column;
-            }
-        }
-    }
+        Math.Min(_columns - 1, (int)((tile.X + tile.Width - 0.001f) / CellSize)),
+        Math.Min(_rows - 1, (int)((tile.Y + tile.Height - 0.001f) / CellSize)));
 }

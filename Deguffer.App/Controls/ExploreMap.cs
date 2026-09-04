@@ -3,6 +3,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -34,6 +35,22 @@ namespace Deguffer.App.Controls;
 /// </summary>
 public sealed class ExploreMap : UserControl
 {
+    /// <summary>
+    /// How long a run of size changes has to stop for before the map is drawn again.
+    ///
+    /// <para>Dragging a window edge raises <see cref="FrameworkElement.SizeChanged"/> tens of times
+    /// a second, and each one is a whole layout of the tree, a fresh bitmap, and a pass over every
+    /// pixel of it — at 3840 by 2160 that is eight million pixels shaded several times over. Drawing
+    /// each of those in turn is not merely repeated work: it is work for a size that was superseded
+    /// before the paint finished, so the window falls further behind the pointer the longer the drag
+    /// goes on.</para>
+    ///
+    /// <para>So the size changes are coalesced and only the size the user settles on is drawn. In
+    /// between, the <see cref="Image"/> stretches the bitmap it already has over the new bounds,
+    /// which is the right picture at the wrong scale and is on screen with no work at all.</para>
+    /// </summary>
+    private static readonly TimeSpan ResizeSettleTime = TimeSpan.FromMilliseconds(120);
+
     private readonly Image _surface = new()
     {
         // The bitmap is rendered at the display's pixel size and stretched back over the control's
@@ -47,6 +64,8 @@ public sealed class ExploreMap : UserControl
         // label rather than the shape under it would select whatever the label happened to overlap.
         IsHitTestVisible = false,
     };
+
+    private readonly DispatcherQueueTimer _settled;
 
     private ExploreTree? _tree;
     private int _node;
@@ -62,7 +81,12 @@ public sealed class ExploreMap : UserControl
     {
         Content = new Grid { Children = { _surface, _labels } };
 
-        SizeChanged += (_, _) => Redraw();
+        _settled = DispatcherQueue.CreateTimer();
+        _settled.Interval = ResizeSettleTime;
+        _settled.IsRepeating = false;
+        _settled.Tick += (_, _) => Redraw();
+
+        SizeChanged += OnSizeChanged;
         PointerMoved += OnPointerMoved;
         PointerExited += OnPointerExited;
         DoubleTapped += OnDoubleTapped;
@@ -84,10 +108,32 @@ public sealed class ExploreMap : UserControl
             {
                 root.Changed += OnRootChanged;
             }
+
+            // A resize that arrived while this was on screen, and was still waiting to be drawn
+            // when the page was navigated away from, is dropped below rather than rasterised for a
+            // page nobody is looking at. Coming back at that same size raises no SizeChanged, so
+            // this is the only place that owes the redraw — and without it the map stays stretched
+            // over the old canvas for as long as the page is open.
+            if (_drawing is { } drawing
+                && (drawing.Width != DevicePixels(ActualWidth)
+                    || drawing.Height != DevicePixels(ActualHeight)))
+            {
+                Redraw();
+            }
         };
 
         Unloaded += (_, _) =>
         {
+            // A pending redraw for a size this control is no longer showing at. Left running it
+            // would rasterise a whole volume for a page that has been navigated away from.
+            _settled.Stop();
+
+            // The labels go back with it. Dropping the redraw drops the thing that would have put
+            // them back, and Loaded only redraws where the size has actually moved — so without
+            // this a map returned to at the size it was last drawn at comes back with no names on
+            // it at all, and nothing on the page would put them there.
+            _labels.Visibility = Visibility.Visible;
+
             if (XamlRoot is { } root)
             {
                 root.Changed -= OnRootChanged;
@@ -154,15 +200,55 @@ public sealed class ExploreMap : UserControl
         Redraw();
     }
 
+    /// <summary>
+    /// Wait for the drag to stop before redrawing, on the terms
+    /// <see cref="ResizeSettleTime"/> gives.
+    ///
+    /// <para>The first size the control is ever given is drawn at once. There is no bitmap to
+    /// stretch in the meantime, so deferring that one would leave the panel empty for the length of
+    /// the wait every time the page is opened.</para>
+    /// </summary>
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_bitmap is null)
+        {
+            Redraw();
+            return;
+        }
+
+        // The bitmap stretches with the control and the labels do not, because they are real
+        // controls at fixed positions rather than part of the picture. Left visible they would sit
+        // over whichever shape had moved under them, naming it wrongly. They come back with the
+        // layout that puts them where they belong.
+        _labels.Visibility = Visibility.Collapsed;
+
+        // Stopped and started rather than started, so each size change puts the whole wait back and
+        // a drag that is still moving never reaches the end of one.
+        _settled.Stop();
+        _settled.Start();
+    }
+
     private void Redraw()
     {
-        _labels.Children.Clear();
+        // Whatever brought us here is more current than a size change still waiting to be drawn.
+        _settled.Stop();
+
+        // Nothing can see it, and the page asks again as it brings the map back. ExplorePage
+        // collapses this for the List view and calls Show() in the same breath, so without this a
+        // switch to List rasterises a whole volume into a control nobody is looking at — and the
+        // zero-size path below would then drop the bitmap and the buffer, so switching back
+        // allocates 33 MB of both again (G5).
+        if (Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
         _hovered = null;
 
         _scale = XamlRoot?.RasterizationScale ?? 1;
 
-        var width = (int)Math.Round(ActualWidth * _scale);
-        var height = (int)Math.Round(ActualHeight * _scale);
+        var width = DevicePixels(ActualWidth);
+        var height = DevicePixels(ActualHeight);
 
         if (_tree is not { } tree || width <= 0 || height <= 0 || tree.SizeOf(_node) <= 0)
         {
@@ -172,6 +258,7 @@ public sealed class ExploreMap : UserControl
             _bitmap = null;
             _pixels = null;
             _drawing = null;
+            _labels.Children.Clear();
             return;
         }
 
@@ -203,6 +290,14 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
+    /// How many bitmap pixels a control extent of <paramref name="extent"/> device-independent
+    /// pixels asks for. One expression, so that a caller asking whether the drawing still matches
+    /// the control gets the same answer <see cref="Redraw"/> would lay out to.
+    /// </summary>
+    private int DevicePixels(double extent) =>
+        (int)Math.Round(extent * (XamlRoot?.RasterizationScale ?? 1));
+
+    /// <summary>
     /// The canvas ground, taken from the theme rather than fixed.
     ///
     /// <para>§6.5 requires the UI to read correctly on a flat background in either theme, and this
@@ -225,38 +320,92 @@ public sealed class ExploreMap : UserControl
     /// <para>Which shapes are worth labelling is the drawing's decision and is made in Core, where
     /// it can be tested. What is left here is the part that is a control: the text, the colour, and
     /// the turn a sunburst's labels take to lie along their own ring.</para>
+    ///
+    /// <para>The text blocks are kept and written over rather than rebuilt. A scan repaints this
+    /// several times a second, and each rebuild would throw away a few dozen controls and their
+    /// brushes and make the framework measure and arrange a fresh set of them, for text that has
+    /// usually not changed (G5).</para>
     /// </summary>
     private void DrawLabels(ExploreTree tree, ExploreSurface drawing)
     {
-        foreach (var label in drawing.Labels)
+        _labels.Visibility = Visibility.Visible;
+
+        while (_labels.Children.Count < drawing.Labels.Count)
         {
-            var text = new TextBlock
-            {
-                Text = $"{tree.NameOf(label.Node)}  {FreeSpace.Format(tree.SizeOf(label.Node))}",
-                FontSize = 12,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                TextAlignment = label.Centred ? TextAlignment.Center : TextAlignment.Left,
-                Width = label.Width / _scale,
-                Foreground = new SolidColorBrush(Color.FromArgb(
-                    255, label.Colour.Red, label.Colour.Green, label.Colour.Blue)),
-            };
+            _labels.Children.Add(NewLabel());
+        }
 
-            if (label.Rotation != 0)
-            {
-                text.RenderTransformOrigin = new Point(0.5, 0.5);
-                text.RenderTransform = new RotateTransform { Angle = label.Rotation };
-            }
+        while (_labels.Children.Count > drawing.Labels.Count)
+        {
+            _labels.Children.RemoveAt(_labels.Children.Count - 1);
+        }
 
-            // Announced through the list view instead: a label here duplicates a row there, and a
-            // screen reader reading fifty fragments of a picture helps nobody.
-            AutomationProperties.SetAccessibilityView(text, AccessibilityView.Raw);
+        for (var i = 0; i < drawing.Labels.Count; i++)
+        {
+            var label = drawing.Labels[i];
+            var text = (TextBlock)_labels.Children[i];
+
+            text.Text = $"{tree.NameOf(label.Node)}  {FreeSpace.Format(tree.SizeOf(label.Node))}";
+            text.TextAlignment = label.Centred ? TextAlignment.Center : TextAlignment.Left;
+            text.Width = label.Width / _scale;
+
+            ((SolidColorBrush)text.Foreground).Color = Color.FromArgb(
+                255, label.Colour.Red, label.Colour.Green, label.Colour.Blue);
+
+            ((RotateTransform)text.RenderTransform).Angle = label.Rotation;
 
             Canvas.SetLeft(text, label.X / _scale);
             Canvas.SetTop(text, label.Y / _scale);
-
-            _labels.Children.Add(text);
         }
     }
+
+    /// <summary>
+    /// One reusable piece of label text, with everything a repaint never changes already set —
+    /// including the brush and the transform, which are written through rather than replaced.
+    /// </summary>
+    private static TextBlock NewLabel()
+    {
+        var text = new TextBlock
+        {
+            FontSize = 12,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = new SolidColorBrush(),
+
+            // Zero for anything in rectangles, and per label for a sunburst, which turns each one to
+            // lie along its own ring. Always present rather than attached only where it turns: a
+            // transform of no degrees costs nothing to keep, and a branch here would mean a label
+            // reused from a sunburst kept its angle on a treemap.
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform = new RotateTransform(),
+        };
+
+        // Announced through the list view instead: a label here duplicates a row there, and a
+        // screen reader reading fifty fragments of a picture helps nobody.
+        AutomationProperties.SetAccessibilityView(text, AccessibilityView.Raw);
+
+        return text;
+    }
+
+    /// <summary>
+    /// What is under <paramref name="point"/>, in the control's own coordinates.
+    ///
+    /// <para>Mapped through the drawing's own dimensions rather than through the display scale,
+    /// because the two part company for as long as a resize is still settling. The bitmap is
+    /// stretched over the control's new bounds in the meantime, so what is on screen is the old
+    /// canvas scaled to fit, and a pointer mapped by the display scale would answer from geometry
+    /// that is no longer where it is drawn.</para>
+    ///
+    /// <para>§7.1 makes that a safety question rather than a cosmetic one. A right-click picks
+    /// what the menu then acts on, so a pick that disagrees with the picture is a Delete aimed at
+    /// something the user never pointed at — the same mistake <c>ExplorePage</c> avoids by picking
+    /// from the row under the pointer rather than from the last selection.</para>
+    /// </summary>
+    private ExploreHit? At(ExploreSurface drawing, Point point) =>
+        ActualWidth > 0 && ActualHeight > 0
+            ? drawing.At(
+                (float)(point.X * drawing.Width / ActualWidth),
+                (float)(point.Y * drawing.Height / ActualHeight))
+            : null;
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
@@ -265,8 +414,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var point = e.GetCurrentPoint(this).Position;
-        var hit = drawing.At((float)(point.X * _scale), (float)(point.Y * _scale));
+        var hit = At(drawing, e.GetCurrentPoint(this).Position);
 
         // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
         // shape for most of that, so reporting every move would rebuild the same string sixty times
@@ -326,7 +474,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        Picked?.Invoke(this, drawing.At((float)(point.X * _scale), (float)(point.Y * _scale)) switch
+        Picked?.Invoke(this, At(drawing, point) switch
         {
             { IsAggregate: false } hit => hit.Node,
             _ => null,
@@ -340,10 +488,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var point = e.GetPosition(this);
-
-        if (drawing.At((float)(point.X * _scale), (float)(point.Y * _scale))
-            is { IsAggregate: false } hit)
+        if (At(drawing, e.GetPosition(this)) is { IsAggregate: false } hit)
         {
             Activated?.Invoke(this, hit.Node);
         }

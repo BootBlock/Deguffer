@@ -54,10 +54,17 @@ public sealed class TiledSurface : ExploreSurface
     {
         // Which nodes had a rectangle drawn inside them. The layouts emit a parent before its
         // children, so this is complete for every tile by the time the second pass reaches it.
+        //
+        // Both passes are indexed rather than foreached. A treemap of a real volume is tens of
+        // thousands of rectangles, and enumerating an IReadOnlyList boxes the list's own struct
+        // enumerator and dispatches every step through the interface — the same cost TileHitTest
+        // dropped its iterator to avoid, on the same list and once per repaint (G5).
         var covered = new HashSet<int>();
 
-        foreach (var tile in _tiles)
+        for (var i = 0; i < _tiles.Count; i++)
         {
+            var tile = _tiles[i];
+
             if (!tile.IsAggregate && tile.Node != Root)
             {
                 covered.Add(Tree.ParentOf(tile.Node));
@@ -66,12 +73,9 @@ public sealed class TiledSurface : ExploreSurface
 
         var labels = new List<ExploreLabel>();
 
-        foreach (var tile in _tiles)
+        for (var i = 0; i < _tiles.Count && labels.Count < MaximumLabels; i++)
         {
-            if (labels.Count >= MaximumLabels)
-            {
-                break;
-            }
+            var tile = _tiles[i];
 
             if (tile.IsAggregate
                 || tile.Node == Root
