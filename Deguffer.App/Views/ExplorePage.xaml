@@ -207,6 +207,12 @@
             are bound to the same current node. Kept as two controls rather than one that switches
             its own template: a list is a list, and rebuilding a bitmap through a ListView's item
             machinery would be the wrong shape for both.
+
+            Both hide their accelerator tooltips. Auto placement turns a control's first accelerator
+            into a tooltip over the whole of it, so each of these grew a "Delete" that followed the
+            pointer across every row and every shape — an answer to a question nobody asked, sitting
+            over the one action that cannot be undone. The menu below names all five, which is where
+            somebody looks for them.
         -->
         <Border Grid.Row="3"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -214,7 +220,8 @@
                 BorderThickness="1"
                 CornerRadius="6">
             <Grid>
-                <controls:ExploreMap x:Name="Map">
+                <controls:ExploreMap x:Name="Map"
+                                     KeyboardAcceleratorPlacementMode="Hidden">
                     <controls:ExploreMap.KeyboardAccelerators>
                         <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
                         <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
@@ -233,6 +240,7 @@
                 <ListView x:Name="RowsList"
                           Visibility="Collapsed"
                           SelectionMode="Extended"
+                          KeyboardAcceleratorPlacementMode="Hidden"
                           SelectionChanged="OnRowSelectionChanged"
                           DoubleTapped="OnRowsDoubleTapped"
                           ItemsSource="{x:Bind ViewModel.Rows}">
