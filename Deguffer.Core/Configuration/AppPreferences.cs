@@ -107,6 +107,19 @@ public enum ExploreColouring
 /// switching it on lists them with no rescan, and one that turns out to be installed after all is
 /// never hidden by it.
 /// </param>
+/// <param name="ShowAlreadyClear">
+/// Whether to list a location that is installed, readable and has nothing to reclaim. Off by
+/// default: the row states a fact about the machine and offers no decision, so a set of them
+/// pushes the rows that do carry one off the screen.
+///
+/// Only the rows that actually say "Already clear". A location Windows would not let Deguffer
+/// list, and one whose every file is inside the guard on recently changed files, both measure
+/// zero and are not clear at all — each says so in its own words, and neither is hidden by this.
+///
+/// Presentation only, and it hides rather than skips, on the same terms as
+/// <paramref name="ShowNotInstalled"/>: every provider is still scanned, so switching it on lists
+/// them with no rescan.
+/// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
 /// backdrop fights the user's stated accessibility requirement, and that is not negotiable by a
@@ -152,6 +165,7 @@ public sealed record AppPreferences(
     ExploreView Explore = ExploreView.Treemap,
     ExploreColouring ExploreColours = ExploreColouring.Branch,
     bool ShowNotInstalled = false,
+    bool ShowAlreadyClear = false,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false,

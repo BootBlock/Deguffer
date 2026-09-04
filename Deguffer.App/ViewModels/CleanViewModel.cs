@@ -50,7 +50,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Rows arrive one provider at a time and are cleared wholesale between runs; subscribing
         // covers both without every mutation site having to remember to raise this.
-        Findings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoFindings));
+        Findings.CollectionChanged += (_, _) => NotifyEmptyStateChanged();
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
@@ -103,6 +103,14 @@ public sealed partial class CleanViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ShowNotInstalled { get; set; }
 
+    /// <summary>
+    /// Whether to list a location that is installed, readable and has nothing left to reclaim. Set
+    /// from the preference by the view, exactly as <see cref="ShowNotInstalled"/> is, and hiding
+    /// rather than skipping for the same reason: a row switched back on has to be there already.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowAlreadyClear { get; set; }
+
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
 
     [ObservableProperty]
@@ -142,18 +150,35 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     public string CleanPercentLabel => $"{CleanPercent:0}%";
 
+    partial void OnShowNotInstalledChanged(bool value) => RefilterRows();
+
+    partial void OnShowAlreadyClearChanged(bool value) => RefilterRows();
+
     /// <summary>
-    /// A row is drawn when its toolchain is on this machine, or when the user asked to see the ones
-    /// that are not. Applied to every row rather than only to new ones, because the filter changes
+    /// Re-apply both filters to every row, rather than to new ones only, because either can change
     /// under a list that is already built.
     /// </summary>
-    partial void OnShowNotInstalledChanged(bool value)
+    private void RefilterRows()
     {
         foreach (var row in Findings)
         {
-            row.IsListed = value || !row.IsToolchainMissing;
+            row.IsListed = IsListed(row);
         }
+
+        // The collection did not change, so the subscription above raises nothing. Without this a
+        // filter that empties the list leaves the empty state collapsed behind it.
+        NotifyEmptyStateChanged();
     }
+
+    /// <summary>
+    /// A row is drawn unless a filter the user left on hides it. Both hide a row that offers no
+    /// decision: one whose toolchain this machine does not have, and one with nothing left to
+    /// reclaim. Neither hides a row that has something to say, so the two are asked together and
+    /// a row has to pass both.
+    /// </summary>
+    private bool IsListed(FindingViewModel row) =>
+        (ShowNotInstalled || !row.IsToolchainMissing)
+        && (ShowAlreadyClear || !row.IsAlreadyClear);
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
@@ -222,8 +247,36 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// Whether to show the empty state instead of the list. On launch the list is a large blank
     /// card, which reads as a screen that has failed rather than one waiting to be told to start.
+    ///
+    /// <para>Asked of what is drawn rather than of what was found, because a filter can empty the
+    /// list under a scan that found plenty. The commonest case is the one that follows success:
+    /// clean everything, let the run re-plan, and every row is then either clear or absent — both
+    /// hidden by default. Counting rows instead put a blank card at the end of a run that
+    /// worked.</para>
     /// </summary>
-    public bool HasNoFindings => Findings.Count == 0;
+    public bool HasNothingListed => !Findings.Any(f => f.IsListed);
+
+    /// <summary>
+    /// Whether that empty list is the filters' doing rather than an empty machine. The two need
+    /// different words: one says what to press, and the other says why a scan that finished is
+    /// showing nothing, and where to switch it back on.
+    /// </summary>
+    private bool IsHiddenByFilters => Findings.Count > 0 && HasNothingListed;
+
+    public string EmptyStateTitle => IsHiddenByFilters ? "Every row is hidden" : "Nothing scanned yet";
+
+    public string EmptyStateMessage => IsHiddenByFilters
+        ? "The scan found locations, and the filters are hiding all of them. Tick “Show items not "
+          + "installed” above, or switch on “Show items that are already clear” in Settings."
+        : "Preview looks at the locations Deguffer recognises and reports what each one holds. It "
+          + "reads only — nothing is removed until you choose to.";
+
+    private void NotifyEmptyStateChanged()
+    {
+        OnPropertyChanged(nameof(HasNothingListed));
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateMessage));
+    }
 
     public bool CanClean => HasPreview && !IsBusy && Findings.Any(f => f.IsSelected);
 
@@ -500,7 +553,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
-        row.IsListed = ShowNotInstalled || !row.IsToolchainMissing;
+        row.IsListed = IsListed(row);
 
         // One event for both directions: the row's own checkbox and any step within it. Subscribing
         // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays

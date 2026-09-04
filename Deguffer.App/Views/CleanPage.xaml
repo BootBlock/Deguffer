@@ -378,16 +378,17 @@
                             HorizontalAlignment="Center"
                             Spacing="6"
                             Padding="40"
-                            Visibility="{x:Bind ViewModel.HasNoFindings, Mode=OneWay}">
-                    <TextBlock Text="Nothing scanned yet"
+                            Visibility="{x:Bind ViewModel.HasNothingListed, Mode=OneWay}">
+                    <TextBlock Text="{x:Bind ViewModel.EmptyStateTitle, Mode=OneWay}"
                                Style="{StaticResource SectionHeading}"
                                FontSize="15"
                                HorizontalAlignment="Center" />
                     <TextBlock Style="{StaticResource SecondaryText}"
                                FontSize="13"
                                TextAlignment="Center"
+                               TextWrapping="Wrap"
                                MaxWidth="380"
-                               Text="Preview looks at the locations Deguffer recognises and reports what each one holds. It reads only — nothing is removed until you choose to." />
+                               Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}" />
                 </StackPanel>
 
                 <ScrollViewer Padding="0,4">

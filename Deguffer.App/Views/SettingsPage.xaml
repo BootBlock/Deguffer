@@ -47,6 +47,23 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <TextBlock Text="Storage list" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <!-- A location with nothing left to reclaim states a fact about the machine and offers
+                 no decision, so by default it is not drawn: a set of them pushes the rows that do
+                 carry a decision off the screen. Presentation only, and it hides rather than skips
+                 — every location is still scanned, so this takes effect on the list already on
+                 screen with no rescan. The description says which rows it does not touch, because
+                 two others measure zero without being clear at all. -->
+            <views:SettingsRow Glyph="&#xE71C;"
+                               Title="Show items that are already clear"
+                               Description="A location Deguffer has nothing left to reclaim from is hidden by default, as it offers nothing to decide. Switch this on to list them as well. Rows that could not be read, or whose files are all too recent to touch, are always listed.">
+                <views:SettingsRow.Control>
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.ShowAlreadyClear, Mode=TwoWay}"
+                                  AutomationProperties.Name="Show items that are already clear" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <TextBlock Text="Safety" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
 
             <views:SettingsRow Glyph="&#xE730;"

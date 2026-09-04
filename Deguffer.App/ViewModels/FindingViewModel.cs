@@ -168,7 +168,7 @@ public sealed partial class FindingViewModel : ObservableObject
             {
                 { HasUnreadableRoot: true } => "Could not be read",
                 { HasRecentContentHeldBack: true } => "Nothing old enough",
-                _ => "Already clear",
+                _ => AlreadyClear,
             }
             : CanBeSelected
                 ? "Ready to clean"
@@ -216,6 +216,27 @@ public sealed partial class FindingViewModel : ObservableObject
     /// largest reclaimable thing on the disk is one setting away.
     /// </summary>
     public bool IsToolchainMissing => !Finding.IsPresent && !Finding.AwaitingSourceFolders;
+
+    private const string AlreadyClear = "Already clear";
+
+    /// <summary>
+    /// Whether this row is one the "show items already clear" filter hides.
+    ///
+    /// Read off <see cref="StatusLabel"/> rather than restating the condition that produces it,
+    /// because a second copy of that condition is free to disagree with the words on screen — and
+    /// what this filter promises is that it hides exactly the rows saying "Already clear". The two
+    /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
+    /// let Deguffer list, and one whose every file is inside the guard on recently changed files.
+    /// Both stay listed, because each is a thing the user may want to act on.
+    ///
+    /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
+    /// the label needs <see cref="Finding.HasReclaimableSpace"/> to be false, that is the sum of
+    /// every step's reclaimable bytes, and no step is negative — so every step measures zero, and
+    /// <see cref="StepViewModel.CanBeSelected"/> refuses each one. The proof holds only while both
+    /// sides count the same bytes. Moving either to <c>ScanSize.Allocated</c> would break it, and a
+    /// selected row would then be hidden by a filter that is on by default.</para>
+    /// </summary>
+    public bool IsAlreadyClear => StatusLabel == AlreadyClear;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }
