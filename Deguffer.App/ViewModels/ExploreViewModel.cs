@@ -709,6 +709,21 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             _rebuildingDrives = false;
         }
+
+        // A rebuild that hands the same volume back is not a choice, and the guard above stopped it
+        // reading as one. A rebuild that cannot — the drive was unplugged, the disc ejected, the
+        // volume re-locked — has moved the page to a volume nobody picked, and that is a change of
+        // drive however it came about. Leaving the scope and the offer alone there is exactly the
+        // state OnSelectedDriveChanged exists to prevent: one target stated, another scanned.
+        if (chosen is not null
+            && !string.Equals(chosen, SelectedDrive?.RootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ScopeFolder = null;
+
+            // Both, for the reason OnSelectedDriveChanged gives: assigning null over null raises
+            // nothing, so the scope's own handler cannot be relied on to have run.
+            OfferElevation(null);
+        }
     }
 
     private bool CanScan() => !IsBusy && ScanRoot is not null;

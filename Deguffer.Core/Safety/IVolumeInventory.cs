@@ -120,9 +120,14 @@ public sealed class VolumeInventory : IVolumeInventory
     {
         var root = drive.RootDirectory.FullName;
 
-        if (!drive.IsReady || drive.DriveType == DriveType.Network)
+        // Read once. IsReady probes the volume rather than reading a field, and on a share that
+        // probe is the round trip this method exists to spend as few of as it can. Two reads can
+        // also disagree, which would report a volume as ready with nothing else known about it.
+        var ready = drive.IsReady;
+
+        if (!ready || drive.DriveType == DriveType.Network)
         {
-            return new LocalVolume(root, drive.DriveType, drive.IsReady);
+            return new LocalVolume(root, drive.DriveType, ready);
         }
 
         try
