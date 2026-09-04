@@ -36,6 +36,12 @@ public sealed partial class ExplorePage : Page
     private bool _showingSelectedRows;
 
     /// <summary>
+    /// Whether the user has touched the list since it last settled on rows or containers it was
+    /// given. See <see cref="IsUserSelecting"/>.
+    /// </summary>
+    private bool _touchedSinceSettled;
+
+    /// <summary>
     /// Where the list sits before <see cref="OnNotesResized"/> moves its bottom edge. Read once,
     /// because every later read would be of a value this page had already written.
     /// </summary>
@@ -69,6 +75,10 @@ public sealed partial class ExplorePage : Page
             // agreement: the highlight goes back onto whichever of the new rows the selection still
             // names. ShowCurrentNode has already put the map's outlines on the new drawing.
             ShowSelectedRows();
+
+            // Whatever the list reports from here until the user touches it again is the list's own
+            // doing, however long it takes to arrive. See IsUserSelecting.
+            _touchedSinceSettled = false;
         };
 
         InitializeComponent();
@@ -81,6 +91,23 @@ public sealed partial class ExplorePage : Page
         // needs none of this — nothing between it and the pointer handles anything.
         RowsList.AddHandler(
             RightTappedEvent, new RightTappedEventHandler(OnRowsRightTapped), handledEventsToo: true);
+
+        // The two ways a person moves this list's selection, marked as they arrive rather than
+        // inferred afterwards. Both run before the control has changed anything: a pointer press is
+        // subscribed past the handled flag, as the right-tap above is and for the same reason, and
+        // the keyboard is taken on the preview because a ListView handles the arrow keys itself and
+        // an ordinary KeyDown handler would run after the selection had already moved. See
+        // IsUserSelecting.
+        RowsList.AddHandler(
+            PointerPressedEvent, new PointerEventHandler(OnRowsTouched), handledEventsToo: true);
+
+        RowsList.PreviewKeyDown += OnRowsTouched;
+
+        // The other moment the list settles on its own, and the one a rewrite does not cover: its
+        // containers are built again when it comes back into the tree, on a return to a page held
+        // by NavigationCacheMode. ShowAs covers the same thing for the map's half of the toggle.
+        // See IsUserSelecting.
+        RowsList.Loaded += (_, _) => _touchedSinceSettled = false;
 
         // One signal, followed by both screens that show a selection. The list is not on screen
         // while the map is and keeps whatever was highlighted in it until something says otherwise,
@@ -154,6 +181,14 @@ public sealed partial class ExplorePage : Page
 
         RowsList.Visibility = listed ? Visibility.Visible : Visibility.Collapsed;
         Map.Visibility = listed ? Visibility.Collapsed : Visibility.Visible;
+
+        if (listed)
+        {
+            // Back from behind the map, so the list realises its containers again and may settle on
+            // one. Nothing here writes the highlight, so no other reset covers it (see
+            // IsUserSelecting).
+            _touchedSinceSettled = false;
+        }
 
         ShowCurrentNode();
     }
@@ -232,6 +267,9 @@ public sealed partial class ExplorePage : Page
         finally
         {
             _showingSelectedRows = false;
+
+            // A write of the page's own is not the user touching the list. See IsUserSelecting.
+            _touchedSinceSettled = false;
         }
     }
 
@@ -355,13 +393,37 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnRowSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsUserSelecting)
+        if (IsUserSelecting)
         {
+            ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<ExploreRow>().Select(r => r.Node)]);
+
             return;
         }
 
-        ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<ExploreRow>().Select(r => r.Node)]);
+        // Refused, and the list is still showing it. Nothing to take off while one of the page's own
+        // writes is in flight, because that write ends by calling ShowSelectedRows itself. A report
+        // arriving outside one is the control having highlighted a row on its own, and leaving that
+        // standing is the same pre-selection §7.1 forbids, one screen further along: the menu and
+        // the accelerators act on the view model, so the list would name a folder Delete is not
+        // pointed at. Put back through the queue rather than here, so the list is not written to
+        // from inside its own report.
+        if (!_showingSelectedRows && !ViewModel.IsShowingRows)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                // Asked again on arrival. A ListView commits a pointer selection on the release, so
+                // a press can land between the two and take the list back; this repair is then
+                // about a state that has already gone, and running it would drop that gesture.
+                if (!_touchedSinceSettled)
+                {
+                    ShowSelectedRows();
+                }
+            });
+        }
     }
+
+    /// <summary>Note that the user has touched the list. See <see cref="IsUserSelecting"/>.</summary>
+    private void OnRowsTouched(object sender, RoutedEventArgs e) => _touchedSinceSettled = true;
 
     /// <summary>
     /// Whether a selection change arriving from the list is the user's doing.
@@ -372,8 +434,32 @@ public sealed partial class ExplorePage : Page
     /// intermediate state of that write. Taken for a gesture, either replaces the selection the
     /// user made with whatever the rewrite had reached — and on a rescan those are node numbers
     /// belonging to the tree before it, which the arriving one cannot place at all.</para>
+    ///
+    /// <para><b>Neither window closes when the page stops writing.</b> A <c>ListView</c> settles on
+    /// rows and containers it has just been given during a later layout pass, and it can select a
+    /// row of its own accord there — reported after <c>Show</c> has returned and after both flags
+    /// above have gone false. The page then took that for a gesture, and §7.1's "Explore never
+    /// pre-selects" stopped being true: the status line named a folder nobody had picked, and the
+    /// menu and the accelerators act on exactly that selection. Reported against a navigation into
+    /// a folder holding one entry, where the control puts a focused index back and the only row
+    /// there is is the one it lands on. <b>The control's own write could not be provoked on
+    /// demand</b>, under driven input, on this code or on the code the report was filed against, so
+    /// what was measured is the page's response to such a write rather than the control making
+    /// one.</para>
+    ///
+    /// <para>So the third term is not a window at all. It asks whether the user has touched the
+    /// list since it last settled on rows or containers it was given, which is a question with an
+    /// answer however late the report is. Both gestures that move a selection are marked as they
+    /// arrive and before the control acts on them, so a genuine click or arrow key counts on the
+    /// first press after a navigation rather than the second.</para>
+    ///
+    /// <para>A row selected straight through UI Automation carries neither, and is refused with the
+    /// rest. From in here it cannot be told apart from the control's own write, and §7.1's
+    /// direction is to drop a pick nobody can attribute rather than to act on one. The keyboard and
+    /// the pointer both reach every row, so nothing is unreachable by that.</para>
     /// </summary>
-    private bool IsUserSelecting => !_showingSelectedRows && !ViewModel.IsShowingRows;
+    private bool IsUserSelecting =>
+        !_showingSelectedRows && !ViewModel.IsShowingRows && _touchedSinceSettled;
 
     /// <summary>
     /// Two clicks go in. A folder is descended into and a file is opened, which is what a double
