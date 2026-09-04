@@ -105,6 +105,29 @@ public sealed record CleanupPlan
     public bool HasUnreadableRoot { get; init; }
 
     /// <summary>
+    /// Whether this plan's subject was never examined, because Deguffer declined to look at it or
+    /// could not establish where to look.
+    ///
+    /// <para>The counterpart to <see cref="HasUnreadableRoot"/>, and deliberately not the same flag:
+    /// the two send the reader to different places. That one is Windows refusing a listing, and the
+    /// answer to it is permissions. This one is Deguffer's own decision — a root that turned out to
+    /// be a link, or a tool that would not say where its cache is — and there are no permissions to
+    /// check. Relocating a cache onto another drive with a junction is a thing developers do on
+    /// purpose, so "could not be read" would send one hunting a fault that is not there.</para>
+    ///
+    /// <para>What it shares with that flag is the reason it exists at all: a present row with
+    /// nothing to reclaim renders as "Already clear", and that is a claim about the location. It is
+    /// no more true of a folder nobody looked in than of one nobody was allowed to read, and the
+    /// junctioned root behind it is routinely the largest thing this tool would have found.</para>
+    ///
+    /// <para>Set on the plan as a whole rather than per root, because every case that sets it
+    /// returns early with nothing examined and nothing measured. A plan that examined part of its
+    /// subject and declined the rest says which part in <see cref="Notes"/>, and its figures are
+    /// about what it did look at.</para>
+    /// </summary>
+    public bool WasNotExamined { get; init; }
+
+    /// <summary>
     /// Whether any step here cannot be carried out without administrator rights.
     ///
     /// Separate from <see cref="Fallback"/> on purpose: that one is about how a size was arrived at,

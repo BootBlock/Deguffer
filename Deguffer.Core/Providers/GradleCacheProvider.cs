@@ -102,7 +102,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         // named here resolves through the same link.
         if (LongPath.IsReparsePoint(_root))
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 $"Leaving '{_root}' alone: it is a link to somewhere else, and Deguffer does not look "
                 + "through a link.");
         }

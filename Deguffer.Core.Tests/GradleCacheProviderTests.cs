@@ -105,6 +105,39 @@ public sealed class GradleCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("daemon", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Moving <c>.gradle</c> onto another drive with a junction is common, and the enumeration
+    /// never classifies the directory it is handed — so a junctioned root would hand back the far
+    /// side's ordinary children, target the recognised ones, and pass every §5.6 assertion, because
+    /// each survivor named here resolves through the same link.
+    ///
+    /// <para>What the decline leaves behind is a row the shell must not call clear. The probe
+    /// follows the link, so the row is present with nothing to reclaim, and the caches on the far
+    /// side are routinely the largest thing Deguffer would have found on the machine.</para>
+    /// </summary>
+    [Fact]
+    public async Task DeclinesARootThatIsItselfALink()
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var stranger = CreateAt(outside, "caches", 4096);
+        Directory.CreateSymbolicLink(Path.Combine(_environment.UserProfile, ".gradle"), outside);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(stranger));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+
+        // Not HasUnreadableRoot: Windows refused nothing here. Deguffer declined, and the two
+        // states send the reader to different places.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+    }
+
     [Fact]
     public async Task WarnsWhenAGradleProcessIsHoldingTheCacheOpen()
     {
@@ -182,6 +215,11 @@ public sealed class GradleCacheProviderTests : IDisposable
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root));
         Assert.Empty(plan.TargetedPaths);
+
+        // The other half of the pair, kept apart: Windows refused this listing, so the answer the
+        // user needs is permissions. The sibling test above is Deguffer's own decision, where there
+        // are no permissions to check.
+        Assert.False(plan.WasNotExamined);
     }
 
     /// <summary>

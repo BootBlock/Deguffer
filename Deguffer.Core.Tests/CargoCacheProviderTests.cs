@@ -265,11 +265,22 @@ public sealed class CargoCacheProviderTests : IDisposable
         Populate(Path.Combine(outside, "git", "checkouts"));
         Directory.CreateSymbolicLink(Home, outside);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        // The probe follows the link, so the row is present with nothing to reclaim — and without
+        // the flag below the shell renders that as "Already clear", about a home nobody looked in.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(Directory.Exists(stranger));
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+
+        // Not HasUnreadableRoot: Windows refused nothing here. Deguffer declined, and the two
+        // states send the reader to different places.
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
     }
 
     /// <summary>

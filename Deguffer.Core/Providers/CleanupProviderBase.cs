@@ -137,6 +137,15 @@ public abstract class CleanupProviderBase : ICleanupProvider
     };
 
     /// <summary>
+    /// A plan with nothing to do because nothing was looked at, and the reason the user is shown.
+    ///
+    /// Distinct from <see cref="EmptyPlan"/> for the shell's sake rather than the executor's: both
+    /// are empty and neither removes anything, but only one of them may be rendered as "Already
+    /// clear". See <see cref="CleanupPlan.WasNotExamined"/>.
+    /// </summary>
+    protected CleanupPlan UnexaminedPlan(string why) => EmptyPlan(why) with { WasNotExamined = true };
+
+    /// <summary>
     /// §5.6 — capture which protected paths exist now, so verification can tell "survived" from
     /// "was never there".
     /// </summary>

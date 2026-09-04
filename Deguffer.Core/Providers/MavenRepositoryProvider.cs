@@ -204,7 +204,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // often as it is typed, so this is refused rather than trusted.
         if (LongPath.Contains(repository, Home))
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 $"Your Maven settings.xml points the local repository at {repository}, which holds "
                 + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.");
         }
@@ -215,7 +215,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         if (ProtectedNames.FirstOrDefault(n => LongPath.Contains(Path.Combine(Home, n.RelativePath), repository))
             is { RelativePath.Length: > 0 } named)
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 $"Your Maven settings.xml points the local repository at {repository}, which is "
                 + $"'{named.RelativePath}' in your Maven home. Deguffer never removes that, so it is "
                 + "leaving it alone.");
@@ -223,7 +223,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
         if (Declare(repository) is not { } roots)
         {
-            return EmptyPlan(
+            return UnexaminedPlan(
                 $"Your Maven settings.xml points the local repository at {repository}, which is a whole "
                 + "volume rather than a directory inside one. Deguffer does not target a volume root.");
         }

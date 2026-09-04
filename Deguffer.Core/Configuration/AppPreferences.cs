@@ -113,8 +113,9 @@ public enum ExploreColouring
 /// pushes the rows that do carry one off the screen.
 ///
 /// Only the rows that actually say "Already clear". A location Windows would not let Deguffer
-/// list, and one whose every file is inside the guard on recently changed files, both measure
-/// zero and are not clear at all — each says so in its own words, and neither is hidden by this.
+/// list, one Deguffer declined to look at or could not locate, and one whose every file is inside
+/// the guard on recently changed files, all measure zero and are not clear at all — each says so
+/// in its own words, and none of them is hidden by this.
 ///
 /// Presentation only, and it hides rather than skips, on the same terms as
 /// <paramref name="ShowNotInstalled"/>: every provider is still scanned, so switching it on lists
