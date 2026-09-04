@@ -147,38 +147,36 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Estimated) : "—";
 
-    // Asked before presence, because the two do not line up: the .NET build output is present
-    // whenever the SDK is, approved folders or not, and that row has as little to report as the four
-    // that are absent for the same reason. Every one of them needs the same thing said, and saying
-    // "not installed" or "already clear" instead names the wrong problem and offers no way out.
-    public string StatusLabel => Finding.AwaitingSourceFolders
-        ? "Needs a source folder"
+    /// <summary>
+    /// What this row is reporting, as the single value both its own label and the page's info bar
+    /// are read off. See <see cref="FindingStatus"/> for why one value rather than two conditions.
+    ///
+    /// <para>Presence is asked after <see cref="Finding.AwaitingSourceFolders"/>, because the two do
+    /// not line up: the .NET build output is present whenever the SDK is, approved folders or not,
+    /// and that row has as little to report as the four that are absent for the same reason.</para>
+    ///
+    /// <para>The held-back state asks the plan what the measurement actually withheld, never whether
+    /// a guard is switched on. Driving the real window settled that: with the guard at seven days,
+    /// deriving it from the setting put "Nothing old enough" on twelve rows, most of them simply
+    /// empty — the same false claim wearing the opposite costume.</para>
+    /// </summary>
+    public FindingStatus Status => Finding.AwaitingSourceFolders
+        ? FindingStatus.AwaitingSourceFolders
         : !Finding.IsPresent
-        ? "Not installed on this machine"
+        ? FindingStatus.ToolchainMissing
         : !Finding.HasReclaimableSpace
-            // "Already clear" is a claim about the folder, and there are three states it must not
-            // be made in. One is a folder Windows would not let Deguffer list. One is a location
-            // Deguffer declined to look at, or could not locate — the zero beside it is about what
-            // was examined, and nothing was. The last is a cache whose every file is inside the
-            // guard window: it measures zero and it is full.
-            //
-            // That last one asks the plan what the measurement actually withheld, never whether a
-            // guard is switched on. Driving the real window settled that: with the guard at seven
-            // days, deriving it from the setting put "Nothing old enough" on twelve rows, most of
-            // them simply empty — the same false claim wearing the opposite costume.
             ? Finding.Plan switch
             {
-                { HasUnreadableRoot: true } => "Could not be read",
-                { WasNotExamined: true } => "Not examined",
-                { HasRecentContentHeldBack: true } => "Nothing old enough",
-                _ => AlreadyClear,
+                { HasUnreadableRoot: true } => FindingStatus.UnreadableRoot,
+                { WasNotExamined: true } => FindingStatus.NotExamined,
+                { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
+                _ => FindingStatus.AlreadyClear,
             }
             : CanBeSelected
-                ? "Ready to clean"
-                // Nothing in the row can be acted on as Deguffer is running, so "Ready to clean"
-                // beside a disabled checkbox would contradict itself. The Windows servicing logs are
-                // the whole row of this kind: every step of them sits under the Windows directory.
-                : "Needs administrator rights";
+                ? FindingStatus.ReadyToClean
+                : FindingStatus.NeedsElevation;
+
+    public string StatusLabel => Status.ToStatusLabel();
 
     /// <summary>
     /// Only rows with a step that can actually be acted on.
@@ -218,16 +216,14 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <see cref="Finding.IsPresent"/>, and is the opposite of noise: it is the row that says the
     /// largest reclaimable thing on the disk is one setting away.
     /// </summary>
-    public bool IsToolchainMissing => !Finding.IsPresent && !Finding.AwaitingSourceFolders;
-
-    private const string AlreadyClear = "Already clear";
+    public bool IsToolchainMissing => Status is FindingStatus.ToolchainMissing;
 
     /// <summary>
     /// Whether this row is one the "show items already clear" filter hides.
     ///
-    /// Read off <see cref="StatusLabel"/> rather than restating the condition that produces it,
-    /// because a second copy of that condition is free to disagree with the words on screen — and
-    /// what this filter promises is that it hides exactly the rows saying "Already clear". The three
+    /// Read off <see cref="Status"/> rather than restating the condition that produces it, because
+    /// a second copy of that condition is free to disagree with the words on screen — and what this
+    /// filter promises is that it hides exactly the rows saying "Already clear". The three
     /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
     /// let Deguffer list, a location Deguffer declined to look at or could not locate, and a cache
     /// whose every file is inside the guard on recently changed files. All three stay listed,
@@ -240,7 +236,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// sides count the same bytes. Moving either to <c>ScanSize.Allocated</c> would break it, and a
     /// selected row would then be hidden by a filter that is on by default.</para>
     /// </summary>
-    public bool IsAlreadyClear => StatusLabel == AlreadyClear;
+    public bool IsAlreadyClear => Status is FindingStatus.AlreadyClear;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; }

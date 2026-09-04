@@ -292,16 +292,12 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             await LoadPreviewAsync(ct);
 
-            // Three outcomes, not two. A row can hold real space this process may not act on, which
-            // is neither "ready" nor "already clear" — and reporting it as the latter contradicts
-            // the rows underneath, which show the size and say what they need.
-            Report(
-                Findings.Any(f => f.CanBeSelected)
-                    ? $"{SelectedTotalLabel} can be reclaimed. Review the rows, then Clean."
-                    : Findings.Any(f => f.Finding.HasReclaimableSpace)
-                        ? "Nothing here can be cleared without administrator rights. "
-                          + $"Use {ElevateLabel}."
-                        : "Nothing to reclaim — these caches are already clear.");
+            // Composed from what the rows themselves report, never from the byte totals, so that
+            // the bar and the list underneath it cannot come to contradict each other.
+            Report(PreviewSummary.For(
+                Findings.Select(f => f.Status),
+                SelectedTotalLabel,
+                ElevateLabel));
         }
         catch (OperationCanceledException)
         {
