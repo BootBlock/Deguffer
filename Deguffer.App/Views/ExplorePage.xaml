@@ -8,6 +8,54 @@
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent">
 
+    <Page.Resources>
+        <!--
+            Two ways of drawing one drive. The list is where the choice is made, so it carries the
+            label and the three space figures; the box above it says which drive is chosen and
+            nothing more, because the Explore toolbar has no room for the wide form. See
+            DriveEntryTemplates for how the two are told apart.
+        -->
+        <DataTemplate x:Key="DriveChosen" x:DataType="exploring:DriveChoice">
+            <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto"
+                  AutomationProperties.Name="{x:Bind Description}">
+                <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind LabelText}"
+                           MaxWidth="116"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Grid>
+        </DataTemplate>
+
+        <!--
+            The label column is a fixed width so the space figures line up down the list. Ragged
+            ones are read a row at a time; a column is read at a glance.
+
+            Each row states its own name, because a templated item is otherwise announced as its
+            parts in layout order with nothing between them.
+        -->
+        <DataTemplate x:Key="DriveListed" x:DataType="exploring:DriveChoice">
+            <Grid ColumnSpacing="8" ColumnDefinitions="Auto,116,Auto"
+                  AutomationProperties.Name="{x:Bind Description}">
+                <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind LabelText}"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                <TextBlock Grid.Column="2"
+                           Text="{x:Bind Sizes}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Grid>
+        </DataTemplate>
+
+        <controls:DriveEntryTemplates x:Key="DriveEntry"
+                                      Chosen="{StaticResource DriveChosen}"
+                                      Listed="{StaticResource DriveListed}" />
+    </Page.Resources>
+
     <Grid Padding="20,12,20,16" RowSpacing="10"
           RowDefinitions="Auto,Auto,Auto,*,Auto">
 
@@ -26,33 +74,8 @@
                       IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                       ItemsSource="{x:Bind ViewModel.Drives}"
                       SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
-                      AutomationProperties.Name="Drive to scan">
-                <!-- The label and the three space figures, so the choice is made in the list
-                     rather than by remembering which letter is the large disk. One line, because
-                     a combo box draws the chosen entry with this same template: a second line
-                     would make the closed box twice its height and break the row it sits in.
-
-                     The name is stated on the row because a templated item otherwise announces
-                     its parts in layout order with nothing between them. -->
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="exploring:DriveChoice">
-                        <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto"
-                              AutomationProperties.Name="{x:Bind Description}">
-                            <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
-
-                            <TextBlock Grid.Column="1"
-                                       Text="{x:Bind LabelText}"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxWidth="140"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                            <TextBlock Grid.Column="2"
-                                       Text="{x:Bind Sizes}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </Grid>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                      ItemTemplateSelector="{StaticResource DriveEntry}"
+                      AutomationProperties.Name="Drive to scan" />
 
             <!-- Scoping to a folder, through the system picker for the reason the source folders
                  use one: the path is then one the shell confirmed exists rather than a typed
