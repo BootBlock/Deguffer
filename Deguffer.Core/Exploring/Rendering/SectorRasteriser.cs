@@ -18,16 +18,6 @@ namespace Deguffer.Core.Exploring.Rendering;
 public static class SectorRasteriser
 {
     /// <summary>
-    /// A sweep at or above which a sector has no angular edges to tilt away from.
-    ///
-    /// <para>A wedge is cushioned across its width as well as through its depth, which is what
-    /// gives it an edge on each side. A sector that closes on itself has no such edge, and shading
-    /// one as though it did puts a seam at twelve o'clock across an unbroken ring — most visibly on
-    /// the disc in the middle, which is always a whole circle.</para>
-    /// </summary>
-    private const float WholeCircle = MathF.Tau - 0.0001f;
-
-    /// <summary>
     /// Paint <paramref name="hits"/>' sunburst into <paramref name="pixels"/>, a BGRA buffer of
     /// <paramref name="width"/> × <paramref name="height"/>.
     ///
@@ -67,8 +57,8 @@ public static class SectorRasteriser
 
         // One colour per sector, before a single pixel is written. Resolving it inside the loop
         // instead would walk a node's ancestors and index the palette three million times per
-        // repaint on a 4K canvas, for an answer that changes only with the sector (G4). This is what
-        // TileRasteriser gets for free by painting one shape at a time.
+        // repaint on a 4K canvas, for an answer that changes only with the sector (G4).
+        // TileRasteriser hoists its colours the same way, for the same reason.
         var colours = new TileColour[sectors.Count];
 
         for (var i = 0; i < sectors.Count; i++)
@@ -145,7 +135,10 @@ public static class SectorRasteriser
         var across = (radius - sector.InnerRadius) / (sector.OuterRadius - sector.InnerRadius);
         var radial = ridge * ((2 * across) - 1);
 
-        var round = sector.SweepAngle >= WholeCircle
+        // A wedge is cushioned across its width as well as through its depth, which is what gives
+        // it an edge on each side. A ring has no such edge, and shading one as though it did puts a
+        // seam at twelve o'clock across unbroken colour.
+        var round = sector.IsWholeCircle
             ? 0
             : ridge * ((2 * ((angle - sector.StartAngle) / sector.SweepAngle)) - 1);
 

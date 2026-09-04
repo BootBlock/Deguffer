@@ -41,6 +41,29 @@ public readonly record struct ExploreLabel(
     bool Centred,
     TileColour Colour);
 
+/// <summary>One corner of a shape's outline, in canvas pixels.</summary>
+public readonly record struct ExplorePoint(float X, float Y);
+
+/// <summary>
+/// One closed boundary of one node's shape, for a caller that wants to draw a line round it.
+///
+/// <para>An outline rather than a filled shape, because the point of it is to say which shape is
+/// selected without hiding what the shape says. A wash over the top would change the colour the
+/// picture spent its whole palette establishing.</para>
+///
+/// <para>A polygon rather than a rectangle or a sector, so the shell has one thing to draw for all
+/// three views. A sunburst's arcs come out as enough short segments that the curve reads as a
+/// curve — a hundredth of a pixel from true at the radii drawn here — and the alternative is a
+/// shape union the shell would have to take apart again.</para>
+///
+/// <para><b>One boundary, not one shape.</b> A ring has two, an inner and an outer, and joining
+/// them would draw a radial line across it that is not there. So a node can come back more than
+/// once, which is also why each of these names the node it belongs to: the answer is a partial
+/// mapping — a node this drawing did not draw is simply absent — and without the name a caller
+/// cannot tell which shape it was handed, nor a test tell a right answer from a wrong one.</para>
+/// </summary>
+public readonly record struct ExploreOutline(int Node, IReadOnlyList<ExplorePoint> Points);
+
 /// <summary>
 /// One drawing of one node of one tree: its geometry, what is under a given point, where the text
 /// goes, and how to paint it.
@@ -180,6 +203,21 @@ public abstract class ExploreSurface
 
     /// <summary>What is at this canvas point, or null where the point is over nothing.</summary>
     public abstract ExploreHit? At(float x, float y);
+
+    /// <summary>
+    /// Where each of <paramref name="nodes"/> was drawn, for a caller that wants to mark it out.
+    ///
+    /// <para>Only the nodes this drawing actually drew come back, so a selection made in a folder
+    /// the user has since left, or one below the depth this view descends to, is silently absent
+    /// rather than an error. An aggregate is never outlined: it stands for a run of siblings rather
+    /// than for anything the user could have picked (§7.1). A node whose shape has more than one
+    /// boundary comes back once per boundary — see <see cref="ExploreOutline"/>.</para>
+    ///
+    /// <para>A set rather than a list, because the answer is found by one pass over the shapes and
+    /// the alternative is a pass per node. A treemap of a volume is tens of thousands of shapes and
+    /// the list view selects any number of rows at once (G4).</para>
+    /// </summary>
+    public abstract IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes);
 
     /// <summary>
     /// Which top-level branch a node belongs to, so a whole subtree shares one hue.
