@@ -913,7 +913,7 @@ already been run against.
 | `%APPDATA%\Code\logs\<timestamp>` | 141.7 MB | 3 | One folder per editor session |
 
 §4's provider already reaches this folder — it holds `Local State` — so the six engine caches inside
-it were covered on the day §4 shipped. They came to 0.18 GB here, against 2.3 GB for the rows above.
+it were covered on the day §4 shipped. They came to about 15 MB here, against 2.3 GB for the rows above.
 
 Four things the work settled that the research did not anticipate:
 

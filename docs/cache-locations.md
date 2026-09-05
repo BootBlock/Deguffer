@@ -720,7 +720,7 @@ times the size.
 | Directory | What it holds |
 | --- | --- |
 | `CachedData` | The editor's own code, compiled ahead of time, in one folder per build. Sixteen builds were present on the measured machine, of which at most one is installed |
-| `CachedExtensionVSIXs` | The installer package of every extension the editor downloaded, kept after it installed it. 775 MB across 21 packages, two of them successive builds of the same extension at 103 MB each |
+| `CachedExtensionVSIXs` | The installer package of every extension the editor downloaded, kept after it installed it. 775.6 MB across 22 files, two of them successive builds of the same extension at 103 MB each |
 | `CachedExtensions`, `CachedProfilesData` | The result of the last extension scan, once overall and once per editor profile |
 | `WebStorage\<n>\CacheStorage` | Web content one webview saved so it would not fetch the same thing twice. This is the same kind of content as `Service Worker\CacheStorage`, which the Chromium rules already recognise, under a different parent |
 

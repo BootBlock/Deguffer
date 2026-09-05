@@ -1,5 +1,4 @@
-using System.Text.RegularExpressions;
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -7,7 +6,7 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The caches a Code - OSS editor manages itself, which are the ones no Chromium rule reaches
-/// (about 2.0 GB on the measured machine, against 0.18 GB for the six Chromium names in the same
+/// (2.0 GB on the measured machine, against about 15 MB for the six Chromium names in the same
 /// folder).
 ///
 /// <para><b>Why this is not the Chromium provider.</b> A VS Code user-data folder holds
@@ -44,20 +43,18 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para>§5.1 does not apply. The editor has no cache-eviction command: its own
 /// <c>CachedDataCleaner</c> runs unattended after startup and is not reachable from a command line,
-/// and <c>code --help</c> exposes nothing that clears any of these.</para>
+/// and the CLI's own help (checked against 1.136.0) exposes no option that clears any of
+/// these.</para>
 /// </summary>
-public sealed partial class VsCodeCacheProvider : CleanupProviderBase
+public sealed class VsCodeCacheProvider : CleanupProviderBase
 {
-    /// <summary>The directory the per-webview storage partitions sit in.</summary>
-    public const string WebStorageDirectory = "WebStorage";
-
     /// <summary>
     /// What may be deleted from the user-data folder itself. Anything not named here is Tier 4 by
     /// construction, which is what makes "we did not recognise that" fail closed beside a folder
     /// holding the editor's entire stored state.
     ///
-    /// <para><see cref="WebStorageDirectory"/> appears as a Tier 4 entry rather than as an omission,
-    /// on the reasoning <see cref="ChromiumCacheProvider"/> settled for <c>Cache</c> and
+    /// <para><see cref="VsCodeWebStorage.DirectoryName"/> appears as a Tier 4 entry rather than as
+    /// an omission, on the reasoning <see cref="ChromiumCacheProvider"/> settled for <c>Cache</c> and
     /// <c>Service Worker</c>: it is the one case where the unrecognised-child wording would be
     /// actively misleading, because the directory really is left standing and something inside it
     /// really is being removed.</para>
@@ -87,7 +84,7 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
             "The same extension scan, cached once per editor profile. It is rebuilt the next time "
             + "each profile is used."),
         new ChildClassification(
-            WebStorageDirectory,
+            VsCodeWebStorage.DirectoryName,
             SafetyTier.DoNotTouch,
             "The storage of every webview the editor has opened. Only the 'CacheStorage' inside each "
             + "numbered partition is removed, and the partition itself stays — what a webview saved "
@@ -110,24 +107,11 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
     ]);
 
     /// <summary>
-    /// Nothing. <see cref="WebStorageDirectory"/> is entered rather than emptied, so §7.1 must
+    /// Nothing. <see cref="VsCodeWebStorage.DirectoryName"/> is entered rather than emptied, so §7.1 must
     /// refuse every one of its children — the numbered partitions included, because a partition
     /// holds what a webview saved as well as what it cached.
     /// </summary>
     private static readonly DisposableChildSet WebStorageChildren = new([]);
-
-    /// <summary>
-    /// A webview storage partition: digits and nothing else, on the pattern
-    /// <see cref="ChromiumUserDataDiscovery"/> uses for a numbered profile. Chromium names these
-    /// after its own partition identifiers, so a directory under <c>WebStorage</c> with any other
-    /// name is something Deguffer has not identified and is never looked inside.
-    ///
-    /// Anchored with <c>\z</c> rather than <c>$</c>: <c>$</c> also matches before a trailing
-    /// newline, and a check that decides whether a directory may be entered should admit no such
-    /// reading.
-    /// </summary>
-    [GeneratedRegex(@"\A[0-9]+\z", RegexOptions.CultureInvariant)]
-    private static partial Regex PartitionName();
 
     private readonly VsCodeUserDataDiscovery _discovery;
     private IReadOnlyList<Editor>? _installed;
@@ -275,7 +259,7 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
 
             if (editor.Partitions.Unreadable)
             {
-                notes.Add(UnreadableRoot.Note(Path.Combine(folder, WebStorageDirectory)));
+                notes.Add(UnreadableRoot.Note(Path.Combine(folder, VsCodeWebStorage.DirectoryName)));
                 unreadable = true;
             }
 
@@ -299,7 +283,7 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
                     + "left alone beside the caches. Your settings, your workspace state and your local file "
                     + "history all live in that folder, so only the recognised caches are removed."
                     + (outcome.EmptiedAContainer
-                        ? $" The webview caches sit inside '{WebStorageDirectory}', and that directory "
+                        ? $" The webview caches sit inside '{VsCodeWebStorage.DirectoryName}', and that directory "
                           + "stays: only the one recognised cache inside each partition is removed."
                         : string.Empty)));
             }
@@ -349,7 +333,7 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
     /// re-reading <c>WebStorage</c> three times per editor would be three walks for one answer.
     /// </summary>
     private IReadOnlyList<Editor> Installed(CancellationToken ct = default) =>
-        _installed ??= [.. _discovery.Discover(ct).Select(u => new Editor(u, PartitionScan.Of(u.Path)))];
+        _installed ??= [.. _discovery.Discover(ct).Select(u => new Editor(u, VsCodeWebStorage.Of(u.Path)))];
 
     /// <summary>
     /// The levels this editor's caches sit in: the folder itself, then one per webview partition.
@@ -363,7 +347,7 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
     [
         new CacheLevel(string.Empty, FolderChildren),
         .. editor.Partitions.Numbered.Select(
-            name => new CacheLevel(Path.Combine(WebStorageDirectory, name), PartitionChildren)),
+            name => new CacheLevel(Path.Combine(VsCodeWebStorage.DirectoryName, name), PartitionChildren)),
     ];
 
     private static IEnumerable<ToolRoot> RootsOf(Editor editor)
@@ -375,7 +359,7 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
             + "workspace state and your local file history sit beside them.",
             FolderChildren);
 
-        var webStorage = Path.Combine(editor.UserData.Path, WebStorageDirectory);
+        var webStorage = Path.Combine(editor.UserData.Path, VsCodeWebStorage.DirectoryName);
 
         yield return ToolRoot.Of(
             webStorage,
@@ -434,105 +418,5 @@ public sealed partial class VsCodeCacheProvider : CleanupProviderBase
     }
 
     /// <summary>One discovered editor, with what <c>WebStorage</c> turned out to hold.</summary>
-    private sealed record Editor(VsCodeUserData UserData, PartitionScan Partitions);
-
-    /// <summary>
-    /// What one editor's <c>WebStorage</c> directory holds.
-    ///
-    /// <para>Discovery only, so it can be memoised and asked three times. Turning it into survivors
-    /// and notes is planning's job, because a §5.6 assertion is a statement about one run.</para>
-    /// </summary>
-    /// <param name="Numbered">The webview storage partitions, by name.</param>
-    /// <param name="Unrecognised">
-    /// Directories in there that are not partitions. Kept rather than dropped: each is a sibling of
-    /// a directory this provider descends into, which is exactly when an over-broad rule takes both.
-    /// </param>
-    /// <param name="Links">
-    /// Links in there, which are never followed. Named rather than dropped, because a link under a
-    /// directory Deguffer is working in is a child the user can see.
-    /// </param>
-    /// <param name="Unreadable">
-    /// The directory refused to be listed. It exists — a full path resolves through a directory the
-    /// account may not list — so this is not the same as holding no partitions.
-    /// </param>
-    private readonly record struct PartitionScan(
-        IReadOnlyList<string> Numbered,
-        IReadOnlyList<string> Unrecognised,
-        IReadOnlyList<string> Links,
-        bool Unreadable)
-    {
-        private static readonly PartitionScan Nothing = new([], [], [], Unreadable: false);
-
-        /// <summary>
-        /// Read <c>WebStorage</c> under <paramref name="folder"/>.
-        ///
-        /// <para>A <c>WebStorage</c> that is itself a link yields nothing here and is left to
-        /// <see cref="CacheLevelWalk"/>, which meets it as a link child of the folder and names it
-        /// once. Declining it in both places would report one skipped directory as two.</para>
-        /// </summary>
-        public static PartitionScan Of(string folder)
-        {
-            var webStorage = Path.Combine(folder, WebStorageDirectory);
-
-            if (!LongPath.DirectoryExists(webStorage) || LongPath.IsReparsePoint(webStorage))
-            {
-                return Nothing;
-            }
-
-            var scan = ChildDirectories.Under(webStorage);
-
-            if (scan.Unreadable)
-            {
-                return Nothing with { Unreadable = true };
-            }
-
-            return new PartitionScan(
-                [.. scan.Directories.Where(d => PartitionName().IsMatch(d.Name)).Select(d => d.Name)],
-                [.. scan.Directories.Where(d => !PartitionName().IsMatch(d.Name)).Select(d => d.Name)],
-                [.. scan.Links.Select(d => d.Name)],
-                Unreadable: false);
-        }
-
-        /// <summary>
-        /// Record what this scan leaves alone, and answer how many things that was.
-        ///
-        /// <para>A partition is asserted to survive even though it is entered, for the reason the
-        /// <c>WebStorage</c> classification gives: the directory really is left standing and
-        /// something inside it really is being removed, so the generic "we did not recognise that"
-        /// wording would be false about it.</para>
-        /// </summary>
-        public int Spared(
-            string folder,
-            ICollection<(string Path, string Reason)> survivors,
-            ICollection<(string Path, string Reason)> declined,
-            ICollection<PlanNote> notes)
-        {
-            var webStorage = Path.Combine(folder, WebStorageDirectory);
-
-            foreach (var partition in Numbered)
-            {
-                survivors.Add((
-                    Path.Combine(webStorage, partition),
-                    "One webview's storage. Only the web cache inside it is removed, and what that "
-                    + "view saved stays."));
-            }
-
-            foreach (var other in Unrecognised)
-            {
-                survivors.Add((
-                    Path.Combine(webStorage, other),
-                    "Not a webview storage partition Deguffer recognises, so it is left alone and "
-                    + "never looked inside."));
-            }
-
-            foreach (var link in Links)
-            {
-                var path = Path.Combine(webStorage, link);
-                notes.Add(CacheLevelWalk.LinkNote(path));
-                declined.Add((path, CacheLevelWalk.LinkReason));
-            }
-
-            return Numbered.Count + Unrecognised.Count;
-        }
-    }
+    private sealed record Editor(VsCodeUserData UserData, VsCodeWebStorage Partitions);
 }
