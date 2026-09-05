@@ -365,6 +365,37 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same rule where the outer level recognises <em>nothing</em>. The Azure Functions tooling
+    /// keeps its feed and its tag records directly beside <c>Releases</c>, and both are how it knows
+    /// which releases it holds — so the outer declaration allows no child at all, and only the level
+    /// written about the releases lets one go.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                              // the tooling's own folder
+    [InlineData("Tags", false)]                          // which release each Functions line uses
+    [InlineData(@"Tags\v4", false)]
+    [InlineData("feed-v2167102.json", false)]            // what it already has
+    [InlineData("Releases", false)]                      // the folder, never a target
+    [InlineData(@"Releases\4.18.1", true)]               // one downloaded release
+    [InlineData(@"Releases\4.0.5455", true)]             // an older feed's long build number
+    [InlineData(@"Releases\4.18.1\cli_x64", true)]       // inside a recognised release
+    [InlineData(@"Releases\notes", false)]               // not a version, so not a release
+    [InlineData(@"Releases\4.18", false)]                // fewer parts than a release carries
+    [InlineData(@"Releases\4.18.1-backup", false)]       // something a person made
+    public void TheOuterAzureFunctionsRootRecognisesNothingAtAll(string relative, bool allowed)
+    {
+        var provider = new AzureFunctionsToolsProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(
+                relative.Length == 0
+                    ? provider.RootPath
+                    : Path.Combine(provider.RootPath, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
     /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
     /// and repeats the whole layout inside every profile.
@@ -504,6 +535,87 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.Equal(
             allowed,
             policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// A Code - OSS editor's user-data folder, level by level. It repeats the Chromium shape one
+    /// directory further down: <c>WebStorage</c> holds one directory per webview, and each of those
+    /// holds what that view saved beside the one cache Deguffer removes.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                             // the user-data folder itself
+    [InlineData("User", false)]                         // settings, profiles and extension state
+    [InlineData(@"User\workspaceStorage", false)]       // every workspace's restored state
+    [InlineData(@"User\History", false)]                // the local undo history
+    [InlineData("CachedData", true)]                    // a recognised cache
+    [InlineData("CachedExtensionVSIXs", true)]
+    [InlineData("Backups", false)]                      // unrecognised, so left alone
+    [InlineData("WebStorage", false)]                   // the container, which stays
+    [InlineData(@"WebStorage\42", false)]               // one webview's storage, which also stays
+    [InlineData(@"WebStorage\42\CacheStorage", true)]
+    [InlineData(@"WebStorage\42\Local Storage", false)] // what that webview saved
+    public void AVsCodeUserDataFolderIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        var editor = CreateVsCodeFolder();
+        _temp.CreateDirectory("profile", "AppData", "Roaming", "Code", "WebStorage", "42");
+
+        var policy = new ExploreActionPolicy([], new VsCodeCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? editor : Path.Combine(editor, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// One folder, three owners. A VS Code user-data folder holds Chromium's six engine caches, the
+    /// editor's own caches, and the editor's logs, and each set is declared by the provider that
+    /// knows it.
+    ///
+    /// <para>The innermost containing declaration used to be a single root, so whichever provider
+    /// happened to be constructed first answered for the whole folder and every child the other two
+    /// recognise was refused — silently, and reversibly by reordering a list nobody would think to
+    /// look at. Asking every declaration at that depth is what makes each provider's table its own
+    /// business.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("Code Cache", true)]            // Chromium's
+    [InlineData("GPUCache", true)]              // Chromium's
+    [InlineData("CachedData", true)]            // the editor's cache
+    [InlineData("CachedProfilesData", true)]    // the editor's cache
+    [InlineData("logs", true)]                  // the editor's records
+    [InlineData("Crashpad", true)]              // the editor's records
+    [InlineData("User", false)]                 // recognised by none of the three
+    [InlineData("Local State", false)]
+    public void EveryProviderOwningOneFolderAnswersForItsOwnChildren(string child, bool allowed)
+    {
+        var editor = CreateVsCodeFolder();
+
+        var policy = new ExploreActionPolicy(
+            [],
+            [
+                .. new ChromiumCacheProvider(_environment).ToolRoots,
+                .. new VsCodeCacheProvider(_environment).ToolRoots,
+                .. new VsCodeLogProvider(_environment).ToolRoots,
+            ]);
+
+        Assert.Equal(allowed, policy.MayRemove(Path.Combine(editor, child)).IsAllowed);
+
+        // The folder itself is refused whichever declaration answers for it.
+        Assert.False(policy.MayRemove(editor).IsAllowed);
+    }
+
+    /// <summary>
+    /// A user-data folder carrying both markers: Chromium's, so the engine provider identifies it,
+    /// and the editor's global storage database, so the two editor providers do.
+    /// </summary>
+    private string CreateVsCodeFolder()
+    {
+        var editor = _temp.CreateDirectory("profile", "AppData", "Roaming", "Code");
+
+        _temp.CreateFile(1, "profile", "AppData", "Roaming", "Code", "Local State");
+        _temp.CreateFile(1, "profile", "AppData", "Roaming", "Code", "User", "globalStorage", "state.vscdb");
+
+        return editor;
     }
 
     /// <summary>
@@ -735,10 +847,11 @@ public sealed class ExploreActionPolicyTests : IDisposable
         """);
 
     /// <summary>
-    /// Firefox is deliberately absent. The sweep above probes a sibling of <c>ToolRoots[0]</c>, and
-    /// Firefox's first root recognises nothing at all, so the probe would be refused structurally
-    /// rather than by the allow-list — an assertion that cannot fail. Its two dedicated theories
-    /// cover both roots and the unrecognised sibling properly.
+    /// Firefox and the Azure Functions tooling are deliberately absent. The sweep above probes a
+    /// sibling of <c>ToolRoots[0]</c>, and each of those providers declares a first root that
+    /// recognises nothing at all, so the probe would be refused structurally rather than by the
+    /// allow-list — an assertion that cannot fail. Each has its own theory instead, covering every
+    /// root it declares and the unrecognised sibling properly.
     /// </summary>
     private IReadOnlyList<ICleanupProvider> Providers() =>
     [
