@@ -285,18 +285,29 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Identification is <c>profiles.ini</c> and nothing else. A directory sitting beside a real
-    /// profile, holding a directory called <c>cache2</c>, is not a profile — which is the same rule
-    /// as the Chromium provider's "a cache name is not licence to look inside a folder", arriving
-    /// through Mozilla's own register instead of through a marker file.
+    /// Identification is a <c>[ProfileN]</c> section's own relative <c>Path</c> and nothing else. A
+    /// directory sitting beside a real profile, holding a directory called <c>cache2</c>, is not a
+    /// profile — the same rule as the Chromium provider's "a cache name is not licence to look inside
+    /// a folder", arriving through Mozilla's own register instead of through a marker file.
+    ///
+    /// <para>The subject is the directory the fixture's install section points at, because that is
+    /// the realistic way to get this wrong: <c>[Install…]</c> carries <c>Default=Profiles/…</c>, a
+    /// value of exactly the shape a profile's <c>Path</c> has.</para>
+    ///
+    /// <para><b>Three independent guards hold this, and it takes all three to break it.</b> The
+    /// section has to match <c>ProfileN</c>, the key has to be <c>Path</c>, and <c>IsRelative</c> has
+    /// to say 1. Mutating any one leaves the other two refusing the directory, so a mutation pass
+    /// over a single guard reads as a test that proves nothing. It is defence in depth rather than a
+    /// weak assertion, and it is written down so that nobody removes a guard on the strength of one
+    /// green run.</para>
     /// </summary>
     [Fact]
-    public async Task ADirectoryTheRegisterDoesNotNameIsNeverLookedInside()
+    public async Task ADirectoryTheRegisterDoesNotNameAsAProfileIsNeverLookedInside()
     {
         var profile = AddProfile();
         CreateDirectory(Path.Combine(profile.Local, "cache2"));
 
-        var stranger = CreateDirectory(Path.Combine(LocalRoot, "Profiles", "not-in-the-register", "cache2"));
+        var stranger = CreateDirectory(Path.Combine(LocalRoot, "Profiles", "somewhere-else", "cache2"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -343,13 +354,22 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     /// relative entry that climbs back out of Firefox's own folder would put every later step —
     /// the enumeration, the classification, the deletion — on a directory nobody chose.
     /// </summary>
-    [Fact]
-    public async Task ARelativePathThatClimbsOutOfFirefoxsFolderIsRefused()
+    /// <param name="declared">
+    /// Five levels up from <c>%APPDATA%\Mozilla\Firefox</c> is the scratch root itself. Both lengths
+    /// are here deliberately: the first resolves to a path <em>shorter</em> than Firefox's own
+    /// folder, so a rule that only compared lengths would refuse it and pass this test while leaving
+    /// the second — which is longer, and just as far outside — accepted.
+    /// </param>
+    [Theory]
+    [InlineData("../../../../../Documents")]
+    [InlineData("../../../../../Documents/a-deliberately-long-directory-name-to-outlength-the-root")]
+    public async Task ARelativePathThatClimbsOutOfFirefoxsFolderIsRefused(string declared)
     {
-        // Five levels up from %APPDATA%\Mozilla\Firefox is the scratch root itself.
-        AddProfile("escaping", declared: "../../../../../Documents");
+        AddProfile("escaping", declared: declared);
 
-        var documents = CreateDirectory(Path.Combine(_temp.Path, "Documents", "cache2"));
+        var escaped = Path.GetFullPath(
+            Path.Combine(RoamingRoot, declared.Replace('/', Path.DirectorySeparatorChar)));
+        var documents = CreateDirectory(Path.Combine(escaped, "cache2"));
 
         var provider = CreateProvider();
 
