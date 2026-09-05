@@ -2,6 +2,7 @@ using Deguffer.App.Shell;
 using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -22,14 +23,27 @@ public sealed partial class MainWindow : Window
         WindowIcon.Apply(this);
 
         _backdrop = new WindowBackdrop(this);
-        _sizing = new WindowSizing(this);
-        _sizing.Apply();
+        _sizing = new WindowSizing(this, new WindowMetricsStore(UserEnvironment.Current));
+
+        // Where the window ends up is the user's, so it outlives the session that produced it.
+        Closed += (_, _) => _sizing.Remember();
 
         ApplyPreferences();
         App.Preferences.Changed += (_, _) => ApplyPreferences();
 
         OpenWhereTheLaunchAsked();
+
+        // Last, because restoring a maximised placement shows the window: the theme, the backdrop
+        // and the first page all have to be in place before anything is on screen. Sizing alone
+        // does not show it, so only that one path was ever exposed to this.
+        _sizing.Apply();
     }
+
+    /// <summary>
+    /// Write the window's placement to disk without waiting for it to close. See
+    /// <see cref="App.RememberWindowPlacement"/> for the one caller that needs that.
+    /// </summary>
+    public void RememberPlacement() => _sizing.Remember();
 
     /// <summary>
     /// Open on the destination this instance was started for: Storage ordinarily, and Explore where

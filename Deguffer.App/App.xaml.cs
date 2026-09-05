@@ -8,7 +8,7 @@ namespace Deguffer.App;
 
 public partial class App : Application
 {
-    private Window? _window;
+    private static MainWindow? _shell;
 
     public App()
     {
@@ -50,18 +50,26 @@ public partial class App : Application
     /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no
     /// route to its own window, and a picker without an owner handle throws rather than opening.
     /// </summary>
-    public static Window? MainWindow { get; private set; }
+    public static Window? MainWindow => _shell;
+
+    /// <summary>
+    /// Get the window's placement onto disk now rather than at the close that follows.
+    ///
+    /// <see cref="ElevatedRelaunch"/> calls this because the replacement process reads that file as
+    /// it opens, and a write that waits for this instance to close is one the replacement may open
+    /// too early to see.
+    /// </summary>
+    internal static void RememberWindowPlacement() => _shell?.RememberPlacement();
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
-        MainWindow = _window;
+        _shell = new MainWindow();
 
         // Closing the only window ends the session rather than leaving the process resident. This
         // is explicit because a dialog dismissed at the wrong moment has been enough to leave a
         // WinUI message loop running with no UI attached to it.
-        _window.Closed += (_, _) => Exit();
+        _shell.Closed += (_, _) => Exit();
 
-        _window.Activate();
+        _shell.Activate();
     }
 }
