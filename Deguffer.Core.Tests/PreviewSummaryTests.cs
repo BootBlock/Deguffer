@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
 
@@ -12,11 +13,15 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class PreviewSummaryTests
 {
-    private const string SelectedTotal = "1.5 GB";
     private const string Elevate = "Elevate and rescan";
 
+    /// <summary>4 GB available, of which 1.5 GB is ticked — the ordinary mid-selection case.</summary>
+    private static readonly ScanSize Selectable = ScanSize.FromLengths(4L * 1024 * 1024 * 1024);
+
+    private static readonly ScanSize Selected = ScanSize.FromLengths(1536L * 1024 * 1024);
+
     private static string For(params FindingStatus[] statuses) =>
-        PreviewSummary.For(statuses, SelectedTotal, Elevate);
+        PreviewSummary.For(statuses, Selectable, Selected, Elevate);
 
     /// <summary>
     /// The four states that measure zero and are not clear. None of them may draw the claim that
@@ -71,14 +76,55 @@ public sealed class PreviewSummaryTests
             For(FindingStatus.AlreadyClear, FindingStatus.ToolchainMissing, FindingStatus.AlreadyClear));
     }
 
-    /// <summary>Space this process can act on outranks every other row, and reports the total.</summary>
+    /// <summary>
+    /// Space this process can act on outranks every other row, and reports both totals: what is
+    /// there to reclaim, and how much of it the user has ticked so far.
+    /// </summary>
     [Fact]
-    public void ReportsTheSelectedTotalWhenARowCanBeCleaned()
+    public void ReportsBothTotalsWhenARowCanBeCleaned()
     {
-        Assert.StartsWith(
-            SelectedTotal,
-            For(FindingStatus.NotExamined, FindingStatus.ReadyToClean),
-            StringComparison.Ordinal);
+        Assert.Equal(
+            "4.0 GB can be reclaimed, 1.5 GB selected. Review the rows, then Clean.",
+            For(FindingStatus.NotExamined, FindingStatus.ReadyToClean));
+    }
+
+    /// <summary>
+    /// Issue #39. The condition above this sentence asks what is <em>available</em> and the sentence
+    /// used to state what was <em>ticked</em>, so a preview whose reclaimable rows are all Tier 2 or
+    /// Tier 3 — node_modules, Cargo target, Maven, the Recycle Bins — read "0 B can be reclaimed"
+    /// over rows showing gigabytes. §3 pre-selects Tier 1 alone, so nothing starts ticked there.
+    ///
+    /// A remembered all-unticked selection and unticking every row by hand reach the same place.
+    /// </summary>
+    [Fact]
+    public void DoesNotSayNothingCanBeReclaimedWhileRowsAreReadyToClean()
+    {
+        var summary = PreviewSummary.For(
+            [FindingStatus.ReadyToClean], Selectable, ScanSize.Zero, Elevate);
+
+        Assert.Equal(
+            "4.0 GB can be reclaimed, 0 B selected. Tick the rows you want, then Clean.",
+            summary);
+    }
+
+    /// <summary>
+    /// A predicted figure keeps its qualifier in both halves of the sentence. conda's dry run
+    /// reports what its own clean expects to free rather than a measurement, and
+    /// <see cref="ScanSize"/> makes approximation contagious across a total — so dropping the word
+    /// here would present a forecast as something counted.
+    /// </summary>
+    [Fact]
+    public void KeepsTheQualifierOnAPredictedTotal()
+    {
+        var summary = PreviewSummary.For(
+            [FindingStatus.ReadyToClean],
+            ScanSize.Approximate(4L * 1024 * 1024 * 1024),
+            ScanSize.Approximate(1536L * 1024 * 1024),
+            Elevate);
+
+        Assert.Equal(
+            "about 4.0 GB can be reclaimed, about 1.5 GB selected. Review the rows, then Clean.",
+            summary);
     }
 
     /// <summary>

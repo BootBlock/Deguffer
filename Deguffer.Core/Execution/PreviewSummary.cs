@@ -1,13 +1,21 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Execution;
 
 /// <summary>
 /// The one sentence the Storage page's info bar states once a preview has finished.
 ///
-/// <para>It is composed from the rows' own <see cref="FindingStatus"/> values rather than from the
-/// byte totals, because the bar and the rows are two statements about the same scan and the user
-/// reads them together. Deriving the bar independently let it announce that the caches were already
-/// clear above a row saying it could not be read: every one of those states measures zero, so a
-/// test on the totals cannot tell a clean machine from a location Deguffer never looked at.</para>
+/// <para><em>Which</em> sentence is chosen comes from the rows' own <see cref="FindingStatus"/>
+/// values and never from the byte totals, because the bar and the rows are two statements about the
+/// same scan and the user reads them together. Deriving the bar independently let it announce that
+/// the caches were already clear above a row saying it could not be read: every one of those states
+/// measures zero, so a test on the totals cannot tell a clean machine from a location Deguffer never
+/// looked at.</para>
+///
+/// <para>The totals are still <em>reported</em>, and this type formats them itself rather than
+/// taking a finished label. Handing it one let the caller supply a figure measuring something other
+/// than what the condition had just tested, which is exactly how the bar came to read "0 B can be
+/// reclaimed" over rows offering gigabytes.</para>
 ///
 /// <para>Here rather than in the view-model for the reason <see cref="ElevationOffer"/> is: a
 /// sentence that has to agree with something else on screen is worth being able to hold to a
@@ -23,21 +31,38 @@ public static class PreviewSummary
         "Nothing to reclaim, and not every location here is clear. Check what each row reports.";
 
     /// <param name="statuses">Every row of the preview, in any order.</param>
-    /// <param name="selectedTotalLabel">What is currently ticked, already formatted.</param>
+    /// <param name="selectable">
+    /// Everything the user could tick across the whole preview — the ceiling
+    /// <paramref name="selected"/> can reach. It is above zero whenever any row reports
+    /// <see cref="FindingStatus.ReadyToClean"/>, because that status needs a step that can be ticked
+    /// and measures more than nothing. The caller upholds that, which is why the branch below states
+    /// the figure rather than re-testing it.
+    /// </param>
+    /// <param name="selected">What is currently ticked.</param>
     /// <param name="elevateLabel">
     /// What the relaunch button on the same page says — <see cref="ElevationOffer.Label"/>, so the
     /// sentence and the button it names cannot come to disagree.
     /// </param>
     public static string For(
         IEnumerable<FindingStatus> statuses,
-        string selectedTotalLabel,
+        ScanSize selectable,
+        ScanSize selected,
         string elevateLabel)
     {
         var present = new HashSet<FindingStatus>(statuses);
 
         if (present.Contains(FindingStatus.ReadyToClean))
         {
-            return $"{selectedTotalLabel} can be reclaimed. Review the rows, then Clean.";
+            // Both quantities, because the condition above tests what is available and the
+            // sentence used to report only what is ticked. §3 pre-selects Tier 1 alone, so on a
+            // machine whose reclaimable rows are all Tier 2 or Tier 3 nothing starts ticked, and
+            // the bar read "0 B can be reclaimed" over rows offering gigabytes.
+            var next = selected.Reclaimable > 0
+                ? "Review the rows, then Clean."
+                : "Tick the rows you want, then Clean.";
+
+            return $"{FreeSpace.Format(selectable)} can be reclaimed, "
+                + $"{FreeSpace.Format(selected)} selected. {next}";
         }
 
         // Real space this process may not act on is neither "ready" nor "already clear", and
