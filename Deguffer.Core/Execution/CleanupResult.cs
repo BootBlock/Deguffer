@@ -42,8 +42,42 @@ public sealed record CleanupResult
     public bool Succeeded => Steps.All(s => s.Succeeded);
 }
 
-/// <summary>One assertion that something survived.</summary>
-public sealed record VerificationCheck(string Path, string Reason, bool Passed, string Detail);
+/// <summary>
+/// What one §5.6 check established about one protected path.
+///
+/// An enum rather than a bool, because "it is gone" and "this run is why it is gone" are two
+/// different findings and only one of them is an alarm. A plan is made when the user previews and
+/// carried out when they clean, so a path can disappear in between for reasons that have nothing to
+/// do with Deguffer — and a single pass/fail flag had no way to say which had happened.
+/// </summary>
+public enum VerificationOutcome
+{
+    /// <summary>It was not there when the plan was made, so there was nothing to preserve.</summary>
+    NotPresentBefore,
+
+    /// <summary>It was there when the plan was made, and it is there now.</summary>
+    Survived,
+
+    /// <summary>
+    /// It is gone, and this run could have taken it. The alarm §5.6 exists to raise: it means a
+    /// rule reached further than it was meant to.
+    /// </summary>
+    Failed,
+
+    /// <summary>
+    /// It is gone, and this run demonstrably did not take it — see
+    /// <see cref="PlanVerifier"/> for what "demonstrably" rests on. Reported rather than passed
+    /// over, because the run's figures describe a machine that changed underneath them.
+    /// </summary>
+    RemovedFromOutside,
+}
+
+/// <summary>One assertion about something that should have survived, and how it came out.</summary>
+public sealed record VerificationCheck(
+    string Path,
+    string Reason,
+    VerificationOutcome Outcome,
+    string Detail);
 
 /// <summary>
 /// §5.6: after acting, assert that the things that should have survived did. This is what turns
@@ -54,16 +88,35 @@ public sealed record VerificationResult
     public IReadOnlyList<VerificationCheck> Checks { get; init; } = [];
 
     /// <summary>
-    /// Not cached in a backing field — this is a record, and <c>with</c> copies backing fields, so
-    /// a cache would outlive a change to <see cref="Checks"/>.
+    /// The paths this run has to answer for. Not cached in a backing field — this is a record, and
+    /// <c>with</c> copies backing fields, so a cache would outlive a change to
+    /// <see cref="Checks"/>.
     /// </summary>
-    public IReadOnlyList<VerificationCheck> Failures => [.. Checks.Where(c => !c.Passed)];
+    public IReadOnlyList<VerificationCheck> Failures =>
+        [.. Checks.Where(c => c.Outcome == VerificationOutcome.Failed)];
 
-    public bool Passed => Checks.All(c => c.Passed);
+    /// <summary>
+    /// The paths something else took while the preview sat on screen. Kept apart from
+    /// <see cref="Failures"/> rather than folded into it: one asks the user to report a fault, and
+    /// the other asks them to preview again.
+    /// </summary>
+    public IReadOnlyList<VerificationCheck> RemovedFromOutside =>
+        [.. Checks.Where(c => c.Outcome == VerificationOutcome.RemovedFromOutside)];
 
-    public string Summary => Checks.Count == 0
-        ? "Nothing to verify."
-        : Passed
-            ? $"All {Checks.Count} protected path(s) survived."
-            : $"{Failures.Count} of {Checks.Count} protected path(s) did not survive.";
+    /// <summary>
+    /// Whether every protected path is accounted for as still standing. An outside removal is not a
+    /// pass: nobody verified that path, and saying otherwise is the overstatement §5.6 exists to
+    /// stop.
+    /// </summary>
+    public bool Passed => Checks.All(
+        c => c.Outcome is VerificationOutcome.NotPresentBefore or VerificationOutcome.Survived);
+
+    public string Summary => (Checks.Count, Failures.Count, RemovedFromOutside.Count) switch
+    {
+        (0, _, _) => "Nothing to verify.",
+        (var total, 0, 0) => $"All {total} protected path(s) survived.",
+        (var total, 0, var outside) =>
+            $"{outside} of {total} protected path(s) were removed from outside this run.",
+        (var total, var failed, _) => $"{failed} of {total} protected path(s) did not survive.",
+    };
 }

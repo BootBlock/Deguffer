@@ -15,7 +15,7 @@ public sealed class RunOutcomeTests
 {
     private static CleanupResult Result(
         string name,
-        bool verified = true,
+        VerificationOutcome outcome = VerificationOutcome.Survived,
         int skipped = 0,
         int kept = 0,
         long reclaimed = 0) => new()
@@ -30,8 +30,8 @@ public sealed class RunOutcomeTests
                     new VerificationCheck(
                         @"C:\Users\testuser\.cache\keep-me",
                         "Configuration, not cache",
-                        verified,
-                        verified ? "Still present." : "MISSING — it was there before the clean."),
+                        outcome,
+                        "Whatever the check found."),
                 ],
             },
         };
@@ -52,7 +52,7 @@ public sealed class RunOutcomeTests
     [Fact]
     public void FlagsTheRunWhenAnyOneProviderFailedVerification()
     {
-        var outcome = RunOutcome.For([Result("npm"), Result("NuGet", verified: false), Result("pip")]);
+        var outcome = RunOutcome.For([Result("npm"), Result("NuGet", VerificationOutcome.Failed), Result("pip")]);
 
         Assert.True(outcome.VerificationFailed);
         Assert.Contains("NuGet", outcome.Statement, StringComparison.Ordinal);
@@ -64,7 +64,7 @@ public sealed class RunOutcomeTests
     public void NamesEveryProviderWhoseVerificationFailed()
     {
         var outcome = RunOutcome.For(
-            [Result("npm", verified: false), Result("NuGet"), Result("Gradle", verified: false)]);
+            [Result("npm", VerificationOutcome.Failed), Result("NuGet"), Result("Gradle", VerificationOutcome.Failed)]);
 
         Assert.Contains("npm", outcome.Statement, StringComparison.Ordinal);
         Assert.Contains("Gradle", outcome.Statement, StringComparison.Ordinal);
@@ -78,7 +78,7 @@ public sealed class RunOutcomeTests
     [Fact]
     public void LeadsWithTheFailureRatherThanWhatTheRunLeftBehind()
     {
-        var outcome = RunOutcome.For([Result("npm", verified: false, skipped: 3, kept: 7)]);
+        var outcome = RunOutcome.For([Result("npm", VerificationOutcome.Failed, skipped: 3, kept: 7)]);
 
         Assert.True(outcome.VerificationFailed);
         Assert.DoesNotContain("left alone", outcome.Statement, StringComparison.Ordinal);
@@ -121,5 +121,96 @@ public sealed class RunOutcomeTests
 
         Assert.DoesNotContain("Removed", outcome.Statement, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("GB", outcome.Statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A protected path taken by something else while the preview sat on screen. It has to be said
+    /// — the run's figures describe a machine that moved — and it must not be said as an alarm. The
+    /// sentence that asks the user to report a fault is the one thing that stops meaning anything if
+    /// it is stated about an ordinary event.
+    /// </summary>
+    [Fact]
+    public void SaysAPathWentFromOutsideTheRunWithoutCallingItAFailure()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm"), Result(".NET intermediate build output", VerificationOutcome.RemovedFromOutside)]);
+
+        Assert.Equal(RunVerdict.RemovedFromOutside, outcome.Verdict);
+        Assert.False(outcome.VerificationFailed);
+        Assert.True(outcome.NeedsReporting);
+
+        Assert.Contains(".NET intermediate build output", outcome.Statement, StringComparison.Ordinal);
+        Assert.Contains("Preview again", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("please report this", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("All protected paths survived", outcome.Statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A run that verified cleanly leaves the bar to the fresh preview's totals, which describe the
+    /// list now on screen. Only the two verdicts with something to answer for hold it.
+    /// </summary>
+    [Theory]
+    [InlineData(VerificationOutcome.Survived, false)]
+    [InlineData(VerificationOutcome.NotPresentBefore, false)]
+    [InlineData(VerificationOutcome.RemovedFromOutside, true)]
+    [InlineData(VerificationOutcome.Failed, true)]
+    public void OnlyAVerdictWithSomethingToAnswerForHoldsTheInfoBar(
+        VerificationOutcome outcome,
+        bool expected)
+    {
+        Assert.Equal(expected, RunOutcome.For([Result("npm", outcome)]).NeedsReporting);
+    }
+
+    /// <summary>
+    /// One over-broad rule outranks any number of paths that went on their own. Leading with the
+    /// milder sentence would leave the alarm unsaid.
+    /// </summary>
+    [Fact]
+    public void AFailureOutranksAPathTakenFromOutside()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm", VerificationOutcome.RemovedFromOutside), Result("NuGet", VerificationOutcome.Failed)]);
+
+        Assert.Equal(RunVerdict.VerificationFailed, outcome.Verdict);
+        Assert.Contains("NuGet", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("npm", outcome.Statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the run left behind stays on this sentence, unlike the failure's. It is not an alarm to
+    /// bury, and both facts explain the same thing: why the figures are not what the preview said.
+    /// </summary>
+    [Fact]
+    public void KeepsWhatTheRunLeftBehindBesideAnOutsideRemoval()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm", VerificationOutcome.RemovedFromOutside, skipped: 2, kept: 5)]);
+
+        Assert.Contains("2 item(s) in use were left alone.", outcome.Statement, StringComparison.Ordinal);
+        Assert.Contains("5 file(s) changed too recently to remove.", outcome.Statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The count is of paths rather than of providers. One removed checkout takes a protected path
+    /// per project inside it, and "1 protected path" about nine of them is a figure the user cannot
+    /// reconcile with the list beneath it.
+    /// </summary>
+    [Fact]
+    public void CountsThePathsRatherThanTheProviders()
+    {
+        var result = Result("npm", VerificationOutcome.RemovedFromOutside);
+        var three = result with
+        {
+            Verification = new VerificationResult
+            {
+                Checks = [.. Enumerable.Range(0, 3).Select(i => new VerificationCheck(
+                    $@"C:\Users\testuser\src\project{i}\obj",
+                    "It must survive.",
+                    VerificationOutcome.RemovedFromOutside,
+                    "Whatever the check found."))],
+            },
+        };
+
+        Assert.Contains("3 protected path(s)", RunOutcome.For([three]).Statement, StringComparison.Ordinal);
     }
 }
