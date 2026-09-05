@@ -372,8 +372,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial string HoveredFigures { get; set; } = string.Empty;
 
     /// <summary>
-    /// What Deguffer knows about the thing under the pointer, ready to show, or empty where it
-    /// knows nothing about it — which is nearly every shape on a map.
+    /// What Deguffer knows about the thing under the pointer, or about the nearest folder above it
+    /// that it knows anything about, ready to show. Empty where nothing on the way to the top of
+    /// the volume is described.
+    ///
+    /// <para>Nearest rather than exact, because a treemap draws a folder as a one-pixel frame round
+    /// its children and the pointer is nearly always on a file inside it. Asked exactly, the whole
+    /// of <c>C:\Windows</c> answered nothing but that frame.</para>
     ///
     /// <para>Only what the reference says, and not the size or the date: those are already on the
     /// status line under the picture, where they can be read without waiting for anything to
@@ -708,7 +713,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             path,
             $"{FreeSpace.Format(tree.SizeOf(node))}, "
             + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}",
-            _guide.Describe(path)?.Tip() ?? string.Empty);
+            _guide.DescribeNearest(path)?.Tip() ?? string.Empty);
     }
 
     /// <summary>Say that what the notes hold has changed, whichever of the four it was.</summary>

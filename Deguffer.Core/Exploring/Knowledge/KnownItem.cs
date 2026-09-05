@@ -97,7 +97,8 @@ public sealed record KnownItem(
     string Summary,
     string Removal)
 {
-    private const string Blank = "\r\n\r\n";
+    /// <summary>The empty line between the parts of a tip. Shared with <see cref="KnownMatch"/>.</summary>
+    internal const string Blank = "\r\n\r\n";
 
     /// <summary>
     /// The whole of what a hovering reader is shown, with <paramref name="facts"/> — whatever the

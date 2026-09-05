@@ -228,11 +228,13 @@
                         without waiting for anything.
 
                         A floating tooltip, where the readout below deliberately is not, and the
-                        difference is how often it appears. A path and a size change on every shape,
-                        so a popup carrying those never settles; this one has something to say about
-                        a handful of shapes on a whole drive, and stays away over the rest. That is
-                        what the collapse below does — a ToolTip with nothing in it is still a
-                        rounded box that follows the pointer.
+                        difference is how often it changes. A path and a size change on every shape,
+                        so a popup carrying those never settles. This one is about a region rather
+                        than a shape — the nearest folder above the pointer that Deguffer knows
+                        anything about — so it holds still while the pointer crosses the thousands
+                        of files inside one, and goes away where nothing on the way to the top of
+                        the volume is described. That is what the collapse below does: a ToolTip
+                        with nothing in it is still a rounded box that follows the pointer.
                     -->
                     <ToolTipService.ToolTip>
                         <ToolTip MaxWidth="420"
