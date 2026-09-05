@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Deguffer.Core.Configuration;
 
 /// <summary>
@@ -66,6 +68,10 @@ public sealed record WindowMetrics(WindowBounds Bounds, bool IsMaximized)
     /// Whether this describes a window at all. A zero or negative extent is not a small window, so
     /// it is treated as nothing remembered rather than clamped up into a placement the user never
     /// left the window at.
+    ///
+    /// Kept out of the file: a derived value written beside the two it is derived from reads, to
+    /// anyone editing the file by hand, as a third thing they can set.
     /// </summary>
+    [JsonIgnore]
     public bool IsUsable => Bounds.Width > 0 && Bounds.Height > 0;
 }

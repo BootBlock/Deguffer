@@ -104,6 +104,22 @@ public sealed class WindowMetricsStoreTests : IDisposable
     }
 
     /// <summary>
+    /// The file holds the placement and nothing derived from it. Whether a rectangle is a window is
+    /// a question the store answers about what it read, so writing the answer beside the numbers it
+    /// came from offers a hand-editor a third value to set and then ignores what they set it to.
+    /// </summary>
+    [Fact]
+    public void WritesOnlyTheValuesItReadsBack()
+    {
+        CreateStore().Save(new WindowMetrics(new WindowBounds(412, 96, 1000, 700), IsMaximized: true));
+
+        var written = File.ReadAllText(StoreFile);
+
+        Assert.Contains(@"""IsMaximized"": true", written);
+        Assert.DoesNotContain("IsUsable", written);
+    }
+
+    /// <summary>
     /// A placement off every display is stored as it stands rather than rejected here. Whether it
     /// still fits is a question about the desktop the window is opening onto, which this file knows
     /// nothing about — <see cref="WindowBounds.Within"/> answers it at that point.
