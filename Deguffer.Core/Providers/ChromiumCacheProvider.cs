@@ -229,8 +229,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// where that matters.</b> Every other one decides presence by probing a path it already knows
     /// the name of, and a full path still resolves through a directory the account may not list.
     /// This one decides by enumerating, so a refusal here answers "no source" and the row renders as
-    /// "Not installed on this machine" — a stronger claim than the "Already clear" the rest of this
-    /// change exists to stop, and one made about a folder Deguffer never read. Answering true sends
+    /// "Not installed" — a stronger claim than the "Already clear" the rest of this change exists
+    /// to stop, and one made about a folder Deguffer never read. Answering true sends
     /// the pass into <see cref="PlanAsync"/>, which says so.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>

@@ -35,6 +35,27 @@ public sealed class FindingStatusTests
         Assert.Equal("Already clear", FindingStatus.AlreadyClear.ToStatusLabel());
     }
 
+    /// <summary>
+    /// The label is drawn under the size, in the one column the standard row pins, and every other
+    /// thing on that row is positioned against that column's left edge. So a label wider than the
+    /// column does not merely look cramped: it widens the column on its own row, and the "What is
+    /// this?" link on that row alone stops lining up with the rest of the list.
+    ///
+    /// <para>The column is 104 effective pixels. The row's secondary type measures about 5.3 of
+    /// those per character at its widest — "Ready to clean" renders 74 pixels wide and "Not
+    /// installed" 65 — which puts the ceiling at twenty characters. Two labels were over it and
+    /// pushed their rows' links visibly left.</para>
+    /// </summary>
+    [Fact]
+    public void NoStateSaysMoreThanTheRowsPinnedColumnHolds()
+    {
+        const int ceiling = 20;
+
+        Assert.All(
+            Enum.GetValues<FindingStatus>(),
+            status => Assert.InRange(status.ToStatusLabel().Length, 1, ceiling));
+    }
+
     /// <summary>Every state has words of its own, and no two states share them.</summary>
     [Fact]
     public void EveryStateHasDistinctWordsOfItsOwn()

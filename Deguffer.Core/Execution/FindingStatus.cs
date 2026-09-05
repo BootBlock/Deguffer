@@ -67,18 +67,24 @@ public static class FindingStatusExtensions
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
     /// no way out.</para>
+    ///
+    /// <para>Length is part of the meaning here, which is why <c>FindingStatusTests</c> holds these
+    /// to a ceiling. The standard row draws the label under the size, in a column pinned wide
+    /// enough for both, and everything on the row's first line is placed against that column's left
+    /// edge. A label too long for it widens the column on that row alone, which walks the "What is
+    /// this?" link out of line with every other row in the list.</para>
     /// </summary>
     public static string ToStatusLabel(this FindingStatus status) => status switch
     {
-        FindingStatus.AwaitingSourceFolders => "Needs a source folder",
-        FindingStatus.ToolchainMissing => "Not installed on this machine",
+        FindingStatus.AwaitingSourceFolders => "Add a source folder",
+        FindingStatus.ToolchainMissing => "Not installed",
         FindingStatus.UnreadableRoot => "Could not be read",
         FindingStatus.NotExamined => "Not examined",
         FindingStatus.RecentContentHeldBack => "Nothing old enough",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.
-        FindingStatus.NeedsElevation => "Needs administrator rights",
+        FindingStatus.NeedsElevation => "Elevate to clean",
         // Throwing rather than falling back on the member's own name, which is what the enum-to-UI
         // extensions elsewhere do. A name is a plausible-looking label, so a state added without
         // words of its own would reach a row reading "RecentContentHeldBack" while every test in

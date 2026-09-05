@@ -72,9 +72,8 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     /// and a full path resolves through a directory the account may not list. This one decides by
     /// <em>enumerating</em> both application-data roots, so a refusal there answers "no source at
     /// all" — and the planner never calls <see cref="ChromiumCacheProvider.PlanAsync"/> for a
-    /// provider that reports itself absent. The row then reads "Not installed on this machine",
-    /// which is a stronger untruth than the "Already clear" the rest of this work exists to
-    /// stop.</para>
+    /// provider that reports itself absent. The row then reads "Not installed", which is a
+    /// stronger untruth than the "Already clear" the rest of this work exists to stop.</para>
     /// </summary>
     [Fact]
     public async Task AnApplicationDataRootThatWillNotBeListedIsSaidSoRatherThanReportedAsAbsent()
