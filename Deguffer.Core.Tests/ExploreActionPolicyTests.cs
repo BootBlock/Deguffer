@@ -459,7 +459,6 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
-    [InlineData("firefox", "storage")]                       // a profile's site data
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
@@ -476,8 +475,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// Firefox's roots come from Mozilla's own register rather than from a known path, so the
-    /// provider declares none at all until <c>profiles.ini</c> exists.
+    /// A profile's own two directories come from Mozilla's register rather than from a known path,
+    /// so the provider declares no <em>profile</em> root until <c>profiles.ini</c> names one.
+    /// Firefox's two folders above them are declared from constants and need no fixture.
     /// </summary>
     private void RegisterFirefoxProfile() => File.WriteAllText(
         _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),

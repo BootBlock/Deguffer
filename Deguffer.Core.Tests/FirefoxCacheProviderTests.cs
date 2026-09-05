@@ -218,11 +218,19 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     /// §5.2's dangerous direction. Every name here is a real neighbour of the caches in a Firefox
     /// local profile, and none of them is something Deguffer knows how to replace.
     /// </summary>
+    /// <param name="name">
+    /// <c>shortcutCache</c>, <c>personality-provider</c> and <c>settings</c> were observed beside
+    /// the five in a live Firefox profile. <c>shortcutCache</c> is the one that matters most: it
+    /// carries the word "Cache" and is still not on the list, so a rule that matched on the name
+    /// rather than on the table would take it.
+    /// </param>
     [Theory]
+    [InlineData("shortcutCache")]
+    [InlineData("personality-provider")]
+    [InlineData("settings")]
     [InlineData("storage")]
     [InlineData("minidumps")]
     [InlineData("datareporting")]
-    [InlineData("settings")]
     [InlineData("SuperCache")]
     public async Task AnUnrecognisedSiblingIsTier4AndIsAssertedToSurvive(string name)
     {
@@ -296,7 +304,13 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         var profile = AddProfile();
         var synchronised = CreateDirectory(Path.Combine(profile.Local, "remote-settings"), bytes: 32768);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        // The planner never asks an absent provider for a plan, so a presence probe that only
+        // knows the five offered names makes every sentence below unreachable.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n =>
@@ -317,7 +331,35 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         AddProfile("hand-placed", declared: _temp.CreateDirectory("moved-profile"), isRelative: false);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("hand-placed", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same rule where there is nothing else at all: every profile Firefox has is stored
+    /// somewhere Deguffer will not examine. The provider must still report itself present, because
+    /// the planner never asks an absent provider for a plan and the row would then read "Not
+    /// installed" about a Firefox that is installed.
+    /// </summary>
+    [Fact]
+    public async Task AFirefoxWhoseOnlyProfileIsStoredElsewhereIsPresentRatherThanAbsent()
+    {
+        var elsewhere = _temp.CreateDirectory("moved-profile");
+        AddProfile("hand-placed", declared: elsewhere, isRelative: false);
+        CreateDirectory(Path.Combine(elsewhere, "cache2"));
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);

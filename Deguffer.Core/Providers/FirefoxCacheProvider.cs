@@ -99,6 +99,18 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     ]);
 
     /// <summary>
+    /// Every name the table declares, offerable or not, for the presence probe to look for.
+    ///
+    /// <para>The Tier 4 entry has to be here, and <see cref="DisposableChildSet.DisposableNames"/>
+    /// excludes it by construction — which is right for that property and wrong for this question.
+    /// A profile whose local half holds nothing but <c>remote-settings</c> is exactly the case the
+    /// size note exists for, it was four fifths of the profile measured, and a probe over the
+    /// offerable names alone would report that profile absent. The planner would then never ask for
+    /// the plan that reports it.</para>
+    /// </summary>
+    private static readonly string[] DeclaredNames = [.. Children.DisposableNames, SynchronisedDataName];
+
+    /// <summary>
     /// Nothing is disposable in the roaming half. It is a <see cref="ToolRoot"/> so that §7.1's
     /// second deletion route refuses it too: Explore draws every directory on the drive and lets the
     /// user act on one, and "never the roaming profile at all" is not a rule that can hold on the
@@ -240,21 +252,27 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Presence is a cache actually on disk, never a profile existing. A profile that has been
-    /// opened once and closed keeps a local half with nothing disposable in it, and reporting that
-    /// as a source would offer the user a row the plan then has nothing to say about.
+    /// Presence is something on disk this provider has a sentence about, never a profile existing.
+    /// A profile that has been opened once and closed keeps a local half with nothing declared in
+    /// it, and reporting that as a source would offer the user a row the plan has nothing to say
+    /// about.
     ///
-    /// <para>A <c>profiles.ini</c> that would not be read counts as present, for the reason the
-    /// Chromium provider's refused application-data root does: the planner never asks an absent
-    /// provider for a plan, so the row would read "Not installed" about a file Deguffer never read.
-    /// Answering true sends the pass into <see cref="BuildPlanAsync"/>, which says so.</para>
+    /// <para><b>The two cases that are not a cache are here because the planner never asks an absent
+    /// provider for a plan.</b> A <c>profiles.ini</c> that would not be read, and a profile kept
+    /// outside Firefox's folder, each have their own sentence in <see cref="BuildPlanAsync"/>, and
+    /// both sentences are unreachable if this answers false. The row then reads "Not installed"
+    /// about a Firefox that is installed, which is a stronger untruth than the "Already clear" it
+    /// would otherwise be. <see cref="DeclaredNames"/> covers the third case, a profile holding the
+    /// synchronised data and no cache.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
         var profiles = Profiles(ct);
 
         return Task.FromResult(
-            _discovery.ProfilesUnreadable || profiles.Any(profile => HasRecognisedCache(profile, ct)));
+            _discovery.ProfilesUnreadable
+            || _discovery.ProfilesElsewhere.Count > 0
+            || profiles.Any(profile => HasDeclaredContent(profile, ct)));
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -397,10 +415,10 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             }
         }
 
-        // Said as a note rather than as an early return, because the pass has other things to
-        // report even when it found no cache: the size of the synchronised data it deliberately did
-        // not offer, and any profile stored somewhere it will not examine. Returning an empty plan
-        // here discarded both, so a profile holding 1.5 GB of remote-settings and nothing else read
+        // A note rather than an early return, because the pass has other things to report even when
+        // it found no cache: the size of the synchronised data it deliberately does not offer, and
+        // any profile stored somewhere it will not examine. Returning an empty plan here would
+        // discard both, and a profile holding 1.5 GB of remote-settings and nothing else would read
         // as clear with no account of the space.
         if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
@@ -492,7 +510,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// Whether any of the five offerable names is on disk for this profile, by probing the table
-    /// rather than by enumerating (G4). Five existence checks per profile, and not one of them can
+    /// rather than by enumerating (G4). Six existence checks per profile, and not one of them can
     /// reach a path the table does not name.
     ///
     /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so a profile
@@ -500,9 +518,9 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// <see cref="BuildPlanAsync"/> declines it. A future edit must not read a true from this as
     /// licence to delete anything.</para>
     /// </summary>
-    private static bool HasRecognisedCache(MozillaProfile profile, CancellationToken ct)
+    private static bool HasDeclaredContent(MozillaProfile profile, CancellationToken ct)
     {
-        foreach (var name in Children.DisposableNames)
+        foreach (var name in DeclaredNames)
         {
             ct.ThrowIfCancellationRequested();
 
