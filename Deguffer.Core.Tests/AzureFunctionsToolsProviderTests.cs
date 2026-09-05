@@ -108,11 +108,12 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         Assert.Contains(Path.Combine(releases, "4.18.1"), plan.TargetedPaths);
     }
 
-    /// <summary>The historic four-part form, which the current feed no longer serves.</summary>
+    /// <summary>Every runtime line's numbering, including the long build numbers older feeds served.</summary>
     [Theory]
     [InlineData("4.0.5455")]
     [InlineData("2.7.1948")]
     [InlineData("1.13.2")]
+    [InlineData("10.0.0")]
     public async Task RecognisesEveryFormOfReleaseVersion(string name)
     {
         var releases = CreateReleases(name);
@@ -128,9 +129,10 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
     /// </summary>
     [Theory]
     [InlineData("4")]                    // a single number is not a version.
+    [InlineData("4.18")]                 // two parts: fewer than the feed has ever served.
+    [InlineData("4.0.5455.1")]           // four parts: more than the feed has ever served.
     [InlineData("v4")]                   // the tag name, not a release.
     [InlineData("4.18.1-backup")]        // something a person made.
-    [InlineData("4.18.1.2.3")]           // more components than a release ever carries.
     [InlineData("4.18.x")]               // not numeric throughout.
     [InlineData("X4.18.1")]              // prefixed: must not match unanchored.
     [InlineData("staging")]              // an unrelated directory.

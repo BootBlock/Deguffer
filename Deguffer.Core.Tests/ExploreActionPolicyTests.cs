@@ -377,9 +377,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("feed-v2167102.json", false)]            // what it already has
     [InlineData("Releases", false)]                      // the folder, never a target
     [InlineData(@"Releases\4.18.1", true)]               // one downloaded release
-    [InlineData(@"Releases\4.0.5455", true)]             // the historic four-part form
+    [InlineData(@"Releases\4.0.5455", true)]             // an older feed's long build number
     [InlineData(@"Releases\4.18.1\cli_x64", true)]       // inside a recognised release
     [InlineData(@"Releases\notes", false)]               // not a version, so not a release
+    [InlineData(@"Releases\4.18", false)]                // fewer parts than a release carries
     [InlineData(@"Releases\4.18.1-backup", false)]       // something a person made
     public void TheOuterAzureFunctionsRootRecognisesNothingAtAll(string relative, bool allowed)
     {

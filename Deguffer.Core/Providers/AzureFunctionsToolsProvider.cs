@@ -54,14 +54,20 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
     /// <summary>
     /// A downloaded release directory, whose whole name is the release version — <c>4.18.1</c>,
-    /// <c>2.60.0</c>. Historic releases carry a fourth component (<c>4.0.5455</c>), so between two
-    /// and four are accepted, and nothing else is.
+    /// <c>2.60.0</c>, <c>4.0.5455</c>.
+    ///
+    /// <para><b>Exactly three parts, which is the shape the feed has always served.</b> A wider rule
+    /// costs nothing to write and is the §5.2 mistake: a directory named <c>4.18</c> or <c>5</c> was
+    /// made by a person, not by the tooling, and treating an unknown thing as safe is the one
+    /// direction this must never fail in. If Microsoft ever renumbers, Deguffer stops offering the
+    /// row and says which children it is leaving alone, which is visible and fixable — where the
+    /// opposite mistake is not.</para>
     ///
     /// Anchored with <c>\A</c> and <c>\z</c> rather than <c>^</c> and <c>$</c>: <c>$</c> also matches
     /// before a trailing newline, and a check that decides whether a directory may be deleted should
     /// admit no such reading.
     /// </summary>
-    [GeneratedRegex(@"\A[0-9]+(?:\.[0-9]+){1,3}\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A[0-9]+\.[0-9]+\.[0-9]+\z", RegexOptions.CultureInvariant)]
     private static partial Regex ReleaseVersion();
 
     private readonly string _root;

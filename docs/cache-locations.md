@@ -1199,10 +1199,10 @@ files are the tooling saying, in its own words, which copy it will reach for.
 
 ### What Deguffer does
 
-Within `Releases`, a child is removed only if its **whole name is a dotted numeric version** —
-`4.18.1`, `2.60.0`, and the four-part `4.0.5455` older releases used. `v4`, `4`, `4.18.1-backup`
-and anything you created yourself do not qualify: they stay in Tier 4 and Deguffer tells you it is
-leaving them alone.
+Within `Releases`, a child is removed only if its **whole name is three dotted numbers** — `4.18.1`,
+`2.60.0`, `4.0.5455`. That is the shape the feed has always served. `v4`, `4`, `4.18`,
+`4.18.1-backup` and anything you created yourself do not qualify: they stay in Tier 4 and Deguffer
+tells you it is leaving them alone.
 
 **Every release is offered, including the one the tooling still points at.** Deguffer cannot know
 whether you still have a Functions v2 project, and withholding 166 MB on the chance that you might
