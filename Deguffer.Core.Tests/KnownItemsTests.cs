@@ -135,6 +135,28 @@ public sealed class KnownItemsTests : IDisposable
     }
 
     /// <summary>
+    /// The two installer caches §9 excludes, which the catalogue has to carry precisely because
+    /// nothing else in the app will ever mention them.
+    ///
+    /// <para>Every other large directory a reader finds is either offered on the Storage page or
+    /// removable from Explore, so the app says something about it either way. These two are refused
+    /// by <see cref="Deguffer.Core.Exploring.Acting.ExploreActionPolicy"/> and reached by no
+    /// provider, which leaves the entry here as the only place Deguffer explains several gigabytes
+    /// the reader can see. An explanation nothing asserts is one a later edit can quietly
+    /// drop.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("Package Cache")]
+    [InlineData(@"Microsoft\VisualStudio\Packages")]
+    public void TheInstallerCachesAreExplainedEvenThoughNothingOffersThem(string relativePath)
+    {
+        var entry = ItemGuide.For(_system, _environment)
+            .Describe(Path.Combine(_system.ProgramData, relativePath));
+
+        Assert.NotNull(entry);
+    }
+
+    /// <summary>
     /// The catalogue against a real machine's directories, which is the one arrangement the app
     /// actually runs in. It asserts the wiring rather than the text: that
     /// <see cref="ItemGuide.ForThisMachine"/> resolves its anchors and finds something through them.

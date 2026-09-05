@@ -1341,6 +1341,48 @@ session held 344 MB of live working files in Temp, with dozens of processes hold
 Doing this properly needs an age filter, exclusion of paths belonging to running processes, and
 treating "access denied" as normal rather than as an error. See §5.3.
 
+### The Visual Studio installer's package caches — no way to clear them safely
+
+Two directories, both large, both holding the installation packages the Visual Studio installer has
+downloaded, and both left alone:
+
+| Location | Measured | What it holds |
+| --- | ---: | --- |
+| `C:\ProgramData\Microsoft\VisualStudio\Packages` | 7.7 GB | A manifest and a payload for every component of every product the installer has put on the machine |
+| `C:\ProgramData\Package Cache` | 6.7 GB | The same idea for products installed as a bundle — Visual Studio, the Visual C++ redistributables, the .NET SDKs |
+
+The first is the largest single location no provider reaches, and on the machine where it was
+measured it was larger than everything the shipped providers found there put together. Deguffer still
+does not offer it, for three reasons that all point the same way.
+
+**There is no command that clears it.** `vs_installer.exe --nocache`, and the
+`KeepDownloadedPayloads` policy behind it, are the routes Microsoft documents — and neither of them
+frees any space when it runs. They tell the installer to stop keeping payloads, and the existing ones
+go during the *next* install, modify or repair of the product they belong to. That operation is long,
+needs administrator rights, and is something the user has to want for its own sake. Deguffer's whole
+promise is a preview and then a number, and there is no honest number to show for a step that
+reclaims nothing.
+
+**The folder cannot be split into "safe" and "unsafe" children.** The measured machine had 1,249 of
+them, one per payload, named by component and version, and different on any other machine. No
+allow-list can be written, so §5.2 puts every one of them in Tier 4. Nor is the folder uniformly
+disposable: `_Instances` holds each installed product's own record of what it is made of, sitting
+directly beside the payloads. That is the same trap as `gradle.properties` next to `.gradle\caches`,
+which is what §5.2 exists to catch.
+
+**Losing it costs a repair you cannot do offline.** With a network, the installer downloads what it
+needs and nothing is lost. Without one, a repair or a change to Visual Studio cannot proceed — which
+is precisely why the sibling `Package Cache` was excluded from the start.
+
+So Deguffer reports these and never offers them. Explore refuses to remove anything under
+`C:\ProgramData`, and hovering either folder says what it is and what clearing it costs, which is the
+question a size picture actually raises. If you want the space back, the supported route is the
+installer's own `--nocache` switch, run before the next repair or modify.
+
+`InstallCleanup.exe` turns up in search results for this and is not an answer. Microsoft documents it
+as a last resort after a repair or an uninstall has already failed, and warns that it can remove
+features belonging to other products.
+
 ### Docker — freeing space inside the disk image does not free it on disk
 
 `docker system prune` reclaims space *inside* `docker_data.vhdx`, while the host file stays exactly
