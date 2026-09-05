@@ -65,7 +65,7 @@ body:
     attributes:
       label: Windows version and app version
       description: The app version is shown on the About screen.
-      placeholder: e.g. Windows 11 26100, Deguffer 2026.07.19
+      placeholder: e.g. Windows 11 26100, Deguffer 0.70.0
     validations:
       required: false
   - type: textarea

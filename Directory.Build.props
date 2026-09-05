@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Project>
+    <!--
+        One version for the whole solution. Nothing set it before, so every assembly carried the
+        SDK's default 1.0.0 and the About page reported that as the app's version.
+
+        Only Version is stated: the SDK derives AssemblyVersion and FileVersion from it, and the
+        build appends the commit SHA to the informational version, which AboutPage trims back off.
+    -->
+    <PropertyGroup>
+        <Version>0.70.0</Version>
+
+        <Product>Deguffer</Product>
+        <Company>BootBlock</Company>
+        <Authors>BootBlock</Authors>
+        <Copyright>Copyright (c) 2026 Joe Cox</Copyright>
+    </PropertyGroup>
+</Project>
