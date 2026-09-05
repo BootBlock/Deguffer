@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -32,7 +31,7 @@ namespace Deguffer.Core.Providers;
 /// <c>clear</c> accepts, and passing those names back is the form that works on every version — and
 /// it puts a size against each repository rather than one figure for all of them.</para>
 /// </summary>
-public sealed partial class PoetryCacheProvider : CleanupProviderBase
+public sealed class PoetryCacheProvider : CleanupProviderBase
 {
     /// <summary>
     /// The only children of Poetry's cache directory this provider recognises. Anything else is
@@ -64,18 +63,7 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
     /// <summary>No paths measured, for the routes that produce no command step at all.</summary>
     private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, []);
 
-    /// <summary>
-    /// What a cache name has to look like before it is pasted into a command line. A repository
-    /// name comes from a <c>pyproject.toml</c> source and reaches Deguffer as a directory name, so
-    /// it is somebody else's string arriving in the arguments of a process this tool starts. A name
-    /// carrying a space or a quote would change which command runs, and the honest answer to one is
-    /// to leave that cache to Poetry rather than to guess at quoting it.
-    /// </summary>
-    [GeneratedRegex(@"\A[A-Za-z0-9._-]+\z", RegexOptions.CultureInvariant)]
-    private static partial Regex PlainCacheName();
-
-    private string? _cacheRoot;
-    private string? _virtualEnvironments;
+    private readonly PoetryDiscovery _discovery;
 
     public PoetryCacheProvider(
         IUserEnvironment? environment = null,
@@ -86,9 +74,8 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
-    {
-    }
+            scanner ?? DirectoryScanner.Default) =>
+        _discovery = new PoetryDiscovery(Runner);
 
     public override string Id => "poetry";
 
@@ -116,15 +103,15 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["poetry", "python", "python3"];
 
-    /// <summary>
-    /// Where Poetry keeps its cache when it has not been asked. <c>cache-dir</c> in
-    /// <c>config.toml</c> and <c>POETRY_CACHE_DIR</c> both move it, so this is a last resort rather
-    /// than an assumption.
-    /// </summary>
-    public string DefaultCacheRoot => Path.Combine(Environment.LocalAppData, "pypoetry", "Cache");
-
     /// <summary>Poetry's folder in the local profile. Never a target, and what §5.6 asserts survived.</summary>
     public string LocalRoot => Path.Combine(Environment.LocalAppData, "pypoetry");
+
+    /// <summary>
+    /// Where Poetry keeps its cache when it has not been asked. It is what the §5.2 declaration below
+    /// is written against, because a declaration Explore consults on every path cannot run a
+    /// subprocess, and it is the fallback handed to <see cref="PoetryDiscovery"/>.
+    /// </summary>
+    public string DefaultCacheRoot => Path.Combine(LocalRoot, "Cache");
 
     /// <summary>
     /// Poetry's folder in the roaming profile. Never reached into at all: it holds
@@ -166,14 +153,9 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("poetry") is not null);
 
-    /// <summary>
-    /// Both answers are configuration, and <c>poetry config</c> is how either is changed, so a
-    /// remembered pair would describe directories Poetry has stopped using.
-    /// </summary>
     public override void InvalidateCaches()
     {
-        _cacheRoot = null;
-        _virtualEnvironments = null;
+        _discovery.Invalidate();
         base.InvalidateCaches();
     }
 
@@ -184,7 +166,8 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
             return EmptyPlan("Poetry is not installed on this machine.");
         }
 
-        var cacheRoot = await ResolveCacheRootAsync(poetry, ct).ConfigureAwait(false);
+        var (cacheRoot, environments) =
+            await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
 
         if (!LongPath.DirectoryExists(cacheRoot))
         {
@@ -200,8 +183,6 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
                 $"Leaving '{LongPath.Display(cacheRoot)}' alone: it is a link to somewhere else, and "
                 + "Deguffer does not look through a link.");
         }
-
-        var environments = await ResolveEnvironmentsAsync(poetry, cacheRoot, ct).ConfigureAwait(false);
 
         // §5.2, and the reason this is a check on the resolved paths rather than on the child names
         // below. cache-dir and virtualenvs.path are configured independently, so a value naming the
@@ -244,14 +225,14 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
         // either measurement met is the one the user is shown.
         var fallback = cleared.Fallback != FallbackReason.None ? cleared.Fallback : deleted.Fallback;
 
-        if (cleared.Note is { } clearNote)
+        // Said once, and that is why this provider builds the sentence rather than taking each
+        // batch's own note. It is the only provider that measures twice — the command route and the
+        // path route, over two children of one directory — so both batches meet the same volume and
+        // report the same reason, and adding both put the same paragraph on screen twice, reading as
+        // two separate findings about one scan.
+        if (FallbackReasonText.Describe(fallback) is { } route)
         {
-            notes.Add(clearNote);
-        }
-
-        if (deleted.Note is { } deleteNote)
-        {
-            notes.Add(deleteNote);
+            notes.Add(new PlanNote(PlanNoteSeverity.Information, route));
         }
 
         if (BuildRunningProcessNote() is { } warning)
@@ -417,7 +398,7 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
             return ([], NothingMeasured);
         }
 
-        var named = await ListCachesAsync(poetry, ct).ConfigureAwait(false);
+        var named = await _discovery.ListCachesAsync(poetry, ct).ConfigureAwait(false);
 
         var caches = named
             .Select(name => (Name: name, Path: Path.Combine(repositories, name)))
@@ -458,79 +439,4 @@ public sealed partial class PoetryCacheProvider : CleanupProviderBase
 
         return (steps, measured);
     }
-
-    /// <summary>
-    /// The caches Poetry's own <c>clear</c> will accept, asked of Poetry rather than read off the
-    /// disk. The names are what <c>cache clear</c> validates against its repository cache
-    /// directory, so taking them from the tool that is about to be handed them back is what keeps
-    /// the two in step if Poetry ever changes how a repository maps to a directory.
-    ///
-    /// <para>Empty is an ordinary answer: Poetry prints "No caches found" and still exits zero on a
-    /// machine that has resolved nothing.</para>
-    /// </summary>
-    private async Task<IReadOnlyList<string>> ListCachesAsync(string poetry, CancellationToken ct)
-    {
-        var outcome = await Runner.RunAsync(poetry, "cache list --no-ansi", ct).ConfigureAwait(false);
-
-        if (!outcome.Succeeded)
-        {
-            return [];
-        }
-
-        return
-        [
-            .. outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(line => PlainCacheName().IsMatch(line))
-                .Distinct(StringComparer.OrdinalIgnoreCase),
-        ];
-    }
-
-    private async Task<string> ResolveCacheRootAsync(string poetry, CancellationToken ct)
-    {
-        if (_cacheRoot is not null)
-        {
-            return _cacheRoot;
-        }
-
-        // --no-ansi because Poetry colourises its output when it believes it is writing to a
-        // terminal, and the escape sequences would land inside the parsed path.
-        var outcome = await Runner.RunAsync(poetry, "config cache-dir --no-ansi", ct).ConfigureAwait(false);
-
-        return _cacheRoot = ReportedPath(outcome) ?? DefaultCacheRoot;
-    }
-
-    /// <summary>
-    /// Where Poetry keeps its environments. Asked separately because the setting is separate: it
-    /// defaults to a child of the cache directory and can be pointed anywhere, so the default is a
-    /// fallback rather than a description of this machine.
-    /// </summary>
-    private async Task<string> ResolveEnvironmentsAsync(string poetry, string cacheRoot, CancellationToken ct)
-    {
-        if (_virtualEnvironments is not null)
-        {
-            return _virtualEnvironments;
-        }
-
-        var outcome = await Runner.RunAsync(poetry, "config virtualenvs.path --no-ansi", ct).ConfigureAwait(false);
-
-        return _virtualEnvironments = ReportedPath(outcome) ?? Path.Combine(cacheRoot, "virtualenvs");
-    }
-
-    /// <summary>
-    /// The path a <c>poetry config</c> lookup reported, normalised, or null where it reported
-    /// something that is not one.
-    ///
-    /// <para>Through <see cref="LongPath.Configured"/> rather than used as it arrived: a trailing
-    /// separator would make the leaf name empty, and a value carrying <c>..</c> would compare equal
-    /// to nothing and walk straight past the containment checks above. A setting Poetry has no value
-    /// for prints as <c>null</c>, which is not a rooted path and so falls back correctly.</para>
-    /// </summary>
-    private static string? ReportedPath(CommandOutcome outcome) =>
-        outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(LongPath.Configured)
-                .LastOrDefault(path => path is not null)
-            : null;
 }

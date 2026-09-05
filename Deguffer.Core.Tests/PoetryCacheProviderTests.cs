@@ -354,6 +354,44 @@ public sealed class PoetryCacheProviderTests : IDisposable
             n.Message.Contains("delete through a link", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The §5.6 negative after a real execution rather than a simulated one: the plan is carried out
+    /// against a real tree by the real executor and the real directory remover, and what the run has
+    /// to show afterwards is the environments still standing.
+    ///
+    /// <para>Only the subprocess is faked, which is the point. Poetry is not installed on the
+    /// machine this was written on, and the deletion half of the plan is Deguffer's own — so the
+    /// half that can destroy something runs for real, and the half that belongs to Poetry does not
+    /// run at all.</para>
+    /// </summary>
+    [Fact]
+    public async Task ExecutingRemovesTheArtifactsAndLeavesTheEnvironmentsStanding()
+    {
+        var (artifacts, repositories, environments) = CreateCache();
+        var installed = Path.Combine(environments, "myproject-py3.12", "Lib", "installed.pyd");
+
+        var runner = Poetry();
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(artifacts));
+
+        // §5.6, asserted rather than inferred from the absence of a step naming them.
+        Assert.True(Directory.Exists(environments));
+        Assert.True(File.Exists(installed));
+        Assert.True(Directory.Exists(CacheRoot));
+        Assert.True(Directory.Exists(repositories));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+
+        // §5.1's half was handed to Poetry rather than done by path.
+        Assert.Contains(runner.Invocations, i =>
+            i.Arguments.Contains("cache clear PyPI --all", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(Path.Combine(repositories, "PyPI")));
+    }
+
     /// <summary>§5.6: the negative is the whole test. An over-broad rule passes every positive one.</summary>
     [Fact]
     public async Task VerificationFailsLoudlyIfTheVirtualEnvironmentsVanished()
@@ -400,6 +438,24 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
         Assert.Contains(Path.Combine(moved, "artifacts"), after.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(Path.Combine(first, "artifacts"), after.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// This is the only provider that measures twice — once for the command route and once for the
+    /// path route — so it is the only one that can report the same scan twice. The plan reached the
+    /// user with §5.5's "scanned by walking directories" paragraph printed under itself, reading as
+    /// two separate findings about one directory.
+    /// </summary>
+    [Fact]
+    public async Task SaysEachThingOnceEvenThoughItMeasuresTwice()
+    {
+        CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.Equal(
+            plan.Notes.Count,
+            plan.Notes.Select(n => n.Message).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
