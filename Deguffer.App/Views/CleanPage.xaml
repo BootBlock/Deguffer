@@ -279,7 +279,7 @@
 
             <!-- §7: free space, prominently. It is the only number the user came for. -->
             <Border Style="{StaticResource CardStyle}">
-                <Grid ColumnSpacing="28" RowSpacing="14" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
 
                     <StackPanel Grid.Row="0" Grid.Column="0" Spacing="10">
                         <StackPanel Orientation="Horizontal" Spacing="10">
@@ -331,10 +331,16 @@
                     <!-- §5.6's verdict on the run those two figures describe, and it stays as long
                          as they do. The info bar below cannot hold it: a clean re-plans the list
                          immediately afterwards, and every provider that scan checks reports a line
-                         of its own into that bar. A verdict there is gone before it is read. -->
+                         of its own into that bar. A verdict there is gone before it is read.
+
+                         The gap above it is this element's margin rather than the grid's
+                         RowSpacing, because row spacing is a property of the rows: it stands
+                         whether or not anything is in them, and before the first clean of a session
+                         that is empty space under the capacity bar. -->
                     <TextBlock Grid.Row="1"
                                Grid.Column="0"
                                Grid.ColumnSpan="2"
+                               Margin="0,14,0,0"
                                Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
                                Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}"
                                Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}" />
@@ -344,11 +350,13 @@
 
         <!-- This line carries a failed §5.6 verification — the most safety-critical string in the
              app. An InfoBar rather than plain text so it is distinguishable from routine progress by
-             icon and severity, not only by reading to the end of it, and it is stated here rather
-             than only in the card above because severity is the one thing the card cannot carry. A
-             clean that verified cleanly leaves the bar to the fresh preview's totals and says so in
-             the card instead, where it survives the next scan. It sits on its own solid surface
-             because §6.5 forbids text that needs the blur to read. -->
+             icon and severity, not only by reading to the end of it, and so it is announced as a
+             problem rather than read out as one more line. The card above states the same sentence
+             durably and in the critical colour, and colour and weight do neither of those things,
+             which is why the failure is stated twice. A clean that verified cleanly leaves the bar
+             to the fresh preview's totals and says so in the card alone, where it survives the next
+             scan. It sits on its own solid surface because §6.5 forbids text that needs the blur to
+             read. -->
         <InfoBar Grid.Row="1"
                  IsOpen="True"
                  IsClosable="False"

@@ -378,6 +378,15 @@ public sealed partial class CleanViewModel : ObservableObject
         }
 
         IsBusy = true;
+
+        // A previous run's figures and its §5.6 verdict describe a machine state this run is about
+        // to replace, exactly as a preview's do. Cleared here rather than when the new ones arrive,
+        // because a run that is cancelled or fails never reaches RecordRunResult: leaving the old
+        // verdict up would stand "All protected paths survived" over a deletion nobody verified,
+        // which is the inversion §5.6 exists to prevent. After the confirmation above, so declining
+        // still leaves the screen exactly as it was.
+        ClearRunResult();
+
         var freeBefore = FreeSpace.ForPath(_environment.UserProfile);
 
         try
@@ -647,9 +656,11 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// What the info bar is left saying once the run and the re-plan behind it have both finished.
     ///
-    /// <para>A verification failure keeps it. It means a rule was over-broad, the user needs to know
-    /// before the next run, and severity is the one thing the card cannot carry: an icon and a
-    /// colour are how it is told apart from routine text without reading to the end of it.</para>
+    /// <para>A verification failure keeps it. It means a rule was over-broad, and the user needs to
+    /// know before the next run. The card states the same sentence, and marks it by colour and
+    /// weight, but only the bar has an icon and a severity behind it — so only the bar is told apart
+    /// from routine text without reading to the end of the line, and announced as a problem rather
+    /// than read out as one more line of text.</para>
     ///
     /// <para>Every other outcome yields to the fresh preview's totals, which describe the list now
     /// on screen. That sentence is also the only one a selection change may keep current, so
