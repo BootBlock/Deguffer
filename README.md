@@ -23,9 +23,15 @@ Size alone cannot tell you which is which, so Deguffer does not rank folders by 
 guess. It recognises specific locations, says what each holds and what losing it costs, and leaves
 the decision with you.
 
-On the workstation this tool was designed against — Windows 11, ~330 GB system drive, down to
+On the workstation this tool was designed against — Windows 11, a ~330 GB system drive, down to
 **5.6 GB free** — targeted cleanup of three package-manager caches recovered **22.9 GB** in a few
-minutes without touching a single piece of user data.
+minutes without touching a single piece of user data. That audit is what the safety model was built
+from.
+
+Previewing that same drive today, version 0.70.0 recognises 34 locations and finds 29 of them
+present. It offers **10.3 GB** of Tier 1 cache pre-selected and **1.4 GB** of Tier 2 beside it, and
+reports **6.4 GB** of Tier 3 user data separately with nothing pre-selected. The Recycle Bin and the
+crash dumps are real space, and they are still yours to decide about.
 
 ## The idea: safety tiers
 
