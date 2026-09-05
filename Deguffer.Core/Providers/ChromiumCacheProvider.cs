@@ -258,6 +258,9 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         // Seeded rather than started at false. A root that refused to be listed is a fact about this
         // pass whether or not the *other* root turned up applications, and reading it only in the
         // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
+        // Seeded rather than started at false. A root that refused to be listed is a fact about this
+        // pass whether or not the *other* root turned up applications, and reading it only in the
+        // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
         var unreadable = _discovery.UnreadableRoots.Count > 0;
 
         foreach (var root in _discovery.UnreadableRoots)
@@ -290,12 +293,16 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                     "The profile directory itself must survive — only recognised cache directories inside it are removed."));
                 survivors.AddRange(ProtectedProfileFiles.Select(f => (Path.Combine(profile, f.Name), f.Reason)));
 
-                var outcome = CacheLevelWalk.Collect(
-                    profile, Levels, targets, declined, survivors, notes, ct);
+                var walk = CacheLevelWalk.Under(Levels, profile, ct);
 
-                spared += outcome.Spared;
-                emptiedAContainer |= outcome.EmptiedAContainer;
-                unreadable |= outcome.Unreadable;
+                targets.AddRange(walk.Targets);
+                declined.AddRange(walk.Declined);
+                survivors.AddRange(walk.Survivors);
+                notes.AddRange(walk.Notes);
+
+                spared += walk.Spared;
+                emptiedAContainer |= walk.EmptiedAContainer;
+                unreadable |= walk.Unreadable;
             }
 
             // One note per application rather than one per spared child. A Chromium profile holds

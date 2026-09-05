@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -178,18 +178,21 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
             survivors.AddRange(VsCodeUserDataDiscovery.NeverOffered
                 .Select(n => (Path.Combine(editor.Path, n.RelativePath), n.Reason)));
 
-            var outcome = CacheLevelWalk.Collect(
-                editor.Path, [new CacheLevel(string.Empty, FolderChildren)],
-                targets, declined, survivors, notes, ct);
+            var walk = CacheLevelWalk.Under([new CacheLevel(string.Empty, FolderChildren)], editor.Path, ct);
 
-            unreadable |= outcome.Unreadable;
+            targets.AddRange(walk.Targets);
+            declined.AddRange(walk.Declined);
+            survivors.AddRange(walk.Survivors);
+            notes.AddRange(walk.Notes);
 
-            if (outcome.Spared > 0)
+            unreadable |= walk.Unreadable;
+
+            if (walk.Spared > 0)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In '{editor.Name}', {outcome.Spared} other "
-                    + $"{(outcome.Spared == 1 ? "item is" : "items are")} left alone beside the logs. "
+                    $"In '{editor.Name}', {walk.Spared} other "
+                    + $"{(walk.Spared == 1 ? "item is" : "items are")} left alone beside the logs. "
                     + "The editor's caches are offered separately, and your settings, workspace state "
                     + "and local file history are never offered at all."));
             }

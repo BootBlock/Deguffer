@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -275,10 +275,15 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
                 unreadable = true;
             }
 
-            var outcome = CacheLevelWalk.Collect(folder, LevelsOf(editor), targets, declined, survivors, notes, ct);
+            var walk = CacheLevelWalk.Under(LevelsOf(editor), folder, ct);
 
-            spared += outcome.Spared;
-            unreadable |= outcome.Unreadable;
+            targets.AddRange(walk.Targets);
+            declined.AddRange(walk.Declined);
+            survivors.AddRange(walk.Survivors);
+            notes.AddRange(walk.Notes);
+
+            spared += walk.Spared;
+            unreadable |= walk.Unreadable;
 
             // One note per editor rather than one per spared child. A user-data folder holds dozens
             // of directories, and a note nobody reads protects nothing. Each of them is still
@@ -294,7 +299,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
                     $"In '{editor.UserData.Name}', {spared} other {(spared == 1 ? "item is" : "items are")} "
                     + "left alone beside the caches. Your settings, your workspace state and your local file "
                     + "history all live in that folder, so only the recognised caches are removed."
-                    + (outcome.EmptiedAContainer
+                    + (walk.EmptiedAContainer
                         ? $" The webview caches sit inside '{VsCodeWebStorage.DirectoryName}', and that directory "
                           + "stays: only the one recognised cache inside each partition is removed."
                         : string.Empty)));

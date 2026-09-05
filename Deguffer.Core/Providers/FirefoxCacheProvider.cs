@@ -29,7 +29,7 @@ namespace Deguffer.Core.Providers;
 /// file plus two constants, and relocating <c>%LOCALAPPDATA%\Mozilla</c> onto another volume with a
 /// junction is a thing people do. A link anywhere along it would put the deletion on the far side
 /// while every §5.6 survivor named below resolved through the same link and passed — the vacuous
-/// negative. <see cref="FirstLinkBetween"/> is what stops that.</para>
+/// negative. <see cref="DerivedPath.FirstLinkBetween"/> is what stops that.</para>
 ///
 /// <para>§5.1 does not apply. Firefox clears its cache only from inside the running browser, and
 /// Mozilla's own published advice for reclaiming the space outside it is to delete <c>cache2</c>.
@@ -135,9 +135,6 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
         ("cert9.db", "The certificates and exceptions you have accepted."),
         ("prefs.js", "Every setting you have changed in Firefox."),
     ];
-
-    private static readonly char[] Separators =
-        [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
@@ -336,7 +333,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             // Before the existence check, not after it. A link partway up the path resolves onto a
             // directory that holds no profile of its own, so the profile itself reads as absent and
             // the pass would end reporting nothing at all about a redirection it did detect.
-            if (FirstLinkBetween(Environment.LocalAppData, profile.LocalPath) is { } link)
+            if (DerivedPath.FirstLinkBetween(Environment.LocalAppData, profile.LocalPath) is { } link)
             {
                 notes.Add(LinkNote(link));
                 declined.Add((link, LinkReason));
@@ -460,36 +457,6 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             WasNotExamined = targets.Count == 0
                 && (declined.Count > 0 || _discovery.ProfilesElsewhere.Count > 0),
         };
-    }
-
-    /// <summary>
-    /// The first directory between <paramref name="baseDirectory"/> and <paramref name="target"/>,
-    /// inclusive of the target, that is a link rather than a directory — or null when none of them
-    /// is.
-    ///
-    /// <para>Every segment, not just the last, because every segment of this path was synthesised.
-    /// <paramref name="target"/> is <c>%LOCALAPPDATA%</c> plus <c>Mozilla\Firefox</c> plus a
-    /// relative path read out of a text file, so nothing on the way down has been seen by an
-    /// enumeration that filters links. A junction at <c>Mozilla</c> is as effective at redirecting
-    /// the deletion as one at the profile itself, and rather more likely: relocating a browser cache
-    /// onto another volume is a thing people do deliberately.</para>
-    /// </summary>
-    private static string? FirstLinkBetween(string baseDirectory, string target)
-    {
-        var walked = baseDirectory;
-
-        foreach (var segment in target[baseDirectory.Length..]
-                     .Split(Separators, StringSplitOptions.RemoveEmptyEntries))
-        {
-            walked = Path.Combine(walked, segment);
-
-            if (LongPath.IsReparsePoint(walked))
-            {
-                return walked;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>

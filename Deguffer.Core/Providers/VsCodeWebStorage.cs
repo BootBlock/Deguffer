@@ -116,7 +116,7 @@ internal readonly partial record struct VsCodeWebStorage(
         foreach (var link in Links)
         {
             var path = Path.Combine(webStorage, link);
-            notes.Add(CacheLevelWalk.LinkNote(path));
+            notes.Add(CacheLevelWalk.Note(path));
             declined.Add((path, CacheLevelWalk.LinkReason));
         }
 

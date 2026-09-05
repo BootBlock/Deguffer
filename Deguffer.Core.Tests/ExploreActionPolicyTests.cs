@@ -396,6 +396,86 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The Epic Games launcher keeps its settings, its cloud saves, its logs and the store's whole
+    /// browser profile in one folder, and two providers act inside it. So the declaration has to say
+    /// three different things about that one listing: the logs may go, the settings may not, and the
+    /// browser folder may not — only the caches named inside it.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                                     // the launcher folder itself
+    [InlineData("Config", false)]                               // the launcher settings
+    [InlineData("Data", false)]                                 // the launcher's own state
+    [InlineData("Saves", false)]                                // cloud saves
+    [InlineData("UserVaultSettings", false)]
+    [InlineData("Crashes", true)]                               // Tier 3, and offered
+    [InlineData("Logs", true)]
+    [InlineData("webcache_4430", false)]                        // holds the sign-in cookies
+    [InlineData(@"webcache_4430\Cookies", false)]
+    [InlineData(@"webcache_4430\Local Storage", false)]
+    [InlineData(@"webcache_4430\Cache", true)]                  // a recognised cache
+    [InlineData(@"webcache_4430\Code Cache", true)]
+    [InlineData(@"webcache_4430\Service Worker", false)]        // the container, which stays
+    [InlineData(@"webcache_4430\Service Worker\Database", false)]
+    [InlineData(@"webcache_4430\Service Worker\CacheStorage", true)]
+    [InlineData(@"webcache_4430\Service Worker\ScriptCache", true)]
+    public void TheEpicLauncherFolderIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        var saved = _temp.CreateDirectory(
+            "profile", "AppData", "Local", "EpicGamesLauncher", "Saved");
+
+        _temp.CreateDirectory(
+            "profile", "AppData", "Local", "EpicGamesLauncher", "Saved", "webcache_4430",
+            "Service Worker");
+
+        var policy = new ExploreActionPolicy(
+            [],
+            new EpicLauncherWebCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? saved : Path.Combine(saved, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Two providers act inside the Epic launcher's folder, and both declare it. That is redundant
+    /// on a machine where both are registered, and deliberate anyway: a declaration carried by only
+    /// one of them would leave Explore willing to remove somebody's launcher settings the moment the
+    /// other was the provider dropped.
+    ///
+    /// <para>The policy reads every provider's roots into one list, so the duplicate has to answer
+    /// the same way whichever of the two it resolves to — which is what makes the redundancy free
+    /// rather than ambiguous.</para>
+    /// </summary>
+    [Fact]
+    public void TheLauncherFolderAnswersTheSameWhicheverProviderDeclaredIt()
+    {
+        var saved = _temp.CreateDirectory(
+            "profile", "AppData", "Local", "EpicGamesLauncher", "Saved");
+
+        ICleanupProvider[] providers =
+        [
+            new EpicLauncherWebCacheProvider(_environment),
+            new EpicLauncherLogProvider(_environment),
+        ];
+
+        var together = new ExploreActionPolicy([], providers.SelectMany(p => p.ToolRoots));
+
+        foreach (var provider in providers)
+        {
+            var alone = new ExploreActionPolicy([], provider.ToolRoots);
+
+            foreach (var relative in new[] { "Config", "Data", "Saves", "UserVaultSettings", "Crashes", "Logs" })
+            {
+                var path = Path.Combine(saved, relative);
+
+                Assert.Equal(alone.MayRemove(path).IsAllowed, together.MayRemove(path).IsAllowed);
+            }
+
+            Assert.False(together.MayRemove(saved).IsAllowed);
+        }
+    }
+
+    /// <summary>
     /// A Firefox profile is two directories under two different roots, and only one of them holds
     /// anything Deguffer will remove. The roaming half is declared here precisely because nothing in
     /// the provider ever plans against it: without the declaration a user could delete
@@ -534,6 +614,59 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Steam's folder in the profile. <c>cefdata</c> and <c>widevine</c> are declared and refused
+    /// rather than merely absent from the allow-list, because each has a specific reason it is not
+    /// on offer and the generic "not recognised" sentence would be a weaker thing to tell somebody.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                     // Steam's own folder
+    [InlineData("htmlcache", true)]             // the cache Deguffer removes
+    [InlineData(@"htmlcache\Cache", true)]      // and everything under it
+    [InlineData("cefdata", false)]              // recognised, and deliberately not offered
+    [InlineData("widevine", false)]             // downloaded software rather than a cache
+    [InlineData("logs", false)]                 // unrecognised, so left alone
+    public void SteamsProfileFolderOffersOnlyTheBrowserCache(string relative, bool allowed)
+    {
+        var root = Path.Combine(_environment.LocalAppData, "Steam");
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The install directory, which is the one tool root in this project that holds the user's game
+    /// library. Program Files is refused structurally, but a Steam library is put on a second drive
+    /// precisely so that it is not — so the refusal has to come from the declaration.
+    ///
+    /// <para>Three levels, because the HTTP cache is a level below the install and a
+    /// <see cref="ToolRoot"/> classifies immediate children: the install recognises nothing at all,
+    /// and <c>appcache</c> under it recognises the one child that may go.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                        // where Steam is installed
+    [InlineData("steamapps", false)]               // every installed game
+    [InlineData(@"steamapps\common\A Game", false)]
+    [InlineData(@"steamapps\downloading", false)]  // the half-downloaded part of an update
+    [InlineData(@"steamapps\workshop", false)]
+    [InlineData("userdata", false)]                // cloud saves and screenshots
+    [InlineData("config", false)]                  // who is signed in on this computer
+    [InlineData("appcache", false)]                // the container, which stays
+    [InlineData(@"appcache\httpcache", true)]      // the one cache offered here
+    [InlineData(@"appcache\librarycache", false)]  // recognised, and deliberately not offered
+    [InlineData("something-unrecognised", false)]
+    public void SteamsInstallDirectoryOffersOnlyTheHttpCache(string relative, bool allowed)
+    {
+        var install = RegisterSteamInstall();
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? install : Path.Combine(install, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
     /// the root itself.
     ///
@@ -555,6 +688,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
+    [InlineData("epic-launcher-webcache", "Config")]         // the launcher settings
+    [InlineData("epic-launcher-logs", "UserVaultSettings")]
+    [InlineData("steam", "cefdata")]                         // the embedded browser's working data
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
@@ -568,6 +704,24 @@ public sealed class ExploreActionPolicyTests : IDisposable
         }
 
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
+    }
+
+    /// <summary>
+    /// An install Steam's own record points at, carrying the client itself — which is what
+    /// <see cref="SteamDiscovery"/> requires before it treats a recorded path as an install.
+    ///
+    /// The recorded value is written in Steam's own form, with forward slashes, because that is
+    /// what the client writes.
+    /// </summary>
+    private string RegisterSteamInstall()
+    {
+        var root = _temp.CreateDirectory("games", "Steam");
+        _temp.CreateFile(64, "games", "Steam", "steam.exe");
+
+        _environment.WithRegistryValue(
+            SteamDiscovery.RegistryKey, SteamDiscovery.InstallPathValue, root.Replace('\\', '/'));
+
+        return root;
     }
 
     /// <summary>
@@ -604,6 +758,13 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new DartAnalysisServerProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
         new GpuShaderCacheProvider(_environment),
+        new EpicLauncherWebCacheProvider(_environment),
+        new EpicLauncherLogProvider(_environment),
+
+        // Its install directory is deliberately not registered here. The sweep probes ToolRoots[0],
+        // which is Steam's folder in the profile and is declared from a constant; the install root
+        // and the container under it have their own theory above, where the register is set up.
+        new SteamCacheProvider(_environment),
     ];
 
     /// <summary>

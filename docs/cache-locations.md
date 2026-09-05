@@ -936,6 +936,236 @@ Thunderbird keeps the identical layout — its own `profiles.ini`, the same two 
 `cache2`. Deguffer does not reach it yet, because nothing here has been measured against it.
 ---
 
+## Epic Games launcher web cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*`, for each such folder on disk |
+| **Method** | Delete the recognised cache directories inside each folder, never the folder itself |
+| **Typical size** | 339 MB of a 343 MB folder on the machine this was measured on, of which the HTTP cache alone was 287 MB |
+
+### What it is
+
+The launcher does not draw its store itself. It embeds a browser and points it at Epic's web pages,
+and that browser keeps its data under the launcher's own `Saved` folder.
+
+**The folder is renamed by every launcher update, and the old ones are left behind.** The suffix is
+the engine build the launcher was updated to, so a machine that has run the launcher for years can
+be holding `webcache`, `webcache_4147` and `webcache_4430` at once. That is why Deguffer matches a
+pattern rather than a name — a known word *and* a number, so `webcache_backup` is not one of these.
+
+Inside each of them is an ordinary browser profile:
+
+| Directory | What it holds |
+| --- | --- |
+| `Cache` | Pages and pictures saved so the same thing is not fetched twice |
+| `Code Cache` | Compiled JavaScript and WebAssembly from the store's own pages |
+| `Service Worker\CacheStorage` | Responses a background worker stored so the store works offline |
+| `Service Worker\ScriptCache` | The background workers' own scripts |
+
+### What Deguffer does
+
+**It reaches inside the folder rather than removing it, and Epic's own advice is the other way
+round.** Epic's support article tells you to delete each `webcache*` folder whole, and for
+troubleshooting a broken launcher that is the right instruction. It is the wrong one for reclaiming
+space, because the folder also holds `Cookies`, `Local Storage`, `Session Storage` and `IndexedDB` —
+your sign-in and the store's saved data. Deleting it signs you out.
+
+Naming the caches inside costs about four megabytes of the 343 MB and keeps you signed in. It is
+also the same rule Deguffer already applies to every other embedded browser: see
+[Chromium application caches](#chromium-application-caches), which refuses to take a profile folder
+whole for exactly this reason.
+
+The launcher exposes no command that clears its cache, so these are deleted directly and only by
+exact name.
+
+**`Cache` is removed whole and `Service Worker` is not**, and the difference is what is known to sit
+beside the cache. `Cache` is the browser's HTTP disk cache and its entire content is cache entries.
+`Service Worker` is not: `Database` inside it is the register of which background workers are
+installed for which pages, which is not a cache, so only the two caches beside it are named.
+
+### What is protected
+
+**The `Saved` folder, every `webcache*` folder, and everything in one that is not a recognised
+cache.** Deguffer asserts afterwards that these survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Cookies` | Your sign-in to the store. Removing it signs you out |
+| `Local Storage`, `Session Storage` | What the store's pages saved in your browser |
+| `IndexedDB` | The store's offline data |
+| `Service Worker\Database` | Which background workers are registered for which pages |
+| `Config` | The launcher's settings, including the library folders you have added |
+| `Saves` | Cloud saves the launcher keeps on your behalf |
+| `Data`, `UserVaultSettings` | The launcher's own state and your vault settings |
+
+Deguffer also refuses to delete through a link, and it checks the whole path rather than just the
+last folder. If you have moved `%LOCALAPPDATA%\EpicGamesLauncher` onto another drive with a
+junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+The store fetches its pages and pictures from the network instead of from disk the first time the
+launcher is opened again, and recompiles the scripts behind them, so the store fills in more slowly
+once.
+
+**You stay signed in, and nothing in your library changes.** Installed games are not in this folder
+at all.
+
+Close the launcher first if you can. It keeps its browser's cache files open while it runs, and
+anything held open is left in place rather than removed.
+
+### Why Tier 1
+
+Every one of these is derived content with an authoritative source elsewhere: pages Epic's servers
+still have, and compiled output of scripts those servers still send. The browser refills all of it
+without being asked, and the folder it refills into is left standing.
+
+---
+
+## Epic Games launcher logs and crash reports
+
+**Tier 3 — user data.** Never pre-selected, and confirmed before it runs.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\EpicGamesLauncher\Saved\Crashes` and `...\Logs` |
+| **Method** | Delete the two recognised directories |
+| **Typical size** | 56 MB of crash reports and 0.7 MB of logs on the machine this was measured on |
+
+### What it is
+
+The launcher writes a log every time it or its updater runs, and gathers a full crash report
+whenever it fails. Neither folder is ever trimmed, so on a machine that has run the launcher for
+years the crash reports alone can be tens of megabytes.
+
+### What Deguffer does
+
+It removes the two directories by name. They sit in the same folder as the launcher's settings, its
+cloud saves and the store's browser data, so nothing else in that listing is ever a candidate.
+
+**This is a separate row from the web cache above, deliberately.** They are two different kinds of
+thing with two different costs, and keeping them apart lets you clear 339 MB of browser cache
+without touching the evidence of a crash. It is the same split
+[Windows servicing logs](#windows-servicing-logs) made against
+[crash dumps and error reports](#crash-dumps-and-error-reports).
+
+**There is no age cut-off, and each row carries the newest write inside it instead.** A report
+written this morning may be the only evidence in a support ticket somebody is still writing, so the
+decision stays yours: the row is never ticked for you, and it shows you how recently something was
+written.
+
+### What is protected
+
+Everything else in the launcher's folder: `Config`, `Data`, `Saves`, `UserVaultSettings` and every
+`webcache*` folder. Deguffer asserts afterwards that they survived.
+
+### What it costs you
+
+The record of every crash and every session the launcher has already had is destroyed, so none of it
+can be attached to a support ticket afterwards. **This is permanent.** Nothing re-creates a crash
+report.
+
+The launcher writes a fresh log the next time it starts, and nothing about how it runs changes.
+
+### Why Tier 3, not Tier 1
+
+Tier 1 requires that whatever produced the content re-creates it, so that nothing is lost. What is
+re-created here is the *next* log, never the ones removed: a crash report is the record of an event,
+and the event will not happen again to order. That is the property that puts logs and records in
+Tier 3, and the consequence column there says the loss is permanent — which is exactly right.
+
+---
+
+## Steam web cache
+
+| **Location** | `%LOCALAPPDATA%\Steam\htmlcache`, and `appcache\httpcache` under wherever Steam is installed |
+| **Method** | Delete the two named caches |
+| **Typical size** | 472 MB in `htmlcache` on the machine this was measured on, out of 513 MB for Steam's whole folder in the profile |
+
+### What it is
+
+The Steam client draws its store, its library and the in-game overlay in a browser built into the
+client, and that browser saves what it downloads. Steam splits the result across **two** directories,
+and only one of them is in your profile:
+
+| Where | What is in it |
+| --- | --- |
+| `%LOCALAPPDATA%\Steam\htmlcache` | The embedded browser's cache — store, library and community pages |
+| `<Steam install>\appcache\httpcache` | The client's own HTTP cache, kept beside the program |
+
+The install directory is not under your profile. It moves with whichever drive you gave your game
+library, and the same folder holds every game you have installed.
+
+### What Deguffer does
+
+**It asks Windows where Steam is rather than assuming.** Steam records its own install directory as
+it starts, and Deguffer reads that record. It then treats the directory as an install only if the
+Steam program is actually sitting in it — a record pointing somewhere Steam is not gets a sentence in
+the plan, not a deletion. If nothing on the machine says where Steam is, the plan says that too, and
+that cache is neither cleared nor ruled out. It is never guessed at.
+
+**Neither folder is ever listed.** Deguffer names the two caches outright and looks at nothing else,
+so there is no route by which something beside them could be found and classified. Each cache is its
+own step, so you can clear one and leave the other.
+
+Steam has no command that clears either cache from outside the running client, so these are deleted
+directly rather than by asking the tool.
+
+### What is protected
+
+**Everything else in both folders**, and the things that matter most are asserted by name rather than
+covered by an assertion on the folder above them:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `steamapps` | Your installed games |
+| `steamapps\common` | The games themselves, on disk |
+| `steamapps\downloading` | The half-downloaded part of an update. Removing it restarts the download |
+| `steamapps\workshop` | Workshop content you subscribed to |
+| `userdata` | Your Steam settings, cloud saves and screenshots, per account |
+| `config` | Steam's own configuration, including who is signed in on this computer |
+| `appcache\appinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes, sitting in the same folder as the cache |
+| `local.vdf` | The Steam client's settings for this computer, sitting in the same folder as the browser cache |
+
+Three things are recognised and then deliberately left alone. `widevine` is a content-decryption
+module Steam downloaded so protected video will play, which is downloaded software rather than a
+cache. `cefdata` is the embedded browser's working data, and nobody has established what removing it
+costs. `appcache\librarycache` is artwork Steam downloaded for your library — a cache, but one whose
+cost to fetch again was never established, so it is measured and not offered.
+
+Deguffer also refuses to delete through a link. If you have moved either cache onto another drive
+with a junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+The client fetches store, library and community pages from the network instead of from disk for a
+while, so they draw more slowly the first time. It may ask you to sign in again to the pages it shows
+inside the client.
+
+**Your installed games, any download in progress, your Workshop content, your cloud saves and your
+settings are untouched.**
+
+Close Steam first if you can. A running client keeps both caches open, and anything held open is left
+in place rather than removed.
+
+### Why Tier 1
+
+Both are copies of pages and files Valve's servers still have. The client downloads what it needs
+again the next time it needs it, and nothing that only exists on your disk is in either of them.
+
+### Not reached: the shader cache
+
+`steamapps\shadercache` holds compiled shaders per game and is commonly several gigabytes where
+pre-caching is enabled. It sits inside a Steam library, and a library can be on any drive rather than
+only beside the program, so reaching every copy of it means finding every library rather than reading
+one recorded path. No machine with one to measure was available either, so it is left for its own
+change.
+
+---
+
 ## Dart analysis server cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
