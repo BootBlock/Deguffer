@@ -112,8 +112,9 @@
             </Grid>
         </DataTemplate>
 
-        <!-- One row per named cause (§7), largest first: the checkbox, the sentence saying what
-             happens on next use, the figures, and the link to everything else. -->
+        <!-- One row per named cause (§7), largest first: the checkbox, the name line with the
+             link to everything else at the end of it, the sentence saying what happens on next
+             use, and the figures. -->
         <DataTemplate x:Key="StandardFinding" x:DataType="vm:FindingViewModel">
             <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
 
@@ -128,7 +129,19 @@
                               AutomationProperties.Name="{x:Bind Name}" />
 
                     <StackPanel Grid.Column="1" Spacing="6">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
+
+                        <!-- The longest name, the widest chip and the link together want more than
+                             this line has at the window's minimum width, so the slack column is
+                             the one in the middle. The name keeps its own width, as the compact
+                             row's does and for the same reason: it is what says which row this
+                             is. The link keeps its own width because a half-drawn control reads
+                             as a defect rather than as a shortage of room, and because it is the
+                             one thing on the line that has to be hit with a pointer. What is left
+                             over is the chip's, and it gives up its last letters before either of
+                             them gives up anything, after the tier is already legible. The label
+                             in full stays on the chip's automation name, and the sentence saying
+                             what the tier means stays on its tooltip and help text. -->
+                        <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto">
                             <TextBlock Text="{x:Bind Name}"
                                        Style="{StaticResource SectionHeading}"
                                        FontSize="15"
@@ -140,28 +153,36 @@
                                  the tier's own explanation, by pointer and by help
                                  text, because two words name it without saying what
                                  it means. -->
-                            <ContentControl Content="{x:Bind TierLabel}"
+                            <ContentControl Grid.Column="1"
+                                            HorizontalAlignment="Left"
+                                            Content="{x:Bind TierLabel}"
                                             Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
                                             ToolTipService.ToolTip="{x:Bind TierExplanation}"
                                             AutomationProperties.Name="{x:Bind TierLabel}"
                                             AutomationProperties.HelpText="{x:Bind TierExplanation}" />
-                        </StackPanel>
+
+                            <!-- Whose folder this is, what it is for, and the plan that says what
+                                 would happen to it. One dialog holds both, because they are one
+                                 question — a reader cannot judge a list of paths belonging to a tool
+                                 they have never heard of. It is a link rather than a button because it
+                                 opens an explanation and changes nothing.
+
+                                 It sits at the end of the name line rather than under the sentence,
+                                 so the row reads as prose from the name down to the figures with
+                                 nothing after it, and the link is at a fixed place on every row
+                                 instead of wherever that row's sentence happens to stop wrapping. -->
+                            <HyperlinkButton Grid.Column="2"
+                                             Content="What is this?"
+                                             VerticalAlignment="Center"
+                                             Padding="0,2"
+                                             Tag="{x:Bind}"
+                                             Click="OnWhatIsThisClicked"
+                                             AutomationProperties.Name="{x:Bind InformationLinkName}" />
+                        </Grid>
 
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
                                    Style="{StaticResource SecondaryText}"
                                    FontSize="13" />
-
-                        <!-- Whose folder this is, what it is for, and the plan that says what
-                             would happen to it. One dialog holds both, because they are one
-                             question — a reader cannot judge a list of paths belonging to a tool
-                             they have never heard of. It is a link rather than a button because it
-                             opens an explanation and changes nothing. -->
-                        <HyperlinkButton Content="What is this?"
-                                         Margin="0,-2,0,0"
-                                         Padding="0,2"
-                                         Tag="{x:Bind}"
-                                         Click="OnWhatIsThisClicked"
-                                         AutomationProperties.Name="{x:Bind InformationLinkName}" />
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
