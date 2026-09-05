@@ -1058,9 +1058,16 @@ called `Update.exe`, and a folder holding a directory whose name begins `app-` i
 updater. A folder that fails the pair is invisible, and nothing inside it is offered.
 
 **In the staging folder it removes only what Squirrel's own name generator produced.** Those names
-are the word `temp` followed by one or more characters from a fixed alphabet, which is how the
-updater reaches a million names without a collision. A directory whose name does not match is
-somebody else's and is left alone. The location is read from `SQUIRREL_TEMP` where that is set,
+are the word `temp` followed by a single character from a fixed 360-character alphabet — `tempa`,
+`tempb`, and so on — because the updater hands out the first free name each time. A directory whose
+name does not match is somebody else's and is left alone.
+
+That rule is deliberately narrower than the generator. Given more than 360 staging directories at
+once the updater starts producing longer names, and Deguffer leaves those alone too, because a
+longer run of letters cannot be told from an ordinary word: matching `temp` followed by *one or
+more* characters would also claim `templates`, `temporary` and `tempdata`. Under the default folder
+that would cost nothing, since nothing else writes there. Under a `SQUIRREL_TEMP` pointing at a
+folder you share with anything else, it would offer your directory for deletion. The location is read from `SQUIRREL_TEMP` where that is set,
 because Squirrel reads it too — and if it is set to something that is not a full path, Deguffer says
 so and leaves the folder alone rather than guessing.
 

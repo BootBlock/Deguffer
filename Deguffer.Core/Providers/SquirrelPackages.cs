@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text.RegularExpressions;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -7,7 +8,16 @@ namespace Deguffer.Core.Providers;
 /// <summary>What one application's <c>packages</c> folder turned out to hold.</summary>
 /// <param name="Superseded">
 /// The update packages Squirrel's own index no longer names and which are not newer than the
-/// installed build. These are what its prune was supposed to delete and did not.
+/// installed build, each with the moment it was downloaded. These are what its prune was supposed
+/// to delete and did not.
+///
+/// <para>The timestamp travels with the path because the enumeration that found the file already
+/// carries it. Reading it again would be a second probe per package (G5) — and a worse answer:
+/// <see cref="FileInfo.LastWriteTimeUtc"/> answers for a file that has since gone with the start of
+/// the Windows epoch rather than by failing, and the updater's own prune may be running over this
+/// very folder while the scan reads it. January 1601 beside a pre-selected deletion row is the
+/// oldest invitation there is to remove something already gone, which is the case
+/// <see cref="DirectoryAge"/> carries the same guard for.</para>
 /// </param>
 /// <param name="StillNeeded">
 /// Every package file left alone, with the reason, for §5.6. It holds the ones the index still
@@ -27,8 +37,31 @@ namespace Deguffer.Core.Providers;
 /// <c>RELEASES</c> is missing, unreadable, or holds a line this could not parse — so nothing in the
 /// folder is offered. See <see cref="SquirrelPackages"/> for why that is the only safe answer.
 /// </param>
+/// <summary>
+/// What every application's packages folder came to, in the four lists a plan is built from.
+///
+/// <para>The same shape <see cref="DeclaredLocationScan"/> carries, and for the same reason: a
+/// provider adds this to whatever its other locations produced and hands the result to
+/// <see cref="Execution.CleanupPlan"/>.</para>
+/// </summary>
+/// <param name="Targets">The spent packages, ready to be measured.</param>
+/// <param name="Protected">What §5.6 asserts survived, with the reason the user is shown.</param>
+/// <param name="Notes">What the user is told, including anything left alone and why.</param>
+/// <param name="Declined">
+/// How many folders were passed over for a reason of Deguffer's own — a link, an index it could not
+/// read, an installation it could not order. Counted because a plan with no steps and a decline must
+/// not be rendered as "Already clear".
+/// </param>
+/// <param name="Unreadable">Whether a folder refused to be listed, so its content is unknown.</param>
+internal sealed record SquirrelPackageScan(
+    IReadOnlyList<DeletionTarget> Targets,
+    IReadOnlyList<(string Path, string Reason)> Protected,
+    IReadOnlyList<PlanNote> Notes,
+    int Declined,
+    bool Unreadable);
+
 internal readonly record struct SquirrelPackageReading(
-    IReadOnlyList<string> Superseded,
+    IReadOnlyList<(string Path, DateTime? LastWritten)> Superseded,
     IReadOnlyList<(string Path, string Reason)> StillNeeded,
     IReadOnlyList<string> Declined,
     bool DirectoryUnreadable,
@@ -64,6 +97,17 @@ internal static partial class SquirrelPackages
 {
     /// <summary>Squirrel's index of the packages it holds, inside the folder that holds them.</summary>
     public const string IndexName = "RELEASES";
+
+    /// <summary>
+    /// The identifier deciding whether this machine gets an application's staged releases early. It
+    /// sits in the packages folder and is not a package, which is half of why the folder is never
+    /// taken whole.
+    /// </summary>
+    public const string StagedIdentifierName = ".betaId";
+
+    private const string SupersededReason =
+        "An update package this application's own index no longer refers to. Squirrel's clean-up "
+        + "was supposed to remove it after the update that replaced it.";
 
     /// <summary>
     /// One line of that index: a SHA-1, the file name, and the size. Squirrel's own parser, with the
@@ -109,6 +153,154 @@ internal static partial class SquirrelPackages
         SearchValues.Create(Path.GetInvalidFileNameChars());
 
     /// <summary>
+    /// Every application's packages folder, and everything beside them that §5.6 must assert
+    /// survived.
+    ///
+    /// <para>The same shape <see cref="DeclaredLocations.Examine"/> uses, for the same reason: what
+    /// a provider needs back from a location is a plan's four lists, and assembling them is the
+    /// location's own knowledge rather than the provider's. It lives here rather than in the
+    /// provider because everything it decides is a fact about this folder — which of its files may
+    /// go, which of its neighbours must not, and what to say when its index cannot be read.</para>
+    /// </summary>
+    /// <param name="installations">The applications found on this machine.</param>
+    public static SquirrelPackageScan Examine(
+        IReadOnlyList<SquirrelInstallation> installations,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(installations);
+
+        var targets = new List<DeletionTarget>();
+        var survivors = new List<(string Path, string Reason)>();
+        var notes = new List<PlanNote>();
+
+        var unreadable = false;
+        var declined = 0;
+        var indexesUnread = 0;
+        var unordered = 0;
+
+        foreach (var installation in installations)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var packages = Path.Combine(installation.Root, SquirrelDiscovery.PackagesDirectoryName);
+
+            survivors.Add((
+                installation.Root,
+                $"The folder {installation.Name} is installed in must survive — only spent update "
+                + "packages inside it are removed."));
+            survivors.Add((
+                Path.Combine(installation.Root, SquirrelDiscovery.UpdaterName),
+                $"The updater {installation.Name} keeps itself up to date with."));
+
+            // The builds are siblings of the folder this reaches into, which is exactly when an
+            // over-broad rule takes one with the other — an assertion that the application's folder
+            // survived would pass with every build inside it gone. Removing one is the
+            // superseded-versions provider's business and never this one's, at any version.
+            survivors.AddRange(installation.Versions.Select(version => (
+                version.Path,
+                $"A build of {installation.Name}. This row removes update packages and never a "
+                + "build.")));
+
+            if (!LongPath.DirectoryExists(packages))
+            {
+                continue;
+            }
+
+            if (LongPath.IsReparsePoint(packages))
+            {
+                notes.Add(CacheLevelWalk.Note(packages));
+                survivors.Add((packages, CacheLevelWalk.LinkReason));
+                declined++;
+                continue;
+            }
+
+            survivors.Add((
+                packages,
+                $"The folder {installation.Name} keeps its update packages in must survive — only "
+                + "the packages it no longer refers to are removed."));
+            survivors.Add((
+                Path.Combine(packages, IndexName),
+                $"{installation.Name}'s own record of the packages it holds. Its shortcut reads this "
+                + "file to work out which version to start."));
+            survivors.Add((
+                Path.Combine(packages, StagedIdentifierName),
+                $"The identifier that decides whether this computer gets {installation.Name}'s "
+                + "staged releases early."));
+
+            // An installation nobody could order is settled here rather than inside the reading,
+            // because the reason belongs to this level. Deciding whether a package is spent means
+            // comparing it against the installed build, and there is no installed build to compare
+            // against — which is a different fact from an index that would not be read, and folding
+            // the two together put a sentence about an unreadable record in front of a user whose
+            // record was perfectly readable.
+            if (installation.Current is not { } current)
+            {
+                unordered++;
+                declined++;
+                continue;
+            }
+
+            var reading = Read(packages, current.Number, ct);
+
+            survivors.AddRange(reading.StillNeeded);
+
+            if (reading.DirectoryUnreadable)
+            {
+                notes.Add(UnreadableRoot.Note(packages));
+                unreadable = true;
+                continue;
+            }
+
+            if (reading.IndexUnreadable)
+            {
+                indexesUnread++;
+                declined++;
+                continue;
+            }
+
+            foreach (var link in reading.Declined)
+            {
+                notes.Add(CacheLevelWalk.Note(link));
+                declined++;
+            }
+
+            targets.AddRange(reading.Superseded.Select(package => new DeletionTarget(
+                package.Path, SupersededReason, package.LastWritten, TargetKind.File)));
+        }
+
+        // One sentence for all of them, per reason. Which application it was does not change what
+        // the user can do about it, and a line per application would bury the rest of the plan on a
+        // machine with several.
+        if (indexesUnread > 0)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Left the update packages of {indexesUnread} "
+                + (indexesUnread == 1
+                    ? "application alone: Deguffer could not read the record of which packages it "
+                      + "still needs"
+                    : "applications alone: Deguffer could not read the record of which packages "
+                      + "they still need")
+                + ", and without it a spent package cannot be told from the one the next update is "
+                + "built from."));
+        }
+
+        if (unordered > 0)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Left the update packages of {unordered} "
+                + (unordered == 1
+                    ? "application alone: Deguffer could not work out which build is installed, and "
+                      + "a spent package is only spent by comparison with it."
+                    : "applications alone: Deguffer could not work out which builds are installed, "
+                      + "and a spent package is only spent by comparison with them.")));
+        }
+
+        return new SquirrelPackageScan(targets, survivors, notes, declined, unreadable);
+    }
+
+    /// <summary>
     /// Read <paramref name="packagesDirectory"/> against its own index.
     /// </summary>
     /// <param name="packagesDirectory">The folder, which the caller has established is not a link.</param>
@@ -152,7 +344,7 @@ internal static partial class SquirrelPackages
             return new SquirrelPackageReading([], [], [], DirectoryUnreadable: true, IndexUnreadable: false);
         }
 
-        var superseded = new List<string>();
+        var superseded = new List<(string Path, DateTime? LastWritten)>();
         var kept = new List<(string Path, string Reason)>();
         var declined = new List<string>();
 
@@ -197,7 +389,9 @@ internal static partial class SquirrelPackages
                 continue;
             }
 
-            superseded.Add(path);
+            // The timestamp the enumeration already carries, rather than a second look at a file
+            // the updater may be pruning as this runs.
+            superseded.Add((path, file.LastWriteTimeUtc));
         }
 
         return new SquirrelPackageReading(

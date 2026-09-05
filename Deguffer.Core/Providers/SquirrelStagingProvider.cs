@@ -36,15 +36,23 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// Coptic, then Cyrillic, 360 characters in all.
     ///
     /// <para><b>One character rather than one or more, and that difference is the whole of §5.2
-    /// here.</b> The generator hands out the first free name, so it produces a single-character
-    /// suffix until 360 staging directories exist at once — <c>tempa</c>, <c>tempb</c>, and so on,
-    /// which is what the framework's own bug reports show and what the measured machine held. A
-    /// longer run of Latin letters cannot be told from an ordinary word: <c>temp</c> followed by one
-    /// or more also claims <c>templates</c>, <c>temporary</c> and <c>tempdata</c>. Under the default
-    /// root that costs nothing, because nothing else writes there. Under a <c>SQUIRREL_TEMP</c>
-    /// pointed at a folder shared with anything else, it would offer somebody's directory as a
-    /// pre-selected Tier 1 row. So a name past the 360th is left alone, which reclaims less and is
-    /// the direction §5.2 requires being wrong in.</para>
+    /// here.</b> One character is the shortest suffix the generator can emit, and it hands out the
+    /// first free name — so it produces one until 360 staging directories exist at once, which is
+    /// what the framework's own bug reports show and what the measured machine held. This is
+    /// therefore the narrowest pattern that still recognises every name a real machine holds, and
+    /// narrowest is what §5.2 asks for. Past the 360th the generator starts producing longer names,
+    /// and those are left alone: a longer run of Latin letters cannot be told from an ordinary word,
+    /// so <c>temp</c> followed by one <em>or more</em> also claims <c>templates</c>,
+    /// <c>temporary</c> and <c>tempdata</c>. Under the default root that would cost nothing, because
+    /// nothing else writes there; under a <c>SQUIRREL_TEMP</c> pointed at a folder shared with
+    /// anything else it would offer somebody's directory as a pre-selected Tier 1 row.</para>
+    ///
+    /// <para><b>It does not follow that no English word matches, and the code is right rather than
+    /// the tempting reading.</b> <c>tempo</c>, <c>tempi</c>, <c>tempt</c> and <c>temps</c> are all
+    /// matched, because <c>o</c>, <c>i</c>, <c>t</c> and <c>s</c> are genuinely characters the
+    /// generator emits — excluding them would fail to recognise a directory Squirrel really made,
+    /// which is the wrong direction. What the narrowing buys is the <em>bound</em>, not a word
+    /// list.</para>
     ///
     /// <para>Case-sensitive, deliberately. Squirrel generates these names in lowercase and Windows
     /// keeps the case a directory was created with, so matching case exactly recognises every folder
@@ -56,10 +64,6 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     private const string StagingReason =
         "An install or an update the Squirrel updater unpacked here and did not clear away "
         + "afterwards. Nothing reads it once the update has finished.";
-
-    private const string PackageReason =
-        "An update package this application's own index no longer refers to. Squirrel's clean-up "
-        + "was supposed to remove it after the update that replaced it.";
 
     private const string StagingRootReason =
         "The staging folder itself must survive — only the directories Squirrel unpacked into it "
@@ -213,9 +217,11 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         unreadable |= staging.Unreadable;
         declined += staging.Declined;
 
-        var packages = CollectPackages(sweep.Installations, notes, survivors, ct);
+        var packages = SquirrelPackages.Examine(sweep.Installations, ct);
 
         targets.AddRange(packages.Targets);
+        survivors.AddRange(packages.Protected);
+        notes.AddRange(packages.Notes);
         unreadable |= packages.Unreadable;
         declined += packages.Declined;
 
@@ -381,166 +387,6 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             declined + live.Vetoed.Count);
     }
 
-    /// <summary>
-    /// Each application's <c>packages</c> folder, against its own index. The index, the staged-user
-    /// identifier beside it and every package the index still names are asserted to survive; see
-    /// <see cref="SquirrelPackages"/> for why the folder is never taken whole.
-    /// </summary>
-    private Collected CollectPackages(
-        IReadOnlyList<SquirrelInstallation> installations,
-        List<PlanNote> notes,
-        List<(string Path, string Reason)> survivors,
-        CancellationToken ct)
-    {
-        var targets = new List<DeletionTarget>();
-        var unreadable = false;
-        var declined = 0;
-        var indexesUnread = 0;
-        var unordered = 0;
-
-        foreach (var installation in installations)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var packages = Path.Combine(installation.Root, SquirrelDiscovery.PackagesDirectoryName);
-
-            survivors.Add((
-                installation.Root,
-                $"The folder {installation.Name} is installed in must survive — only spent update "
-                + "packages inside it are removed."));
-            survivors.Add((
-                Path.Combine(installation.Root, SquirrelDiscovery.UpdaterName),
-                $"The updater {installation.Name} keeps itself up to date with."));
-
-            // The builds are siblings of the folder this provider reaches into, which is exactly
-            // when an over-broad rule takes one with the other — an assertion that the application's
-            // folder survived would pass with every build inside it gone. Removing one is the
-            // superseded-versions provider's business and never this one's, at any version.
-            survivors.AddRange(installation.Versions.Select(version => (
-                version.Path,
-                $"A build of {installation.Name}. This row removes update packages and never a "
-                + "build.")));
-
-            if (!LongPath.DirectoryExists(packages))
-            {
-                continue;
-            }
-
-            if (LongPath.IsReparsePoint(packages))
-            {
-                notes.Add(CacheLevelWalk.Note(packages));
-                survivors.Add((packages, CacheLevelWalk.LinkReason));
-                declined++;
-                continue;
-            }
-
-            survivors.Add((
-                packages,
-                $"The folder {installation.Name} keeps its update packages in must survive — only "
-                + "the packages it no longer refers to are removed."));
-            survivors.Add((
-                Path.Combine(packages, SquirrelPackages.IndexName),
-                $"{installation.Name}'s own record of the packages it holds. Its shortcut reads this "
-                + "file to work out which version to start."));
-            survivors.Add((
-                Path.Combine(packages, ".betaId"),
-                $"The identifier that decides whether this computer gets {installation.Name}'s "
-                + "staged releases early."));
-
-            // An installation nobody could order is settled here rather than inside the reading,
-            // because the reason belongs to the caller. Deciding whether a package is spent means
-            // comparing it against the installed build, and there is no installed build to compare
-            // against — which is a different fact from an index that would not be read, and folding
-            // the two together put a sentence about an unreadable record in front of a user whose
-            // record was perfectly readable.
-            if (installation.Current is not { } current)
-            {
-                unordered++;
-                declined++;
-                continue;
-            }
-
-            var reading = SquirrelPackages.Read(packages, current.Number, ct);
-
-            survivors.AddRange(reading.StillNeeded);
-
-            if (reading.DirectoryUnreadable)
-            {
-                notes.Add(UnreadableRoot.Note(packages));
-                unreadable = true;
-                continue;
-            }
-
-            if (reading.IndexUnreadable)
-            {
-                indexesUnread++;
-                declined++;
-                continue;
-            }
-
-            foreach (var link in reading.Declined)
-            {
-                notes.Add(CacheLevelWalk.Note(link));
-                declined++;
-            }
-
-            targets.AddRange(reading.Superseded.Select(path => new DeletionTarget(
-                path,
-                PackageReason,
-                LastWritten(path),
-                TargetKind.File)));
-        }
-
-        if (indexesUnread > 0)
-        {
-            // One sentence for all of them. Which application it was does not change what the user
-            // can do about it, and a line per application would bury the rest of the plan on a
-            // machine with several.
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Left the update packages of {indexesUnread} "
-                + (indexesUnread == 1 ? "application" : "applications")
-                + " alone: Deguffer could not read the record of which packages "
-                + (indexesUnread == 1 ? "it" : "they")
-                + " still needs, and without it a spent package cannot be told from the one the "
-                + "next update is built from."));
-        }
-
-        if (unordered > 0)
-        {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Left the update packages of {unordered} "
-                + (unordered == 1 ? "application" : "applications")
-                + " alone: Deguffer could not work out which build "
-                + (unordered == 1 ? "is" : "are")
-                + " installed, and a spent package is only spent by comparison with it."));
-        }
-
-        return new Collected(targets, unreadable, declined);
-    }
-
-    /// <summary>
-    /// A package's own timestamp, which is when it was downloaded — the age §7 shows beside the row.
-    ///
-    /// <para>Its own rather than <see cref="DirectoryAge"/>'s, because the subject is a file. The
-    /// staging directories beside these carry an age too, and a provider whose rows carried one on
-    /// half its steps would leave the column blank for no reason the user could see.</para>
-    /// </summary>
-    private static DateTime? LastWritten(string path)
-    {
-        try
-        {
-            return new FileInfo(LongPath.Extended(path)).LastWriteTimeUtc;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
-            // §5.3 makes a refusal ordinary, and §7 renders a null as unknown rather than as an age
-            // — which is the honest rendering, since an age is what invites a deletion.
-            return null;
-        }
-    }
-
     private IReadOnlyList<ToolRoot> Declare()
     {
         var roots = new List<ToolRoot>();
@@ -566,13 +412,18 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         return roots;
     }
 
-    /// <summary>What one of the two locations came to, so the plan can add the halves together.</summary>
+    /// <summary>
+    /// What the staging folder came to, in the form the plan adds to
+    /// <see cref="SquirrelPackages.Examine"/>'s half.
+    /// </summary>
     /// <param name="Targets">What may be removed.</param>
-    /// <param name="Unreadable">Whether a folder refused to be listed, so its content is unknown.</param>
+    /// <param name="Unreadable">Whether the folder refused to be listed, so its content is unknown.</param>
     /// <param name="Declined">
-    /// How many locations were passed over for a reason of Deguffer's own — a link, an index it
-    /// could not read, a configured path it could not resolve. Counted because a plan with no steps
-    /// and a decline must not be rendered as "Already clear".
+    /// How many directories were passed over for a reason of Deguffer's own — a link, a configured
+    /// path that could not be resolved, or one something is installing through right now. Counted
+    /// because a plan with no steps and a decline must not be rendered as "Already clear", and the
+    /// last of those is the ordinary case: a machine holding one staging directory that is busy
+    /// gives up nothing and has plenty left behind.
     /// </param>
     private readonly record struct Collected(
         IReadOnlyList<DeletionTarget> Targets,

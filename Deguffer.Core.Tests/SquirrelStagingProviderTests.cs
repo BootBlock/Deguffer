@@ -120,9 +120,10 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2's dangerous direction is an unknown thing treated as safe. The name Squirrel's generator
-    /// produces is the prefix and at least one character from its own alphabet, so a bare
-    /// <c>temp</c>, a numbered one and a differently cased one are all somebody else's directory.
+    /// §5.2's dangerous direction is an unknown thing treated as safe. A name Squirrel's generator
+    /// hands out is the prefix and a single character from its own alphabet, so a bare <c>temp</c>,
+    /// a numbered one, a differently cased one and every ordinary word beginning "temp" are all
+    /// somebody else's directory.
     /// </summary>
     [Theory]
     [InlineData("temp")]
@@ -175,6 +176,36 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         Assert.Equal(
             Path.Combine(packages, "Chatterbox-1.0.9007-full.nupkg"),
             Assert.Single(plan.TargetedPaths));
+
+        // §7's age column. It comes from the enumeration that found the file rather than from a
+        // second look, so it can never be the start of the Windows epoch for a package the
+        // updater's own prune removed while the scan was reading the folder.
+        var step = Assert.Single(plan.Steps);
+        Assert.NotNull(step.LastWritten);
+        Assert.True(step.LastWritten > new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    /// <summary>
+    /// Two of everything, because a sentence that reads correctly only on a machine with one of
+    /// something is the defect this project has met before. Both counts are written out rather than
+    /// switched on a verb, so the plural form is a real sentence.
+    /// </summary>
+    [Fact]
+    public async Task TheSentenceAboutSeveralApplicationsIsGrammatical()
+    {
+        foreach (var name in new[] { "Chatterbox", "Notepad" })
+        {
+            var root = CreateApplication(name, "1.0.0");
+            Populate(Path.Combine(root, "app-1.1.0-beta1"));
+            CreatePackages(root, [$"{name}-1.0.0-full.nupkg"], $"{name}-1.0.0-full.nupkg");
+        }
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(
+            plan.Notes,
+            n => n.Message.Contains("which builds are installed", StringComparison.Ordinal)
+                && n.Message.Contains("comparison with them", StringComparison.Ordinal));
     }
 
     /// <summary>
