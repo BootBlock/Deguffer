@@ -699,6 +699,101 @@ see its cache.
 
 ---
 
+## Firefox caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Mozilla\Firefox\Profiles\<profile>`, for each profile `profiles.ini` names |
+| **Method** | Delete five recognised cache directories, per profile |
+| **Typical size** | 350 MB across the five in one profile on the machine this was measured on, of which `cache2` was 322 MB |
+
+### What it is
+
+Firefox is not Chromium, so nothing the Chromium provider recognises applies to it. It also keeps a
+profile in **two** places rather than one, and the split is the whole of why this is safe:
+
+| Half | Where | What is in it |
+| --- | --- | --- |
+| **Roaming** | `%APPDATA%\Mozilla\Firefox\Profiles\<profile>` | Bookmarks, history, saved passwords, certificates, every preference |
+| **Local** | `%LOCALAPPDATA%\Mozilla\Firefox\Profiles\<profile>` | The disk cache and the other files Firefox refills by itself |
+
+Deguffer plans against the local half only. Nothing in the roaming half is ever a candidate, whatever
+it is called.
+
+| Directory | What it holds |
+| --- | --- |
+| `cache2` | Web content saved so the same thing is not fetched twice |
+| `startupCache` | Interface and script data Firefox precompiles for its own start-up |
+| `safebrowsing` | The Safe Browsing lists Firefox checks sites against |
+| `thumbnails` | The page images on the new-tab page |
+| `jumpListCache` | Icons for Firefox's taskbar jump list |
+
+### What Deguffer does
+
+**It asks Firefox which directories are profiles.** `%APPDATA%\Mozilla\Firefox\profiles.ini` is
+Mozilla's own register of them, and a directory it does not name as a profile is never entered — a
+directory called `cache2` in a folder nobody registered is left exactly where it is. Each profile's
+caches are their own steps, so you can clear one profile and leave another alone.
+
+Firefox has no command that clears its cache from outside the running browser, so these are deleted
+directly rather than by asking the tool, and only by exact name.
+
+**A profile you moved somewhere yourself is reported and not examined.** Where `profiles.ini` records
+an absolute path, Firefox keeps that profile's cache in the same directory as its bookmarks and
+passwords rather than separately from them, and the argument above stops applying. Deguffer says so
+in the plan instead of guessing.
+
+### What is protected
+
+**The whole roaming half, and everything in the local half that is not one of the five.** Deguffer
+asserts afterwards that these survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `places.sqlite` | Your bookmarks and browsing history |
+| `key4.db` | The key that decrypts your saved passwords |
+| `logins.json` | Your saved usernames and passwords |
+| `cert9.db` | The certificates and exceptions you have accepted |
+| `prefs.js` | Every setting you have changed |
+| `profiles.ini` | The register itself. Losing it loses every profile |
+
+`remote-settings` is the one directory Deguffer names and then leaves alone. It is datasets Firefox
+synchronises for itself, most of it the Firefox Suggest data, and it was four fifths of the local
+profile on the machine this was measured on — 1.5 GB of a 1.9 GB folder. It is not user data, but
+Mozilla documents no way to remove it and nobody has established what re-downloading it would cost,
+so Deguffer measures it, tells you how big it is, and does not offer it.
+
+Deguffer also refuses to delete through a link, and it checks the whole path rather than just the
+last folder. If you have moved `%LOCALAPPDATA%\Mozilla` onto another drive with a junction, it
+removes nothing there and tells you why.
+
+### What it costs you
+
+Firefox fetches pages from the network rather than from disk for a while, and rebuilds its startup
+cache the first time it opens, so one start is slower. The Safe Browsing lists are downloaded again
+shortly after that start, and the new-tab thumbnails are drawn again as you revisit the pages.
+
+**Bookmarks, history, saved passwords, open tabs and settings are untouched.** They are all in the
+other half of the profile, which Deguffer never removes anything from.
+
+Close Firefox first if you can. A running browser keeps its cache files open, and anything held open
+is left in place rather than removed.
+
+### Why Tier 1
+
+Every one of the five is derived content with an authoritative source elsewhere: pages the server
+still has, lists Mozilla still publishes, and compiled output of code that is still on your disk.
+Firefox refills all of it without being asked.
+
+### Not reached: Thunderbird
+
+Thunderbird keeps the identical layout — its own `profiles.ini`, the same two roots, the same
+`cache2`. Deguffer does not reach it yet, because nothing here has been measured against it.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
