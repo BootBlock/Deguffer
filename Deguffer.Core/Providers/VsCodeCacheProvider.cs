@@ -24,8 +24,9 @@ namespace Deguffer.Core.Providers;
 /// VSCodium and every other derivative on the machine.</para>
 ///
 /// <para><b>What sits beside these is the most valuable thing in the profile.</b> <c>User</c> holds
-/// <c>workspaceStorage</c>, <c>globalStorage</c> and <c>History</c> — 14 GB between them on the
-/// measured machine, and every byte of it user data wearing a cache costume (§4.3). It is Tier 4 by
+/// <c>workspaceStorage</c>, <c>globalStorage</c> and <c>History</c> — §4.3 records the first at
+/// 11.3 GB and the third at 1.1 GB on the audited machine, and calls the whole of it user data
+/// wearing a cache costume. It is Tier 4 by
 /// construction like any unrecognised child, and <see cref="VsCodeUserDataDiscovery.NeverOffered"/>
 /// names it in full so that a run produces evidence it survived rather than merely never mentioning
 /// it.</para>
@@ -115,6 +116,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     private readonly VsCodeUserDataDiscovery _discovery;
     private IReadOnlyList<Editor>? _installed;
+    private IReadOnlyList<Editor>? _withCaches;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
     public VsCodeCacheProvider(
@@ -158,12 +160,21 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// The editors whose folders hold at least one recognised cache, memoised for the life of a
-    /// planning pass (G4). Presence and planning ask the same question of the same disk.
+    /// planning pass (G4). Presence and planning ask the same question of the same disk, and the
+    /// probe behind it is a run of existence checks per editor rather than a free lookup.
     ///
     /// Exposed so tests can assert that no user-data folder is ever a target.
     /// </summary>
     public IReadOnlyList<VsCodeUserData> Editors(CancellationToken ct = default) =>
-        [.. Installed(ct).Where(HasRecognisedCache).Select(e => e.UserData)];
+        [.. WithCaches(ct).Select(e => e.UserData)];
+
+    /// <summary>
+    /// The same set, as the type planning needs. Separate from <see cref="Editors"/> because the
+    /// <c>WebStorage</c> reading travels with each editor and a caller outside this type has no use
+    /// for it.
+    /// </summary>
+    private IReadOnlyList<Editor> WithCaches(CancellationToken ct = default) =>
+        _withCaches ??= [.. Installed(ct).Where(HasRecognisedCache)];
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: the user-data folder, the <c>WebStorage</c>
@@ -197,6 +208,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _installed = null;
+        _withCaches = null;
         _toolRoots = null;
         base.InvalidateCaches();
     }
@@ -216,7 +228,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var editors = Installed(ct).Where(HasRecognisedCache).ToList();
+        var editors = WithCaches(ct);
 
         if (editors.Count == 0)
         {
@@ -380,7 +392,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// Whether any declared name is on disk for this editor, by probing the tables rather than by
-    /// enumerating (G4). Five existence checks plus one per partition, and not one of them can reach
+    /// enumerating (G4). Four existence checks plus one per partition, and not one of them can reach
     /// a path the tables do not name.
     ///
     /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so an editor

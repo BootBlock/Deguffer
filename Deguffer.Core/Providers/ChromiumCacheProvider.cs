@@ -371,7 +371,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     ///
     /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so an
     /// application whose only cache is a link reports as present here and then yields no target,
-    /// because <see cref="CollectFrom"/> declines it. That is the intended outcome — a plan naming
+    /// because <see cref="CacheLevelWalk"/> declines it. That is the intended outcome — a plan naming
     /// the link beats an empty plan that claims no cache exists — but a future edit must not read
     /// a true from this as licence to delete anything.</para>
     /// </summary>

@@ -714,8 +714,8 @@ see its cache.
 Visual Studio Code is a Chromium application, so [Chromium application
 caches](#chromium-application-caches) above already reaches the six engine cache directories inside
 its folder. Those six are the small part. The editor keeps four more caches of its own, under names
-that belong to VS Code rather than to Chromium, and on the measured machine they were about ten
-times the size.
+that belong to VS Code rather than to Chromium. On the measured machine the six came to about
+15 MB and these four to 2.0 GB.
 
 | Directory | What it holds |
 | --- | --- |
@@ -752,8 +752,8 @@ your disk, so the whole cost of removing it is one slower start.
 
 ### What is protected
 
-**Everything in `User`, which is the most valuable directory in the folder.** On the measured
-machine it held 14 GB, and not one byte of it is a cache:
+**Everything in `User`, which is the most valuable directory in the folder.** The founding audit
+measured `workspaceStorage` alone at 11.3 GB, and not one byte of any of it is a cache:
 
 | Neighbour | What it really is |
 | --- | --- |

@@ -1,4 +1,4 @@
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
@@ -52,10 +52,11 @@ public sealed class VsCodeUserDataDiscovery(IUserEnvironment environment)
     /// rather than merely never mentioning it.
     ///
     /// <para><c>User</c> is §3's founding example of user data wearing a cache costume, and
-    /// <c>_spec.md</c> §4.3 already says so: <c>workspaceStorage</c> was 11.6 GB on the measured
-    /// machine, <c>globalStorage</c> 1.5 GB and <c>History</c> 1.1 GB, and between them they hold
-    /// every extension's stored state, every open editor and terminal the editor will restore, and
-    /// the local undo history of files that were never committed. The directory is classified Tier 4
+    /// <c>_spec.md</c> §4.3 already says so by name: it records <c>User\workspaceStorage</c> at
+    /// 11.3 GB and <c>User\History</c> at 1.1 GB on the audited machine. Between them and
+    /// <c>globalStorage</c> they hold every extension's stored state, every open editor and terminal
+    /// the editor will restore, and the local undo history of files that were never committed. The
+    /// directory is classified Tier 4
     /// like any other unrecognised child, so this list adds nothing to what is <em>planned</em>. It
     /// adds what a run can show afterwards, which is the whole of §5.6: naming the largest things in
     /// there individually is what turns "we did not target it" into evidence that it is still on
@@ -81,6 +82,7 @@ public sealed class VsCodeUserDataDiscovery(IUserEnvironment environment)
             + "copy of what came before."),
         (Path.Combine("User", "profiles"),
             "The settings and extension state of every editor profile other than the default one."),
+        (Path.Combine("User", "snippets"), "The snippets you have written."),
         (Path.Combine("User", "settings.json"), "The editor settings you have changed."),
         (Path.Combine("User", "keybindings.json"), "The keyboard shortcuts you have changed."),
         (IdentifyingFile,

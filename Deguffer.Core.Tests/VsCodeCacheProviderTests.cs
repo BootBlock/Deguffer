@@ -291,8 +291,8 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
     /// <summary>
     /// The <c>User</c> tree is never classified, because child classification enumerates one
-    /// directory at a time and this provider never enters that one. §4.3 calls it the founding
-    /// example of user data wearing a cache costume — 14 GB of it on the measured machine — so the
+    /// directory at a time and this provider never enters that one. §4.3 is the section titled
+    /// "user data wearing a cache costume", and two of the rows in it are inside this tree, so the
     /// provider names each part of it and a run produces evidence it is still there.
     /// </summary>
     [Fact]
@@ -304,13 +304,14 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         var workspaces = CreateDirectory(Path.Combine(editor, "User", "workspaceStorage"));
         var global = CreateDirectory(Path.Combine(editor, "User", "globalStorage"));
         var history = CreateDirectory(Path.Combine(editor, "User", "History"));
+        var snippets = CreateDirectory(Path.Combine(editor, "User", "snippets"));
         var settings = CreateFile(Path.Combine(editor, "User", "settings.json"));
         var database = Path.Combine(editor, VsCodeUserDataDiscovery.IdentifyingFile);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        foreach (var path in new[] { workspaces, global, history, settings, database })
+        foreach (var path in new[] { workspaces, global, history, snippets, settings, database })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
@@ -322,6 +323,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         Assert.True(Directory.Exists(workspaces));
         Assert.True(Directory.Exists(global));
         Assert.True(Directory.Exists(history));
+        Assert.True(Directory.Exists(snippets));
         Assert.True(File.Exists(settings));
         Assert.True(File.Exists(database));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);

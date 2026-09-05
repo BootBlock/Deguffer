@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -99,9 +99,9 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
 
     /// <summary>
     /// The editors whose folders hold at least one of the two, memoised for the life of a planning
-    /// pass (G4). Exposed so tests can assert that no user-data folder is ever a target.
+    /// pass (G4). Presence and planning ask the same question of the same disk.
     /// </summary>
-    public IReadOnlyList<VsCodeUserData> Editors(CancellationToken ct = default) =>
+    private IReadOnlyList<VsCodeUserData> Editors(CancellationToken ct = default) =>
         _editors ??= [.. _discovery.Discover(ct).Where(HasRecord)];
 
     /// <summary>
