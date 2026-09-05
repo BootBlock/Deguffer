@@ -699,6 +699,149 @@ see its cache.
 
 ---
 
+## VS Code editor caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Any Code - OSS editor's folder one level under `%APPDATA%` — `Code`, `Code - Insiders`, `VSCodium`, `Cursor` and the rest |
+| **Method** | Delete the four cache directories the editor writes, plus the web cache inside each webview partition |
+| **Typical size** | 2.0 GB was measured on one workstation for a single editor |
+
+### What it is
+
+Visual Studio Code is a Chromium application, so [Chromium application
+caches](#chromium-application-caches) above already reaches the six engine cache directories inside
+its folder. Those six are the small part. The editor keeps four more caches of its own, under names
+that belong to VS Code rather than to Chromium, and on the measured machine they were about ten
+times the size.
+
+| Directory | What it holds |
+| --- | --- |
+| `CachedData` | The editor's own code, compiled ahead of time, in one folder per build. Sixteen builds were present on the measured machine, of which at most one is installed |
+| `CachedExtensionVSIXs` | The installer package of every extension the editor downloaded, kept after it installed it. 775 MB across 21 packages, two of them successive builds of the same extension at 103 MB each |
+| `CachedExtensions`, `CachedProfilesData` | The result of the last extension scan, once overall and once per editor profile |
+| `WebStorage\<n>\CacheStorage` | Web content one webview saved so it would not fetch the same thing twice. This is the same kind of content as `Service Worker\CacheStorage`, which the Chromium rules already recognise, under a different parent |
+
+Because every editor built on the Code - OSS base writes the same names into its own `%APPDATA%`
+folder, one set of rules reaches all of them. Deguffer does not need to know the editor.
+
+### What Deguffer does
+
+**It identifies the folder before it looks inside it.** `CachedData` is a name any directory on your
+disk may happen to have, so a cache name is never on its own a reason to go in. A folder is examined
+only if it holds *both* Chromium's `Local State`, which says an Electron application owns it, and
+`User\globalStorage\state.vscdb`, which the editor's own storage service creates on first run.
+
+Within such a folder it removes exactly the directories above and nothing else, one step each, so
+you can clear one editor and keep another, or clear the extension packages and keep the compiled
+code.
+
+`WebStorage` is **not** removed, and neither is any of the numbered folders inside it. Each of those
+is one webview's storage, holding what that view *saved* beside what it merely cached, so Deguffer
+takes the one recognised cache inside each and leaves the folder standing. The plan says so, so you
+are not left wondering why those folders are still there afterwards.
+
+**`CachedData` goes whole, including the folder for the build you are running.** The editor names
+each folder after the build that wrote it, and a folder for a build you no longer have can never be
+used again — but nothing inside the editor's folder records which build is installed, so Deguffer
+cannot tell them apart without guessing, and guessing is the one thing it will not do. Keeping the
+live build's folder would save you very little in any case: it is compiled output of code still on
+your disk, so the whole cost of removing it is one slower start.
+
+### What is protected
+
+**Everything in `User`, which is the most valuable directory in the folder.** On the measured
+machine it held 14 GB, and not one byte of it is a cache:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `User\workspaceStorage` | The state of every workspace you have opened — the editors, terminals and layout the editor restores |
+| `User\globalStorage` | What every installed extension has stored: sign-ins, indexes and its own settings |
+| `User\History` | Your local undo history. For a file you never committed it is the only copy of what came before |
+| `User\settings.json`, `User\keybindings.json`, `User\snippets`, `User\profiles` | Everything you have configured |
+
+Nothing outside the recognised names is ever a candidate, whatever it is called — a folder named
+`CachedSomethingNew` stays exactly where it is, and so does anything Deguffer finds inside a webview
+partition that is not the one cache it recognises. Deguffer asserts afterwards that each of the
+directories above survived.
+
+Deguffer also refuses to delete through a link. If you have redirected one of these caches to
+another drive with a junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+The editor starts more slowly once. It recompiles its own code, rescans your installed extensions,
+and then behaves exactly as before. Your extensions themselves are installed elsewhere and are
+untouched; only the downloaded installer packages go, and the marketplace supplies one again if it
+is ever needed.
+
+Close the editor first if you can. A running one keeps files open, and anything held open is left in
+place rather than removed.
+
+### Why Tier 1
+
+Every one of these is derived content with an authoritative source elsewhere: the editor's own code
+is on your disk, the extension packages are in the marketplace, and the webview content is on the
+server that served it. The editor refills all of it without being asked.
+
+---
+
+## VS Code editor logs and crash reports
+
+**Tier 3 — user data in a cache costume.** Never pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `logs` and `Crashpad`, in the same editor folder as the caches above |
+| **Method** | Delete the two directories |
+| **Typical size** | 0.29 GB was measured on one workstation, across 65 sessions |
+
+### What it is
+
+The editor writes a new folder under `logs` **every single time it starts**, holding what it and
+every installed extension wrote to their output channels. It removes none of them. `Crashpad` beside
+it is the crash reporter's database: the dump and the metadata for every time the editor stopped
+unexpectedly.
+
+Both grow for as long as the editor is installed. On the measured machine `logs` held 141.7 MB
+across 65 session folders, and `Crashpad` 152.9 MB.
+
+### What Deguffer does
+
+It removes the two directories, one step each, in every editor folder it identifies — the same two
+positive tests as the caches above. The directories themselves are re-created the next time the
+editor starts.
+
+### What is protected
+
+The same `User` tree as above, named the same way and asserted to survive in the same way. The
+editor's **caches** are protected here too: they are offered separately, under Tier 1, because a
+Tier 3 confirmation is not the one you should be giving to delete a regenerable cache.
+
+### What it costs you
+
+**Permanently.** Nothing re-creates the log of a session that has already ended, or the dump of a
+crash that will not happen again to order. If an extension author has asked you for a log, this is
+where it is. If you are halfway through a bug report, the evidence is here and there is no other
+copy.
+
+There is no age cut-off, deliberately. A log written this morning may be exactly the one you need,
+and Deguffer will not decide that for you: the tier keeps the row unselected and the confirmation
+says plainly that the loss is permanent. If you want a cut-off, the guard on recently changed files
+is yours to set, and it protects the session you are running now without anything having to guess
+which one that is.
+
+### Why Tier 3
+
+Tier 1 requires that whatever produced the content re-creates it on demand, so that nothing is lost.
+Nothing re-creates a record of something that happened. This is the same judgement as [crash dumps
+and error reports](#crash-dumps-and-error-reports) and [Windows servicing
+logs](#windows-servicing-logs) below, for the same reason.
+
+---
+
 ## Firefox caches
 
 **Tier 1 — regenerable cache.** Pre-selected.
