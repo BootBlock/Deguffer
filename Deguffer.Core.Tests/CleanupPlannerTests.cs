@@ -183,7 +183,7 @@ public sealed class CleanupPlannerTests
             [
                 "dotnet-obj", "unity-library", "cargo-target", "node-modules", "python-venv",
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "uv", "pip",
-                "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
+                "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
                 "vscode-cache", "firefox", "epic-launcher-webcache", "steam",
                 "platformio", "playwright", "recycle-bin", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "vscode-logs",

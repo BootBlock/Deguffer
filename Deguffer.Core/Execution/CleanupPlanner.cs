@@ -18,7 +18,7 @@ public sealed class CleanupPlanner
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Cargo, Go, Maven, vcpkg, pnpm,
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
     /// web caches, the Dart analysis server's byte store, the per-volume Recycle Bins, the crash
@@ -67,6 +67,7 @@ public sealed class CleanupPlanner
         new DartAnalysisServerProvider(),
         new UvCacheProvider(),
         new PipCacheProvider(),
+        new PoetryCacheProvider(),
         new CondaCacheProvider(),
         new CargoCacheProvider(),
         new GoCacheProvider(),

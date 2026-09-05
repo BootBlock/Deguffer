@@ -1,0 +1,439 @@
+using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
+using Deguffer.Core.Tests.Fakes;
+
+namespace Deguffer.Core.Tests;
+
+/// <summary>
+/// Poetry is the §5.1 provider whose cache directory also holds the thing that must never go: its
+/// virtual environments default to a child of the very folder being cleaned. So most of what is
+/// asserted here is the negative — what the plan leaves alone, and what it proves survived (§5.6) —
+/// rather than what it removes.
+///
+/// <para>Everything runs against a synthetic profile and canned Poetry output. Poetry is not
+/// installed on the machine this was written on, which is exactly the case the
+/// <see cref="IProcessRunner"/> seam exists for.</para>
+/// </summary>
+public sealed class PoetryCacheProviderTests : IDisposable
+{
+    private readonly TempDirectory _temp = new();
+    private readonly FakeUserEnvironment _environment;
+
+    public PoetryCacheProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
+
+    public void Dispose() => _temp.Dispose();
+
+    private PoetryCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
+        new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+    /// <summary>Poetry's default cache directory, without creating anything in it.</summary>
+    private string CacheRoot => Path.Combine(_environment.LocalAppData, "pypoetry", "Cache");
+
+    /// <summary>
+    /// The layout Poetry actually builds: downloaded artefacts, one metadata cache per repository,
+    /// and the environments beside both of them.
+    /// </summary>
+    private (string Artifacts, string Repositories, string Environments) CreateCache(string? root = null)
+    {
+        root ??= CacheRoot;
+
+        var artifacts = Path.Combine(root, "artifacts");
+        var repositories = Path.Combine(root, "cache", "repositories");
+        var environments = Path.Combine(root, "virtualenvs");
+
+        Directory.CreateDirectory(Path.Combine(artifacts, "ab", "cd"));
+        File.WriteAllBytes(Path.Combine(artifacts, "ab", "cd", "package.whl"), new byte[4096]);
+
+        Directory.CreateDirectory(Path.Combine(repositories, "PyPI"));
+        File.WriteAllBytes(Path.Combine(repositories, "PyPI", "metadata.json"), new byte[2048]);
+
+        Directory.CreateDirectory(Path.Combine(environments, "myproject-py3.12", "Lib"));
+        File.WriteAllBytes(Path.Combine(environments, "myproject-py3.12", "Lib", "installed.pyd"), new byte[8192]);
+
+        return (artifacts, repositories, environments);
+    }
+
+    /// <summary>Poetry installed, answering its two config lookups and naming one cache.</summary>
+    private FakeProcessRunner Poetry(string? cacheRoot = null, string? environments = null)
+    {
+        _environment.WithExecutable("poetry");
+
+        return new FakeProcessRunner()
+            .Responding("config cache-dir", cacheRoot ?? CacheRoot)
+            .Responding("config virtualenvs.path", environments ?? Path.Combine(cacheRoot ?? CacheRoot, "virtualenvs"))
+            .Responding("cache list", "PyPI");
+    }
+
+    [Fact]
+    public async Task ReportsNotPresentWhenPoetryWasNeverInstalled()
+    {
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+        Assert.True(plan.IsEmpty);
+        Assert.Equal(0, plan.EstimatedBytes);
+    }
+
+    [Fact]
+    public async Task AsksPoetryWhereItsCacheIsRatherThanAssuming()
+    {
+        var elsewhere = _temp.CreateDirectory("relocated-cache");
+        CreateCache(elsewhere);
+
+        var runner = Poetry(elsewhere);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(runner.Invocations, i => i.Arguments.Contains("config cache-dir", StringComparison.Ordinal));
+        Assert.Contains(Path.Combine(elsewhere, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            Path.Combine(CacheRoot, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The environments are a setting of their own, so a machine that moved them and left the cache
+    /// where it was must be described as it is. Assuming the default would name a directory Poetry
+    /// has stopped using, and then prove nothing about the one it uses now.
+    /// </summary>
+    [Fact]
+    public async Task AsksPoetryWhereItsVirtualEnvironmentsAreRatherThanAssuming()
+    {
+        CreateCache();
+        var moved = _temp.CreateDirectory("relocated-environments");
+
+        var runner = Poetry(environments: moved);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(
+            runner.Invocations, i => i.Arguments.Contains("config virtualenvs.path", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+    }
+
+    [Fact]
+    public async Task AsksPoetryNotToColouriseTheOutputItIsAboutToParse()
+    {
+        CreateCache();
+
+        var runner = Poetry();
+        await CreateProvider(runner).PlanAsync();
+
+        // Without this, Poetry wraps its output in ANSI escapes and they land inside the parsed
+        // path and inside the cache names handed back to it.
+        Assert.All(
+            runner.Invocations,
+            i => Assert.Contains("--no-ansi", i.Arguments, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FallsBackToTheDocumentedLocationWhenPoetryCannotAnswer()
+    {
+        _environment.WithExecutable("poetry");
+        CreateCache();
+
+        var runner = new FakeProcessRunner()
+            .Responding("config", string.Empty, exitCode: 1)
+            .Responding("cache list", "PyPI");
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(Path.Combine(CacheRoot, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(Path.Combine(CacheRoot, "virtualenvs"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The issue this provider exists for. Every environment on the machine sits inside the folder
+    /// being cleaned, and each is a full install rather than a cache.
+    /// </summary>
+    [Fact]
+    public async Task NeverTargetsTheVirtualEnvironmentsThatLiveInsideTheCache()
+    {
+        var (_, _, environments) = CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.DoesNotContain(environments, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.All(
+            plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths),
+            path => Assert.False(LongPath.Contains(path, environments)));
+
+        // Not merely unmentioned — asserted to survive (§5.6).
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+    }
+
+    [Fact]
+    public async Task NeverTargetsTheCacheRootBecauseTheEnvironmentsAreInsideIt()
+    {
+        CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.DoesNotContain(CacheRoot, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(CacheRoot, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+    }
+
+    /// <summary>
+    /// §5.2's unrecognised case, which is the direction that loses data: a child nobody wrote a rule
+    /// about is Tier 4, and the user is told rather than left to notice the omission.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAnUnrecognisedChildAloneAndSaysSo()
+    {
+        CreateCache();
+        var unknown = Path.Combine(CacheRoot, "something-poetry-added-later");
+        Directory.CreateDirectory(unknown);
+        File.WriteAllBytes(Path.Combine(unknown, "payload.bin"), new byte[4096]);
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.DoesNotContain(unknown, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("something-poetry-added-later", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.1 answers the repository caches and nothing else. Poetry's clear builds a file cache over
+    /// its repository directory and flushes that; the archives it downloaded and the wheels it built
+    /// sit in a sibling no Poetry command removes, so the plan removes that one by path.
+    /// </summary>
+    [Fact]
+    public async Task DeletesTheArtifactsCacheBecauseNoPoetryCommandReachesIt()
+    {
+        var (artifacts, _, _) = CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+        Assert.Equal(artifacts, step.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.True(step.EstimatedBytes > 0);
+    }
+
+    [Fact]
+    public async Task ClearsEachNamedRepositoryCacheWithPoetrysOwnCommand()
+    {
+        var (_, repositories, _) = CreateCache();
+        Directory.CreateDirectory(Path.Combine(repositories, "private-index"));
+        File.WriteAllBytes(Path.Combine(repositories, "private-index", "metadata.json"), new byte[1024]);
+
+        var runner = Poetry().Responding("cache list", "PyPI\nprivate-index");
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        var commands = plan.Steps.OfType<RunCommandStep>().ToList();
+
+        Assert.Equal(2, commands.Count);
+        Assert.Contains(commands, s => s.Arguments.Contains("cache clear PyPI --all", StringComparison.Ordinal));
+        Assert.Contains(commands, s => s.Arguments.Contains("cache clear private-index --all", StringComparison.Ordinal));
+
+        // The repository cache is measured but never targeted: §5.1 leaves Poetry deciding what it
+        // removes, so the paths on a command step are a probe rather than a target.
+        Assert.All(
+            commands.SelectMany(s => s.MeasuredPaths),
+            path => Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// <c>poetry cache clear</c> asks "Delete N entries?" before it does anything, and Deguffer
+    /// starts it with no console attached. Without the flag the step's behaviour would depend on
+    /// what a detached standard input does to a prompt.
+    /// </summary>
+    [Fact]
+    public async Task AsksPoetryNotToPromptBecauseThereIsNoConsoleToAnswerThePrompt()
+    {
+        CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.All(
+            plan.Steps.OfType<RunCommandStep>(),
+            step => Assert.Contains("--no-interaction", step.Arguments, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The directory holding the repository caches is recognised as disposable and is still not a
+    /// target. Poetry's own command clears what is inside it, and §5.1 leaves that route in charge.
+    /// </summary>
+    [Fact]
+    public async Task NeverDeletesTheDirectoryHoldingTheRepositoryCachesByPath()
+    {
+        CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.DoesNotContain(
+            Path.Combine(CacheRoot, "cache"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(Path.Combine(CacheRoot, "cache"), StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+    }
+
+    /// <summary>
+    /// A cache name reaches Deguffer as a directory name written by somebody else and leaves it as
+    /// the arguments of a process this tool starts. A name carrying a space or a shell character
+    /// would change which command runs, so it is left to Poetry rather than quoted at.
+    /// </summary>
+    [Fact]
+    public async Task RefusesACacheNameThatWouldChangeWhichCommandRuns()
+    {
+        var (_, repositories, _) = CreateCache();
+        Directory.CreateDirectory(Path.Combine(repositories, "odd name"));
+
+        var runner = Poetry().Responding("cache list", "PyPI\nodd name");
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        var command = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains("cache clear PyPI --all", command.Arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("odd name", command.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Both settings are configurable and neither constrains the other, so a <c>virtualenvs.path</c>
+    /// at or above the cache directory makes every child of it part of the environment tree. The
+    /// name-based rule cannot see that, which is why the resolved paths are compared.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingWhenTheEnvironmentsAreConfiguredToHoldTheCache()
+    {
+        CreateCache();
+
+        var runner = Poetry(environments: CacheRoot);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("leaving the whole of", StringComparison.Ordinal));
+    }
+
+    /// <summary>The same refusal one level in, where a recognised child holds the environments.</summary>
+    [Fact]
+    public async Task LeavesARecognisedChildAloneWhenTheEnvironmentsWereMovedInsideIt()
+    {
+        var (artifacts, _, _) = CreateCache();
+        var inside = Path.Combine(artifacts, "envs");
+        Directory.CreateDirectory(inside);
+
+        var runner = Poetry(environments: inside);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.DoesNotContain(artifacts, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("virtual environments inside it", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DoesNotLookThroughACacheDirectoryThatIsALink()
+    {
+        var real = _temp.CreateDirectory("elsewhere");
+        CreateCache(real);
+
+        Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "pypoetry"));
+        Directory.CreateSymbolicLink(CacheRoot, real);
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task LeavesALinkedChildAloneAndSaysSo()
+    {
+        CreateCache();
+        Directory.Delete(Path.Combine(CacheRoot, "artifacts"), recursive: true);
+        Directory.CreateSymbolicLink(Path.Combine(CacheRoot, "artifacts"), _temp.CreateDirectory("far-side"));
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<DeleteDirectoryStep>());
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("delete through a link", StringComparison.Ordinal));
+    }
+
+    /// <summary>§5.6: the negative is the whole test. An over-broad rule passes every positive one.</summary>
+    [Fact]
+    public async Task VerificationFailsLoudlyIfTheVirtualEnvironmentsVanished()
+    {
+        var (_, _, environments) = CreateCache();
+
+        var provider = CreateProvider(Poetry());
+        var plan = await provider.PlanAsync();
+
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+
+        // Simulate the over-broad rule §5.6 exists to catch: clearing the cache took the
+        // environments with it.
+        Directory.Delete(environments, recursive: true);
+
+        var verification = await provider.VerifyAsync(plan);
+
+        Assert.False(verification.Passed);
+        Assert.Contains(verification.Failures, c =>
+            c.Path.Equals(environments, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ReResolvesBothSettingsAfterInvalidationBecauseEitherCanMove()
+    {
+        var first = _temp.CreateDirectory("first-cache");
+        CreateCache(first);
+
+        var moved = _temp.CreateDirectory("moved-cache");
+        CreateCache(moved);
+
+        var runner = Poetry(first);
+        var provider = CreateProvider(runner);
+
+        var before = await provider.PlanAsync();
+        Assert.Contains(Path.Combine(first, "artifacts"), before.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        // POETRY_CACHE_DIR moved between scans; the planner invalidates before replanning.
+        runner.Responding("config cache-dir", moved)
+            .Responding("config virtualenvs.path", Path.Combine(moved, "virtualenvs"));
+        provider.InvalidateCaches();
+
+        var after = await provider.PlanAsync();
+
+        Assert.Contains(Path.Combine(moved, "artifacts"), after.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Path.Combine(first, "artifacts"), after.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WarnsWhenPoetryIsRunning()
+    {
+        CreateCache();
+
+        var provider = new PoetryCacheProvider(
+            _environment, Poetry(), new FakeProcessInspector("poetry"));
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+    }
+
+    [Fact]
+    public async Task SaysSoWhenPoetryIsInstalledButItsCacheDirectoryIsNotThereYet()
+    {
+        _environment.WithExecutable("poetry");
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("does not exist yet", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysSoWhenTheCacheDirectoryIsThereButEmpty()
+    {
+        Directory.CreateDirectory(CacheRoot);
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.False(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("has cached nothing yet", StringComparison.Ordinal));
+    }
+}
