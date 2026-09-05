@@ -130,6 +130,12 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     [InlineData("TEMPA")]
     [InlineData("tempa-old")]
     [InlineData("logs")]
+    // Ordinary words beginning "temp". The generator hands out the first free name, so it produces
+    // a one-character suffix until 360 directories exist at once — a longer run of Latin letters is
+    // an English word, and under a SQUIRREL_TEMP pointed at a shared folder these are somebody's.
+    [InlineData("templates")]
+    [InlineData("temporary")]
+    [InlineData("tempdata")]
     public async Task AnUnrecognisedNeighbourInTheStagingFolderIsNeverATarget(string name)
     {
         Populate(Path.Combine(StagingRoot, "tempz"));
@@ -265,8 +271,15 @@ public sealed class SquirrelStagingProviderTests : IDisposable
             Path.Combine(root, "app-1.0.9254"),
         ];
 
+        File.WriteAllText(Path.Combine(StagingRoot, "SquirrelSetup.log"), "log");
+        File.WriteAllText(Path.Combine(StagingRoot, "setup.json"), "{}");
+
+        // Files, not directories. Child classification enumerates directories, so these are only
+        // ever asserted because the provider names them — the NVIDIA 'accounts' lesson.
         string[] files =
         [
+            Path.Combine(StagingRoot, "SquirrelSetup.log"),
+            Path.Combine(StagingRoot, "setup.json"),
             Path.Combine(root, SquirrelDiscovery.UpdaterName),
             Path.Combine(packages, SquirrelPackages.IndexName),
             Path.Combine(packages, ".betaId"),
@@ -318,6 +331,23 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The single-directory machine, which is the ordinary one: everything the folder holds is in
+    /// use, so the plan has no steps. The row must not read "Already clear" and must not carry a
+    /// sentence saying the updater left nothing behind, beside a warning saying the opposite.
+    /// </summary>
+    [Fact]
+    public async Task AStagingFolderWhoseEveryDirectoryIsInUseIsNotReportedAsClear()
+    {
+        var busy = Populate(Path.Combine(StagingRoot, "tempa"));
+
+        var plan = await CreateProvider(new FakeLiveTreeInspector(busy)).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("left nothing behind", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A check that could not run must not look like a check that found nothing (§5.5's reasoning,
     /// applied to a safeguard rather than a measurement).
     /// </summary>
@@ -329,6 +359,90 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not check", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A package file somebody moved onto another drive with a link. The file enumeration hands one
+    /// back exactly as it hands back a file, so this is the check every other root in this provider
+    /// makes, applied to the one route that ends in a deletion.
+    /// </summary>
+    [Fact]
+    public async Task ALinkedPackageIsLeftAloneAndReported()
+    {
+        var root = CreateApplication("Chatterbox", "1.0.9254");
+        var packages = CreatePackages(root, ["Chatterbox-1.0.9254-full.nupkg"], "Chatterbox-1.0.9254-full.nupkg");
+
+        var outside = Path.Combine(_temp.Path, "elsewhere.nupkg");
+        File.WriteAllBytes(outside, new byte[2048]);
+
+        var link = Path.Combine(packages, "Chatterbox-1.0.9007-full.nupkg");
+        File.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(File.Exists(outside), $"{outside} was removed through the link");
+    }
+
+    /// <summary>
+    /// An application whose builds could not be ordered has no installed version to compare a
+    /// package against, so its packages are left alone — and the reason the user is given is that
+    /// one, not the wrong one about a record Deguffer read perfectly well.
+    /// </summary>
+    [Fact]
+    public async Task AnApplicationWhoseBuildsCannotBeOrderedKeepsItsPackagesAndIsToldWhy()
+    {
+        var root = CreateApplication("Chatterbox", "1.0.9254");
+        Populate(Path.Combine(root, "app-1.1.0-beta1"));
+
+        var packages = CreatePackages(
+            root,
+            ["Chatterbox-1.0.9254-full.nupkg"],
+            "Chatterbox-1.0.9254-full.nupkg",
+            "Chatterbox-1.0.9007-full.nupkg");
+
+        var spent = Path.Combine(packages, "Chatterbox-1.0.9007-full.nupkg");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("which build", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("could not read the record", StringComparison.Ordinal));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(File.Exists(spent), $"{spent} was removed");
+    }
+
+    /// <summary>
+    /// An application folder that holds the updater and then refuses to be listed. It passes the
+    /// first half of the identification test and fails the second, and the row must say so — the
+    /// facts about what the sweep could not read are only known once the sweep has run, so a plan
+    /// that read them too early reported the refusal as though it had not happened.
+    /// </summary>
+    [Fact]
+    public async Task AnApplicationFolderThatWillNotBeListedIsReported()
+    {
+        // The staging folder exists, which is what used to let the presence probe answer true
+        // without the sweep ever running.
+        Populate(Path.Combine(StagingRoot, "tempa"));
+
+        var root = Path.Combine(_environment.LocalAppData, "Chatterbox");
+        Directory.CreateDirectory(root);
+        File.WriteAllBytes(Path.Combine(root, SquirrelDiscovery.UpdaterName), new byte[64]);
+
+        using var denied = new DeniedDirectory(root);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(root, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

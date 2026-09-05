@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.RegularExpressions;
 using Deguffer.Core.Safety;
 
@@ -12,6 +13,12 @@ namespace Deguffer.Core.Providers;
 /// Every package file left alone, with the reason, for §5.6. It holds the ones the index still
 /// names — the base a delta update is applied to — and any whose name could not be read.
 /// </param>
+/// <param name="Declined">
+/// Package files that turned out to be links. Reported apart from <paramref name="StillNeeded"/>,
+/// which holds them too, because a link is something Deguffer looked at and refused rather than
+/// something it found nothing of — and the plan owes the user that sentence. Removing one would
+/// take a link whose far side nobody classified, and the figure beside it was measured through it.
+/// </param>
 /// <param name="DirectoryUnreadable">
 /// The folder would not be listed, so the two lists above describe nothing. A caller must not read
 /// that as "there is nothing in there".
@@ -20,9 +27,10 @@ namespace Deguffer.Core.Providers;
 /// <c>RELEASES</c> is missing, unreadable, or holds a line this could not parse — so nothing in the
 /// folder is offered. See <see cref="SquirrelPackages"/> for why that is the only safe answer.
 /// </param>
-public readonly record struct SquirrelPackageReading(
+internal readonly record struct SquirrelPackageReading(
     IReadOnlyList<string> Superseded,
     IReadOnlyList<(string Path, string Reason)> StillNeeded,
+    IReadOnlyList<string> Declined,
     bool DirectoryUnreadable,
     bool IndexUnreadable);
 
@@ -93,23 +101,36 @@ internal static partial class SquirrelPackages
         + "through downloading.";
 
     /// <summary>
+    /// The characters Windows will not accept in a file name, as the set the index check tests
+    /// against. <see cref="Path.GetInvalidFileNameChars"/> clones its array on every call so a
+    /// caller cannot mutate it, and the check runs once per line of the index (G5).
+    /// </summary>
+    private static readonly SearchValues<char> InvalidInFileName =
+        SearchValues.Create(Path.GetInvalidFileNameChars());
+
+    /// <summary>
     /// Read <paramref name="packagesDirectory"/> against its own index.
     /// </summary>
     /// <param name="packagesDirectory">The folder, which the caller has established is not a link.</param>
     /// <param name="installed">
-    /// The newest installed version, which nothing newer than may be offered. Null where the
-    /// installation could not be ordered, and then nothing at all is offered.
+    /// The newest installed version, which nothing newer than may be offered.
+    ///
+    /// <para>Not nullable, and that is a correction. An installation whose builds could not be
+    /// ordered has no answer here either, but it is a different fact from an index that could not be
+    /// read — and folding the two together made the plan tell the user Deguffer could not read a
+    /// record it had read perfectly well. The caller owns that case, because the caller is what
+    /// knows why.</para>
     /// </param>
     public static SquirrelPackageReading Read(
         string packagesDirectory,
-        Version? installed,
+        Version installed,
         CancellationToken ct = default)
     {
         var named = NamedByIndex(packagesDirectory);
 
-        if (named is null || installed is null)
+        if (named is null)
         {
-            return new SquirrelPackageReading([], [], DirectoryUnreadable: false, IndexUnreadable: true);
+            return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: true);
         }
 
         List<FileInfo> files;
@@ -122,17 +143,18 @@ internal static partial class SquirrelPackages
         {
             // Not there is a complete answer: a folder that does not exist holds no packages. The
             // caller checked existence, so this is the folder having gone since.
-            return new SquirrelPackageReading([], [], DirectoryUnreadable: false, IndexUnreadable: false);
+            return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: false);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
             // Nothing rather than a partial view, on ChildDirectories' reasoning: half a listing
             // invites a plan that describes a folder nobody fully read.
-            return new SquirrelPackageReading([], [], DirectoryUnreadable: true, IndexUnreadable: false);
+            return new SquirrelPackageReading([], [], [], DirectoryUnreadable: true, IndexUnreadable: false);
         }
 
         var superseded = new List<string>();
         var kept = new List<(string Path, string Reason)>();
+        var declined = new List<string>();
 
         foreach (var file in files)
         {
@@ -140,19 +162,36 @@ internal static partial class SquirrelPackages
 
             var path = LongPath.Display(file.FullName);
 
+            // Before anything is classified. A file enumeration hands back a link exactly as it
+            // hands back a file, so this is the check ChildDirectories makes for a caller that
+            // enumerates directories, and DeclaredLocations makes for the only other route in this
+            // project that produces a file target. Without it the one enumeration in the change that
+            // ends in a deletion is the one that would follow a redirection nobody classified.
+            if (file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                declined.Add(path);
+                kept.Add((path, CacheLevelWalk.LinkReason));
+                continue;
+            }
+
             if (named.Contains(file.Name))
             {
                 kept.Add((path, StillNamedReason));
                 continue;
             }
 
-            if (PackageFile().Match(file.Name) is not { Success: true } match)
+            // TryParse rather than Parse, for the reason SquirrelDiscovery gives: the pattern bounds
+            // a version's shape and not its magnitude, so App-9999999999.0.nupkg matches and then
+            // overflows — and an exception here takes down the whole planning pass. A name nobody
+            // could read is already a case this keeps, so failing into it fails closed.
+            if (PackageFile().Match(file.Name) is not { Success: true } match
+                || !Version.TryParse(match.Groups["version"].ValueSpan, out var version))
             {
                 kept.Add((path, UnreadableNameReason));
                 continue;
             }
 
-            if (Version.Parse(match.Groups["version"].ValueSpan) > installed)
+            if (version > installed)
             {
                 kept.Add((path, NewerReason));
                 continue;
@@ -162,7 +201,7 @@ internal static partial class SquirrelPackages
         }
 
         return new SquirrelPackageReading(
-            superseded, kept, DirectoryUnreadable: false, IndexUnreadable: false);
+            superseded, kept, declined, DirectoryUnreadable: false, IndexUnreadable: false);
     }
 
     /// <summary>
@@ -213,7 +252,7 @@ internal static partial class SquirrelPackages
             // A local index holds bare file names. Squirrel's own parser also accepts an absolute
             // HTTP URL, which belongs to a remote feed rather than to this folder — meeting one
             // here means the file is not what it was taken for, so nothing in the folder is offered.
-            if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            if (name.AsSpan().IndexOfAny(InvalidInFileName) >= 0)
             {
                 return null;
             }

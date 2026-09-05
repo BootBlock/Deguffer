@@ -10,7 +10,16 @@ namespace Deguffer.Core.Providers;
 /// The version parsed out of that name. Squirrel resolves which build to launch by ordering these
 /// same names, so ordering them is reading the application's own rule rather than inventing one.
 /// </param>
-public sealed record SquirrelVersionDirectory(string Path, string Name, Version Number);
+/// <param name="IsLink">
+/// Whether this is a junction or a symbolic link rather than a directory.
+///
+/// <para>Such a build is counted when the versions are ordered and never removed, and it needs both
+/// halves. Dropping it from the ordering is how the newest build gets named superseded. Removing it
+/// takes a link whose far side nobody classified — and the figure beside it was measured
+/// <em>through</em> the link, so the row would promise the far side's size and reclaim none of
+/// it.</para>
+/// </param>
+public sealed record SquirrelVersionDirectory(string Path, string Name, Version Number, bool IsLink);
 
 /// <summary>
 /// One Squirrel-installed application under <c>%LOCALAPPDATA%</c>, and the version directories in
@@ -55,6 +64,30 @@ public sealed record SquirrelInstallation(
     public IReadOnlyList<SquirrelVersionDirectory> Superseded =>
         Current is { } current ? [.. Versions.Where(v => v != current)] : [];
 }
+
+/// <summary>
+/// What one look at <c>%LOCALAPPDATA%</c> found, with what it could not read carried beside it.
+///
+/// <para>The three travel together rather than as three properties on the discovery, and that is
+/// the point: two of them are only known <em>after</em> the sweep has run, so a caller holding a
+/// lazily-memoised property could read them before it and see the defaults. A provider then reports
+/// an application folder it could not list as though the refusal had not happened, which is the
+/// "a safeguard that could not run must not look like a safeguard that found nothing" case.</para>
+/// </summary>
+/// <param name="Installations">The applications found, in the order the profile listed them.</param>
+/// <param name="ApplicationDataUnreadable">
+/// <c>%LOCALAPPDATA%</c> itself would not be listed, so <paramref name="Installations"/> describes
+/// nothing rather than describing a machine with no Squirrel application on it.
+/// </param>
+/// <param name="UnreadableRoots">
+/// Application folders that hold the updater and then refused to be listed. A folder can pass the
+/// first half of the identification test and fail the second, because a listing right is separate
+/// from a traverse right — and it is not an application with no builds.
+/// </param>
+public sealed record SquirrelSweep(
+    IReadOnlyList<SquirrelInstallation> Installations,
+    bool ApplicationDataUnreadable,
+    IReadOnlyList<string> UnreadableRoots);
 
 /// <summary>
 /// Finds the applications the Squirrel updater installed, one level under <c>%LOCALAPPDATA%</c>.
@@ -117,7 +150,7 @@ public sealed partial class SquirrelDiscovery
 
     private readonly IUserEnvironment _environment;
 
-    private IReadOnlyList<SquirrelInstallation>? _installations;
+    private SquirrelSweep? _sweep;
 
     public SquirrelDiscovery(IUserEnvironment environment)
     {
@@ -155,28 +188,19 @@ public sealed partial class SquirrelDiscovery
     public string? StagingRoot { get; }
 
     /// <summary>
-    /// The applications on this machine, memoised for the life of a planning pass (G4). Two
+    /// One look at <c>%LOCALAPPDATA%</c>, memoised for the life of a planning pass (G4). Two
     /// providers, their presence probes and their §5.2 declarations all ask this same question of
     /// the same directory, and this is the one sweep behind all of them.
+    ///
+    /// <para>A method rather than a property, on <see cref="ChromiumCacheProvider.Applications"/>'s
+    /// pattern, because the memoisation must not cost the cancellation: what it does on a miss is a
+    /// child listing of a root holding hundreds of directories, plus a listing per candidate below
+    /// it, and G4 requires a scan the user can abandon.</para>
     /// </summary>
-    public IReadOnlyList<SquirrelInstallation> Installations => _installations ??= Find();
-
-    /// <summary>
-    /// True where <c>%LOCALAPPDATA%</c> itself would not be listed, so <see cref="Installations"/>
-    /// describes nothing rather than describing a machine with no Squirrel application on it.
-    /// </summary>
-    public bool ApplicationDataUnreadable { get; private set; }
-
-    /// <summary>The applications whose own folder would not be listed, named so a plan can say so.</summary>
-    public IReadOnlyList<string> UnreadableRoots { get; private set; } = [];
+    public SquirrelSweep Look(CancellationToken ct = default) => _sweep ??= Find(ct);
 
     /// <summary>Drop the memoised answer, so an application installed while the app was open is seen.</summary>
-    public void Invalidate()
-    {
-        _installations = null;
-        ApplicationDataUnreadable = false;
-        UnreadableRoots = [];
-    }
+    public void Invalidate() => _sweep = null;
 
     /// <summary>
     /// The sweep. One child-directory listing of <c>%LOCALAPPDATA%</c>, then one file-existence
@@ -189,14 +213,13 @@ public sealed partial class SquirrelDiscovery
     /// to look at rather than classifying the children of a tool root, so a link to some unrelated
     /// folder is not something a plan would ever have mentioned.</para>
     /// </summary>
-    private IReadOnlyList<SquirrelInstallation> Find(CancellationToken ct = default)
+    private SquirrelSweep Find(CancellationToken ct)
     {
         var scan = ChildDirectories.Under(_environment.LocalAppData);
 
         if (scan.Unreadable)
         {
-            ApplicationDataUnreadable = true;
-            return [];
+            return new SquirrelSweep([], ApplicationDataUnreadable: true, []);
         }
 
         var found = new List<SquirrelInstallation>();
@@ -229,15 +252,21 @@ public sealed partial class SquirrelDiscovery
 
             // Links are read for their names and never followed. A version directory somebody moved
             // to another drive is still evidence of which version is current, and dropping it
-            // silently is how the newest build gets named superseded.
-            foreach (var candidate in inside.Directories.Concat(inside.Links))
+            // silently is how the newest build gets named superseded. Which of the two a build is
+            // travels with it, because a caller has to count it and then refuse it.
+            foreach (var (candidate, isLink) in
+                inside.Directories.Select(d => (d, false)).Concat(inside.Links.Select(l => (l, true))))
             {
-                if (VersionDirectory().Match(candidate.Name) is { Success: true } match)
+                // TryParse rather than Parse. The pattern bounds the shape of a version and not its
+                // magnitude, so a directory named app-9999999999 matches and then overflows — and
+                // an exception out of here escapes the presence probe and takes down the planning
+                // pass for every other provider too. A number nobody could read is exactly what
+                // UnreadableVersionNames is for, and failing into it fails closed.
+                if (VersionDirectory().Match(candidate.Name) is { Success: true } match
+                    && Version.TryParse(match.Groups["version"].ValueSpan, out var number))
                 {
                     versions.Add(new SquirrelVersionDirectory(
-                        LongPath.Display(candidate.FullName),
-                        candidate.Name,
-                        Version.Parse(match.Groups["version"].ValueSpan)));
+                        LongPath.Display(candidate.FullName), candidate.Name, number, isLink));
                 }
                 else if (NamedLikeAVersion().IsMatch(candidate.Name))
                 {
@@ -258,7 +287,6 @@ public sealed partial class SquirrelDiscovery
             found.Add(new SquirrelInstallation(child.Name, root, versions, unreadable));
         }
 
-        UnreadableRoots = refused;
-        return found;
+        return new SquirrelSweep(found, ApplicationDataUnreadable: false, refused);
     }
 }

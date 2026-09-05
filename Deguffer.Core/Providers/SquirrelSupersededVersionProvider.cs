@@ -101,10 +101,14 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??=
     [
-        .. _discovery.Installations.Select(installation =>
+        .. _discovery.Look().Installations.Select(installation =>
         {
+            // A build that is a link is excluded here as it is excluded from the plan. Explore
+            // removing one would take a link whose far side nobody classified, and this declaration
+            // is the same §5.2 rule read from the other side.
             var superseded = new HashSet<string>(
-                installation.Superseded.Select(v => v.Name), StringComparer.OrdinalIgnoreCase);
+                installation.Superseded.Where(v => !v.IsLink).Select(v => v.Name),
+                StringComparer.OrdinalIgnoreCase);
 
             return new ToolRoot(
                 installation.Root,
@@ -131,34 +135,36 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     /// nobody could order would be unreachable, and the row would read "Not installed" about
     /// applications that are.</para>
     /// </summary>
-    public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(_discovery.Installations.Count > 0 || _discovery.ApplicationDataUnreadable);
+    public override Task<bool> IsPresentAsync(CancellationToken ct = default)
+    {
+        var sweep = _discovery.Look(ct);
+
+        return Task.FromResult(sweep.Installations.Count > 0 || sweep.ApplicationDataUnreadable);
+    }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
+        // Before anything reads what the sweep could not list, for the reason the staging provider
+        // gives: those two facts are only known once it has run.
+        var sweep = _discovery.Look(ct);
+
         var notes = new List<PlanNote>();
         var survivors = new List<(string Path, string Reason)>();
 
-        var unreadable = _discovery.ApplicationDataUnreadable;
+        var unreadable = sweep.ApplicationDataUnreadable;
 
         if (unreadable)
         {
             notes.Add(UnreadableRoot.Note(Environment.LocalAppData));
         }
 
-        foreach (var refused in _discovery.UnreadableRoots)
+        foreach (var refused in sweep.UnreadableRoots)
         {
             notes.Add(UnreadableRoot.Note(refused));
             unreadable = true;
         }
 
-        var installations = _discovery.Installations;
-
-        foreach (var installation in installations)
-        {
-            ct.ThrowIfCancellationRequested();
-            Preserve(installation, survivors);
-        }
+        var installations = sweep.Installations;
 
         var unordered = installations.Where(i => i.UnreadableVersionNames.Count > 0).ToList();
 
@@ -189,12 +195,18 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         var held = new HashSet<string>(
             live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var installation in installations.Where(i => held.Contains(i.Root)))
+        // A build somebody moved onto another drive is named and not followed, on the same rule
+        // every other root in this change applies. It counts when the versions are ordered — that is
+        // what stops the newest build being called superseded — and it is never removed: what it
+        // points at was never classified, and the figure beside it was measured through it.
+        var linked = installations
+            .Where(i => !held.Contains(i.Root))
+            .SelectMany(i => i.Superseded.Where(v => v.IsLink))
+            .ToList();
+
+        foreach (var version in linked)
         {
-            foreach (var version in installation.Superseded)
-            {
-                survivors.Add((version.Path, LiveTreeVeto.ProtectedReason));
-            }
+            notes.Add(CacheLevelWalk.Note(version.Path));
         }
 
         if (live.Vetoed.Count > 0)
@@ -221,6 +233,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             (from installation in installations
              where !held.Contains(installation.Root)
              from version in installation.Superseded
+             where !version.IsLink
              select new DeletionTarget(
                  version.Path,
                  $"{installation.Name} {version.Number}, the build version "
@@ -228,7 +241,26 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                  DirectoryAge.Of(version.Path, ct)))
             .ToList();
 
-        if (targets.Count == 0 && live.Vetoed.Count == 0 && unordered.Count == 0 && !unreadable)
+        // §5.6, and only once the targets are settled. Every build this provider is not removing is
+        // asserted to survive — the one in use, one whose number nobody could read, one held back
+        // because the application is running, and one that is a link. Asserting only the current
+        // build would leave an installation nobody could order proving nothing at all about the two
+        // builds it actually holds, and those are siblings of the directories this provider removes
+        // elsewhere, which is exactly when an over-broad rule takes one with the other.
+        var removing = new HashSet<string>(
+            targets.Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var installation in installations)
+        {
+            ct.ThrowIfCancellationRequested();
+            Preserve(installation, removing, survivors);
+        }
+
+        if (targets.Count == 0
+            && live.Vetoed.Count == 0
+            && unordered.Count == 0
+            && linked.Count == 0
+            && !unreadable)
         {
             notes.Add(installations.Count == 0
                 ? new PlanNote(
@@ -259,22 +291,31 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            // A held-back installation and one nobody could order are both cases where something
-            // real was left unexamined, so the shell must not call a row with no steps clear.
-            WasNotExamined = targets.Count == 0 && (live.Vetoed.Count > 0 || unordered.Count > 0),
+            // A held-back installation, one nobody could order, and a build that turned out to be a
+            // link are all cases where something real was left unexamined, so the shell must not
+            // call a row with no steps clear.
+            WasNotExamined = targets.Count == 0
+                && (live.Vetoed.Count > 0 || unordered.Count > 0 || linked.Count > 0),
         };
     }
 
     /// <summary>
-    /// §5.6 for one installation: the folder, the updater, the build it runs, the packages beside
-    /// it, and any version directory whose number could not be read.
+    /// §5.6 for one installation: the folder, the updater, the packages beside them, and
+    /// <em>every build this run is not removing</em>.
     ///
     /// <para>Each is named rather than covered by an assertion on the folder above it, because an
     /// assertion that the application's folder survived would pass with the running build gone —
     /// which is the whole of what this provider must never do.</para>
     /// </summary>
+    /// <param name="removing">
+    /// The builds that are going, so everything else can be asserted. Passed in rather than derived
+    /// here, because which builds go is settled by the liveness veto and the link rule rather than
+    /// by the installation alone — and asserting only <see cref="SquirrelInstallation.Current"/>
+    /// left an installation nobody could order proving nothing about the builds it holds.
+    /// </param>
     private static void Preserve(
         SquirrelInstallation installation,
+        HashSet<string> removing,
         List<(string Path, string Reason)> survivors)
     {
         survivors.Add((
@@ -291,10 +332,16 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             Path.Combine(installation.Root, SquirrelDiscovery.PackagesDirectoryName),
             $"The packages {installation.Name} updates itself from, and its record of them."));
 
-        if (installation.Current is { } current)
-        {
-            survivors.Add((current.Path, $"The build of {installation.Name} you are using."));
-        }
+        survivors.AddRange(
+            from version in installation.Versions
+            where !removing.Contains(version.Path)
+            select (
+                version.Path,
+                version == installation.Current
+                    ? $"The build of {installation.Name} you are using."
+                    : version.IsLink
+                        ? CacheLevelWalk.LinkReason
+                        : $"A build of {installation.Name} Deguffer is leaving in place."));
 
         survivors.AddRange(installation.UnreadableVersionNames.Select(name => (
             Path.Combine(installation.Root, name),

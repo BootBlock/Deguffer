@@ -201,6 +201,93 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A build somebody moved onto another drive with a link. It still counts when the versions are
+    /// ordered — dropping it is how the newest build gets named superseded — and it is never
+    /// removed: what it points at was never classified, and the figure beside it would have been
+    /// measured through it.
+    /// </summary>
+    [Fact]
+    public async Task ALinkedBuildIsCountedWhenOrderingAndNeverRemoved()
+    {
+        var root = CreateApplication("Chatterbox", "3.6.3");
+        var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
+
+        // The newest build, and a link. Ordering has to see it, or app-3.6.3 becomes the newest and
+        // the running build is the one offered.
+        Directory.CreateSymbolicLink(Path.Combine(root, "app-3.6.4"), outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(Path.Combine(root, "app-3.6.3"), Assert.Single(plan.TargetedPaths));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(Directory.Exists(outside), $"{outside} was removed through the link");
+    }
+
+    /// <summary>
+    /// The same link, this time on a build that <em>is</em> superseded. It is named, left alone and
+    /// asserted to survive, on the rule every other root in this change applies.
+    /// </summary>
+    [Fact]
+    public async Task ASupersededBuildThatIsALinkIsLeftAloneAndReported()
+    {
+        var root = CreateApplication("Chatterbox", "3.6.4");
+        var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
+
+        var link = Path.Combine(root, "app-3.6.3");
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.ExistedBefore);
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(Directory.Exists(outside), $"{outside} was removed through the link");
+        Assert.False(provider.ToolRoots[0].Recognises("app-3.6.3"));
+    }
+
+    /// <summary>
+    /// §5.6 where nothing is removed at all. An installation nobody could order gives up nothing, so
+    /// every build it holds has to be asserted — an assertion covering only the current build proves
+    /// nothing about the folder, and there is no current build to assert in that case.
+    /// </summary>
+    [Fact]
+    public async Task EveryBuildOfAnInstallationThatCannotBeOrderedIsAsserted()
+    {
+        var root = CreateApplication("Chatterbox", "3.6.3", "3.6.4");
+        var odd = Populate(Path.Combine(root, "app-3.7.0-beta1"));
+
+        string[] mustSurvive =
+        [
+            Path.Combine(root, "app-3.6.3"),
+            Path.Combine(root, "app-3.6.4"),
+            odd,
+        ];
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+
+        foreach (var path in mustSurvive)
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(mustSurvive, d => Assert.True(Directory.Exists(d), $"{d} was removed"));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// A check that could not run must not look like a check that found nothing (§5.5's reasoning,
     /// applied to a safeguard rather than a measurement).
     /// </summary>
