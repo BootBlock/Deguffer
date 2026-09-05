@@ -365,6 +365,36 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same rule where the outer level recognises <em>nothing</em>. The Azure Functions tooling
+    /// keeps its feed and its tag records directly beside <c>Releases</c>, and both are how it knows
+    /// which releases it holds — so the outer declaration allows no child at all, and only the level
+    /// written about the releases lets one go.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                              // the tooling's own folder
+    [InlineData("Tags", false)]                          // which release each Functions line uses
+    [InlineData(@"Tags\v4", false)]
+    [InlineData("feed-v2167102.json", false)]            // what it already has
+    [InlineData("Releases", false)]                      // the folder, never a target
+    [InlineData(@"Releases\4.18.1", true)]               // one downloaded release
+    [InlineData(@"Releases\4.0.5455", true)]             // the historic four-part form
+    [InlineData(@"Releases\4.18.1\cli_x64", true)]       // inside a recognised release
+    [InlineData(@"Releases\notes", false)]               // not a version, so not a release
+    [InlineData(@"Releases\4.18.1-backup", false)]       // something a person made
+    public void TheOuterAzureFunctionsRootRecognisesNothingAtAll(string relative, bool allowed)
+    {
+        var provider = new AzureFunctionsToolsProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(
+                relative.Length == 0
+                    ? provider.RootPath
+                    : Path.Combine(provider.RootPath, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
     /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
     /// and repeats the whole layout inside every profile.
@@ -606,6 +636,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
+    [InlineData("azure-functions-tools", "Tags")]            // which release each Functions line uses
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
     [InlineData("epic-launcher-webcache", "Config")]         // the launcher settings
     [InlineData("epic-launcher-logs", "UserVaultSettings")]
@@ -676,6 +707,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new VsCodeCppToolsCacheProvider(_environment),
         new DartAnalysisServerProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
+        new AzureFunctionsToolsProvider(_environment),
         new GpuShaderCacheProvider(_environment),
         new EpicLauncherWebCacheProvider(_environment),
         new EpicLauncherLogProvider(_environment),

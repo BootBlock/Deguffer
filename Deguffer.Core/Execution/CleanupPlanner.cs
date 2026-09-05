@@ -21,14 +21,16 @@ public sealed class CleanupPlanner
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
-    /// web caches, the Dart analysis server's byte store, the per-volume Recycle Bins, the crash
+    /// web caches, the Dart analysis server's byte store, the Azure Functions Core Tools releases
+    /// Visual Studio downloads, the per-volume Recycle Bins, the crash
     /// dumps, the Windows servicing logs and the per-project build output inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
     /// terms before being added. Their reasoning and their rejected alternatives are in
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2, and the
+    /// environments, conda, Maven, vcpkg, PlatformIO, Playwright and the Azure Functions Core Tools
+    /// releases, which are Tier 2, and the
     /// Recycle Bins, the crash dumps, the servicing logs and the Epic launcher's logs, which are
     /// Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
@@ -79,6 +81,7 @@ public sealed class CleanupPlanner
         new SteamCacheProvider(),
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
+        new AzureFunctionsToolsProvider(),
         new RecycleBinProvider(),
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
