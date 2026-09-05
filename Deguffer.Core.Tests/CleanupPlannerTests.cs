@@ -182,7 +182,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "unity-library", "cargo-target", "node-modules", "python-venv",
-                "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "uv", "pip",
+                "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "uv", "pip",
                 "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
                 "platformio", "playwright", "recycle-bin", "crash-dumps", "windows-servicing-logs",
             ],

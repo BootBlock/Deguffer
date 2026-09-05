@@ -699,6 +699,79 @@ see its cache.
 
 ---
 
+## Dart analysis server cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\.dartServer` |
+| **Method** | Delete `.analysis-driver` and `.pub-package-details-cache` only |
+| **Typical size** | Grows without limit. 3.2 GB was measured on one workstation, all but 0.7 MB of it `.analysis-driver` |
+
+### What it is
+
+Every editor with Dart or Flutter support — VS Code, Android Studio, IntelliJ — runs the same
+program behind the scenes: the Dart analysis server, which is what produces the errors, the
+completions and the go-to-definition. Analysing a package from source is slow, so the server writes
+a summary of each file it has read and reuses it the next time. That store is `.analysis-driver`,
+and Dart's own performance guidance names the folder holding it when it tells you to exclude it from
+real-time virus scanning.
+
+Nothing trims it. It gains entries for every package you have ever opened, keeps them after the
+project is gone, and so grows out of all proportion to the work in front of it.
+
+`.pub-package-details-cache` is a much smaller companion: the package listing fetched from pub.dev
+so that typing a dependency name can complete it.
+
+### What Deguffer does
+
+It deletes those two children and nothing else. There is no eviction command to prefer under §5.1 —
+the Dart SDK ships none for this store, and the remedy in Dart's own issue tracker is deleting the
+directory.
+
+The folder is also never removed through a link. If you have redirected `%LOCALAPPDATA%\.dartServer`
+onto another drive with a junction to keep 3 GB off a small system disk, Deguffer removes nothing
+and tells you why: what the link points at is a folder it never looked inside.
+
+### What is protected
+
+The `.dartServer` folder itself, and the three children that are not caches. All five children are
+dot-named directories sitting side by side, which is exactly the arrangement an over-broad rule gets
+wrong while looking correct:
+
+| Child | Why it stays |
+| --- | --- |
+| `.prompts` | Your own answers to the questions the server asks, so that it stops asking. A preference file, and nothing regenerates it. |
+| `.plugin_manager` | State for the analyzer plugins the server loads. |
+| `.instrumentation` | The server's instrumentation log and the identifier it is keyed to. |
+
+Deguffer names all three explicitly and asserts they survived the run, the same treatment
+`gradle.properties` gets. Anything else that turns up in there is unrecognised, so it is left alone
+and Deguffer says so.
+
+**An analysis server may be running.** One is started by whichever editor has a Dart or Flutter
+project open, and it holds this store while it runs, so Deguffer warns you when it sees one. An
+access-denied on a file the server is using is an ordinary outcome here, not a failure: the file is
+skipped and the rest of the store still goes.
+
+### What it costs you
+
+One slow analysis pass, per project, the next time you open it. Errors, completion and navigation
+are unavailable or incomplete until it finishes, and then everything behaves exactly as before.
+
+### Why Tier 1
+
+Nothing here originated with you. It is derived from Dart sources that are still on your disk, by an
+analyser that is still installed, and the server rebuilds what it needs without being asked. The one
+thing in the folder that *is* yours, `.prompts`, is never a candidate.
+
+**Not to be confused with the pub cache**, which is a different folder holding downloaded packages,
+and which Deguffer does not offer for an unrelated reason — see
+[Dart/Flutter pub cache](#dartflutter-pub-cache--clean-uninstalls-your-global-tools) below.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
@@ -1210,6 +1283,10 @@ A provider here is viable, but only as a per-subfolder allow-list where each ent
 its own. Treating the folder as a unit is exactly the mistake §5.2 exists to prevent.
 
 ### Dart/Flutter pub cache — `clean` uninstalls your global tools
+
+This is not the Dart analysis server's byte store, which *is* offered — see
+[Dart analysis server cache](#dart-analysis-server-cache) above. Different folder, different
+contents, different answer.
 
 `%LOCALAPPDATA%\Pub\Cache` measured ~451 MB. It ships a `README.md` stating its contents "should
 only be modified using the `dart pub` and `flutter pub` commands", which rules out a path-based
