@@ -19,11 +19,12 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Cargo, Go, Maven, vcpkg, pnpm,
-    /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Dart analysis
-    /// server's byte store, the per-volume Recycle Bins, the crash dumps, the Windows servicing logs
-    /// and the per-project build output inside the user's own approved folders — which the audit did
-    /// not cover, and which were investigated on their own terms before being added. Their reasoning
-    /// and their rejected alternatives are in <c>docs/cache-locations.md</c>.
+    /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
+    /// profile caches, the Dart analysis server's byte store, the per-volume Recycle Bins, the crash
+    /// dumps, the Windows servicing logs and the per-project build output inside the user's own
+    /// approved folders — which the audit did not cover, and which were investigated on their own
+    /// terms before being added. Their reasoning and their rejected alternatives are in
+    /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2, and the
@@ -71,6 +72,7 @@ public sealed class CleanupPlanner
         new VcpkgCacheProvider(),
         new GpuShaderCacheProvider(),
         new ChromiumCacheProvider(),
+        new FirefoxCacheProvider(),
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
         new RecycleBinProvider(),

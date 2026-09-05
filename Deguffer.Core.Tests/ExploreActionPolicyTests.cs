@@ -396,6 +396,63 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A Firefox profile is two directories under two different roots, and only one of them holds
+    /// anything Deguffer will remove. The roaming half is declared here precisely because nothing in
+    /// the provider ever plans against it: without the declaration a user could delete
+    /// <c>logins.json</c> out of the size picture while the Storage page was carefully leaving it
+    /// alone.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "", false)]                  // the cache folder itself
+    [InlineData(true, "cache2", true)]             // a recognised cache
+    [InlineData(true, "startupCache", true)]
+    [InlineData(true, "remote-settings", false)]   // recognised, and deliberately not offered
+    [InlineData(true, "storage", false)]           // unrecognised, so left alone
+    [InlineData(false, "", false)]                 // the profile itself
+    [InlineData(false, "logins.json", false)]      // saved passwords
+    [InlineData(false, "places.sqlite", false)]    // bookmarks and history
+    [InlineData(false, "cache2", false)]           // a cache name in the half that is never touched
+    public void AFirefoxProfileIsClassifiedByWhichHalfItIsIn(bool local, string relative, bool allowed)
+    {
+        RegisterFirefoxProfile();
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var profile = Assert.Single(provider.Profiles());
+        var root = local ? profile.LocalPath : profile.RoamingPath;
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Refusing a profile is worth nothing while the folder holding it can go. Every directory
+    /// between the two application-data roots and a profile contains the whole password database,
+    /// so each of them is refused as well — otherwise Explore takes the parent of the directory the
+    /// Storage page was carefully leaving alone.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "")]              // %APPDATA%\Mozilla\Firefox
+    [InlineData(true, "Profiles")]
+    [InlineData(true, "profiles.ini")]  // losing it loses every profile
+    [InlineData(false, "")]             // %LOCALAPPDATA%\Mozilla\Firefox
+    [InlineData(false, "Profiles")]
+    public void FirefoxsOwnFoldersAreRefusedAsWellAsTheProfilesInThem(bool roaming, string relative)
+    {
+        RegisterFirefoxProfile();
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        var root = Path.Combine(
+            roaming ? _environment.RoamingAppData : _environment.LocalAppData, "Mozilla", "Firefox");
+
+        Assert.False(
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
     /// the root itself.
     ///
@@ -432,6 +489,26 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
     }
 
+    /// <summary>
+    /// A profile's own two directories come from Mozilla's register rather than from a known path,
+    /// so the provider declares no <em>profile</em> root until <c>profiles.ini</c> names one.
+    /// Firefox's two folders above them are declared from constants and need no fixture.
+    /// </summary>
+    private void RegisterFirefoxProfile() => File.WriteAllText(
+        _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),
+        """
+        [Profile0]
+        Name=default-release
+        IsRelative=1
+        Path=Profiles/default-release
+        """);
+
+    /// <summary>
+    /// Firefox is deliberately absent. The sweep above probes a sibling of <c>ToolRoots[0]</c>, and
+    /// Firefox's first root recognises nothing at all, so the probe would be refused structurally
+    /// rather than by the allow-list — an assertion that cannot fail. Its two dedicated theories
+    /// cover both roots and the unrecognised sibling properly.
+    /// </summary>
     private IReadOnlyList<ICleanupProvider> Providers() =>
     [
         new GradleCacheProvider(_environment),
