@@ -1310,6 +1310,85 @@ rather than a global install.
 
 ---
 
+## Azure Functions Core Tools releases
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\AzureFunctionsTools\Releases` |
+| **Method** | Delete whole release directories (`4.18.1`, `3.40.0`, …) |
+| **Typical size** | ~150 MB per release; 599 MB across four on the measured machine |
+
+### What it is
+
+The Azure Functions Core Tools are what runs a Functions project on your own machine. Visual Studio
+and the Azure Functions extension do not use a copy you installed. They read a feed, work out which
+release each version of the Functions runtime needs, and download it themselves into your profile.
+
+Each release is a complete, self-contained copy: the `func` host under `cli_x64`, the project
+templates, and one isolated worker runtime per .NET version it supports. A v4 release is around
+140 MB and a v3 release around 210 MB.
+
+**This is why the folder grows.** Nothing removes an old release. When the tooling decides it needs
+a newer one it downloads it beside the last, so a machine that has followed several updates holds
+every release it has ever fetched.
+
+Beside `Releases` the tooling keeps two things it reads rather than downloads: `feed-v<sequence>.json`,
+the cached feed telling it what is available and what it already has, and `Tags\v1` … `Tags\v4`,
+each holding a `LastKnownGood-v<sequence>` file whose whole content is a release version. Those tag
+files are the tooling saying, in its own words, which copy it will reach for.
+
+### What Deguffer does
+
+Within `Releases`, a child is removed only if its **whole name is three dotted numbers** — `4.18.1`,
+`2.60.0`, `4.0.5455`. That is the shape the feed has always served. `v4`, `4`, `4.18`,
+`4.18.1-backup` and anything you created yourself do not qualify: they stay in Tier 4 and Deguffer
+tells you it is leaving them alone.
+
+**Every release is offered, including the one the tooling still points at.** Deguffer cannot know
+whether you still have a Functions v2 project, and withholding 166 MB on the chance that you might
+would be Deguffer making your decision for you. What it does instead is tell you which is which:
+each row carries the date its release arrived, and its description says whether the tooling's own
+tag records still name it — "the release it uses for Functions v4", against "the tooling's own
+records no longer name".
+
+That description is read from `Tags` rather than worked out by comparing version numbers, because
+the tooling keeps one release per runtime line and "the newest" is four different answers. If **any**
+of those records cannot be read, every row says neither. "Nothing points at this release" is a claim
+about all four records, so a partial reading cannot support it, and describing a release you still
+use as superseded is a worse answer than saying nothing.
+
+### What is protected
+
+The tooling's folder, `Releases` itself, **`Tags`** and the cached **`feed-v<sequence>.json`**.
+The last two are the subtle ones: both look like more cache, and both are how the tooling knows
+which releases it already holds and which one each runtime line should use. Removing a release is
+something the tooling recovers from by downloading it again. Removing the record of what it has
+interferes with the part that decides.
+
+### What it costs you
+
+**A wait, the next time a project needs a release you removed.** Visual Studio downloads it again
+before the project will start — a few minutes and a few hundred megabytes over the network.
+
+Your function projects, their code and their settings are untouched. So are any releases you kept.
+
+### Why Tier 2, not Tier 1
+
+The same distinction Playwright's browsers make. A package cache refills itself the moment the tool
+next needs it and you notice a slower build. A release does not refill itself so much as get fetched
+again, on the tooling's schedule rather than yours, and the wait lands in the middle of opening a
+project rather than in the background.
+
+Deguffer uses no eviction command here because there is none. Neither Visual Studio nor the Core
+Tools offers a way to remove a downloaded release, and the documented remedy for a bad download is
+to delete the directory — so §5.1's preferred route does not exist, and §5.2's path-based one is
+what is left.
+
+---
+
 ## Per-project build output
 
 **Tier 1 for .NET intermediate output, Tier 2 for the rest.** The only thing Deguffer looks for

@@ -365,6 +365,37 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same rule where the outer level recognises <em>nothing</em>. The Azure Functions tooling
+    /// keeps its feed and its tag records directly beside <c>Releases</c>, and both are how it knows
+    /// which releases it holds — so the outer declaration allows no child at all, and only the level
+    /// written about the releases lets one go.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                              // the tooling's own folder
+    [InlineData("Tags", false)]                          // which release each Functions line uses
+    [InlineData(@"Tags\v4", false)]
+    [InlineData("feed-v2167102.json", false)]            // what it already has
+    [InlineData("Releases", false)]                      // the folder, never a target
+    [InlineData(@"Releases\4.18.1", true)]               // one downloaded release
+    [InlineData(@"Releases\4.0.5455", true)]             // an older feed's long build number
+    [InlineData(@"Releases\4.18.1\cli_x64", true)]       // inside a recognised release
+    [InlineData(@"Releases\notes", false)]               // not a version, so not a release
+    [InlineData(@"Releases\4.18", false)]                // fewer parts than a release carries
+    [InlineData(@"Releases\4.18.1-backup", false)]       // something a person made
+    public void TheOuterAzureFunctionsRootRecognisesNothingAtAll(string relative, bool allowed)
+    {
+        var provider = new AzureFunctionsToolsProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(
+                relative.Length == 0
+                    ? provider.RootPath
+                    : Path.Combine(provider.RootPath, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
     /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
     /// and repeats the whole layout inside every profile.
@@ -739,10 +770,11 @@ public sealed class ExploreActionPolicyTests : IDisposable
         """);
 
     /// <summary>
-    /// Firefox is deliberately absent. The sweep above probes a sibling of <c>ToolRoots[0]</c>, and
-    /// Firefox's first root recognises nothing at all, so the probe would be refused structurally
-    /// rather than by the allow-list — an assertion that cannot fail. Its two dedicated theories
-    /// cover both roots and the unrecognised sibling properly.
+    /// Firefox and the Azure Functions tooling are deliberately absent. The sweep above probes a
+    /// sibling of <c>ToolRoots[0]</c>, and each of those providers declares a first root that
+    /// recognises nothing at all, so the probe would be refused structurally rather than by the
+    /// allow-list — an assertion that cannot fail. Each has its own theory instead, covering every
+    /// root it declares and the unrecognised sibling properly.
     /// </summary>
     private IReadOnlyList<ICleanupProvider> Providers() =>
     [
