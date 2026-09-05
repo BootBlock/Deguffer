@@ -637,7 +637,6 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
-    [InlineData("azure-functions-tools", "Tags")]            // which release each Functions line uses
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
     [InlineData("epic-launcher-webcache", "Config")]         // the launcher settings
     [InlineData("epic-launcher-logs", "UserVaultSettings")]
@@ -690,10 +689,11 @@ public sealed class ExploreActionPolicyTests : IDisposable
         """);
 
     /// <summary>
-    /// Firefox is deliberately absent. The sweep above probes a sibling of <c>ToolRoots[0]</c>, and
-    /// Firefox's first root recognises nothing at all, so the probe would be refused structurally
-    /// rather than by the allow-list — an assertion that cannot fail. Its two dedicated theories
-    /// cover both roots and the unrecognised sibling properly.
+    /// Firefox and the Azure Functions tooling are deliberately absent. The sweep above probes a
+    /// sibling of <c>ToolRoots[0]</c>, and each of those providers declares a first root that
+    /// recognises nothing at all, so the probe would be refused structurally rather than by the
+    /// allow-list — an assertion that cannot fail. Each has its own theory instead, covering every
+    /// root it declares and the unrecognised sibling properly.
     /// </summary>
     private IReadOnlyList<ICleanupProvider> Providers() =>
     [
@@ -708,7 +708,6 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new VsCodeCppToolsCacheProvider(_environment),
         new DartAnalysisServerProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
-        new AzureFunctionsToolsProvider(_environment),
         new GpuShaderCacheProvider(_environment),
         new EpicLauncherWebCacheProvider(_environment),
         new EpicLauncherLogProvider(_environment),

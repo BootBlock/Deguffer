@@ -1212,9 +1212,10 @@ tag records still name it — "the release it uses for Functions v4", against "t
 records no longer name".
 
 That description is read from `Tags` rather than worked out by comparing version numbers, because
-the tooling keeps one release per runtime line and "the newest" is four different answers. Where
-those records cannot be read, the row says neither, rather than claiming a release has been
-superseded on no evidence.
+the tooling keeps one release per runtime line and "the newest" is four different answers. If **any**
+of those records cannot be read, every row says neither. "Nothing points at this release" is a claim
+about all four records, so a partial reading cannot support it, and describing a release you still
+use as superseded is a worse answer than saying nothing.
 
 ### What is protected
 

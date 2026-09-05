@@ -33,14 +33,19 @@ internal static class AzureFunctionsToolTags
     private const int LongestRecord = 64;
 
     /// <summary>
-    /// Release version to the runtime lines whose records name it, or null when there are no
-    /// records to read.
+    /// Release version to the runtime lines whose records name it, or null when the records could
+    /// not all be read.
     ///
-    /// <para>Null rather than an empty map, because the two mean opposite things to the sentence a
-    /// row carries. "No record names this release" is worth saying and is what makes a superseded
-    /// release identifiable; "there were no records" must not be reported as that, or every row on a
-    /// machine whose <c>Tags</c> folder is missing or unreadable would claim the tooling had
-    /// abandoned a release it uses daily.</para>
+    /// <para><b>All of them or none, and the strictness is the point.</b> What a row says about a
+    /// release the map does not contain is "the tooling's own records no longer name this" — a claim
+    /// about every record there is. Answering it from a partial reading states something nobody
+    /// established: a machine has <c>Tags\v1</c> to <c>Tags\v4</c>, so one unreadable or junctioned
+    /// tag beside three readable ones would leave its release, the one the developer's v2 projects
+    /// actually use, described as abandoned and offered for deletion on that basis.</para>
+    ///
+    /// <para>So a tag that will not be read makes the whole answer null, and every row is then
+    /// described neutrally. That silences a useful sentence in a rare configuration, which is the
+    /// right way round: the alternative is an untrue sentence in the same configuration.</para>
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<string>>? Read(
         string root,
@@ -53,16 +58,28 @@ internal static class AzureFunctionsToolTags
             return null;
         }
 
+        var scan = ChildDirectories.Under(tags);
+
+        // A link is never followed, on the rule every enumeration here follows: what it points at was
+        // never classified. Together with a folder that refused to be listed, that is a tag whose
+        // records were not read, so it takes the whole answer with it.
+        if (scan.Unreadable || scan.Links.Count > 0)
+        {
+            return null;
+        }
+
         var found = new Dictionary<string, SortedSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-        // Links are separated out and not followed, on the rule every enumeration here follows: what
-        // a link points at was never classified. A tag directory that is a link contributes nothing,
-        // which leaves its release described neutrally rather than wrongly.
-        foreach (var tag in ChildDirectories.Under(tags).Directories)
+        foreach (var tag in scan.Directories)
         {
             ct.ThrowIfCancellationRequested();
 
-            foreach (var version in VersionsNamedIn(tag, ct))
+            if (VersionsNamedIn(tag, ct) is not { } versions)
+            {
+                return null;
+            }
+
+            foreach (var version in versions)
             {
                 if (!found.TryGetValue(version, out var lines))
                 {
@@ -89,11 +106,11 @@ internal static class AzureFunctionsToolTags
     }
 
     /// <summary>
-    /// The versions the records in one tag directory name. Empty where the directory will not be
-    /// read: one tag Deguffer may not open leaves the others readable, and a release with no record
-    /// behind it is described neutrally. Nothing here decides what is deleted.
+    /// The versions the records in one tag directory name, or null where the directory would not be
+    /// read. Null rather than an empty list, because the caller's answer is only worth anything if
+    /// every tag was read — a tag that refused is not a tag that named nothing.
     /// </summary>
-    private static IReadOnlyList<string> VersionsNamedIn(DirectoryInfo tag, CancellationToken ct)
+    private static IReadOnlyList<string>? VersionsNamedIn(DirectoryInfo tag, CancellationToken ct)
     {
         var versions = new List<string>();
 
@@ -118,7 +135,7 @@ internal static class AzureFunctionsToolTags
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
-            return versions;
+            return null;
         }
 
         return versions;

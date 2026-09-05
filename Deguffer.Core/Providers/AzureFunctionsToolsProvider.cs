@@ -50,7 +50,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     /// The feed the tooling caches beside <c>Releases</c>, one file per feed sequence. Never a
     /// target: it is how the tooling knows what it has already got.
     /// </summary>
-    public const string FeedPattern = "feed-v*.json";
+    private const string FeedPattern = "feed-v*.json";
 
     /// <summary>
     /// A downloaded release directory, whose whole name is the release version — <c>4.18.1</c>,
@@ -121,9 +121,6 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
     /// <summary>The tooling's folder. Exposed so tests can assert it is never targeted.</summary>
     public string RootPath => _root;
-
-    /// <summary>The folder holding the releases. Exposed for the same reason.</summary>
-    public string ReleasesPath => _releases;
 
     /// <summary>
     /// Two levels, because §5.2's declaration is an allow-list over one directory's immediate

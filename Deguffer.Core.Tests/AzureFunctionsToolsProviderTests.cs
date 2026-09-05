@@ -229,29 +229,94 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A tag directory that is a link points at a tree nobody classified, so it contributes no
-    /// record — and a release with no record behind it is described neutrally rather than as one the
-    /// tooling has abandoned.
+    /// "The tooling's own records no longer name this release" is a claim about every record there
+    /// is, so it cannot be answered from a partial reading. A real machine has four tag directories,
+    /// and one of them being a link nobody may look through leaves the other three able to produce
+    /// a map that silently omits the release that unread one names — which would describe the
+    /// release a developer's v2 projects use as abandoned, and offer it for deletion on that basis.
     /// </summary>
     [Fact]
-    public async Task ATagDirectoryThatIsALinkContributesNoRecord()
+    public async Task WillNotClaimARecordIsMissingWhenOneTagIsALink()
     {
-        CreateReleases("4.18.1");
+        CreateReleases("4.18.1", "2.60.0");
+        RecordTag("v4", "4.18.1");
 
         var outside = Path.Combine(_temp.Path, "elsewhere");
         Directory.CreateDirectory(outside);
-        File.WriteAllText(Path.Combine(outside, "LastKnownGood-v2167102"), "4.18.1");
+        File.WriteAllText(Path.Combine(outside, "LastKnownGood-v2167102"), "2.60.0");
 
         var tags = Path.Combine(Root, AzureFunctionsToolTags.DirectoryName);
-        Directory.CreateDirectory(tags);
-        Directory.CreateSymbolicLink(Path.Combine(tags, "v4"), outside);
+        Directory.CreateSymbolicLink(Path.Combine(tags, "v2"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
-        var step = Assert.Single(plan.Steps.OfType<DeleteStep>());
+        Assert.Equal(2, plan.Steps.Count);
+        Assert.All(
+            plan.Steps.OfType<DeleteStep>(),
+            step => Assert.DoesNotContain("no longer", step.What, StringComparison.Ordinal));
+    }
 
-        Assert.DoesNotContain("uses for Functions", step.What, StringComparison.Ordinal);
-        Assert.Contains("downloaded again", step.What, StringComparison.Ordinal);
+    /// <summary>The same, where Windows refuses one tag directory rather than the user relocating it.</summary>
+    [Fact]
+    public async Task WillNotClaimARecordIsMissingWhenOneTagWillNotBeRead()
+    {
+        CreateReleases("4.18.1", "2.60.0");
+        RecordTag("v4", "4.18.1");
+        RecordTag("v2", "2.60.0");
+
+        using var denied = new DeniedDirectory(
+            Path.Combine(Root, AzureFunctionsToolTags.DirectoryName, "v2"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal(2, plan.Steps.Count);
+        Assert.All(
+            plan.Steps.OfType<DeleteStep>(),
+            step => Assert.DoesNotContain("no longer", step.What, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.6 driven all the way through, which is the half a plan-only assertion cannot reach. The
+    /// spared and the targeted are siblings in one folder, so this is exactly where an over-broad
+    /// rule takes one with the other, and the plan naming a survivor is not evidence that it lived.
+    /// </summary>
+    [Fact]
+    public async Task ExecutingTakesTheReleasesAndLeavesEverythingElseStanding()
+    {
+        CreateReleases("4.18.1", "3.40.0", "notes");
+        RecordTag("v4", "4.18.1");
+        var feed = WriteFeed();
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Directory.CreateDirectory(outside);
+        File.WriteAllBytes(Path.Combine(outside, "func.exe"), new byte[4096]);
+
+        var link = Path.Combine(Releases, "2.60.0");
+        Directory.CreateSymbolicLink(link, outside);
+
+        string[] mustSurvive =
+        [
+            Root,
+            Releases,
+            Path.Combine(Root, AzureFunctionsToolTags.DirectoryName),
+            Path.Combine(Releases, "notes"),
+            link,
+            outside,
+        ];
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(Path.Combine(Releases, "4.18.1")));
+        Assert.False(Directory.Exists(Path.Combine(Releases, "3.40.0")));
+
+        Assert.All(mustSurvive, d => Assert.True(Directory.Exists(d), $"{d} was removed"));
+        Assert.True(File.Exists(feed), $"{feed} was removed");
+        Assert.True(File.Exists(Path.Combine(outside, "func.exe")), "Deguffer deleted through a link.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
