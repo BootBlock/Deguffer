@@ -396,6 +396,46 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The Epic Games launcher keeps its settings, its cloud saves, its logs and the store's whole
+    /// browser profile in one folder, and two providers act inside it. So the declaration has to say
+    /// three different things about that one listing: the logs may go, the settings may not, and the
+    /// browser folder may not — only the caches named inside it.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                                     // the launcher folder itself
+    [InlineData("Config", false)]                               // the launcher settings
+    [InlineData("Saves", false)]                                // cloud saves
+    [InlineData("UserVaultSettings", false)]
+    [InlineData("Crashes", true)]                               // Tier 3, and offered
+    [InlineData("Logs", true)]
+    [InlineData("webcache_4430", false)]                        // holds the sign-in cookies
+    [InlineData(@"webcache_4430\Cookies", false)]
+    [InlineData(@"webcache_4430\Local Storage", false)]
+    [InlineData(@"webcache_4430\Cache", true)]                  // a recognised cache
+    [InlineData(@"webcache_4430\Code Cache", true)]
+    [InlineData(@"webcache_4430\Service Worker", false)]        // the container, which stays
+    [InlineData(@"webcache_4430\Service Worker\Database", false)]
+    [InlineData(@"webcache_4430\Service Worker\CacheStorage", true)]
+    [InlineData(@"webcache_4430\Service Worker\ScriptCache", true)]
+    public void TheEpicLauncherFolderIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        var saved = _temp.CreateDirectory(
+            "profile", "AppData", "Local", "EpicGamesLauncher", "Saved");
+
+        _temp.CreateDirectory(
+            "profile", "AppData", "Local", "EpicGamesLauncher", "Saved", "webcache_4430",
+            "Service Worker");
+
+        var policy = new ExploreActionPolicy(
+            [],
+            new EpicLauncherWebCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? saved : Path.Combine(saved, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// A Firefox profile is two directories under two different roots, and only one of them holds
     /// anything Deguffer will remove. The roaming half is declared here precisely because nothing in
     /// the provider ever plans against it: without the declaration a user could delete
@@ -474,6 +514,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
+    [InlineData("epic-launcher-webcache", "Config")]         // the launcher settings
+    [InlineData("epic-launcher-logs", "UserVaultSettings")]
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
@@ -523,6 +565,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new DartAnalysisServerProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
         new GpuShaderCacheProvider(_environment),
+        new EpicLauncherWebCacheProvider(_environment),
+        new EpicLauncherLogProvider(_environment),
     ];
 
     /// <summary>
