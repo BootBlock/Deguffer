@@ -1023,6 +1023,162 @@ change.
 
 ---
 
+## Squirrel updater leftovers
+
+| **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |
+| **Method** | Delete what the updater unpacked, and the update packages an application's own index has stopped naming |
+| **Typical size** | 466 MB of staging, and 87 MB of spent packages across three applications, on the machine this was measured on |
+
+### What it is
+
+Squirrel is the updater behind a large family of Windows desktop applications. An application using
+it installs into `%LOCALAPPDATA%\<the application's name>` and keeps three things there: `Update.exe`,
+one `app-<version>` folder per installed build, and a `packages` folder holding what it downloaded.
+Installs and updates are unpacked somewhere else again — `%LOCALAPPDATA%\SquirrelTemp`, which **every
+Squirrel application on the machine shares**.
+
+Both locations are meant to be temporary, and neither reliably is:
+
+| Where | Why it accumulates |
+| --- | --- |
+| `SquirrelTemp` | The unpacked copy is deleted when the update finishes. An application killed part-way through never gets there, and what it unpacked stays |
+| `packages` | After an update, Squirrel deletes every package its index no longer names — in a loop with no error handling, so the first failure abandons the rest |
+
+This is not a rare edge. Squirrel's own issue tracker carries reports of 718 MB, 2 GB, 6.2 GB, 13 GB
+and 35 GB in one staging folder, over nine years, and it was never fixed. The maintainer's answer
+both times was that deleting the folder is safe, and that the library cannot do it itself: Squirrel
+is a library, several applications use it, and one of them cannot know that another is not
+installing through that folder at this moment.
+
+### What Deguffer does
+
+**It identifies an application positively, and needs both halves.** A folder qualifies only if it
+holds `Update.exe` *and* a child named for a version Deguffer can read. Other software ships a file
+called `Update.exe`, and a folder holding a directory whose name begins `app-` is not evidence of an
+updater. A folder that fails the pair is invisible, and nothing inside it is offered.
+
+**In the staging folder it removes only what Squirrel's own name generator produced.** Those names
+are the word `temp` followed by one or more characters from a fixed alphabet, which is how the
+updater reaches a million names without a collision. A directory whose name does not match is
+somebody else's and is left alone. The location is read from `SQUIRREL_TEMP` where that is set,
+because Squirrel reads it too — and if it is set to something that is not a full path, Deguffer says
+so and leaves the folder alone rather than guessing.
+
+**Before removing a staging directory it asks whether anything is running from inside it, and
+refuses the ones that are.** This is the collision the maintainer named, and it is a refusal rather
+than a warning.
+
+**In a `packages` folder it reads the application's own index.** `RELEASES` lists the packages the
+application still needs. Deguffer removes package files that index has stopped naming, and nothing
+else. If the index is missing or will not parse, nothing in that folder is offered at all — without
+it there is no way to tell a spent package from the one the next update is built against.
+
+**A package for a build newer than the one installed is never removed, even when the index does not
+name it.** Squirrel writes a downloaded update into that folder *before* it rewrites the index, so an
+unnamed package can be an update part-way through downloading rather than debris.
+
+Squirrel has no clean-up command. `Update.exe` can install, uninstall, download, update, make and
+remove shortcuts, start a process, update itself and check for updates, and nothing else — so these
+are deleted directly rather than by asking the tool.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `SquirrelTemp` itself, and the setup logs in it | The shared folder, which stays, and the record of past installs |
+| `packages\RELEASES` | The application's index of its own packages. **Its shortcut reads this file to decide which build to start**, and reads it without error handling — so removing it stops the application launching |
+| `packages\.betaId` | The identifier deciding whether this computer gets that application's staged releases early |
+| The package the index still names | The base the next update is applied as a patch against |
+| A package for a newer build | Possibly an update part-way through downloading |
+| `Update.exe` | The updater itself |
+| Every `app-<version>` folder | A build. This row removes packages and staging, never a build |
+| The application's own folder | Never a target |
+
+Deguffer also refuses to delete through a link. If you have moved the staging folder onto another
+drive with a junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+Nothing. Every application still starts, still updates itself, and still applies its next update as
+a patch rather than a whole download. The next install or update unpacks itself into the staging
+folder again, exactly as it would have done.
+
+If an application is installing or updating while you clean, Deguffer leaves what it is using alone
+and says so.
+
+### Why Tier 1
+
+Every file here is one the updater itself was supposed to delete and did not. Nothing reads the
+staging directories once an update has finished, and a package the application's own index has
+stopped naming is one that application will never open again.
+
+---
+
+## Superseded application versions
+
+| **Location** | The `app-<version>` folders, other than the newest, inside each application Squirrel installed |
+| **Method** | Delete the folders holding builds the application has replaced |
+| **Typical size** | 719 MB for one application on the machine this was measured on, sitting beside the 722 MB it actually runs |
+
+### What it is
+
+A Squirrel application installs each version into a folder of its own — `app-3.6.3`, then `app-3.6.4`
+beside it — and launches whichever is newest. Updating does not replace a folder; it adds one.
+
+Squirrel does delete the old ones, but it deliberately keeps two. Its clean-up excludes both the
+build it has just installed and the one that build replaced, so after an update a **full second copy
+of the application** sits beside the one you use, until the update after next removes it.
+
+### What Deguffer does
+
+It offers every build except the newest, on the same rule the application's own shortcut uses to
+decide which to launch: the highest version number wins.
+
+**If any version folder carries a number Deguffer cannot order, that application gives up nothing at
+all.** A pre-release version such as `2.0.0-beta1` sorts below its own release under one reading and
+above it under another. Rather than choose, Deguffer stops: naming the wrong folder superseded would
+remove the build you are running.
+
+**An application that is running gives up nothing either.** This is a refusal, not a warning. The
+question it answers is whether the application is running at all, not whether the old folder itself
+is busy — the process holding it open runs from the build that replaced it.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| The newest `app-<version>` | The build you are using |
+| `Update.exe` | The updater, and the program many of these applications' shortcuts actually run |
+| `packages` | The packages the application updates itself from, and its index of them |
+| A version folder whose number could not be read | Deguffer cannot tell whether it is the one in use |
+| The application's own folder | Never a target |
+
+Your settings, your sign-ins and anything an application saved live somewhere else entirely — a
+Squirrel application's data is not kept in its version folders.
+
+### What it costs you
+
+Every application still starts, and starts the version you are using now.
+
+What you give up is the build it replaced. **There is no supported way back to it**: Squirrel has no
+rollback, and its own documentation says so. You also give up one step the updater would have taken
+for you. Before deleting an old build, Squirrel runs that build's own tidy-up hook, which is where an
+application undoes what that version registered. Deguffer removes the folder without running it,
+because starting a vendor's executable to tidy up after a deletion is not something this tool does.
+
+### Why Tier 2, not Tier 1
+
+Tier 1 means the tool re-creates what was removed. Nothing re-creates an old build: once that folder
+is gone, that version is gone unless you can find its installer again. That alone rules Tier 1 out,
+whatever the application's own updater intends to do with the folder later.
+
+It is not Tier 3 either. These are not your files. They are a vendor's superseded program, which the
+vendor's own updater treats as already uninstalled — its clean-up comment calls the old versions
+dead — and which it deletes itself at the next update. So the row is offered, never selected for you,
+and it asks for the extra acknowledgement Tier 2 carries.
+
+---
+
 ## Dart analysis server cache
 
 **Tier 1 — regenerable cache.** Pre-selected.

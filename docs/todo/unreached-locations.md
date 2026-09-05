@@ -3,7 +3,8 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §5's GPU shader caches, §6's crash dumps and
-> servicing logs, and §7's per-volume recycle bins have shipped; everything else is unstarted.
+> servicing logs, §7's per-volume recycle bins and §12's Squirrel staging and superseded builds
+> have shipped; everything else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
@@ -1372,6 +1373,38 @@ Two carve-outs are defensible, because both are caches rather than installations
 Both are §5.2 recognised children under a root that must never be targeted whole, because `settings`
 and `plugins` live in the same place.
 
+### Squirrel's superseded application builds — Tier 2, measured at 719 MB for one application ✅ done
+
+**A third carve-out, and it is the one place "old application builds" above turned out to be too
+broad.** Squirrel is the updater a large family of Windows desktop applications ships with. It
+installs each version into `%LOCALAPPDATA%\<app>\app-<version>`, launches whichever is newest, and
+deletes the older ones itself — but its clean-up excludes both the build it has just installed and
+the one that build replaced, so a full second copy sits on disk until the update after next.
+
+What makes this different from an SDK is that it is not an uninstall. Nothing records the old build
+as installed: the uninstaller entry names the application's folder, the shortcut runs the shim in
+that folder, and the shim resolves the highest version at launch every time. The framework's own
+clean-up comment calls the previous versions dead — "already uninstalled, but not deleted" — and
+its documentation states plainly that rolling back to one is not supported.
+
+Two things were established from the framework's source before anything was offered, and both moved
+the design:
+
+- **The retention is deliberate rather than a failed delete**, and the vendor documents it. That is
+  what keeps this at Tier 2 rather than Tier 1: nothing re-creates a build, and Squirrel also runs
+  the application's own `--squirrel-obsolete` hook against a version before deleting it, which
+  Deguffer does not run.
+- **The `packages` folder cannot be removed whole**, which is what the obvious design would have
+  done. `Update.exe --processStart` reads `packages\RELEASES` with no error handling to decide which
+  build to launch, and that is the shortcut style Squirrel's own install documentation gives. So the
+  index decides instead: only package files it has stopped naming are offered, and only those not
+  newer than the installed build, since a downloaded update is written there before the index is
+  rewritten.
+
+Shipped as two providers, because the tiers differ: the staging leftovers and the spent packages are
+Tier 1, and the superseded builds are Tier 2. Reasoning and protected neighbours are in
+[../cache-locations.md](../cache-locations.md).
+
 ---
 
 ## The negative list
@@ -1389,6 +1422,7 @@ competing cleaners actively do. Worth encoding as knowledge, not merely omitting
 | Chromium `Local Storage`, `IndexedDB`, `Cookies` | Sit beside the six safe cache names and hold sign-in state and offline data. Tier 3 |
 | `.cargo\credentials.toml`, `.m2\settings.xml` | Registry authentication tokens and encrypted server passwords, in the root of a directory whose children are being deleted. The §5.2 case exactly |
 | Steam `steamapps\downloading` | Looks temporary. Holds the in-progress half of a patch; deleting it restarts the download |
+| Squirrel `packages\RELEASES` and `.betaId` | An index and an identifier, in a folder of downloaded packages. `Update.exe --processStart` reads the index with no error handling to decide which build to launch, so removing it stops the application starting from its own shortcut. Named survivors on the Squirrel provider — see §12 |
 | Steam `userdata`, `steamapps\workshop`, `widevine` | Cloud saves, settings and screenshots; subscribed Workshop content; and a downloaded decryption module. All three sit beside the client's web caches, and none of them is one. Named survivors on the Steam provider |
 | `.vs\...\.suo` | The user's own solution options, inside an otherwise disposable directory |
 
@@ -1407,6 +1441,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Cargo, Go, Maven, vcpkg ✅ | Expected one class each on the npm and NuGet shape. Two wanted the declared-path shape instead, two moved to Tier 2, and the read-only trap turned out to be in the remover — §1 records all three | researched |
 | pnpm and conda ✅ | Expected one link-aware measurement to unblock both. The walk can answer and the file table cannot do it better, but only pnpm needed the answer — conda reports its own link-aware figure, so it shipped on PlatformIO's shape. §1a records the split | researched |
 | Per-project build output ✅ | Expected §5.3's exclusion generalised, and that was indeed the larger half. Unity, Rust, node_modules and .venv shipped; `.vs` split out below, `dist` and Dart's `build` declined for want of evidence inside the directory — §2 records why | 5.8 GB |
+| Squirrel staging and superseded builds ✅ | Expected the survey's "old application builds" to stay out of scope, and one framework's own source moved it. Two providers rather than one, because the staging and the builds land at different tiers; and the `packages` folder had to be read through the application's own index rather than removed, because a shortcut reads the index in it — §12 records both | 1.3 GB |
 | Visual Studio `.vs` per solution | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at two nesting levels | 1.5 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |

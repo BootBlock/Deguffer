@@ -184,6 +184,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(SourceDirectoryDiscovery)
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
+        : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : throw new XunitException(
