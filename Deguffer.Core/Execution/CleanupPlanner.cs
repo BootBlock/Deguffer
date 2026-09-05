@@ -22,8 +22,8 @@ public sealed class CleanupPlanner
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Dart analysis
     /// server's byte store, the per-volume Recycle Bins, the crash dumps, the Windows servicing logs
     /// and the per-project build output inside the user's own approved folders — which the audit did
-    /// not cover, and which were investigated on their own terms before being added. Their reasoning and their rejected
-    /// alternatives are in <c>docs/cache-locations.md</c>.
+    /// not cover, and which were investigated on their own terms before being added. Their reasoning
+    /// and their rejected alternatives are in <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, PlatformIO and Playwright, which are Tier 2, and the

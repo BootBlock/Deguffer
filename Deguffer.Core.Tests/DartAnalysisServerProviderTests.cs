@@ -13,10 +13,12 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>§6.3 is deliberately not asserted here. This provider hands its paths to
 /// <see cref="ChildDirectories"/> and to <c>DirectoryRemover</c>, and those two seams are where the
-/// extended prefix is asserted on the path's <em>form</em> — see <c>LongPathTests</c> and
-/// <c>DirectoryRemoverTests</c>. A deep-tree test written here would pass with
-/// <see cref="LongPath.Extended"/> deleted outright, so it would prove nothing about this provider
-/// that those tests do not already prove about the seams underneath it.</para>
+/// extended prefix is asserted on the path's <em>form</em> — see
+/// <see cref="ChildDirectoriesTests.HandsBackChildrenInTheExtendedLengthFormItsCallersGoOnToUse"/>
+/// and <see cref="DirectoryRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm"/>.
+/// A deep-tree test written here would pass with <see cref="LongPath.Extended"/> deleted outright,
+/// so it would prove nothing about this provider that those tests do not already prove about the
+/// seams underneath it.</para>
 /// </summary>
 public sealed class DartAnalysisServerProviderTests : IDisposable
 {
@@ -149,6 +151,14 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
     /// junctioned root would hand back the far side's ordinary children, target the recognised ones,
     /// and pass every §5.6 assertion, because each survivor named here resolves through the same
     /// link.
+    ///
+    /// <para><see cref="Assert.Empty{T}(System.Collections.Generic.IEnumerable{T})"/> on the
+    /// targeted paths is what catches the decline going missing, and it is the assertion that bites:
+    /// removing the reparse-point guard fails this test there. The far side is asserted after
+    /// <em>executing</em>, so the run covers the executor as well — a step reaching the far side
+    /// without appearing in the plan's targets. Asserting it after planning alone, which is what
+    /// this test used to do, proved nothing at all: planning removes nothing whatever the
+    /// classification decided.</para>
     /// </summary>
     [Fact]
     public async Task DeclinesARootThatIsItselfALink()
@@ -164,8 +174,10 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
-        Assert.True(Directory.Exists(stranger));
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+        Assert.True(Directory.Exists(stranger), "The run deleted through the link it said it was leaving alone.");
 
         // Not HasUnreadableRoot: Windows refused nothing here. Deguffer declined, and the two
         // states send the reader to different places.
@@ -196,9 +208,13 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
-        Assert.True(Directory.Exists(stranger));
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
+
+        // Executed, for the reason given on the test above: the emptiness assertion covers the
+        // planner, and the run is what extends the check to the executor.
+        await provider.ExecuteAsync(plan);
+        Assert.True(Directory.Exists(stranger), "The run deleted through the link it said it was leaving alone.");
     }
 
     /// <summary>
