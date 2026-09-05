@@ -507,6 +507,53 @@
                         below was there to give (§6.5).
                     -->
                     <Grid Opacity="0.75" Visibility="{x:Bind ViewModel.ShowsNotes, Mode=OneWay}">
+                        <Grid.Resources>
+                            <!--
+                                The banner is one surface, so nothing inside it paints a second one.
+                                The Border below is the ground; an informational note's severity tint,
+                                its stroke, and the dismiss button's fill each landed a lighter slab on
+                                top of it, which read as a step at the gutter and a square in the corner.
+                                Measured in dark: #292929 tint, #222222 stroke, #252525 ground, #2E2E2E
+                                button, on one line across a banner that should be one colour.
+
+                                Turned off at the theme keys rather than as properties on the elements.
+                                A local property wins in every theme at once, and High Contrast is the
+                                one theme where all of this is load-bearing: there a Button's fill and
+                                stroke are the whole statement that it is a control, and an InfoBar's
+                                2px WindowText border is what separates one note from the next once
+                                every severity has collapsed to the window colour. So the clearing is
+                                scoped to the themes that asked for it.
+
+                                The empty HighContrast dictionary is doing work and must stay. A theme
+                                with no dictionary of its own falls back to Default, so deleting it does
+                                not restore the SDK's values — it hands High Contrast the transparent
+                                ones. Empty, the lookup misses here and walks up to the SDK's own.
+
+                                Default and Light repeat each other because ThemeDictionaries has no
+                                way to share an entry between two themes. generic.xaml spells the
+                                InfoBar's own close button out three times for the same reason.
+                            -->
+                            <ResourceDictionary>
+                                <ResourceDictionary.ThemeDictionaries>
+                                    <ResourceDictionary x:Key="Default">
+                                        <SolidColorBrush x:Key="InfoBarInformationalSeverityBackgroundBrush" Color="Transparent" />
+                                        <Thickness x:Key="InfoBarBorderThickness">0</Thickness>
+                                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
+                                    </ResourceDictionary>
+
+                                    <ResourceDictionary x:Key="Light">
+                                        <SolidColorBrush x:Key="InfoBarInformationalSeverityBackgroundBrush" Color="Transparent" />
+                                        <Thickness x:Key="InfoBarBorderThickness">0</Thickness>
+                                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
+                                    </ResourceDictionary>
+
+                                    <ResourceDictionary x:Key="HighContrast" />
+                                </ResourceDictionary.ThemeDictionaries>
+                            </ResourceDictionary>
+                        </Grid.Resources>
+
                         <Border CornerRadius="{ThemeResource ControlCornerRadius}"
                                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                                 Padding="0,0,36,0"
@@ -531,7 +578,13 @@
 
                                 <!-- The picture stops matching the disk the moment something is removed from
                                      it, and rebuilding it means rescanning the drive. §7.1 allows the numbers
-                                     to be off provided the picture says which way. -->
+                                     to be off provided the picture says which way.
+
+                                     This one keeps its ground, deliberately, and reaches it by a key the
+                                     override above does not name. What it says is a claim a deletion
+                                     decision rests on. A tint carried by every note is decoration; a tint
+                                     carried by the one note that cautions is a signal, and this is now the
+                                     only tinted thing on the panel. -->
                                 <InfoBar IsOpen="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
                                          Visibility="{x:Bind ViewModel.Selection.HasStaleNote, Mode=OneWay}"
                                          IsClosable="False"
@@ -568,6 +621,16 @@
                             is the panel over their picture, not this sentence as against that one, and four
                             close buttons would ask them to say it four times. The gutter above is what it
                             sits in, so it is never over a word.
+
+                            Its rest fill and stroke are cleared by the ButtonBackground and
+                            ButtonBorderBrush entries above, which reach this button and no other:
+                            the collapsed ShowNotes button is outside this grid, and it needs the
+                            fill it has. Only the rest state goes. Pointer-over, pressed and disabled
+                            are driven by storyboards against the template's own ContentPresenter, so
+                            they still paint, and the focus visual is drawn by the framework rather
+                            than from BorderBrush. A button that answers nothing under the pointer,
+                            or that a keyboard cannot find, would be a worse fault than the one this
+                            fixes.
                         -->
                         <Button x:Name="DismissNotes"
                                 HorizontalAlignment="Right"

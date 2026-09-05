@@ -76,6 +76,7 @@ public sealed class CleanupPlanner
         new VcpkgCacheProvider(),
         new GpuShaderCacheProvider(),
         new ChromiumCacheProvider(),
+        new VsCodeCacheProvider(),
         new FirefoxCacheProvider(),
         new EpicLauncherWebCacheProvider(),
         new SteamCacheProvider(),
@@ -86,6 +87,7 @@ public sealed class CleanupPlanner
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
         new EpicLauncherLogProvider(),
+        new VsCodeLogProvider(),
     ];
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
