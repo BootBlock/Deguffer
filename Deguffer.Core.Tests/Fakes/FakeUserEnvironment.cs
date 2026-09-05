@@ -10,6 +10,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 {
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _registry = new(StringComparer.OrdinalIgnoreCase);
 
     public FakeUserEnvironment(string root)
     {
@@ -64,8 +65,25 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
+    /// <summary>Pretend <paramref name="valueName"/> is recorded under <paramref name="keyPath"/>.</summary>
+    public FakeUserEnvironment WithRegistryValue(string keyPath, string valueName, string value)
+    {
+        _registry[keyPath + "\\" + valueName] = value;
+        return this;
+    }
+
     /// <summary>How many times a provider read the environment. Proves a discovery is memoised.</summary>
     public int EnvironmentReads { get; private set; }
+
+    /// <summary>How many times a provider read the registry. Proves a discovery is memoised.</summary>
+    public int RegistryReads { get; private set; }
+
+    public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
+    {
+        RegistryReads++;
+
+        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value : null;
+    }
 
     public string? GetEnvironmentVariable(string name)
     {

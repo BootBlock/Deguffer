@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security;
 using System.Security.Principal;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Safety;
 
@@ -42,6 +44,24 @@ public interface IUserEnvironment
     /// children beneath it.
     /// </summary>
     string? GetEnvironmentVariable(string name);
+
+    /// <summary>
+    /// Read a string value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value or
+    /// the permission to read it is missing.
+    ///
+    /// <para>Exists because Steam records where it is installed and nothing else on disk does. The
+    /// install directory is not under the profile, it moves with the user's game library, and §5.2's
+    /// "never assume a location" forbids guessing at <c>%PROGRAMFILES(X86)%\Steam</c>.</para>
+    ///
+    /// <para><b>The current user's hive only, and deliberately so.</b> The machine-wide key is
+    /// redirected under <c>WOW6432Node</c> for a 64-bit process, which is a second thing to get
+    /// wrong for an answer about an install this account may never have run. Steam's own client
+    /// writes the per-user value every time it starts, so a user with a Steam cache to reclaim has
+    /// it.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
+    /// <param name="valueName">The value to read.</param>
+    string? ReadCurrentUserRegistryValue(string keyPath, string valueName);
 
     /// <summary>
     /// Discard cached lookups. Called at the start of a planning pass so a toolchain installed
@@ -90,6 +110,33 @@ public sealed class UserEnvironment : IUserEnvironment
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         return Environment.GetEnvironmentVariable(name);
+    }
+
+    /// <summary>
+    /// Not memoised, for the reason <see cref="GetEnvironmentVariable"/> is not: the one caller
+    /// memoises the answer it derives for the life of a planning pass, and a second cache here would
+    /// be a second thing for <see cref="Invalidate"/> to get wrong.
+    /// </summary>
+    public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+
+            // Anything that is not a string is not an answer to this question. A REG_DWORD where a
+            // path was expected would otherwise arrive as its decimal digits and be treated as one.
+            return key?.GetValue(valueName) as string;
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // A hive this account may not read, and a key already marked for deletion. Both are
+            // ordinary on a long-lived machine, and both mean the same thing here: nothing said
+            // where the tool is.
+            return null;
+        }
     }
 
     public string? FindExecutable(string command)

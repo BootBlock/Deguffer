@@ -453,6 +453,59 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Steam's folder in the profile. <c>cefdata</c> and <c>widevine</c> are declared and refused
+    /// rather than merely absent from the allow-list, because each has a specific reason it is not
+    /// on offer and the generic "not recognised" sentence would be a weaker thing to tell somebody.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                     // Steam's own folder
+    [InlineData("htmlcache", true)]             // the cache Deguffer removes
+    [InlineData(@"htmlcache\Cache", true)]      // and everything under it
+    [InlineData("cefdata", false)]              // recognised, and deliberately not offered
+    [InlineData("widevine", false)]             // downloaded software rather than a cache
+    [InlineData("logs", false)]                 // unrecognised, so left alone
+    public void SteamsProfileFolderOffersOnlyTheBrowserCache(string relative, bool allowed)
+    {
+        var root = Path.Combine(_environment.LocalAppData, "Steam");
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The install directory, which is the one tool root in this project that holds the user's game
+    /// library. Program Files is refused structurally, but a Steam library is put on a second drive
+    /// precisely so that it is not — so the refusal has to come from the declaration.
+    ///
+    /// <para>Three levels, because the HTTP cache is a level below the install and a
+    /// <see cref="ToolRoot"/> classifies immediate children: the install recognises nothing at all,
+    /// and <c>appcache</c> under it recognises the one child that may go.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                        // where Steam is installed
+    [InlineData("steamapps", false)]               // every installed game
+    [InlineData(@"steamapps\common\A Game", false)]
+    [InlineData(@"steamapps\downloading", false)]  // the half-downloaded part of an update
+    [InlineData(@"steamapps\workshop", false)]
+    [InlineData("userdata", false)]                // cloud saves and screenshots
+    [InlineData("config", false)]                  // who is signed in on this computer
+    [InlineData("appcache", false)]                // the container, which stays
+    [InlineData(@"appcache\httpcache", true)]      // the one cache offered here
+    [InlineData(@"appcache\librarycache", false)]  // recognised, and deliberately not offered
+    [InlineData("something-unrecognised", false)]
+    public void SteamsInstallDirectoryOffersOnlyTheHttpCache(string relative, bool allowed)
+    {
+        var install = RegisterSteamInstall();
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? install : Path.Combine(install, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
     /// the root itself.
     ///
@@ -474,6 +527,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
+    [InlineData("steam", "cefdata")]                         // the embedded browser's working data
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
@@ -487,6 +541,24 @@ public sealed class ExploreActionPolicyTests : IDisposable
         }
 
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
+    }
+
+    /// <summary>
+    /// An install Steam's own record points at, carrying the client itself — which is what
+    /// <see cref="SteamDiscovery"/> requires before it treats a recorded path as an install.
+    ///
+    /// The recorded value is written in Steam's own form, with forward slashes, because that is
+    /// what the client writes.
+    /// </summary>
+    private string RegisterSteamInstall()
+    {
+        var root = _temp.CreateDirectory("games", "Steam");
+        _temp.CreateFile(64, "games", "Steam", "steam.exe");
+
+        _environment.WithRegistryValue(
+            SteamDiscovery.RegistryKey, SteamDiscovery.InstallPathValue, root.Replace('\\', '/'));
+
+        return root;
     }
 
     /// <summary>
@@ -523,6 +595,11 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new DartAnalysisServerProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
         new GpuShaderCacheProvider(_environment),
+
+        // Its install directory is deliberately not registered here. The sweep probes ToolRoots[0],
+        // which is Steam's folder in the profile and is declared from a constant; the install root
+        // and the container under it have their own theory above, where the register is set up.
+        new SteamCacheProvider(_environment),
     ];
 
     /// <summary>
