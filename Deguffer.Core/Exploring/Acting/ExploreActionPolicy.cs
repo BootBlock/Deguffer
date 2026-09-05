@@ -240,25 +240,62 @@ public sealed class ExploreActionPolicy
     /// <para>It is also the ordering the region table above uses, for the same reason: a rule and
     /// the narrower rule inside it are both true, and the narrower one is the one that was written
     /// about this path.</para>
+    ///
+    /// <para><b>Innermost is a set rather than one root, because a directory can have two owners.</b>
+    /// A VS Code user-data folder holds Chromium's six engine caches and the editor's own, so
+    /// <see cref="Providers.ChromiumCacheProvider"/> and
+    /// <see cref="Providers.VsCodeCacheProvider"/> both declare that one path with disjoint child
+    /// tables, and <see cref="Providers.VsCodeLogProvider"/> declares it a third time. Asking only
+    /// the first of them would refuse every child the other two recognise — silently, and
+    /// differently depending on the order the providers happen to be constructed in. So every
+    /// declaration at that depth is asked, and a child one of them recognises is allowed: each
+    /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
     private ExploreVerdict Below(string target)
     {
-        ToolRoot? innermost = null;
+        List<ToolRoot> innermost = [];
         var depth = -1;
 
         foreach (var root in _toolRoots)
         {
-            if (LongPath.Configured(root.Path) is { } path
-                && LongPath.Contains(path, target)
-                && path.Length > depth)
+            if (LongPath.Configured(root.Path) is not { } path
+                || !LongPath.Contains(path, target)
+                || path.Length < depth)
             {
-                innermost = root;
+                continue;
+            }
+
+            // Strictly deeper discards what was found before it; equally deep joins it. Two roots
+            // that both contain this path and are the same length are the same directory, because
+            // each is a prefix of the target.
+            if (path.Length > depth)
+            {
+                innermost.Clear();
                 depth = path.Length;
             }
+
+            innermost.Add(root);
         }
 
-        return innermost is { } owner ? Refusal(owner, target) ?? ExploreVerdict.Unclassified
-            : ExploreVerdict.Unclassified;
+        ExploreVerdict? refusal = null;
+
+        foreach (var owner in innermost)
+        {
+            if (Refusal(owner, target) is not { } refused)
+            {
+                // One declaration recognises this child, which settles it: a child is recognised
+                // however many other providers also own the directory holding it.
+                return ExploreVerdict.Unclassified;
+            }
+
+            // The first refusal is the one the user is shown, because a reason naming the wrong
+            // provider's rule is worse than either of them alone.
+            refusal ??= refused;
+        }
+
+        // Null where no declaration covers this path, which is the ordinary case: most of a drive
+        // belongs to no tool root at all.
+        return refusal ?? ExploreVerdict.Unclassified;
     }
 
     private static bool Covers(ProtectedRegion region, string target) =>
