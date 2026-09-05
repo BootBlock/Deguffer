@@ -1389,6 +1389,7 @@ competing cleaners actively do. Worth encoding as knowledge, not merely omitting
 | Chromium `Local Storage`, `IndexedDB`, `Cookies` | Sit beside the six safe cache names and hold sign-in state and offline data. Tier 3 |
 | `.cargo\credentials.toml`, `.m2\settings.xml` | Registry authentication tokens and encrypted server passwords, in the root of a directory whose children are being deleted. The §5.2 case exactly |
 | Steam `steamapps\downloading` | Looks temporary. Holds the in-progress half of a patch; deleting it restarts the download |
+| Steam `userdata`, `steamapps\workshop`, `widevine` | Cloud saves, settings and screenshots; subscribed Workshop content; and a downloaded decryption module. All three sit beside the client's web caches, and none of them is one. Named survivors on the Steam provider |
 | `.vs\...\.suo` | The user's own solution options, inside an otherwise disposable directory |
 
 ---

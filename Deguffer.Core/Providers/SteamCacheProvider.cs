@@ -242,6 +242,10 @@ public sealed class SteamCacheProvider : CleanupProviderBase
                         + "nobody has established what removing it costs."),
                     ("widevine", "The content-decryption module Steam downloaded so protected video "
                         + "will play. It is downloaded software rather than a cache."),
+                    // A file, and the NVIDIA 'accounts' lesson: a child set classifies directories,
+                    // so a file in a root a provider reaches into is never asserted unless it is
+                    // named. Found by looking at a real Steam folder rather than by reasoning.
+                    ("local.vdf", "The Steam client's settings for this computer."),
                 ]),
         };
 

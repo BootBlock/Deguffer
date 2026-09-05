@@ -149,15 +149,22 @@ public sealed class SteamCacheProviderTests : IDisposable
 
         // Files, not directories. A child set classifies directories, so these are only ever
         // asserted because the provider names them — the NVIDIA 'accounts' lesson.
-        var appInfo = Path.Combine(install, "appcache", "appinfo.vdf");
-        var packageInfo = Path.Combine(install, "appcache", "packageinfo.vdf");
-        File.WriteAllBytes(appInfo, new byte[128]);
-        File.WriteAllBytes(packageInfo, new byte[128]);
+        string[] files =
+        [
+            Path.Combine(LocalRoot, "local.vdf"),
+            Path.Combine(install, "appcache", "appinfo.vdf"),
+            Path.Combine(install, "appcache", "packageinfo.vdf"),
+        ];
+
+        foreach (var file in files)
+        {
+            File.WriteAllBytes(file, new byte[128]);
+        }
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        foreach (var path in mustSurvive.Concat([appInfo, packageInfo]))
+        foreach (var path in mustSurvive.Concat(files))
         {
             Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
@@ -168,8 +175,7 @@ public sealed class SteamCacheProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.All(mustSurvive, d => Assert.True(Directory.Exists(d), $"{d} was removed"));
-        Assert.True(File.Exists(appInfo));
-        Assert.True(File.Exists(packageInfo));
+        Assert.All(files, f => Assert.True(File.Exists(f), $"{f} was removed"));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
