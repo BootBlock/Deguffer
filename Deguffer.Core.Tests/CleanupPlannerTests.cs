@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -184,8 +184,9 @@ public sealed class CleanupPlannerTests
                 "dotnet-obj", "unity-library", "cargo-target", "node-modules", "python-venv",
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "uv", "pip",
                 "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
-                "firefox",
+                "vscode-cache", "firefox",
                 "platformio", "playwright", "recycle-bin", "crash-dumps", "windows-servicing-logs",
+                "vscode-logs",
             ],
             planner.Providers.Select(p => p.Id));
 
@@ -197,7 +198,7 @@ public sealed class CleanupPlannerTests
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(
-            ["recycle-bin", "crash-dumps", "windows-servicing-logs"],
+            ["recycle-bin", "crash-dumps", "windows-servicing-logs", "vscode-logs"],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 
         // §3 excludes Tier 4 from the UI entirely, so a provider declaring it could only ever

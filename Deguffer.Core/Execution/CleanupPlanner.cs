@@ -1,4 +1,4 @@
-using Deguffer.Core.Configuration;
+﻿using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -72,12 +72,14 @@ public sealed class CleanupPlanner
         new VcpkgCacheProvider(),
         new GpuShaderCacheProvider(),
         new ChromiumCacheProvider(),
+        new VsCodeCacheProvider(),
         new FirefoxCacheProvider(),
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
         new RecycleBinProvider(),
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
+        new VsCodeLogProvider(),
     ];
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
