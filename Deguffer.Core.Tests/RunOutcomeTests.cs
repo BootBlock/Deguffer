@@ -192,25 +192,49 @@ public sealed class RunOutcomeTests
 
     /// <summary>
     /// The count is of paths rather than of providers. One removed checkout takes a protected path
-    /// per project inside it, and "1 protected path" about nine of them is a figure the user cannot
-    /// reconcile with the list beneath it.
+    /// per project inside it, and "one protected path" about nine of them is a figure the user
+    /// cannot reconcile with the list beneath it.
     /// </summary>
     [Fact]
     public void CountsThePathsRatherThanTheProviders()
     {
-        var result = Result("npm", VerificationOutcome.RemovedFromOutside);
-        var three = result with
+        Assert.Contains(
+            "3 protected paths",
+            RunOutcome.For([OutsideRemovals("npm", 3)]).Statement,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Written out in both grammatical forms rather than with the "(s)" the counts elsewhere use:
+    /// this clause has to agree in "it" and "them" as well, and "1 protected path(s) … the folders
+    /// holding them" is a sentence only a machine writes. Driving the window is what catches it.
+    /// </summary>
+    [Fact]
+    public void ReadsAsEnglishForOnePathAsWellAsForSeveral()
+    {
+        var one = RunOutcome.For([OutsideRemovals("npm", 1)]).Statement;
+
+        Assert.Contains("One protected path for npm went missing", one, StringComparison.Ordinal);
+        Assert.Contains("the folder holding it", one, StringComparison.Ordinal);
+        Assert.DoesNotContain("(s)", one, StringComparison.Ordinal);
+
+        var several = RunOutcome.For([OutsideRemovals("npm", 2)]).Statement;
+
+        Assert.Contains("2 protected paths for npm went missing", several, StringComparison.Ordinal);
+        Assert.Contains("the folders holding them", several, StringComparison.Ordinal);
+    }
+
+    /// <summary>One provider's result carrying <paramref name="count"/> paths taken from outside.</summary>
+    private static CleanupResult OutsideRemovals(string name, int count) =>
+        Result(name, VerificationOutcome.RemovedFromOutside) with
         {
             Verification = new VerificationResult
             {
-                Checks = [.. Enumerable.Range(0, 3).Select(i => new VerificationCheck(
+                Checks = [.. Enumerable.Range(0, count).Select(i => new VerificationCheck(
                     $@"C:\Users\testuser\src\project{i}\obj",
                     "It must survive.",
                     VerificationOutcome.RemovedFromOutside,
                     "Whatever the check found."))],
             },
         };
-
-        Assert.Contains("3 protected path(s)", RunOutcome.For([three]).Statement, StringComparison.Ordinal);
-    }
 }

@@ -111,12 +111,22 @@ public sealed record VerificationResult
     public bool Passed => Checks.All(
         c => c.Outcome is VerificationOutcome.NotPresentBefore or VerificationOutcome.Survived);
 
+    /// <summary>
+    /// One sentence for the whole result, which has to account for every path it could not verify.
+    ///
+    /// The mixed case gets both counts rather than only the alarming one. Naming the failures alone
+    /// would say "1 of 7 did not survive" about a run where six went unverified, and a §5.6 report
+    /// that states less than it established is the overstatement's mirror image.
+    /// </summary>
     public string Summary => (Checks.Count, Failures.Count, RemovedFromOutside.Count) switch
     {
         (0, _, _) => "Nothing to verify.",
         (var total, 0, 0) => $"All {total} protected path(s) survived.",
         (var total, 0, var outside) =>
             $"{outside} of {total} protected path(s) were removed from outside this run.",
-        (var total, var failed, _) => $"{failed} of {total} protected path(s) did not survive.",
+        (var total, var failed, 0) => $"{failed} of {total} protected path(s) did not survive.",
+        (var total, var failed, var outside) =>
+            $"{failed} of {total} protected path(s) did not survive, and {outside} more were "
+            + "removed from outside this run.",
     };
 }

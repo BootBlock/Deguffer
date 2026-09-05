@@ -4,8 +4,13 @@ using Microsoft.UI.Xaml.Data;
 namespace Deguffer.App.Converters;
 
 /// <summary>
-/// How the run-result card states its §5.6 verdict: quiet when every protected path survived, and
-/// in the critical colour when one did not.
+/// How the run-result card states its §5.6 verdict: in the critical colour when a protected path
+/// went missing where this run could have taken it, and quiet otherwise.
+///
+/// Quiet covers two verdicts rather than one, and deliberately. A path something else removed while
+/// the preview sat on screen is a fact the card states in words and lists underneath, and it is not
+/// a fault to report — colouring it as one would spend the critical colour on the ordinary event and
+/// leave nothing to mark the real thing with.
 ///
 /// A <see cref="Style"/> rather than a brush, for the reason <see cref="TierChipStyleConverter"/>
 /// gives — resolving <c>Application.Current.Resources[key]</c> in C# snapshots the theme in force at

@@ -206,6 +206,13 @@ public sealed class CleanupPlanner
             .Select(p => (p.Finding, Plan: p.Plan!))
             .ToList();
 
+        // §5.6's negative is answered against what the whole run may destroy, not against each
+        // plan's own targets. Gathered once, before the first deletion, because a provider that
+        // verifies halfway through has to be able to tell a folder a *later* provider will take
+        // from one a stranger already took — and because the set does not change while the run
+        // proceeds.
+        var reach = RunReach.Of([.. plans.Select(p => p.Plan)]);
+
         var weights = ProgressWeights.For(plans.Select(p => p.Plan.EstimatedBytes));
         var total = weights.Sum();
         var results = new List<CleanupResult>(plans.Count);
@@ -230,7 +237,11 @@ public sealed class CleanupPlanner
             status?.Report($"Cleaning {finding.Provider.Name}…");
 
             results.Add(await finding.Provider
-                .ExecuteAsync(plan, ScaledProgress.Within(progress, done / total, weights[i] / total), ct)
+                .ExecuteAsync(
+                    plan,
+                    reach,
+                    ScaledProgress.Within(progress, done / total, weights[i] / total),
+                    ct)
                 .ConfigureAwait(false));
 
             // Reported from here rather than trusted from the provider: a provider that reports

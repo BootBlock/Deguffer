@@ -71,12 +71,21 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
         {
             var count = outside.Sum(r => r.Verification!.RemovedFromOutside.Count);
 
+            // Both grammatical forms written out, for the reason LiveTreeVeto's note records: a
+            // sentence that reads correctly only on a machine with more than one of something is
+            // what driving the real window is for. The "(s)" shorthand the counts below use does
+            // not stretch to a clause that also has to agree in "it" and "them".
+            var went = count == 1
+                ? $"One protected path for {Names(outside)} went missing between the preview and "
+                  + "the clean, along with the folder holding it"
+                : $"{count} protected paths for {Names(outside)} went missing between the preview "
+                  + "and the clean, along with the folders holding them";
+
             // What the run left behind stays on this one, because it is not an alarm and because
             // both facts explain the same thing: why the figures are not what the preview implied.
             return new RunOutcome(
-                $"Cleaned. {count} protected path(s) for {Names(outside)} went missing between the "
-                + "preview and the clean, along with the folders holding them — which no step in "
-                + "this run named. Preview again to see the machine as it is now."
+                $"Cleaned. {went} — which no step in this run named. Preview again to see the "
+                + "machine as it is now."
                 + LeftBehind(results),
                 RunVerdict.RemovedFromOutside);
         }

@@ -41,8 +41,19 @@ public sealed class PlanVerifierTests : IDisposable
 
     private static ProtectedPath Protect(string path) => new(path, "It must survive.", ExistedBefore: true);
 
-    private static VerificationOutcome OutcomeFor(CleanupPlan plan, string path) =>
-        PlanVerifier.Verify(plan).Checks.Single(c => c.Path == path).Outcome;
+    private static VerificationOutcome OutcomeFor(CleanupPlan plan, string path, RunReach? reach = null) =>
+        PlanVerifier.Verify(plan, reach).Checks.Single(c => c.Path == path).Outcome;
+
+    /// <summary>
+    /// A volume root this machine has not mounted, chosen rather than written down. A literal drive
+    /// letter makes the test's answer depend on what happens to be mapped here, which is what G8's
+    /// "test through the fakes, never against the real machine" refuses.
+    /// </summary>
+    private static string UnmountedVolumeRoot() =>
+        Enumerable.Range('D', 'Z' - 'D' + 1)
+            .Select(letter => $"{(char)letter}:\\")
+            .FirstOrDefault(root => !LongPath.DirectoryExists(root))
+        ?? throw new InvalidOperationException("Every drive letter from D: to Z: is in use here.");
 
     [Fact]
     public void APathStillStandingSurvived()
@@ -196,11 +207,94 @@ public sealed class PlanVerifierTests : IDisposable
     [Fact]
     public void APathWithNoFolderAboveItStaysAFailure()
     {
-        var plan = Plan(
-            [new DeleteDirectoryStep(_temp.CreateDirectory("obj"), "Output")],
-            Protect(@"Q:\"));
+        var root = UnmountedVolumeRoot();
+        var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("obj"), "Output")], Protect(root));
 
-        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, @"Q:\"));
+        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, root));
+    }
+
+    /// <summary>
+    /// The plainest over-reach there is: execution goes one directory higher than the plan named.
+    /// The deselected sibling and the folder holding it are both gone, and neither is under a
+    /// target — every condition for "something else did it", about a directory this run was working
+    /// inside. The folder holding a target is the half of the evidence that refuses it.
+    /// </summary>
+    [Fact]
+    public void APathWhoseFolderThisRunWasDeletingInsideIsAFailure()
+    {
+        var project = _temp.CreateDirectory("project");
+        var target = _temp.CreateDirectory("project", "obj2");
+        var deselected = _temp.CreateDirectory("project", "obj");
+
+        // The shape CleanupPlan.NarrowedTo produces: the sibling the user unticked is protected, and
+        // the one they left ticked is the step.
+        var plan = Plan([new DeleteDirectoryStep(target, "Output")], Protect(deselected));
+
+        Directory.Delete(project, recursive: true);
+
+        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, deselected));
+    }
+
+    /// <summary>
+    /// A run is many plans, and a folder another provider deleted is not a folder a stranger
+    /// deleted. Verified against this plan alone the disappearance is indistinguishable from an
+    /// outside removal, which is Deguffer's own hand suppressing a §5.6 alarm.
+    /// </summary>
+    [Fact]
+    public void APathWhoseFolderAnotherPlanInTheRunWasDeletingInsideIsAFailure()
+    {
+        var project = _temp.CreateDirectory("project");
+        var otherPlansTarget = _temp.CreateDirectory("project", "node_modules");
+        var protectedPath = _temp.CreateDirectory("project", "obj");
+
+        var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("elsewhere", "obj"), "Output")], Protect(protectedPath));
+        var reach = new RunReach([.. plan.TargetedPaths, otherPlansTarget], Unbounded: false);
+
+        Directory.Delete(project, recursive: true);
+
+        // Its own plan's reach cannot see the other provider's target, so on its own it reads as an
+        // outside removal. The run's reach is what makes the answer honest.
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, OutcomeFor(plan, protectedPath));
+        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, protectedPath, reach));
+    }
+
+    /// <summary>
+    /// §5.1 leaves an eviction command deciding what it removes, and a run holds many plans, so one
+    /// provider's command makes the whole run's reach unbounded — including for the delete-only
+    /// providers beside it, which is where the suppressed alarm would otherwise land.
+    /// </summary>
+    [Fact]
+    public void ACommandStepInAnotherPlanLeavesThisOneAnsweringForTheRunToo()
+    {
+        var tree = _temp.CreateDirectory("cache");
+        var protectedPath = _temp.CreateDirectory("cache", "config");
+
+        var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("elsewhere", "obj"), "Output")], Protect(protectedPath));
+        var reach = new RunReach(plan.TargetedPaths, Unbounded: true);
+
+        Directory.Delete(tree, recursive: true);
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, OutcomeFor(plan, protectedPath));
+        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, protectedPath, reach));
+    }
+
+    /// <summary>
+    /// A protected path spelled with a trailing separator, which a provider's own Path.Combine can
+    /// produce. Without the normalisation, Path.GetDirectoryName hands back the path itself — which
+    /// is missing by definition here — and every such check would read as an outside removal.
+    /// </summary>
+    [Fact]
+    public void ATrailingSeparatorDoesNotMakeAPathItsOwnFolder()
+    {
+        _temp.CreateDirectory("project");
+        var vanished = _temp.CreateDirectory("project", "bin");
+        var plan = Plan(
+            [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
+            Protect(vanished + Path.DirectorySeparatorChar));
+
+        Directory.Delete(vanished);
+
+        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, vanished + Path.DirectorySeparatorChar));
     }
 
     /// <summary>
@@ -221,4 +315,30 @@ public sealed class PlanVerifierTests : IDisposable
         Assert.Contains("removed from outside this run", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("did not survive", summary, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A result holding both kinds accounts for both. Naming the failures alone would say "1 of 3"
+    /// about a run where two paths went unverified, and a §5.6 report that states less than it
+    /// established is the overstatement's mirror image.
+    /// </summary>
+    [Fact]
+    public void TheSummaryCountsBothKindsWhenARunHasBoth()
+    {
+        var result = new VerificationResult
+        {
+            Checks =
+            [
+                Check(VerificationOutcome.Survived),
+                Check(VerificationOutcome.Failed),
+                Check(VerificationOutcome.RemovedFromOutside),
+            ],
+        };
+
+        Assert.Equal(
+            "1 of 3 protected path(s) did not survive, and 1 more were removed from outside this run.",
+            result.Summary);
+    }
+
+    private static VerificationCheck Check(VerificationOutcome outcome) =>
+        new($@"C:\Users\testuser\src\{outcome}", "It must survive.", outcome, "Whatever was found.");
 }
