@@ -279,9 +279,9 @@
 
             <!-- §7: free space, prominently. It is the only number the user came for. -->
             <Border Style="{StaticResource CardStyle}">
-                <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto">
+                <Grid ColumnSpacing="28" RowSpacing="14" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
 
-                    <StackPanel Grid.Column="0" Spacing="10">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="10">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TextBlock Text="{x:Bind ViewModel.FreeSpaceNowLabel, Mode=OneWay}"
                                        Style="{StaticResource HeroFigure}" />
@@ -305,7 +305,8 @@
                     <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
                          disagree whenever anything else on the machine writes during the run, and
                          merging them into one figure is how a user stops trusting the tool. -->
-                    <StackPanel Grid.Column="1"
+                    <StackPanel Grid.Row="0"
+                                Grid.Column="1"
                                 Orientation="Horizontal"
                                 Spacing="28"
                                 VerticalAlignment="Center"
@@ -326,14 +327,28 @@
                                        Style="{StaticResource Figure}" />
                         </StackPanel>
                     </StackPanel>
+
+                    <!-- §5.6's verdict on the run those two figures describe, and it stays as long
+                         as they do. The info bar below cannot hold it: a clean re-plans the list
+                         immediately afterwards, and every provider that scan checks reports a line
+                         of its own into that bar. A verdict there is gone before it is read. -->
+                    <TextBlock Grid.Row="1"
+                               Grid.Column="0"
+                               Grid.ColumnSpan="2"
+                               Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
+                               Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}"
+                               Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}" />
                 </Grid>
             </Border>
         </StackPanel>
 
-        <!-- This line carries the §5.6 verification headline — the most safety-critical string in
-             the app. An InfoBar rather than plain text so a failed verification is distinguishable
-             from routine progress by icon and severity, not only by reading to the end of it. It
-             sits on its own solid surface because §6.5 forbids text that needs the blur to read. -->
+        <!-- This line carries a failed §5.6 verification — the most safety-critical string in the
+             app. An InfoBar rather than plain text so it is distinguishable from routine progress by
+             icon and severity, not only by reading to the end of it, and it is stated here rather
+             than only in the card above because severity is the one thing the card cannot carry. A
+             clean that verified cleanly leaves the bar to the fresh preview's totals and says so in
+             the card instead, where it survives the next scan. It sits on its own solid surface
+             because §6.5 forbids text that needs the blur to read. -->
         <InfoBar Grid.Row="1"
                  IsOpen="True"
                  IsClosable="False"

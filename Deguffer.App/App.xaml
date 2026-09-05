@@ -12,6 +12,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <converters:TierChipStyleConverter x:Key="TierChipStyle" />
+            <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
 
             <!--
                 §7's "colour by tier". These are Styles rather than loose brushes so the colours
@@ -101,6 +102,19 @@
             <Style x:Key="SecondaryText" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <!-- A card's own sentence about what it is showing, under the figures rather than beside
+                 them: it is a statement, not a value, and it has room to wrap. -->
+            <Style x:Key="CardStatement" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+                <Setter Property="FontSize" Value="13" />
+            </Style>
+
+            <!-- The same sentence when it reports a §5.6 failure. Colour only reinforces the words,
+                 which say it outright, because §6.5 forbids a claim that needs the colour to read. -->
+            <Style x:Key="CardStatementCritical" TargetType="TextBlock" BasedOn="{StaticResource CardStatement}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
             <!-- The label above a figure: small, letter-spaced and quiet, so the number carries. -->
