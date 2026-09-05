@@ -293,11 +293,16 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                     "The profile directory itself must survive — only recognised cache directories inside it are removed."));
                 survivors.AddRange(ProtectedProfileFiles.Select(f => (Path.Combine(profile, f.Name), f.Reason)));
 
-                var outcome = CollectFrom(profile, targets, declined, survivors, notes, ct);
+                var walk = CacheLevelWalk.Under(Levels, profile, ct);
 
-                spared += outcome.Spared;
-                emptiedAContainer |= outcome.EmptiedAContainer;
-                unreadable |= outcome.Unreadable;
+                targets.AddRange(walk.Targets);
+                declined.AddRange(walk.Declined);
+                survivors.AddRange(walk.Survivors);
+                notes.AddRange(walk.Notes);
+
+                spared += walk.Spared;
+                emptiedAContainer |= walk.EmptiedAContainer;
+                unreadable |= walk.Unreadable;
             }
 
             // One note per application rather than one per spared child. A Chromium profile holds
@@ -367,133 +372,13 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.2 for one profile: classify the children of each level, target the recognised ones, and
-    /// protect the rest. A spared child is a sibling of a targeted one under the same parent, which
-    /// is exactly when an over-broad rule takes both — so it is asserted to survive rather than
-    /// merely left out of the plan.
-    /// </summary>
-    private static ProfileOutcome CollectFrom(
-        string profile,
-        List<DeletionTarget> targets,
-        List<(string Path, string Reason)> declined,
-        List<(string Path, string Reason)> survivors,
-        List<PlanNote> notes,
-        CancellationToken ct)
-    {
-        var spared = 0;
-        var emptiedAContainer = false;
-        var unreadable = false;
-
-        // A container that is a link is met twice: once as a link child of the profile, and once as
-        // a level whose own directory turns out to be one. Both times it is the same path and the
-        // same sentence. Deduplicating here rather than over the finished note list is what keeps
-        // two applications that happen to share a folder name from collapsing into one note.
-        var reportedLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var level in Levels)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var directory = level.Resolve(profile);
-
-            if (!LongPath.DirectoryExists(directory))
-            {
-                continue;
-            }
-
-            // Applied at every level rather than only at the two reached by name. The profile
-            // directories came from an enumeration that filtered links out, so this answers false
-            // for them today — and that is the point. Phase 1's junction defect existed because the
-            // safety property was riding on a filter nobody had named, and it held only for as long
-            // as every target happened to arrive the same way.
-            if (LongPath.IsReparsePoint(directory))
-            {
-                Decline(directory);
-                continue;
-            }
-
-            var scan = ChildDirectories.Under(directory);
-
-            if (scan.Unreadable)
-            {
-                notes.Add(UnreadableRoot.Note(directory));
-                unreadable = true;
-                continue;
-            }
-
-            foreach (var link in scan.Links)
-            {
-                Decline(LongPath.Display(link.FullName));
-            }
-
-            foreach (var child in scan.Directories)
-            {
-                var classification = level.Children.Classify(child.Name);
-                var path = LongPath.Display(child.FullName);
-
-                if (classification.Tier.IsOfferable())
-                {
-                    targets.Add(new DeletionTarget(path, classification.Reason));
-                    emptiedAContainer |= level.ContainerName.Length > 0;
-                }
-                else
-                {
-                    survivors.Add((path, classification.Reason));
-                    spared++;
-                }
-            }
-        }
-
-        return new ProfileOutcome(spared, emptiedAContainer, unreadable);
-
-        void Decline(string path)
-        {
-            if (!reportedLinks.Add(path))
-            {
-                return;
-            }
-
-            notes.Add(LinkNote(path));
-            declined.Add((path, LinkReason));
-        }
-    }
-
-    /// <summary>What one profile's levels came to, for the sentences the plan carries.</summary>
-    /// <param name="Spared">
-    /// How many children were spared. Counted here rather than from the length of the survivor
-    /// list, which also carries the folder, the profile and the named files — a total including
-    /// those would tell the user that items were left alone in a folder that may not hold them.
-    /// </param>
-    /// <param name="EmptiedAContainer">
-    /// Whether a target came from inside <c>Cache</c> or <c>Service Worker</c>. Those directories
-    /// are kept, so without this the user sees one still standing and cannot tell that the cache
-    /// inside it went.
-    /// </param>
-    /// <param name="Unreadable">
-    /// Whether a level's directory would not be listed. A level is reached by name, and a full path
-    /// resolves through a directory the account may not list — so the level can exist, pass the
-    /// presence probe, and then hand back no children at all. Without this the provider treats that
-    /// as "the cache is empty" and reports the application as keeping no Chromium cache, which its
-    /// own probe already found on disk.
-    /// </param>
-    private readonly record struct ProfileOutcome(int Spared, bool EmptiedAContainer, bool Unreadable);
-
-    private const string LinkReason =
-        "A link rather than a directory, so what it points at was never classified.";
-
-    private static PlanNote LinkNote(string path) => new(
-        PlanNoteSeverity.Information,
-        $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not delete "
-        + "through a link.");
-
-    /// <summary>
     /// Whether any of the six declared names is on disk for this application, by probing the table
     /// rather than by enumerating (G4). Six existence checks per profile, and not one of them can
     /// reach a path the table does not name.
     ///
     /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so an
     /// application whose only cache is a link reports as present here and then yields no target,
-    /// because <see cref="CollectFrom"/> declines it. That is the intended outcome — a plan naming
+    /// because <see cref="CacheLevelWalk"/> declines it. That is the intended outcome — a plan naming
     /// the link beats an empty plan that claims no cache exists — but a future edit must not read
     /// a true from this as licence to delete anything.</para>
     /// </summary>
