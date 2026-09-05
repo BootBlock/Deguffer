@@ -34,7 +34,7 @@ public class ProviderDescriptionTests
     }
 
     /// <summary>
-    /// The failure this guards is a copy-and-paste, which is how twenty-seven hand-written
+    /// The failure this guards is a copy-and-paste, which is how twenty-nine hand-written
     /// explanations go wrong: a provider inherits the paragraph belonging to the one above it and
     /// then describes somebody else's directory. Publishers repeat legitimately — Microsoft owns
     /// several of these — so it is the explanation itself that must be its own.

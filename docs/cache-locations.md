@@ -936,6 +936,93 @@ Tier 3, and the consequence column there says the loss is permanent — which is
 
 ---
 
+## Steam web cache
+
+| **Location** | `%LOCALAPPDATA%\Steam\htmlcache`, and `appcache\httpcache` under wherever Steam is installed |
+| **Method** | Delete the two named caches |
+| **Typical size** | 472 MB in `htmlcache` on the machine this was measured on, out of 513 MB for Steam's whole folder in the profile |
+
+### What it is
+
+The Steam client draws its store, its library and the in-game overlay in a browser built into the
+client, and that browser saves what it downloads. Steam splits the result across **two** directories,
+and only one of them is in your profile:
+
+| Where | What is in it |
+| --- | --- |
+| `%LOCALAPPDATA%\Steam\htmlcache` | The embedded browser's cache — store, library and community pages |
+| `<Steam install>\appcache\httpcache` | The client's own HTTP cache, kept beside the program |
+
+The install directory is not under your profile. It moves with whichever drive you gave your game
+library, and the same folder holds every game you have installed.
+
+### What Deguffer does
+
+**It asks Windows where Steam is rather than assuming.** Steam records its own install directory as
+it starts, and Deguffer reads that record. It then treats the directory as an install only if the
+Steam program is actually sitting in it — a record pointing somewhere Steam is not gets a sentence in
+the plan, not a deletion. If nothing on the machine says where Steam is, the plan says that too, and
+that cache is neither cleared nor ruled out. It is never guessed at.
+
+**Neither folder is ever listed.** Deguffer names the two caches outright and looks at nothing else,
+so there is no route by which something beside them could be found and classified. Each cache is its
+own step, so you can clear one and leave the other.
+
+Steam has no command that clears either cache from outside the running client, so these are deleted
+directly rather than by asking the tool.
+
+### What is protected
+
+**Everything else in both folders**, and the things that matter most are asserted by name rather than
+covered by an assertion on the folder above them:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `steamapps` | Your installed games |
+| `steamapps\common` | The games themselves, on disk |
+| `steamapps\downloading` | The half-downloaded part of an update. Removing it restarts the download |
+| `steamapps\workshop` | Workshop content you subscribed to |
+| `userdata` | Your Steam settings, cloud saves and screenshots, per account |
+| `config` | Steam's own configuration, including who is signed in on this computer |
+| `appcache\appinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes, sitting in the same folder as the cache |
+| `local.vdf` | The Steam client's settings for this computer, sitting in the same folder as the browser cache |
+
+Three things are recognised and then deliberately left alone. `widevine` is a content-decryption
+module Steam downloaded so protected video will play, which is downloaded software rather than a
+cache. `cefdata` is the embedded browser's working data, and nobody has established what removing it
+costs. `appcache\librarycache` is artwork Steam downloaded for your library — a cache, but one whose
+cost to fetch again was never established, so it is measured and not offered.
+
+Deguffer also refuses to delete through a link. If you have moved either cache onto another drive
+with a junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+The client fetches store, library and community pages from the network instead of from disk for a
+while, so they draw more slowly the first time. It may ask you to sign in again to the pages it shows
+inside the client.
+
+**Your installed games, any download in progress, your Workshop content, your cloud saves and your
+settings are untouched.**
+
+Close Steam first if you can. A running client keeps both caches open, and anything held open is left
+in place rather than removed.
+
+### Why Tier 1
+
+Both are copies of pages and files Valve's servers still have. The client downloads what it needs
+again the next time it needs it, and nothing that only exists on your disk is in either of them.
+
+### Not reached: the shader cache
+
+`steamapps\shadercache` holds compiled shaders per game and is commonly several gigabytes where
+pre-caching is enabled. It sits inside a Steam library, and a library can be on any drive rather than
+only beside the program, so reaching every copy of it means finding every library rather than reading
+one recorded path. No machine with one to measure was available either, so it is left for its own
+change.
+
+---
+
 ## Dart analysis server cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
