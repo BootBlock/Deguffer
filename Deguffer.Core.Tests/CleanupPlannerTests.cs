@@ -184,6 +184,7 @@ public sealed class CleanupPlannerTests
                 "dotnet-obj", "unity-library", "cargo-target", "node-modules", "python-venv",
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "uv", "pip",
                 "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
+                "firefox",
                 "platformio", "playwright", "recycle-bin", "crash-dumps", "windows-servicing-logs",
             ],
             planner.Providers.Select(p => p.Id));

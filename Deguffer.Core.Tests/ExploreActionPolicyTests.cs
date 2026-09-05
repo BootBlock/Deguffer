@@ -382,6 +382,37 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A Firefox profile is two directories under two different roots, and only one of them holds
+    /// anything Deguffer will remove. The roaming half is declared here precisely because nothing in
+    /// the provider ever plans against it: without the declaration a user could delete
+    /// <c>logins.json</c> out of the size picture while the Storage page was carefully leaving it
+    /// alone.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "", false)]                  // the cache folder itself
+    [InlineData(true, "cache2", true)]             // a recognised cache
+    [InlineData(true, "startupCache", true)]
+    [InlineData(true, "remote-settings", false)]   // recognised, and deliberately not offered
+    [InlineData(true, "storage", false)]           // unrecognised, so left alone
+    [InlineData(false, "", false)]                 // the profile itself
+    [InlineData(false, "logins.json", false)]      // saved passwords
+    [InlineData(false, "places.sqlite", false)]    // bookmarks and history
+    [InlineData(false, "cache2", false)]           // a cache name in the half that is never touched
+    public void AFirefoxProfileIsClassifiedByWhichHalfItIsIn(bool local, string relative, bool allowed)
+    {
+        RegisterFirefoxProfile();
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var profile = Assert.Single(provider.Profiles());
+        var root = local ? profile.LocalPath : profile.RoamingPath;
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
     /// the root itself.
     ///
@@ -402,6 +433,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
+    [InlineData("firefox", "storage")]                       // a profile's site data
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
@@ -417,20 +449,39 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
     }
 
-    private IReadOnlyList<ICleanupProvider> Providers() =>
-    [
-        new GradleCacheProvider(_environment),
-        new CargoCacheProvider(_environment),
-        new NuGetCacheProvider(_environment),
-        new MavenRepositoryProvider(_environment),
-        new PlatformIoCacheProvider(_environment),
-        new UvCacheProvider(_environment),
-        new PipCacheProvider(_environment),
-        new GoCacheProvider(_environment),
-        new VsCodeCppToolsCacheProvider(_environment),
-        new PlaywrightBrowsersProvider(_environment),
-        new GpuShaderCacheProvider(_environment),
-    ];
+    /// <summary>
+    /// Firefox's roots come from Mozilla's own register rather than from a known path, so the
+    /// provider declares none at all until <c>profiles.ini</c> exists.
+    /// </summary>
+    private void RegisterFirefoxProfile() => File.WriteAllText(
+        _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),
+        """
+        [Profile0]
+        Name=default-release
+        IsRelative=1
+        Path=Profiles/default-release
+        """);
+
+    private IReadOnlyList<ICleanupProvider> Providers()
+    {
+        RegisterFirefoxProfile();
+
+        return
+        [
+            new FirefoxCacheProvider(_environment),
+            new GradleCacheProvider(_environment),
+            new CargoCacheProvider(_environment),
+            new NuGetCacheProvider(_environment),
+            new MavenRepositoryProvider(_environment),
+            new PlatformIoCacheProvider(_environment),
+            new UvCacheProvider(_environment),
+            new PipCacheProvider(_environment),
+            new GoCacheProvider(_environment),
+            new VsCodeCppToolsCacheProvider(_environment),
+            new PlaywrightBrowsersProvider(_environment),
+            new GpuShaderCacheProvider(_environment),
+        ];
+    }
 
     /// <summary>
     /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.For"/> reads §5.2
