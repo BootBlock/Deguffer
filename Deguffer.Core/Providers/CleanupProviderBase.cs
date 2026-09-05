@@ -109,6 +109,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
+        RunReach? runReach = null,
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
@@ -120,11 +121,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 $"Plan belongs to provider '{plan.ProviderId}', not '{Id}'.", nameof(plan));
         }
 
-        return _executor.ExecuteAsync(plan, progress, ct);
+        return _executor.ExecuteAsync(plan, runReach, progress, ct);
     }
 
-    public Task<VerificationResult> VerifyAsync(CleanupPlan plan, CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, ct));
+    public Task<VerificationResult> VerifyAsync(
+        CleanupPlan plan,
+        RunReach? runReach = null,
+        CancellationToken ct = default) =>
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, ct));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()

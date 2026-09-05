@@ -10,8 +10,14 @@ namespace Deguffer.Core.Execution;
 /// </summary>
 public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanner)
 {
+    /// <param name="runReach">
+    /// What the whole run may destroy. §5.6's negative is answered against it rather than against
+    /// this plan alone, because a run is many plans and a folder another provider deleted is not a
+    /// folder something outside Deguffer deleted. Null means this plan is the whole run.
+    /// </param>
     public async Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
+        RunReach? runReach,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -59,7 +65,7 @@ public sealed class PlanExecutor(IProcessRunner runner, IDirectoryScanner scanne
             Duration = stopwatch.Elapsed,
 
             // §5.6 is not a separate user action: acting and proving what survived are one step.
-            Verification = PlanVerifier.Verify(plan, ct),
+            Verification = PlanVerifier.Verify(plan, runReach, ct),
         };
     }
 

@@ -70,7 +70,7 @@ public sealed class PlanExecutorTests : IDisposable
             ],
         };
 
-        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, progress: null, default);
+        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
 
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(cache), "the fixture command did not actually empty the tree.");
@@ -125,7 +125,7 @@ public sealed class PlanExecutorTests : IDisposable
             ],
         };
 
-        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, progress: null, default);
+        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
 
         Assert.Equal(0, result.BytesReclaimed);
     }
@@ -187,7 +187,7 @@ public sealed class PlanExecutorTests : IDisposable
         var progress = new ProgressRecorder<double>();
 
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
-            .ExecuteAsync(plan, progress, default);
+            .ExecuteAsync(plan, runReach: null, progress, default);
 
         // Repeats are ordinary — the removal reports its last file and then its own completion —
         // so the claim is about which values appear and in what order, not how many times.
@@ -223,7 +223,7 @@ public sealed class PlanExecutorTests : IDisposable
         var progress = new ProgressRecorder<double>();
 
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
-            .ExecuteAsync(plan, progress, default);
+            .ExecuteAsync(plan, runReach: null, progress, default);
 
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());
     }
@@ -261,7 +261,7 @@ public sealed class PlanExecutorTests : IDisposable
         var progress = new ProgressRecorder<double>();
 
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
-            .ExecuteAsync(plan, progress, default);
+            .ExecuteAsync(plan, runReach: null, progress, default);
 
         // Two steps, two reports, and nothing else could have produced either of them.
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
@@ -308,7 +308,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
 
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
-            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
 
         var step = Assert.Single(result.Steps);
 
@@ -341,7 +341,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
 
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
-            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
 
         Assert.Equal(0, result.KeptCount);
         Assert.Equal(4096, result.BytesReclaimed);
@@ -370,7 +370,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
 
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
-            .ExecuteAsync(plan, progress: null, CancellationToken.None);
+            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
 
         var step = Assert.Single(result.Steps);
 

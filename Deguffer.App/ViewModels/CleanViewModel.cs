@@ -268,6 +268,24 @@ public sealed partial class CleanViewModel : ObservableObject
     [ObservableProperty]
     public partial bool RunVerificationFailed { get; set; }
 
+    /// <summary>
+    /// Every §5.6 check the run has something to answer for, in full and unabridged.
+    ///
+    /// <para>The sentence above tells the user a protected path went missing and, when it is a
+    /// failure, asks them to report it. Without this it asks them to report something it never told
+    /// them: the paths, the reasons they were protected, and what was found instead all existed in
+    /// <see cref="VerificationResult"/> and reached no surface at all. A request to report a fault,
+    /// with no way to say what the fault was, is a dead end.</para>
+    ///
+    /// <para>Both kinds of check appear here, because both describe a path nobody could verify. The
+    /// sentence is what separates a fault to report from a folder that went away on its own, and
+    /// each row's own detail repeats which of the two it is.</para>
+    /// </summary>
+    public ObservableCollection<VerificationCheck> RunVerificationNotes { get; } = [];
+
+    /// <summary>Whether there is anything in that list, so the card shows it only when there is.</summary>
+    public bool HasRunVerificationNotes => RunVerificationNotes.Count > 0;
+
     [ObservableProperty]
     public partial string SelectedTotalLabel { get; set; } = FreeSpace.Format(0);
 
@@ -648,6 +666,17 @@ public sealed partial class CleanViewModel : ObservableObject
         RunStatement = outcome.Statement;
         RunVerificationFailed = outcome.VerificationFailed;
 
+        RunVerificationNotes.Clear();
+
+        foreach (var check in results
+            .Select(r => r.Verification)
+            .OfType<VerificationResult>()
+            .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside)))
+        {
+            RunVerificationNotes.Add(check);
+        }
+
+        OnPropertyChanged(nameof(HasRunVerificationNotes));
         OnPropertyChanged(nameof(HasRunResult));
 
         return outcome;
@@ -662,16 +691,24 @@ public sealed partial class CleanViewModel : ObservableObject
     /// from routine text without reading to the end of the line, and announced as a problem rather
     /// than read out as one more line of text.</para>
     ///
-    /// <para>Every other outcome yields to the fresh preview's totals, which describe the list now
-    /// on screen. That sentence is also the only one a selection change may keep current, so
-    /// stating it here is what makes ticking a row after a clean move the bar rather than leave it
-    /// describing a machine two operations ago.</para>
+    /// <para>A protected path taken by something else keeps it too, as a warning rather than an
+    /// error. It is not a fault to report, but it is the reason the run's figures describe a machine
+    /// that moved while the preview sat on screen — and yielding to the fresh preview's totals would
+    /// replace that explanation with the numbers it explains.</para>
+    ///
+    /// <para>Every other outcome yields to those totals, which describe the list now on screen. That
+    /// sentence is also the only one a selection change may keep current, so stating it here is what
+    /// makes ticking a row after a clean move the bar rather than leave it describing a machine two
+    /// operations ago.</para>
     /// </summary>
     private void ReportOutcome(RunOutcome outcome)
     {
-        if (outcome.VerificationFailed)
+        if (outcome.NeedsReporting)
         {
-            Report(outcome.Statement, InfoBarSeverity.Error);
+            Report(
+                outcome.Statement,
+                outcome.VerificationFailed ? InfoBarSeverity.Error : InfoBarSeverity.Warning);
+
             return;
         }
 
@@ -731,6 +768,8 @@ public sealed partial class CleanViewModel : ObservableObject
         FreeSpaceChangeLabel = string.Empty;
         RunStatement = string.Empty;
         RunVerificationFailed = false;
+        RunVerificationNotes.Clear();
+        OnPropertyChanged(nameof(HasRunVerificationNotes));
         OnPropertyChanged(nameof(HasRunResult));
     }
 

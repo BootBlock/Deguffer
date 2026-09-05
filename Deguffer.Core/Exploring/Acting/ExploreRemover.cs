@@ -347,10 +347,14 @@ public static class ExploreRemover
         {
             var survives = LongPath.DirectoryExists(parent);
 
+            // No outcome here is ever VerificationOutcome.RemovedFromOutside, and that is a property
+            // of this flow rather than an omission: the "before" listing is taken immediately before
+            // the removal, so there is no preview sitting on screen for the machine to change under.
+            // What PlanVerifier has to disentangle cannot arise.
             checks.Add(new VerificationCheck(
                 parent,
                 "The folder the item was taken out of must survive.",
-                survives,
+                survives ? VerificationOutcome.Survived : VerificationOutcome.Failed,
                 survives ? "Still present." : "MISSING — it was there before the removal."));
 
             // A listing that never happened is recorded as a failure rather than as a pass. §5.6
@@ -362,7 +366,7 @@ public static class ExploreRemover
                 ? new VerificationCheck(
                     parent,
                     "Everything beside the removed item must survive.",
-                    Passed: false,
+                    VerificationOutcome.Failed,
                     "NOT ESTABLISHED — this folder would not list its contents, so nothing beside "
                     + "the removed item could be checked.")
                 : SiblingsSurvived(parent, names, removed, fs));
@@ -382,7 +386,7 @@ public static class ExploreRemover
         if (Names(parent, fs) is not { } after)
         {
             return new VerificationCheck(
-                parent, Reason, Passed: false,
+                parent, Reason, VerificationOutcome.Failed,
                 "Could not be checked: this folder listed its contents before the removal and would "
                 + "not afterwards.");
         }
@@ -395,9 +399,10 @@ public static class ExploreRemover
 
         return missing.Count == 0
             ? new VerificationCheck(
-                parent, Reason, Passed: true, $"All {expected} other item(s) are still there.")
+                parent, Reason, VerificationOutcome.Survived,
+                $"All {expected} other item(s) are still there.")
             : new VerificationCheck(
-                parent, Reason, Passed: false,
+                parent, Reason, VerificationOutcome.Failed,
                 $"MISSING — {missing.Count} of {expected} other item(s) went too, starting with "
                 + $"'{string.Join("', '", missing.Take(3))}'.");
     }

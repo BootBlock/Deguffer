@@ -222,10 +222,14 @@ public sealed class ElevationOfferTests
             throw new NotSupportedException();
 
         public Task<CleanupResult> ExecuteAsync(
-            CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default) =>
+            CleanupPlan plan,
+            RunReach? runReach = null,
+            IProgress<double>? progress = null,
+            CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<VerificationResult> VerifyAsync(CleanupPlan plan, CancellationToken ct = default) =>
+        public Task<VerificationResult> VerifyAsync(
+            CleanupPlan plan, RunReach? runReach = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 }
