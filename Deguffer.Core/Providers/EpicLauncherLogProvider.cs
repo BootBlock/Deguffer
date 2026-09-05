@@ -35,6 +35,8 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
+    private EpicLauncherSaved.SavedFolder? _saved;
+
     public EpicLauncherLogProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
@@ -78,62 +80,68 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     public string SavedPath => EpicLauncherSaved.PathIn(Environment);
 
     /// <summary>
-    /// Presence is one of the two declared folders actually being there, probed by name rather than
-    /// by enumerating (G4). The <c>Saved</c> folder exists on every machine that has opened the
-    /// launcher, so reading it as a hit would report this source and then plan nothing.
+    /// Presence is one of the two declared folders actually being there. The <c>Saved</c> folder
+    /// exists on every machine that has opened the launcher, so reading it as a hit would report
+    /// this source and then plan nothing.
     ///
-    /// <para>A link on the way down counts as present, because the sentence saying what Deguffer
-    /// declined to look at lives in the plan, and the planner never asks an absent provider for
-    /// one.</para>
+    /// <para><b>The two cases that are not a log are here because the planner never asks an absent
+    /// provider for a plan.</b> A link on the derived path, and a <c>Saved</c> folder that refuses
+    /// to be listed, each have their own sentence in <see cref="BuildPlanAsync"/>, and both are
+    /// unreachable if this answers false. The row then reads "Not installed" about a launcher that
+    /// is installed, which is a stronger untruth than the "Already clear" it would otherwise be —
+    /// and the refusal is not hypothetical, because Windows takes the right to list a folder and the
+    /// right to traverse it away together, so a probe by name would answer false for a folder that
+    /// is plainly there.</para>
     ///
-    /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so a folder
-    /// that is a link reports as present here and then yields no target, because
-    /// <see cref="BuildPlanAsync"/> declines it.</para>
+    /// <para>A junctioned child counts too. It yields no target, because
+    /// <see cref="BuildPlanAsync"/> declines it, but it is a child the user can see and the plan
+    /// says so.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
-        if (EpicLauncherSaved.FirstLinkTo(Environment) is not null)
-        {
-            return Task.FromResult(true);
-        }
+        var saved = Look();
 
-        var saved = SavedPath;
-
-        foreach (var name in EpicLauncherSaved.Diagnostics.DisposableNames)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            if (LongPath.DirectoryExists(Path.Combine(saved, name)))
-            {
-                return Task.FromResult(true);
-            }
-        }
-
-        return Task.FromResult(false);
+        return Task.FromResult(
+            saved.HasSomethingToReport
+            || saved.Named(EpicLauncherSaved.Diagnostics.IsDisposable).Any());
     }
+
+    public override void InvalidateCaches()
+    {
+        _saved = null;
+        base.InvalidateCaches();
+    }
+
+    /// <summary>
+    /// The shared look at the <c>Saved</c> folder, memoised for the life of a planning pass (G4).
+    /// Presence and planning ask the same question of the same directory, and this is the one
+    /// enumeration behind both.
+    /// </summary>
+    private EpicLauncherSaved.SavedFolder Look() => _saved ??= EpicLauncherSaved.Look(Environment);
 
     /// <summary>§5.2 as §7.1 needs it read from outside. The declaration is the shared one.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => [EpicLauncherSaved.Root(Environment)];
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
+        var folder = Look();
+
         // Before the existence check, not after it. A link partway up resolves onto a directory that
         // holds no launcher folder of its own, so Saved reads as absent and the pass would end
         // reporting nothing at all about a redirection it did detect.
-        if (EpicLauncherSaved.FirstLinkTo(Environment) is { } link)
+        if (folder.Link is { } link)
         {
             return UnexaminedPlan(
                 $"Leaving '{link}' alone: it is a link to somewhere else, and Deguffer does not look "
                 + "through a link.");
         }
 
-        var saved = SavedPath;
-
-        if (!LongPath.DirectoryExists(saved))
+        if (!folder.Exists)
         {
             return EmptyPlan("The Epic Games launcher has kept no folder in this user's account.");
         }
 
+        var saved = SavedPath;
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
@@ -146,13 +154,11 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
         survivors.AddRange(EpicLauncherSaved.ProtectedNames.Select(
             n => (Path.Combine(saved, n.Name), n.Reason)));
 
-        var scan = ChildDirectories.Under(saved);
-
         // The folder was found on disk by name above, and a listing right is separate from a
         // traverse right — so a refusal here leaves a plan with no steps and, without this, nothing
         // said. The shell renders that as "Already clear", which is a claim about a folder nobody
         // read.
-        if (scan.Unreadable)
+        if (folder.Unreadable)
         {
             notes.Add(UnreadableRoot.Note(saved));
         }
@@ -160,7 +166,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
         // Only the links this provider would otherwise have removed. A link named 'webcache_4430'
         // is a child of the same folder and is the web cache row's subject, not this one's, and
         // naming it here would put a sentence about somebody else's row in front of the user.
-        foreach (var linked in scan.Links.Where(l => EpicLauncherSaved.Diagnostics.IsDisposable(l.Name)))
+        foreach (var linked in folder.Links.Where(l => EpicLauncherSaved.Diagnostics.IsDisposable(l.Name)))
         {
             var path = LongPath.Display(linked.FullName);
 
@@ -174,7 +180,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
 
         var spared = 0;
 
-        foreach (var child in scan.Directories)
+        foreach (var child in folder.Children)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -205,7 +211,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
                 + "that folder."));
         }
 
-        if (targets.Count == 0 && declined.Count == 0 && !scan.Unreadable)
+        if (targets.Count == 0 && declined.Count == 0 && !folder.Unreadable)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
@@ -238,7 +244,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
                 [.. survivors.Concat(declined).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
             Notes = notes,
             Fallback = measured.Fallback,
-            HasUnreadableRoot = scan.Unreadable,
+            HasUnreadableRoot = folder.Unreadable,
             WasNotExamined = targets.Count == 0 && declined.Count > 0,
         };
     }

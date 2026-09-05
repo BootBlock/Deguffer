@@ -134,6 +134,37 @@ public static partial class EpicLauncherSaved
         DerivedPath.FirstLinkBetween(environment.LocalAppData, PathIn(environment));
 
     /// <summary>
+    /// One look at the <c>Saved</c> folder: whether the path down to it is a link, whether it is
+    /// there, whether it would be listed, and what it holds.
+    ///
+    /// <para>Shared because both providers need every one of those four facts and neither may
+    /// answer any of them differently. It is the folder's state, not one provider's view of it.</para>
+    ///
+    /// <para>The link on the derived path is answered <b>before</b> anything is listed. Listing
+    /// through it would return the far side's ordinary directories, and a recognised name among them
+    /// would be targeted while every §5.6 survivor named for this folder resolved through the same
+    /// link and passed — the vacuous negative.</para>
+    /// </summary>
+    public static SavedFolder Look(IUserEnvironment environment)
+    {
+        if (FirstLinkTo(environment) is { } link)
+        {
+            return new SavedFolder(link, Exists: true, Unreadable: false, [], []);
+        }
+
+        var saved = PathIn(environment);
+
+        if (!LongPath.DirectoryExists(saved))
+        {
+            return new SavedFolder(null, Exists: false, Unreadable: false, [], []);
+        }
+
+        var scan = ChildDirectories.Under(saved);
+
+        return new SavedFolder(null, Exists: true, scan.Unreadable, scan.Directories, scan.Links);
+    }
+
+    /// <summary>
     /// §5.2 as §7.1 needs it read from outside: the <c>Saved</c> folder itself is never a target,
     /// and below it only the two diagnostic folders are recognised.
     ///
@@ -153,4 +184,46 @@ public static partial class EpicLauncherSaved
         + "your vault settings are in it, and Deguffer removes the caches and logs from the Storage "
         + "page, where it knows which of them are which.",
         Diagnostics);
+
+    /// <summary>What one look at the <c>Saved</c> folder found.</summary>
+    /// <param name="Link">
+    /// The first segment of the derived path down to <c>Saved</c> that is a link, or null when none
+    /// of them is. Nothing below it was listed when this is set.
+    /// </param>
+    /// <param name="Exists">
+    /// Whether the folder is there at all. Distinct from <paramref name="Unreadable"/>, because
+    /// absence is a complete answer — nothing is inside it — and a refusal is not an answer at all.
+    /// </param>
+    /// <param name="Unreadable">
+    /// The folder refused to be listed, so the two lists below describe nothing rather than
+    /// describing a folder with nothing in it.
+    /// </param>
+    /// <param name="Children">Its directory children, links already separated out.</param>
+    /// <param name="Links">
+    /// The children that are junctions or symbolic links. Reported rather than dropped: one is a
+    /// child the user can see, and a plan that neither offers it nor mentions it disagrees with the
+    /// folder. It is never followed.
+    /// </param>
+    public readonly record struct SavedFolder(
+        string? Link,
+        bool Exists,
+        bool Unreadable,
+        IReadOnlyList<DirectoryInfo> Children,
+        IReadOnlyList<DirectoryInfo> Links)
+    {
+        /// <summary>
+        /// Whether this folder is something a row must speak about even though it yields no target.
+        ///
+        /// <para>The planner never asks an absent provider for a plan, so a sentence a provider can
+        /// only say from its plan is unreachable unless presence is true. A link on the way down and
+        /// a folder that will not be listed are both cases where saying "Not installed" about an
+        /// installed launcher is a stronger untruth than the "Already clear" it would otherwise
+        /// be.</para>
+        /// </summary>
+        public bool HasSomethingToReport => Link is not null || Unreadable;
+
+        /// <summary>The children, link or not, whose names <paramref name="recognises"/> accepts.</summary>
+        public IEnumerable<DirectoryInfo> Named(Predicate<string> recognises) =>
+            Children.Concat(Links).Where(child => recognises(child.Name));
+    }
 }

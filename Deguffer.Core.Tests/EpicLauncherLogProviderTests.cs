@@ -132,6 +132,33 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A folder that will not be listed is not a folder with nothing in it.
+    ///
+    /// <para>Probing the two names directly would answer false here, because Windows takes the right
+    /// to list a folder and the right to traverse it away together — so <c>Directory.Exists</c> on a
+    /// path through it returns false for a folder that is plainly there. The row would then read
+    /// "Not installed" about an installed launcher, and the sentence saying the folder could not be
+    /// read would be unreachable, because the planner never asks an absent provider for a plan.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnUnreadableLauncherFolderIsReportedRatherThanCalledAbsent()
+    {
+        CreateDirectory(Path.Combine(Saved, "Logs"));
+
+        using var denied = new DeniedDirectory(Saved);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(Saved, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// §5.6. The settings, the cloud saves and the store's browser folder sit in the same directory
     /// listing as the two that go. Asserting that the logs went is half a test.
     /// </summary>

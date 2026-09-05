@@ -192,6 +192,70 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The credential surface is named in full rather than sampled, on the Chromium provider's
+    /// reasoning: a file is never enumerated and so never asserted unless the provider names it, and
+    /// anything less makes the §5.6 evidence weaker than the claim it supports. A newer engine build
+    /// moves the cookie jar under <c>Network</c>, and the store takes payment, so all four names
+    /// belong here.
+    /// </summary>
+    [Fact]
+    public async Task TheWholeCredentialSurfaceIsAssertedToSurvive()
+    {
+        var fixture = AddWebCache();
+
+        string[] credentials =
+        [
+            Path.Combine(fixture.Root, "Login Data"),
+            Path.Combine(fixture.Root, "Web Data"),
+            Path.Combine(fixture.Root, "Network", "Cookies"),
+        ];
+
+        foreach (var path in credentials)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "<REDACTED>");
+        }
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        foreach (var path in credentials)
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.All(credentials, path => Assert.Equal("<REDACTED>", File.ReadAllText(path)));
+    }
+
+    /// <summary>
+    /// A folder that will not be listed is not a folder with nothing in it. Answering "not
+    /// installed" here would make a claim about a directory nobody read, and would also leave the
+    /// sentence that says so unreachable — the planner never asks an absent provider for a plan.
+    /// </summary>
+    [Fact]
+    public async Task AnUnreadableLauncherFolderIsReportedRatherThanCalledAbsent()
+    {
+        Directory.CreateDirectory(Saved);
+
+        using var denied = new DeniedDirectory(Saved);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(Saved, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// §5.2's dangerous direction is an unknown thing treated as safe. A Chromium profile is full of
     /// directories in the same naming style as the caches, so a name the table does not carry has to
     /// land at Tier 4 rather than be guessed at.

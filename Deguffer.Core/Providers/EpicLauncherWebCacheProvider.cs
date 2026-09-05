@@ -98,17 +98,33 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
-    /// The one file in a web cache folder that §5.6 must name. Every other thing worth sparing in
-    /// there is a directory, so the enumeration classifies it and the plan asserts it — but a file
-    /// is never enumerated, never classified and never asserted unless a provider names it, and this
-    /// is the file the whole shape of this provider exists to protect.
+    /// The credential surface inside a web cache folder, named in full rather than sampled.
+    ///
+    /// <para>Named at all because child classification enumerates directories, so anything that is a
+    /// file is never seen, never classified and never asserted unless a provider names it. These are
+    /// the reason this provider reaches into a web cache folder rather than removing it, and an
+    /// assertion that the folder survived would pass with every one of them gone.</para>
+    ///
+    /// <para>In full rather than sampled, on <see cref="ChromiumCacheProvider"/>'s reasoning:
+    /// anything less makes the §5.6 evidence weaker than the claim it supports. A web cache folder
+    /// is a Chromium profile directory and the launcher's store takes payment, so the whole set
+    /// belongs here even though the measured machine held only the cookie. <c>Cookies</c> is listed
+    /// at both paths because Chromium moved it under <c>Network</c> and an older profile keeps it at
+    /// the top level; whichever is absent records itself as nothing to preserve rather than as a
+    /// pass.</para>
     /// </summary>
-    private const string SignInCookies = "Cookies";
+    private static readonly (string Name, string Reason)[] ProtectedProfileFiles =
+    [
+        ("Cookies", "The store's sign-in cookies. Removing them signs you out of the launcher's store."),
+        (@"Network\Cookies", "The store's sign-in cookies. Removing them signs you out of the launcher's store."),
+        ("Login Data", "Any username and password the store's browser saved."),
+        ("Web Data", "Any address and payment card the store's browser saved."),
+    ];
 
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
-    private SavedFolderScan? _saved;
+    private WebCacheScan? _scan;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
     public EpicLauncherWebCacheProvider(
@@ -162,7 +178,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     ///
     /// Exposed so tests can assert what was and was not found.
     /// </summary>
-    public SavedFolderScan Look(CancellationToken ct = default) => _saved ??= Examine(ct);
+    public WebCacheScan Look(CancellationToken ct = default) => _scan ??= Examine(ct);
 
     /// <summary>The web cache folders on disk, which is what most callers want from a look.</summary>
     public IReadOnlyList<string> WebCaches(CancellationToken ct = default) => Look(ct).WebCaches;
@@ -196,7 +212,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _saved = null;
+        _scan = null;
         _toolRoots = null;
         base.InvalidateCaches();
     }
@@ -215,13 +231,12 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
-        var saved = Look(ct);
+        var scan = Look(ct);
 
         return Task.FromResult(
-            saved.Link is not null
-            || saved.Unreadable
-            || saved.WebCaches.Count > 0
-            || saved.LinkedWebCaches.Count > 0);
+            scan.Folder.HasSomethingToReport
+            || scan.WebCaches.Count > 0
+            || scan.LinkedWebCaches.Count > 0);
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -231,14 +246,14 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         // Before the existence check, not after it. A link partway up resolves onto a directory that
         // holds no launcher folder of its own, so Saved reads as absent and the pass would end
         // reporting nothing at all about a redirection it did detect.
-        if (look.Link is { } link)
+        if (look.Folder.Link is { } link)
         {
             return UnexaminedPlan(
                 $"Leaving '{link}' alone: it is a link to somewhere else, and Deguffer does not look "
                 + "through a link.");
         }
 
-        if (!look.Exists)
+        if (!look.Folder.Exists)
         {
             return EmptyPlan("The Epic Games launcher has kept no folder in this user's account.");
         }
@@ -261,7 +276,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         // traverse right — so a refusal here leaves a plan with no steps and, without this, nothing
         // said. The shell renders that as "Already clear", which is a claim about a folder nobody
         // read.
-        if (look.Unreadable)
+        if (look.Folder.Unreadable)
         {
             notes.Add(UnreadableRoot.Note(saved));
         }
@@ -272,7 +287,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
             declined.Add((path, LinkReason));
         }
 
-        var unreadable = look.Unreadable;
+        var unreadable = look.Folder.Unreadable;
         var emptiedAContainer = false;
         var spared = 0;
 
@@ -284,9 +299,8 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                 cache,
                 "The store's browser folder itself must survive — only recognised caches inside it "
                 + "are removed."));
-            survivors.Add((
-                Path.Combine(cache, SignInCookies),
-                "The store's sign-in cookies. Removing them signs you out of the launcher's store."));
+            survivors.AddRange(ProtectedProfileFiles.Select(
+                file => (Path.Combine(cache, file.Name), file.Reason)));
 
             var outcome = CollectFrom(cache, targets, declined, survivors, notes, ct);
 
@@ -314,11 +328,13 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 
         if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
+            // One sentence, not two. Reaching here needs no target, no declined link and a
+            // readable folder, and the only remaining way presence could have been true is a web
+            // cache folder actually being there — so an "and no web cache folder either" arm would
+            // be a branch for a case the planner never asks about.
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                caches.Count == 0
-                    ? "The Epic Games launcher's store has kept no web cache on this machine."
-                    : "The Epic Games launcher's store is holding no cache on disk."));
+                "The Epic Games launcher's store is holding no cache on disk."));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -353,36 +369,20 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// What one listing of the <c>Saved</c> folder found, or the refusal that stopped it.
+    /// The shared look at the <c>Saved</c> folder, with this provider's own subject picked out of
+    /// it.
     ///
-    /// <para>A link on the derived path is answered before anything is listed, because listing
-    /// through it would return the far side's ordinary directories — and a recognised name among
-    /// them would be targeted while every §5.6 survivor named for this folder resolved through the
-    /// same link and passed.</para>
-    ///
-    /// <para>Only the links named like a web cache folder are kept. A link named <c>Config</c> is a
-    /// child of the same folder, but it is not this provider's subject, and naming it on a row about
-    /// web caches would put a sentence in front of the user with nothing to do with what the row
-    /// removes.</para>
+    /// <para>Only the children named like a web cache folder are kept, links included. A child named
+    /// <c>Config</c> belongs to the same folder, but it is not this provider's subject, and naming it
+    /// on a row about web caches would put a sentence in front of the user with nothing to do with
+    /// what the row removes.</para>
     /// </summary>
-    private SavedFolderScan Examine(CancellationToken ct)
+    private WebCacheScan Examine(CancellationToken ct)
     {
-        if (EpicLauncherSaved.FirstLinkTo(Environment) is { } link)
-        {
-            return new SavedFolderScan(link, [], [], Unreadable: false, Exists: true);
-        }
-
-        var saved = SavedPath;
-
-        if (!LongPath.DirectoryExists(saved))
-        {
-            return new SavedFolderScan(null, [], [], Unreadable: false, Exists: false);
-        }
-
-        var scan = ChildDirectories.Under(saved);
+        var folder = EpicLauncherSaved.Look(Environment);
         var found = new List<string>();
 
-        foreach (var child in scan.Directories)
+        foreach (var child in folder.Children)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -392,16 +392,14 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
             }
         }
 
-        return new SavedFolderScan(
-            null,
+        return new WebCacheScan(
+            folder,
             found,
             [
-                .. scan.Links
+                .. folder.Links
                     .Where(l => EpicLauncherSaved.WebCacheDirectory().IsMatch(l.Name))
                     .Select(l => LongPath.Display(l.FullName)),
-            ],
-            scan.Unreadable,
-            Exists: true);
+            ]);
     }
 
     /// <summary>
@@ -499,31 +497,18 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not delete "
         + "through a link.");
 
-    /// <summary>What one listing of the <c>Saved</c> folder found.</summary>
-    /// <param name="Link">
-    /// The first segment of the derived path down to <c>Saved</c> that is a link, or null when none
-    /// of them is. Nothing below it was listed when this is set.
-    /// </param>
+    /// <summary>The shared look at the <c>Saved</c> folder, plus this provider's subject in it.</summary>
+    /// <param name="Folder">Whether the folder is reachable, readable and there, and what it holds.</param>
     /// <param name="WebCaches">The web cache folders, in display form.</param>
     /// <param name="LinkedWebCaches">
     /// Children named like a web cache folder that turned out to be links. Reported rather than
     /// dropped: one is a child the user can see, and a plan that neither offers it nor mentions it
     /// disagrees with the folder.
     /// </param>
-    /// <param name="Unreadable">
-    /// The folder refused to be listed, so the two lists above describe nothing rather than
-    /// describing a folder with nothing in it.
-    /// </param>
-    /// <param name="Exists">
-    /// Whether the folder is there at all. Distinct from <paramref name="Unreadable"/>, because
-    /// absence is a complete answer and a refusal is not an answer at all.
-    /// </param>
-    public readonly record struct SavedFolderScan(
-        string? Link,
+    public readonly record struct WebCacheScan(
+        EpicLauncherSaved.SavedFolder Folder,
         IReadOnlyList<string> WebCaches,
-        IReadOnlyList<string> LinkedWebCaches,
-        bool Unreadable,
-        bool Exists);
+        IReadOnlyList<string> LinkedWebCaches);
 
     /// <summary>What one web cache folder's levels came to, for the sentences the plan carries.</summary>
     /// <param name="Spared">

@@ -404,6 +404,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Theory]
     [InlineData("", false)]                                     // the launcher folder itself
     [InlineData("Config", false)]                               // the launcher settings
+    [InlineData("Data", false)]                                 // the launcher's own state
     [InlineData("Saves", false)]                                // cloud saves
     [InlineData("UserVaultSettings", false)]
     [InlineData("Crashes", true)]                               // Tier 3, and offered
@@ -433,6 +434,45 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.Equal(
             allowed,
             policy.MayRemove(relative.Length == 0 ? saved : Path.Combine(saved, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Two providers act inside the Epic launcher's folder, and both declare it. That is redundant
+    /// on a machine where both are registered, and deliberate anyway: a declaration carried by only
+    /// one of them would leave Explore willing to remove somebody's launcher settings the moment the
+    /// other was the provider dropped.
+    ///
+    /// <para>The policy reads every provider's roots into one list, so the duplicate has to answer
+    /// the same way whichever of the two it resolves to — which is what makes the redundancy free
+    /// rather than ambiguous.</para>
+    /// </summary>
+    [Fact]
+    public void TheLauncherFolderAnswersTheSameWhicheverProviderDeclaredIt()
+    {
+        var saved = _temp.CreateDirectory(
+            "profile", "AppData", "Local", "EpicGamesLauncher", "Saved");
+
+        ICleanupProvider[] providers =
+        [
+            new EpicLauncherWebCacheProvider(_environment),
+            new EpicLauncherLogProvider(_environment),
+        ];
+
+        var together = new ExploreActionPolicy([], providers.SelectMany(p => p.ToolRoots));
+
+        foreach (var provider in providers)
+        {
+            var alone = new ExploreActionPolicy([], provider.ToolRoots);
+
+            foreach (var relative in new[] { "Config", "Data", "Saves", "UserVaultSettings", "Crashes", "Logs" })
+            {
+                var path = Path.Combine(saved, relative);
+
+                Assert.Equal(alone.MayRemove(path).IsAllowed, together.MayRemove(path).IsAllowed);
+            }
+
+            Assert.False(together.MayRemove(saved).IsAllowed);
+        }
     }
 
     /// <summary>
