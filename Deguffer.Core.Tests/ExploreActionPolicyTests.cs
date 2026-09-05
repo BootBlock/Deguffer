@@ -39,16 +39,30 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// §9's two exclusions by name. They are covered by the rule above, and naming them anyway is
-    /// the point: §9 is enforced by nothing except not reaching those paths, so an assertion that
-    /// says "we did not reach them" is what turns that into evidence.
+    /// §9's exclusions inside the Windows directory, by name. They are covered by the rule above,
+    /// and naming them anyway is the point: §9 is enforced by nothing except not reaching those
+    /// paths, so an assertion that says "we did not reach them" is what turns that into evidence.
     /// </summary>
     [Theory]
     [InlineData("WinSxS")]
     [InlineData("Installer")]
-    public void TheSection9ExclusionsAreRefused(string name)
+    public void TheSection9ExclusionsInsideWindowsAreRefused(string name)
     {
         Assert.False(Policy().MayRemove(Path.Combine(_system.WindowsDirectory, name)).IsAllowed);
+    }
+
+    /// <summary>
+    /// §9's other two, which sit under a different root and so are named separately. Both are
+    /// installer caches with the same failure mode, and both are among the largest directories on a
+    /// developer's machine — which is exactly the shape of thing a size picture invites somebody to
+    /// act on, so the refusal is worth an assertion of its own rather than inheriting one.
+    /// </summary>
+    [Theory]
+    [InlineData("Package Cache")]
+    [InlineData(@"Microsoft\VisualStudio\Packages")]
+    public void TheInstallerCachesUnderProgramDataAreRefused(string relativePath)
+    {
+        Assert.False(Policy().MayRemove(Path.Combine(_system.ProgramData, relativePath)).IsAllowed);
     }
 
     /// <summary>
@@ -457,6 +471,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("pip", "pip.ini")]                           // private index URLs
     [InlineData("go", "src")]                                // the user's own code
     [InlineData("vscode-cpptools", "something-unrecognised")]
+    [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
@@ -488,26 +503,27 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Path=Profiles/default-release
         """);
 
-    private IReadOnlyList<ICleanupProvider> Providers()
-    {
-        RegisterFirefoxProfile();
-
-        return
-        [
-            new FirefoxCacheProvider(_environment),
-            new GradleCacheProvider(_environment),
-            new CargoCacheProvider(_environment),
-            new NuGetCacheProvider(_environment),
-            new MavenRepositoryProvider(_environment),
-            new PlatformIoCacheProvider(_environment),
-            new UvCacheProvider(_environment),
-            new PipCacheProvider(_environment),
-            new GoCacheProvider(_environment),
-            new VsCodeCppToolsCacheProvider(_environment),
-            new PlaywrightBrowsersProvider(_environment),
-            new GpuShaderCacheProvider(_environment),
-        ];
-    }
+    /// <summary>
+    /// Firefox is deliberately absent. The sweep above probes a sibling of <c>ToolRoots[0]</c>, and
+    /// Firefox's first root recognises nothing at all, so the probe would be refused structurally
+    /// rather than by the allow-list — an assertion that cannot fail. Its two dedicated theories
+    /// cover both roots and the unrecognised sibling properly.
+    /// </summary>
+    private IReadOnlyList<ICleanupProvider> Providers() =>
+    [
+        new GradleCacheProvider(_environment),
+        new CargoCacheProvider(_environment),
+        new NuGetCacheProvider(_environment),
+        new MavenRepositoryProvider(_environment),
+        new PlatformIoCacheProvider(_environment),
+        new UvCacheProvider(_environment),
+        new PipCacheProvider(_environment),
+        new GoCacheProvider(_environment),
+        new VsCodeCppToolsCacheProvider(_environment),
+        new DartAnalysisServerProvider(_environment),
+        new PlaywrightBrowsersProvider(_environment),
+        new GpuShaderCacheProvider(_environment),
+    ];
 
     /// <summary>
     /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.For"/> reads §5.2

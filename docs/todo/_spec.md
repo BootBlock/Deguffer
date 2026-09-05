@@ -136,6 +136,7 @@ the single most useful signal here.
 | `C:\Windows\WinSxS` | 16.1 GB | Never safe to delete manually. Only `DISM /StartComponentCleanup` may touch it, and `/ResetBase` blocks update rollback |
 | `C:\Windows\Installer` | 12.5 GB | Orphaned MSI patches. Deleting the wrong file breaks repair *and* uninstall, permanently |
 | `C:\ProgramData\Package Cache` | 6.7 GB | Visual Studio installer cache; removing breaks repair/modify |
+| `C:\ProgramData\Microsoft\VisualStudio\Packages` | 7.7 GB | The installer's payload cache, and a different directory from the row above — a machine has both. Removing it breaks an offline repair or modify, and there is no allow-list to be had: the children are one per payload, and the installer's own record of each installed product sits among them. See §9 |
 | `pagefile.sys` | 5.0 GB | System-managed |
 | Application VM disk images (e.g. `*.vhdx` under a packaged app) | 8.1 GB | Live application state |
 
@@ -429,3 +430,33 @@ large and tempting — ~35 GB on the audited machine — but the failure modes a
 uninstall, unbootable rollback) and the safe operations are already exposed by `DISM` and the
 vendors' own tooling. A tool that is trusted to clear caches should not stake that trust on Windows
 servicing internals.
+
+**The installer package caches are two directories, and both are named here rather than implied.**
+`C:\ProgramData\Package Cache` and `C:\ProgramData\Microsoft\VisualStudio\Packages` sit apart, hold
+the same kind of thing, and cost about the same — 6.7 GB in the founding audit, and 7.7 GB measured
+on a Windows 11 workstation since, which makes the second the largest single location no provider
+reaches. Naming only the first left the larger one excluded by a plural, and a reader could not tell
+whether it had been considered.
+
+Deguffer therefore **reports them and never offers them**: `%PROGRAMDATA%` is refused from Explore,
+no provider targets either path, and both are named survivors on the one provider that declares that
+root, so §5.6 produces evidence about them rather than silence. What the app does say is what each
+one is and what clearing it costs, which is the reader's actual question when a size picture puts
+seven gigabytes in front of them.
+
+A Tier 2 provider was the alternative, and two rules rule it out:
+
+- **§5.1's vendor route is not an eviction command.** `vs_installer.exe --nocache`, and the
+  `KeepDownloadedPayloads` policy behind it, remove the existing payloads *for one product* as a side
+  effect of the next install, modify or repair of that product. Nothing clears the cache on request.
+  A step that frees no space when it runs cannot be previewed, cannot be reported against free space
+  before and after, and gives §5.6 nothing to verify.
+- **§5.2 cannot be satisfied by a path rule.** The measured machine held 1,249 children, one per
+  payload, named by component and version and different on every machine and after every update. No
+  allow-list can be written, so every child is unrecognised and therefore Tier 4 — and a deny-list is
+  the shape §5.2 exists to forbid. `_Instances` makes the point concrete: it holds each installed
+  product's own catalogue and state, beside the payloads, which is §5.2's "config lives next to
+  cache" exactly.
+
+`InstallCleanup.exe` is not an answer either. Microsoft documents it as a last resort after a repair
+or uninstall has already failed, and warns that it can remove features belonging to other products.
