@@ -400,6 +400,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("pip", "pip.ini")]                           // private index URLs
     [InlineData("go", "src")]                                // the user's own code
     [InlineData("vscode-cpptools", "something-unrecognised")]
+    [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
@@ -428,6 +429,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new PipCacheProvider(_environment),
         new GoCacheProvider(_environment),
         new VsCodeCppToolsCacheProvider(_environment),
+        new DartAnalysisServerProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
         new GpuShaderCacheProvider(_environment),
     ];
