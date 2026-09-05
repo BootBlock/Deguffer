@@ -136,9 +136,10 @@ of the plan. Also the `Cache` folder that contains it, `%LOCALAPPDATA%\pypoetry`
 `%APPDATA%\pypoetry`, which holds `config.toml` and the `auth.toml` that can carry credentials for a
 private package repository.
 
-The environments are checked by their **resolved path**, not by the name `virtualenvs`. Both
-settings can be pointed anywhere, so a `virtualenvs.path` inside a folder Deguffer would otherwise
-clear takes that folder off the plan, with the reason shown.
+The environments are checked twice over: by the name `virtualenvs`, which is what stops the folder
+being offered anywhere in the app, and separately by their **resolved path**. Both settings can be
+pointed anywhere, so a `virtualenvs.path` inside a folder Deguffer would otherwise clear takes that
+folder off the plan, with the reason shown.
 
 Anything else inside the cache folder that Deguffer does not recognise is left alone and named.
 

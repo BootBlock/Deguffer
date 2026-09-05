@@ -156,9 +156,12 @@ public sealed class PoetryCacheProviderTests : IDisposable
         var plan = await CreateProvider(Poetry()).PlanAsync();
 
         Assert.DoesNotContain(environments, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        // Contains(ancestor, candidate). The question is whether a measured path lies inside the
+        // environments, so the environments are the ancestor — the other order asks whether a
+        // measured path *contains* them, which no realistic over-reach would trip.
         Assert.All(
             plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths),
-            path => Assert.False(LongPath.Contains(path, environments)));
+            path => Assert.False(LongPath.Contains(environments, path)));
 
         // Not merely unmentioned — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
@@ -287,6 +290,32 @@ public sealed class PoetryCacheProviderTests : IDisposable
         var command = Assert.Single(plan.Steps.OfType<RunCommandStep>());
         Assert.Contains("cache clear PyPI --all", command.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("odd name", command.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §5.2. A cache name is a directory name Poetry read off the disk, and <c>.</c> and <c>..</c>
+    /// are ordinary command-line tokens that walk out of the directory the step claims to be about.
+    /// <c>..</c> resolves to the container this provider's own §5.6 list says must survive, and
+    /// Poetry's clear flushes whatever it is pointed at — so it would take every environment
+    /// underneath. Poetry's own containment check compares the paths without resolving them, so it
+    /// does not catch this either.
+    /// </summary>
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    public async Task RefusesACacheNameThatWalksOutOfTheRepositoryCache(string name)
+    {
+        var (_, repositories, _) = CreateCache();
+
+        var runner = Poetry().Responding("cache list", $"PyPI\n{name}");
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        var command = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains("cache clear PyPI --all", command.Arguments, StringComparison.Ordinal);
+
+        // Whatever it measures is inside the repository cache, and is not the repository cache.
+        var measured = Assert.Single(command.MeasuredPaths);
+        Assert.Equal(repositories, Path.GetDirectoryName(measured), StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

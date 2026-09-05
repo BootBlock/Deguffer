@@ -40,6 +40,13 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <para><c>virtualenvs</c> is declared rather than omitted. An unrecognised child is already
     /// left alone, but it is left alone under a sentence saying Deguffer did not know what it was,
     /// and this is the one child whose contents the user most needs named.</para>
+    ///
+    /// <para><c>cache</c> is Tier 4 for a different reason, and it is not a claim that its contents
+    /// are precious. §5.1 leaves Poetry's own command in charge of what is inside it, and that
+    /// command empties the caches rather than removing the folder — so the folder is one this
+    /// provider's §5.6 list asserts survived every run. §7.1 reads this same table, so classifying
+    /// it as disposable here would let Explore remove a path the Storage page had just certified
+    /// must survive, and the two routes would disagree about one directory.</para>
     /// </summary>
     public static readonly DisposableChildSet DisposableChildren = new(
     [
@@ -50,9 +57,9 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             + "The next install fetches or rebuilds them."),
         new ChildClassification(
             "cache",
-            SafetyTier.RegenerableCache,
-            "The package metadata Poetry caches per repository while it resolves dependencies. It is "
-            + "fetched again on the next resolve."),
+            SafetyTier.DoNotTouch,
+            "The folder holding the package metadata Poetry caches per repository. The caches inside "
+            + "it are emptied by Poetry's own command rather than by removing the folder."),
         new ChildClassification(
             "virtualenvs",
             SafetyTier.DoNotTouch,
@@ -203,18 +210,24 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 + $"environments as {LongPath.Display(environments)}."),
         };
 
-        var (targets, scan) = CollectTargets(cacheRoot, environments, notes, ct);
+        var (targets, scan, childDeclined) = CollectTargets(cacheRoot, environments, notes, ct);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
-        var (commands, cleared) = await PlanRepositoryClearsAsync(
+        var (commands, cleared, commandDeclined) = await PlanRepositoryClearsAsync(
             poetry, cacheRoot, environments, notes, ct).ConfigureAwait(false);
 
         // Built rather than returned as an empty plan, so the sentences explaining what was left
-        // alone survive: EmptyPlan replaces the note list rather than adding to it, and a link or an
-        // unreadable root is exactly the case where the reason is the whole of the answer.
+        // alone survive: EmptyPlan replaces the note list rather than adding to it, and a refusal is
+        // exactly the case where the reason is the whole of the answer.
         var offersNothing = commands.Count == 0 && deletions.Count == 0;
 
-        if (offersNothing && !scan.Unreadable && scan.Links.Count == 0)
+        // Whether something reclaimable was found and deliberately not offered — a folder that could
+        // not be listed, a child reached through a link, a recognised child holding the environments,
+        // or a repository cache Poetry would not name. A Tier 4 child is deliberately not one of
+        // these: nothing was withheld from the user when the only thing there was never disposable.
+        var declined = scan.Unreadable || scan.Links.Count > 0 || childDeclined || commandDeclined;
+
+        if (offersNothing && !declined)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
@@ -255,10 +268,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             Fallback = fallback,
             HasUnreadableRoot = scan.Unreadable,
 
-            // A cache reached through a link is present, measures nothing here, and holds
-            // everything. Rendering that as "Already clear" would disagree with the folder the user
-            // can see — see CleanupPlan.WasNotExamined.
-            WasNotExamined = offersNothing && (scan.Unreadable || scan.Links.Count > 0),
+            // A cache Deguffer declined is present, measures nothing here, and holds everything.
+            // Rendering that as "Already clear" would disagree with the folder the user can see —
+            // see CleanupPlan.WasNotExamined.
+            WasNotExamined = offersNothing && declined,
         };
     }
 
@@ -292,7 +305,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// deleting the directory holding them would be Deguffer doing by path what the tool was about
     /// to do properly.</para>
     /// </summary>
-    private (IReadOnlyList<DeletionTarget> Targets, ChildDirectoryScan Scan) CollectTargets(
+    private (IReadOnlyList<DeletionTarget> Targets, ChildDirectoryScan Scan, bool Declined) CollectTargets(
         string cacheRoot,
         string environments,
         List<PlanNote> notes,
@@ -300,6 +313,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     {
         var scan = ChildDirectories.Under(cacheRoot);
         var targets = new List<DeletionTarget>();
+        var declined = false;
 
         // A listing right is separate from the traverse right that found the directory, so a refusal
         // would otherwise leave a plan with no steps and nothing said — which the shell renders as
@@ -328,11 +342,6 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            if (child.Name.Equals("cache", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             // Enumeration runs in extended form; a plan always holds display paths.
             var path = LongPath.Display(child.FullName);
 
@@ -345,6 +354,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                     PlanNoteSeverity.Warning,
                     $"Leaving '{child.Name}' alone: Poetry keeps its virtual environments inside it, "
                     + "and those are never removed."));
+
+                declined = true;
                 continue;
             }
 
@@ -359,7 +370,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 LastWritten: null));
         }
 
-        return (targets, scan);
+        return (targets, scan, declined);
     }
 
     /// <summary>
@@ -372,7 +383,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// The flag makes Poetry take the prompt's own default, which is yes. It overrides no safety
     /// check of Poetry's: §7's confirmation has already been given by the time this runs.</para>
     /// </summary>
-    private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured)> PlanRepositoryClearsAsync(
+    private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured, bool Declined)> PlanRepositoryClearsAsync(
         string poetry,
         string cacheRoot,
         string environments,
@@ -383,7 +394,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         if (!LongPath.DirectoryExists(repositories))
         {
-            return ([], NothingMeasured);
+            return ([], NothingMeasured, false);
         }
 
         // Poetry's clear never reaches outside its repository cache, so this is the whole of the
@@ -395,22 +406,25 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 "Poetry keeps its virtual environments inside its own repository cache, so Deguffer "
                 + "is not running its cache clear command."));
 
-            return ([], NothingMeasured);
+            return ([], NothingMeasured, true);
         }
 
         var named = await _discovery.ListCachesAsync(poetry, ct).ConfigureAwait(false);
 
         var caches = named
-            .Select(name => (Name: name, Path: Path.Combine(repositories, name)))
-            .Where(cache => LongPath.DirectoryExists(cache.Path))
+            .Select(name => (Name: name, Path: Resolve(repositories, name)))
+            .Where(cache => cache.Path is not null && LongPath.DirectoryExists(cache.Path))
+            .Select(cache => (cache.Name, Path: cache.Path!))
             .ToList();
 
         if (caches.Count == 0)
         {
-            // The directory is there and Poetry named nothing in it, so something is present that
-            // Deguffer is not going to reclaim. §5.5 wants a route that could not be taken said out
-            // loud rather than rendered as an empty row.
-            if (ChildDirectories.Under(repositories).Directories.Count > 0)
+            // The directory is there and Poetry named nothing usable in it, so something is present
+            // that Deguffer is not going to reclaim. §5.5 wants a route that could not be taken said
+            // out loud rather than rendered as an empty row.
+            var populated = ChildDirectories.Under(repositories).Directories.Count > 0;
+
+            if (populated)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
@@ -418,7 +432,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                     + "cache is left alone."));
             }
 
-            return ([], NothingMeasured);
+            return ([], NothingMeasured, populated);
         }
 
         var measured = await MeasureAllAsync([.. caches.Select(c => c.Path)], ct).ConfigureAwait(false);
@@ -437,6 +451,36 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             }),
         ];
 
-        return (steps, measured);
+        return (steps, measured, false);
+    }
+
+    /// <summary>
+    /// Where a cache Poetry named sits, or null when the name does not resolve to a directory
+    /// directly inside the repository cache.
+    ///
+    /// <para>§5.2, and a different question from the one the name itself answers.
+    /// <see cref="PoetryDiscovery"/> checks that a name is safe to put in a command line;
+    /// this checks that it is safe to put in a path, and the two do not overlap. <c>.</c> and
+    /// <c>..</c> are perfectly ordinary command-line tokens, and both walk out of the directory the
+    /// step claims to be about: <c>..</c> resolves to the container this provider's own §5.6 list
+    /// says must survive, and Poetry's <c>clear</c> would then flush it, taking every environment
+    /// underneath. Poetry's own containment check does not catch that either, because it compares
+    /// the paths without resolving them.</para>
+    ///
+    /// <para>Asked as "is the parent exactly the repository cache" rather than as a containment
+    /// test, because <see cref="LongPath.Contains"/> counts a directory as containing itself, and
+    /// the bare <c>.</c> is precisely the case that would slip through.</para>
+    /// </summary>
+    private static string? Resolve(string repositories, string name)
+    {
+        if (LongPath.Configured(Path.Combine(repositories, name)) is not { } path)
+        {
+            return null;
+        }
+
+        return Path.GetDirectoryName(path) is { } container
+            && container.Equals(repositories, StringComparison.OrdinalIgnoreCase)
+                ? path
+                : null;
     }
 }
