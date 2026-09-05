@@ -91,21 +91,66 @@ public sealed class ItemGuide
     }
 
     /// <summary>
-    /// What Deguffer knows about <paramref name="path"/>, or null where it is an ordinary file or
-    /// folder — which is nearly everything on a disk, and is not a failure.
+    /// What Deguffer knows about <paramref name="path"/> itself, or null where it is an ordinary
+    /// file or folder — which is nearly everything on a disk, and is not a failure.
     ///
-    /// <para>Asked in order of how specific the claim is: an address on this machine, then a
-    /// position at the top of any volume, then a name found anywhere. The one written about this
-    /// exact place is the one that was written about this thing, and the bare name is the weakest
-    /// claim of the three.</para>
+    /// <para>For a caller holding the thing the entry would be about, which is what a list row is.
+    /// A pointer over a picture is not, and <see cref="DescribeNearest"/> is for that.</para>
     /// </summary>
-    public KnownItem? Describe(string? path)
+    public KnownItem? Describe(string? path) =>
+        LongPath.Configured(path) is { } target ? Lookup(target) : null;
+
+    /// <summary>
+    /// What Deguffer knows about <paramref name="path"/>, or about the nearest folder above it that
+    /// it does know, or null where nothing on the way to the top of the volume is described.
+    ///
+    /// <para>For the map, where the pointer answers with the deepest shape covering it and a folder
+    /// is drawn as a one-pixel frame around its children (<see cref="Layout.TreemapLayout"/>). So
+    /// the shape under the pointer is nearly always a file nobody wrote about, sitting inside a
+    /// folder somebody did, and asking about the exact path left the reference unreachable
+    /// everywhere except on that frame.</para>
+    ///
+    /// <para>The nearest described folder wins rather than the outermost, because it is the more
+    /// specific claim: a file inside <c>WinSxS</c> is better explained by WinSxS than by Windows.
+    /// <see cref="KnownMatch.IsExact"/> is what lets the answer say which of the two it is.</para>
+    /// </summary>
+    public KnownMatch? DescribeNearest(string? path)
     {
         if (LongPath.Configured(path) is not { } target)
         {
             return null;
         }
 
+        var at = (string?)target;
+        var exact = true;
+
+        // Ends at the top of the volume: GetDirectoryName answers null for a root, which is the
+        // same boundary the anchors are measured from.
+        while (at is { Length: > 0 })
+        {
+            if (Lookup(at) is { } item)
+            {
+                return new KnownMatch(item, at, exact);
+            }
+
+            at = Path.GetDirectoryName(at);
+            exact = false;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The entry for exactly <paramref name="target"/>, which has already been through
+    /// <see cref="LongPath.Configured(string?)"/>.
+    ///
+    /// <para>Asked in order of how specific the claim is: an address on this machine, then a
+    /// position at the top of any volume, then a name found anywhere. The one written about this
+    /// exact place is the one that was written about this thing, and the bare name is the weakest
+    /// claim of the three.</para>
+    /// </summary>
+    private KnownItem? Lookup(string target)
+    {
         if (_byPath.TryGetValue(target, out var anchored))
         {
             return anchored;
