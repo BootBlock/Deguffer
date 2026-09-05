@@ -17,19 +17,30 @@ namespace Deguffer.Core.Providers;
 /// through as unrecognised.</para>
 ///
 /// <para><b>§5.1's command answers half of the cache, and the half it answers is not the large
-/// one.</b> <c>poetry cache clear</c> reaches <c>{cache-dir}/cache/repositories</c> and nothing
-/// else: it builds a <c>FileCache</c> over that directory and flushes it. The downloaded archives
-/// and the wheels Poetry built from source distributions sit in <c>{cache-dir}/artifacts</c>, which
-/// no Poetry command removes — a gap Poetry's own issue tracker has carried for years, and the
-/// reason its users are told to delete the folder by hand. So the plan is command-first where a
-/// command exists and path-based for the one recognised child it cannot reach.</para>
+/// one.</b> <c>poetry cache clear</c> reaches one directory under
+/// <c>{cache-dir}/cache/repositories</c> and nothing else: it builds a file cache over
+/// <c>repositories/{name}</c> and flushes it, which removes that directory alone. The downloaded
+/// archives and the wheels Poetry built from source distributions sit in
+/// <c>{cache-dir}/artifacts</c>, which no Poetry command removes — a gap Poetry's own issue tracker
+/// has carried for years, and the reason its users are told to delete the folder by hand. So the
+/// plan is command-first where a command exists and path-based for the one recognised child it
+/// cannot reach.</para>
 ///
 /// <para><b>The command is run once per named cache rather than once with <c>--all</c>.</b> The
 /// documented bare <c>poetry cache clear --all</c> is a recent spelling: until the cache argument
-/// was made optional it failed outright with "Not enough arguments", so a plan built on it would
-/// silently reclaim nothing on an older Poetry. <c>poetry cache list</c> names the caches its own
-/// <c>clear</c> accepts, and passing those names back is the form that works on every version — and
-/// it puts a size against each repository rather than one figure for all of them.</para>
+/// was made optional it failed with "Not enough arguments"
+/// (<c>python-poetry/poetry#9366</c>), so a plan built on it would silently reclaim nothing on an
+/// older Poetry. <c>poetry cache list</c> names the caches its own <c>clear</c> accepts, and passing
+/// those names back is the form that works on every version — and it puts a size against each
+/// repository rather than one figure for all of them.</para>
+///
+/// <para><b>Both of those are read from Poetry's own source rather than observed here</b>, because
+/// Poetry is not installed on this machine and the tests fake the subprocess. The one that is
+/// load-bearing is the scope of the flush: <see cref="BuildProtectedPaths"/> asserts that
+/// <c>{cache-dir}/cache</c> and <c>repositories</c> under it are still standing after a run, so if
+/// <c>clear</c> ever removed a directory above the one it was given, every real run would report a
+/// verification failure. That fails towards a false alarm rather than towards a loss, which is the
+/// direction §5.6 requires an uncertain claim to fail in.</para>
 /// </summary>
 public sealed class PoetryCacheProvider : CleanupProviderBase
 {

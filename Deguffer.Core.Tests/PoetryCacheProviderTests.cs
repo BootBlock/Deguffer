@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -480,7 +481,19 @@ public sealed class PoetryCacheProviderTests : IDisposable
     {
         CreateCache();
 
-        var plan = await CreateProvider(Poetry()).PlanAsync();
+        // The duplicate was §5.5's scan-route sentence, which the real scanner produces only where
+        // the file-table path did not serve the measurement. Stamping the reason on the walk makes
+        // the sentence certain rather than dependent on whether the test host happens to be
+        // elevated — otherwise this test would pass vacuously on half the machines it runs on.
+        var walked = ParallelEnumerationScanner.Default.Because(FallbackReason.NotElevated);
+
+        var provider = new PoetryCacheProvider(
+            _environment, Poetry(), FakeProcessInspector.NothingRunning, walked);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.StartsWith("Scanned by walking directories", StringComparison.Ordinal));
 
         Assert.Equal(
             plan.Notes.Count,
