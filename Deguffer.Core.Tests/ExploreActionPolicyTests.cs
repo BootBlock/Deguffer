@@ -507,6 +507,87 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A Code - OSS editor's user-data folder, level by level. It repeats the Chromium shape one
+    /// directory further down: <c>WebStorage</c> holds one directory per webview, and each of those
+    /// holds what that view saved beside the one cache Deguffer removes.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                             // the user-data folder itself
+    [InlineData("User", false)]                         // settings, profiles and extension state
+    [InlineData(@"User\workspaceStorage", false)]       // every workspace's restored state
+    [InlineData(@"User\History", false)]                // the local undo history
+    [InlineData("CachedData", true)]                    // a recognised cache
+    [InlineData("CachedExtensionVSIXs", true)]
+    [InlineData("Backups", false)]                      // unrecognised, so left alone
+    [InlineData("WebStorage", false)]                   // the container, which stays
+    [InlineData(@"WebStorage\42", false)]               // one webview's storage, which also stays
+    [InlineData(@"WebStorage\42\CacheStorage", true)]
+    [InlineData(@"WebStorage\42\Local Storage", false)] // what that webview saved
+    public void AVsCodeUserDataFolderIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        var editor = CreateVsCodeFolder();
+        _temp.CreateDirectory("profile", "AppData", "Roaming", "Code", "WebStorage", "42");
+
+        var policy = new ExploreActionPolicy([], new VsCodeCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? editor : Path.Combine(editor, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// One folder, three owners. A VS Code user-data folder holds Chromium's six engine caches, the
+    /// editor's own caches, and the editor's logs, and each set is declared by the provider that
+    /// knows it.
+    ///
+    /// <para>The innermost containing declaration used to be a single root, so whichever provider
+    /// happened to be constructed first answered for the whole folder and every child the other two
+    /// recognise was refused — silently, and reversibly by reordering a list nobody would think to
+    /// look at. Asking every declaration at that depth is what makes each provider's table its own
+    /// business.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("Code Cache", true)]            // Chromium's
+    [InlineData("GPUCache", true)]              // Chromium's
+    [InlineData("CachedData", true)]            // the editor's cache
+    [InlineData("CachedProfilesData", true)]    // the editor's cache
+    [InlineData("logs", true)]                  // the editor's records
+    [InlineData("Crashpad", true)]              // the editor's records
+    [InlineData("User", false)]                 // recognised by none of the three
+    [InlineData("Local State", false)]
+    public void EveryProviderOwningOneFolderAnswersForItsOwnChildren(string child, bool allowed)
+    {
+        var editor = CreateVsCodeFolder();
+
+        var policy = new ExploreActionPolicy(
+            [],
+            [
+                .. new ChromiumCacheProvider(_environment).ToolRoots,
+                .. new VsCodeCacheProvider(_environment).ToolRoots,
+                .. new VsCodeLogProvider(_environment).ToolRoots,
+            ]);
+
+        Assert.Equal(allowed, policy.MayRemove(Path.Combine(editor, child)).IsAllowed);
+
+        // The folder itself is refused whichever declaration answers for it.
+        Assert.False(policy.MayRemove(editor).IsAllowed);
+    }
+
+    /// <summary>
+    /// A user-data folder carrying both markers: Chromium's, so the engine provider identifies it,
+    /// and the editor's global storage database, so the two editor providers do.
+    /// </summary>
+    private string CreateVsCodeFolder()
+    {
+        var editor = _temp.CreateDirectory("profile", "AppData", "Roaming", "Code");
+
+        _temp.CreateFile(1, "profile", "AppData", "Roaming", "Code", "Local State");
+        _temp.CreateFile(1, "profile", "AppData", "Roaming", "Code", "User", "globalStorage", "state.vscdb");
+
+        return editor;
+    }
+
+    /// <summary>
     /// Refusing a profile is worth nothing while the folder holding it can go. Every directory
     /// between the two application-data roots and a profile contains the whole password database,
     /// so each of them is refused as well — otherwise Explore takes the parent of the directory the

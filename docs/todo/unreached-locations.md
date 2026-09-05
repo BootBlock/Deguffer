@@ -2,8 +2,9 @@
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
-> providers, §4's Chromium application caches, §5's GPU shader caches, §6's crash dumps and
-> servicing logs, and §7's per-volume recycle bins have shipped; everything else is unstarted.
+> providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
+> shader caches, §6's crash dumps and servicing logs, and §7's per-volume recycle bins have shipped;
+> everything else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
@@ -894,6 +895,59 @@ the published figure for a single heavily used chat client is 2 to 5 GB.
 hold sign-in tokens, drafts and offline application data. This is only safe as an exact allow-list
 of the six names, with every unrecognised sibling kept at Tier 4 — §5.2 applied to a signature
 instead of a root.
+
+---
+
+## 4a. What a Code - OSS editor keeps that Chromium's names do not cover ✅ done
+
+**Outcome:** shipped as `VsCodeCacheProvider` (Tier 1) and `VsCodeLogProvider` (Tier 3), over one
+`VsCodeUserDataDiscovery`. Measured on one Windows 11 workstation, on a machine §4's provider had
+already been run against.
+
+| Path | Size | Tier | What it is |
+| --- | ---: | --- | --- |
+| `%APPDATA%\Code\WebStorage\<n>\CacheStorage` | 982.6 MB | 1 | Cache-storage responses, one folder per webview partition. The same content as `Service Worker\CacheStorage`, which §4 already recognised, under a different parent |
+| `%APPDATA%\Code\CachedExtensionVSIXs` | 775.6 MB | 1 | Downloaded extension packages kept after installation. 22 files, two of them successive builds of one extension at about 103 MB each |
+| `%APPDATA%\Code\CachedData\<commit>` | 286.8 MB | 1 | The V8 compiled-code cache, one folder per editor build. 16 build folders present, of which at most one belongs to the installed build |
+| `%APPDATA%\Code\Crashpad` | 152.9 MB | 3 | The crash reporter database |
+| `%APPDATA%\Code\logs\<timestamp>` | 141.7 MB | 3 | One folder per editor session |
+
+§4's provider already reaches this folder — it holds `Local State` — so the six engine caches inside
+it were covered on the day §4 shipped. They came to about 15 MB here, against 2.3 GB for the rows above.
+
+Four things the work settled that the research did not anticipate:
+
+- **Two tiers means two providers, and there is no third option.** A plan carries its *provider's*
+  tier, so a Tier 3 child declared inside a Tier 1 provider is pre-selected and removed under a
+  sentence promising nothing is lost. The proposal put `logs` and `Crashpad` in the same scope as the
+  caches; they are a separate provider, on the precedent §6's crash-dump and servicing-log providers
+  set.
+- **Identification needs a second marker, and `Local State` is not it.** §4's marker says the folder
+  belongs to *an Electron application*, which is exactly the identification that must not be enough
+  here: `CachedData` and `logs` are names anything may carry. A folder qualifies only if it also
+  holds `User\globalStorage\state.vscdb`, which the editor's own storage service creates on first
+  run. Requiring both means the three providers over this one folder agree about which folders they
+  may enter.
+- **The `<commit>` layout could not be used, and the proposal assumed it could.** "Every folder
+  except the installed build's commit" needs to know which commit is installed, and nothing in the
+  user-data folder records it — searching the whole folder for each of the sixteen names found each
+  only under `CachedData` itself. The editor's own cleaner reads `product.json` from its install
+  directory, which is not discoverable from here for an arbitrary derivative, and inferring the
+  install path from the folder name is the guess §5.2 refuses. So `CachedData` is targeted whole. The
+  cost of including the live build's folder is one slower start, which is what Tier 1 promises, and
+  §4 already offers the identical artefact whole under Chromium's own name.
+- **One folder can have three owners, and §7.1 could only ask one of them.**
+  `ExploreActionPolicy` resolved a path to the *innermost* tool root and then asked that one root
+  alone. With `ChromiumCacheProvider`, `VsCodeCacheProvider` and `VsCodeLogProvider` all declaring
+  the same user-data folder, whichever was constructed first answered for the whole of it, and every
+  child the other two recognise was refused — silently, and reversibly by reordering a list nobody
+  would think to look at. It now asks every declaration at that depth and allows a child one of them
+  recognises. The Storage page was never affected: a provider consults its own table there.
+
+Confirmed and left alone: `CachedConfigurations`, which was present on the measured machine at a
+negligible size and is not documented anywhere in the editor's own source that could be found. It is
+Tier 4 by construction like any unrecognised child, and adding it would be a name in an allow-list
+with no reasoning behind it.
 
 ---
 
