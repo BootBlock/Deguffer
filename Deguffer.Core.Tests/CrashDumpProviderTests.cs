@@ -166,9 +166,9 @@ public sealed class CrashDumpProviderTests : IDisposable
             Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         }
 
-        // The five §9 and root paths are named rather than merely absent, so the run produces
-        // evidence about them. The two neighbours are unreachable by construction and so carry no
-        // assertion — which is why they are executed against below.
+        // The §9 exclusions and the roots themselves are named rather than merely absent, so the
+        // run produces evidence about them. The two neighbours are unreachable by construction and
+        // so carry no assertion — which is why they are executed against below.
         foreach (var asserted in new[] { Windows, ProgramData, winSxS, installer, packageCache, payloads })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
