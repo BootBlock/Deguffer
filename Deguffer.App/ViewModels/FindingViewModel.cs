@@ -260,6 +260,18 @@ public sealed partial class FindingViewModel : ObservableObject
         SelectedSteps.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
 
     /// <summary>
+    /// The ceiling <see cref="SelectedSize"/> can reach: every step this row offers, ticked or not.
+    ///
+    /// Steps rather than <see cref="Finding.Estimated"/>, and only the selectable ones, so the two
+    /// figures the info bar states side by side count the same bytes. Taking the finding's own total
+    /// would include a step whose checkbox is disabled, and the bar would then offer space that no
+    /// amount of ticking can reach.
+    /// </summary>
+    public ScanSize SelectableSize => Steps
+        .Where(s => s.CanBeSelected)
+        .Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
+
+    /// <summary>
     /// Whether the steps are individually worth choosing between. A single step <em>is</em> the
     /// whole finding, so offering a checkbox against it as well as against the row would put two
     /// controls on screen for one decision — and unticking either would visibly move the other.

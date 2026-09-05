@@ -23,6 +23,17 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly SelectionService _selections;
     private readonly Func<IConfirmationPrompt> _prompt;
 
+    /// <summary>
+    /// Whether the info bar is still showing the sentence the last preview put there.
+    ///
+    /// Cleared by <see cref="Report"/>, the one writer of <see cref="Status"/>, and set again by
+    /// <see cref="ReportPreviewSummary"/>. That is what lets <see cref="OnRowSelectionChanged"/>
+    /// keep the figures current without overwriting whatever else has since been said — a run
+    /// outcome, a §5.6 verification failure, an error. Ticking a checkbox is not a reason to lose
+    /// one of those.
+    /// </summary>
+    private bool _barShowsPreviewSummary;
+
     /// <param name="selections">
     /// What the rows were left ticked as last time, and where a change to that is written back.
     /// A scan re-plans from scratch, so without this every preview hands the user the same list of
@@ -292,12 +303,7 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             await LoadPreviewAsync(ct);
 
-            // Composed from what the rows themselves report, never from the byte totals, so that
-            // the bar and the list underneath it cannot come to contradict each other.
-            Report(PreviewSummary.For(
-                Findings.Select(f => f.Status),
-                SelectedTotalLabel,
-                ElevateLabel));
+            ReportPreviewSummary();
         }
         catch (OperationCanceledException)
         {
@@ -498,6 +504,11 @@ public sealed partial class CleanViewModel : ObservableObject
         HasPreview = false;
         CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
 
+        // The sentence the last preview stated describes rows that are being thrown away, so the
+        // bar stops being one a selection change may refresh. Explicit for the same reason
+        // HasPreview drops here rather than being reassigned at the end.
+        _barShowsPreviewSummary = false;
+
         var progress = new Progress<string>(message => Report(message));
         var found = new Progress<Finding>(AddRowInSizeOrder);
 
@@ -645,6 +656,10 @@ public sealed partial class CleanViewModel : ObservableObject
 
     private void Report(string message, InfoBarSeverity severity = InfoBarSeverity.Informational)
     {
+        // Here rather than at each call site, so a message added later cannot forget to say that
+        // the preview's sentence is no longer what the bar shows.
+        _barShowsPreviewSummary = false;
+
         Status = message;
         StatusSeverity = severity;
     }
@@ -688,6 +703,32 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         _selections.Remember(row.Finding.Provider.Id, row.ToRemembered());
         UpdateSelectionTotal();
+
+        // The bar states what is ticked, so it has to follow the ticking. Reported only at the end
+        // of a preview, the figure was frozen at preview time and went stale on the first click.
+        if (_barShowsPreviewSummary)
+        {
+            ReportPreviewSummary();
+        }
+    }
+
+    /// <summary>States the preview's sentence, and records that the bar is now showing it.</summary>
+    private void ReportPreviewSummary()
+    {
+        Report(PreviewSummary.For(
+            Findings.Select(f => f.Status),
+            SelectableTotal,
+            SelectedTotal,
+            ElevateLabel));
+
+        // After Report, which clears it.
+        _barShowsPreviewSummary = true;
+    }
+
+    private void UpdateSelectionTotal()
+    {
+        SelectedTotalLabel = FreeSpace.Format(SelectedTotal);
+        CleanCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -695,11 +736,14 @@ public sealed partial class CleanViewModel : ObservableObject
     /// ticked row no longer implies its whole plan will run, so totalling the finding would promise
     /// back space that the unticked steps within it are not going to release.
     /// </summary>
-    private void UpdateSelectionTotal()
-    {
-        SelectedTotalLabel = FreeSpace.Format(
-            Findings.Aggregate(ScanSize.Zero, (total, row) => total + row.SelectedSize));
+    private ScanSize SelectedTotal =>
+        Findings.Aggregate(ScanSize.Zero, (total, row) => total + row.SelectedSize);
 
-        CleanCommand.NotifyCanExecuteChanged();
-    }
+    /// <summary>
+    /// The ceiling <see cref="SelectedTotal"/> can reach: every step the user is free to tick. This
+    /// is what the info bar means by "can be reclaimed", and it is summed the same way the selected
+    /// total is so that the two figures beside each other count the same bytes.
+    /// </summary>
+    private ScanSize SelectableTotal =>
+        Findings.Aggregate(ScanSize.Zero, (total, row) => total + row.SelectableSize);
 }
