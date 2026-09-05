@@ -248,6 +248,26 @@ public sealed partial class CleanViewModel : ObservableObject
     [ObservableProperty]
     public partial string FreeSpaceChangeLabel { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The run's own §5.6 verdict, beside its figures, for as long as those figures stand.
+    ///
+    /// <para>The info bar cannot be its home. The bar is a single line describing whatever happened
+    /// most recently, and what happens immediately after a clean is the re-plan that follows it —
+    /// so a verdict left there is displaced by the next provider's progress line. §5.6 exists to
+    /// turn "I think it worked" into evidence the user sees, which a message visible for the length
+    /// of one rescan is not.</para>
+    /// </summary>
+    [ObservableProperty]
+    public partial string RunStatement { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether that verdict is a failure, so the card can say so in more than words. The words
+    /// carry it on their own (§6.5) — the colour is what stops a protected path having gone missing
+    /// reading like the two neutral figures beside it.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool RunVerificationFailed { get; set; }
+
     [ObservableProperty]
     public partial string SelectedTotalLabel { get; set; } = FreeSpace.Format(0);
 
@@ -358,6 +378,15 @@ public sealed partial class CleanViewModel : ObservableObject
         }
 
         IsBusy = true;
+
+        // A previous run's figures and its §5.6 verdict describe a machine state this run is about
+        // to replace, exactly as a preview's do. Cleared here rather than when the new ones arrive,
+        // because a run that is cancelled or fails never reaches RecordRunResult: leaving the old
+        // verdict up would stand "All protected paths survived" over a deletion nobody verified,
+        // which is the inversion §5.6 exists to prevent. After the confirmation above, so declining
+        // still leaves the screen exactly as it was.
+        ClearRunResult();
+
         var freeBefore = FreeSpace.ForPath(_environment.UserProfile);
 
         try
@@ -404,11 +433,18 @@ public sealed partial class CleanViewModel : ObservableObject
                 IsCleaning = false;
             }
 
-            ReportOutcome(results, freeBefore);
+            // The card takes the run's figures and its §5.6 verdict the moment the run ends, before
+            // the rescan below: it is the durable record, and leaving it showing the previous run
+            // for the length of a scan would describe a machine that no longer exists.
+            var outcome = RecordRunResult(results, freeBefore);
 
             // Re-plan rather than keeping the old rows: their sizes and "Ready to clean" labels
             // describe a machine that no longer exists.
             await LoadPreviewAsync(ct);
+
+            // Last, so a re-plan's per-provider progress lines cannot be what the bar is left
+            // showing. See ReportOutcome for which of the two sentences wins it.
+            ReportOutcome(outcome);
         }
         catch (OperationCanceledException)
         {
@@ -595,10 +631,10 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// §5.6 is reported, not just performed. A verification failure is the headline: it means a
-    /// rule was over-broad, and the user needs to know before the next run.
+    /// §5.6 is reported, not just performed, so the run's verdict goes somewhere that outlives the
+    /// run: the result card, beside the two figures it already carries.
     /// </summary>
-    private void ReportOutcome(IReadOnlyList<CleanupResult> results, long? freeBefore)
+    private RunOutcome RecordRunResult(IReadOnlyList<CleanupResult> results, long? freeBefore)
     {
         var removed = results.Sum(r => r.BytesReclaimed);
         RemovedLabel = FreeSpace.Format(removed);
@@ -608,31 +644,38 @@ public sealed partial class CleanViewModel : ObservableObject
             ? FreeSpace.Format(after - before)
             : "—";
 
+        var outcome = RunOutcome.For(results);
+        RunStatement = outcome.Statement;
+        RunVerificationFailed = outcome.VerificationFailed;
+
         OnPropertyChanged(nameof(HasRunResult));
 
-        var failed = results.Where(r => r.Verification is { Passed: false }).ToList();
-        if (failed.Count > 0)
+        return outcome;
+    }
+
+    /// <summary>
+    /// What the info bar is left saying once the run and the re-plan behind it have both finished.
+    ///
+    /// <para>A verification failure keeps it. It means a rule was over-broad, and the user needs to
+    /// know before the next run. The card states the same sentence, and marks it by colour and
+    /// weight, but only the bar has an icon and a severity behind it — so only the bar is told apart
+    /// from routine text without reading to the end of the line, and announced as a problem rather
+    /// than read out as one more line of text.</para>
+    ///
+    /// <para>Every other outcome yields to the fresh preview's totals, which describe the list now
+    /// on screen. That sentence is also the only one a selection change may keep current, so
+    /// stating it here is what makes ticking a row after a clean move the bar rather than leave it
+    /// describing a machine two operations ago.</para>
+    /// </summary>
+    private void ReportOutcome(RunOutcome outcome)
+    {
+        if (outcome.VerificationFailed)
         {
-            Report(
-                $"Cleaned, but verification failed for {string.Join(", ", failed.Select(f => f.ProviderName))}. " +
-                "A protected path did not survive — please report this.",
-                InfoBarSeverity.Error);
+            Report(outcome.Statement, InfoBarSeverity.Error);
             return;
         }
 
-        var skipped = results.Sum(r => r.SkippedCount);
-
-        // Reported beside the skipped count and never folded into it. One is Windows refusing, which
-        // the user can act on by closing something; the other is Deguffer honouring the setting they
-        // chose. Saying nothing about the second leaves a run that reclaimed less than the preview
-        // implied with no stated reason on screen at all.
-        var kept = results.Sum(r => r.KeptCount);
-
-        Report(
-            $"Removed {RemovedLabel}. All protected paths survived." +
-            (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty) +
-            (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty),
-            InfoBarSeverity.Success);
+        ReportPreviewSummary();
     }
 
     /// <summary>
@@ -686,6 +729,8 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         RemovedLabel = string.Empty;
         FreeSpaceChangeLabel = string.Empty;
+        RunStatement = string.Empty;
+        RunVerificationFailed = false;
         OnPropertyChanged(nameof(HasRunResult));
     }
 
