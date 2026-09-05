@@ -154,12 +154,14 @@ public sealed class CrashDumpProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// The five locations, and the two §9 exclusions that must be shown to survive a rule reaching
-    /// into the same directory.
+    /// The five locations, and the §9 exclusions that must be shown to survive a rule reaching into
+    /// the same directory.
     ///
     /// <c>%PROGRAMDATA%</c> is declared as the root rather than the <c>WER</c> folder inside it, so
-    /// that <c>Package Cache</c> — §9's installer package cache, and 6.7 GB on the audited machine —
-    /// is a named survivor of this provider rather than merely something it never mentions.
+    /// that the two installer caches §9 excludes are named survivors of this provider rather than
+    /// merely things it never mentions. They are separate directories holding the same kind of
+    /// thing: <c>Package Cache</c> was 6.7 GB in the founding audit, and Visual Studio's own payload
+    /// store 7.7 GB when it was measured.
     /// </summary>
     private IReadOnlyList<DeclaredRoot> Declare(ISystemDirectories system) =>
     [
@@ -194,6 +196,10 @@ public sealed class CrashDumpProvider : CleanupProviderBase
                 ("Package Cache",
                     "The installer package cache. §9 keeps Windows and installer component caches "
                     + "out of Deguffer entirely, because removing one breaks repair and uninstall."),
+                (Path.Combine("Microsoft", "VisualStudio", "Packages"),
+                    "The Visual Studio installer's payload cache. §9 excludes it for the same reason "
+                    + "as the one above: removing it breaks an offline repair or modify, and the "
+                    + "installer's own records of each installed product sit among the payloads."),
             ]),
 
         WindowsSystemRoot.Holding(

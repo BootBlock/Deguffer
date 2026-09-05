@@ -959,6 +959,17 @@ them.
 should hold. Everything below is a log, a crash artefact or a completed upgrade's scaffolding — a
 different kind of thing with a different failure mode.
 
+**The installer package caches were re-examined and the exclusion held**, which is worth recording
+because one of them is the largest location on this machine that no provider reaches.
+`C:\ProgramData\Microsoft\VisualStudio\Packages` measured 7.7 GB, beside `C:\ProgramData\Package
+Cache` at 6.7 GB, and §9 previously covered the pair by a plural rather than by name. Both are now
+named in §4.4 and §9, both are named survivors on the one provider that declares `%PROGRAMDATA%`, and
+the Explore catalogue explains each of them. What settled it against a Tier 2 provider was not the
+consequence but the mechanics: the vendor's `--nocache` route frees nothing at the moment it runs, and
+the folder has 1,249 children with the installer's own per-instance state among them, so §5.2 has no
+allow-list to write. The reasoning is in
+[cache-locations.md](../cache-locations.md#the-visual-studio-installers-package-caches--no-way-to-clear-them-safely).
+
 ### Crash dumps and error reports — Tier 3, measured at 0.15 GB ✅ done
 
 **Outcome:** shipped as `CrashDumpProvider`, at **Tier 3 rather than the Tier 1 this section
@@ -1374,6 +1385,7 @@ competing cleaners actively do. Worth encoding as knowledge, not merely omitting
 | `$UsnJrnl`, `$LogFile` | Can be large, and some tools offer to delete the USN journal. Deguffer's own scanner reads volume metadata, so this is self-harm as well as user harm |
 | Font, icon and thumbnail caches | Tens of megabytes. Not worth a row, and rebuilding them causes visible flicker across the shell |
 | `pagefile.sys`, `hiberfil.sys`, `swapfile.sys` | System-managed. §4.4 already excludes these |
+| `C:\ProgramData\Microsoft\VisualStudio\Packages`, `C:\ProgramData\Package Cache` | The installer package caches, 7.7 GB and 6.7 GB. Nothing clears either on request, and the payloads cannot be told from the installer's own state by any rule §5.2 permits. Reported in Explore, never offered — see §6 |
 | Chromium `Local Storage`, `IndexedDB`, `Cookies` | Sit beside the six safe cache names and hold sign-in state and offline data. Tier 3 |
 | `.cargo\credentials.toml`, `.m2\settings.xml` | Registry authentication tokens and encrypted server passwords, in the root of a directory whose children are being deleted. The §5.2 case exactly |
 | Steam `steamapps\downloading` | Looks temporary. Holds the in-progress half of a patch; deleting it restarts the download |

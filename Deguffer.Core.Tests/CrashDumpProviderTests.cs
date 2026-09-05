@@ -130,7 +130,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     /// §9 keeps <c>WinSxS</c> and <c>Windows\Installer</c> out of the product because the failure
     /// modes are a broken uninstall and an unbootable rollback. An over-broad rule passes every
     /// positive assertion, so the only evidence that this one is not over-broad is that those paths,
-    /// the installer package cache beside <c>%PROGRAMDATA%</c>'s own targets, an unrecognised
+    /// the two installer caches beside <c>%PROGRAMDATA%</c>'s own targets, an unrecognised
     /// neighbour, and both roots themselves are all still there afterwards.
     /// </summary>
     [Fact]
@@ -143,6 +143,12 @@ public sealed class CrashDumpProviderTests : IDisposable
         var installer = Populate(Path.Combine(Windows, "Installer"), name: "patch.msp");
         var packageCache = Populate(Path.Combine(ProgramData, "Package Cache"), name: "bundle.exe");
 
+        // Nested several segments below the root, unlike the other four, so it is also the case
+        // where a survivor could be missed by a walk that only looked at immediate children.
+        var payloads = Populate(
+            Path.Combine(ProgramData, "Microsoft", "VisualStudio", "Packages"),
+            name: "payload.vsix");
+
         // §5.2's unrecognised case, in the form this provider can have one: a neighbour it never
         // named. There is no classification to get wrong here, so what has to hold is that a
         // directory the table does not mention is never reached at all.
@@ -152,17 +158,18 @@ public sealed class CrashDumpProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        string[] mustSurvive = [Windows, ProgramData, winSxS, installer, packageCache, unnamed, werTemp];
+        string[] mustSurvive =
+            [Windows, ProgramData, winSxS, installer, packageCache, payloads, unnamed, werTemp];
 
         foreach (var spared in mustSurvive)
         {
             Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         }
 
-        // The four §9 and root paths are named rather than merely absent, so the run produces
+        // The five §9 and root paths are named rather than merely absent, so the run produces
         // evidence about them. The two neighbours are unreachable by construction and so carry no
         // assertion — which is why they are executed against below.
-        foreach (var asserted in new[] { Windows, ProgramData, winSxS, installer, packageCache })
+        foreach (var asserted in new[] { Windows, ProgramData, winSxS, installer, packageCache, payloads })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);

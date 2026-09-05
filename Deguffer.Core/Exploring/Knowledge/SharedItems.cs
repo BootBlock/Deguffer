@@ -70,6 +70,20 @@ internal static class SharedItems
 
         new(
             KnownPlace.ProgramData,
+            @"Microsoft\VisualStudio\Packages",
+            "The Visual Studio installer's own store: a manifest and a downloaded payload for each "
+            + "component of each product it has installed, kept so that a change or a repair can "
+            + "run with no network. Every update adds its own and nothing removes the old ones, so "
+            + "this reaches several gigabytes on a machine with Visual Studio. It is a different "
+            + "folder from 'Package Cache' at the top of ProgramData, and a machine normally has "
+            + "both. Beside the payloads sit the installer's records of what each product is made "
+            + "of.",
+
+            "The payloads download again on demand, so losing them costs an offline repair and "
+            + "nothing else, and the installer's own '--nocache' switch is what clears them."),
+
+        new(
+            KnownPlace.ProgramData,
             @"Microsoft\Windows\WER",
             "Crash reports waiting to be sent to Microsoft, and the ones already sent. Each report "
             + "is a folder that can hold event logs and a memory dump of the program that failed, "
