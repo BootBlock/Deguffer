@@ -24,13 +24,15 @@ namespace Deguffer.Core.Providers;
 /// declared beside the ones that may go, so a run produces evidence that a rule reaching into
 /// Steam's folder did not reach the games.</para>
 ///
-/// <para><b>Two things next to the cache are deliberately not offered.</b> <c>widevine</c> is a
-/// content-decryption module Steam downloaded, not a cache, so it is unrecognised under §5.2 and
-/// stays. <c>cefdata</c> is the embedded browser's working data, and what removing it costs was
-/// never established — so it is named and left alone rather than guessed at. <c>appcache</c> keeps
-/// Steam's own application and package indexes as files beside <c>httpcache</c>, and those are named
-/// too: child classification enumerates directories, so a file in a container is never seen and
-/// never asserted unless the provider names it.</para>
+/// <para><b>Three things next to the caches are recognised and then deliberately not offered.</b>
+/// <c>widevine</c> is a content-decryption module Steam downloaded rather than a cache.
+/// <c>cefdata</c> is the embedded browser's working data. <c>appcache\librarycache</c> is artwork
+/// Steam downloaded for the library, which <em>is</em> a cache — but what fetching it again costs
+/// was never established, and that is the reason all three stay. Each is declared at Tier 4 rather
+/// than merely omitted, so the refusal carries its own sentence instead of the generic "not
+/// recognised" one. <c>appcache</c> also keeps Steam's own application and package indexes as files
+/// beside <c>httpcache</c>, and those are named too: child classification enumerates directories, so
+/// a file in a container is never seen and never asserted unless the provider names it.</para>
 ///
 /// <para><b>§5.1 does not apply.</b> Steam ships no command-line switch that evicts either cache.
 /// The client is reported to offer the same thing as a button under Settings, Web Browser, and that

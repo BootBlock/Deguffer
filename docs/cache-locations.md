@@ -874,12 +874,13 @@ in place rather than removed.
 Both are copies of pages and files Valve's servers still have. The client downloads what it needs
 again the next time it needs it, and nothing that only exists on your disk is in either of them.
 
-### Not reached: the shader cache and the download cache
+### Not reached: the shader cache
 
 `steamapps\shadercache` holds compiled shaders per game and is commonly several gigabytes where
-pre-caching is enabled, but it sits under a library root rather than under the install directory, and
-a machine with one to measure was not available. `steamapps\downloading` is on the negative list
-rather than unreached: it looks temporary and is not.
+pre-caching is enabled. It sits inside a Steam library, and a library can be on any drive rather than
+only beside the program, so reaching every copy of it means finding every library rather than reading
+one recorded path. No machine with one to measure was available either, so it is left for its own
+change.
 
 ---
 

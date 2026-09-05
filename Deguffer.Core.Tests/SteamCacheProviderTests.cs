@@ -34,10 +34,10 @@ public sealed class SteamCacheProviderTests : IDisposable
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
 
     /// <summary>A directory with a file in it, so it measures above zero and is selectable.</summary>
-    private static string Populate(string path, string file = "data.bin", int bytes = 4096)
+    private static string Populate(string path)
     {
         Directory.CreateDirectory(path);
-        File.WriteAllBytes(Path.Combine(path, file), new byte[bytes]);
+        File.WriteAllBytes(Path.Combine(path, "data.bin"), new byte[4096]);
         return path;
     }
 
@@ -265,7 +265,11 @@ public sealed class SteamCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
-        Assert.True(Directory.Exists(outside));
+
+        // Executed, or the assertion below could not fail: nothing else in this test deletes
+        // anything. Run the plan and the far side of the link is either still there or it is not.
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(Directory.Exists(outside), $"{outside} was removed through the link");
     }
 
     /// <summary>
@@ -285,7 +289,9 @@ public sealed class SteamCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
-        Assert.True(Directory.Exists(outside));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(Directory.Exists(outside), $"{outside} was removed through the link");
     }
 
     /// <summary>
