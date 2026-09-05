@@ -5,8 +5,8 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// The caches of the embedded browser the Epic Games launcher draws its store in (343 MB of a
-/// 346 MB web cache folder on the measured machine).
+/// The caches of the embedded browser the Epic Games launcher draws its store in (339 MB of a
+/// 343 MB web cache folder on the measured machine).
 ///
 /// <para><b>The folder is renamed by every launcher update, so the old ones stay.</b> Epic's own
 /// support article names <c>webcache</c>, <c>webcache_4147</c> and <c>webcache_4430</c> and tells
@@ -16,24 +16,24 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Deguffer deliberately reaches inside those folders instead of removing them, and Epic's
 /// article is the reason it has to be said.</b> A web cache folder is a Chromium profile directory:
-/// on the measured machine it held 289 MB of HTTP cache, 43 MB of service-worker responses and
-/// 11 MB of compiled script, and beside them the store's <c>Cookies</c>, <c>Local Storage</c>,
+/// on the measured machine it held 287 MB of HTTP cache, 41 MB of service-worker responses and
+/// 10 MB of compiled script, and beside them the store's <c>Cookies</c>, <c>Local Storage</c>,
 /// <c>Session Storage</c> and <c>IndexedDB</c>. <see cref="ChromiumCacheProvider"/> already refuses
 /// to take a profile directory whole for exactly that reason, and the rule does not change because
 /// a different vendor wrote the folder. Epic's article is troubleshooting advice, where signing the
 /// reader out is an acceptable price for fixing a broken launcher; Deguffer is reclaiming space,
-/// where it is not. Naming the caches inside costs 3 MB of the 346 MB and keeps the user signed
+/// where it is not. Naming the caches inside costs 4 MB of the 343 MB and keeps the user signed
 /// in.</para>
 ///
 /// <para>§5.1 does not apply. The launcher exposes no cache-eviction command, and the engine's own
 /// clear-browsing-data surface is not reachable from inside it. Epic's published route is to delete
 /// the folder, which is the path-based case §5.2 then governs.</para>
 ///
-/// <para><b>The launcher's own build of the engine keeps Chromium's pre-M81 disk-cache layout</b>,
-/// where the cache entries sit directly in <c>Cache</c> rather than in a <c>Cache_Data</c>
-/// underneath it. That is why this table declares <c>Cache</c> disposable outright while Chromium's
-/// declares it a container — see <see cref="Levels"/>, which is also where the difference between
-/// that directory and <c>Service Worker</c> is argued.</para>
+/// <para><b>The cache entries sit directly in <c>Cache</c> on the measured machine</b>, rather than
+/// in a <c>Cache_Data</c> underneath it as a current Chromium build writes them. That is why this
+/// table declares <c>Cache</c> disposable outright while Chromium's declares it a container — see
+/// <see cref="Levels"/>, which is also where the difference between that directory and
+/// <c>Service Worker</c> is argued, and why the difference does not matter either way.</para>
 /// </summary>
 public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 {
@@ -121,9 +121,6 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         ("Web Data", "Any address and payment card the store's browser saved."),
     ];
 
-    private const string LinkReason =
-        "A link rather than a directory, so what it points at was never classified.";
-
     private WebCacheScan? _scan;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
@@ -168,19 +165,20 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     /// <summary>§5.3. The launcher holds its embedded browser's cache open while it runs.</summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => EpicLauncherSaved.ProcessNames;
 
-    /// <summary>The launcher's <c>Saved</c> folder. Exposed so tests can assert it is never a target.</summary>
-    public string SavedPath => EpicLauncherSaved.PathIn(Environment);
+    /// <summary>The launcher's <c>Saved</c> folder.</summary>
+    private string SavedPath => EpicLauncherSaved.PathIn(Environment);
 
     /// <summary>
     /// One look at the <c>Saved</c> folder, memoised for the life of a planning pass (G4). Presence,
     /// planning and <see cref="ToolRoots"/> all ask the same question of the same directory, and
     /// this is the one enumeration behind all three.
-    ///
-    /// Exposed so tests can assert what was and was not found.
     /// </summary>
-    public WebCacheScan Look(CancellationToken ct = default) => _scan ??= Examine(ct);
+    private WebCacheScan Look(CancellationToken ct = default) => _scan ??= Examine(ct);
 
-    /// <summary>The web cache folders on disk, which is what most callers want from a look.</summary>
+    /// <summary>
+    /// The web cache folders on disk, which is what most callers want from a look. Exposed so tests
+    /// can assert which folders were and were not entered.
+    /// </summary>
     public IReadOnlyList<string> WebCaches(CancellationToken ct = default) => Look(ct).WebCaches;
 
     /// <summary>
@@ -283,8 +281,8 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 
         foreach (var path in look.LinkedWebCaches)
         {
-            notes.Add(LinkNote(path));
-            declined.Add((path, LinkReason));
+            notes.Add(CacheLevelWalk.Note(path));
+            declined.Add((path, CacheLevelWalk.LinkReason));
         }
 
         var unreadable = look.Folder.Unreadable;
@@ -302,11 +300,16 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
             survivors.AddRange(ProtectedProfileFiles.Select(
                 file => (Path.Combine(cache, file.Name), file.Reason)));
 
-            var outcome = CollectFrom(cache, targets, declined, survivors, notes, ct);
+            var walk = CacheLevelWalk.Under(Levels, cache, ct);
 
-            spared += outcome.Spared;
-            emptiedAContainer |= outcome.EmptiedAContainer;
-            unreadable |= outcome.Unreadable;
+            targets.AddRange(walk.Targets);
+            declined.AddRange(walk.Declined);
+            survivors.AddRange(walk.Survivors);
+            notes.AddRange(walk.Notes);
+
+            spared += walk.Spared;
+            emptiedAContainer |= walk.EmptiedAContainer;
+            unreadable |= walk.Unreadable;
         }
 
         // One note rather than one per spared child. Each is still asserted individually by §5.6,
@@ -402,101 +405,6 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
             ]);
     }
 
-    /// <summary>
-    /// §5.2 for one web cache folder: classify the children of each level, target the recognised
-    /// ones, and protect the rest. A spared child is a sibling of a targeted one under the same
-    /// parent, which is exactly when an over-broad rule takes both — so it is asserted to survive
-    /// rather than merely left out of the plan.
-    /// </summary>
-    private static LevelOutcome CollectFrom(
-        string cache,
-        List<DeletionTarget> targets,
-        List<(string Path, string Reason)> declined,
-        List<(string Path, string Reason)> survivors,
-        List<PlanNote> notes,
-        CancellationToken ct)
-    {
-        var spared = 0;
-        var emptiedAContainer = false;
-        var unreadable = false;
-
-        // A container that is a link is met twice: once as a link child of the cache folder, and
-        // once as a level whose own directory turns out to be one. Both times it is the same path
-        // and the same sentence.
-        var reportedLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var level in Levels)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var directory = level.Resolve(cache);
-
-            if (!LongPath.DirectoryExists(directory))
-            {
-                continue;
-            }
-
-            // Applied at every level rather than only at the one reached by name. The cache folders
-            // came from an enumeration that filtered links out, so this answers false for them
-            // today — and that is the point: a safety property riding on a filter nobody named holds
-            // only for as long as every target happens to arrive the same way.
-            if (LongPath.IsReparsePoint(directory))
-            {
-                Decline(directory);
-                continue;
-            }
-
-            var scan = ChildDirectories.Under(directory);
-
-            if (scan.Unreadable)
-            {
-                notes.Add(UnreadableRoot.Note(directory));
-                unreadable = true;
-                continue;
-            }
-
-            foreach (var link in scan.Links)
-            {
-                Decline(LongPath.Display(link.FullName));
-            }
-
-            foreach (var child in scan.Directories)
-            {
-                var classification = level.Children.Classify(child.Name);
-                var path = LongPath.Display(child.FullName);
-
-                if (classification.Tier.IsOfferable())
-                {
-                    targets.Add(new DeletionTarget(path, classification.Reason));
-                    emptiedAContainer |= level.ContainerName.Length > 0;
-                }
-                else
-                {
-                    survivors.Add((path, classification.Reason));
-                    spared++;
-                }
-            }
-        }
-
-        return new LevelOutcome(spared, emptiedAContainer, unreadable);
-
-        void Decline(string path)
-        {
-            if (!reportedLinks.Add(path))
-            {
-                return;
-            }
-
-            notes.Add(LinkNote(path));
-            declined.Add((path, LinkReason));
-        }
-    }
-
-    private static PlanNote LinkNote(string path) => new(
-        PlanNoteSeverity.Information,
-        $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not delete "
-        + "through a link.");
-
     /// <summary>The shared look at the <c>Saved</c> folder, plus this provider's subject in it.</summary>
     /// <param name="Folder">Whether the folder is reachable, readable and there, and what it holds.</param>
     /// <param name="WebCaches">The web cache folders, in display form.</param>
@@ -505,21 +413,10 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     /// dropped: one is a child the user can see, and a plan that neither offers it nor mentions it
     /// disagrees with the folder.
     /// </param>
-    public readonly record struct WebCacheScan(
+    private readonly record struct WebCacheScan(
         EpicLauncherSaved.SavedFolder Folder,
         IReadOnlyList<string> WebCaches,
         IReadOnlyList<string> LinkedWebCaches);
 
-    /// <summary>What one web cache folder's levels came to, for the sentences the plan carries.</summary>
-    /// <param name="Spared">
-    /// How many children were spared. Counted here rather than from the length of the survivor list,
-    /// which also carries the <c>Saved</c> folder, the cache folder and the named files — a total
-    /// including those would tell the user that items were left alone in a folder that holds none.
-    /// </param>
-    /// <param name="EmptiedAContainer">
-    /// Whether a target came from inside <c>Service Worker</c>. That directory is kept, so without
-    /// this the user sees it still standing and cannot tell that the caches inside it went.
-    /// </param>
-    /// <param name="Unreadable">Whether a directory refused to be listed, so nothing was planned from it.</param>
-    private readonly record struct LevelOutcome(int Spared, bool EmptiedAContainer, bool Unreadable);
 }
+

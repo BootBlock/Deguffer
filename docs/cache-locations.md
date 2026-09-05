@@ -801,7 +801,7 @@ Thunderbird keeps the identical layout — its own `profiles.ini`, the same two 
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*`, for each such folder on disk |
 | **Method** | Delete the recognised cache directories inside each folder, never the folder itself |
-| **Typical size** | 343 MB of a 346 MB folder on the machine this was measured on, of which the HTTP cache alone was 289 MB |
+| **Typical size** | 339 MB of a 343 MB folder on the machine this was measured on, of which the HTTP cache alone was 287 MB |
 
 ### What it is
 
@@ -830,7 +830,7 @@ troubleshooting a broken launcher that is the right instruction. It is the wrong
 space, because the folder also holds `Cookies`, `Local Storage`, `Session Storage` and `IndexedDB` —
 your sign-in and the store's saved data. Deleting it signs you out.
 
-Naming the caches inside costs about three megabytes of the 346 MB and keeps you signed in. It is
+Naming the caches inside costs about four megabytes of the 343 MB and keeps you signed in. It is
 also the same rule Deguffer already applies to every other embedded browser: see
 [Chromium application caches](#chromium-application-caches), which refuses to take a profile folder
 whole for exactly this reason.
@@ -890,7 +890,7 @@ without being asked, and the folder it refills into is left standing.
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\EpicGamesLauncher\Saved\Crashes` and `...\Logs` |
 | **Method** | Delete the two recognised directories |
-| **Typical size** | 58 MB of crash reports and 0.7 MB of logs on the machine this was measured on |
+| **Typical size** | 56 MB of crash reports and 0.7 MB of logs on the machine this was measured on |
 
 ### What it is
 
@@ -904,7 +904,7 @@ It removes the two directories by name. They sit in the same folder as the launc
 cloud saves and the store's browser data, so nothing else in that listing is ever a candidate.
 
 **This is a separate row from the web cache above, deliberately.** They are two different kinds of
-thing with two different costs, and keeping them apart lets you clear 343 MB of browser cache
+thing with two different costs, and keeping them apart lets you clear 339 MB of browser cache
 without touching the evidence of a crash. It is the same split
 [Windows servicing logs](#windows-servicing-logs) made against
 [crash dumps and error reports](#crash-dumps-and-error-reports).

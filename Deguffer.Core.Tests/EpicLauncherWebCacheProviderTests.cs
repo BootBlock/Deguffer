@@ -416,6 +416,44 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The other half of the link rule, and the half a test over a cache child cannot reach. A
+    /// <em>level's own directory</em> is reached by name, so <c>DirectoryExists</c> answers through
+    /// the junction and the walk would list the far side's ordinary directories — where a recognised
+    /// name would be targeted while every §5.6 survivor named for this folder resolved through the
+    /// same link and passed.
+    /// </summary>
+    [Fact]
+    public async Task AJunctionedContainerIsNeverListedThrough()
+    {
+        var fixture = AddWebCache();
+
+        var outside = _temp.CreateDirectory("elsewhere");
+        var bystander = CreateDirectory(Path.Combine(outside, "CacheStorage"));
+
+        Directory.Delete(fixture.ServiceWorker, recursive: true);
+        Directory.CreateSymbolicLink(fixture.ServiceWorker, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(bystander, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            Path.Combine(fixture.ServiceWorker, "CacheStorage"),
+            plan.TargetedPaths,
+            StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("Service Worker", StringComparison.Ordinal) &&
+            n.Message.Contains("link", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(bystander, "entry.bin")),
+            "planning listed through a junctioned container and deleted the far side.");
+    }
+
+    /// <summary>
     /// §7.1's second deletion route reads §5.2 out of these declarations rather than restating it,
     /// so a level with no root of its own is a level Explore decides about on its own.
     /// </summary>

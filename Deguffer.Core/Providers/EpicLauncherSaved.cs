@@ -118,7 +118,7 @@ public static partial class EpicLauncherSaved
     }
 
     /// <summary>The launcher's own folder, which the <c>Saved</c> folder is built under.</summary>
-    public static string LauncherRoot(IUserEnvironment environment) =>
+    private static string LauncherRoot(IUserEnvironment environment) =>
         Path.Combine(environment.LocalAppData, LauncherDirectory);
 
     /// <summary>Where both providers work.</summary>
@@ -130,7 +130,7 @@ public static partial class EpicLauncherSaved
     /// every segment of it is checked for a link before anything below it is planned. See
     /// <see cref="DerivedPath"/> for why the last segment alone is not enough.
     /// </summary>
-    public static string? FirstLinkTo(IUserEnvironment environment) =>
+    private static string? FirstLinkTo(IUserEnvironment environment) =>
         DerivedPath.FirstLinkBetween(environment.LocalAppData, PathIn(environment));
 
     /// <summary>

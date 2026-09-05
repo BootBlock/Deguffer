@@ -5,7 +5,7 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// The logs and crash reports the Epic Games launcher writes about itself (58 MB of crash reports
+/// The logs and crash reports the Epic Games launcher writes about itself (56 MB of crash reports
 /// and 0.7 MB of logs on the measured machine).
 ///
 /// <para><b>Tier 3, on <see cref="CrashDumpProvider"/>'s reasoning.</b> §3's Tier 1 requires that
@@ -19,7 +19,7 @@ namespace Deguffer.Core.Providers;
 /// <para>Separate from <see cref="EpicLauncherWebCacheProvider"/> rather than one provider over
 /// both, for the reason <see cref="EpicLauncherSaved"/> gives: they are two tiers, and a plan
 /// carries one. It is the same split <see cref="WindowsServicingLogProvider"/> made against the
-/// crash dumps, and it lets somebody clear 343 MB of web cache without touching the evidence of a
+/// crash dumps, and it lets somebody clear 339 MB of web cache without touching the evidence of a
 /// crash.</para>
 ///
 /// <para>§5.1 does not apply. The launcher offers no way to clear either folder, and Epic's own
@@ -76,8 +76,8 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     /// <summary>§5.3. The launcher holds the log it is currently writing open.</summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => EpicLauncherSaved.ProcessNames;
 
-    /// <summary>The launcher's <c>Saved</c> folder. Exposed so tests can assert it is never a target.</summary>
-    public string SavedPath => EpicLauncherSaved.PathIn(Environment);
+    /// <summary>The launcher's <c>Saved</c> folder.</summary>
+    private string SavedPath => EpicLauncherSaved.PathIn(Environment);
 
     /// <summary>
     /// Presence is one of the two declared folders actually being there. The <c>Saved</c> folder
