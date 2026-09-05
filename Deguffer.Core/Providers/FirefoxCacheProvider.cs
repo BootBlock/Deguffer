@@ -183,17 +183,36 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
         _profiles ??= _discovery.Discover(ct);
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside: both halves of every profile, one declaring the five
-    /// caches and one declaring nothing at all.
+    /// §5.2 as §7.1 needs it read from outside: Firefox's own folder under each application-data
+    /// root, then both halves of every profile — the local half declaring the five caches, and
+    /// everything else declaring nothing at all.
     ///
-    /// <para>The roaming half is declared even though this provider never plans against it, and that
-    /// is the point. Explore's refusals come from these declarations, so without the roaming entry a
-    /// user could delete <c>logins.json</c> from the size picture while the Storage page was
-    /// carefully leaving it alone.</para>
+    /// <para>The roaming side is declared even though this provider never plans against it, and that
+    /// is the point. Explore's refusals come from these declarations, so without them a user could
+    /// delete <c>logins.json</c> from the size picture while the Storage page was carefully leaving
+    /// it alone.</para>
+    ///
+    /// <para><b>The folders above a profile are declared too, and refusing the profile alone is
+    /// worth nothing without them.</b> <c>%APPDATA%\Mozilla\Firefox</c> and the <c>Profiles</c>
+    /// directory under it hold every profile's password database between them, so a refusal that
+    /// stopped at the profile would refuse a directory and permit its parent. They are declared
+    /// unconditionally rather than from what discovery found, because a register that would not be
+    /// read leaves no profiles and the files are on disk regardless — and a declaration naming a
+    /// directory that is not there refuses nothing.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         _toolRoots ??=
         [
+            ToolRoot.Of(
+                _discovery.RoamingRoot,
+                "This is Firefox's own folder. Your profiles are inside it, with your bookmarks, "
+                + "history and saved passwords, and Deguffer removes nothing from any of them.",
+                NothingIsDisposable),
+            ToolRoot.Of(
+                _discovery.LocalRoot,
+                "This is where Firefox keeps the caches for each of your profiles. Deguffer removes "
+                + "them from the Storage page, where it knows which of them are caches.",
+                NothingIsDisposable),
             .. from profile in Profiles()
                from root in new[]
                {
@@ -378,12 +397,16 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             }
         }
 
-        // Reaching here means a profile directory was found on disk by full name, and a full path
-        // resolves through a directory the account may not list. So the sentence below would deny
-        // what this same pass established.
+        // Said as a note rather than as an early return, because the pass has other things to
+        // report even when it found no cache: the size of the synchronised data it deliberately did
+        // not offer, and any profile stored somewhere it will not examine. Returning an empty plan
+        // here discarded both, so a profile holding 1.5 GB of remote-settings and nothing else read
+        // as clear with no account of the space.
         if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
-            return EmptyPlan("No Firefox profile on this machine is keeping a cache on disk.");
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                "No Firefox profile on this machine is keeping a cache on disk."));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -393,7 +416,10 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             notes.Add(scanNote);
         }
 
-        if (BuildRunningProcessNote() is { } warning)
+        // §5.3, and only where something is actually going to be removed. A warning that Firefox is
+        // holding files open, on a row with nothing to delete, describes a clean that will not
+        // happen.
+        if (targets.Count > 0 && BuildRunningProcessNote() is { } warning)
         {
             notes.Add(warning);
         }
@@ -410,7 +436,11 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            WasNotExamined = targets.Count == 0 && declined.Count > 0,
+            // A profile kept outside Firefox's folder counts here for the same reason a declined
+            // link does: nothing was removed and something was never looked at, so the shell must
+            // not call the row clear.
+            WasNotExamined = targets.Count == 0
+                && (declined.Count > 0 || _discovery.ProfilesElsewhere.Count > 0),
         };
     }
 

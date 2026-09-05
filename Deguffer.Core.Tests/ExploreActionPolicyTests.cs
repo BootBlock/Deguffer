@@ -413,6 +413,32 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Refusing a profile is worth nothing while the folder holding it can go. Every directory
+    /// between the two application-data roots and a profile contains the whole password database,
+    /// so each of them is refused as well — otherwise Explore takes the parent of the directory the
+    /// Storage page was carefully leaving alone.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "")]              // %APPDATA%\Mozilla\Firefox
+    [InlineData(true, "Profiles")]
+    [InlineData(true, "profiles.ini")]  // losing it loses every profile
+    [InlineData(false, "")]             // %LOCALAPPDATA%\Mozilla\Firefox
+    [InlineData(false, "Profiles")]
+    public void FirefoxsOwnFoldersAreRefusedAsWellAsTheProfilesInThem(bool roaming, string relative)
+    {
+        RegisterFirefoxProfile();
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        var root = Path.Combine(
+            roaming ? _environment.RoamingAppData : _environment.LocalAppData, "Mozilla", "Firefox");
+
+        Assert.False(
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
     /// the root itself.
     ///

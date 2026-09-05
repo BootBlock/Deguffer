@@ -285,6 +285,46 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The synchronised dataset is reported whether or not there is a cache to offer beside it. It
+    /// was 1.5 GB of a 1.9 GB profile on the machine this was measured on, so a profile holding it
+    /// and nothing else is exactly the case where a user asks where the space went — and exactly the
+    /// case a plan that short-circuits on "no targets" says nothing about.
+    /// </summary>
+    [Fact]
+    public async Task TheSynchronisedDataIsReportedEvenWhenThereIsNoCacheToOffer()
+    {
+        var profile = AddProfile();
+        var synchronised = CreateDirectory(Path.Combine(profile.Local, "remote-settings"), bytes: 32768);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(synchronised, StringComparison.Ordinal) &&
+            n.Message.Contains("32 KB", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same short-circuit, from the direction that makes a false claim rather than an incomplete
+    /// one: one profile is stored somewhere Deguffer will not examine, and the other has no cache.
+    /// Dropping the note leaves the row reading as clear about a profile nobody looked at.
+    /// </summary>
+    [Fact]
+    public async Task AProfileStoredElsewhereIsStillReportedWhenTheOtherProfileHasNoCache()
+    {
+        var relative = AddProfile();
+        CreateDirectory(Path.Combine(relative.Local, "storage"));
+
+        AddProfile("hand-placed", declared: _temp.CreateDirectory("moved-profile"), isRelative: false);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("hand-placed", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Identification is a <c>[ProfileN]</c> section's own relative <c>Path</c> and nothing else. A
     /// directory sitting beside a real profile, holding a directory called <c>cache2</c>, is not a
     /// profile — the same rule as the Chromium provider's "a cache name is not licence to look inside
