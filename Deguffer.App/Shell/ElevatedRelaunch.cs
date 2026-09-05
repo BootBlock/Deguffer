@@ -63,6 +63,10 @@ public static class ElevatedRelaunch
             start.ArgumentList.Add(argument);
         }
 
+        // Before the replacement exists, not after this instance closes: it reads the stored window
+        // placement as it opens, so a write left to the close that follows is one it can miss.
+        App.RememberWindowPlacement();
+
         try
         {
             Process.Start(start);
