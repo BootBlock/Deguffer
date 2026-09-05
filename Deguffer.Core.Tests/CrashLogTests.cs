@@ -171,6 +171,8 @@ public class CrashLogTests
 
         public string? GetEnvironmentVariable(string name) => null;
 
+        public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
+
         public void Invalidate()
         {
         }
