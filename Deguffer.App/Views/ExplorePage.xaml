@@ -232,9 +232,10 @@
                         so a popup carrying those never settles. This one is about a region rather
                         than a shape — the nearest folder above the pointer that Deguffer knows
                         anything about — so it holds still while the pointer crosses the thousands
-                        of files inside one, and goes away where nothing on the way to the top of
-                        the volume is described. That is what the collapse below does: a ToolTip
-                        with nothing in it is still a rounded box that follows the pointer.
+                        of files inside one. On a system drive that is most of the picture, because
+                        the places at the top of one are all described; on a data drive it is rarely
+                        anything at all, and the collapse below is what keeps those shapes clear — a
+                        ToolTip with nothing in it is still a rounded box that follows the pointer.
                     -->
                     <ToolTipService.ToolTip>
                         <ToolTip MaxWidth="420"

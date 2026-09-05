@@ -390,8 +390,8 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// Whether there is anything to say about what the pointer is over. The map's tooltip is
-    /// collapsed by this, so nothing appears over the shapes Deguffer has nothing to add about —
-    /// which is nearly all of them.
+    /// collapsed by this, so nothing appears where nothing on the way to the top of the volume is
+    /// described — which is most of a data drive and little of a system one.
     /// </summary>
     public bool HasHoveredNote => HoveredNote.Length > 0;
 
@@ -701,9 +701,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// pointer is how somebody checks one shape against the rest, and having to change the
     /// colouring to read a date would be a worse answer than showing it always.</para>
     ///
-    /// <para>The path is built once and the reference is asked with it. Both need it, and walking
-    /// the parent chain twice for one pointer move is the kind of cost this method's caller cannot
-    /// afford (G4).</para>
+    /// <para>The path is built once and the reference is asked with it, rather than each walking
+    /// the tree's parent chain for itself. This runs on every pointer move that lands on a
+    /// different shape (G4).</para>
     /// </summary>
     private (string Path, string Figures, string Note) Over(ExploreTree tree, int node)
     {

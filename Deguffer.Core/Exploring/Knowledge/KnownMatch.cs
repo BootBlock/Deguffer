@@ -13,7 +13,7 @@ namespace Deguffer.Core.Exploring.Knowledge;
 ///
 /// <para>Where the answer came from above, the text says so before it says anything else. Otherwise
 /// an explanation of what <c>WinSxS</c> is reads as an explanation of the file the pointer is
-/// actually on (G3: the reader is told what the claim is about).</para>
+/// actually on.</para>
 /// </summary>
 /// <param name="Item">What Deguffer knows.</param>
 /// <param name="Path">Where it knows it about, which is the asked-for path or an ancestor of it.</param>
@@ -25,9 +25,11 @@ namespace Deguffer.Core.Exploring.Knowledge;
 public sealed record KnownMatch(KnownItem Item, string Path, bool IsExact)
 {
     /// <summary>
-    /// The whole of what a hovering reader is shown, with <paramref name="facts"/> passed through to
-    /// <see cref="KnownItem.Tip"/>.
+    /// The whole of what a hovering reader is shown.
+    ///
+    /// <para>No counterpart to <see cref="KnownItem.Tip"/>'s <c>facts</c>, because the one caller
+    /// this has is the map, and the map already puts the size and the date on the status line under
+    /// the picture rather than inside the popup.</para>
     /// </summary>
-    public string Tip(string? facts = null) =>
-        IsExact ? Item.Tip(facts) : $"Inside {Path}{KnownItem.Blank}{Item.Tip(facts)}";
+    public string Tip() => IsExact ? Item.Tip() : $"Inside {Path}{KnownItem.Blank}{Item.Tip()}";
 }
