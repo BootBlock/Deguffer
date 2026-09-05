@@ -24,7 +24,6 @@ public sealed partial class MainWindow : Window
 
         _backdrop = new WindowBackdrop(this);
         _sizing = new WindowSizing(this, new WindowMetricsStore(UserEnvironment.Current));
-        _sizing.Apply();
 
         // Where the window ends up is the user's, so it outlives the session that produced it.
         Closed += (_, _) => _sizing.Remember();
@@ -33,6 +32,11 @@ public sealed partial class MainWindow : Window
         App.Preferences.Changed += (_, _) => ApplyPreferences();
 
         OpenWhereTheLaunchAsked();
+
+        // Last, because restoring a maximised placement shows the window: the theme, the backdrop
+        // and the first page all have to be in place before anything is on screen. Sizing alone
+        // does not show it, so only that one path was ever exposed to this.
+        _sizing.Apply();
     }
 
     /// <summary>
