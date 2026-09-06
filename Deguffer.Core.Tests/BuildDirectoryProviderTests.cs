@@ -325,6 +325,44 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("Unity", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The largest virtual environment on a machine is the one nobody thinks to declare. A
+    /// machine-learning or image-generation application builds one inside its own install folder,
+    /// which is not source and never gets added, so a search bounded by the approved roots cannot
+    /// reach it. Widening that boundary is what §5.2 forbids, which leaves saying so as the fix.
+    ///
+    /// The state that matters is the second half of this test, not the first. A user who has
+    /// approved nothing sees the guidance; a user with several gigabytes hidden from a perfectly
+    /// well-configured scan sees only the row's own explanation, and that is the reader this
+    /// sentence exists for.
+    /// </summary>
+    [Fact]
+    public async Task ThePythonRowSaysWhereTheLargestEnvironmentsHide()
+    {
+        var awaiting = await PlanWith(Python);
+
+        Assert.Contains(awaiting.Notes, n => NamesTheUndeclaredInstallFolder(n.Message));
+
+        ApproveRoot();
+        var approved = Python();
+
+        Assert.False(approved.IsAwaitingSourceFolders);
+        Assert.True(NamesTheUndeclaredInstallFolder(approved.Description.Recommendation));
+
+        // Said by the provider whose environments are measured in gigabytes, not by the base class.
+        // A node_modules row claiming the same thing would be describing somebody else's directory.
+        Assert.False(NamesTheUndeclaredInstallFolder(Node().Description.Recommendation));
+    }
+
+    /// <summary>
+    /// Two tokens rather than the whole sentence: what has to survive a rewording is that the
+    /// reader is told which kind of application to look for, and that its own folder is the thing
+    /// to add. A test holding the full paragraph would fail on a comma.
+    /// </summary>
+    private static bool NamesTheUndeclaredInstallFolder(string message) =>
+        message.Contains("machine-learning", StringComparison.Ordinal)
+        && message.Contains("own folder", StringComparison.Ordinal);
+
     // ---- the live-tree veto --------------------------------------------------------------------
 
     /// <summary>
