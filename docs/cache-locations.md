@@ -1948,13 +1948,13 @@ have since moved, renamed or deleted. Deguffer will not ask for it.
 
 **It is a ceiling, not a forecast, and the row says "about".** `FhManagew.exe` reports nothing
 before it runs, so there is no way to ask Windows what a cleanup would free. What Deguffer shows
-instead is its own measurement of the *first* of the two conditions above: everything on the drive
-older than the age you set. The second condition can only take away from that, never add to it, so
-the real reclaim is usually smaller — Windows keeps the newest copy of every file it is still
-protecting, however old that copy is.
+instead is its own measurement of the *first* of the two conditions above: this machine's saved
+versions older than the age you set. The second condition can only take away from that, never add to
+it, so the real reclaim is usually smaller — Windows keeps the newest copy of every file it is still
+protecting, however old that copy is. Nothing else on the drive is counted.
 
-The figure that is not a forecast is the one measured afterwards. Deguffer measures the drive before
-and after the command and reports the difference, along with the free space on the volume.
+The figure that is not a forecast is the one measured afterwards. Deguffer measures that same folder
+before and after the command and reports the difference.
 
 **A drive holding nothing old enough reads as "Nothing old enough", never "Already clear".** Those
 are different claims, and only one of them would be true of a full drive whose versions are all
@@ -1962,7 +1962,7 @@ recent.
 
 ### What is protected
 
-Everything on the drive except the versions themselves, asserted individually on every run:
+These are named on every plan, and the run checks afterwards that each is still there:
 
 - **Every other account's File History.** A backup drive is routinely shared, and another person's
   history sits beside yours under a folder named for their account.
@@ -1973,12 +1973,17 @@ Everything on the drive except the versions themselves, asserted individually on
   comparison of sizes would show that had happened.
 - **Your File History settings** in your own profile, which record what is protected and where it is
   saved.
-- **Everything else on the drive.** A File History target is very often an ordinary external disk
-  with the rest of your files on it.
 
-The command is Windows' own, so what it reaches is Windows' decision rather than Deguffer's. §5.6 is
-what covers that: the run asserts afterwards that every folder above is still standing and still
-holds something, and reports a failure if any of them does not.
+Everything else on the drive is untouched as well — a File History target is very often an ordinary
+external disk with the rest of your files on it — but Deguffer names the folders above rather than
+the whole drive, so those are the ones the check covers.
+
+**What the check proves, exactly.** The command is Windows' own, so what it reaches is Windows'
+decision rather than Deguffer's, and §5.6 is the answer to that: after the run, each folder above
+must still be there. A cleanup that removed one outright is reported as a failure. A cleanup that
+left a folder standing and took the versions out of it is not — Deguffer withholds that stronger
+judgement from any step that hands a tool its own command, because §5.1 gives that command a reach
+Deguffer cannot state. That applies to every such step in the app, not to this one alone.
 
 ### What it costs you
 

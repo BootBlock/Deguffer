@@ -1,4 +1,3 @@
-using System.Xml;
 using System.Xml.Linq;
 using Deguffer.Core.Safety;
 
@@ -11,17 +10,18 @@ public enum FileHistoryLookup
     NotConfigured,
 
     /// <summary>
-    /// It is set up, and its configuration did not name a target Deguffer could use. The one case
-    /// that is a limitation rather than a fact about the machine — see
-    /// <see cref="FileHistoryDiscovery"/> for what is read and what is refused.
+    /// It is set up, and this machine's saved versions are not under anything its configuration
+    /// names. An unplugged external drive is the ordinary reason; a configuration Deguffer could not
+    /// read is the other.
+    ///
+    /// <para><b>One outcome rather than two, because the parse cannot tell them apart.</b> No
+    /// element name is matched, so "the configuration named a target Deguffer cannot reach" and "it
+    /// named no target at all" both arrive here as "no candidate held the folder" — a real
+    /// configuration carries absolute paths for the protected folders as well, and those are
+    /// candidates too. Reporting "the drive is not connected" off that evidence would be a specific
+    /// claim about the machine that nothing established.</para>
     /// </summary>
-    ConfigurationUnreadable,
-
-    /// <summary>
-    /// It is set up and the target was named, and this machine's history is not there. An external
-    /// drive that is unplugged is the ordinary reason, and a share that is not mounted is the other.
-    /// </summary>
-    TargetUnreachable,
+    TargetNotFound,
 
     /// <summary>The target is named, connected, and holds this machine's saved versions.</summary>
     Found,
@@ -61,9 +61,6 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
     /// </summary>
     private const string ConfigurationPattern = "Config*.xml";
 
-    private static readonly char[] Separators =
-        [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
-
     private FileHistoryLocation? _located;
 
     /// <summary>
@@ -94,12 +91,8 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
             return new FileHistoryLocation(FileHistoryLookup.NotConfigured);
         }
 
-        var named = false;
-
         foreach (var candidate in ConfiguredRoots())
         {
-            named = true;
-
             var target = new FileHistoryTarget(candidate, environment.UserName, environment.MachineName);
 
             if (LongPath.DirectoryExists(target.DataDirectory))
@@ -108,8 +101,7 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
             }
         }
 
-        return new FileHistoryLocation(
-            named ? FileHistoryLookup.TargetUnreachable : FileHistoryLookup.ConfigurationUnreadable);
+        return new FileHistoryLocation(FileHistoryLookup.TargetNotFound);
     }
 
     /// <summary>
@@ -161,7 +153,7 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
     /// — see the class remarks.
     /// </summary>
     private static IEnumerable<string> LeafValuesIn(string file) =>
-        Load(file) is { } document ? document.Descendants().SelectMany(ValuesOf) : [];
+        XmlFile.TryLoad(file) is { } document ? document.Descendants().SelectMany(ValuesOf) : [];
 
     /// <summary>
     /// A container element's own text is the concatenation of everything below it, which is never a
@@ -174,26 +166,6 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
         return element.HasElements ? attributes : attributes.Append(element.Value);
     }
 
-    private static XDocument? Load(string file)
-    {
-        try
-        {
-            // From a stream, not from the path: the overload taking a string treats it as a URI, and
-            // §6.3's extended-length form is not one — every configuration would fail to parse on a
-            // path that reached this in the shape the rest of Core uses.
-            //
-            // XDocument prohibits DTD processing by default either way, so a configuration file
-            // somebody had replaced cannot pull in an external entity.
-            using var stream = File.OpenRead(LongPath.Extended(file));
-
-            return XDocument.Load(stream, LoadOptions.None);
-        }
-        catch (Exception ex) when (ex is XmlException or IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
     /// <summary>
     /// The target device <paramref name="value"/> names, or null where it is not a path at all.
     ///
@@ -204,7 +176,11 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
     /// </summary>
     private string? TargetRootOf(string value)
     {
-        if (Normalise(value) is not { } path)
+        // LongPath.Configured is the whole of the normalising: it refuses anything that is not
+        // fully qualified, resolves relative segments, and drops a trailing separator. It handles
+        // the device-namespace form a letterless drive is named in — which is what a File History
+        // target frequently is — because LongPath.Display leaves that form alone (§6.3).
+        if (LongPath.Configured(value) is not { } path)
         {
             return null;
         }
@@ -240,38 +216,5 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
         return path.EndsWith(ending, StringComparison.OrdinalIgnoreCase)
             ? path[..^ending.Length]
             : null;
-    }
-
-    /// <summary>
-    /// <paramref name="value"/> as a fully qualified path with no trailing separator, or null where
-    /// it is not one.
-    ///
-    /// <para>A drive with no letter is named in the device namespace, and that is the one form
-    /// <see cref="LongPath.Configured"/> cannot handle: it strips the prefix before normalising, and
-    /// <c>Volume{…}\</c> is not a qualified path, so what is left resolves against Deguffer's own
-    /// working directory — a folder nobody pointed at, silently. Such a value is therefore kept as
-    /// it stands, and refused outright if it carries a relative segment, because the device
-    /// namespace resolves nothing and a <c>..</c> in one would reach a folder nobody named.</para>
-    ///
-    /// <para><b>Only half of this is provable in a fixture.</b> The refusal above is, and
-    /// <c>FileHistoryDiscoveryTests</c> covers it. The volume-GUID case is not, because a test
-    /// cannot create a volume — so what stands behind that branch is this paragraph rather than an
-    /// assertion, and a test written against <c>\\?\C:\…</c> would pass with the branch deleted.</para>
-    /// </summary>
-    private static string? Normalise(string value)
-    {
-        var trimmed = value.Trim();
-
-        if (!trimmed.StartsWith(@"\\?\", StringComparison.Ordinal)
-            && !trimmed.StartsWith(@"\\.\", StringComparison.Ordinal))
-        {
-            return LongPath.Configured(trimmed);
-        }
-
-        var segments = trimmed.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
-
-        return segments.Contains(".") || segments.Contains("..")
-            ? null
-            : Path.TrimEndingDirectorySeparator(trimmed);
     }
 }

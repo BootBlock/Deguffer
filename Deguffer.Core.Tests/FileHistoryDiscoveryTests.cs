@@ -127,21 +127,21 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public void ReportsTheDriveUnreachableWhenTheNamedTargetHoldsNothing()
+    public void ReportsNoTargetWhenTheNamedDriveHoldsNothing()
     {
         var drive = CreateDrive("E");
         WriteConfiguration(NamingTarget(drive));
 
-        Assert.Equal(FileHistoryLookup.TargetUnreachable, Discovery().Locate().Outcome);
+        Assert.Equal(FileHistoryLookup.TargetNotFound, Discovery().Locate().Outcome);
     }
 
     [Fact]
-    public void ReportsTheConfigurationUnreadableWhenItNamesNoPathAtAll()
+    public void ReportsNoTargetWhenTheConfigurationNamesNoPathAtAll()
     {
         CreateHistory(CreateDrive("E"));
         WriteConfiguration("<DataProtectionConfig><Target><Url>not a path</Url></Target></DataProtectionConfig>");
 
-        Assert.Equal(FileHistoryLookup.ConfigurationUnreadable, Discovery().Locate().Outcome);
+        Assert.Equal(FileHistoryLookup.TargetNotFound, Discovery().Locate().Outcome);
     }
 
     /// <summary>
@@ -149,12 +149,12 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
     /// offered rather than a target invented, and the app carries on planning every other row.
     /// </summary>
     [Fact]
-    public void ReportsTheConfigurationUnreadableWhenItIsNotXml()
+    public void ReportsNoTargetWhenTheConfigurationIsNotXml()
     {
         CreateHistory(CreateDrive("E"));
         WriteConfiguration("<DataProtectionConfig><Target>");
 
-        Assert.Equal(FileHistoryLookup.ConfigurationUnreadable, Discovery().Locate().Outcome);
+        Assert.Equal(FileHistoryLookup.TargetNotFound, Discovery().Locate().Outcome);
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
         CreateHistory(CreateDrive("E"));
         WriteConfiguration(NamingTarget(@"drives\E"));
 
-        Assert.Equal(FileHistoryLookup.ConfigurationUnreadable, Discovery().Locate().Outcome);
+        Assert.Equal(FileHistoryLookup.TargetNotFound, Discovery().Locate().Outcome);
     }
 
     /// <summary>
@@ -175,12 +175,11 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
     /// drive that has no letter this way, so refusing the prefix outright would lose exactly the
     /// case a File History target most often is — an external disk with no assigned letter.
     ///
-    /// <para><b>What this cannot reach is the volume-GUID form itself.</b> A fixture can build
-    /// <c>\\?\C:\…</c>, and cannot build <c>\\?\Volume{…}\</c>, because that names a real volume on
-    /// the machine. The branch in <c>Normalise</c> that keeps a device path verbatim exists for that
-    /// form and is not exercised here: <see cref="Safety.LongPath.Configured"/> happens to handle the
-    /// drive-letter one correctly, so this test passes either way. What is stated instead is the
-    /// reasoning, in that method — and the case below, which does discriminate.</para>
+    /// <para><b>What a fixture cannot reach is the volume-GUID form itself</b>, because that names a
+    /// real volume on the machine. The handling that form needs is in
+    /// <see cref="Safety.LongPath.Display"/>, and <c>LongPathTests</c> covers it there as pure string
+    /// work — which is where the defect lived, and where a real volume would make it no more
+    /// visible.</para>
     /// </summary>
     [Fact]
     public void ReadsATargetAlreadyInExtendedLengthForm()
@@ -189,22 +188,22 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
         var data = CreateHistory(drive);
         WriteConfiguration(NamingTarget(@"\\?\" + drive + @"\"));
 
-        Assert.Equal(FileHistoryLookup.Found, Discovery().Locate().Outcome);
-        Assert.True(Directory.Exists(data));
+        Assert.Equal(data, Discovery().Locate().Target!.DataDirectory);
     }
 
     /// <summary>
-    /// The device namespace resolves nothing, so a relative segment in one would reach a folder
-    /// nobody named. It is refused rather than resolved.
+    /// A relative segment is resolved rather than carried, because <see cref="Safety.LongPath.Extended"/>
+    /// requires an already-normalised path — the Win32 device namespace resolves nothing itself, so a
+    /// <c>..</c> that survived here would reach a folder nobody named (§6.3).
     /// </summary>
     [Fact]
-    public void RefusesARelativeSegmentInTheDeviceNamespace()
+    public void ResolvesARelativeSegmentInAConfiguredPath()
     {
         var drive = CreateDrive("E");
-        CreateHistory(drive);
-        WriteConfiguration(NamingTarget(@"\\?\" + drive + @"\sub\..\"));
+        var data = CreateHistory(drive);
+        WriteConfiguration(NamingTarget(Path.Combine(drive, "sub", "..")));
 
-        Assert.Equal(FileHistoryLookup.ConfigurationUnreadable, Discovery().Locate().Outcome);
+        Assert.Equal(data, Discovery().Locate().Target!.DataDirectory);
     }
 
     /// <summary>
@@ -220,10 +219,10 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
         WriteConfiguration(NamingTarget(drive));
 
         var discovery = Discovery();
-        Assert.Equal(FileHistoryLookup.TargetUnreachable, discovery.Locate().Outcome);
+        Assert.Equal(FileHistoryLookup.TargetNotFound, discovery.Locate().Outcome);
 
         CreateHistory(drive);
-        Assert.Equal(FileHistoryLookup.TargetUnreachable, discovery.Locate().Outcome);
+        Assert.Equal(FileHistoryLookup.TargetNotFound, discovery.Locate().Outcome);
 
         discovery.Invalidate();
         Assert.Equal(FileHistoryLookup.Found, discovery.Locate().Outcome);

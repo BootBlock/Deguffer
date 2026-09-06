@@ -121,13 +121,10 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     /// clean is worth saying out loud. It is a warning rather than a refusal: both are Windows'
     /// own, and the command is the one Microsoft documents for the job.
     /// </summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => ["FileHistory", "FileHistoryCore"];
+    protected override IReadOnlyList<string> ConflictingProcessNames => ["FileHistory"];
 
-    /// <summary>
-    /// The retention age in force, clamped. Public so the settings box binds the same bounds the
-    /// clamp applies, rather than carrying a second copy of them that is free to disagree.
-    /// </summary>
-    public int RetentionDays => Math.Clamp(
+    /// <summary>The retention age in force, clamped to the bounds the settings box also binds.</summary>
+    private int RetentionDays => Math.Clamp(
         _preferences.Current.FileHistoryRetentionDays, MinimumRetentionDays, MaximumRetentionDays);
 
     /// <summary>
@@ -144,7 +141,10 @@ public sealed class FileHistoryProvider : CleanupProviderBase
             ?
             [
                 new ToolRoot(
-                    target.FileHistoryRoot,
+                    // Display form, which is ToolRoot's contract. On a drive with no letter the
+                    // target is named in the device namespace, and LongPath.Display leaves such a
+                    // path alone rather than producing one that resolves nowhere (§6.3).
+                    LongPath.Display(target.FileHistoryRoot),
                     "This is your File History backup, and it holds every saved version of your own "
                     + "files as well as anyone else's who backs up to this drive. Deguffer never "
                     + "removes anything here itself.",
@@ -190,18 +190,13 @@ public sealed class FileHistoryProvider : CleanupProviderBase
 
         var days = RetentionDays;
 
-        // The first of Microsoft's two conditions, measured. MinimumAge reads the newer of a file's
-        // creation and last-write times, so a version copied onto the target counts from when it
-        // arrived there rather than from whenever the original was last edited — which is the age
-        // the command is judging, and errs towards keeping a file rather than counting it.
-        var aged = await Scanner
-            .MeasureAsync(target.DataDirectory, RetentionAge(days), progress: null, ct)
+        // The whole folder for the after-run delta, and the first of Microsoft's two conditions for
+        // the estimate. MinimumAge reads the newer of a file's creation and last-write times, so a
+        // version copied onto the target counts from when it arrived rather than from whenever the
+        // original was last edited — which is the age the command is judging, and errs towards
+        // keeping a file rather than counting it.
+        var (probed, aged) = await MeasureAgedAsync([target.DataDirectory], RetentionAge(days), ct)
             .ConfigureAwait(false);
-
-        // Deguffer's own probe of the same folder, unguarded, for the after-run delta. It is the
-        // larger number by construction, because everything inside the retention age is in it —
-        // see RunCommandStep.MeasuredBefore for why the two sides must be measured on one basis.
-        var probed = await MeasureAllAsync([target.DataDirectory], ct).ConfigureAwait(false);
 
         var survivors = ProtectedNeighboursOf(target, out var unreadable);
 
@@ -210,9 +205,10 @@ public sealed class FileHistoryProvider : CleanupProviderBase
             new(PlanNoteSeverity.Information,
                 $"Windows is saving this machine's File History to {target.Root}."),
             new(PlanNoteSeverity.Information,
-                $"The figure is everything on that drive older than {days} days, which is as much as "
-                + "Windows could remove. It keeps the newest copy of any file it is still "
-                + "protecting, so it will usually free less."),
+                $"The figure is this machine's saved versions older than {days} days, which is as "
+                + "much as Windows could remove. It keeps the newest copy of any file it is still "
+                + "protecting, so it will usually free less. Nothing else on that drive is counted, "
+                + "and nothing else on it is touched."),
         };
 
         if (probed.Note is { } scanNote)
@@ -238,7 +234,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     $"-cleanup {days} -quiet",
                     $"Drop File History versions older than {days} days using Windows' own command")
                 {
-                    Estimated = ScanSize.Approximate(aged.Size.Reclaimable),
+                    Estimated = ScanSize.Approximate(aged.Total.Reclaimable),
                     MeasuredPaths = [target.DataDirectory],
                     MeasuredBefore = probed.Total,
 
@@ -246,7 +242,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     // measures: the command takes only what is past the retention age, so a target
                     // full of recent versions measures zero and is not clear. Without this the row
                     // would claim it was. See CleanupStep.WithheldRecent.
-                    WithheldRecent = aged.WithheldRecent,
+                    WithheldRecent = aged.WithheldRecent.Any(held => held),
                 },
             ],
             ProtectedPaths = Protect([.. survivors]),
@@ -265,20 +261,21 @@ public sealed class FileHistoryProvider : CleanupProviderBase
         MinimumAge.Within(TimeSpan.FromDays(days), DateTime.UtcNow);
 
     /// <summary>
-    /// Why there is nothing to offer, in the words that tell the user what, if anything, to do
-    /// about it. The three cases ask for three different things — nothing, a bug report, and
-    /// plugging the drive in — so they are not collapsed into one sentence.
+    /// Why there is nothing to offer. The two cases ask for different things — nothing at all, and
+    /// plugging a drive in — so they are not one sentence.
+    ///
+    /// <para>Only two, because <see cref="FileHistoryLookup"/> makes only two claims it can support.
+    /// "The drive is unplugged" and "the settings named nothing Deguffer could use" are one outcome
+    /// there, so the sentence names the likely reason without asserting it.</para>
     /// </summary>
     private CleanupPlan DescribeAbsence(FileHistoryLookup outcome) => outcome switch
     {
         FileHistoryLookup.NotConfigured =>
             EmptyPlan("File History is not set up on this machine, so there are no saved versions."),
-        FileHistoryLookup.TargetUnreachable => UnexaminedPlan(
-            "File History is set up, and the drive it saves to is not connected. Nothing is offered "
-            + "rather than guessed at."),
         _ => UnexaminedPlan(
-            "File History is set up, and Deguffer could not tell from its settings which drive it "
-            + "saves to. Nothing is offered rather than guessed at."),
+            "File History is set up, and Deguffer did not find this machine's saved versions on any "
+            + "drive its settings name. The drive it saves to may not be connected. Nothing is "
+            + "offered rather than guessed at."),
     };
 
     /// <summary>
@@ -287,12 +284,21 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     /// <para>A File History drive is shared twice over: one folder per account under
     /// <c>FileHistory</c>, and one folder per machine under each account. Somebody else's backup and
     /// this machine's backup are siblings of identical shape, so the folders that must survive are
-    /// listed individually — the same reasoning as a <c>$Recycle.Bin</c>, where a rule slightly too
-    /// broad takes another person's data with this user's.</para>
+    /// listed individually rather than left out silently.</para>
     ///
-    /// <para>The catalogue beside the versions is the other one worth asserting. Removing it would
+    /// <para>The catalogue beside the versions is the other one worth naming. Removing it would
     /// leave every saved version on the drive intact and unreachable, which is a failure no size
     /// comparison would show.</para>
+    ///
+    /// <para><b>What the run then proves is that these folders are still there, and no more than
+    /// that.</b> <see cref="PlanVerifier"/>'s stronger question, whether a protected directory
+    /// survived but was emptied, is switched off for every plan holding a
+    /// <see cref="RunCommandStep"/>: <see cref="RunReach.Of"/> marks such a run unbounded, because
+    /// §5.1 hands the tool a command whose reach nothing here can state, and
+    /// <c>PlanVerifier.WasEmptied</c> declines to draw a conclusion from that. So a cleanup that
+    /// removed another account's folder outright is caught, and one that emptied it in place is not.
+    /// That is a property of §5.6 against every command step in the product rather than of this
+    /// provider, and it is stated here because Tier 3 is where it costs most.</para>
     /// </summary>
     /// <param name="unreadable">
     /// Whether a folder refused to be listed, so its children were never classified and the

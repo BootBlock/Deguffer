@@ -48,6 +48,33 @@ public class LongPathTests
         Assert.Equal(expected, LongPath.Display(extended));
 
     /// <summary>
+    /// A volume-GUID path keeps its prefix, and this is a safety test rather than a cosmetic one.
+    ///
+    /// <para>Windows names a drive that has no letter <c>\\?\Volume{…}\</c>, and a File History
+    /// target frequently is one. Stripping the prefix leaves <c>Volume{…}\…</c>, which is not a
+    /// fully qualified path — so the next thing to touch it resolves it against Deguffer's own
+    /// working directory. That string reaches <c>ProtectedPath</c>, where §5.6's negative then
+    /// asserts the survival of a folder under Deguffer's directory rather than the one on the drive:
+    /// it measures absent, it is reported as "nothing to preserve", and the check passes over
+    /// whatever really happened to the folder it was meant to guard.</para>
+    ///
+    /// <para>The GUID is invented. Nothing here reaches a disk, which is the point — the defect is
+    /// in the string handling, and a real volume would not make it any more visible.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\?\Volume{11111111-2222-3333-4444-555555555555}\FileHistory")]
+    [InlineData(@"\\?\Volume{11111111-2222-3333-4444-555555555555}\")]
+    public void KeepsThePrefixWhereStrippingItWouldUnrootThePath(string device)
+    {
+        Assert.Equal(device, LongPath.Display(device));
+
+        // The property that makes it safe, stated rather than implied: whatever comes back can be
+        // handed to Extended and Configured again without moving.
+        Assert.True(Path.IsPathFullyQualified(LongPath.Display(device)));
+        Assert.Equal(device, LongPath.Extended(LongPath.Display(device)));
+    }
+
+    /// <summary>
     /// The assumption every other long-path test in this suite rests on, made falsifiable.
     ///
     /// <para>.NET prepends <c>\\?\</c> itself to any path of 260 characters or more before it calls

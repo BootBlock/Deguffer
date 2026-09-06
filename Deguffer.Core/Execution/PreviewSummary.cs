@@ -98,8 +98,13 @@ public static class PreviewSummary
             "Nothing to reclaim, and Windows would not let Deguffer read some of these locations.",
         FindingStatus.NotExamined =>
             "Nothing to reclaim, and some of these locations were not examined.",
+        // Deliberately "not old enough" rather than "recently changed", which the row's own label
+        // has always said and this sentence used not to. Two different ages reach this state: the
+        // user's guard on recently changed files, and a command that takes an age of its own —
+        // FhManagew's retention, where the files held back can be a year old. Naming the guard here
+        // would describe a setting the reader may never have switched on.
         FindingStatus.RecentContentHeldBack =>
-            "Nothing to reclaim, and some of these caches hold only recently changed files.",
+            "Nothing to reclaim, and some of these hold only files that are not old enough to remove.",
         FindingStatus.AwaitingSourceFolders =>
             "Nothing to reclaim, and some of these locations need a source folder before Deguffer "
             + "can look.",
