@@ -106,6 +106,20 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// How a Recycle Bin gets emptied. Off means Windows does it, which is the shipped route.
+    ///
+    /// <para>It is on this page rather than decided for the user because neither answer is right
+    /// for everybody, and because the two costs are of different kinds: asking Windows keeps every
+    /// window on the machine agreeing with the disk, and doing it ourselves is several times faster
+    /// on a bin large enough to be worth emptying. Neither changes which directory is emptied.</para>
+    /// </summary>
+    public bool EmptyRecycleBinsDirectly
+    {
+        get => _preferences.Current.EmptyRecycleBinsDirectly;
+        set => Apply(current => current with { EmptyRecycleBinsDirectly = value });
+    }
+
+    /// <summary>
     /// A week. Bound by the control as well as used by the clamp below, so the box and the value it
     /// produces cannot disagree — a number typed past the maximum is otherwise accepted by one and
     /// silently rewritten by the other.

@@ -1797,8 +1797,9 @@ one under `S-1-5-18`.
 ### What Deguffer does
 
 It takes **your own** bin from each fixed drive, one row per drive, and it does not touch the
-`$Recycle.Bin` folder that contains them. Windows re-creates your folder the next time you delete
-something to that drive, so the bin keeps working exactly as it did.
+`$Recycle.Bin` folder that contains them. Your own folder is left standing and empty when Windows
+does the emptying, and re-created on your next delete when Deguffer does it directly. Either way the
+bin keeps working exactly as it did.
 
 Each row carries the date that bin last changed, because that is what the decision turns on. A
 drive you last deleted something on eight months ago is a different proposition from one you were
@@ -1810,15 +1811,37 @@ rather than to you. Removable media can be swapped between the preview and the c
 put a plan you approved for one disk in front of another. A fixed drive that is not ready to be
 read, which is unusual but possible, is skipped as well.
 
-**Windows has a command for this, and Deguffer does not use it.** §5.1 says to prefer a tool's own
-eviction command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name. The reason
-it is not used is the preview. Deguffer's plan tells you the exact folder it will remove on each
-drive, how large it is and when you last used it, and then checks afterwards that everything it
-promised to keep is still there. A command that takes a drive and reports nothing back leaves both
-of those with nothing to say — and it would move the decision about *whose* bin gets emptied out of
-the code where that rule can be checked. The one thing given up is that Windows is not told what
-changed, so a Recycle Bin window you already had open may keep showing the old contents until you
-refresh it. That is a stale picture rather than a stale deletion.
+**Windows has a command for this, and Deguffer uses it.** §5.1 says to prefer a tool's own eviction
+command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name. Asking Windows
+rather than deleting the files means Windows knows the bin changed, so a Recycle Bin window you
+already had open, the desktop icon and anything else watching all agree with the disk straight away.
+
+The preview is unaffected. The call takes a *drive*, and Deguffer's plan still names the exact
+folder on each drive, how large it is and when you last used it, and still checks afterwards that
+everything it promised to keep is still there. Those are two different paths, and only the second is
+what you are shown.
+
+**The reason to doubt it was §5.2, and it was measured rather than assumed.** A command that names a
+drive and no account looks, from its shape alone, like exactly the too-broad rule that section
+refuses. On a scratch drive carrying this account's bin, a second account's bin beside it, and a
+folder that was not an account identifier at all, the call removed this account's entries and left
+all three of the others exactly as they were. That test ran with administrator rights, which is the
+case worth stating: a token that may delete anything did not widen what Windows chose to delete.
+Deguffer still asserts the survivors on every run, so the answer is proved again each time rather
+than resting on that one measurement.
+
+**It is slower than deleting the files, which is why the other route is still here.** Against a bin
+holding 1,000 deleted files the call took between 4 and 6 seconds where removing the same files took
+under a fifth of a second; at 3,000 files the two were 60 seconds and under a second. The gap widens
+the more the bin holds, so it is worst on the bin most worth emptying. **Empty Recycle Bins without
+Windows**, on the Settings page, takes the fast side instead and gives up the notification, so a
+Recycle Bin window left open may keep showing the old contents until you refresh it. That is a stale
+picture rather than a stale deletion. The same folder is emptied either way, and other accounts'
+bins are untouched by both.
+
+**Leaving recently changed files alone always uses the direct route.** Windows empties a bin whole
+and offers no way to hold anything back, so a plan made under that setting removes the files itself
+whatever the setting above says, and tells you it is doing so.
 
 ### What is protected
 

@@ -27,6 +27,7 @@ public class PreferenceStoreTests
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true,
+            EmptyRecycleBinsDirectly: true,
             KeepFilesChangedWithinHours: 8)));
 
         var loaded = store.Load();
@@ -51,6 +52,10 @@ public class PreferenceStoreTests
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
+
+        // Not the default, on the reasoning above: false is what the record declares and what a
+        // missing key deserialises to.
+        Assert.True(loaded.EmptyRecycleBinsDirectly);
 
         // Not the default, for the reason the two above give: zero is what the record declares and
         // what a missing key deserialises to, so asserting zero would pass with the preference
@@ -101,6 +106,10 @@ public class PreferenceStoreTests
         Assert.False(loaded.RequireTypedConfirmation);
         Assert.False(loaded.ShowNotInstalled);
         Assert.False(loaded.ShowAlreadyClear);
+
+        // Off, so an upgraded machine keeps asking Windows to empty a bin rather than silently
+        // switching to the route that leaves an open Recycle Bin window showing the old contents.
+        Assert.False(loaded.EmptyRecycleBinsDirectly);
 
         // Off, which is the one direction this preference may default in: a guard nobody asked for
         // would quietly shrink every plan on an upgraded machine.

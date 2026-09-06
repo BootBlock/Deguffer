@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -33,17 +34,28 @@ namespace Deguffer.Core.Providers;
 /// and §7's age column wants a row a reader can act on — "you last deleted something on this drive
 /// eight months ago" — not ten thousand of them.</para>
 ///
-/// <para><b>§5.1 is answered rather than skipped.</b> Windows ships <c>SHEmptyRecycleBin</c>, which
-/// takes a volume root — the grain this provider already works at — and it is deliberately not used.
-/// §7 makes the preview the primary action, and a plan has to name what it will remove: this one
-/// names one directory per volume, sized and dated, and §5.6 asserts what survived beside it. A
-/// shell call names a volume, reports nothing back, and would leave both of those with nothing to
-/// say. The second reason is §5.2 itself — the safety property here is "this account's directory,
-/// never a sibling", and handing a whole volume to the shell puts that decision outside the code the
-/// rule is checkable in. The cost is accepted rather than dismissed: a path deletion does not tell
-/// the shell what changed, so a Recycle Bin window left open may show a stale picture until it
-/// refreshes. That is a stale picture rather than a stale deletion, and it has not been observed
-/// here.</para>
+/// <para><b>§5.1 is answered, and the answer is Windows' own call.</b> Windows ships
+/// <c>SHEmptyRecycleBin</c>, which takes a volume root — the grain this provider already works at —
+/// and it is the shipped route. §7's preview is unaffected by that: the plan still names one
+/// directory per volume, sized and dated, and §5.6 still asserts what survived beside it, because
+/// what the shell is handed and what the plan names are two different paths and only the second is
+/// what the user is shown. See <see cref="EmptyRecycleBinStep"/>.</para>
+///
+/// <para>§5.2 was the reason to doubt it, since a call naming a volume looks from its signature like
+/// the over-broad rule the section exists to refuse. It was measured instead of assumed: an elevated
+/// call on a volume root removed this account's entries and left a second account's bin, a child
+/// that was not an identifier at all, and the bin root itself exactly as they were.
+/// <see cref="ShellRecycleBinEmptier"/> records that, and the cost that came with it — the shell
+/// route is several times slower than removing the same files, and the gap widens with the number
+/// of entries. What it buys is the notification a path deletion cannot give: Windows learns the bin
+/// changed, so an open Recycle Bin window and the desktop icon agree with the disk immediately.</para>
+///
+/// <para><b>The other route is kept and is the user's to choose.</b>
+/// <see cref="AppPreferences.EmptyRecycleBinsDirectly"/> removes the files instead, which is much
+/// faster and leaves Windows to notice in its own time. The guard on recently changed files forces
+/// that route regardless, because the shell empties a bin whole and offers no way to hold anything
+/// back — a plan that has withheld files must not then hand the whole bin to something that will
+/// take them.</para>
 ///
 /// <para>The bin root was observed holding nothing but per-account directories, so unlike NVIDIA's
 /// <c>accounts</c> there is no file beside the target to name explicitly. The children that
@@ -62,6 +74,12 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     private readonly IVolumeInventory _volumes;
 
     /// <summary>
+    /// Read at plan time rather than held, so a change on the Settings page takes effect from the
+    /// next preview. See <see cref="ICurrentPreferences"/>.
+    /// </summary>
+    private readonly ICurrentPreferences _preferences;
+
+    /// <summary>
     /// The one child of a bin root this user may empty, or an empty set when the user cannot be
     /// identified.
     ///
@@ -78,14 +96,18 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        ICurrentPreferences? preferences = null,
+        IRecycleBinEmptier? emptier = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            emptier)
     {
         _volumes = volumes ?? VolumeInventory.Current;
+        _preferences = preferences ?? DefaultPreferences.Instance;
         _children = new DisposableChildSet(
             Environment.UserSecurityIdentifier is { } sid
                 ?
@@ -176,6 +198,14 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         var survivors = new List<(string Path, string Reason)>();
         var unreadable = false;
 
+        // Decided once for the whole plan rather than per volume, because it is one answer to one
+        // question the user was asked once. The guard wins over the setting: Windows empties a bin
+        // whole, so the only way to leave a recently changed file where it is, is to do the removal
+        // ourselves.
+        var kind = keep.IsOn || _preferences.Current.EmptyRecycleBinsDirectly
+            ? TargetKind.Directory
+            : TargetKind.RecycleBin;
+
         foreach (var bin in CandidateBins())
         {
             ct.ThrowIfCancellationRequested();
@@ -202,7 +232,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
                 bin,
                 "The volume's Recycle Bin itself must survive — only this user's own bin inside it is removed."));
 
-            unreadable |= !CollectFrom(bin, targets, declined, notes, ct);
+            unreadable |= !CollectFrom(bin, kind, targets, declined, notes, ct);
         }
 
         // A refused bin root must not be reported as an absent one. Presence was decided by probing
@@ -213,6 +243,17 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         if (targets.Count == 0 && declined.Count == 0 && !unreadable)
         {
             return EmptyPlan("No volume on this machine holds a Recycle Bin for this user.");
+        }
+
+        // Only where the setting and the guard actually disagree. Saying it whenever the direct
+        // route is taken would explain the user's own setting back to them on every preview.
+        if (keep.IsOn && !_preferences.Current.EmptyRecycleBinsDirectly && targets.Count > 0)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                "Emptying these bins by removing their files rather than asking Windows to, so that "
+                + "the files you asked to keep are kept. Windows empties a bin whole and cannot "
+                + "leave anything behind."));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -246,12 +287,19 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// identical shape under one parent, distinguished by nothing but a string of digits — and the
     /// spared one holds another person's files.
     /// </summary>
+    /// <param name="kind">
+    /// Which removal each target becomes, decided once for the plan by the caller. It is not
+    /// decided here because it is a fact about the run rather than about this volume, and one plan
+    /// emptying two bins by two different routes is not something anything downstream could explain
+    /// to the user.
+    /// </param>
     /// <returns>
     /// False where the bin root would not be listed, so the caller can keep the plan from claiming
     /// the volume holds nothing.
     /// </returns>
     private bool CollectFrom(
         string bin,
+        TargetKind kind,
         List<DeletionTarget> targets,
         List<(string Path, string Reason)> declined,
         List<PlanNote> notes,
@@ -295,7 +343,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
                 continue;
             }
 
-            targets.Add(new DeletionTarget(path, classification.Reason, LastActivity(child)));
+            targets.Add(new DeletionTarget(path, classification.Reason, LastActivity(child), kind));
         }
 
         return true;

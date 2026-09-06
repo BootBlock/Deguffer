@@ -48,8 +48,15 @@ public static class PlanVerifier
 
         if (LongPath.FileExists(protectedPath.Path) || LongPath.DirectoryExists(protectedPath.Path))
         {
-            return new VerificationCheck(
-                protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
+            return WasEmptied(protectedPath, reach)
+                ? new VerificationCheck(
+                    protectedPath.Path,
+                    protectedPath.Reason,
+                    VerificationOutcome.Emptied,
+                    "EMPTIED — the folder is still here and everything that was in it has gone. "
+                    + "No step in this run named anything inside it.")
+                : new VerificationCheck(
+                    protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
         }
 
         return WasBeyondThisRunsReach(protectedPath.Path, reach)
@@ -66,6 +73,36 @@ public static class PlanVerifier
                 VerificationOutcome.Failed,
                 "MISSING — it was there before the clean.");
     }
+
+    /// <summary>
+    /// Whether a protected directory that held something now holds nothing, for a reason this run
+    /// cannot account for.
+    ///
+    /// <para><b>Why existence alone stopped being the whole question.</b> Until a route existed that
+    /// empties a directory in place, an over-broad rule always took the directory with the contents,
+    /// so a protected sibling went missing and the check above caught it. It no longer does.
+    /// <see cref="EmptyRecycleBinStep"/> hands Windows a whole volume and Windows empties one
+    /// account's bin inside it, and the failure worth catching — it reached every account — leaves
+    /// each of those directories exactly where it was, holding nothing. Every protected path is then
+    /// present, the negative passes, and what it passed over is another person's deleted files.
+    /// See <see cref="ProtectedPath.HeldContentBefore"/>.</para>
+    ///
+    /// <para><b>The run's own targets are the exemption, and it is the same reasoning
+    /// <see cref="HoldsATarget"/> already carries.</b> A protected path is often the parent of a
+    /// target — a volume's <c>$Recycle.Bin</c> is protected and this account's bin inside it is
+    /// removed — so on a machine with one account that parent legitimately ends the run empty.
+    /// Reading that as an alarm would fire on the ordinary case and teach the reader to ignore it.
+    /// A directory holding nothing this run named, that held something before and holds nothing now,
+    /// has no such explanation.</para>
+    ///
+    /// <para>Asked only of a directory that held something, so nothing here reads a path that was
+    /// empty to begin with, and nothing reads a file.</para>
+    /// </summary>
+    private static bool WasEmptied(ProtectedPath protectedPath, RunReach reach) =>
+        protectedPath.HeldContentBefore
+        && !LongPath.HoldsAnything(protectedPath.Path)
+        && !reach.Unbounded
+        && !HoldsATarget(protectedPath.Path, reach.TargetedPaths);
 
     /// <summary>
     /// Whether a path that has gone missing went missing for a reason nothing in this run can

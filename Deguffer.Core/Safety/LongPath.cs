@@ -128,6 +128,32 @@ public static class LongPath
     public static bool FileExists(string path) => File.Exists(Extended(path));
 
     /// <summary>
+    /// Whether this is a directory holding at least one entry, tolerating paths beyond MAX_PATH.
+    ///
+    /// <para>§5.6 asks it of every protected path, so it stops at the first entry rather than
+    /// counting them: the question is whether the directory still holds <em>anything</em>, and a
+    /// count would walk a Recycle Bin to learn what one entry settles (G4).</para>
+    ///
+    /// <para>False for a file, for a path that is not there, and for a directory that cannot be
+    /// listed. The last of those is the one worth stating: an unreadable directory answers the same
+    /// as an empty one, so a protected path Windows will not list is never <em>reported</em> as
+    /// having held something. That keeps a refusal out of the evidence rather than turning it into
+    /// an alarm, and it is the same direction §5.3 takes everywhere else.</para>
+    /// </summary>
+    public static bool HoldsAnything(string path)
+    {
+        try
+        {
+            return Directory.EnumerateFileSystemEntries(Extended(path)).Any();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        {
+            // Not a directory, gone, or not listable by this account.
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Whether this path is a junction or symbolic link rather than a real directory.
     ///
     /// <see cref="DirectoryExists"/> answers true for a junction and says nothing about it, so a

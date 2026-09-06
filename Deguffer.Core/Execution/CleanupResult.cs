@@ -70,6 +70,14 @@ public enum VerificationOutcome
     /// over, because the run's figures describe a machine that changed underneath them.
     /// </summary>
     RemovedFromOutside,
+
+    /// <summary>
+    /// It is still there and everything inside it has gone. The same alarm as
+    /// <see cref="Failed"/>, in the shape an emptying leaves rather than the shape a deletion
+    /// leaves — see <see cref="ProtectedPath.HeldContentBefore"/> for why the two need telling
+    /// apart at all.
+    /// </summary>
+    Emptied,
 }
 
 /// <summary>One assertion about something that should have survived, and how it came out.</summary>
@@ -91,9 +99,15 @@ public sealed record VerificationResult
     /// The paths this run has to answer for. Not cached in a backing field — this is a record, and
     /// <c>with</c> copies backing fields, so a cache would outlive a change to
     /// <see cref="Checks"/>.
+    ///
+    /// <para><see cref="VerificationOutcome.Emptied"/> counts here beside
+    /// <see cref="VerificationOutcome.Failed"/>, because the two differ only in what the wreckage
+    /// looks like: one path was destroyed and the other was emptied, and both mean a rule reached
+    /// further than it was meant to. Keeping them apart would let <see cref="Passed"/> report false
+    /// while <see cref="Summary"/> said every path survived.</para>
     /// </summary>
     public IReadOnlyList<VerificationCheck> Failures =>
-        [.. Checks.Where(c => c.Outcome == VerificationOutcome.Failed)];
+        [.. Checks.Where(c => c.Outcome is VerificationOutcome.Failed or VerificationOutcome.Emptied)];
 
     /// <summary>
     /// The paths something else took while the preview sat on screen. Kept apart from
