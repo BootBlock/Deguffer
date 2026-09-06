@@ -2092,6 +2092,73 @@ installer's own `--nocache` switch, run before the next repair or modify.
 as a last resort after a repair or an uninstall has already failed, and warns that it can remove
 features belonging to other products.
 
+### .NET workload packs — the command that clears them cannot say what it would free
+
+`%PROGRAMFILES%\dotnet\packs` holds the workload packs: the Android, iOS and MacCatalyst SDKs, the
+reference assemblies a project compiles against, and the Mono and NativeAOT runtime packs those
+platforms run on. A full set is kept per SDK feature band and per workload manifest version, and an
+SDK update adds a set rather than replacing one.
+
+It measured **4,599.5 MB** on the audited machine, out of 8,604.4 MB for
+`%PROGRAMFILES%\dotnet` as a whole. Classifying every pack against the four installed feature bands
+put **1,881.9 MB of it — 41% —** on bands (`8.0.100` and `9.0.100`) with no installed SDK, or on
+superseded same-band workload SDK packs. Outside the Visual Studio caches above, that is the largest
+single figure no provider reaches.
+
+`dotnet workload clean` is the right command for it, and it is the right *shape* of command.
+Microsoft documents it as removing "workload components that might have been left behind from
+previous updates and uninstallations", and it is reference-counted rather than path-matched: it drops
+a pack's installer dependency reference when that pack's `"SDK feature band … does not match any
+installed feature bands"`, and removes the pack only once nothing refers to it any more. That is what
+§5.1 asks for, and the packs are Tier 2 — regenerable, but only by a workload re-install that is a
+large download.
+
+**It is not offered, for two reasons, and the first is disqualifying on its own.**
+
+**There is no read-only estimate.** The command takes `--all` and `--help` and nothing else. There is
+no `--dry-run`, no `--whatif`, and no listing mode, in the CLI or in the documentation. Deguffer's
+promise is a number shown before the act and a §5.6 check against a predicted set afterwards, and
+neither is available here. Every other command-driven provider in the tree has this:
+`pio system prune --dry-run`, `dotnet nuget locals --list`, conda's own reporting.
+
+**On a machine with Visual Studio the reclaim may be zero.** `dotnet workload list` reports an
+installation source of `VS <version>` for workloads Visual Studio installed, and Visual Studio holds
+the installer dependency references on their packs — so the count never falls to zero and nothing is
+removed. The command says so itself rather than failing: it prints *"Workload '…' was not removed
+because it is installed and managed by Visual Studio"*, and the code that prints it is commented as
+existing "to increase user awareness that they must uninstall via VS". Deguffer would have shown a
+1.88 GB row and delivered nothing.
+
+A read-only mode on `dotnet workload clean`, or any documented way to enumerate what it would remove,
+is what would change this. Until then the folder is reported in Explore and never offered — the same
+treatment as the installer caches above.
+
+### Superseded SDK versions — large, version-partitioned, and still an uninstall
+
+Three separate finds, one verdict. Each keeps one directory per version, each was measured in the
+gigabytes, and in each case §5.2 looks satisfiable because the versions are cleanly partitioned. All
+three are **Tier 4** anyway, because removing a version is an uninstall and §2 rules those out:
+deleting the folder leaves the installer's records claiming the version is still present.
+
+| Location | Measured | Supported route |
+| --- | ---: | --- |
+| `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA` | 3,130.1 MB in one superseded version | The toolkit's own entries in Settings, under Apps |
+| `%PROGRAMFILES(X86)%\Windows Kits\10` | 1,691.9 MB for one superseded version | Each version's own "Windows Software Development Kit" entry, under Apps |
+| `%PROGRAMFILES%\dotnet\sdk` and `shared` | 1,660.9 MB reachable | Each version's own entry under Apps |
+
+The last of those has a tool behind it, and it was considered properly. **`dotnet-core-uninstall`**
+reaches that 1,660.9 MB of superseded within-band SDKs and runtime patches, and unlike
+`dotnet workload clean` it *does* have a dry run. It is still declined, for three reasons: it is an
+uninstaller, which §2 rules out; it is not installed and is a separate download, so Deguffer would be
+recommending an install in order to enable a delete; and its own documentation says it can only
+remove components installed by particular routes — "the tool might not be able to uninstall all of
+the .NET SDKs and runtimes on your machine". A provider whose method may silently apply to only part
+of what it listed is not one that can make Deguffer's promise.
+
+All three are reported in Explore. The CUDA toolkit and the Windows SDK carry an entry of their own,
+and `%PROGRAMFILES%\dotnet` carries one the map answers with from anywhere inside it, so hovering
+says what the folder is and which uninstaller owns it.
+
 ### Docker — freeing space inside the disk image does not free it on disk
 
 `docker system prune` reclaims space *inside* `docker_data.vhdx`, while the host file stays exactly

@@ -1,8 +1,8 @@
 namespace Deguffer.Core.Exploring.Knowledge;
 
 /// <summary>
-/// The caches a developer toolchain leaves in a profile, and the package trees it leaves beside a
-/// project.
+/// The caches a developer toolchain leaves in a profile, the package trees it leaves beside a
+/// project, and the SDKs it installs for the whole machine.
 ///
 /// <para>These are what Deguffer exists for, so the verdicts are the most useful in the catalogue
 /// and also the easiest to get wrong. Every one of these tools can say where its own cache is and
@@ -14,6 +14,15 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// <para>Where a tool's folder holds configuration or credentials beside its cache — Cargo's
 /// registry login, Maven's server passwords, Gradle's properties file — the entry says so, because
 /// that is the difference between reclaiming space and losing an account.</para>
+///
+/// <para>The machine-wide SDKs at the foot of the list have a different job, the one
+/// <see cref="SharedItems"/>' entries have: they sit under <c>Program Files</c>, which §7.1 refuses
+/// outright and no provider reaches, so a reader who has just found several gigabytes there is owed
+/// the reason and the supported route rather than a refusal. Every one of them is an installed
+/// product, so that route is an uninstaller and the verdict says so. <c>dotnet\packs</c> is the
+/// exception and the reason these are here at all: <c>dotnet workload clean</c> is a genuine §5.1
+/// eviction command, and it neither reports what it would free before it runs nor frees anything at
+/// all where Visual Studio installed the workloads and still holds its claim on them.</para>
 /// </summary>
 internal static class ToolchainItems
 {
@@ -145,5 +154,57 @@ internal static class ToolchainItems
             "A project with a lock file rebuilds it exactly with 'npm ci', so removing it costs a "
             + "reinstall; without one, 'npm install' still rebuilds it from package.json, but the "
             + "versions it resolves may differ from what was there."),
+
+        new(
+            KnownPlace.ProgramFiles,
+            "dotnet",
+            "The .NET installation for the whole machine: the SDKs, the runtimes they build and run "
+            + "against, the reference assemblies, and the workload packs for Android, iOS and Mac "
+            + "Catalyst. Each SDK and runtime version installs beside the last rather than over it, "
+            + "and Visual Studio brings its own, so this holds every version the machine has been "
+            + "given and several gigabytes is ordinary.",
+
+            "Each version has its own entry in Settings, under Apps, which is what removes it "
+            + "properly — deleting a folder here leaves Windows still recording it as installed."),
+
+        new(
+            KnownPlace.ProgramFiles,
+            @"dotnet\packs",
+            "The workload packs: the Android, iOS and Mac Catalyst SDKs, the reference assemblies a "
+            + "project compiles against, and the Mono and native runtime packs those platforms run "
+            + "on. A full set is kept for each version line of the SDK and each workload release, "
+            + "and an update adds a set rather than replacing one, so most of what is here is "
+            + "usually for a version line no installed SDK still uses. Nothing reports how much "
+            + "that is before the packs are removed.",
+
+            "'dotnet workload clean' is the supported way to remove the sets nothing installed "
+            + "still uses, and it frees nothing where Visual Studio installed the workloads, "
+            + "because the installer's own claim on them stays."),
+
+        new(
+            KnownPlace.ProgramFiles,
+            @"NVIDIA GPU Computing Toolkit\CUDA",
+            "The CUDA Toolkit: the compiler, libraries, headers and profiling tools for writing "
+            + "software that runs on an NVIDIA GPU. There is one folder per toolkit version, each "
+            + "of them a few gigabytes, and the installer adds a version beside the ones already "
+            + "there rather than replacing them, so every version this machine has installed is "
+            + "still present.",
+
+            "A version is removed by its own entries in Settings, under Apps, and deleting its "
+            + "folder by hand leaves those entries behind still claiming it is installed."),
+
+        new(
+            KnownPlace.ProgramFilesX86,
+            @"Windows Kits\10",
+            "The Windows SDK: the headers, libraries, metadata and tools for building Windows "
+            + "software, together with the Debugging Tools for Windows and the Windows Performance "
+            + "Toolkit. Its contents are split by version, one folder per SDK version under "
+            + "'Include', 'Lib' and the rest, and installing a newer SDK adds a version rather than "
+            + "replacing the one before it, so a machine kept current for a few years carries "
+            + "several.",
+
+            "Each version has its own 'Windows Software Development Kit' entry in Settings, under "
+            + "Apps, and Microsoft documents no supported way to remove one version's folders by "
+            + "hand."),
     ];
 }
