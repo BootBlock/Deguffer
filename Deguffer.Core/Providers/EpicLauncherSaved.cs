@@ -32,6 +32,11 @@ public static partial class EpicLauncherSaved
     /// <summary>
     /// §5.3. The launcher holds its embedded browser's cache and its own log open while it runs, so
     /// an access denial during a clean is the ordinary outcome rather than a fault.
+    ///
+    /// <para>Read by <see cref="EpicLauncherContentCacheProvider"/> as well, which acts under
+    /// <c>%PROGRAMDATA%</c> rather than in this folder. The process name is a fact about the
+    /// launcher rather than about either directory, and one copy of it is one copy that gets kept
+    /// current.</para>
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames = ["EpicGamesLauncher"];
 
