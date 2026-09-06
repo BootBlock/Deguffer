@@ -118,9 +118,9 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
     /// <summary>
     /// The folders this provider would reach into, and any that named themselves and were refused.
-    /// Exposed so tests can assert the §5.2 refusal without going through a plan.
+    /// Resolved once per planning pass, because both the presence probe and the plan ask for them.
     /// </summary>
-    public TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system);
+    private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system);
 
     public override void InvalidateCaches()
     {
@@ -144,7 +144,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         // Fixed once, here, for the same reason MinimumAge is an instant rather than a duration: the
         // preview and the clean must agree about which files are old enough, however long the
         // preview sits on screen before the user presses Clean.
-        var effective = MinimumAge.Stricter(keep, MinimumAge.Within(StaleAfter, DateTime.UtcNow));
+        var floor = MinimumAge.Within(StaleAfter, DateTime.UtcNow);
+        var effective = MinimumAge.Stricter(keep, floor);
 
         var scan = DeclaredLocations.Examine(Roots.Roots, ct);
         var notes = new List<PlanNote>(scan.Notes);
@@ -168,7 +169,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
         notes.Add(new PlanNote(
             PlanNoteSeverity.Information,
-            $"Only what nothing has touched for {Describe(StaleAfter)} is offered. A temporary "
+            $"Only what nothing has touched for {floor.Describe()} is offered. A temporary "
             + "folder holds live working files among abandoned ones, and there is nothing but age "
             + "to tell them apart."));
 
@@ -287,13 +288,6 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 ? "Close what is using it and preview again to include it."
                 : "Close what is using each one and preview again to include them."));
     }
-
-    /// <summary>
-    /// <see cref="StaleAfter"/> as the phrase the notes quote, so the constant and the sentence
-    /// cannot drift apart.
-    /// </summary>
-    private static string Describe(TimeSpan window) =>
-        window.TotalDays == 1 ? "a day" : $"{(int)window.TotalDays} days";
 
     private IEnumerable<string> DeclaredPaths() =>
         from root in Roots.Roots

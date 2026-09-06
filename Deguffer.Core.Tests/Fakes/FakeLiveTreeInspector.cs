@@ -44,9 +44,6 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             _complete);
     }
 
-    /// <summary>What the provider asked about, for the roots form of the question.</summary>
-    public IReadOnlyList<string> AskedUnder { get; private set; } = [];
-
     /// <summary>
     /// The declared live directories that sit below one of <paramref name="directories"/>.
     ///
@@ -57,8 +54,6 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         IReadOnlyList<string> directories,
         CancellationToken ct = default)
     {
-        AskedUnder = directories;
-
         return new LiveTreeFindings(
             [.. _live
                 .Where(child => directories.Any(root => LongPath.Contains(root, child)))
