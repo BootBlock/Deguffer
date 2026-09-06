@@ -112,6 +112,32 @@ public readonly record struct MinimumAge
         hours <= 0 ? Off : Within(TimeSpan.FromHours(Math.Min(hours, MaximumWindow.TotalHours)), nowUtc);
 
     /// <summary>
+    /// The stricter of two guards: whichever of them protects more.
+    ///
+    /// <para>Exists because two guards can legitimately apply to one plan. The user's setting is
+    /// one, and §5.3's floor under a scratch folder is the other — a location where live working
+    /// files sit among dead ones and look identical, so a cut-off is part of what makes the location
+    /// offerable at all. A provider that owns such a floor must not have it loosened by a user who
+    /// asked for a shorter window, or by one who asked for nothing.</para>
+    ///
+    /// <para><b>Later wins, because a later cut-off keeps more.</b> The instant is the moment a file
+    /// must predate to be deletable, so the guard whose instant is later is the guard that protects
+    /// the larger set. <see cref="Off"/> is the weakest possible guard and loses to any real one,
+    /// which is why it cannot be compared as an instant — it has none.</para>
+    ///
+    /// <para>One of the two arguments is returned whole rather than a new value built from both, so
+    /// <see cref="Describe"/> still names a window somebody actually asked for. A combination would
+    /// have to invent one.</para>
+    /// </summary>
+    public static MinimumAge Stricter(MinimumAge first, MinimumAge second) =>
+        (first.KeepFromUtc, second.KeepFromUtc) switch
+        {
+            (null, _) => second,
+            (_, null) => first,
+            var (a, b) => a >= b ? first : second,
+        };
+
+    /// <summary>
     /// Whether a file this recent is left alone, given the newer of its creation and last-write
     /// FILETIMEs. The one implementation of the rule; every other overload reduces to this.
     /// </summary>

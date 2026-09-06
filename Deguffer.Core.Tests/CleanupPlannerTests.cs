@@ -187,8 +187,8 @@ public sealed class CleanupPlannerTests
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "steam", "squirrel-staging",
                 "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
-                "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
-                "epic-launcher-logs", "vscode-logs",
+                "recycle-bin", "file-history", "temp-directories", "crash-dumps",
+                "windows-servicing-logs", "epic-launcher-logs", "vscode-logs",
             ],
             planner.Providers.Select(p => p.Id));
 
@@ -196,7 +196,7 @@ public sealed class CleanupPlannerTests
             [
                 "unity-library", "cargo-target", "node-modules", "python-venv",
                 "conda", "maven", "vcpkg", "platformio", "playwright",
-                "squirrel-superseded-versions", "azure-functions-tools",
+                "squirrel-superseded-versions", "azure-functions-tools", "temp-directories",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 

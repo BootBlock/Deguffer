@@ -52,6 +52,24 @@ public readonly record struct ScanSize(long Allocated, long Logical, bool IsAppr
         left.IsApproximate || right.IsApproximate);
 
     /// <summary>
+    /// A measurement with part of it taken out: what a folder holds, less the part of it a plan has
+    /// undertaken to leave alone.
+    ///
+    /// <para><b>Clamped at zero, which the addition above needs no equivalent of.</b> The two
+    /// figures are separate measurements taken moments apart, so a folder that shrank in between
+    /// can make the subtrahend the larger — and a negative estimate would be subtracted from a
+    /// plan's total and report that cleaning gains space elsewhere. Nothing is the honest answer:
+    /// there is no longer anything to reclaim.</para>
+    ///
+    /// <para>Approximation is contagious in the same direction as it is for a sum. A figure with an
+    /// inexact part removed from it is not thereby exact.</para>
+    /// </summary>
+    public static ScanSize operator -(ScanSize left, ScanSize right) => new(
+        Math.Max(0, left.Allocated - right.Allocated),
+        Math.Max(0, left.Logical - right.Logical),
+        left.IsApproximate || right.IsApproximate);
+
+    /// <summary>
     /// The single number to show and to subtract. It is <see cref="Logical"/>, and that is a
     /// decision taken against measurement rather than the obvious reading of the two fields.
     ///

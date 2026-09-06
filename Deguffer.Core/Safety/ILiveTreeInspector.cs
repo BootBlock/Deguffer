@@ -94,6 +94,30 @@ public interface ILiveTreeInspector
     LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default);
 
     /// <summary>
+    /// Which immediate children of <paramref name="directories"/> something is running from or
+    /// working in, asked without naming the children.
+    ///
+    /// <para><b>The same evidence as <see cref="FindLive"/>, asked from the other end, and the
+    /// reason is arithmetic.</b> That method tests each candidate against every process, which is
+    /// what a set of projects wants: there are tens of them and the caller knows their names. A
+    /// scratch folder is the opposite shape — the user's <c>%TEMP%</c> held 18,056 immediate
+    /// entries on the machine this was written against — so naming them would mean enumerating the
+    /// folder to build the list and then walking the process table once per entry, to learn a fact
+    /// the process table already holds outright. Asked this way it is one pass over the processes,
+    /// whatever the folder holds.</para>
+    ///
+    /// <para><see cref="LiveTree.Directory"/> is the child rather than the process's own path,
+    /// because the child is the unit a caller can act on: <c>%TEMP%\pip-build-abc123</c> is what
+    /// gets spared, not the executable four levels inside it. A process sitting in one of
+    /// <paramref name="directories"/> itself has no such child and is not reported — there is
+    /// nothing below it to spare, and the folder itself is never a candidate for removal.</para>
+    ///
+    /// <para>The same limits apply as to <see cref="FindLive"/>: every signal is positive evidence,
+    /// and an elevated program or one belonging to another account cannot be inspected at all.</para>
+    /// </summary>
+    LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default);
+
+    /// <summary>
     /// Discard any cached snapshot, so every provider in one planning pass sees the same machine.
     /// The same contract as <see cref="IProcessInspector.Invalidate"/>.
     /// </summary>
