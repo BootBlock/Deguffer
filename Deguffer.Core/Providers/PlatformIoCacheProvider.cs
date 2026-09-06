@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -389,13 +388,9 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Ask PlatformIO where it keeps things. <c>--json-output</c> rather than scraping the human
-    /// listing: the field names are part of a documented machine-readable contract, the alignment
-    /// of the text table is not.
-    ///
-    /// <para>Which fields come back varies by version — 6.1.19 reports <c>core_dir</c> and neither
-    /// of the other two — so each answer falls back to the documented default beneath it rather than
-    /// to nothing.</para>
+    /// Ask PlatformIO where it keeps things, once per scan. The answer is
+    /// <see cref="PlatformIoLocations"/>'s to read; this method's whole job is the subprocess and
+    /// remembering what came back.
     /// </summary>
     private async Task<PlatformIoLocations> ResolveLocationsAsync(string pio, CancellationToken ct)
     {
@@ -408,69 +403,11 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             .RunAsync(pio, "system info --json-output", ct)
             .ConfigureAwait(false);
 
-        var reported = outcome.Succeeded ? TryReadReport(outcome.StandardOutput) : null;
-        var core = ReadPath(reported, "core_dir") ?? CoreRoot;
-
-        return _locations = new PlatformIoLocations(
-            core,
-            ReadPath(reported, "cache_dir") ?? Path.Combine(core, ".cache"),
-            ReadPath(reported, "packages_dir") ?? Path.Combine(core, "packages"));
-    }
-
-    /// <summary>
-    /// The report as a value that outlives the document holding it, which is what
-    /// <see cref="JsonElement.Clone"/> is for. Three fields are read from it, and threading the
-    /// document through three calls to keep it alive would put the disposal in the caller.
-    /// </summary>
-    private static JsonElement? TryReadReport(string json)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                ? document.RootElement.Clone()
-                : null;
-        }
-        catch (JsonException)
-        {
-            // An older PlatformIO that does not understand --json-output prints its usage text to
-            // stdout and still exits zero, so malformed output here is an expected outcome rather
-            // than a broken install. The documented locations are the honest fallback.
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// PlatformIO wraps each value in <c>{"value": …, "default": …}</c> in some versions and emits
-    /// a bare string in others, so both shapes are read rather than assuming the current one.
-    /// </summary>
-    private static string? ReadPath(JsonElement? reported, string name)
-    {
-        if (reported is not { } root || !root.TryGetProperty(name, out var property))
-        {
-            return null;
-        }
-
-        var value = property.ValueKind == JsonValueKind.Object
-            && property.TryGetProperty("value", out var wrapped)
-                ? wrapped
-                : property;
-
-        return value.ValueKind == JsonValueKind.String
-            && value.GetString() is { Length: > 0 } path
-            && Path.IsPathRooted(path)
-                ? path
-                : null;
+        return _locations = PlatformIoLocations.Read(
+            outcome.Succeeded ? outcome.StandardOutput : string.Empty, CoreRoot);
     }
 
     private static PlanNote Information(string message) => new(PlanNoteSeverity.Information, message);
-
-    /// <summary>Where PlatformIO keeps things, as it reported them or as documented beneath it.</summary>
-    private sealed record PlatformIoLocations(
-        string CoreDirectory,
-        string CacheDirectory,
-        string PackagesDirectory);
 
     /// <summary>
     /// One half of the plan: the step it contributes if any, what the user is told about it, and how
