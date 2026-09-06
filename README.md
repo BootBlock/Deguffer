@@ -108,7 +108,7 @@ installed" cleanly on a machine without that toolchain.
 | Maven local repository | |
 | Conda package cache | |
 | vcpkg build caches | |
-| PlatformIO download cache | |
+| PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
 | Node.js project dependencies | `node_modules` under your own source trees |
