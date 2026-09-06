@@ -38,7 +38,14 @@ public sealed class CleanupPlanner
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
     /// held to it.
     /// </summary>
-    public static CleanupPlanner CreateDefault()
+    /// <param name="preferences">
+    /// The live settings, for the one provider whose route the user chooses. Defaulted to the
+    /// shipped values so a caller outside the app — a test, or the Explore page's own provider list
+    /// — behaves as an untouched install would. It is passed rather than captured because the
+    /// provider reads it at plan time, which is what makes a change on the Settings page take
+    /// effect from the next preview.
+    /// </param>
+    public static CleanupPlanner CreateDefault(ICurrentPreferences? preferences = null)
     {
         var roots = new SourceRootStore(UserEnvironment.Current);
 
@@ -61,13 +68,14 @@ public sealed class CleanupPlanner
             new CargoTargetProvider(roots, sourceTrees, liveTrees),
             new NodeModulesProvider(roots, sourceTrees, liveTrees),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees),
-            .. CacheProviders(squirrel, liveTrees),
+            .. CacheProviders(squirrel, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
         SquirrelDiscovery squirrel,
-        ILiveTreeInspector liveTrees) =>
+        ILiveTreeInspector liveTrees,
+        ICurrentPreferences preferences) =>
     [
         new NuGetCacheProvider(),
         new GradleCacheProvider(),
@@ -93,7 +101,7 @@ public sealed class CleanupPlanner
         new PlaywrightBrowsersProvider(),
         new SquirrelSupersededVersionProvider(discovery: squirrel, liveTrees: liveTrees),
         new AzureFunctionsToolsProvider(),
-        new RecycleBinProvider(),
+        new RecycleBinProvider(preferences: preferences),
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
         new EpicLauncherLogProvider(),

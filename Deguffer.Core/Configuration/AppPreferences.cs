@@ -83,8 +83,9 @@ public enum ExploreColouring
 /// <summary>
 /// The user's settings, as a value. Most of it is presentation-only — §6.5 makes the backdrop
 /// decoration, so switching it off changes nothing about what Deguffer will delete — but the two
-/// confirmation settings govern what is asked before a deletion, so they are read by Core rather
-/// than only by the shell.
+/// confirmation settings govern what is asked before a deletion, the guard on recently changed
+/// files governs what a plan may reach, and one setting picks how a Recycle Bin is emptied. Those
+/// are read by Core rather than only by the shell.
 /// </summary>
 /// <param name="Theme">Light, dark, or follow the system.</param>
 /// <param name="View">
@@ -158,6 +159,28 @@ public enum ExploreColouring
 /// the preview and Tier 3 never being pre-selected as what stands between the user and the
 /// deletion.
 /// </param>
+/// <param name="EmptyRecycleBinsDirectly">
+/// Whether to empty a Recycle Bin by removing its files rather than by asking Windows to. Off by
+/// default, so Windows does it.
+///
+/// <para><b>It changes how the emptying is done, never what is emptied.</b> Both routes act on the
+/// same directory — this account's own bin on one volume — and both leave every other account's
+/// alone. §5.2's rule and §5.6's assertion are identical under either, so this is not a setting
+/// that can widen what a run may destroy.</para>
+///
+/// <para><b>What each side costs.</b> Asking Windows tells it the bin changed, so an open Recycle
+/// Bin window, the desktop icon and anything else listening agree with the disk straight away. It
+/// is also far slower: against a bin of 1,000 recycled files it took roughly 4 to 6 seconds where
+/// removing the same files took under 0.2, and at 3,000 files the two were 60 seconds and 0.7. The
+/// gap widens with the number of entries, so it is worst on the bin most worth emptying. Switching
+/// this on takes the fast side and gives up the notification: the disk is correct immediately, and
+/// a Recycle Bin window left open beside Deguffer may show the old contents until it is refreshed.
+/// See <see cref="Execution.ShellRecycleBinEmptier"/> for where those figures come from.</para>
+///
+/// <para><paramref name="KeepFilesChangedWithinHours"/> overrides it. Windows empties a bin whole
+/// and offers no way to hold anything back, so a guard on recently changed files can only be kept
+/// by the direct route — a plan under that guard takes it whatever this says, and says so.</para>
+/// </param>
 /// <param name="KeepFilesChangedWithinHours">
 /// Leave any file touched inside this many hours where it is, however the row it sits in is
 /// classified. Zero is off, and off is the default.
@@ -184,6 +207,7 @@ public sealed record AppPreferences(
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false,
+    bool EmptyRecycleBinsDirectly = false,
     int KeepFilesChangedWithinHours = 0)
 {
     public static readonly AppPreferences Default = new();

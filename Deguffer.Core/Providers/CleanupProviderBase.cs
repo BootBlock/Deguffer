@@ -14,16 +14,23 @@ public abstract class CleanupProviderBase : ICleanupProvider
 {
     private readonly PlanExecutor _executor;
 
+    /// <param name="emptier">
+    /// How a <see cref="EmptyRecycleBinStep"/> is carried out, for the one provider that plans one.
+    /// Defaulted rather than required because every other provider has no use for it, and injected
+    /// rather than reached for because the real one empties the Recycle Bin of whoever runs the
+    /// suite.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
-        IDirectoryScanner scanner)
+        IDirectoryScanner scanner,
+        IRecycleBinEmptier? emptier = null)
     {
         Environment = environment;
         Inspector = inspector;
         Scanner = scanner;
-        _executor = new PlanExecutor(runner, scanner);
+        _executor = new PlanExecutor(runner, scanner, emptier);
         Runner = runner;
     }
 
@@ -238,9 +245,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
         {
             var target = targets[i];
 
-            DeleteStep step = target.Kind == TargetKind.File
-                ? new DeleteFileStep(target.Path, target.Reason)
-                : new DeleteDirectoryStep(target.Path, target.Reason);
+            DeleteStep step = target.Kind switch
+            {
+                TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
+                TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
+                _ => new DeleteDirectoryStep(target.Path, target.Reason),
+            };
 
             steps.Add(step with
             {

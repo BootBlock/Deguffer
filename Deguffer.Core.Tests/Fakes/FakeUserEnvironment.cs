@@ -36,9 +36,14 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     /// <summary>
     /// A recognisably invented identifier. Real enough in shape for a provider that matches on it,
     /// and nobody's actual SID.
+    ///
+    /// <para>A constant as well as the default, because a fake standing in for something that acts
+    /// on this account's own directory has to name the same account the environment does. Two
+    /// copies of the literal would agree until one of them was edited.</para>
     /// </summary>
-    public string? UserSecurityIdentifier { get; private set; } =
-        "S-1-5-21-1111111111-2222222222-3333333333-1001";
+    public const string SecurityIdentifier = "S-1-5-21-1111111111-2222222222-3333333333-1001";
+
+    public string? UserSecurityIdentifier { get; private set; } = SecurityIdentifier;
 
     /// <summary>
     /// Pretend the account is unidentifiable, which is how a provider that keys on the SID is shown

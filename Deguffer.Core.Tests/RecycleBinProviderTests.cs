@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -26,14 +27,32 @@ public sealed class RecycleBinProviderTests : IDisposable
     private readonly FakeUserEnvironment _environment;
     private readonly FakeVolumeInventory _volumes = new();
 
+    /// <summary>
+    /// Never the real one. The shipped route asks Windows to empty the bin, so a fixture that let
+    /// the default through would empty the Recycle Bin of whoever ran the suite.
+    /// </summary>
+    private FakeRecycleBinEmptier _emptier = new();
+
     public RecycleBinProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
 
     public void Dispose() => _temp.Dispose();
 
     private string Sid => _environment.UserSecurityIdentifier!;
 
-    private RecycleBinProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: _volumes);
+    private RecycleBinProvider CreateProvider(
+        AppPreferences? preferences = null,
+        FakeRecycleBinEmptier? emptier = null)
+    {
+        _emptier = emptier ?? _emptier;
+
+        return new RecycleBinProvider(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            volumes: _volumes,
+            preferences: new FakePreferences(preferences ?? AppPreferences.Default),
+            emptier: _emptier);
+    }
 
     /// <summary>A volume root under the scratch tree, registered as fixed and ready.</summary>
     private string CreateVolume(string name, DriveType kind = DriveType.Fixed, bool isReady = true)
@@ -171,7 +190,12 @@ public sealed class RecycleBinProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.False(Directory.Exists(mine));
+
+        // Emptied, not removed. Windows leaves the account's own directory standing and takes its
+        // contents, which was observed rather than assumed — see ShellRecycleBinEmptier.
+        Assert.True(Directory.Exists(mine));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mine));
+
         Assert.True(Directory.Exists(theirs), "another account's deleted files were destroyed");
         Assert.True(Directory.Exists(system), "the system account's bin was destroyed");
         Assert.True(Directory.Exists(stray), "an unrecognised directory in the bin root was destroyed");
@@ -373,6 +397,199 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The shipped route: Windows is asked to empty the bin, and what it is asked about is the
+    /// <em>volume</em> even though the plan names the account's directory inside it.
+    ///
+    /// <para>Both halves matter. A step of the wrong type would delete the files instead, silently
+    /// taking the setting's other side; and a volume root derived wrongly would hand
+    /// <c>SHEmptyRecycleBin</c> a path whose reach nobody has established. The second is the
+    /// dangerous one, because the call reports success either way.</para>
+    /// </summary>
+    [Fact]
+    public async Task EmptiesThroughWindowsByDefaultAndNamesTheVolume()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.IsType<EmptyRecycleBinStep>(Assert.Single(plan.Steps));
+        Assert.Equal(mine, step.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(volume, step.VolumeRoot, StringComparer.OrdinalIgnoreCase);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal([volume], _emptier.VolumeRoots);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mine));
+    }
+
+    /// <summary>
+    /// §6.3, and the one boundary in Core that requires the opposite form from every other. The
+    /// shell parses a drive root and refuses the extended-length spelling of it, so a path prepared
+    /// for the file APIs would be rejected by the very call this route exists to make — and an
+    /// outcome cannot show which form crossed, which is why the seam records it.
+    /// </summary>
+    [Fact]
+    public async Task WhatCrossesToWindowsCarriesNoExtendedLengthPrefix()
+    {
+        var volume = CreateVolume("D");
+        CreateBin(volume, Sid);
+
+        var provider = CreateProvider();
+        await provider.ExecuteAsync(await provider.PlanAsync());
+
+        var handed = Assert.Single(_emptier.VolumeRoots);
+        Assert.False(handed.StartsWith(@"\\?\", StringComparison.Ordinal));
+        Assert.Equal(LongPath.Display(handed), handed);
+    }
+
+    /// <summary>
+    /// The setting takes the other side: the files go directly, Windows is never asked, and the
+    /// account's directory is removed rather than left standing.
+    /// </summary>
+    [Fact]
+    public async Task TheDirectSettingRemovesTheFilesAndNeverAsksWindows()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid);
+
+        var provider = CreateProvider(AppPreferences.Default with { EmptyRecycleBinsDirectly = true });
+        var plan = await provider.PlanAsync();
+
+        Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(_emptier.VolumeRoots);
+        Assert.False(Directory.Exists(mine));
+        Assert.True(Directory.Exists(Path.Combine(volume, BinName)), "the bin root was removed");
+    }
+
+    /// <summary>
+    /// The guard outranks the setting, and it has to: Windows empties a bin whole and offers no way
+    /// to hold anything back, so a plan whose estimate already excludes a recent file must not then
+    /// hand the bin to something that will take it. The user is told, because a route chosen for
+    /// them against their setting is not something to leave unsaid.
+    /// </summary>
+    [Fact]
+    public async Task TheGuardOnRecentFilesForcesTheDirectRouteAndSaysSo()
+    {
+        var volume = CreateVolume("D");
+        CreateBin(volume, Sid);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Windows empties a bin whole", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.Empty(_emptier.VolumeRoots);
+    }
+
+    /// <summary>
+    /// A step's key is what a choice the user made is matched against on the next scan, so the two
+    /// routes have to agree on it. They do because both are deletions keyed on the path — and if
+    /// they ever stopped, somebody who changed the setting would find every bin they had ticked
+    /// silently unticked, which is the direction that loses a decision rather than a file.
+    /// </summary>
+    [Fact]
+    public async Task ChangingTheRouteKeepsTheKeyTheUsersChoiceIsMatchedOn()
+    {
+        var volume = CreateVolume("D");
+        CreateBin(volume, Sid);
+
+        var throughWindows = Assert.Single((await CreateProvider().PlanAsync()).Steps);
+
+        var directly = Assert.Single(
+            (await CreateProvider(AppPreferences.Default with { EmptyRecycleBinsDirectly = true })
+                .PlanAsync()).Steps);
+
+        Assert.NotEqual(throughWindows.GetType(), directly.GetType());
+        Assert.Equal(throughWindows.SelectionKey, directly.SelectionKey);
+    }
+
+    /// <summary>
+    /// §5.6's whole purpose, against this route specifically. The call names a volume rather than an
+    /// account, so an emptying that reached every account's bin on that volume would satisfy every
+    /// assertion that the target was emptied — and the only thing that catches it is the negative.
+    ///
+    /// <para>This is the shape the real call was measured not to have. The test holds the check
+    /// rather than the measurement: it proves that if Windows ever did behave this way, Deguffer
+    /// would report it rather than call the run a success.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnEmptyThatReachedEveryAccountFailsTheNegative()
+    {
+        var volume = CreateVolume("D");
+        CreateBin(volume, Sid);
+        var theirs = CreateBin(volume, AnotherAccount);
+
+        var provider = CreateProvider(emptier: FakeRecycleBinEmptier.TakingEveryAccount());
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.False(Directory.Exists(theirs));
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(
+            result.Verification.Checks,
+            c => c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase)
+                && c.Outcome == VerificationOutcome.Failed);
+    }
+
+    /// <summary>
+    /// Windows refuses for reasons this code cannot fix — a bin it will not read, a volume with the
+    /// bin switched off — and the number it refused with is the only thing that tells them apart. A
+    /// refusal has to reach the user as a failed step saying so, never as a quiet success over a bin
+    /// that is still full.
+    /// </summary>
+    [Fact]
+    public async Task ARefusalFromWindowsIsReportedAndNothingIsClaimed()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid);
+
+        var provider = CreateProvider(
+            emptier: FakeRecycleBinEmptier.Refusing("Windows would not empty this Recycle Bin (0x80004005)."));
+
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.Equal(0, step.BytesReclaimed);
+        Assert.Contains("0x80004005", step.Message, StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.EnumerateFileSystemEntries(mine));
+    }
+
+    /// <summary>
+    /// The reclaim is what left the disk, not what the plan hoped would. The shell call reports no
+    /// figures at all, so reporting the estimate would be a number nobody checked — and a bin
+    /// emptied by something else between the preview and the clean would be reported as everything
+    /// this run reclaimed.
+    /// </summary>
+    [Fact]
+    public async Task ReportsWhatActuallyLeftTheDiskRatherThanTheEstimate()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid, bytes: 8192);
+
+        var provider = CreateProvider(emptier: FakeRecycleBinEmptier.DoingNothing());
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.EstimatedBytes > 8000);
+
+        var result = await provider.ExecuteAsync(plan);
+        var step = Assert.Single(result.Steps);
+
+        Assert.Equal(0, step.BytesReclaimed);
+        Assert.Contains("held nothing", step.Message, StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.EnumerateFileSystemEntries(mine));
+    }
+
+    /// <summary>
     /// §6.3. A bin is flat in normal use, but it holds whatever the user deleted — and a deleted
     /// directory keeps its whole tree, which is how a path past <c>MAX_PATH</c> gets in here. A
     /// truncation would be a partial deletion of something already irreversible.
@@ -414,7 +631,7 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.False(LongPath.FileExists(file), "a file past MAX_PATH survived the removal.");
-        Assert.False(Directory.Exists(bin));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(bin));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 

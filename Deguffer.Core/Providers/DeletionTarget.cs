@@ -1,10 +1,16 @@
 namespace Deguffer.Core.Providers;
 
-/// <summary>Whether a target is a directory tree or a single file.</summary>
+/// <summary>Which kind of removal a target becomes.</summary>
 public enum TargetKind
 {
     Directory,
     File,
+
+    /// <summary>
+    /// One account's Recycle Bin on one volume, emptied through Windows rather than by deleting its
+    /// files. See <see cref="Execution.EmptyRecycleBinStep"/>.
+    /// </summary>
+    RecycleBin,
 }
 
 /// <summary>
@@ -21,8 +27,9 @@ public enum TargetKind
 /// spanning everything a tool ever cached is a number with nothing to mean.
 /// </param>
 /// <param name="Kind">
-/// Which step this becomes. A file is not a small tree — it cannot partially succeed — so the two
-/// are removed by different code and the provider says which it meant.
+/// Which step this becomes. A file is not a small tree — it cannot partially succeed — and a
+/// Recycle Bin is emptied by Windows rather than by us, so each is removed by different code and
+/// the provider says which it meant.
 /// </param>
 /// <param name="RequiresElevation">
 /// Whether removing this needs administrator rights. A declaration about the location, carried onto

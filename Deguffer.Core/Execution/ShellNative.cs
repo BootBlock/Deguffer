@@ -28,6 +28,23 @@ internal static class ShellNative
         IntPtr bindContext,
         ref Guid interfaceId,
         [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
+
+    /// <summary>
+    /// Empties the calling account's Recycle Bin on one volume, named by its root.
+    ///
+    /// <para>It takes a volume root and no account, because the account is the one the process is
+    /// running as — see <see cref="ShellRecycleBinEmptier"/> for what was measured about that, which
+    /// is the whole reason §5.2 survives a call that names something broader than the target.</para>
+    ///
+    /// <para>Declared with <c>PreserveSig</c>, unlike everything else in this file. The one caller
+    /// reports the number to the user rather than acting on it, and an HRESULT that arrives as a
+    /// value cannot be dropped by a <c>catch</c> that was written for something else.</para>
+    /// </summary>
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    internal static extern int SHEmptyRecycleBin(
+        IntPtr owner,
+        [MarshalAs(UnmanagedType.LPWStr)] string? volumeRoot,
+        uint flags);
 }
 
 /// <summary>One item in the shell namespace. Declared to <c>Compare</c> and no further.</summary>
