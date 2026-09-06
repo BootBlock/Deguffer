@@ -2301,6 +2301,124 @@ acts.
 
 ---
 
+## Windows temporary folders
+
+**Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and it needs an extra
+acknowledgement before it runs.
+
+| | |
+| --- | --- |
+| **Location** | This account's own temporary folder, ordinarily `%LOCALAPPDATA%\Temp`, plus `C:\Windows\Temp` |
+| **Method** | Empty each folder in place, taking only what nothing has touched for seven days |
+| **Typical size** | 5.4 GB across the two on one workstation. It grows without limit, so a machine that has never been cleaned holds more |
+
+### What it is
+
+Where every program on the machine puts something it means to throw away. Installers unpack their
+payload here, compilers write intermediate output, browsers spool downloads, test runners build
+scratch trees. Each of them is supposed to clear up afterwards. A great many never do, usually
+because they were killed, crashed, or simply never had the code.
+
+There are two of these folders and they belong to different people:
+
+| Folder | Who writes it |
+| --- | --- |
+| `%LOCALAPPDATA%\Temp` | Everything running as you |
+| `C:\Windows\Temp` | Windows itself, and the services running under system accounts |
+
+**The account's folder can be moved, and Deguffer follows it rather than assuming.** `%TMP%` and
+`%TEMP%` are separate settings that are allowed to disagree, and Windows hands a program the first
+of the two that is set — so a machine configured that way has a second temporary folder that
+ordinary tools never look at. Deguffer resolves both, and the default location as well, and offers
+each distinct folder once.
+
+### What Deguffer does
+
+It empties each folder and leaves the folder itself. That is not a nicety: every program on the
+machine expects `%TEMP%` to exist, and Windows does not put it back once it is gone, so a profile
+whose temporary folder had been deleted would start failing installers for a reason nobody would
+connect to a disk cleaner.
+
+Two rules decide what comes out, and both of them hold back more than a plain "empty it" would.
+
+- **Nothing touched in the last seven days.** A temporary folder holds live working files among
+  abandoned ones and they look identical — same folder, same kind of name, often the same size.
+  Age is the only thing that separates them. Seven days is the interval Windows' own Disk Cleanup
+  and Storage Sense apply to these two folders, so Deguffer offers what the machine would have
+  removed on its own rather than inventing a threshold of its own.
+- **Nothing a running program is working in.** Before it plans anything, Deguffer reads the process
+  table once and asks which entries of each folder something is running from or working inside. Any
+  entry that answers is left alone whatever its age, is named in the preview so you can see what is
+  holding it, and is checked afterwards to prove it is still there. This catches the case the age
+  filter cannot: a program that has been running for a month, working in a scratch directory whose
+  files are all older than the cut-off.
+
+The size shown already has both of those taken out of it, so the number in the preview is what the
+clean will actually take.
+
+**A file Windows will not release is skipped, and that is normal.** Anything held open by a running
+program stays exactly where it is, so reclaiming less than the size shown is the expected result
+here rather than a failure.
+
+`C:\Windows\Temp` needs administrator rights. On an ordinary run it is shown, sized, and left
+unticked with that reason on it.
+
+### What is refused
+
+A temporary folder is the one location Deguffer is *told* about rather than knowing, because
+`%TEMP%` is an environment variable anything on the machine may have written. Two settings are
+declined outright, with the reason shown in the preview:
+
+- One pointing at the root of a drive or a share, where emptying it would take the whole volume.
+- One that *contains* a directory Windows is built out of — the profile, either program directory,
+  the Windows directory, or the machine-wide application data.
+
+A temporary folder that turns out to be a link to somewhere else is declined too, on the rule that
+applies everywhere in Deguffer: it does not delete through a link, because what is on the far side
+was never classified.
+
+### What is protected
+
+Both folders themselves, the folder holding each of them, every entry a running program is using,
+and — for `C:\Windows\Temp` — the Windows directory, `WinSxS` and `Windows\Installer`. All of them
+are named in the plan and checked after the run.
+
+The check on a spared entry is stronger than "is it still there". An over-broad rule here would
+leave every folder standing and empty one it promised not to, which no test of existence can see, so
+Deguffer records whether each spared entry held anything before the run and reports it as a failure
+if it is standing empty afterwards.
+
+### What it costs you
+
+Almost always nothing. Everything offered was abandoned more than a week ago by a program that has
+finished with it, and nothing is running out of it.
+
+The exception is a program that treats a temporary folder as storage rather than as scratch and
+still expects to find something there — an installer keeping resume state between reboots, a crash
+reporter holding a report you have not sent. That is rare and it is bad practice, but it happens,
+and it is the reason this is not Tier 1.
+
+### Why Tier 2, and not Tier 1
+
+Tier 1 promises that nothing is lost, because whatever produced the content re-creates it on demand.
+Nothing re-creates a temporary file. It is what a program left behind, and the program has gone.
+
+What makes this safe to offer is the age filter and the live-program check, and neither of those is
+a claim that the content is regenerable — they are a claim that it is *abandoned*, which is a
+different and weaker thing. The practical difference between the two tiers is whether the row is
+ticked before you have read it, and on the folder the spec calls the classic mistake it should not
+be.
+
+### Why not Disk Cleanup or Storage Sense
+
+Windows does ship a route to both folders, and Deguffer does not use it. Selecting Disk Cleanup's
+handler means writing settings into your registry on your behalf, and the run then reports nothing
+back — no list of what it took, no size, and nothing to check afterwards. Storage Sense is a setting
+rather than a command, and switching it on is not Deguffer's to do. If you would rather Windows did
+this on a schedule, Storage Sense is the right answer and Settings is where to turn it on.
+
+---
+
 ## Locations deliberately not offered
 
 Being large is not a reason to clean something. These were investigated and left out, and the
@@ -2368,13 +2486,6 @@ identity and invalidates every API key registered against its fingerprint; losin
 every device's trust; an AVD holds user data that cannot be re-downloaded at any price.
 
 A one-character slip in a name comparison there costs more than the entire reclaim is worth.
-
-### `%LOCALAPPDATA%\Temp` — needs an age filter and live-process exclusions
-
-Genuinely reclaimable, and genuinely dangerous to do naively. During the founding audit an active
-session held 344 MB of live working files in Temp, with dozens of processes holding open handles.
-Doing this properly needs an age filter, exclusion of paths belonging to running processes, and
-treating "access denied" as normal rather than as an error. See §5.3.
 
 ### The Visual Studio installer's package caches — no way to clear them safely
 

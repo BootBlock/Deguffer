@@ -157,8 +157,9 @@ internal static class ProfileItems
             + "scratch here and are supposed to clear up afterwards; a great many do not, so it "
             + "grows without limit and is frequently gigabytes.",
 
-            "Disk Cleanup clears it and leaves the past week alone, because a newer file may belong "
-            + "to something still running, and Storage Sense clears it too once it is switched on."),
+            "Deguffer offers it on the Storage page, taking only what nothing has touched for a "
+            + "week and leaving alone anything a running program is working in. Disk Cleanup and "
+            + "Storage Sense apply the same week-long rule."),
 
         new(
             KnownPlace.LocalAppData,

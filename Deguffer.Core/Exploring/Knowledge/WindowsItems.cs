@@ -109,8 +109,9 @@ internal static class WindowsItems
             + "are supposed to clear up after themselves here and many do not, so it accumulates "
             + "indefinitely.",
 
-            "Disk Cleanup clears it and leaves anything written in the past week alone, because a "
-            + "newer file may belong to an installer that is still running."),
+            "Deguffer offers it on the Storage page under the same week-long rule Disk Cleanup "
+            + "applies, and clearing it needs administrator rights because the folder belongs to "
+            + "the operating system rather than to any one account."),
 
         new(
             KnownPlace.WindowsDirectory,
