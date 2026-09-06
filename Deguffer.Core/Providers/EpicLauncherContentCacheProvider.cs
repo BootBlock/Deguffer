@@ -37,10 +37,20 @@ namespace Deguffer.Core.Providers;
 /// directory, and the launcher exposes no command that empties it. The store's own settings reach
 /// the profile's web cache and not this.</para>
 ///
-/// <para><b>Administrator rights, stated rather than discovered.</b> <c>%PROGRAMDATA%</c> is
-/// machine-wide, so the step carries <see cref="CleanupStep.RequiresElevation"/> and the plan says
-/// so before anything runs. Failing silently during execution and quietly omitting the location are
-/// both worse than showing it and naming what it needs.</para>
+/// <para><b>No administrator rights, and that was measured rather than assumed.</b> Being under
+/// <c>%PROGRAMDATA%</c> is not the question <see cref="CleanupStep.RequiresElevation"/> asks: that
+/// flag means the step can be seen and cannot be performed. Epic's installer writes an explicit,
+/// non-inherited <c>BUILTIN\Users:(OI)(CI)(F)</c> onto <c>%PROGRAMDATA%\Epic</c>, which inherits
+/// down to every file in the cache, so the signed-in user may remove it as they are. Windows' own
+/// default for the directory is <c>Users:(OI)(CI)(RX)</c> plus create-only, which is what
+/// <see cref="CrashDumpProvider"/>'s <c>WER</c> folders still carry and why those genuinely do
+/// declare it.</para>
+///
+/// <para>Declaring it anyway would not have been the cautious choice. The shell refuses to tick a
+/// row whose step needs elevation, so it would send somebody through a relaunch to reclaim half a
+/// gigabyte they could already reclaim, and the plan's note would tell them something untrue about
+/// their disk. On a machine whose permissions really are the restrictive default the removal fails
+/// loudly, reclaims nothing, and leaves §5.6 passing — which is the direction to be wrong in.</para>
 /// </summary>
 public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
 {
@@ -171,6 +181,19 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
     /// it. <c>Launcher.manifest</c> and its <c>.meta</c> are the launcher's own record of the build
     /// it is running, and an assertion that <c>Data</c> survived would pass with both of them
     /// gone.</para>
+    ///
+    /// <para><b>The list reaches the root's own children, not only the launcher's.</b> Rooting at
+    /// <c>Epic</c> to name <c>VaultCache</c> and then asserting nothing outside
+    /// <c>EpicGamesLauncher</c> would leave the other products under that root as things this
+    /// provider merely never mentions — the position §5.6 exists to move a path out of.
+    /// <c>UnrealEngineLauncher</c> holds <c>LauncherInstalled.dat</c>, which is the machine's record
+    /// of where its Epic games are installed and is what other launchers read to find them.</para>
+    ///
+    /// <para><c>ReportsAge</c> is off, on <see cref="CleanupStep.LastWritten"/>'s rule that a whole
+    /// cache leaves it null. The measured folder's timestamps ran across four years, and its newest
+    /// child is whichever store page was drawn last — so §7's column would say "today" about a cache
+    /// that is mostly ancient. That is Maven's problem arriving from the other end, and §7 renders a
+    /// null as unknown rather than as an age.</para>
     /// </summary>
     private IReadOnlyList<DeclaredRoot> Declare(ISystemDirectories system) =>
     [
@@ -178,17 +201,21 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
             Path.Combine(system.ProgramData, "Epic"),
             "The launcher's machine-wide folder must survive — only the storefront artwork cache "
             + "inside it is removed.",
-            RequiresElevation: true,
+            RequiresElevation: false,
             [
                 new DeclaredLocation(
                     Path.Combine(DataDirectory, "ContentCache"),
                     "Cover images, screenshots and banners the store has drawn. Each one is fetched "
-                    + "from Epic again the next time a page showing it is opened."),
+                    + "from Epic again the next time a page showing it is opened.",
+                    ReportsAge: false),
             ],
             [
                 (Path.Combine(DataDirectory, "Manifests"),
                     "The launcher's record of which games are installed and where. Removing it makes "
                     + "the launcher forget your installed library."),
+                (Path.Combine(DataDirectory, "ManifestTemp"),
+                    "Where the launcher assembles a new installation record before it replaces the "
+                    + "one above."),
                 (Path.Combine(LauncherDirectory, "VaultCache"),
                     "Downloaded game data the launcher is keeping on purpose, which is not a cache "
                     + "of anything it can fetch back for free."),
@@ -210,6 +237,11 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
                     "The launcher's record of the build it is running."),
                 (Path.Combine(DataDirectory, "Launcher.manifest.meta"),
                     "The metadata beside that record."),
+                (Path.Combine("UnrealEngineLauncher", "LauncherInstalled.dat"),
+                    "The machine's record of where its Epic games are installed, which other "
+                    + "launchers read to find them."),
+                ("EpicOnlineServices",
+                    "The services Epic games sign in and play online through."),
             ]),
     ];
 

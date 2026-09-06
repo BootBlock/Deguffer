@@ -128,6 +128,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         Populate(ContentCache, bytes: 16384);
 
         var manifests = Populate(Path.Combine(DataFolder, "Manifests"), name: "installed.item");
+        var manifestTemp = Populate(Path.Combine(DataFolder, "ManifestTemp"), name: "pending.item");
         var vault = Populate(Path.Combine(LauncherRoot, "VaultCache"), name: "chunk.bin");
         var ems = Populate(Path.Combine(DataFolder, "EMS"), name: "panel.layout");
         var downloads = Populate(Path.Combine(DataFolder, "DownloadManager"), name: "partial.state");
@@ -135,6 +136,13 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         var catalog = Populate(Path.Combine(DataFolder, "Catalog"), name: "catalog.json");
         var sdMeta = Populate(Path.Combine(DataFolder, "SDMeta"), name: "meta.sdmeta");
         var managed = Populate(Path.Combine(DataFolder, "ThirPartyManagedApps"), name: "app.json");
+
+        // Outside EpicGamesLauncher entirely. The root was declared at Epic so that VaultCache could
+        // be named, and these are the other products that root actually holds.
+        var services = Populate(Path.Combine(EpicRoot, "EpicOnlineServices"), name: "service.exe");
+        var unreal = Path.Combine(EpicRoot, "UnrealEngineLauncher", "LauncherInstalled.dat");
+        Directory.CreateDirectory(Path.GetDirectoryName(unreal)!);
+        File.WriteAllBytes(unreal, new byte[128]);
 
         // Files rather than directories, so they are never enumerated and are asserted only because
         // the declaration names them. An assertion that Data survived would pass with both gone.
@@ -153,8 +161,8 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
 
         string[] mustSurvive =
         [
-            EpicRoot, LauncherRoot, DataFolder, manifests, vault, ems, downloads, update, catalog,
-            sdMeta, managed, unnamed,
+            EpicRoot, LauncherRoot, DataFolder, manifests, manifestTemp, vault, ems, downloads,
+            update, catalog, sdMeta, managed, services, unnamed,
         ];
 
         foreach (var spared in mustSurvive)
@@ -165,8 +173,8 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         // Named rather than merely absent, so the run produces evidence about them.
         string[] mustBeAsserted =
         [
-            EpicRoot, LauncherRoot, DataFolder, manifests, vault, ems, downloads, update, catalog,
-            sdMeta, managed, manifest, manifestMeta,
+            EpicRoot, LauncherRoot, DataFolder, manifests, manifestTemp, vault, ems, downloads,
+            update, catalog, sdMeta, managed, manifest, manifestMeta, services, unreal,
         ];
 
         foreach (var asserted in mustBeAsserted)
@@ -187,6 +195,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
 
         Assert.True(File.Exists(manifest), "the launcher's own build record went with the cache");
         Assert.True(File.Exists(manifestMeta), "the build record's metadata went with the cache");
+        Assert.True(File.Exists(unreal), "the machine's record of installed games went with the cache");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -212,29 +221,40 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The claim that is not <see cref="FallbackReason.NotElevated"/>: this one is about whether the
-    /// removal can happen at all. <c>%PROGRAMDATA%</c> is machine-wide, so a plan that failed to say
-    /// so would either fail silently during execution or drop the location from an unelevated
-    /// preview altogether.
+    /// <see cref="CleanupStep.RequiresElevation"/> means the step can be seen and cannot be
+    /// performed, and that is not true here — so the plan must not say it is.
+    ///
+    /// <para>Sitting under <c>%PROGRAMDATA%</c> is not the question. Epic's installer writes an
+    /// explicit <c>BUILTIN\Users:(OI)(CI)(F)</c> onto <c>%PROGRAMDATA%\Epic</c> which inherits down
+    /// to every file in the cache, so the signed-in user may remove it as they are. The shell
+    /// refuses to tick a row whose step needs elevation, so declaring it would send somebody
+    /// through a relaunch to reclaim half a gigabyte they could already reclaim, and would put a
+    /// note in front of them that their own disk contradicts.</para>
+    ///
+    /// <para>The note is the assertion that matters, and it has to name the sentence rather than the
+    /// word. <see cref="DeclaredLocations"/> adds "can remove them only while it is running as
+    /// administrator" when a target declares the flag, and <see cref="ScanStrategy"/> separately
+    /// says "Running Deguffer as administrator lets it read the volume's file table" whenever the
+    /// size was walked for — which happens on every unelevated run of this suite. A test matching
+    /// the bare word would pass with the flag left on.</para>
+    ///
+    /// <para>What Core cannot show is the consequence: the shell's refusal to tick such a row lives
+    /// in <c>StepViewModel</c>, in a project with no tests. So this asserts the claim, and the
+    /// claim is what that refusal reads.</para>
     /// </summary>
     [Fact]
-    public async Task RemovingTheArtworkNeedsAdministratorRightsAndThePlanSaysSo()
+    public async Task ClaimsNoAdministratorRightsItDoesNotNeed()
     {
         Populate(ContentCache);
 
-        var provider = CreateProvider();
-        var plan = await provider.PlanAsync();
+        var plan = await CreateProvider().PlanAsync();
 
-        Assert.True(plan.RequiresElevation);
-        Assert.True(Assert.Single(plan.Steps).RequiresElevation);
+        Assert.False(plan.RequiresElevation);
+        Assert.False(Assert.Single(plan.Steps).RequiresElevation);
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             plan.Notes,
-            n => n.Message.Contains("administrator", StringComparison.OrdinalIgnoreCase));
-
-        // The offer is what turns the claim into something the user can act on.
-        Assert.True(ElevationOffer.ShouldOffer(
-            isElevated: false, [new Finding(provider, IsPresent: true, plan)]));
+            n => n.Message.Contains("only while it is running as administrator", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -335,7 +355,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         var root = Assert.Single(provider.Roots);
 
         Assert.Equal(EpicRoot, root.Path);
-        Assert.True(root.RequiresElevation);
+        Assert.False(root.RequiresElevation);
 
         Assert.Equal(
             ContentCache,
@@ -346,6 +366,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         Assert.Equal(
             [
                 @"EpicGamesLauncher\Data\Manifests",
+                @"EpicGamesLauncher\Data\ManifestTemp",
                 @"EpicGamesLauncher\VaultCache",
                 @"EpicGamesLauncher\Data\DownloadManager",
                 @"EpicGamesLauncher\Data\Update",
@@ -355,8 +376,28 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
                 @"EpicGamesLauncher\Data\ThirPartyManagedApps",
                 @"EpicGamesLauncher\Data\Launcher.manifest",
                 @"EpicGamesLauncher\Data\Launcher.manifest.meta",
+                @"UnrealEngineLauncher\LauncherInstalled.dat",
+                "EpicOnlineServices",
             ],
             root.ProtectedNames.Select(p => p.RelativePath));
+    }
+
+    /// <summary>
+    /// §7's age column, left blank rather than filled in with the last store page somebody opened.
+    ///
+    /// <para><see cref="CleanupStep.LastWritten"/> says a whole-cache step leaves this null, because
+    /// one timestamp across everything a tool ever cached is a number with nothing to mean. The
+    /// measured folder ran across four years, so a date here would say "today" about a cache that is
+    /// mostly ancient — and §7 renders an age as an invitation to delete.</para>
+    /// </summary>
+    [Fact]
+    public async Task ReportsNoAgeForACacheWhoseOneDateWouldMeanNothing()
+    {
+        Populate(ContentCache);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Null(Assert.Single(plan.Steps).LastWritten);
     }
 
     /// <summary>
@@ -364,9 +405,10 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
     /// Deguffer, and a <c>MAX_PATH</c> truncation here is a silent partial deletion.
     ///
     /// A crash guard rather than a discriminating test: .NET prefixes long paths itself, so an
-    /// outcome-based check passes even with <see cref="LongPath.Extended"/> removed.
-    /// <see cref="FileRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm"/> and its
-    /// directory counterpart are what prove the form.
+    /// outcome-based check passes even with <see cref="LongPath.Extended"/> removed. This provider
+    /// declares one directory and no file, so what proves Core applies the prefix on the path this
+    /// row removes is
+    /// <see cref="DirectoryRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm"/>.
     /// </summary>
     [Fact]
     public async Task MeasuresAndRemovesContentPastMaxPath()

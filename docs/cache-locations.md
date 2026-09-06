@@ -1044,7 +1044,7 @@ without being asked, and the folder it refills into is left standing.
 
 ## Epic Games launcher store artwork
 
-**Tier 1 — regenerable cache.** Pre-selected. **Needs administrator rights.**
+**Tier 1 — regenerable cache.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -1069,11 +1069,14 @@ embedded browser's own cache inside your profile. A machine that has run the lau
 
 It removes `ContentCache` and nothing else. Epic documents no command that clears this directory, so
 there is nothing to prefer to deleting the path, and the folder is named outright rather than found
-by looking around — Deguffer never lists what else is in there.
+by looking around. Nothing under `%PROGRAMDATA%\Epic` is ever classified, so nothing there can
+become a candidate by being noticed.
 
-**This needs administrator rights**, because `%PROGRAMDATA%` belongs to the machine rather than to
-you. Deguffer shows the row either way and says what it needs, rather than hiding it or failing
-part-way through.
+**It does not need administrator rights**, even though `%PROGRAMDATA%` belongs to the machine rather
+than to you. Epic's own installer gives every account on the machine full control of
+`%PROGRAMDATA%\Epic`, and that carries down to the artwork, so you can clear it as you are. On a
+machine whose permissions have been tightened the clean stops, tells you nothing was removed, and
+leaves the folder exactly as it was.
 
 ### What is protected
 
@@ -1083,10 +1086,13 @@ on most rows:
 | Neighbour | What it really is |
 | --- | --- |
 | `Data\Manifests` | **The launcher's record of which games are installed.** Losing it makes the launcher forget your installed library |
+| `Data\ManifestTemp` | Where the launcher assembles a new copy of that record before replacing it |
 | `VaultCache` | Downloaded game data the launcher is keeping on purpose |
 | `Data\DownloadManager`, `Data\Update` | Downloads and updates that are part-finished |
 | `Data\Catalog`, `Data\SDMeta`, `Data\ThirPartyManagedApps` | Store and integration data the launcher reads rather than re-fetches |
-| `Data\Launcher.manifest` | The launcher's record of the build it is running |
+| `Data\Launcher.manifest`, `Data\Launcher.manifest.meta` | The launcher's record of the build it is running |
+| `UnrealEngineLauncher\LauncherInstalled.dat` | The machine's record of where its Epic games are installed, which other launchers read to find them |
+| `EpicOnlineServices` | The services Epic games sign in and play online through |
 
 Deguffer asserts afterwards that every one of them survived.
 

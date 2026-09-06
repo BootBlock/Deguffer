@@ -9,7 +9,7 @@ costs to lose, so you decide what goes.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Thirty-four sources across the four tiers, plus a file-table-backed
+> **Status:** Version 0.70.0. Thirty-five sources across the four tiers, plus a file-table-backed
 > Explore view of the whole drive. See [Roadmap](#roadmap).
 
 ## Why
@@ -75,7 +75,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Thirty-four providers, each holding its own knowledge of one location. A provider reports "not
+Thirty-five providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -98,7 +98,7 @@ installed" cleanly on a machine without that toolchain.
 | Firefox caches | |
 | Steam web cache | |
 | Epic Games launcher web cache | |
-| Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, so removing it needs administrator rights |
+| Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 
