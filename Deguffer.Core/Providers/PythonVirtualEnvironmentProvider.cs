@@ -23,7 +23,7 @@ namespace Deguffer.Core.Providers;
 /// <para><b>The environments worth the most are the ones nobody thinks to declare.</b> A
 /// machine-learning or image-generation application installs into its own folder, not into a code
 /// directory, and the environment it builds there holds a CUDA-enabled <c>torch</c> and its
-/// neighbours — gigabytes, against the hundreds of megabytes a web project's environment costs. Both
+/// neighbours — gigabytes, worth roughly ten of the environments a web project keeps. Both
 /// of this provider's conditions hold for it, and its tier is unchanged. It is simply never searched
 /// for, because a search runs only inside the folders the user approved, and nobody thinks of an
 /// application's install folder as source. Widening the search is not the answer: the boundary is a

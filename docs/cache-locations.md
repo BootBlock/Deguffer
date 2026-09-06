@@ -1583,10 +1583,10 @@ the Settings description says. If you want a narrower scope, add narrower folder
 usually a Python virtual environment that nobody would think to declare: a machine-learning or
 image-generation application installs into its own folder, builds an environment there holding a
 CUDA-enabled `torch`, `tensorflow` and their neighbours, and never comes near your projects. One
-measured at 7.3 GB, against the few hundred megabytes a web project's environment costs. It meets
-every condition below — `pyvenv.cfg` inside, a `requirements.txt` beside it — and it is Tier 2 like
-any other. Deguffer simply never looks there, because you never said it could. Add the application's
-own folder if you want that environment offered.
+measured at 7.3 GB, which is worth roughly ten of the environments a web project keeps. It meets
+every condition below — `pyvenv.cfg` inside it, a dependency manifest beside it — and it is Tier 2
+like any other. Deguffer simply never looks there, because you never said it could. Add the
+application's own folder if you want that environment offered.
 
 The model weights such an application downloads are a different matter, and are never offered: they
 sit outside the environment, they are not regenerable from a manifest, and re-fetching them is not a
