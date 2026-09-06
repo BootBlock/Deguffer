@@ -170,16 +170,17 @@ internal static class ToolchainItems
         new(
             KnownPlace.ProgramFiles,
             @"dotnet\packs",
-            "The workload packs: the Android, iOS and Mac Catalyst SDKs, the reference assemblies a "
-            + "project compiles against, and the Mono and native runtime packs those platforms run "
-            + "on. A full set is kept for each version line of the SDK and each workload release, "
-            + "and an update adds a set rather than replacing one, so most of what is here is "
-            + "usually for a version line no installed SDK still uses. Nothing reports how much "
-            + "that is before the packs are removed.",
+            "Two things, side by side. The reference assemblies every .NET project compiles "
+            + "against, which arrive with the SDK itself; and the workload packs — the Android, iOS "
+            + "and Mac Catalyst SDKs, and the Mono and native runtime packs those platforms run on. "
+            + "A full set of workload packs is kept for each version line of the SDK and each "
+            + "workload release, and an update adds a set rather than replacing one, so sets for "
+            + "version lines no installed SDK still uses collect here. Nothing reports what they "
+            + "come to before they are removed.",
 
-            "'dotnet workload clean' is the supported way to remove the sets nothing installed "
-            + "still uses, and it frees nothing where Visual Studio installed the workloads, "
-            + "because the installer's own claim on them stays."),
+            "'dotnet workload clean' is the supported way to remove the workload packs nothing "
+            + "installed still uses, and it frees nothing where Visual Studio installed the "
+            + "workloads, because the installer's own claim on them stays."),
 
         new(
             KnownPlace.ProgramFiles,
@@ -187,8 +188,7 @@ internal static class ToolchainItems
             "The CUDA Toolkit: the compiler, libraries, headers and profiling tools for writing "
             + "software that runs on an NVIDIA GPU. There is one folder per toolkit version, each "
             + "of them a few gigabytes, and the installer adds a version beside the ones already "
-            + "there rather than replacing them, so every version this machine has installed is "
-            + "still present.",
+            + "there rather than replacing them, so more than one version is usually present.",
 
             "A version is removed by its own entries in Settings, under Apps, and deleting its "
             + "folder by hand leaves those entries behind still claiming it is installed."),

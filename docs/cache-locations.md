@@ -2094,16 +2094,16 @@ features belonging to other products.
 
 ### .NET workload packs — the command that clears them cannot say what it would free
 
-`%PROGRAMFILES%\dotnet\packs` holds the workload packs: the Android, iOS and MacCatalyst SDKs, the
-reference assemblies a project compiles against, and the Mono and NativeAOT runtime packs those
-platforms run on. A full set is kept per SDK feature band and per workload manifest version, and an
-SDK update adds a set rather than replacing one.
+`%PROGRAMFILES%\dotnet\packs` holds the workload packs: the Android, iOS and MacCatalyst SDKs, and
+the Mono and NativeAOT runtime packs those platforms run on. A full set is kept per SDK feature band
+and per workload manifest version, and an SDK update adds a set rather than replacing one.
 
 It measured **4,599.5 MB** on the audited machine, out of 8,604.4 MB for
 `%PROGRAMFILES%\dotnet` as a whole. Classifying every pack against the four installed feature bands
 put **1,881.9 MB of it — 41% —** on bands (`8.0.100` and `9.0.100`) with no installed SDK, or on
-superseded same-band workload SDK packs. Outside the Visual Studio caches above, that is the largest
-single figure no provider reaches.
+superseded same-band workload SDK packs. The rest of the folder is in use, and part of it is not
+workload packs at all: the reference assemblies every .NET project compiles against
+(`Microsoft.NETCore.App.Ref` and its siblings) sit in the same directory and arrive with the SDK.
 
 `dotnet workload clean` is the right command for it, and it is the right *shape* of command.
 Microsoft documents it as removing "workload components that might have been left behind from
@@ -2118,8 +2118,9 @@ large download.
 **There is no read-only estimate.** The command takes `--all` and `--help` and nothing else. There is
 no `--dry-run`, no `--whatif`, and no listing mode, in the CLI or in the documentation. Deguffer's
 promise is a number shown before the act and a §5.6 check against a predicted set afterwards, and
-neither is available here. Every other command-driven provider in the tree has this:
-`pio system prune --dry-run`, `dotnet nuget locals --list`, conda's own reporting.
+neither is available here. Where a provider's method is a command rather than a path, it has a way
+to find the number first: `dotnet nuget locals --list` names the directories to measure, and the
+conda provider's figure is conda's own dry run.
 
 **On a machine with Visual Studio the reclaim may be zero.** `dotnet workload list` reports an
 installation source of `VS <version>` for workloads Visual Studio installed, and Visual Studio holds
