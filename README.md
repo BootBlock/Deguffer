@@ -98,6 +98,7 @@ installed" cleanly on a machine without that toolchain.
 | Firefox caches | |
 | Steam web cache | |
 | Epic Games launcher web cache | |
+| Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, so removing it needs administrator rights |
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 

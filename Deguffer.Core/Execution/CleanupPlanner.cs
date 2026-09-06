@@ -95,6 +95,7 @@ public sealed class CleanupPlanner
         new VsCodeCacheProvider(),
         new FirefoxCacheProvider(),
         new EpicLauncherWebCacheProvider(),
+        new EpicLauncherContentCacheProvider(),
         new SteamCacheProvider(),
         new SquirrelStagingProvider(discovery: squirrel, liveTrees: liveTrees),
         new PlatformIoCacheProvider(),
