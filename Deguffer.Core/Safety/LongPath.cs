@@ -106,7 +106,24 @@ public static class LongPath
         return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Strip the extended-length prefix, for display and comparison.</summary>
+    /// <summary>
+    /// Strip the extended-length prefix, for display and comparison.
+    ///
+    /// <para><b>Only where what is left is still a path.</b> The prefix comes off
+    /// <c>\\?\C:\cache</c> and <c>\\?\UNC\server\share</c> because <c>C:\cache</c> and
+    /// <c>\\server\share</c> are the same locations said better. It must not come off
+    /// <c>\\?\Volume{…}\cache</c>, which is how Windows names a drive that has no letter: the
+    /// remainder is <c>Volume{…}\cache</c>, which is not fully qualified, so anything that hands it
+    /// back to <see cref="Extended"/> or <see cref="Configured"/> resolves it against Deguffer's own
+    /// working directory — a folder nobody named, silently.</para>
+    ///
+    /// <para>That is not a display problem, it is a safety one. Such a string reaches
+    /// <see cref="Execution.ProtectedPath"/>, and §5.6's negative then asserts the survival of a
+    /// path under Deguffer's own directory rather than the one on the drive. It measures absent, it
+    /// is reported as "nothing to preserve", and the check passes over whatever really happened.
+    /// <c>FileHistoryDiscovery</c> is the first thing in Core that can produce a volume-GUID root,
+    /// so the case is reachable rather than theoretical.</para>
+    /// </summary>
     public static string Display(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -116,9 +133,14 @@ public static class LongPath
             return @"\\" + path[UncDevicePrefix.Length..];
         }
 
-        return path.StartsWith(DevicePrefix, StringComparison.Ordinal)
-            ? path[DevicePrefix.Length..]
-            : path;
+        if (!path.StartsWith(DevicePrefix, StringComparison.Ordinal))
+        {
+            return path;
+        }
+
+        var stripped = path[DevicePrefix.Length..];
+
+        return Path.IsPathFullyQualified(stripped) ? stripped : path;
     }
 
     /// <summary>Whether the directory exists, tolerating paths beyond MAX_PATH.</summary>

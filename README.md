@@ -123,6 +123,7 @@ installed" cleanly on a machine without that toolchain.
 | Source | Notes |
 | --- | --- |
 | Recycle Bin | |
+| Windows File History | Windows' own command drops saved versions past an age you set; the backup drive itself is never touched |
 | Crash dumps and error reports | |
 | Windows servicing logs | |
 | VS Code editor logs and crash reports | |

@@ -198,10 +198,44 @@ public abstract class CleanupProviderBase : ICleanupProvider
     ///
     /// <para>Every provider call site is a command step's probe, so refusing the argument is what
     /// makes that unmistakable. The guarded measurement is <see cref="PlanDeletionsAsync"/>'s, and
-    /// it is guarded because those paths are ones Deguffer deletes itself.</para>
+    /// it is guarded because those paths are ones Deguffer deletes itself. The one age a command
+    /// step may legitimately measure against is <em>its own</em> — see
+    /// <see cref="MeasureAgedAsync"/>, which is not the user's guard.</para>
     /// </summary>
     protected Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
         MeasureAllAsync(paths, MinimumAge.Off, ct);
+
+    /// <summary>
+    /// A command step's probe measured twice: the whole of what those paths hold, and the part of it
+    /// older than <paramref name="age"/>.
+    ///
+    /// <para><b>For the command that takes an age as a parameter.</b>
+    /// <c>FhManagew.exe -cleanup &lt;days&gt;</c> is the one, and the age here is the number handed
+    /// to it, never <see cref="MinimumAge"/>'s ordinary subject of the user's guard on recently
+    /// changed files. The estimate has to be the aged part, because that is the only part the
+    /// command will consider; the probe has to be the whole, because
+    /// <see cref="PlanExecutor"/> subtracts an unguarded after-measure from it and the two sides
+    /// must be measured on one basis.</para>
+    ///
+    /// <para><b>It is two passes over one tree, and there is no third figure to carry forward.</b>
+    /// G4's rule against re-measuring assumes the second question has the same answer as the first.
+    /// These are different quantities, and <see cref="IDirectoryScanner"/> answers one filter at a
+    /// time — so the cost is real and stated here rather than hidden in a provider. §5.5's fast path
+    /// serves both readings from one volume index where the table can be read, which is what keeps
+    /// it affordable on the tens of gigabytes such a target holds.</para>
+    ///
+    /// <para>Here rather than in the provider so that every measurement a provider makes still goes
+    /// through this class, and so the exception to the paragraph above is stated where the rule is.
+    /// </para>
+    /// </summary>
+    protected async Task<(ScanBatch Whole, ScanBatch Aged)> MeasureAgedAsync(
+        IReadOnlyList<string> paths,
+        MinimumAge age,
+        CancellationToken ct) =>
+    (
+        await MeasureAllAsync(paths, MinimumAge.Off, ct).ConfigureAwait(false),
+        await MeasureAllAsync(paths, age, ct).ConfigureAwait(false)
+    );
 
     private async Task<ScanBatch> MeasureAllAsync(
         IReadOnlyList<string> paths,

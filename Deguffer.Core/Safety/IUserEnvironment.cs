@@ -50,6 +50,27 @@ public interface IUserEnvironment
     /// </summary>
     string? UserSecurityIdentifier { get; }
 
+    /// <summary>
+    /// This user's Windows account name — the <c>UserName</c> half of <c>DOMAIN\UserName</c>.
+    ///
+    /// <para>Exists because a File History target is divided by account name and then by machine
+    /// name, so one drive can hold several people's histories and several machines' histories of one
+    /// person. Telling this user's from the rest is §5.2 there, exactly as
+    /// <see cref="UserSecurityIdentifier"/> is inside a <c>$Recycle.Bin</c>.</para>
+    ///
+    /// <para>Not derived from <see cref="UserProfile"/>, which is the profile <em>folder</em>: the
+    /// two agree on most machines and diverge on any account renamed after it was created, and on
+    /// one whose profile folder collided with an existing one when it was made.</para>
+    /// </summary>
+    string UserName { get; }
+
+    /// <summary>
+    /// This machine's NetBIOS name, for the same reason <see cref="UserName"/> is here: it is the
+    /// second level of a File History target's layout, and a target that has served two machines
+    /// holds a folder for each.
+    /// </summary>
+    string MachineName { get; }
+
     /// <summary>Resolve an executable on <c>PATH</c>, or null if it is not installed.</summary>
     string? FindExecutable(string command);
 
@@ -119,6 +140,10 @@ public sealed partial class UserEnvironment : IUserEnvironment
     // Read once rather than through Invalidate: a process cannot change the account it runs as,
     // and relaunching elevated makes a new process with the same identity.
     public string? UserSecurityIdentifier { get; } = WindowsIdentity.GetCurrent().User?.Value;
+
+    public string UserName { get; } = Environment.UserName;
+
+    public string MachineName { get; } = Environment.MachineName;
 
     public void Invalidate() => _resolved.Clear();
 

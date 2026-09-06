@@ -50,6 +50,19 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public string? UserSecurityIdentifier { get; private set; } = SecurityIdentifier;
 
     /// <summary>
+    /// A recognisably invented account name and machine name, on the same terms as
+    /// <see cref="SecurityIdentifier"/>: a fixture that laid out a File History target has to name
+    /// the same account and the same machine the provider will look for.
+    /// </summary>
+    public const string Account = "testuser";
+
+    public const string Machine = "TESTMACHINE";
+
+    public string UserName { get; } = Account;
+
+    public string MachineName { get; } = Machine;
+
+    /// <summary>
     /// Pretend the account is unidentifiable, which is how a provider that keys on the SID is shown
     /// to fail closed. Set before the provider is constructed: providers read the identity once,
     /// because a process cannot change the account it runs as.

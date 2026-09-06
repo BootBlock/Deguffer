@@ -187,7 +187,7 @@ public sealed class CleanupPlannerTests
                 "vscode-cache", "firefox", "epic-launcher-webcache", "epic-launcher-content-cache",
                 "steam", "squirrel-staging",
                 "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
-                "recycle-bin", "crash-dumps", "windows-servicing-logs",
+                "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "vscode-logs",
             ],
             planner.Providers.Select(p => p.Id));
@@ -202,8 +202,8 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "recycle-bin", "crash-dumps", "windows-servicing-logs", "epic-launcher-logs",
-                "vscode-logs",
+                "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
+                "epic-launcher-logs", "vscode-logs",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 

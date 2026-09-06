@@ -1964,6 +1964,126 @@ type the name out as well.
 
 ---
 
+## Windows File History
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
+to type the words out.
+
+| | |
+| --- | --- |
+| **Location** | The drive File History is set to save to, under `FileHistory\<account>\<machine>\Data` |
+| **Method** | Run Windows' own `FhManagew.exe -cleanup <days>`. Nothing on the drive is ever deleted by Deguffer |
+| **Typical size** | Whatever has accumulated. File History's shipped retention is *never delete*, so these targets routinely reach tens of gigabytes |
+
+### What it is
+
+File History saves a copy of every file in your protected folders each time it changes, onto a
+drive you chose. Each copy is a **version**: what that file looked like at one moment. Going back
+to how a document was three months ago is what the feature exists for.
+
+**Its default retention is "never delete".** Windows' own `FH_RETENTION_TYPES` documents
+`FH_RETENTION_DISABLED` as the default — "previous versions are never deleted from the backup
+target" — so the drive fills up because that is what it was configured to do, not because anything
+went wrong. That is why a File History drive is frequently the largest thing on a machine that
+nothing else accounts for.
+
+File History is **not** a deprecated feature. It appears on neither Microsoft's deprecated-features
+nor removed-features list. Its configuration *API* is deprecated, which is a different thing, and
+Backup and Restore (Windows 7) is a different feature again.
+
+### What Deguffer does
+
+It runs the command Microsoft ships for exactly this job:
+
+```
+FhManagew.exe -cleanup <days> -quiet
+```
+
+**Deguffer deletes nothing on the backup drive itself, and that is the whole design.** The command
+is documented to remove a version only when *both* of two conditions hold:
+
+- the version is older than the age given, **and**
+- the file is no longer in the protection scope, **or** a newer version of it is already on the
+  drive.
+
+The second condition is what guarantees the last remaining copy of a file you are still protecting
+survives. **That guarantee belongs to the command**, and no rule Deguffer could write about folders
+would reproduce it. §5.2 rules out the folders independently: the layout of a File History target
+is documented nowhere by Microsoft, so every folder inside it is unrecognised and therefore Tier 4.
+
+**How the drive is found.** Windows uses exactly one backup target at a time, and a machine that has
+changed drives keeps a complete, stale `FileHistory` folder on the old one. Deguffer reads the File
+History settings in your own profile to learn which drive is in use, rather than trimming whichever
+folder it finds first. If those settings name no drive it can reach, the row says so and offers
+nothing. It does not guess.
+
+**The age is yours to set.** *Keep File History versions for*, on the Settings page, defaults to
+**365 days** — which is `FH_RETENTION_AGE`'s own documented default, so an untouched install asks
+Windows for what it would have done had a retention policy been switched on. The minimum is 1 day,
+and that is a safety floor rather than a tidy number: `-cleanup 0` keeps only the newest version of
+files *currently in the protection scope*, which silently discards every version of everything you
+have since moved, renamed or deleted. Deguffer will not ask for it.
+
+### About the size shown
+
+**It is a ceiling, not a forecast, and the row says "about".** `FhManagew.exe` reports nothing
+before it runs, so there is no way to ask Windows what a cleanup would free. What Deguffer shows
+instead is its own measurement of the *first* of the two conditions above: this machine's saved
+versions older than the age you set. The second condition can only take away from that, never add to
+it, so the real reclaim is usually smaller — Windows keeps the newest copy of every file it is still
+protecting, however old that copy is. Nothing else on the drive is counted.
+
+The figure that is not a forecast is the one measured afterwards. Deguffer measures that same folder
+before and after the command and reports the difference.
+
+**A drive holding nothing old enough reads as "Nothing old enough", never "Already clear".** Those
+are different claims, and only one of them would be true of a full drive whose versions are all
+recent.
+
+### What is protected
+
+These are named on every plan, and the run checks afterwards that each is still there:
+
+- **Every other account's File History.** A backup drive is routinely shared, and another person's
+  history sits beside yours under a folder named for their account.
+- **Your own File History of every other machine.** One drive holds one folder per machine you back
+  up, and this run covers only the machine it is running on.
+- **The catalogue**, in `Configuration` beside `Data`. It is what makes the saved versions
+  restorable. Removing it would leave every version on the drive, intact and unreachable, and no
+  comparison of sizes would show that had happened.
+- **Your File History settings** in your own profile, which record what is protected and where it is
+  saved.
+
+Everything else on the drive is untouched as well — a File History target is very often an ordinary
+external disk with the rest of your files on it — but Deguffer names the folders above rather than
+the whole drive, so those are the ones the check covers.
+
+**What the check proves, exactly.** The command is Windows' own, so what it reaches is Windows'
+decision rather than Deguffer's, and §5.6 is the answer to that: after the run, each folder above
+must still be there. A cleanup that removed one outright is reported as a failure. A cleanup that
+left a folder standing and took the versions out of it is not — Deguffer withholds that stronger
+judgement from any step that hands a tool its own command, because §5.1 gives that command a reach
+Deguffer cannot state. That applies to every such step in the app, not to this one alone.
+
+### What it costs you
+
+**Older versions of your files stop existing.** A version is a snapshot of a file as it was, so
+nothing can regenerate one — the state it captured exists nowhere else once it goes. If you might
+want to go back to how a document was before the cut-off date, do not clean this.
+
+What does not change: File History keeps running exactly as before, the newest copy of everything it
+protects stays on the drive, and the files on your own machine are untouched.
+
+### Why Tier 3, and not Tier 2
+
+Tier 2 means regenerable at a cost — re-downloaded, or rebuilt. **A superseded version of a file is
+not regenerable at any cost.** No command, download or rebuild recreates the way a spreadsheet
+looked in March. That test settles it, and it is why this is offered but never selected for you, and
+why its confirmation says the loss is permanent rather than costly.
+
+---
+
 ## Crash dumps and error reports
 
 **Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the

@@ -44,7 +44,7 @@ public sealed class PreviewSummaryTests
     [Theory]
     [InlineData(FindingStatus.UnreadableRoot, "would not let Deguffer read")]
     [InlineData(FindingStatus.NotExamined, "were not examined")]
-    [InlineData(FindingStatus.RecentContentHeldBack, "recently changed files")]
+    [InlineData(FindingStatus.RecentContentHeldBack, "not old enough")]
     [InlineData(FindingStatus.AwaitingSourceFolders, "need a source folder")]
     public void NamesTheCauseWhenOnlyOneKindOfRowIsUnclear(FindingStatus unclear, string expected)
     {
