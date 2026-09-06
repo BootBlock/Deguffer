@@ -234,7 +234,20 @@ public sealed record CleanupPlan
                 // It was measured during planning, so it was there when the plan was made. That is
                 // the only claim ExistedBefore makes, and re-probing the disk here would let a
                 // directory deleted between planning and execution excuse itself.
-                ExistedBefore: true));
+                ExistedBefore: true,
+
+                // Content is asked of the disk rather than assumed, which is the opposite of the
+                // line above and for a reason the two do not share. Assuming it would report every
+                // declined directory that was *already* empty as having been emptied by the run —
+                // an alarm about an untouched folder, on a machine where an unused drive's bin is
+                // ordinary. The excuse the probe allows is harmless in the other direction: a
+                // directory something else emptied in the gap has nothing left for an over-broad
+                // rule to destroy.
+                //
+                // This is the site the declined Recycle Bin depends on. A bin the user unticked is
+                // still standing after a call that emptied it anyway, so existence proves nothing
+                // and this is the whole of what §5.6 has left to compare.
+                LongPath.HoldsAnything(s.Path)));
 
         return this with
         {

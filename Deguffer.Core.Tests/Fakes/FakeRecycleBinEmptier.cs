@@ -96,6 +96,29 @@ public sealed class FakeRecycleBinEmptier : IRecycleBinEmptier
         return new RecycleBinEmptyOutcome(Emptied: true);
     });
 
+    /// <summary>
+    /// An emptier that empties the volume it was given and one directory it was not.
+    ///
+    /// <para>The over-reach that survives per-step selection: the user leaves one volume's bin
+    /// unticked, and the call made about another volume takes it anyway. The scope of
+    /// <c>SHEmptyRecycleBin</c> over the volume it names is what was measured; nothing establishes
+    /// what it does beyond one, so this is the shape §5.6 has to be able to report.</para>
+    /// </summary>
+    public static FakeRecycleBinEmptier AlsoEmptying(string directory) => new(volumeRoot =>
+    {
+        Default().Empty(volumeRoot);
+
+        foreach (var file in Directory.EnumerateFiles(LongPath.Extended(directory)))
+        {
+            File.Delete(file);
+        }
+
+        return new RecycleBinEmptyOutcome(Emptied: true);
+    });
+
+    /// <summary>The ordinary behaviour, for a fake that wants it as well as something else.</summary>
+    private static FakeRecycleBinEmptier Default() => new();
+
     /// <summary>An emptier that refuses, as the shell does for a bin it will not read.</summary>
     public static FakeRecycleBinEmptier Refusing(string message) =>
         new(_ => new RecycleBinEmptyOutcome(Emptied: false, message));

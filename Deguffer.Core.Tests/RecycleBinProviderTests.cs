@@ -558,6 +558,43 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.6 across a selection, which is where a per-volume row makes the negative do real work.
+    ///
+    /// <para>A user who ticks one drive's bin and leaves another's alone has said, in as many words,
+    /// that the second must survive. <see cref="CleanupPlan.NarrowedTo"/> turns that into a
+    /// protected path for exactly this reason: the declined bin and the selected one are siblings in
+    /// shape, so a rule that reached too far takes both. With a route that empties in place, the
+    /// declined bin is still standing afterwards however far the call reached, so the check has to
+    /// be about what it holds.</para>
+    /// </summary>
+    [Fact]
+    public async Task ABinTheUserDeclinedIsReportedWhenTheCallEmptiesItAnyway()
+    {
+        var c = CreateVolume("C");
+        var d = CreateVolume("D");
+        var mine = CreateBin(c, Sid);
+        var declined = CreateBin(d, Sid);
+
+        var provider = CreateProvider(emptier: FakeRecycleBinEmptier.AlsoEmptying(declined));
+        var plan = await provider.PlanAsync();
+
+        var chosen = plan.Steps.Single(s => ((DeleteStep)s).Path.Equals(mine, StringComparison.OrdinalIgnoreCase));
+        var narrowed = plan.NarrowedTo([chosen]);
+
+        var result = await provider.ExecuteAsync(narrowed);
+
+        // The loss: still standing, and everything the user kept has gone out of it.
+        Assert.True(Directory.Exists(declined));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(declined));
+
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(
+            result.Verification.Checks,
+            v => v.Path.Equals(declined, StringComparison.OrdinalIgnoreCase)
+                && v.Outcome == VerificationOutcome.Emptied);
+    }
+
+    /// <summary>
     /// Windows refuses for reasons this code cannot fix — a bin it will not read, a volume with the
     /// bin switched off — and the number it refused with is the only thing that tells them apart. A
     /// refusal has to reach the user as a failed step saying so, never as a quiet success over a bin
