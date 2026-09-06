@@ -48,6 +48,15 @@ public enum KnownPlace
     RoamingAppData,
 
     /// <summary>
+    /// <c>%USERPROFILE%\AppData\LocalLow</c>.
+    ///
+    /// <para>Unlike the other two tiers this one can be absent from the anchor table, because the
+    /// platform call behind it can decline to say where it is. An entry anchored here then explains
+    /// nothing, which is the right answer: the alternative is a path built by assumption.</para>
+    /// </summary>
+    LocalLowAppData,
+
+    /// <summary>
     /// Anywhere at all, matched on the name alone.
     ///
     /// <para>Reserved for names that mean one thing wherever they are found. <c>node_modules</c> is
