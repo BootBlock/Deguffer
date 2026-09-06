@@ -7,7 +7,7 @@ most useful thing anyone can send.
 
 **Deguffer does not accept external pull requests.** A pull request opened by anyone who is not a
 collaborator on this repository is closed automatically, without being read. That is not a
-judgement on the change or on the person who sent it. Deguffer deletes directories on other
+judgement on the change or on the person who sent it (but it's gonna be a bot, though, innit?). Deguffer deletes directories on other
 people's machines, so every line of it has to be understood and verified by the people who
 maintain it, against the safety model in the
 [specification](docs/todo/_spec.md). Reviewing a patch to that standard costs more than writing
