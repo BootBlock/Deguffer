@@ -6,10 +6,10 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The shader-cache provider spans four locations under one profile, so §5.2 has to hold four times
-/// over rather than once. These are mostly negative tests: <c>%LOCALAPPDATA%\NVIDIA</c> holds
-/// sign-in state beside the caches, and <c>%LOCALAPPDATA%</c> is the parent of the one target that
-/// is a whole directory.
+/// The shader-cache provider spans five locations across two of the profile's application-data
+/// tiers, so §5.2 has to hold five times over rather than once. These are mostly negative tests:
+/// each <c>NVIDIA</c> root holds sign-in state beside its cache, and <c>%LOCALAPPDATA%</c> is the
+/// parent of the one target that is a whole directory.
 /// </summary>
 public sealed class GpuShaderCacheProviderTests : IDisposable
 {
@@ -27,6 +27,17 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     private string CreateCache(string relative, int bytes = 4096)
     {
         var directory = Path.Combine(_environment.LocalAppData, relative);
+        Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, "pipeline.bin"), new byte[bytes]);
+        return directory;
+    }
+
+    /// <summary>
+    /// The same, in the profile's LocalLow tier. NVIDIA keeps a second cache there.
+    /// </summary>
+    private string CreateLocalLowCache(string relative, int bytes = 4096)
+    {
+        var directory = Path.Combine(_environment.LocalLowAppData!, relative);
         Directory.CreateDirectory(directory);
         File.WriteAllBytes(Path.Combine(directory, "pipeline.bin"), new byte[bytes]);
         return directory;
@@ -62,6 +73,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     {
         var dxCache = CreateCache(Path.Combine("NVIDIA", "DXCache"), 8192);
         var glCache = CreateCache(Path.Combine("NVIDIA", "GLCache"), 2048);
+        var localLow = CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"), 4096);
         var amd = CreateCache(Path.Combine("AMD", "DxCache"));
         var intel = CreateCache(Path.Combine("Intel", "ShaderCache"));
         var direct3D = CreateCache("D3DSCache");
@@ -71,8 +83,12 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
+        string[] expected = [amd, direct3D, intel, dxCache, glCache, localLow];
+
+        // Both sides sorted, because the two NVIDIA roots sit in sibling directories whose names
+        // share a prefix and the order that falls out of that is not worth encoding here.
         Assert.Equal(
-            [amd, direct3D, intel, dxCache, glCache],
+            expected.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.True(plan.EstimatedBytes > 0);
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
@@ -98,6 +114,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     public async Task NeverTargetsAVendorRootDirectory()
     {
         CreateCache(Path.Combine("NVIDIA", "DXCache"));
+        CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
         CreateCache(Path.Combine("Intel", "ShaderCache"));
 
         var provider = CreateProvider();
@@ -275,7 +292,8 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateCache(Path.Combine("NVIDIA", "DXCache"));
         var sibling = CreateCache(Path.Combine("NVIDIA", "Telemetry"));
 
-        var nvidia = GpuShaderCacheProvider.Roots.Single(r => r.DirectoryName == "NVIDIA");
+        var nvidia = GpuShaderCacheProvider.Roots
+            .Single(r => r.DirectoryName == "NVIDIA" && r.Area == ProfileArea.LocalAppData);
         Assert.Equal(SafetyTier.DoNotTouch, nvidia.Children.Classify("Telemetry").Tier);
 
         var provider = CreateProvider();
@@ -451,6 +469,148 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(vendorRoot));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("No graphics driver has written a shader cache"));
         Assert.Empty(plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// NVIDIA writes a second <c>DXCache</c> under LocalLow. It was measured at much the same size
+    /// as the one under <c>%LOCALAPPDATA%</c>, and neither is a link to the other, so a plan that
+    /// reaches only the first leaves about half the reclaim on the disk.
+    /// </summary>
+    [Fact]
+    public async Task PlansBothNvidiaCachesWhenTheDriverHasWrittenOneInEachTier()
+    {
+        var local = CreateCache(Path.Combine("NVIDIA", "DXCache"), 8192);
+        var localLow = CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"), 8192);
+
+        Assert.NotEqual(local, localLow, StringComparer.OrdinalIgnoreCase);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(local, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(localLow, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(local));
+        Assert.False(Directory.Exists(localLow), "the LocalLow shader cache was planned and then left behind.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Presence is answered from the declared paths, so a machine carrying only the LocalLow cache
+    /// must still report one rather than nothing at all.
+    /// </summary>
+    [Fact]
+    public async Task ACacheUnderLocalLowAloneIsStillPresence()
+    {
+        CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
+
+        Assert.True(await CreateProvider().IsPresentAsync());
+    }
+
+    /// <summary>
+    /// §5.2's unknown case for the LocalLow root, which is a separate declaration from the root of
+    /// the same name under <c>%LOCALAPPDATA%</c> and gets no coverage from it.
+    /// </summary>
+    [Fact]
+    public async Task AnUnrecognisedLocalLowNvidiaChildIsTier4AndSurvives()
+    {
+        CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
+        var sibling = CreateLocalLowCache(Path.Combine("NVIDIA", "Telemetry"));
+
+        var root = GpuShaderCacheProvider.Roots
+            .Single(r => r.DirectoryName == "NVIDIA" && r.Area == ProfileArea.LocalLowAppData);
+        Assert.Equal(SafetyTier.DoNotTouch, root.Children.Classify("Telemetry").Tier);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(sibling, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        // Qualified by tier, because an unqualified note would name a folder the user has two of.
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("NVIDIA (LocalLow)\\Telemetry", StringComparison.Ordinal));
+
+        // Not merely absent from the plan — asserted to survive (§5.6).
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(Directory.Exists(sibling), "Telemetry was removed alongside the LocalLow cache.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// <c>accounts</c> sits beside the LocalLow cache exactly as it does beside the other one, and
+    /// it is a file, so nothing classifies it and only naming it makes §5.6 assert it.
+    /// </summary>
+    [Fact]
+    public async Task TheLocalLowNvidiaAccountsFileIsAssertedToSurviveAsWell()
+    {
+        CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
+
+        var accounts = Path.Combine(_environment.LocalLowAppData!, "NVIDIA", "accounts");
+        File.WriteAllText(accounts, "{\"token\":\"<REDACTED>\"}");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(accounts, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(File.Exists(accounts), "NVIDIA sign-in state under LocalLow was removed with the cache.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The LocalLow row is deliberately thin: only <c>DXCache</c> was measured there. Declaring
+    /// <c>GLCache</c> under <c>%LOCALAPPDATA%</c> must not widen the other root, for the reason
+    /// AMD's row does not inherit NVIDIA's names.
+    /// </summary>
+    [Fact]
+    public async Task NvidiaGlCacheIsNotRecognisedUnderLocalLow()
+    {
+        var glCache = CreateLocalLowCache(Path.Combine("NVIDIA", "GLCache"));
+        CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
+
+        var root = GpuShaderCacheProvider.Roots
+            .Single(r => r.DirectoryName == "NVIDIA" && r.Area == ProfileArea.LocalLowAppData);
+        Assert.Equal(SafetyTier.DoNotTouch, root.Children.Classify("GLCache").Tier);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(glCache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// LocalLow has no <see cref="System.Environment.SpecialFolder"/>, so it comes from a call that
+    /// can fail. §5.2 forbids assembling the path by hand when it does: a cache that really is
+    /// there goes untouched rather than being reached through a guess at where the tier ought to be.
+    /// </summary>
+    [Fact]
+    public async Task NothingUnderLocalLowIsPlannedWhenWindowsWillNotSayWhereItIs()
+    {
+        var cache = CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
+        _environment.WithNoLocalLow();
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.DoesNotContain(
+            provider.RootPaths,
+            path => path.Contains("LocalLow", StringComparison.OrdinalIgnoreCase));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(cache), "a cache was reached through a guess at where LocalLow is.");
     }
 
     private static bool IsAtOrUnder(string candidate, string ancestor) =>

@@ -145,7 +145,8 @@ internal static class ProfileItems
             @"AppData\LocalLow",
             "Application data for programs running with reduced privileges, which cannot write to "
             + "the other two tiers. Browser sandboxes, some games and some graphics drivers use it. "
-            + "It is usually small.",
+            + "It is usually small, with one exception worth knowing about: NVIDIA keeps a second "
+            + "compiled shader cache here, and it can be as large as the one in Local.",
 
             "It holds settings as well as caches, so it does not go as a whole."),
 

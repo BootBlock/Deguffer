@@ -541,9 +541,9 @@ this is not about environments being expensive to rebuild.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
 | **Method** | Delete the recognised cache directories |
-| **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache` |
+| **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache`. On another, the two NVIDIA folders held 163 MB and 161 MB |
 
 ### What it is
 
@@ -558,11 +558,22 @@ a year can vanish on a Tuesday without anybody noticing.
 Windows keeps one of its own beside the vendors': `%LOCALAPPDATA%\D3DSCache` is Direct3D's system
 shader cache, holding one opaque container per application that has used it.
 
+**NVIDIA keeps two, in two different parts of your profile.** One is under `%LOCALAPPDATA%\NVIDIA`
+and the other under `AppData\LocalLow\NVIDIA`, which is where a program running with reduced
+privileges writes because it may not write to the first. They are separate folders rather than one
+folder seen twice, and on the machine they were measured on they were much the same size as each
+other. A tool that clears only the first leaves about half of it behind.
+
 ### What Deguffer does
 
 It deletes the cache directories it recognises, one step each, so you can keep one vendor's and
-clear another's. There is no eviction command to prefer here — no vendor ships one, and deleting
-the directory is what every published instruction says to do.
+clear another's. The two NVIDIA folders are separate steps for the same reason, so clearing one and
+keeping the other is your choice to make. There is no eviction command to prefer here — no vendor
+ships one, and deleting the directory is what every published instruction says to do.
+
+Only `DXCache` is recognised in the LocalLow folder, because that is the only cache that has been
+observed there. If NVIDIA writes a `GLCache` there on your machine, Deguffer leaves it alone and
+says so, rather than assuming a name it has seen elsewhere applies here too.
 
 `%LOCALAPPDATA%\D3DSCache` is the one entry removed whole rather than child by child. It has no
 configuration to sit beside: everything in it belongs to Direct3D, arriving as opaque per-application
@@ -576,7 +587,8 @@ Each vendor's folder itself, and everything in it Deguffer does not recognise.
 **`%LOCALAPPDATA%\NVIDIA\accounts` is the one to know about.** It sits directly beside the two
 NVIDIA caches and holds account and sign-in state, not shader blobs — and it is a file rather than a
 folder, so the rule that classifies folders never sees it at all. Deguffer names it explicitly and
-asserts it survived the run, the same treatment `gradle.properties` gets.
+asserts it survived the run, the same treatment `gradle.properties` gets. The LocalLow `NVIDIA`
+folder is protected the same way, by name, whether or not it currently holds one.
 
 Any other **folder** you find in there gets the same treatment: unrecognised means untouched, and
 Deguffer says so and asserts it survived. `%LOCALAPPDATA%\Intel` in particular is a shared Intel

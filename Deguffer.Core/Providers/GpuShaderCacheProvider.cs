@@ -14,14 +14,22 @@ namespace Deguffer.Core.Providers;
 /// no vendor ships a cache-eviction command, and every published instruction is to delete the
 /// directory.
 ///
-/// <para><b>One provider over four locations, not one per vendor.</b> Every vendor's shader cache
-/// is the same fact — driver-version-keyed pipeline blobs, rebuilt on demand — so the tier, the
-/// sentence the user reads and the reasoning behind both are identical. Four classes would be four
-/// copies of one piece of knowledge, and the copies would drift. What actually differs is which
-/// directory and which child names, and that is data: <see cref="Roots"/> is the table, and each
-/// row carries its own <see cref="DisposableChildSet"/> so §5.2 stays answerable from one
+/// <para><b>One provider over several locations, not one per vendor.</b> Every vendor's shader
+/// cache is the same fact — driver-version-keyed pipeline blobs, rebuilt on demand — so the tier,
+/// the sentence the user reads and the reasoning behind both are identical. A class each would be
+/// several copies of one piece of knowledge, and the copies would drift. What actually differs is
+/// which directory and which child names, and that is data: <see cref="Roots"/> is the table, and
+/// each row carries its own <see cref="DisposableChildSet"/> so §5.2 stays answerable from one
 /// declaration. The user keeps per-vendor control regardless, because selection is per step and
 /// each cache is its own step.</para>
+///
+/// <para><b>NVIDIA appears twice, in two application-data tiers.</b> The driver writes one cache
+/// under <c>%LOCALAPPDATA%\NVIDIA</c> and a second under <c>AppData\LocalLow\NVIDIA</c>, and the
+/// two were measured at much the same size on one machine. Neither is a link to the other, so
+/// reaching only the first leaves roughly half the reclaim on the disk. That is what
+/// <see cref="ProfileArea"/> on a row is for, and why every note names its root by
+/// <see cref="ShaderCacheRoot.Label"/>: two rows called "NVIDIA" would otherwise be
+/// indistinguishable to whoever reads the plan.</para>
 ///
 /// <para>§5.2 is live here rather than theoretical: <c>%LOCALAPPDATA%\NVIDIA</c> holds
 /// <c>accounts</c> — NVIDIA sign-in state — beside the two caches, so the root is never a target.
@@ -46,10 +54,14 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// machine was available to establish what else that root holds — so the other names sometimes
     /// attributed to it are absent rather than guessed at. The consequence is an incomplete reclaim
     /// on an AMD machine, which is the safe direction to be wrong in.
+    ///
+    /// NVIDIA's LocalLow row is thin for the same reason. Only <c>DXCache</c> was measured there,
+    /// so <c>GLCache</c> is left out rather than assumed to exist in both tiers. A name that has
+    /// not been seen in a directory is Tier 4 in that directory.
     /// </summary>
     public static readonly IReadOnlyList<ShaderCacheRoot> Roots =
     [
-        new ShaderCacheRoot("NVIDIA", new DisposableChildSet(
+        new ShaderCacheRoot(ProfileArea.LocalAppData, "NVIDIA", new DisposableChildSet(
         [
             new ChildClassification(
                 "DXCache",
@@ -61,14 +73,22 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 "Compiled OpenGL and Vulkan program binaries. The driver rebuilds them on demand."),
         ]),
         [("accounts", "NVIDIA account and sign-in state. It sits beside the caches and is not one.")]),
-        new ShaderCacheRoot("AMD", new DisposableChildSet(
+        new ShaderCacheRoot(ProfileArea.LocalLowAppData, "NVIDIA", new DisposableChildSet(
+        [
+            new ChildClassification(
+                "DXCache",
+                SafetyTier.RegenerableCache,
+                "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
+        ]),
+        [("accounts", "NVIDIA account and sign-in state. It sits beside the caches and is not one.")]),
+        new ShaderCacheRoot(ProfileArea.LocalAppData, "AMD", new DisposableChildSet(
         [
             new ChildClassification(
                 "DxCache",
                 SafetyTier.RegenerableCache,
                 "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
         ]), []),
-        new ShaderCacheRoot("Intel", new DisposableChildSet(
+        new ShaderCacheRoot(ProfileArea.LocalAppData, "Intel", new DisposableChildSet(
         [
             new ChildClassification(
                 "ShaderCache",
@@ -86,6 +106,16 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// whose names prove nothing, so a recognised-child rule there would recognise none of them.
     /// §5.2's substance still holds — the parent is never targeted and never enumerated, and it is
     /// what §5.6 asserts survived.
+    ///
+    /// <para><b>Windows ships an eviction route for this one, and what it clears is not
+    /// established.</b> Disk Cleanup carries a "DirectX Shader Cache" item, registered under
+    /// <c>VolumeCaches\D3D Shader Cache</c> with <c>Autorun</c> set. It is a COM handler rather
+    /// than a folder-based one, so the registration does not say which directories it clears, and
+    /// only observing it would. §5.1 prefers a tool's own eviction route where one exists, so
+    /// whether this is one is an open question rather than a settled no. It is recorded here
+    /// because the answer changes what this provider should do about <c>D3DSCache</c> and about
+    /// nothing else in the table. Microsoft documents no on-disk location for it either: the D3D12
+    /// pipeline-state documentation does not mention <c>D3DSCache</c> at all.</para>
     /// </summary>
     private const string Direct3DCacheName = "D3DSCache";
 
@@ -127,19 +157,27 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             + "is a few seconds of stutter the first time a scene renders.",
     };
 
-    /// <summary>The vendor root paths on this machine. Exposed so tests can assert none is targeted.</summary>
+    /// <summary>
+    /// The vendor root paths on this machine. Exposed so tests can assert none is targeted.
+    ///
+    /// A root whose tier the platform would not locate is absent rather than represented by a
+    /// guess, which is the answer planning gives it too.
+    /// </summary>
     public IReadOnlyList<string> RootPaths =>
-        [.. Roots.Select(r => Path.Combine(Environment.LocalAppData, r.DirectoryName))];
+        [.. Roots.Select(r => r.PathIn(Environment)).OfType<string>()];
 
     /// <inheritdoc />
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        .. Roots.Select(root => ToolRoot.Of(
-            Path.Combine(Environment.LocalAppData, root.DirectoryName),
-            $"This is {root.DirectoryName}'s own folder. Deguffer removes the shader caches inside "
-            + "it and nothing else — a graphics vendor keeps driver settings and profiles in the "
-            + "same place.",
-            root.Children)),
+        .. Roots
+            .Select(root => (Path: root.PathIn(Environment), root.DirectoryName, root.Children))
+            .Where(root => root.Path is not null)
+            .Select(root => ToolRoot.Of(
+                root.Path!,
+                $"This is {root.DirectoryName}'s own folder. Deguffer removes the shader caches inside "
+                + "it and nothing else — a graphics vendor keeps driver settings and profiles in the "
+                + "same place.",
+                root.Children)),
     ];
 
     /// <summary>
@@ -162,9 +200,12 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            var rootPath = Path.Combine(Environment.LocalAppData, root.DirectoryName);
+            var rootPath = root.PathIn(Environment);
 
-            if (!LongPath.DirectoryExists(rootPath))
+            // A null path is a tier the platform would not locate, which only LocalLow can be.
+            // §5.2 forbids guessing where it is, so the row contributes nothing rather than a path
+            // assembled by hand.
+            if (rootPath is null || !LongPath.DirectoryExists(rootPath))
             {
                 continue;
             }
@@ -177,7 +218,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"Leaving '{root.DirectoryName}' alone: it is a link to somewhere else, and Deguffer "
+                    $"Leaving '{root.Label}' alone: it is a link to somewhere else, and Deguffer "
                     + "does not look through a link."));
                 declined.Add((rootPath, "A link rather than a directory, so what it holds was never classified."));
                 continue;
@@ -185,7 +226,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             survivors.Add((
                 rootPath,
-                $"The {root.DirectoryName} directory itself must survive — only its known-disposable children are removed."));
+                $"The {root.Label} directory itself must survive — only its known-disposable children are removed."));
 
             survivors.AddRange(root.ProtectedNames.Select(p => (Path.Combine(rootPath, p.Name), p.Reason)));
 
@@ -284,7 +325,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving '{root.DirectoryName}\\{link.Name}' alone: it is a link to somewhere else, and "
+                $"Leaving '{root.Label}\\{link.Name}' alone: it is a link to somewhere else, and "
                 + "Deguffer does not delete through a link."));
             declined.Add((
                 LongPath.Display(link.FullName),
@@ -300,11 +341,12 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             if (!classification.Tier.IsOfferable())
             {
-                // Qualified by vendor: two roots may hold a child of the same name, and an
-                // unqualified note would leave the user unable to tell which one it meant.
+                // Qualified by root: several roots hold a child of the same name, and NVIDIA has
+                // one root in each of two tiers, so an unqualified note would leave the user unable
+                // to tell which folder it meant.
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"Leaving '{root.DirectoryName}\\{child.Name}' alone: {classification.Reason}"));
+                    $"Leaving '{root.Label}\\{child.Name}' alone: {classification.Reason}"));
                 declined.Add((path, classification.Reason));
                 continue;
             }
@@ -324,9 +366,14 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     {
         foreach (var root in Roots)
         {
+            if (root.PathIn(Environment) is not { } rootPath)
+            {
+                continue;
+            }
+
             foreach (var child in root.Children.DisposableNames)
             {
-                yield return Path.Combine(Environment.LocalAppData, root.DirectoryName, child);
+                yield return Path.Combine(rootPath, child);
             }
         }
 
