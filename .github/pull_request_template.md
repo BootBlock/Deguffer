@@ -1,5 +1,10 @@
 <!-- What does this change do, and why? Describe the what and the why, never the plumbing. -->
 
+> **Deguffer does not accept external pull requests.** One opened by anybody who is not a
+> collaborator is closed automatically. Please
+> [open an issue](https://github.com/BootBlock/Deguffer/issues/new/choose) instead, and see
+> [CONTRIBUTING.md](https://github.com/BootBlock/Deguffer/blob/main/CONTRIBUTING.md).
+
 ## Summary
 
 ## Verification
