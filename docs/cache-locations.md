@@ -1579,6 +1579,19 @@ still offers only the ones inside a folder you added. A cheap answer is not perm
 Approving a folder approves it for **every** kind of build output in the table above, which is what
 the Settings description says. If you want a narrower scope, add narrower folders.
 
+**A folder does not have to hold your own code.** The single largest thing this section can offer is
+usually a Python virtual environment that nobody would think to declare: a machine-learning or
+image-generation application installs into its own folder, builds an environment there holding a
+CUDA-enabled `torch`, `tensorflow` and their neighbours, and never comes near your projects. One
+measured at 7.3 GB, which is worth roughly ten of the environments a web project keeps. It meets
+every condition below — `pyvenv.cfg` inside it, a dependency manifest beside it — and it is Tier 2
+like any other. Deguffer simply never looks there, because you never said it could. Add the
+application's own folder if you want that environment offered.
+
+The model weights such an application downloads are a different matter, and are never offered: they
+sit outside the environment, they are not regenerable from a manifest, and re-fetching them is not a
+slow build but a download of tens of gigabytes.
+
 ### What Deguffer does
 
 **A directory's name is not evidence.** `build`, `target` and `Library` are ordinary English words,
