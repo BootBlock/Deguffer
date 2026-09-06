@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
 using Microsoft.Win32;
@@ -19,6 +20,22 @@ public interface IUserEnvironment
 
     /// <summary><c>%APPDATA%</c>.</summary>
     string RoamingAppData { get; }
+
+    /// <summary>
+    /// <c>%USERPROFILE%\AppData\LocalLow</c>, or null when Windows will not say where it is.
+    ///
+    /// <para>The third application-data tier, the one a program running at low integrity writes to
+    /// because it may not write to the other two. NVIDIA's driver keeps a second shader cache here,
+    /// measured at much the same size as the one under <c>%LOCALAPPDATA%</c> and a genuinely
+    /// separate tree rather than a link to it.</para>
+    ///
+    /// <para><b>Null is a real answer and must stay one.</b> There is no
+    /// <see cref="Environment.SpecialFolder"/> for this tier, so it comes from
+    /// <c>SHGetKnownFolderPath</c>, which fails rather than returning a path when no user profile
+    /// is loaded. §5.2 forbids guessing at a location, so a caller that was not told where LocalLow
+    /// is targets nothing under it.</para>
+    /// </summary>
+    string? LocalLowAppData { get; }
 
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
@@ -71,7 +88,7 @@ public interface IUserEnvironment
 }
 
 /// <inheritdoc />
-public sealed class UserEnvironment : IUserEnvironment
+public sealed partial class UserEnvironment : IUserEnvironment
 {
     public static readonly UserEnvironment Current = new();
 
@@ -94,6 +111,8 @@ public sealed class UserEnvironment : IUserEnvironment
     public string LocalAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
     public string RoamingAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+    public string? LocalLowAppData { get; } = ResolveLocalLow();
 
     public string TempPath { get; } = Path.GetTempPath();
 
@@ -159,6 +178,49 @@ public sealed class UserEnvironment : IUserEnvironment
             return null;
         });
     }
+
+    /// <summary><c>KF_FLAG_DONT_VERIFY</c>.</summary>
+    private const uint DoNotVerify = 0x00004000;
+
+    /// <summary>
+    /// Ask Windows where LocalLow is, once, when the environment is constructed.
+    ///
+    /// <para>Verification is switched off because the question is where the tier <em>is</em>, not
+    /// whether it exists yet. A caller decides what to do about an absent directory by looking for
+    /// the cache it wants, and without this flag a profile that has never had a low-integrity
+    /// program run in it would answer identically to a platform that could not say at all.</para>
+    ///
+    /// <para><b><c>FOLDERID_LocalAppDataLow</c> is built here rather than held in a static
+    /// field.</b> This runs from an instance initialiser, and <see cref="Current"/> is a static
+    /// field declared above any such field would be. Static initialisers run in textual order, so
+    /// the identifier would still be <see cref="Guid.Empty"/> when the singleton constructs itself,
+    /// the call would fail, and the one environment the application actually uses would report
+    /// LocalLow as unknown while a freshly constructed one answered correctly.</para>
+    /// </summary>
+    private static string? ResolveLocalLow()
+    {
+        var folderId = new Guid("a520a1a4-1780-4ff6-bd18-167343c5af16");
+        var result = SHGetKnownFolderPath(in folderId, DoNotVerify, IntPtr.Zero, out var buffer);
+
+        try
+        {
+            return result == 0 ? Marshal.PtrToStringUni(buffer) : null;
+        }
+        finally
+        {
+            // The buffer is the caller's to release whether or not the call succeeded, which is
+            // what the documented contract says and is why this covers the failure path too.
+            // Releasing IntPtr.Zero is a no-op, so it costs nothing when there was no buffer.
+            Marshal.FreeCoTaskMem(buffer);
+        }
+    }
+
+    [LibraryImport("shell32.dll")]
+    private static partial int SHGetKnownFolderPath(
+        in Guid folderId,
+        uint flags,
+        IntPtr token,
+        out IntPtr path);
 
     private static IEnumerable<string> Candidates(string directory, string command)
     {

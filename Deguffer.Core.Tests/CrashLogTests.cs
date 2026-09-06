@@ -163,6 +163,8 @@ public class CrashLogTests
 
         public string RoamingAppData => string.Empty;
 
+        public string? LocalLowAppData => null;
+
         public string TempPath => string.Empty;
 
         public string? UserSecurityIdentifier => null;

@@ -17,11 +17,13 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         UserProfile = Path.Combine(root, "profile");
         LocalAppData = Path.Combine(root, "profile", "AppData", "Local");
         RoamingAppData = Path.Combine(root, "profile", "AppData", "Roaming");
+        LocalLowAppData = Path.Combine(root, "profile", "AppData", "LocalLow");
         TempPath = Path.Combine(root, "temp");
 
         Directory.CreateDirectory(UserProfile);
         Directory.CreateDirectory(LocalAppData);
         Directory.CreateDirectory(RoamingAppData);
+        Directory.CreateDirectory(LocalLowAppData);
         Directory.CreateDirectory(TempPath);
     }
 
@@ -30,6 +32,8 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public string LocalAppData { get; }
 
     public string RoamingAppData { get; }
+
+    public string? LocalLowAppData { get; private set; }
 
     public string TempPath { get; }
 
@@ -53,6 +57,17 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public FakeUserEnvironment WithNoSecurityIdentifier()
     {
         UserSecurityIdentifier = null;
+        return this;
+    }
+
+    /// <summary>
+    /// Pretend Windows would not say where LocalLow is, which is how a provider that reaches into
+    /// it is shown to fail closed. The directory itself is left on disk, so the test can prove the
+    /// provider declined a cache that was really there rather than one that was simply absent.
+    /// </summary>
+    public FakeUserEnvironment WithNoLocalLow()
+    {
+        LocalLowAppData = null;
         return this;
     }
 
