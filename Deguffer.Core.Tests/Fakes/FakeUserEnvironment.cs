@@ -17,11 +17,13 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         UserProfile = Path.Combine(root, "profile");
         LocalAppData = Path.Combine(root, "profile", "AppData", "Local");
         RoamingAppData = Path.Combine(root, "profile", "AppData", "Roaming");
+        LocalLowAppData = Path.Combine(root, "profile", "AppData", "LocalLow");
         TempPath = Path.Combine(root, "temp");
 
         Directory.CreateDirectory(UserProfile);
         Directory.CreateDirectory(LocalAppData);
         Directory.CreateDirectory(RoamingAppData);
+        Directory.CreateDirectory(LocalLowAppData);
         Directory.CreateDirectory(TempPath);
     }
 
@@ -31,14 +33,34 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
     public string RoamingAppData { get; }
 
+    public string? LocalLowAppData { get; private set; }
+
     public string TempPath { get; }
 
     /// <summary>
     /// A recognisably invented identifier. Real enough in shape for a provider that matches on it,
     /// and nobody's actual SID.
+    ///
+    /// <para>A constant as well as the default, because a fake standing in for something that acts
+    /// on this account's own directory has to name the same account the environment does. Two
+    /// copies of the literal would agree until one of them was edited.</para>
     /// </summary>
-    public string? UserSecurityIdentifier { get; private set; } =
-        "S-1-5-21-1111111111-2222222222-3333333333-1001";
+    public const string SecurityIdentifier = "S-1-5-21-1111111111-2222222222-3333333333-1001";
+
+    public string? UserSecurityIdentifier { get; private set; } = SecurityIdentifier;
+
+    /// <summary>
+    /// A recognisably invented account name and machine name, on the same terms as
+    /// <see cref="SecurityIdentifier"/>: a fixture that laid out a File History target has to name
+    /// the same account and the same machine the provider will look for.
+    /// </summary>
+    public const string Account = "testuser";
+
+    public const string Machine = "TESTMACHINE";
+
+    public string UserName { get; } = Account;
+
+    public string MachineName { get; } = Machine;
 
     /// <summary>
     /// Pretend the account is unidentifiable, which is how a provider that keys on the SID is shown
@@ -48,6 +70,17 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public FakeUserEnvironment WithNoSecurityIdentifier()
     {
         UserSecurityIdentifier = null;
+        return this;
+    }
+
+    /// <summary>
+    /// Pretend Windows would not say where LocalLow is, which is how a provider that reaches into
+    /// it is shown to fail closed. The directory itself is left on disk, so the test can prove the
+    /// provider declined a cache that was really there rather than one that was simply absent.
+    /// </summary>
+    public FakeUserEnvironment WithNoLocalLow()
+    {
+        LocalLowAppData = null;
         return this;
     }
 

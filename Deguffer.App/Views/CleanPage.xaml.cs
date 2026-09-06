@@ -23,7 +23,7 @@ public sealed partial class CleanPage : Page
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
         // view-model, whatever the framework's initialisation order does next.
         ViewModel = new CleanViewModel(
-            CleanupPlanner.CreateDefault(),
+            CleanupPlanner.CreateDefault(App.Preferences),
             UserEnvironment.Current,
             App.Selections,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme));

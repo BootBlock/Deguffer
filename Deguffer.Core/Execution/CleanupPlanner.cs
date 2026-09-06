@@ -21,23 +21,32 @@ public sealed class CleanupPlanner
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
-    /// web caches, the Dart analysis server's byte store, the Azure Functions Core Tools releases
-    /// Visual Studio downloads, the per-volume Recycle Bins, the crash
+    /// web caches, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// server's byte store, the Azure Functions Core Tools releases Visual Studio downloads, the
+    /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
     /// terms before being added. Their reasoning and their rejected alternatives are in
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, PlatformIO, Playwright and the Azure Functions Core Tools
-    /// releases, which are Tier 2, and the
-    /// Recycle Bins, the crash dumps, the servicing logs and the Epic launcher's logs, which are
-    /// Tier 3. Neither tier is ever
+    /// environments, conda, Maven, vcpkg, PlatformIO, Playwright, the Azure Functions Core Tools
+    /// releases and the superseded Squirrel builds, which are Tier 2, and the
+    /// Recycle Bins, the File History target, the crash dumps, the servicing logs and the Epic
+    /// launcher's logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
     /// held to it.
     /// </summary>
-    public static CleanupPlanner CreateDefault()
+    /// <param name="preferences">
+    /// The live settings, for the two providers the user parameterises: the route a Recycle Bin is
+    /// emptied by, and the age past which a File History version may go. Defaulted to the
+    /// shipped values so a caller outside the app — a test, or the Explore page's own provider list
+    /// — behaves as an untouched install would. It is passed rather than captured because the
+    /// provider reads it at plan time, which is what makes a change on the Settings page take
+    /// effect from the next preview.
+    /// </param>
+    public static CleanupPlanner CreateDefault(ICurrentPreferences? preferences = null)
     {
         var roots = new SourceRootStore(UserEnvironment.Current);
 
@@ -48,6 +57,11 @@ public sealed class CleanupPlanner
         var sourceTrees = new SourceDirectoryDiscovery(DirectoryScanner.Default);
         var liveTrees = LiveTreeInspector.Default;
 
+        // One sweep of %LOCALAPPDATA% for both Squirrel providers, on the reasoning above: they ask
+        // the same question of the same directory, and two unshared discoveries would list a folder
+        // holding hundreds of children twice per pass.
+        var squirrel = new SquirrelDiscovery(UserEnvironment.Current);
+
         return new CleanupPlanner(
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees),
@@ -55,11 +69,14 @@ public sealed class CleanupPlanner
             new CargoTargetProvider(roots, sourceTrees, liveTrees),
             new NodeModulesProvider(roots, sourceTrees, liveTrees),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees),
-            .. CacheProviders(),
+            .. CacheProviders(squirrel, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
-    private static IReadOnlyList<ICleanupProvider> CacheProviders() =>
+    private static IReadOnlyList<ICleanupProvider> CacheProviders(
+        SquirrelDiscovery squirrel,
+        ILiveTreeInspector liveTrees,
+        ICurrentPreferences preferences) =>
     [
         new NuGetCacheProvider(),
         new GradleCacheProvider(),
@@ -80,11 +97,15 @@ public sealed class CleanupPlanner
         new VsCodeCacheProvider(),
         new FirefoxCacheProvider(),
         new EpicLauncherWebCacheProvider(),
+        new EpicLauncherContentCacheProvider(),
         new SteamCacheProvider(),
+        new SquirrelStagingProvider(discovery: squirrel, liveTrees: liveTrees),
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
+        new SquirrelSupersededVersionProvider(discovery: squirrel, liveTrees: liveTrees),
         new AzureFunctionsToolsProvider(),
-        new RecycleBinProvider(),
+        new RecycleBinProvider(preferences: preferences),
+        new FileHistoryProvider(preferences: preferences),
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
         new EpicLauncherLogProvider(),
@@ -207,6 +228,13 @@ public sealed class CleanupPlanner
             .Select(p => (p.Finding, Plan: p.Plan!))
             .ToList();
 
+        // §5.6's negative is answered against what the whole run may destroy, not against each
+        // plan's own targets. Gathered once, before the first deletion, because a provider that
+        // verifies halfway through has to be able to tell a folder a *later* provider will take
+        // from one a stranger already took — and because the set does not change while the run
+        // proceeds.
+        var reach = RunReach.Of([.. plans.Select(p => p.Plan)]);
+
         var weights = ProgressWeights.For(plans.Select(p => p.Plan.EstimatedBytes));
         var total = weights.Sum();
         var results = new List<CleanupResult>(plans.Count);
@@ -231,7 +259,11 @@ public sealed class CleanupPlanner
             status?.Report($"Cleaning {finding.Provider.Name}…");
 
             results.Add(await finding.Provider
-                .ExecuteAsync(plan, ScaledProgress.Within(progress, done / total, weights[i] / total), ct)
+                .ExecuteAsync(
+                    plan,
+                    reach,
+                    ScaledProgress.Within(progress, done / total, weights[i] / total),
+                    ct)
                 .ConfigureAwait(false));
 
             // Reported from here rather than trusted from the provider: a provider that reports

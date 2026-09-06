@@ -106,7 +106,24 @@ public static class LongPath
         return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Strip the extended-length prefix, for display and comparison.</summary>
+    /// <summary>
+    /// Strip the extended-length prefix, for display and comparison.
+    ///
+    /// <para><b>Only where what is left is still a path.</b> The prefix comes off
+    /// <c>\\?\C:\cache</c> and <c>\\?\UNC\server\share</c> because <c>C:\cache</c> and
+    /// <c>\\server\share</c> are the same locations said better. It must not come off
+    /// <c>\\?\Volume{…}\cache</c>, which is how Windows names a drive that has no letter: the
+    /// remainder is <c>Volume{…}\cache</c>, which is not fully qualified, so anything that hands it
+    /// back to <see cref="Extended"/> or <see cref="Configured"/> resolves it against Deguffer's own
+    /// working directory — a folder nobody named, silently.</para>
+    ///
+    /// <para>That is not a display problem, it is a safety one. Such a string reaches
+    /// <see cref="Execution.ProtectedPath"/>, and §5.6's negative then asserts the survival of a
+    /// path under Deguffer's own directory rather than the one on the drive. It measures absent, it
+    /// is reported as "nothing to preserve", and the check passes over whatever really happened.
+    /// <c>FileHistoryDiscovery</c> is the first thing in Core that can produce a volume-GUID root,
+    /// so the case is reachable rather than theoretical.</para>
+    /// </summary>
     public static string Display(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -116,9 +133,14 @@ public static class LongPath
             return @"\\" + path[UncDevicePrefix.Length..];
         }
 
-        return path.StartsWith(DevicePrefix, StringComparison.Ordinal)
-            ? path[DevicePrefix.Length..]
-            : path;
+        if (!path.StartsWith(DevicePrefix, StringComparison.Ordinal))
+        {
+            return path;
+        }
+
+        var stripped = path[DevicePrefix.Length..];
+
+        return Path.IsPathFullyQualified(stripped) ? stripped : path;
     }
 
     /// <summary>Whether the directory exists, tolerating paths beyond MAX_PATH.</summary>
@@ -126,6 +148,32 @@ public static class LongPath
 
     /// <summary>Whether the file exists, tolerating paths beyond MAX_PATH.</summary>
     public static bool FileExists(string path) => File.Exists(Extended(path));
+
+    /// <summary>
+    /// Whether this is a directory holding at least one entry, tolerating paths beyond MAX_PATH.
+    ///
+    /// <para>§5.6 asks it of every protected path, so it stops at the first entry rather than
+    /// counting them: the question is whether the directory still holds <em>anything</em>, and a
+    /// count would walk a Recycle Bin to learn what one entry settles (G4).</para>
+    ///
+    /// <para>False for a file, for a path that is not there, and for a directory that cannot be
+    /// listed. The last of those is the one worth stating: an unreadable directory answers the same
+    /// as an empty one, so a protected path Windows will not list is never <em>reported</em> as
+    /// having held something. That keeps a refusal out of the evidence rather than turning it into
+    /// an alarm, and it is the same direction §5.3 takes everywhere else.</para>
+    /// </summary>
+    public static bool HoldsAnything(string path)
+    {
+        try
+        {
+            return Directory.EnumerateFileSystemEntries(Extended(path)).Any();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        {
+            // Not a directory, gone, or not listable by this account.
+            return false;
+        }
+    }
 
     /// <summary>
     /// Whether this path is a junction or symbolic link rather than a real directory.

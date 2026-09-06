@@ -372,8 +372,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial string HoveredFigures { get; set; } = string.Empty;
 
     /// <summary>
-    /// What Deguffer knows about the thing under the pointer, ready to show, or empty where it
-    /// knows nothing about it — which is nearly every shape on a map.
+    /// What Deguffer knows about the thing under the pointer, or about the nearest folder above it
+    /// that it knows anything about, ready to show. Empty where nothing on the way to the top of
+    /// the volume is described.
+    ///
+    /// <para>Nearest rather than exact, because a treemap draws a folder as a one-pixel frame round
+    /// its children and the pointer is nearly always on a file inside it. Asked exactly, the whole
+    /// of <c>C:\Windows</c> answered nothing but that frame.</para>
     ///
     /// <para>Only what the reference says, and not the size or the date: those are already on the
     /// status line under the picture, where they can be read without waiting for anything to
@@ -385,8 +390,8 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// Whether there is anything to say about what the pointer is over. The map's tooltip is
-    /// collapsed by this, so nothing appears over the shapes Deguffer has nothing to add about —
-    /// which is nearly all of them.
+    /// collapsed by this, so nothing appears where nothing on the way to the top of the volume is
+    /// described — which is most of a data drive and little of a system one.
     /// </summary>
     public bool HasHoveredNote => HoveredNote.Length > 0;
 
@@ -696,9 +701,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// pointer is how somebody checks one shape against the rest, and having to change the
     /// colouring to read a date would be a worse answer than showing it always.</para>
     ///
-    /// <para>The path is built once and the reference is asked with it. Both need it, and walking
-    /// the parent chain twice for one pointer move is the kind of cost this method's caller cannot
-    /// afford (G4).</para>
+    /// <para>The path is built once and the reference is asked with it, rather than each walking
+    /// the tree's parent chain for itself. This runs on every pointer move that lands on a
+    /// different shape (G4).</para>
     /// </summary>
     private (string Path, string Figures, string Note) Over(ExploreTree tree, int node)
     {
@@ -708,7 +713,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             path,
             $"{FreeSpace.Format(tree.SizeOf(node))}, "
             + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}",
-            _guide.Describe(path)?.Tip() ?? string.Empty);
+            _guide.DescribeNearest(path)?.Tip() ?? string.Empty);
     }
 
     /// <summary>Say that what the notes hold has changed, whichever of the four it was.</summary>

@@ -77,9 +77,13 @@ public abstract record CleanupStep
     /// measuring happens per path. <see cref="CleanupPlan.HasRecentContentHeldBack"/> is the
     /// question the shell actually asks, and it is that question asked over these.</para>
     ///
-    /// <para>False on a <see cref="RunCommandStep"/>, always: §5.1 leaves the tool's own eviction
-    /// command deciding what it removes, so nothing is held back from it and its figure is the
-    /// whole cache.</para>
+    /// <para>False on nearly every <see cref="RunCommandStep"/>: §5.1 leaves the tool's own eviction
+    /// command deciding what it removes, so nothing is held back from it and its figure is the whole
+    /// cache. <see cref="Providers.FileHistoryProvider"/> is the exception, and it is one because
+    /// the <em>command</em> takes an age — <c>FhManagew.exe -cleanup &lt;days&gt;</c> considers only
+    /// versions past a cut-off, so the estimate is the aged part of the folder by construction. A
+    /// target full of recent versions measures zero and is not clear, which is exactly the false
+    /// "Already clear" this flag exists to prevent.</para>
     /// </summary>
     public bool WithheldRecent { get; init; }
 }
@@ -161,6 +165,59 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
 /// </summary>
 public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(Path, What)
 {
+    public override string Description => $"{What} — {LongPath.Display(Path)}";
+}
+
+/// <summary>
+/// Empty one volume's Recycle Bin through Windows rather than by deleting its files.
+///
+/// <para><b>Why it is a <see cref="DeleteStep"/> and not a <see cref="RunCommandStep"/>.</b> §5.1's
+/// preferred route is a tool's own eviction command, and <c>SHEmptyRecycleBin</c> is one — but a
+/// command step reports against probe paths and is never guarded, and neither is true here. This
+/// destroys one path whose contents the plan named, sized and dated, so it belongs where §5.6's
+/// negative and <see cref="CleanupPlan.TargetedPaths"/> already look.</para>
+///
+/// <para><b><see cref="CleanupStep.SelectionKey"/> is inherited, which is the point.</b> The key is
+/// the path for every deletion, so a bin the user ticked keeps its tick when the route changes
+/// underneath it — the setting that chooses between this step and
+/// <see cref="DeleteDirectoryStep"/> must not silently discard a selection, and the direction it
+/// would discard it in is back towards not being selected.</para>
+///
+/// <para>The shell is given the volume, and the plan names the account's directory inside it. Those
+/// are different paths on purpose: <see cref="VolumeRoot"/> is what the call accepts, and
+/// <see cref="DeleteStep.Path"/> is what actually loses its contents and what §5.6 measures around.
+/// See <see cref="ShellRecycleBinEmptier"/> for what was observed about the gap between them.</para>
+/// </summary>
+public sealed record EmptyRecycleBinStep(string Path, string What) : DeleteStep(Path, What)
+{
+    /// <summary>
+    /// The volume whose bin this is, which is what <c>SHEmptyRecycleBin</c> accepts, or an empty
+    /// string where <see cref="DeleteStep.Path"/> is not shaped like a bin at all.
+    ///
+    /// <para>Derived rather than stored, because the shape is guaranteed by the only thing that
+    /// builds one: a bin is always <c>&lt;root&gt;\$Recycle.Bin\&lt;account&gt;</c>, so the root is
+    /// two levels up. Deriving it this way rather than with <c>GetPathRoot</c> is deliberate — the
+    /// tests stand synthetic volumes inside a scratch directory, where the drive's own root is not
+    /// the volume the step means, and a derivation that could not be exercised there would be one
+    /// nothing checks.</para>
+    ///
+    /// <para><b>Nothing is the answer for a path that is not two levels deep, and the alternative
+    /// was dangerous.</b> Falling back to the path itself reads as harmless, and is exactly wrong
+    /// for the one input that reaches the fallback while still being accepted downstream: a
+    /// <see cref="DeleteStep.Path"/> that is already a drive root. <c>GetDirectoryName</c> answers
+    /// null for it, the fallback would hand that root straight to the shell, and
+    /// <see cref="ShellRecycleBinEmptier"/>'s guard admits a root. A malformed target would have
+    /// become a whole-volume call. An empty string is refused by everything downstream, so the
+    /// degenerate case fails closed.</para>
+    ///
+    /// <para><see cref="LongPath.Display"/> first, because the shell namespace refuses the
+    /// extended-length prefix and because trimming it after splitting would leave <c>\\?\D:</c>
+    /// as the root. See <see cref="IRecycleBinEmptier"/>.</para>
+    /// </summary>
+    public string VolumeRoot =>
+        System.IO.Path.GetDirectoryName(System.IO.Path.GetDirectoryName(LongPath.Display(Path)))
+        ?? string.Empty;
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 

@@ -1,0 +1,49 @@
+name: Close external pull requests
+
+# Deguffer takes no external patches. CONTRIBUTING.md says why, and asks for an issue instead.
+# Left alone, a pull request from outside sits open until somebody explains that by hand, so this
+# says it once and closes it.
+#
+# pull_request_target rather than pull_request: a fork's pull_request run is handed a read-only
+# GITHUB_TOKEN and could not close anything. The hazard that trigger normally carries is running
+# the pull request's own code with a write token, and nothing here checks anything out.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    # Somebody who is not a collaborator cannot push a branch here, so an external pull request is
+    # always from a fork. Testing both keeps in-repo automation, which is not a person and has no
+    # association, out of it.
+    if: >-
+      github.event.pull_request.head.repo.full_name != github.repository &&
+      github.event.pull_request.author_association != 'OWNER' &&
+      github.event.pull_request.author_association != 'MEMBER' &&
+      github.event.pull_request.author_association != 'COLLABORATOR'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain the policy, then close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          cat > body.md <<'BODY'
+          Thank you for taking the time to write this, and sorry to close it unread.
+
+          Deguffer does not accept external pull requests. That is a standing policy, not a
+          judgement on this change: [CONTRIBUTING.md](https://github.com/BootBlock/Deguffer/blob/main/CONTRIBUTING.md)
+          explains why.
+
+          If you would still like the change made, please
+          [open an issue](https://github.com/BootBlock/Deguffer/issues/new/choose) with a short
+          summary of what it should do and why. A line or two is enough, and that is the form the
+          project can act on.
+          BODY
+          gh pr comment "$PR" --body-file body.md
+          gh pr close "$PR"

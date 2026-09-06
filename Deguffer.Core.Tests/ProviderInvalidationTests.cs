@@ -1,5 +1,6 @@
 using System.Reflection;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -184,8 +185,13 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(SourceDirectoryDiscovery)
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
+        : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
+        : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
+
+        // Never the real one: it would empty the Recycle Bin of whoever ran the suite.
+        : parameter == typeof(IRecycleBinEmptier) ? new FakeRecycleBinEmptier()
         : throw new XunitException(
             $"{provider.Name} takes a {parameter.Name}, which this test cannot fabricate from a fake. " +
             "Extend Argument so the provider is still covered.");

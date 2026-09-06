@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Providers;
 
 namespace Deguffer.App.ViewModels;
 
@@ -106,6 +107,20 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// How a Recycle Bin gets emptied. Off means Windows does it, which is the shipped route.
+    ///
+    /// <para>It is on this page rather than decided for the user because neither answer is right
+    /// for everybody, and because the two costs are of different kinds: asking Windows keeps every
+    /// window on the machine agreeing with the disk, and doing it ourselves is several times faster
+    /// on a bin large enough to be worth emptying. Neither changes which directory is emptied.</para>
+    /// </summary>
+    public bool EmptyRecycleBinsDirectly
+    {
+        get => _preferences.Current.EmptyRecycleBinsDirectly;
+        set => Apply(current => current with { EmptyRecycleBinsDirectly = value });
+    }
+
+    /// <summary>
     /// A week. Bound by the control as well as used by the clamp below, so the box and the value it
     /// produces cannot disagree — a number typed past the maximum is otherwise accepted by one and
     /// silently rewritten by the other.
@@ -130,6 +145,38 @@ public sealed partial class SettingsViewModel : ObservableObject
         get => _preferences.Current.KeepFilesChangedWithinHours;
         set => Apply(current => current with { KeepFilesChangedWithinHours = WholeHours(value) });
     }
+
+    /// <summary>
+    /// The bounds on the File History retention age, read from the provider that clamps to them so
+    /// the box and the value it produces cannot disagree.
+    ///
+    /// <para>The floor is a safety rule rather than a validation nicety: <c>FhManagew.exe -cleanup
+    /// 0</c> discards every version of everything that has left the protection scope. See
+    /// <see cref="FileHistoryProvider"/>.</para>
+    /// </summary>
+    public double MinimumFileHistoryRetentionDays => FileHistoryProvider.MinimumRetentionDays;
+
+    public double MaximumFileHistoryRetentionDays => FileHistoryProvider.MaximumRetentionDays;
+
+    /// <summary>
+    /// How old a File History version has to be before Windows may discard it, on the same terms as
+    /// <see cref="KeepFilesChangedWithinHours"/>: a <see cref="double"/> because that is what a
+    /// <c>NumberBox</c> exposes, and an emptied box reports <see cref="double.NaN"/>.
+    ///
+    /// <para>NaN falls back to the shipped default rather than to the floor. Clearing the field is
+    /// not a request to delete as much as possible, and the floor is the setting that destroys
+    /// most.</para>
+    /// </summary>
+    public double FileHistoryRetentionDays
+    {
+        get => _preferences.Current.FileHistoryRetentionDays;
+        set => Apply(current => current with { FileHistoryRetentionDays = WholeDays(value) });
+    }
+
+    private int WholeDays(double value) => double.IsNaN(value)
+        ? AppPreferences.Default.FileHistoryRetentionDays
+        : (int)Math.Clamp(
+            Math.Round(value), MinimumFileHistoryRetentionDays, MaximumFileHistoryRetentionDays);
 
     private int WholeHours(double value) =>
         double.IsNaN(value) ? 0 : (int)Math.Clamp(Math.Round(value), 0, MaximumKeepHours);

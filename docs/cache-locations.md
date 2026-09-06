@@ -613,9 +613,9 @@ this is not about environments being expensive to rebuild.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
 | **Method** | Delete the recognised cache directories |
-| **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache` |
+| **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache`. On another, the two NVIDIA folders held 163 MB and 161 MB |
 
 ### What it is
 
@@ -630,11 +630,27 @@ a year can vanish on a Tuesday without anybody noticing.
 Windows keeps one of its own beside the vendors': `%LOCALAPPDATA%\D3DSCache` is Direct3D's system
 shader cache, holding one opaque container per application that has used it.
 
+**NVIDIA keeps two, in two different parts of your profile.** One is under `%LOCALAPPDATA%\NVIDIA`
+and the other under `AppData\LocalLow\NVIDIA`, which is where a program running with reduced
+privileges writes because it may not write to the first. They are separate folders rather than one
+folder seen twice, and on the machine they were measured on they were much the same size as each
+other. A tool that clears only the first leaves about half of it behind.
+
 ### What Deguffer does
 
 It deletes the cache directories it recognises, one step each, so you can keep one vendor's and
-clear another's. There is no eviction command to prefer here — no vendor ships one, and deleting
-the directory is what every published instruction says to do.
+clear another's. The two NVIDIA folders are separate steps for the same reason, so clearing one and
+keeping the other is your choice to make. No graphics vendor ships a command that clears its own
+shader cache, and deleting the directory is what every published instruction says to do.
+
+Windows is the one exception, and it is unresolved rather than ruled out. Disk Cleanup carries a
+"DirectX Shader Cache" item, but it runs as code rather than as a list of folders, so what it
+actually clears is not something the registration reveals. Deguffer deletes `%LOCALAPPDATA%\D3DSCache`
+directly because that is what it can name, offer and check afterwards.
+
+Only `DXCache` is recognised in the LocalLow folder, because that is the only cache that has been
+observed there. If NVIDIA writes a `GLCache` there on your machine, Deguffer leaves it alone and
+says so, rather than assuming a name it has seen elsewhere applies here too.
 
 `%LOCALAPPDATA%\D3DSCache` is the one entry removed whole rather than child by child. It has no
 configuration to sit beside: everything in it belongs to Direct3D, arriving as opaque per-application
@@ -648,7 +664,8 @@ Each vendor's folder itself, and everything in it Deguffer does not recognise.
 **`%LOCALAPPDATA%\NVIDIA\accounts` is the one to know about.** It sits directly beside the two
 NVIDIA caches and holds account and sign-in state, not shader blobs — and it is a file rather than a
 folder, so the rule that classifies folders never sees it at all. Deguffer names it explicitly and
-asserts it survived the run, the same treatment `gradle.properties` gets.
+asserts it survived the run, the same treatment `gradle.properties` gets. The LocalLow `NVIDIA`
+folder is protected the same way, by name, whether or not it currently holds one.
 
 Any other **folder** you find in there gets the same treatment: unrecognised means untouched, and
 Deguffer says so and asserts it survived. `%LOCALAPPDATA%\Intel` in particular is a shared Intel
@@ -1097,6 +1114,87 @@ without being asked, and the folder it refills into is left standing.
 
 ---
 
+## Epic Games launcher store artwork
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\ContentCache` |
+| **Method** | Delete that one folder, and nothing else under `%PROGRAMDATA%\Epic` |
+| **Typical size** | 497 MB in 3,917 files on the machine this was measured on, 3,912 of them JPEGs |
+
+### What it is
+
+The launcher keeps a **second** data directory, outside anybody's profile and shared by every
+account on the machine. The store's pictures go there: the cover images, screenshots and banners
+behind every page you have opened.
+
+Nothing ever removes one. On the machine this was measured on the timestamps ran from November 2022
+to September 2026 — nearly four years of artwork, in one flat folder with no subdirectories at all,
+including games that have long since left the store.
+
+It is a different folder from the [web cache](#epic-games-launcher-web-cache) above, which is the
+embedded browser's own cache inside your profile. A machine that has run the launcher has both.
+
+### What Deguffer does
+
+It removes `ContentCache` and nothing else. Epic documents no command that clears this directory, so
+there is nothing to prefer to deleting the path, and the folder is named outright rather than found
+by looking around. Nothing under `%PROGRAMDATA%\Epic` is ever classified, so nothing there can
+become a candidate by being noticed.
+
+**It does not need administrator rights**, even though `%PROGRAMDATA%` belongs to the machine rather
+than to you. Epic's own installer gives every account on the machine full control of
+`%PROGRAMDATA%\Epic`, and that carries down to the artwork, so you can clear it as you are. On a
+machine whose permissions have been tightened the clean stops, tells you nothing was removed, and
+leaves the folder exactly as it was.
+
+### What is protected
+
+**Everything else under `%PROGRAMDATA%\Epic`.** What sits beside the artwork matters more here than
+on most rows:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Data\Manifests` | **The launcher's record of which games are installed.** Losing it makes the launcher forget your installed library |
+| `Data\ManifestTemp` | Where the launcher assembles a new copy of that record before replacing it |
+| `VaultCache` | Downloaded game data the launcher is keeping on purpose |
+| `Data\DownloadManager`, `Data\Update` | Downloads and updates that are part-finished |
+| `Data\Catalog`, `Data\SDMeta`, `Data\ThirPartyManagedApps` | Store and integration data the launcher reads rather than re-fetches |
+| `Data\Launcher.manifest`, `Data\Launcher.manifest.meta` | The launcher's record of the build it is running |
+| `UnrealEngineLauncher\LauncherInstalled.dat` | The machine's record of where its Epic games are installed, which other launchers read to find them |
+| `EpicOnlineServices` | The services Epic games sign in and play online through |
+
+Deguffer asserts afterwards that every one of them survived.
+
+**`Data\EMS` is left alone deliberately**, and it is 79 MB that could have been offered. It holds
+promotional images, but beside them sit `.layout`, `.sdmeta` and `.ini` files describing the panels,
+and nobody has established what that metadata is for. §5.2's answer to something unidentified is to
+leave it, and 79 MB does not justify guessing.
+
+Deguffer also refuses to delete through a link, and it checks the whole path rather than just the
+last folder. If you have moved `%PROGRAMDATA%\Epic\EpicGamesLauncher` onto another drive with a
+junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+The store downloads each picture again the first time the page showing it is opened, so the
+storefront fills in more slowly once.
+
+**Your installed games, your library and your sign-in are untouched.** No game data is in this
+folder.
+
+Close the launcher first if you can. It writes artwork into this folder as you browse the store, and
+anything it holds open is left in place rather than removed.
+
+### Why Tier 1
+
+Every file in there is a picture Epic's servers still hold. The launcher fetched it on demand and
+fetches it again on demand, and nothing else is the authority for any of it.
+
+---
+
 ## Epic Games launcher logs and crash reports
 
 **Tier 3 — user data.** Never pre-selected, and confirmed before it runs.
@@ -1235,6 +1333,169 @@ pre-caching is enabled. It sits inside a Steam library, and a library can be on 
 only beside the program, so reaching every copy of it means finding every library rather than reading
 one recorded path. No machine with one to measure was available either, so it is left for its own
 change.
+
+---
+
+## Squirrel updater leftovers
+
+| **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |
+| **Method** | Delete what the updater unpacked, and the update packages an application's own index has stopped naming |
+| **Typical size** | 466 MB of staging, and 87 MB of spent packages across three applications, on the machine this was measured on |
+
+### What it is
+
+Squirrel is the updater behind a large family of Windows desktop applications. An application using
+it installs into `%LOCALAPPDATA%\<the application's name>` and keeps three things there: `Update.exe`,
+one `app-<version>` folder per installed build, and a `packages` folder holding what it downloaded.
+Installs and updates are unpacked somewhere else again — `%LOCALAPPDATA%\SquirrelTemp`, which **every
+Squirrel application on the machine shares**.
+
+Both locations are meant to be temporary, and neither reliably is:
+
+| Where | Why it accumulates |
+| --- | --- |
+| `SquirrelTemp` | The unpacked copy is deleted when the update finishes. An application killed part-way through never gets there, and what it unpacked stays |
+| `packages` | After an update, Squirrel deletes every package its index no longer names — in a loop with no error handling, so the first failure abandons the rest |
+
+This is not a rare edge. Squirrel's own issue tracker carries reports of 718 MB, 2 GB, 6.2 GB, 13 GB
+and 35 GB in one staging folder, over nine years, and it was never fixed. The maintainer's answer
+both times was that deleting the folder is safe, and that the library cannot do it itself: Squirrel
+is a library, several applications use it, and one of them cannot know that another is not
+installing through that folder at this moment.
+
+### What Deguffer does
+
+**It identifies an application positively, and needs both halves.** A folder qualifies only if it
+holds `Update.exe` *and* a child named for a version Deguffer can read. Other software ships a file
+called `Update.exe`, and a folder holding a directory whose name begins `app-` is not evidence of an
+updater. A folder that fails the pair is invisible, and nothing inside it is offered.
+
+**In the staging folder it removes only what Squirrel's own name generator produced.** Those names
+are the word `temp` followed by a single character from a fixed 360-character alphabet — `tempa`,
+`tempb`, and so on — because the updater hands out the first free name each time. A directory whose
+name does not match is somebody else's and is left alone.
+
+That rule is deliberately narrower than the generator. Given more than 360 staging directories at
+once the updater starts producing longer names, and Deguffer leaves those alone too, because a
+longer run of letters cannot be told from an ordinary word: matching `temp` followed by *one or
+more* characters would also claim `templates`, `temporary` and `tempdata`. Under the default folder
+that would cost nothing, since nothing else writes there. Under a `SQUIRREL_TEMP` pointing at a
+folder you share with anything else, it would offer your directory for deletion. The location is read from `SQUIRREL_TEMP` where that is set,
+because Squirrel reads it too — and if it is set to something that is not a full path, Deguffer says
+so and leaves the folder alone rather than guessing.
+
+**Before removing a staging directory it asks whether anything is running from inside it, and
+refuses the ones that are.** This is the collision the maintainer named, and it is a refusal rather
+than a warning.
+
+**In a `packages` folder it reads the application's own index.** `RELEASES` lists the packages the
+application still needs. Deguffer removes package files that index has stopped naming, and nothing
+else. If the index is missing or will not parse, nothing in that folder is offered at all — without
+it there is no way to tell a spent package from the one the next update is built against.
+
+**A package for a build newer than the one installed is never removed, even when the index does not
+name it.** Squirrel writes a downloaded update into that folder *before* it rewrites the index, so an
+unnamed package can be an update part-way through downloading rather than debris.
+
+Squirrel has no clean-up command. `Update.exe` can install, uninstall, download, update, make and
+remove shortcuts, start a process, update itself and check for updates, and nothing else — so these
+are deleted directly rather than by asking the tool.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `SquirrelTemp` itself, and the setup logs in it | The shared folder, which stays, and the record of past installs |
+| `packages\RELEASES` | The application's index of its own packages. **Its shortcut reads this file to decide which build to start**, and reads it without error handling — so removing it stops the application launching |
+| `packages\.betaId` | The identifier deciding whether this computer gets that application's staged releases early |
+| The package the index still names | The base the next update is applied as a patch against |
+| A package for a newer build | Possibly an update part-way through downloading |
+| `Update.exe` | The updater itself |
+| Every `app-<version>` folder | A build. This row removes packages and staging, never a build |
+| The application's own folder | Never a target |
+
+Deguffer also refuses to delete through a link. If you have moved the staging folder onto another
+drive with a junction, it removes nothing there and tells you why.
+
+### What it costs you
+
+Nothing. Every application still starts, still updates itself, and still applies its next update as
+a patch rather than a whole download. The next install or update unpacks itself into the staging
+folder again, exactly as it would have done.
+
+If an application is installing or updating while you clean, Deguffer leaves what it is using alone
+and says so.
+
+### Why Tier 1
+
+Every file here is one the updater itself was supposed to delete and did not. Nothing reads the
+staging directories once an update has finished, and a package the application's own index has
+stopped naming is one that application will never open again.
+
+---
+
+## Superseded application versions
+
+| **Location** | The `app-<version>` folders, other than the newest, inside each application Squirrel installed |
+| **Method** | Delete the folders holding builds the application has replaced |
+| **Typical size** | 719 MB for one application on the machine this was measured on, sitting beside the 722 MB it actually runs |
+
+### What it is
+
+A Squirrel application installs each version into a folder of its own — `app-3.6.3`, then `app-3.6.4`
+beside it — and launches whichever is newest. Updating does not replace a folder; it adds one.
+
+Squirrel does delete the old ones, but it deliberately keeps two. Its clean-up excludes both the
+build it has just installed and the one that build replaced, so after an update a **full second copy
+of the application** sits beside the one you use, until the update after next removes it.
+
+### What Deguffer does
+
+It offers every build except the newest, on the same rule the application's own shortcut uses to
+decide which to launch: the highest version number wins.
+
+**If any version folder carries a number Deguffer cannot order, that application gives up nothing at
+all.** A pre-release version such as `2.0.0-beta1` sorts below its own release under one reading and
+above it under another. Rather than choose, Deguffer stops: naming the wrong folder superseded would
+remove the build you are running.
+
+**An application that is running gives up nothing either.** This is a refusal, not a warning. The
+question it answers is whether the application is running at all, not whether the old folder itself
+is busy — the process holding it open runs from the build that replaced it.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| The newest `app-<version>` | The build you are using |
+| `Update.exe` | The updater, and the program many of these applications' shortcuts actually run |
+| `packages` | The packages the application updates itself from, and its index of them |
+| A version folder whose number could not be read | Deguffer cannot tell whether it is the one in use |
+| The application's own folder | Never a target |
+
+Your settings, your sign-ins and anything an application saved live somewhere else entirely — a
+Squirrel application's data is not kept in its version folders.
+
+### What it costs you
+
+Every application still starts, and starts the version you are using now.
+
+What you give up is the build it replaced. **There is no supported way back to it**: Squirrel has no
+rollback, and its own documentation says so. You also give up one step the updater would have taken
+for you. Before deleting an old build, Squirrel runs that build's own tidy-up hook, which is where an
+application undoes what that version registered. Deguffer removes the folder without running it,
+because starting a vendor's executable to tidy up after a deletion is not something this tool does.
+
+### Why Tier 2, not Tier 1
+
+Tier 1 means the tool re-creates what was removed. Nothing re-creates an old build: once that folder
+is gone, that version is gone unless you can find its installer again. That alone rules Tier 1 out,
+whatever the application's own updater intends to do with the folder later.
+
+It is not Tier 3 either. These are not your files. They are a vendor's superseded program, which the
+vendor's own updater treats as already uninstalled — its clean-up comment calls the old versions
+dead — and which it deletes itself at the next update. So the row is offered, never selected for you,
+and it asks for the extra acknowledgement Tier 2 carries.
 
 ---
 
@@ -1488,6 +1749,19 @@ still offers only the ones inside a folder you added. A cheap answer is not perm
 Approving a folder approves it for **every** kind of build output in the table above, which is what
 the Settings description says. If you want a narrower scope, add narrower folders.
 
+**A folder does not have to hold your own code.** The single largest thing this section can offer is
+usually a Python virtual environment that nobody would think to declare: a machine-learning or
+image-generation application installs into its own folder, builds an environment there holding a
+CUDA-enabled `torch`, `tensorflow` and their neighbours, and never comes near your projects. One
+measured at 7.3 GB, which is worth roughly ten of the environments a web project keeps. It meets
+every condition below — `pyvenv.cfg` inside it, a dependency manifest beside it — and it is Tier 2
+like any other. Deguffer simply never looks there, because you never said it could. Add the
+application's own folder if you want that environment offered.
+
+The model weights such an application downloads are a different matter, and are never offered: they
+sit outside the environment, they are not regenerable from a manifest, and re-fetching them is not a
+slow build but a download of tens of gigabytes.
+
 ### What Deguffer does
 
 **A directory's name is not evidence.** `build`, `target` and `Library` are ordinary English words,
@@ -1676,8 +1950,9 @@ one under `S-1-5-18`.
 ### What Deguffer does
 
 It takes **your own** bin from each fixed drive, one row per drive, and it does not touch the
-`$Recycle.Bin` folder that contains them. Windows re-creates your folder the next time you delete
-something to that drive, so the bin keeps working exactly as it did.
+`$Recycle.Bin` folder that contains them. Your own folder is left standing and empty when Windows
+does the emptying, and re-created on your next delete when Deguffer does it directly. Either way the
+bin keeps working exactly as it did.
 
 Each row carries the date that bin last changed, because that is what the decision turns on. A
 drive you last deleted something on eight months ago is a different proposition from one you were
@@ -1689,15 +1964,37 @@ rather than to you. Removable media can be swapped between the preview and the c
 put a plan you approved for one disk in front of another. A fixed drive that is not ready to be
 read, which is unusual but possible, is skipped as well.
 
-**Windows has a command for this, and Deguffer does not use it.** §5.1 says to prefer a tool's own
-eviction command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name. The reason
-it is not used is the preview. Deguffer's plan tells you the exact folder it will remove on each
-drive, how large it is and when you last used it, and then checks afterwards that everything it
-promised to keep is still there. A command that takes a drive and reports nothing back leaves both
-of those with nothing to say — and it would move the decision about *whose* bin gets emptied out of
-the code where that rule can be checked. The one thing given up is that Windows is not told what
-changed, so a Recycle Bin window you already had open may keep showing the old contents until you
-refresh it. That is a stale picture rather than a stale deletion.
+**Windows has a command for this, and Deguffer uses it.** §5.1 says to prefer a tool's own eviction
+command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name. Asking Windows
+rather than deleting the files means Windows knows the bin changed, so a Recycle Bin window you
+already had open, the desktop icon and anything else watching all agree with the disk straight away.
+
+The preview is unaffected. The call takes a *drive*, and Deguffer's plan still names the exact
+folder on each drive, how large it is and when you last used it, and still checks afterwards that
+everything it promised to keep is still there. Those are two different paths, and only the second is
+what you are shown.
+
+**The reason to doubt it was §5.2, and it was measured rather than assumed.** A command that names a
+drive and no account looks, from its shape alone, like exactly the too-broad rule that section
+refuses. On a scratch drive carrying this account's bin, a second account's bin beside it, and a
+folder that was not an account identifier at all, the call removed this account's entries and left
+all three of the others exactly as they were. That test ran with administrator rights, which is the
+case worth stating: a token that may delete anything did not widen what Windows chose to delete.
+Deguffer still asserts the survivors on every run, so the answer is proved again each time rather
+than resting on that one measurement.
+
+**It is slower than deleting the files, which is why the other route is still here.** Against a bin
+holding 1,000 deleted files the call took between 4 and 6 seconds where removing the same files took
+under a fifth of a second; at 3,000 files the two were 60 seconds and under a second. The gap widens
+the more the bin holds, so it is worst on the bin most worth emptying. **Empty Recycle Bins without
+Windows**, on the Settings page, takes the fast side instead and gives up the notification, so a
+Recycle Bin window left open may keep showing the old contents until you refresh it. That is a stale
+picture rather than a stale deletion. The same folder is emptied either way, and other accounts'
+bins are untouched by both.
+
+**Leaving recently changed files alone always uses the direct route.** Windows empties a bin whole
+and offers no way to hold anything back, so a plan made under that setting removes the files itself
+whatever the setting above says, and tells you it is doing so.
 
 ### What is protected
 
@@ -1736,6 +2033,126 @@ only remaining purpose is to be restorable.
 So it is never pre-selected, and it is the first location in Deguffer whose confirmation says the
 loss is permanent rather than costly. Switch *Type a name to delete user data* on and it asks you to
 type the name out as well.
+
+---
+
+## Windows File History
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
+to type the words out.
+
+| | |
+| --- | --- |
+| **Location** | The drive File History is set to save to, under `FileHistory\<account>\<machine>\Data` |
+| **Method** | Run Windows' own `FhManagew.exe -cleanup <days>`. Nothing on the drive is ever deleted by Deguffer |
+| **Typical size** | Whatever has accumulated. File History's shipped retention is *never delete*, so these targets routinely reach tens of gigabytes |
+
+### What it is
+
+File History saves a copy of every file in your protected folders each time it changes, onto a
+drive you chose. Each copy is a **version**: what that file looked like at one moment. Going back
+to how a document was three months ago is what the feature exists for.
+
+**Its default retention is "never delete".** Windows' own `FH_RETENTION_TYPES` documents
+`FH_RETENTION_DISABLED` as the default — "previous versions are never deleted from the backup
+target" — so the drive fills up because that is what it was configured to do, not because anything
+went wrong. That is why a File History drive is frequently the largest thing on a machine that
+nothing else accounts for.
+
+File History is **not** a deprecated feature. It appears on neither Microsoft's deprecated-features
+nor removed-features list. Its configuration *API* is deprecated, which is a different thing, and
+Backup and Restore (Windows 7) is a different feature again.
+
+### What Deguffer does
+
+It runs the command Microsoft ships for exactly this job:
+
+```
+FhManagew.exe -cleanup <days> -quiet
+```
+
+**Deguffer deletes nothing on the backup drive itself, and that is the whole design.** The command
+is documented to remove a version only when *both* of two conditions hold:
+
+- the version is older than the age given, **and**
+- the file is no longer in the protection scope, **or** a newer version of it is already on the
+  drive.
+
+The second condition is what guarantees the last remaining copy of a file you are still protecting
+survives. **That guarantee belongs to the command**, and no rule Deguffer could write about folders
+would reproduce it. §5.2 rules out the folders independently: the layout of a File History target
+is documented nowhere by Microsoft, so every folder inside it is unrecognised and therefore Tier 4.
+
+**How the drive is found.** Windows uses exactly one backup target at a time, and a machine that has
+changed drives keeps a complete, stale `FileHistory` folder on the old one. Deguffer reads the File
+History settings in your own profile to learn which drive is in use, rather than trimming whichever
+folder it finds first. If those settings name no drive it can reach, the row says so and offers
+nothing. It does not guess.
+
+**The age is yours to set.** *Keep File History versions for*, on the Settings page, defaults to
+**365 days** — which is `FH_RETENTION_AGE`'s own documented default, so an untouched install asks
+Windows for what it would have done had a retention policy been switched on. The minimum is 1 day,
+and that is a safety floor rather than a tidy number: `-cleanup 0` keeps only the newest version of
+files *currently in the protection scope*, which silently discards every version of everything you
+have since moved, renamed or deleted. Deguffer will not ask for it.
+
+### About the size shown
+
+**It is a ceiling, not a forecast, and the row says "about".** `FhManagew.exe` reports nothing
+before it runs, so there is no way to ask Windows what a cleanup would free. What Deguffer shows
+instead is its own measurement of the *first* of the two conditions above: this machine's saved
+versions older than the age you set. The second condition can only take away from that, never add to
+it, so the real reclaim is usually smaller — Windows keeps the newest copy of every file it is still
+protecting, however old that copy is. Nothing else on the drive is counted.
+
+The figure that is not a forecast is the one measured afterwards. Deguffer measures that same folder
+before and after the command and reports the difference.
+
+**A drive holding nothing old enough reads as "Nothing old enough", never "Already clear".** Those
+are different claims, and only one of them would be true of a full drive whose versions are all
+recent.
+
+### What is protected
+
+These are named on every plan, and the run checks afterwards that each is still there:
+
+- **Every other account's File History.** A backup drive is routinely shared, and another person's
+  history sits beside yours under a folder named for their account.
+- **Your own File History of every other machine.** One drive holds one folder per machine you back
+  up, and this run covers only the machine it is running on.
+- **The catalogue**, in `Configuration` beside `Data`. It is what makes the saved versions
+  restorable. Removing it would leave every version on the drive, intact and unreachable, and no
+  comparison of sizes would show that had happened.
+- **Your File History settings** in your own profile, which record what is protected and where it is
+  saved.
+
+Everything else on the drive is untouched as well — a File History target is very often an ordinary
+external disk with the rest of your files on it — but Deguffer names the folders above rather than
+the whole drive, so those are the ones the check covers.
+
+**What the check proves, exactly.** The command is Windows' own, so what it reaches is Windows'
+decision rather than Deguffer's, and §5.6 is the answer to that: after the run, each folder above
+must still be there. A cleanup that removed one outright is reported as a failure. A cleanup that
+left a folder standing and took the versions out of it is not — Deguffer withholds that stronger
+judgement from any step that hands a tool its own command, because §5.1 gives that command a reach
+Deguffer cannot state. That applies to every such step in the app, not to this one alone.
+
+### What it costs you
+
+**Older versions of your files stop existing.** A version is a snapshot of a file as it was, so
+nothing can regenerate one — the state it captured exists nowhere else once it goes. If you might
+want to go back to how a document was before the cut-off date, do not clean this.
+
+What does not change: File History keeps running exactly as before, the newest copy of everything it
+protects stays on the drive, and the files on your own machine are untouched.
+
+### Why Tier 3, and not Tier 2
+
+Tier 2 means regenerable at a cost — re-downloaded, or rebuilt. **A superseded version of a file is
+not regenerable at any cost.** No command, download or rebuild recreates the way a spreadsheet
+looked in March. That test settles it, and it is why this is offered but never selected for you, and
+why its confirmation says the loss is permanent rather than costly.
 
 ---
 
@@ -2000,6 +2417,74 @@ installer's own `--nocache` switch, run before the next repair or modify.
 `InstallCleanup.exe` turns up in search results for this and is not an answer. Microsoft documents it
 as a last resort after a repair or an uninstall has already failed, and warns that it can remove
 features belonging to other products.
+
+### .NET workload packs — the command that clears them cannot say what it would free
+
+`%PROGRAMFILES%\dotnet\packs` holds the workload packs: the Android, iOS and MacCatalyst SDKs, and
+the Mono and NativeAOT runtime packs those platforms run on. A full set is kept per SDK feature band
+and per workload manifest version, and an SDK update adds a set rather than replacing one.
+
+It measured **4,599.5 MB** on the audited machine, out of 8,604.4 MB for
+`%PROGRAMFILES%\dotnet` as a whole. Classifying every pack against the four installed feature bands
+put **1,881.9 MB of it — 41% —** on bands (`8.0.100` and `9.0.100`) with no installed SDK, or on
+superseded same-band workload SDK packs. The rest of the folder is in use, and part of it is not
+workload packs at all: the reference assemblies every .NET project compiles against
+(`Microsoft.NETCore.App.Ref` and its siblings) sit in the same directory and arrive with the SDK.
+
+`dotnet workload clean` is the right command for it, and it is the right *shape* of command.
+Microsoft documents it as removing "workload components that might have been left behind from
+previous updates and uninstallations", and it is reference-counted rather than path-matched: it drops
+a pack's installer dependency reference when that pack's `"SDK feature band … does not match any
+installed feature bands"`, and removes the pack only once nothing refers to it any more. That is what
+§5.1 asks for, and the packs are Tier 2 — regenerable, but only by a workload re-install that is a
+large download.
+
+**It is not offered, for two reasons, and the first is disqualifying on its own.**
+
+**There is no read-only estimate.** The command takes `--all` and `--help` and nothing else. There is
+no `--dry-run`, no `--whatif`, and no listing mode, in the CLI or in the documentation. Deguffer's
+promise is a number shown before the act and a §5.6 check against a predicted set afterwards, and
+neither is available here. Where a provider's method is a command rather than a path, it has a way
+to find the number first: `dotnet nuget locals --list` names the directories to measure, and the
+conda provider's figure is conda's own dry run.
+
+**On a machine with Visual Studio the reclaim may be zero.** `dotnet workload list` reports an
+installation source of `VS <version>` for workloads Visual Studio installed, and Visual Studio holds
+the installer dependency references on their packs — so the count never falls to zero and nothing is
+removed. The command says so itself rather than failing: it prints *"Workload '…' was not removed
+because it is installed and managed by Visual Studio"*, and the code that prints it is commented as
+existing "to increase user awareness that they must uninstall via VS". Deguffer would have shown a
+1.88 GB row and delivered nothing.
+
+A read-only mode on `dotnet workload clean`, or any documented way to enumerate what it would remove,
+is what would change this. Until then the folder is reported in Explore and never offered — the same
+treatment as the installer caches above.
+
+### Superseded SDK versions — large, version-partitioned, and still an uninstall
+
+Three separate finds, one verdict. Each keeps one directory per version, each was measured in the
+gigabytes, and in each case §5.2 looks satisfiable because the versions are cleanly partitioned. All
+three are **Tier 4** anyway, because removing a version is an uninstall and §2 rules those out:
+deleting the folder leaves the installer's records claiming the version is still present.
+
+| Location | Measured | Supported route |
+| --- | ---: | --- |
+| `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA` | 3,130.1 MB in one superseded version | The toolkit's own entries in Settings, under Apps |
+| `%PROGRAMFILES(X86)%\Windows Kits\10` | 1,691.9 MB for one superseded version | Each version's own "Windows Software Development Kit" entry, under Apps |
+| `%PROGRAMFILES%\dotnet\sdk` and `shared` | 1,660.9 MB reachable | Each version's own entry under Apps |
+
+The last of those has a tool behind it, and it was considered properly. **`dotnet-core-uninstall`**
+reaches that 1,660.9 MB of superseded within-band SDKs and runtime patches, and unlike
+`dotnet workload clean` it *does* have a dry run. It is still declined, for three reasons: it is an
+uninstaller, which §2 rules out; it is not installed and is a separate download, so Deguffer would be
+recommending an install in order to enable a delete; and its own documentation says it can only
+remove components installed by particular routes — "the tool might not be able to uninstall all of
+the .NET SDKs and runtimes on your machine". A provider whose method may silently apply to only part
+of what it listed is not one that can make Deguffer's promise.
+
+All three are reported in Explore. The CUDA toolkit and the Windows SDK carry an entry of their own,
+and `%PROGRAMFILES%\dotnet` carries one the map answers with from anywhere inside it, so hovering
+says what the folder is and which uninstaller owns it.
 
 ### Docker — freeing space inside the disk image does not free it on disk
 

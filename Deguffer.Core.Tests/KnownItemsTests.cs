@@ -157,6 +157,30 @@ public sealed class KnownItemsTests : IDisposable
     }
 
     /// <summary>
+    /// The machine-wide SDK installations, which stand in the same place as the installer caches
+    /// above: gigabytes under a root <see cref="Deguffer.Core.Exploring.Acting.ExploreActionPolicy"/>
+    /// refuses outright, reached by no provider, and so explained nowhere else in the app.
+    ///
+    /// <para><c>dotnet\packs</c> is the one of these with a supported eviction command behind it,
+    /// and that command can neither say in advance what it would free nor free anything at all
+    /// where Visual Studio installed the workloads. Both halves of that belong to the reader, and
+    /// this entry is the only place either is said.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(KnownPlace.ProgramFiles, "dotnet")]
+    [InlineData(KnownPlace.ProgramFiles, @"dotnet\packs")]
+    [InlineData(KnownPlace.ProgramFiles, @"NVIDIA GPU Computing Toolkit\CUDA")]
+    [InlineData(KnownPlace.ProgramFilesX86, @"Windows Kits\10")]
+    public void TheMachineWideSdksAreExplainedEvenThoughNothingOffersThem(
+        KnownPlace place, string relativePath)
+    {
+        var entry = ItemGuide.For(_system, _environment)
+            .Describe(Path.Combine(Anchor(place), relativePath));
+
+        Assert.NotNull(entry);
+    }
+
+    /// <summary>
     /// The catalogue against a real machine's directories, which is the one arrangement the app
     /// actually runs in. It asserts the wiring rather than the text: that
     /// <see cref="ItemGuide.ForThisMachine"/> resolves its anchors and finds something through them.
@@ -215,6 +239,10 @@ public sealed class KnownItemsTests : IDisposable
         KnownPlace.UserProfile => _environment.UserProfile,
         KnownPlace.LocalAppData => _environment.LocalAppData,
         KnownPlace.RoamingAppData => _environment.RoamingAppData,
+
+        // The fake always has one. The real environment can decline to say, which is why the
+        // production anchor table omits the place entirely rather than assembling a path.
+        KnownPlace.LocalLowAppData => _environment.LocalLowAppData!,
         _ => throw new ArgumentOutOfRangeException(nameof(place), place, "No anchor for this place."),
     };
 }

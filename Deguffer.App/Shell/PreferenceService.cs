@@ -9,8 +9,12 @@ namespace Deguffer.App.Shell;
 /// This holds the values and persists them; it does not apply them. Turning
 /// <see cref="AppPreferences.Theme"/> into an <c>ElementTheme</c> is the window's job, and turning
 /// it into a combo-box index is the view-model's.
+///
+/// <para>It is Core's <see cref="ICurrentPreferences"/> as well, which is how a setting that changes
+/// what a run does reaches a provider without Core learning about the shell. The interface is one
+/// property this type already had.</para>
 /// </summary>
-public sealed class PreferenceService
+public sealed class PreferenceService : ICurrentPreferences
 {
     private readonly PreferenceStore _store;
 

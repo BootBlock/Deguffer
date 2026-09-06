@@ -335,33 +335,21 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             return null;
         }
 
-        try
-        {
-            // Opened as a stream rather than by path, because XDocument.Load treats a string as a
-            // URI and §6.3's extended-length prefix is not one — it throws before it reads a byte.
-            using var stream = new FileStream(
-                LongPath.Extended(settings), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var configured = XmlFile
+            .TryLoad(settings)?
+            .Root?
+            .Elements()
+            .FirstOrDefault(e => e.Name.LocalName == "localRepository")?
+            .Value
+            .Trim();
 
-            var configured = XDocument
-                .Load(stream)
-                .Root?
-                .Elements()
-                .FirstOrDefault(e => e.Name.LocalName == "localRepository")?
-                .Value
-                .Trim();
-
-            if (string.IsNullOrEmpty(configured))
-            {
-                return null;
-            }
-
-            return configured.StartsWith(UserHomeProperty, StringComparison.OrdinalIgnoreCase)
-                ? Path.Combine(Environment.UserProfile, configured[UserHomeProperty.Length..].TrimStart('/', '\\'))
-                : configured;
-        }
-        catch (Exception ex) when (ex is XmlException or IOException or UnauthorizedAccessException)
+        if (string.IsNullOrEmpty(configured))
         {
             return null;
         }
+
+        return configured.StartsWith(UserHomeProperty, StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(Environment.UserProfile, configured[UserHomeProperty.Length..].TrimStart('/', '\\'))
+            : configured;
     }
 }

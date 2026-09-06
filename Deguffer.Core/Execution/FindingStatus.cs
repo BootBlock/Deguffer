@@ -36,8 +36,14 @@ public enum FindingStatus
     NotExamined,
 
     /// <summary>
-    /// A cache whose every file is inside the guard on recently changed files: it measures zero and
-    /// it is full.
+    /// A location whose every file is too new for an age limit to let it go: it measures zero and it
+    /// is full.
+    ///
+    /// <para>Two different ages reach here, which is why the label is "Nothing old enough" rather
+    /// than anything naming a setting. The first is the user's guard on recently changed files. The
+    /// second is a command that takes an age of its own — <c>FhManagew.exe -cleanup &lt;days&gt;</c>,
+    /// where the files held back can be a year old and the user's guard may be switched off
+    /// entirely. See <see cref="CleanupStep.WithheldRecent"/>.</para>
     /// </summary>
     RecentContentHeldBack,
 

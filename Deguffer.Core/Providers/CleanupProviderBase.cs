@@ -14,16 +14,23 @@ public abstract class CleanupProviderBase : ICleanupProvider
 {
     private readonly PlanExecutor _executor;
 
+    /// <param name="emptier">
+    /// How a <see cref="EmptyRecycleBinStep"/> is carried out, for the one provider that plans one.
+    /// Defaulted rather than required because every other provider has no use for it, and injected
+    /// rather than reached for because the real one empties the Recycle Bin of whoever runs the
+    /// suite.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
-        IDirectoryScanner scanner)
+        IDirectoryScanner scanner,
+        IRecycleBinEmptier? emptier = null)
     {
         Environment = environment;
         Inspector = inspector;
         Scanner = scanner;
-        _executor = new PlanExecutor(runner, scanner);
+        _executor = new PlanExecutor(runner, scanner, emptier);
         Runner = runner;
     }
 
@@ -109,6 +116,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
+        RunReach? runReach = null,
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
@@ -120,11 +128,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 $"Plan belongs to provider '{plan.ProviderId}', not '{Id}'.", nameof(plan));
         }
 
-        return _executor.ExecuteAsync(plan, progress, ct);
+        return _executor.ExecuteAsync(plan, runReach, progress, ct);
     }
 
-    public Task<VerificationResult> VerifyAsync(CleanupPlan plan, CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, ct));
+    public Task<VerificationResult> VerifyAsync(
+        CleanupPlan plan,
+        RunReach? runReach = null,
+        CancellationToken ct = default) =>
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, ct));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()
@@ -146,15 +157,20 @@ public abstract class CleanupProviderBase : ICleanupProvider
     protected CleanupPlan UnexaminedPlan(string why) => EmptyPlan(why) with { WasNotExamined = true };
 
     /// <summary>
-    /// §5.6 — capture which protected paths exist now, so verification can tell "survived" from
-    /// "was never there".
+    /// §5.6 — capture what each protected path was before the run, so verification can tell
+    /// "survived" from "was never there", and from "is still standing and has been emptied".
+    ///
+    /// <para>The content question costs one entry per directory, because
+    /// <see cref="LongPath.HoldsAnything"/> stops at the first, so it is a fixed cost per protected
+    /// path rather than a walk (G4).</para>
     /// </summary>
     protected static IReadOnlyList<ProtectedPath> Protect(params (string Path, string Reason)[] candidates) =>
     [
         .. candidates.Select(c => new ProtectedPath(
             c.Path,
             c.Reason,
-            LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path))),
+            LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path),
+            LongPath.HoldsAnything(c.Path))),
     ];
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
@@ -182,10 +198,44 @@ public abstract class CleanupProviderBase : ICleanupProvider
     ///
     /// <para>Every provider call site is a command step's probe, so refusing the argument is what
     /// makes that unmistakable. The guarded measurement is <see cref="PlanDeletionsAsync"/>'s, and
-    /// it is guarded because those paths are ones Deguffer deletes itself.</para>
+    /// it is guarded because those paths are ones Deguffer deletes itself. The one age a command
+    /// step may legitimately measure against is <em>its own</em> — see
+    /// <see cref="MeasureAgedAsync"/>, which is not the user's guard.</para>
     /// </summary>
     protected Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
         MeasureAllAsync(paths, MinimumAge.Off, ct);
+
+    /// <summary>
+    /// A command step's probe measured twice: the whole of what those paths hold, and the part of it
+    /// older than <paramref name="age"/>.
+    ///
+    /// <para><b>For the command that takes an age as a parameter.</b>
+    /// <c>FhManagew.exe -cleanup &lt;days&gt;</c> is the one, and the age here is the number handed
+    /// to it, never <see cref="MinimumAge"/>'s ordinary subject of the user's guard on recently
+    /// changed files. The estimate has to be the aged part, because that is the only part the
+    /// command will consider; the probe has to be the whole, because
+    /// <see cref="PlanExecutor"/> subtracts an unguarded after-measure from it and the two sides
+    /// must be measured on one basis.</para>
+    ///
+    /// <para><b>It is two passes over one tree, and there is no third figure to carry forward.</b>
+    /// G4's rule against re-measuring assumes the second question has the same answer as the first.
+    /// These are different quantities, and <see cref="IDirectoryScanner"/> answers one filter at a
+    /// time — so the cost is real and stated here rather than hidden in a provider. §5.5's fast path
+    /// serves both readings from one volume index where the table can be read, which is what keeps
+    /// it affordable on the tens of gigabytes such a target holds.</para>
+    ///
+    /// <para>Here rather than in the provider so that every measurement a provider makes still goes
+    /// through this class, and so the exception to the paragraph above is stated where the rule is.
+    /// </para>
+    /// </summary>
+    protected async Task<(ScanBatch Whole, ScanBatch Aged)> MeasureAgedAsync(
+        IReadOnlyList<string> paths,
+        MinimumAge age,
+        CancellationToken ct) =>
+    (
+        await MeasureAllAsync(paths, MinimumAge.Off, ct).ConfigureAwait(false),
+        await MeasureAllAsync(paths, age, ct).ConfigureAwait(false)
+    );
 
     private async Task<ScanBatch> MeasureAllAsync(
         IReadOnlyList<string> paths,
@@ -234,9 +284,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
         {
             var target = targets[i];
 
-            DeleteStep step = target.Kind == TargetKind.File
-                ? new DeleteFileStep(target.Path, target.Reason)
-                : new DeleteDirectoryStep(target.Path, target.Reason);
+            DeleteStep step = target.Kind switch
+            {
+                TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
+                TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
+                _ => new DeleteDirectoryStep(target.Path, target.Reason),
+            };
 
             steps.Add(step with
             {
@@ -259,6 +312,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// less. A <see cref="DeleteFileStep"/> has nothing left to do once its one file is protected,
     /// and offering a row that will reclaim nothing is worse than not offering it — so it is
     /// withdrawn, and §5.6 is told to prove the file is still there afterwards.</para>
+    ///
+    /// <para><b>That reasoning holds because every deletion here honours the guard itself, and
+    /// <see cref="EmptyRecycleBinStep"/> cannot.</b> Windows empties a bin whole, so such a step
+    /// under a guard would stay and do <em>more</em> rather than less. It never arrives here in
+    /// that state — <see cref="Providers.RecycleBinProvider"/> takes the direct route whenever the
+    /// guard is on — and <see cref="PlanExecutor"/> refuses the pairing outright rather than
+    /// leaving that to one expression in one provider.</para>
     /// </summary>
     private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep)
     {

@@ -113,6 +113,48 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- How, never what. Both routes empty this account's own bin on each drive and leave
+                 every other account's alone, so §5.2's rule and §5.6's assertion are the same under
+                 either and this cannot widen what a run destroys. The description says which side
+                 it gives up, because the trade is real: Windows' own call is several times slower
+                 and the gap widens with the number of entries, while removing the files leaves an
+                 open Recycle Bin window showing the old contents until it refreshes. The guard
+                 above overrides it — Windows empties a bin whole — and the plan says so when it
+                 does. -->
+            <views:SettingsRow Glyph="&#xE74D;"
+                               Title="Empty Recycle Bins without Windows"
+                               Description="Deguffer normally asks Windows to empty a Recycle Bin, so an open Recycle Bin window and the desktop icon update straight away. That call is slow on a full bin, and slower the more it holds. Switch this on to remove the files directly instead, which is much faster but leaves Windows to notice in its own time. The same folder is emptied either way, and other accounts' bins are untouched by both. Leaving recently changed files alone always uses the direct route, as Windows cannot empty a bin partially.">
+                <views:SettingsRow.Control>
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.EmptyRecycleBinsDirectly, Mode=TwoWay}"
+                                  AutomationProperties.Name="Empty Recycle Bins without Windows" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <!-- The age Deguffer asks Windows for when it trims File History, and a setting rather
+                 than a constant because it decides how much is destroyed permanently: a saved
+                 version is a snapshot of a file as it was, and nothing recreates one. 365 days is
+                 FH_RETENTION_AGE's own documented default, so an untouched install asks for what
+                 Windows would have done had a retention policy been enabled. The minimum is 1 and
+                 not 0 for a safety reason the description states: -cleanup 0 keeps only the newest
+                 version of files still in the protection scope, discarding every version of
+                 anything the user has since moved or deleted. -->
+            <views:SettingsRow Glyph="&#xE777;"
+                               Title="Keep File History versions for"
+                               Description="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Set how old a saved version has to be before Windows may drop it. Windows always keeps the newest copy of a file it is still protecting; everything older than this that it has superseded is gone for good.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind ViewModel.FileHistoryRetentionDays, Mode=TwoWay}"
+                               Minimum="{x:Bind ViewModel.MinimumFileHistoryRetentionDays}"
+                               Maximum="{x:Bind ViewModel.MaximumFileHistoryRetentionDays}"
+                               SmallChange="1"
+                               LargeChange="30"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Days"
+                               AutomationProperties.Name="Days to keep File History versions for" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <!-- The other setting on this page that changes what Deguffer will delete rather than
                  how it looks, the guard above being the first. Stated as scope rather than as a
                  preference, because an empty list is not a disabled feature — it is Deguffer having
@@ -121,7 +163,7 @@
 
             <views:SettingsRow Glyph="&#xE8B7;"
                                Title="Where to look for build output"
-                               Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, Unity Library, Rust target, node_modules and Python virtual environments. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone.">
+                               Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, Unity Library, Rust target, node_modules and Python virtual environments. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered.">
                 <views:SettingsRow.Control>
                     <Button Content="Add folder…"
                             Click="OnAddSourceRoot"

@@ -3,7 +3,24 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// One graphics vendor's directory under <c>%LOCALAPPDATA%</c>, and the children of it that
+/// Which of the profile's application-data tiers a shader-cache root sits in.
+///
+/// Two values because NVIDIA writes two separate caches, one in each of two tiers, and a row that
+/// only named a directory could not tell them apart. A tier is named rather than a path held,
+/// because <see cref="ShaderCacheRoot"/> stays a static declaration and the paths come from
+/// <see cref="IUserEnvironment"/> at the moment they are needed.
+/// </summary>
+public enum ProfileArea
+{
+    /// <summary><c>%LOCALAPPDATA%</c>.</summary>
+    LocalAppData,
+
+    /// <summary><c>%USERPROFILE%\AppData\LocalLow</c>.</summary>
+    LocalLowAppData,
+}
+
+/// <summary>
+/// One graphics vendor's directory in one application-data tier, and the children of it that
 /// <see cref="GpuShaderCacheProvider"/> recognises.
 ///
 /// A row rather than a type per vendor, because what differs between vendors is only which
@@ -11,14 +28,14 @@ namespace Deguffer.Core.Providers;
 /// on the provider. Each row still carries its own <see cref="DisposableChildSet"/>, so §5.2's
 /// question — which children may this tool delete? — is answered by reading one table.
 /// </summary>
+/// <param name="Area">
+/// Which application-data tier the root sits in. NVIDIA has a row in each, because the driver keeps
+/// a separate shader cache in both and they are of comparable size.
+/// </param>
 /// <param name="DirectoryName">
-/// The root's name under <c>%LOCALAPPDATA%</c>, not a full path: the profile location comes from
+/// The root's name inside that tier, not a full path: the profile location comes from
 /// <see cref="IUserEnvironment"/>, so this declaration stays static and testable against a
 /// synthetic profile.
-///
-/// It is also the name the user is shown, because each vendor's directory is named after the
-/// vendor. A separate display field would be two same-typed strings that are equal in every row,
-/// which is a transposition waiting to happen and a distinction no vendor has yet needed.
 /// </param>
 /// <param name="Children">
 /// What may be deleted under that root. Anything absent from it is Tier 4 by construction, which
@@ -37,6 +54,44 @@ namespace Deguffer.Core.Providers;
 /// as worth naming.
 /// </param>
 public sealed record ShaderCacheRoot(
+    ProfileArea Area,
     string DirectoryName,
     DisposableChildSet Children,
-    IReadOnlyList<(string Name, string Reason)> ProtectedNames);
+    IReadOnlyList<(string Name, string Reason)> ProtectedNames)
+{
+    /// <summary>
+    /// What the user is shown this root called, qualified by tier only where it has to be.
+    ///
+    /// Derived rather than declared: two same-typed strings in every row would be a transposition
+    /// waiting to happen, and until NVIDIA's second cache there was no distinction to draw at all.
+    /// Qualification matters because every note this provider writes names the root, and two rows
+    /// called "NVIDIA" would otherwise leave the user unable to tell which folder was meant.
+    /// </summary>
+    public string Label => Area is ProfileArea.LocalLowAppData
+        ? DirectoryName + " (LocalLow)"
+        : DirectoryName;
+
+    /// <summary>
+    /// Where this root is on <paramref name="environment"/>'s machine, or null when the tier itself
+    /// could not be located — which only LocalLow can be, and which §5.2 says is not to be guessed
+    /// at.
+    /// </summary>
+    public string? PathIn(IUserEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+
+        var area = Area switch
+        {
+            ProfileArea.LocalAppData => environment.LocalAppData,
+            ProfileArea.LocalLowAppData => environment.LocalLowAppData,
+
+            // A tier this method does not resolve yields no path, rather than falling back on the
+            // one it happens to know. §5.2's direction, one level up from a child: a row whose
+            // location is not established contributes nothing, where a fallback would quietly plan
+            // deletions in a real directory the row never named.
+            _ => null,
+        };
+
+        return area is null ? null : Path.Combine(area, DirectoryName);
+    }
+}

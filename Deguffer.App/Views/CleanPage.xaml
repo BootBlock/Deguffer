@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:execution="using:Deguffer.Core.Execution"
     Background="Transparent">
 
     <Page.Resources>
@@ -358,13 +359,51 @@
                          RowSpacing, because row spacing is a property of the rows: it stands
                          whether or not anything is in them, and before the first clean of a session
                          that is empty space under the capacity bar. -->
-                    <TextBlock Grid.Row="1"
-                               Grid.Column="0"
-                               Grid.ColumnSpan="2"
-                               Margin="0,14,0,0"
-                               Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
-                               Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}"
-                               Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}" />
+                    <StackPanel Grid.Row="1"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                Margin="0,14,0,0"
+                                Spacing="10"
+                                Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+
+                        <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
+                                   Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}" />
+
+                        <!-- What the sentence above is about, named. When it asks the user to report
+                             a protected path that did not survive, this is the only thing on the
+                             screen that says which path, why it was protected, and what was found
+                             in its place — and a request to report a fault with no way to state it
+                             is a dead end.
+
+                             Bounded and scrolling for the reason the confirmation dialog's list is:
+                             one run can have a check per project on the disk, and a card that grows
+                             with it pushes the list of findings off the screen. -->
+                        <ScrollViewer MaxHeight="180"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}">
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.RunVerificationNotes}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="execution:VerificationCheck">
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="{x:Bind Path}"
+                                                       TextWrapping="Wrap"
+                                                       FontFamily="{ThemeResource ContentControlThemeFontFamily}"
+                                                       FontWeight="SemiBold"
+                                                       IsTextSelectionEnabled="True" />
+                                            <TextBlock Text="{x:Bind Detail}"
+                                                       TextWrapping="Wrap"
+                                                       Style="{StaticResource SecondaryText}"
+                                                       IsTextSelectionEnabled="True" />
+                                            <TextBlock Text="{x:Bind Reason}"
+                                                       TextWrapping="Wrap"
+                                                       Style="{StaticResource SecondaryText}"
+                                                       IsTextSelectionEnabled="True" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
                 </Grid>
             </Border>
         </StackPanel>

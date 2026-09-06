@@ -698,6 +698,83 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A Squirrel application's own folder, which nothing else in §7.1 refuses: it sits under
+    /// <c>%LOCALAPPDATA%</c> like any other application's data, and until a provider says whose it
+    /// is, Explore treats it as an ordinary directory somebody may delete.
+    ///
+    /// <para>Two providers own this one path with disjoint tables, so both are handed to the policy
+    /// together — the staging provider declares the packages folder inside it, and the superseded
+    /// provider declares the root itself. A child either recognises is allowed, and everything else
+    /// is refused.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                     // where the application is installed
+    [InlineData("Update.exe", false)]           // the updater, and what its shortcut runs
+    [InlineData("app-3.6.4", false)]            // the build in use
+    [InlineData(@"app-3.6.4\resources", false)]
+    [InlineData("app-3.6.3", true)]             // the build it replaced, which is the one on offer
+    [InlineData(@"app-3.6.3\resources", true)]
+    [InlineData("packages", false)]             // the index a shortcut reads to pick a build
+    [InlineData(@"packages\RELEASES", false)]
+    [InlineData("app.ico", false)]
+    [InlineData("something-unrecognised", false)]
+    public void ASquirrelApplicationOffersOnlyABuildItHasReplaced(string relative, bool allowed)
+    {
+        var root = RegisterSquirrelApplication();
+
+        var policy = new ExploreActionPolicy(
+            [],
+            [
+                .. new SquirrelStagingProvider(_environment).ToolRoots,
+                .. new SquirrelSupersededVersionProvider(_environment).ToolRoots,
+            ]);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Squirrel's staging folder, which every application using the updater shares. Only the
+    /// directories its own name generator produced are on offer; the setup logs beside them are not.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]             // the shared staging folder itself
+    [InlineData("tempa", true)]         // an install or update it unpacked
+    [InlineData(@"tempa\lib", true)]
+    [InlineData("temp", false)]         // the prefix alone is not one of its names
+    [InlineData("SquirrelSetup.log", false)]
+    [InlineData("setup.json", false)]
+    public void SquirrelsStagingFolderOffersOnlyWhatItUnpacked(string relative, bool allowed)
+    {
+        var root = _temp.CreateDirectory("profile", "AppData", "Local", "SquirrelTemp");
+
+        var policy = new ExploreActionPolicy(
+            [], new SquirrelStagingProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// An application installed by Squirrel: the updater it puts beside every one it manages, and a
+    /// directory per build. The provider treats neither half alone as an installation, so both are
+    /// needed before it declares anything at all.
+    /// </summary>
+    private string RegisterSquirrelApplication()
+    {
+        var root = _temp.CreateDirectory("profile", "AppData", "Local", "Chatterbox");
+
+        _temp.CreateFile(64, "profile", "AppData", "Local", "Chatterbox", "Update.exe");
+        _temp.CreateDirectory("profile", "AppData", "Local", "Chatterbox", "app-3.6.3");
+        _temp.CreateDirectory("profile", "AppData", "Local", "Chatterbox", "app-3.6.4");
+        _temp.CreateDirectory("profile", "AppData", "Local", "Chatterbox", "packages");
+
+        return root;
+    }
+
+    /// <summary>
     /// Every provider that declares a root refuses an unrecognised sibling inside it, and refuses
     /// the root itself.
     ///
@@ -737,6 +814,37 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
     }
+
+    /// <summary>
+    /// A name that is disposable under one of a provider's roots must still be refused under
+    /// another, and the shader caches are where that now bites: NVIDIA keeps a root in each of two
+    /// application-data tiers, and <c>GLCache</c> is declared in only one of them.
+    ///
+    /// <para><see cref="EveryDeclaredRootRefusesAnUnrecognisedSibling"/> cannot cover this. It
+    /// probes one root per provider with a name unrecognised everywhere, and the case here is the
+    /// opposite one: a name the policy would allow if it matched on the child rather than on the
+    /// root it sits under.</para>
+    /// </summary>
+    [Fact]
+    public void ANameDisposableInOneTierIsStillRefusedInTheOther()
+    {
+        var provider = new GpuShaderCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        var local = NvidiaRoot(ProfileArea.LocalAppData);
+        var localLow = NvidiaRoot(ProfileArea.LocalLowAppData);
+
+        // The premise, without which the assertion below proves nothing: this name really is
+        // disposable in the other tier, so a policy keyed on the child name would allow both.
+        Assert.True(policy.MayRemove(Path.Combine(local, "GLCache")).IsAllowed);
+
+        Assert.False(policy.MayRemove(Path.Combine(localLow, "GLCache")).IsAllowed);
+    }
+
+    private string NvidiaRoot(ProfileArea area) =>
+        GpuShaderCacheProvider.Roots
+            .Single(root => root.DirectoryName == "NVIDIA" && root.Area == area)
+            .PathIn(_environment)!;
 
     /// <summary>
     /// An install Steam's own record points at, carrying the client itself — which is what
@@ -859,12 +967,15 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         public Task<Execution.CleanupResult> ExecuteAsync(
             Execution.CleanupPlan plan,
+            Execution.RunReach? runReach = null,
             IProgress<double>? progress = null,
             CancellationToken ct = default) =>
             throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
 
         public Task<Execution.VerificationResult> VerifyAsync(
-            Execution.CleanupPlan plan, CancellationToken ct = default) =>
+            Execution.CleanupPlan plan,
+            Execution.RunReach? runReach = null,
+            CancellationToken ct = default) =>
             throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
     }
 }

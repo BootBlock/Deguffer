@@ -1,4 +1,4 @@
-using Deguffer.Core.Execution;
+﻿using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -183,10 +183,11 @@ public sealed class CleanupPlannerTests
             [
                 "dotnet-obj", "unity-library", "cargo-target", "node-modules", "python-venv",
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "uv", "pip",
-                "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache", "chromium-app-cache",
-                "vscode-cache", "firefox", "epic-launcher-webcache", "steam",
-                "platformio", "playwright", "azure-functions-tools",
-                "recycle-bin", "crash-dumps", "windows-servicing-logs",
+                "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache",
+                "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
+                "epic-launcher-content-cache", "steam", "squirrel-staging",
+                "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
+                "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "vscode-logs",
             ],
             planner.Providers.Select(p => p.Id));
@@ -194,14 +195,15 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "cargo-target", "node-modules", "python-venv",
-                "conda", "maven", "vcpkg", "platformio", "playwright", "azure-functions-tools",
+                "conda", "maven", "vcpkg", "platformio", "playwright",
+                "squirrel-superseded-versions", "azure-functions-tools",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(
             [
-                "recycle-bin", "crash-dumps", "windows-servicing-logs", "epic-launcher-logs",
-                "vscode-logs",
+                "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
+                "epic-launcher-logs", "vscode-logs",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 
@@ -435,6 +437,30 @@ public sealed class CleanupPlannerTests
         Assert.Empty(progress.Reports);
     }
 
+    /// <summary>
+    /// §5.6's negative asks whether Deguffer took a protected path that has gone missing, and a run
+    /// is many plans. A provider handed only its own targets would find the folder the provider
+    /// beside it deleted indistinguishable from a folder a stranger deleted, and report Deguffer's
+    /// own deletion as somebody else's — the one direction that check must never fail in. So each
+    /// provider is told what the whole run will destroy, not what it will destroy itself.
+    /// </summary>
+    [Fact]
+    public async Task EveryProviderIsToldWhatTheWholeRunMayDestroy()
+    {
+        var deleter = new StubProvider("obj", bytes: 4_000, deletes: @"C:\Users\testuser\src\project\obj");
+        var evictor = new StubProvider("nuget", bytes: 9_000);
+        var planner = new CleanupPlanner([deleter, evictor]);
+
+        await planner.ExecuteAsync(await planner.PlanAllAsync());
+
+        // The delete-only provider learns both halves from the run rather than from its own plan:
+        // the other provider's paths, and that §5.1's eviction command makes the reach unbounded.
+        Assert.NotNull(deleter.ReachHandedOver);
+        Assert.True(deleter.ReachHandedOver.Unbounded);
+        Assert.Equal(deleter.ReachHandedOver, evictor.ReachHandedOver);
+        Assert.Contains(@"C:\Users\testuser\src\project\obj", deleter.ReachHandedOver.TargetedPaths);
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,
@@ -443,13 +469,17 @@ public sealed class CleanupPlannerTests
         List<string>? journal = null,
         bool awaitingSourceFolders = false,
         IReadOnlyList<double>? reports = null,
-        bool planStepWithoutEstimate = false) : ICleanupProvider
+        bool planStepWithoutEstimate = false,
+        string? deletes = null) : ICleanupProvider
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
         public IReadOnlyList<ToolRoot> ToolRoots => [];
 
         public bool WasExecuted { get; private set; }
+
+        /// <summary>What the planner said the whole run may destroy, for §5.6's negative.</summary>
+        public RunReach? ReachHandedOver { get; private set; }
 
         public void InvalidateCaches() => journal?.Add($"invalidate:{id}");
 
@@ -483,14 +513,28 @@ public sealed class CleanupPlannerTests
             ProviderName = id,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
-            Steps = bytes == 0 && !planStepWithoutEstimate
-                ? []
-                : [new RunCommandStep("tool", "clear", "Clear") { Estimated = new ScanSize(bytes, bytes) }],
+            Steps = (bytes, planStepWithoutEstimate, deletes) switch
+            {
+                (0, false, null) => [],
+
+                // A path rather than a command, for the run-reach assertions: §5.1's command step
+                // contributes no target and makes the whole run unbounded, so a plan built from one
+                // cannot show what a delete-only provider is told about the run around it.
+                (_, _, { } path) =>
+                    [new DeleteDirectoryStep(path, "Output") { Estimated = new ScanSize(bytes, bytes) }],
+
+                _ => [new RunCommandStep("tool", "clear", "Clear") { Estimated = new ScanSize(bytes, bytes) }],
+            },
         };
 
-        public Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default)
+        public Task<CleanupResult> ExecuteAsync(
+            CleanupPlan plan,
+            RunReach? runReach = null,
+            IProgress<double>? progress = null,
+            CancellationToken ct = default)
         {
             WasExecuted = true;
+            ReachHandedOver = runReach;
 
             // Stands in for the fractions a real removal emits as it works through a tree.
             foreach (var fraction in reports ?? [])
@@ -501,7 +545,8 @@ public sealed class CleanupPlannerTests
             return Task.FromResult(new CleanupResult { ProviderId = id, ProviderName = id });
         }
 
-        public Task<VerificationResult> VerifyAsync(CleanupPlan plan, CancellationToken ct = default) =>
+        public Task<VerificationResult> VerifyAsync(
+            CleanupPlan plan, RunReach? runReach = null, CancellationToken ct = default) =>
             Task.FromResult(new VerificationResult());
     }
 }

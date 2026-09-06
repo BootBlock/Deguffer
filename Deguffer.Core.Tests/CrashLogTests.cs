@@ -163,9 +163,15 @@ public class CrashLogTests
 
         public string RoamingAppData => string.Empty;
 
+        public string? LocalLowAppData => null;
+
         public string TempPath => string.Empty;
 
         public string? UserSecurityIdentifier => null;
+
+        public string UserName => string.Empty;
+
+        public string MachineName => string.Empty;
 
         public string? FindExecutable(string command) => null;
 

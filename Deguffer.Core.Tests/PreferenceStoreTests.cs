@@ -27,7 +27,9 @@ public class PreferenceStoreTests
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true,
-            KeepFilesChangedWithinHours: 8)));
+            EmptyRecycleBinsDirectly: true,
+            KeepFilesChangedWithinHours: 8,
+            FileHistoryRetentionDays: 30)));
 
         var loaded = store.Load();
 
@@ -52,10 +54,19 @@ public class PreferenceStoreTests
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
 
+        // Not the default, on the reasoning above: false is what the record declares and what a
+        // missing key deserialises to.
+        Assert.True(loaded.EmptyRecycleBinsDirectly);
+
         // Not the default, for the reason the two above give: zero is what the record declares and
         // what a missing key deserialises to, so asserting zero would pass with the preference
         // deleted outright.
         Assert.Equal(8, loaded.KeepFilesChangedWithinHours);
+
+        // Not the default, on the same reasoning, and the one preference here where the distinction
+        // has teeth: a missing key deserialises to zero, and zero asks Windows to keep only the
+        // newest version of each file still in scope.
+        Assert.Equal(30, loaded.FileHistoryRetentionDays);
     }
 
     /// <summary>
@@ -102,9 +113,20 @@ public class PreferenceStoreTests
         Assert.False(loaded.ShowNotInstalled);
         Assert.False(loaded.ShowAlreadyClear);
 
+        // Off, so an upgraded machine keeps asking Windows to empty a bin rather than silently
+        // switching to the route that leaves an open Recycle Bin window showing the old contents.
+        Assert.False(loaded.EmptyRecycleBinsDirectly);
+
         // Off, which is the one direction this preference may default in: a guard nobody asked for
         // would quietly shrink every plan on an upgraded machine.
         Assert.Equal(0, loaded.KeepFilesChangedWithinHours);
+
+        // The strongest case in the record for this test, and the reason it is worth extending
+        // rather than trusting the serialiser: a missing key deserialises to zero, and zero is the
+        // one File History retention age that must never be asked for — it keeps only the newest
+        // version of each file still in the protection scope, discarding every version of anything
+        // since moved or deleted. An upgraded machine has to land on 365, not on default(int).
+        Assert.Equal(365, loaded.FileHistoryRetentionDays);
     }
 
     /// <summary>

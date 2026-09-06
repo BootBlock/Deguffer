@@ -48,6 +48,15 @@ public enum KnownPlace
     RoamingAppData,
 
     /// <summary>
+    /// <c>%USERPROFILE%\AppData\LocalLow</c>.
+    ///
+    /// <para>Unlike the other two tiers this one can be absent from the anchor table, because the
+    /// platform call behind it can decline to say where it is. An entry anchored here then explains
+    /// nothing, which is the right answer: the alternative is a path built by assumption.</para>
+    /// </summary>
+    LocalLowAppData,
+
+    /// <summary>
     /// Anywhere at all, matched on the name alone.
     ///
     /// <para>Reserved for names that mean one thing wherever they are found. <c>node_modules</c> is
@@ -97,7 +106,8 @@ public sealed record KnownItem(
     string Summary,
     string Removal)
 {
-    private const string Blank = "\r\n\r\n";
+    /// <summary>The empty line between the parts of a tip. Shared with <see cref="KnownMatch"/>.</summary>
+    internal const string Blank = "\r\n\r\n";
 
     /// <summary>
     /// The whole of what a hovering reader is shown, with <paramref name="facts"/> — whatever the

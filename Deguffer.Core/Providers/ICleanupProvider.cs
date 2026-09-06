@@ -75,10 +75,23 @@ public interface ICleanupProvider
     /// </param>
     Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default);
 
-    Task<CleanupResult> ExecuteAsync(CleanupPlan plan, IProgress<double>? progress = null, CancellationToken ct = default);
+    /// <param name="runReach">
+    /// What the whole run may destroy, for §5.6's negative. It sits beside the plan rather than
+    /// inside it because it belongs to the run: a verifier that saw only this provider's targets
+    /// would report a folder another provider deleted as one something outside Deguffer removed.
+    /// Null means this plan is the whole run, which is what a provider executed on its own is.
+    /// </param>
+    Task<CleanupResult> ExecuteAsync(
+        CleanupPlan plan,
+        RunReach? runReach = null,
+        IProgress<double>? progress = null,
+        CancellationToken ct = default);
 
     /// <summary>§5.6 — assert the survivors.</summary>
-    Task<VerificationResult> VerifyAsync(CleanupPlan plan, CancellationToken ct = default);
+    Task<VerificationResult> VerifyAsync(
+        CleanupPlan plan,
+        RunReach? runReach = null,
+        CancellationToken ct = default);
 
     /// <summary>
     /// The directories this provider owns whose unrecognised children are Tier 4, and the test that

@@ -213,6 +213,104 @@ public sealed class ItemGuideTests : IDisposable
         Assert.Null(guide.Describe(@"C:\ProgramData\Package Cache"));
     }
 
+    /// <summary>
+    /// The map's case, and the reason <see cref="ItemGuide.DescribeNearest"/> exists. A treemap
+    /// draws a folder as a one-pixel frame round its children, so what the pointer answers with is
+    /// nearly always a file several levels below the folder that explains it.
+    /// </summary>
+    [Fact]
+    public void SomethingInsideADescribedFolderIsDescribedByThatFolder()
+    {
+        var guide = Guide(At(KnownPlace.WindowsDirectory, "WinSxS"));
+        var store = Path.Combine(_system.WindowsDirectory, "WinSxS");
+
+        var found = guide.DescribeNearest(Path.Combine(store, "amd64_something", "a.dll"));
+
+        Assert.Equal("WinSxS is what it is", found?.Item.Summary);
+        Assert.Equal(store, found?.Path);
+        Assert.False(found?.IsExact);
+    }
+
+    [Fact]
+    public void TheDescribedFolderItselfIsItsOwnAnswer()
+    {
+        var guide = Guide(At(KnownPlace.WindowsDirectory, "WinSxS"));
+
+        var found = guide.DescribeNearest(Path.Combine(_system.WindowsDirectory, "WinSxS"));
+
+        Assert.Equal("WinSxS is what it is", found?.Item.Summary);
+        Assert.True(found?.IsExact);
+    }
+
+    /// <summary>
+    /// The nearer of two, because it is the more specific claim. Told that a file is inside Windows
+    /// when it is inside the component store, the reader learns the less useful of the two facts.
+    /// </summary>
+    [Fact]
+    public void TheNearestDescribedFolderWins()
+    {
+        var guide = Guide(
+            At(KnownPlace.WindowsDirectory, string.Empty),
+            At(KnownPlace.WindowsDirectory, "WinSxS"));
+
+        Assert.Equal(
+            "WinSxS is what it is",
+            guide.DescribeNearest(
+                Path.Combine(_system.WindowsDirectory, "WinSxS", "a.dll"))?.Item.Summary);
+    }
+
+    /// <summary>
+    /// Nothing described anywhere above it, which is the answer over most of a data drive. The walk
+    /// stops at the top of the volume rather than reaching for something to say.
+    /// </summary>
+    [Fact]
+    public void NothingIsInventedWhereNothingAboveIsDescribed()
+    {
+        var guide = Guide(At(KnownPlace.WindowsDirectory, "WinSxS"));
+
+        Assert.Null(guide.DescribeNearest(Path.Combine(_temp.Path, "holiday photos", "beach.jpg")));
+    }
+
+    /// <summary>
+    /// The walk does not weaken the rule <see cref="AVolumeRootEntryIsNotFoundDeeperDown"/> states.
+    /// A folder somebody called <c>pagefile.sys</c> inside their own documents is not the paging
+    /// file, and neither is anything inside it.
+    /// </summary>
+    [Fact]
+    public void AVolumeRootEntryIsStillNotFoundDeeperDown()
+    {
+        var guide = Guide(new KnownItem(KnownPlace.VolumeRoot, "pagefile.sys", "the paging file", "No."));
+
+        Assert.Null(guide.DescribeNearest(@"C:\Users\testuser\pagefile.sys\inside"));
+    }
+
+    /// <summary>
+    /// An answer about a folder above says so before it says anything else. Without that, an
+    /// explanation of what the component store is reads as an explanation of the file the pointer
+    /// is actually on.
+    /// </summary>
+    [Fact]
+    public void ATipAboutAFolderAboveNamesThatFolderFirst()
+    {
+        var guide = Guide(At(KnownPlace.WindowsDirectory, "WinSxS"));
+        var store = Path.Combine(_system.WindowsDirectory, "WinSxS");
+
+        var tip = guide.DescribeNearest(Path.Combine(store, "a.dll"))!.Tip();
+
+        Assert.StartsWith($"Inside {store}\r\n\r\n", tip, StringComparison.Ordinal);
+        Assert.EndsWith("WinSxS is what it is\r\n\r\nIt cannot be deleted.", tip, StringComparison.Ordinal);
+    }
+
+    /// <summary>And an answer about the thing itself adds nothing, because there is nothing to add.</summary>
+    [Fact]
+    public void ATipAboutTheThingItselfSaysNothingExtra()
+    {
+        var guide = Guide(At(KnownPlace.WindowsDirectory, "WinSxS"));
+        var store = Path.Combine(_system.WindowsDirectory, "WinSxS");
+
+        Assert.Equal(guide.Describe(store)!.Tip(), guide.DescribeNearest(store)!.Tip());
+    }
+
     private ItemGuide Guide(params KnownItem[] entries) =>
         new(entries, Anchors());
 

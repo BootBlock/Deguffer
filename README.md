@@ -9,7 +9,8 @@ costs to lose, so you decide what goes.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Milestone 1. Three cache sources, verified end to end. See [Roadmap](#roadmap).
+> **Status:** Version 0.70.0. Thirty-five sources across the four tiers, plus a file-table-backed
+> Explore view of the whole drive. See [Roadmap](#roadmap).
 
 ## Why
 
@@ -22,9 +23,15 @@ Size alone cannot tell you which is which, so Deguffer does not rank folders by 
 guess. It recognises specific locations, says what each holds and what losing it costs, and leaves
 the decision with you.
 
-On the workstation this tool was designed against — Windows 11, ~330 GB system drive, down to
+On the workstation this tool was designed against — Windows 11, a ~330 GB system drive, down to
 **5.6 GB free** — targeted cleanup of three package-manager caches recovered **22.9 GB** in a few
-minutes without touching a single piece of user data.
+minutes without touching a single piece of user data. That audit is what the safety model was built
+from.
+
+Previewing that same drive today, version 0.70.0 recognises 34 locations and finds 29 of them
+present. It offers **10.3 GB** of Tier 1 cache pre-selected and **1.4 GB** of Tier 2 beside it, and
+reports **6.4 GB** of Tier 3 user data separately with nothing pre-selected. The Recycle Bin and the
+crash dumps are real space, and they are still yours to decide about.
 
 ## The idea: safety tiers
 
@@ -68,13 +75,62 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-| Source | Method | Tier |
-| --- | --- | --- |
-| NuGet | `dotnet nuget locals all --clear` | 1 |
-| npm | `npm cache clean --force` | 1 |
-| Gradle | Deletes `.gradle\caches` and `.gradle\wrapper` only | 1 |
+Thirty-five providers, each holding its own knowledge of one location. A provider reports "not
+installed" cleanly on a machine without that toolchain.
 
-Each reports "not installed" cleanly on a machine without that toolchain.
+**Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
+
+| Source | Notes |
+| --- | --- |
+| NuGet package cache | Cleared with `dotnet nuget locals all --clear`, not by path |
+| npm package cache | Cleared with `npm cache clean --force` |
+| pnpm store | |
+| Gradle build cache | `caches` and `wrapper` only, never the `.gradle` root |
+| Cargo crate cache | |
+| Go build and module caches | |
+| pip package cache | |
+| uv package cache | |
+| .NET intermediate build output | `obj` directories under your own source trees |
+| Dart analysis server cache | |
+| VS Code editor caches | |
+| VS Code C/C++ IntelliSense cache | |
+| Chromium application caches | |
+| Firefox caches | |
+| Steam web cache | |
+| Epic Games launcher web cache | |
+| Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
+| GPU shader caches | |
+| Squirrel updater leftovers | Staging directories an interrupted update left behind |
+
+**Tier 2 — regenerable, with cost.** Re-created by re-downloading or rebuilding.
+
+| Source | Notes |
+| --- | --- |
+| Maven local repository | |
+| Conda package cache | |
+| vcpkg build caches | |
+| PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
+| Playwright browsers | |
+| Azure Functions Core Tools releases | |
+| Node.js project dependencies | `node_modules` under your own source trees |
+| Python virtual environments | |
+| Rust build output | `target` directories under your own source trees |
+| Unity project library | |
+| Superseded application versions | Older versions a Squirrel-updated app still keeps |
+
+**Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.
+
+| Source | Notes |
+| --- | --- |
+| Recycle Bin | |
+| Windows File History | Windows' own command drops saved versions past an age you set; the backup drive itself is never touched |
+| Crash dumps and error reports | |
+| Windows servicing logs | |
+| VS Code editor logs and crash reports | |
+| Epic Games launcher logs and crash reports | |
+
+**Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
+excluded by construction rather than by enumeration.
 
 ## Building
 
@@ -93,10 +149,13 @@ for on a machine too full to install a runtime.
 
 ```
 Deguffer.Core/
-  Safety/      tier classification, disposable-child rules, long paths, machine seams
-  Scanning/    size aggregation, free space
-  Execution/   plan model, planner, executor, post-run verification
-  Providers/   one class per known cache
+  Safety/        tier classification, disposable-child rules, long paths, machine seams
+  Scanning/      size aggregation, free space
+  Execution/     plan model, planner, executor, post-run verification
+  Providers/     one class per known cache
+  Exploring/     whole-drive view: file-table reads, tree building, what each location is
+  Configuration/ user preferences
+  Diagnostics/   run logging
 Deguffer.Core.Tests/
 Deguffer.App/  WinUI 3 shell, MVVM over Core
 ```
@@ -107,10 +166,10 @@ knowledge.
 
 ## Roadmap
 
-Milestone 2 and beyond: MFT/USN-based full-drive scanning (directory walking is far too slow to be
-the scanner), then Tier 2/3 sources — VS Code workspace storage with per-workspace ages, Docker
-(reporting reclaim *inside* the VHDX separately from host space), Android SDK, temp directories
-with age filters and process exclusions.
+File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
+elevated, and walks whatever the table cannot account for. Still to come: VS Code workspace storage
+with per-workspace ages, Docker (reporting reclaim *inside* the VHDX separately from host space),
+Android SDK, and temp directories with age filters and process exclusions.
 
 Deliberately out of scope: `WinSxS`, `Windows\Installer`, and installer package caches. They are
 large and tempting, but the failure modes are severe and the safe operations are already exposed by
@@ -121,6 +180,8 @@ large and tempting, but the failure modes are severe and the safe operations are
 - [Specification](docs/todo/_spec.md) — the safety model, the audit evidence behind it, and the
   decided toolchain
 - [CLAUDE.md](CLAUDE.md) — engineering gates for contributors and agents
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to ask for a change, and why pull requests are not
+  accepted
 
 ## Licence
 
