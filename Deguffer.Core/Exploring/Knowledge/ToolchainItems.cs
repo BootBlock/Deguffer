@@ -161,8 +161,8 @@ internal static class ToolchainItems
             "The .NET installation for the whole machine: the SDKs, the runtimes they build and run "
             + "against, the reference assemblies, and the workload packs for Android, iOS and Mac "
             + "Catalyst. Each SDK and runtime version installs beside the last rather than over it, "
-            + "and Visual Studio brings its own, so this holds every version the machine has been "
-            + "given and several gigabytes is ordinary.",
+            + "and Visual Studio brings its own, so several versions of each are usually here and "
+            + "several gigabytes is ordinary.",
 
             "Each version has its own entry in Settings, under Apps, which is what removes it "
             + "properly — deleting a folder here leaves Windows still recording it as installed."),
