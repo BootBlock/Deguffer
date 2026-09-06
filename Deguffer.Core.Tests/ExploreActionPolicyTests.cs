@@ -791,6 +791,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("platformio", "packages")]                   // the installed toolchains
     [InlineData("uv", "tools")]                              // what 'uv tool install' put there
     [InlineData("pip", "pip.ini")]                           // private index URLs
+    [InlineData("poetry", "virtualenvs")]                    // every environment on the machine
     [InlineData("go", "src")]                                // the user's own code
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
@@ -893,6 +894,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new PlatformIoCacheProvider(_environment),
         new UvCacheProvider(_environment),
         new PipCacheProvider(_environment),
+        new PoetryCacheProvider(_environment),
         new GoCacheProvider(_environment),
         new VsCodeCppToolsCacheProvider(_environment),
         new DartAnalysisServerProvider(_environment),

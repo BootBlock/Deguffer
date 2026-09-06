@@ -90,6 +90,78 @@ about compilation rather than promising a uniformly cheap refill — but the cos
 
 ---
 
+## Poetry package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\pypoetry\Cache`, unless moved |
+| **Method** | `poetry cache clear <name> --all` for the repository caches; a path deletion for `artifacts` |
+| **Typical size** | Hundreds of MB to several GB, depending on how many projects you build |
+
+### What it is
+
+Poetry is a dependency manager and packaging tool for Python. One folder holds three quite
+different things:
+
+- **`artifacts`** — the package archives Poetry downloaded, and the wheels it built itself from
+  packages that ship only as source.
+- **`cache\repositories\<name>`** — the package metadata Poetry resolves dependency versions
+  against, one directory per repository it has talked to.
+- **`virtualenvs`** — **every virtual environment Poetry has created, for every project on the
+  machine.** These are not a cache. Each one is a full dependency install.
+
+### What Deguffer does
+
+It asks `poetry config cache-dir` where the folder is and `poetry config virtualenvs.path` where the
+environments are, because both are settings and neither constrains the other. It then clears the two
+caches by different routes, because Poetry only ships a command for one of them:
+
+- **The repository caches** go through `poetry cache clear <name> --all`, once per cache
+  `poetry cache list` names. The per-name form is used rather than the documented bare
+  `poetry cache clear --all` because the cache argument was mandatory until recently, so the short
+  form fails outright on an older Poetry.
+- **`artifacts`** is removed by path. No Poetry command reaches it — `cache clear` builds a file
+  cache over the repository directory and flushes that, and nothing else touches the downloads. It
+  is a long-standing gap in Poetry itself, and the reason its users are told to delete the folder by
+  hand.
+
+The `Cache` folder itself is never removed, and neither is `virtualenvs`.
+
+### What is protected
+
+`virtualenvs`, first and most importantly — asserted to have survived every run, not merely left out
+of the plan. Also the `Cache` folder that contains it, `%LOCALAPPDATA%\pypoetry` above that, and
+`%APPDATA%\pypoetry`, which holds `config.toml` and the `auth.toml` that can carry credentials for a
+private package repository.
+
+The environments are checked twice over: by the name `virtualenvs`, which is what stops the folder
+being offered anywhere in the app, and separately by their **resolved path**. Both settings can be
+pointed anywhere, so a `virtualenvs.path` inside a folder Deguffer would otherwise clear takes that
+folder off the plan, with the reason shown.
+
+Anything else inside the cache folder that Deguffer does not recognise is left alone and named.
+
+### What it costs you
+
+The next `poetry install` re-downloads package archives, re-fetches the metadata Poetry resolves
+against, and rebuilds any wheel it had built from a source distribution.
+
+**Your virtual environments, and everything installed into them, are untouched.** That is the whole
+reason this provider works the way it does: the default location for those environments is a child
+of the folder being cleaned, so a rule that reclaimed the cache by removing the folder would delete
+every project's environment on the machine.
+
+### Why Tier 1
+
+Everything removed is a copy of something obtainable from a package repository, or rebuildable from
+a source distribution, with no input from you. The rebuild cost is real for a package with C
+extensions, but it is time rather than data — and the one thing in the folder that *is* data is
+never removed.
+
+---
+
 ## Cargo crate cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
