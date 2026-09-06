@@ -5,11 +5,16 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// The real <see cref="UserEnvironment"/>, which every other test replaces with a fake.
 ///
-/// <para>These are runtime-assumption guards rather than rule tests, the same job
+/// <para>This is a runtime-assumption guard rather than a rule test, the same job
 /// <c>LongPathTests</c> does. A provider's safety rules are proved against
 /// <c>FakeUserEnvironment</c> precisely so they need no toolchain installed, but that leaves the
 /// class which answers from the actual platform untested by anything — and one of its answers comes
 /// from a P/Invoke that fails silently by returning null.</para>
+///
+/// <para><b>Nothing here asserts where a folder is.</b> A known folder can be relocated, and this
+/// tier and <c>%LOCALAPPDATA%</c> are redirected through separate registry values, so an assertion
+/// on the shape of a path would go red on a machine that is configured legitimately and running
+/// correct code. What is asserted is only what a defect would change.</para>
 /// </summary>
 public sealed class UserEnvironmentTests
 {
@@ -24,31 +29,23 @@ public sealed class UserEnvironmentTests
     /// <para><see cref="UserEnvironment.Current"/> specifically, not a fresh instance: the
     /// initialisation order this guards against only applies to the static field, so an assertion
     /// on <c>new UserEnvironment()</c> would pass with the defect present.</para>
+    ///
+    /// <para>Null is a legitimate answer from the platform where no user profile is loaded, and the
+    /// interface says so. It is not a legitimate answer to a test run, which is a signed-in
+    /// interactive session by construction.</para>
     /// </summary>
     [Fact]
     public void TheSingletonResolvesLocalLowRatherThanReportingItUnknown()
     {
-        var localLow = UserEnvironment.Current.LocalLowAppData;
-
-        Assert.NotNull(localLow);
-        Assert.EndsWith(
-            Path.Combine("AppData", "LocalLow"),
-            localLow,
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// The three tiers are siblings under one profile, so a LocalLow that resolved to somewhere
-    /// else entirely would still satisfy the assertion above.
-    /// </summary>
-    [Fact]
-    public void LocalLowSitsBesideTheOtherTwoApplicationDataTiers()
-    {
         var environment = UserEnvironment.Current;
 
-        Assert.Equal(
-            Path.GetDirectoryName(environment.LocalAppData),
-            Path.GetDirectoryName(environment.LocalLowAppData),
-            StringComparer.OrdinalIgnoreCase);
+        Assert.NotNull(environment.LocalLowAppData);
+
+        // A wrong folder identifier does not fail — it answers with a different real folder. So the
+        // discriminating assertion is that the answer is none of the places already had, which
+        // holds wherever the profile is and wherever any of its tiers has been redirected to.
+        Assert.NotEqual(environment.LocalAppData, environment.LocalLowAppData, StringComparer.OrdinalIgnoreCase);
+        Assert.NotEqual(environment.RoamingAppData, environment.LocalLowAppData, StringComparer.OrdinalIgnoreCase);
+        Assert.NotEqual(environment.UserProfile, environment.LocalLowAppData, StringComparer.OrdinalIgnoreCase);
     }
 }

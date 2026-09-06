@@ -568,8 +568,13 @@ other. A tool that clears only the first leaves about half of it behind.
 
 It deletes the cache directories it recognises, one step each, so you can keep one vendor's and
 clear another's. The two NVIDIA folders are separate steps for the same reason, so clearing one and
-keeping the other is your choice to make. There is no eviction command to prefer here — no vendor
-ships one, and deleting the directory is what every published instruction says to do.
+keeping the other is your choice to make. No graphics vendor ships a command that clears its own
+shader cache, and deleting the directory is what every published instruction says to do.
+
+Windows is the one exception, and it is unresolved rather than ruled out. Disk Cleanup carries a
+"DirectX Shader Cache" item, but it runs as code rather than as a list of folders, so what it
+actually clears is not something the registration reveals. Deguffer deletes `%LOCALAPPDATA%\D3DSCache`
+directly because that is what it can name, offer and check afterwards.
 
 Only `DXCache` is recognised in the LocalLow folder, because that is the only cache that has been
 observed there. If NVIDIA writes a `GLCache` there on your machine, Deguffer leaves it alone and

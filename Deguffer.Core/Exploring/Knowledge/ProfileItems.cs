@@ -141,8 +141,8 @@ internal static class ProfileItems
             + "be cleared is particular folders inside it rather than the whole thing."),
 
         new(
-            KnownPlace.UserProfile,
-            @"AppData\LocalLow",
+            KnownPlace.LocalLowAppData,
+            string.Empty,
             "Application data for programs running with reduced privileges, which cannot write to "
             + "the other two tiers. Browser sandboxes, some games and some graphics drivers use it. "
             + "It is usually small, with one exception worth knowing about: NVIDIA keeps a second "

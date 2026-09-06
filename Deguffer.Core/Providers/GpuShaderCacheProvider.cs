@@ -10,9 +10,10 @@ namespace Deguffer.Core.Providers;
 ///
 /// The purest Tier 1 on the disk. The driver keys these blobs by its own version and discards them
 /// itself whenever that version changes, so they are regenerated transparently and the only cost of
-/// deleting one is a few seconds of stutter the first time a scene renders. §5.1 does not apply:
-/// no vendor ships a cache-eviction command, and every published instruction is to delete the
-/// directory.
+/// deleting one is a few seconds of stutter the first time a scene renders. §5.1 finds nothing to
+/// prefer for a vendor's cache: none of them ships a cache-eviction command, and every published
+/// instruction is to delete the directory. Windows' own cache is a separate question, and
+/// <see cref="Direct3DCacheName"/> records where that one stands.
 ///
 /// <para><b>One provider over several locations, not one per vendor.</b> Every vendor's shader
 /// cache is the same fact — driver-version-keyed pipeline blobs, rebuilt on demand — so the tier,
@@ -80,7 +81,8 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 SafetyTier.RegenerableCache,
                 "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
         ]),
-        [("accounts", "NVIDIA account and sign-in state. It sits beside the caches and is not one.")]),
+        [("accounts", "NVIDIA account and sign-in state. It is not a shader cache, and it is named "
+            + "here whether or not this folder currently holds one.")]),
         new ShaderCacheRoot(ProfileArea.LocalAppData, "AMD", new DisposableChildSet(
         [
             new ChildClassification(
@@ -170,13 +172,16 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         .. Roots
-            .Select(root => (Path: root.PathIn(Environment), root.DirectoryName, root.Children))
+            .Select(root => (Path: root.PathIn(Environment), root.Label, root.Children))
             .Where(root => root.Path is not null)
             .Select(root => ToolRoot.Of(
                 root.Path!,
-                $"This is {root.DirectoryName}'s own folder. Deguffer removes the shader caches inside "
-                + "it and nothing else — a graphics vendor keeps driver settings and profiles in the "
-                + "same place.",
+                // Named by Label, not by vendor: Explore states this sentence on its own when it
+                // refuses a root, with no path beside it, so the two NVIDIA roots would otherwise
+                // produce refusals a user cannot tell apart.
+                $"This is the {root.Label} folder. Deguffer removes the shader caches inside it and "
+                + "nothing else — a graphics vendor keeps driver settings and profiles in the same "
+                + "place.",
                 root.Children)),
     ];
 
@@ -265,10 +270,12 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             return EmptyPlan("No graphics driver has written a shader cache for this user.");
         }
 
-        // The parent of every target. A weak assertion on its own — an over-broad rule that emptied
-        // the profile would leave the directory standing — but it is the only one a whole-directory
-        // target under a shared parent admits, and the vendor roots above are its siblings, so on
-        // any machine with a vendor cache the negative has real subjects too.
+        // The parent of the one target that has no root of its own. A weak assertion by itself -
+        // an over-broad rule that emptied the profile would leave the directory standing — but it
+        // is the only one a whole-directory target under a shared parent admits, and the vendor
+        // roots above are its siblings, so on any machine with a vendor cache the negative has real
+        // subjects too. A LocalLow target needs no equivalent for its own tier: that row's root is
+        // already a survivor, and it is the direct parent of everything the row targets.
         survivors.Add((
             Environment.LocalAppData,
             "The profile's local application data must survive — only named shader caches inside it are removed."));

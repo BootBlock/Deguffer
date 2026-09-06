@@ -200,20 +200,17 @@ public sealed partial class UserEnvironment : IUserEnvironment
     private static string? ResolveLocalLow()
     {
         var folderId = new Guid("a520a1a4-1780-4ff6-bd18-167343c5af16");
-
-        if (SHGetKnownFolderPath(in folderId, DoNotVerify, IntPtr.Zero, out var buffer) != 0)
-        {
-            return null;
-        }
+        var result = SHGetKnownFolderPath(in folderId, DoNotVerify, IntPtr.Zero, out var buffer);
 
         try
         {
-            return Marshal.PtrToStringUni(buffer);
+            return result == 0 ? Marshal.PtrToStringUni(buffer) : null;
         }
         finally
         {
-            // Documented as the caller's to release, and released whatever the string turned out
-            // to be. Freeing IntPtr.Zero is a no-op, so the failure path above needs no cleanup.
+            // The buffer is the caller's to release whether or not the call succeeded, which is
+            // what the documented contract says and is why this covers the failure path too.
+            // Releasing IntPtr.Zero is a no-op, so it costs nothing when there was no buffer.
             Marshal.FreeCoTaskMem(buffer);
         }
     }

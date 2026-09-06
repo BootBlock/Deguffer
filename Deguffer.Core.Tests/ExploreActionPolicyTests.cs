@@ -815,6 +815,37 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A name that is disposable under one of a provider's roots must still be refused under
+    /// another, and the shader caches are where that now bites: NVIDIA keeps a root in each of two
+    /// application-data tiers, and <c>GLCache</c> is declared in only one of them.
+    ///
+    /// <para><see cref="EveryDeclaredRootRefusesAnUnrecognisedSibling"/> cannot cover this. It
+    /// probes one root per provider with a name unrecognised everywhere, and the case here is the
+    /// opposite one: a name the policy would allow if it matched on the child rather than on the
+    /// root it sits under.</para>
+    /// </summary>
+    [Fact]
+    public void ANameDisposableInOneTierIsStillRefusedInTheOther()
+    {
+        var provider = new GpuShaderCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        var local = NvidiaRoot(ProfileArea.LocalAppData);
+        var localLow = NvidiaRoot(ProfileArea.LocalLowAppData);
+
+        // The premise, without which the assertion below proves nothing: this name really is
+        // disposable in the other tier, so a policy keyed on the child name would allow both.
+        Assert.True(policy.MayRemove(Path.Combine(local, "GLCache")).IsAllowed);
+
+        Assert.False(policy.MayRemove(Path.Combine(localLow, "GLCache")).IsAllowed);
+    }
+
+    private string NvidiaRoot(ProfileArea area) =>
+        GpuShaderCacheProvider.Roots
+            .Single(root => root.DirectoryName == "NVIDIA" && root.Area == area)
+            .PathIn(_environment)!;
+
+    /// <summary>
     /// An install Steam's own record points at, carrying the client itself — which is what
     /// <see cref="SteamDiscovery"/> requires before it treats a recorded path as an install.
     ///

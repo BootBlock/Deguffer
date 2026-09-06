@@ -239,6 +239,10 @@ public sealed class KnownItemsTests : IDisposable
         KnownPlace.UserProfile => _environment.UserProfile,
         KnownPlace.LocalAppData => _environment.LocalAppData,
         KnownPlace.RoamingAppData => _environment.RoamingAppData,
+
+        // The fake always has one. The real environment can decline to say, which is why the
+        // production anchor table omits the place entirely rather than assembling a path.
+        KnownPlace.LocalLowAppData => _environment.LocalLowAppData!,
         _ => throw new ArgumentOutOfRangeException(nameof(place), place, "No anchor for this place."),
     };
 }

@@ -82,8 +82,14 @@ public sealed record ShaderCacheRoot(
 
         var area = Area switch
         {
+            ProfileArea.LocalAppData => environment.LocalAppData,
             ProfileArea.LocalLowAppData => environment.LocalLowAppData,
-            _ => environment.LocalAppData,
+
+            // A tier this method does not resolve yields no path, rather than falling back on the
+            // one it happens to know. §5.2's direction, one level up from a child: a row whose
+            // location is not established contributes nothing, where a fallback would quietly plan
+            // deletions in a real directory the row never named.
+            _ => null,
         };
 
         return area is null ? null : Path.Combine(area, DirectoryName);

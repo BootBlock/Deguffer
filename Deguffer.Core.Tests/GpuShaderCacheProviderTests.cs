@@ -482,8 +482,6 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var local = CreateCache(Path.Combine("NVIDIA", "DXCache"), 8192);
         var localLow = CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"), 8192);
 
-        Assert.NotEqual(local, localLow, StringComparer.OrdinalIgnoreCase);
-
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
@@ -496,6 +494,20 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.False(Directory.Exists(local));
         Assert.False(Directory.Exists(localLow), "the LocalLow shader cache was planned and then left behind.");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Explore states a root's reason on its own when it refuses one, with no path beside it, so
+    /// two roots whose reasons read identically leave the user unable to tell which folder was
+    /// refused. NVIDIA has a root in each of two tiers, which makes that live rather than
+    /// theoretical.
+    /// </summary>
+    [Fact]
+    public void EachRootIsRefusedWithAReasonThatNamesWhichFolderItIs()
+    {
+        var reasons = CreateProvider().ToolRoots.Select(root => root.Reason).ToList();
+
+        Assert.Equal(reasons.Count, reasons.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     /// <summary>

@@ -204,6 +204,13 @@ public sealed class ItemGuide
             [KnownPlace.RoamingAppData] = environment.RoamingAppData,
         };
 
+        // Absent rather than assembled when the platform will not say where the tier is, which is
+        // the one application-data tier that can happen for.
+        if (environment.LocalLowAppData is { Length: > 0 } localLow)
+        {
+            anchors[KnownPlace.LocalLowAppData] = localLow;
+        }
+
         if (Path.GetDirectoryName(environment.UserProfile) is { Length: > 0 } users)
         {
             anchors[KnownPlace.UserProfiles] = users;
