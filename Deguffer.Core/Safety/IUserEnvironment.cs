@@ -179,9 +179,6 @@ public sealed partial class UserEnvironment : IUserEnvironment
         });
     }
 
-    /// <summary><c>FOLDERID_LocalAppDataLow</c>.</summary>
-    private static readonly Guid LocalAppDataLowId = new("a520a1a4-1780-4ff6-bd18-167343c5af16");
-
     /// <summary><c>KF_FLAG_DONT_VERIFY</c>.</summary>
     private const uint DoNotVerify = 0x00004000;
 
@@ -192,10 +189,17 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// whether it exists yet. A caller decides what to do about an absent directory by looking for
     /// the cache it wants, and without this flag a profile that has never had a low-integrity
     /// program run in it would answer identically to a platform that could not say at all.</para>
+    ///
+    /// <para><b><c>FOLDERID_LocalAppDataLow</c> is built here rather than held in a static
+    /// field.</b> This runs from an instance initialiser, and <see cref="Current"/> is a static
+    /// field declared above any such field would be. Static initialisers run in textual order, so
+    /// the identifier would still be <see cref="Guid.Empty"/> when the singleton constructs itself,
+    /// the call would fail, and the one environment the application actually uses would report
+    /// LocalLow as unknown while a freshly constructed one answered correctly.</para>
     /// </summary>
     private static string? ResolveLocalLow()
     {
-        var folderId = LocalAppDataLowId;
+        var folderId = new Guid("a520a1a4-1780-4ff6-bd18-167343c5af16");
 
         if (SHGetKnownFolderPath(in folderId, DoNotVerify, IntPtr.Zero, out var buffer) != 0)
         {
