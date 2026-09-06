@@ -293,6 +293,13 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <c>auth.toml</c>, which are nowhere near the cache and would be a silent loss if a future
     /// rule ever reached the wrong <c>pypoetry</c>.
     ///
+    /// <para>The environments are named twice, at the configured location and at the default one,
+    /// because moving <c>virtualenvs.path</c> does not move the environments already on disk.
+    /// Poetry starts creating new ones at the new location and leaves the old tree exactly where it
+    /// was, so a list built only from the current setting would produce no evidence at all about the
+    /// environments a machine that has moved the setting is still carrying. In the default layout
+    /// the two are one path, which costs a duplicated check and nothing else.</para>
+    ///
     /// <para>The repository caches are deliberately not protected. Poetry's own command removes each
     /// one rather than emptying it, and recreates it on next use, so asserting their survival would
     /// fail verification on a successful run.</para>
@@ -300,6 +307,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string cacheRoot, string environments) => Protect(
         (cacheRoot, "Poetry's cache directory must survive — only the caches within it are cleared."),
         (environments, "Every virtual environment Poetry has created. Each is a full install, not a cache."),
+        (Path.Combine(cacheRoot, "virtualenvs"), "Virtual environments left where Poetry creates them by default, which moving virtualenvs.path does not relocate."),
         (Path.Combine(cacheRoot, "cache"), "The directory holding the repository caches; only the caches inside it are cleared."),
         (Path.Combine(cacheRoot, "cache", "repositories"), "The directory holding one cache per repository; only the caches inside it are cleared."),
         (LocalRoot, "Poetry's folder in your profile, which is what contains the cache."),
@@ -391,8 +399,13 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <para><c>--no-interaction</c> is not decoration. <c>poetry cache clear</c> asks "Delete N
     /// entries?" before it does anything, and Deguffer starts it with no console attached, so
     /// without the flag the step would depend on what a detached standard input does to a prompt.
-    /// The flag makes Poetry take the prompt's own default, which is yes. It overrides no safety
-    /// check of Poetry's: §7's confirmation has already been given by the time this runs.</para>
+    /// The flag makes Poetry take the prompt's own default, and that default is yes only because
+    /// Poetry passes it explicitly: <c>self.confirm("Delete {n} entries?", True)</c> in
+    /// <c>console/commands/cache/clear.py</c>, where Cleo's own <c>confirm</c> would otherwise
+    /// default to no. That is worth naming because it is the direction this claim fails in. Were
+    /// the argument ever dropped, the step would reclaim nothing and still exit zero, which is a
+    /// false report rather than a loss. It overrides no safety check of Poetry's: §7's
+    /// confirmation has already been given by the time this runs.</para>
     /// </summary>
     private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured, bool Declined)> PlanRepositoryClearsAsync(
         string poetry,
@@ -409,13 +422,18 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         }
 
         // Poetry's clear never reaches outside its repository cache, so this is the whole of the
-        // §5.2 question for the command route rather than a per-cache one.
-        if (LongPath.Contains(repositories, environments))
+        // §5.2 question for the command route rather than a per-cache one. Asked in both
+        // directions, because virtualenvs.path can name a directory that holds the repository cache
+        // as readily as one inside it, and {cache-dir}\cache is exactly the value neither other
+        // guard sees: it is not the cache root, so BuildPlanAsync's whole-root refusal passes it,
+        // and it is a Tier 4 child, so CollectTargets skips it before reaching its own check.
+        if (LongPath.Contains(repositories, environments)
+            || LongPath.Contains(environments, repositories))
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                "Poetry keeps its virtual environments inside its own repository cache, so Deguffer "
-                + "is not running its cache clear command."));
+                "Poetry keeps its virtual environments in the same tree as its own repository "
+                + "cache, so Deguffer is not running its cache clear command."));
 
             return ([], NothingMeasured, true);
         }
@@ -431,8 +449,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         if (caches.Count == 0)
         {
             // The directory is there and Poetry named nothing usable in it, so something is present
-            // that Deguffer is not going to reclaim. §5.5 wants a route that could not be taken said
-            // out loud rather than rendered as an empty row.
+            // that Deguffer is not going to reclaim. §7 wants a row that is absent to say which kind
+            // of absent it is, rather than reading as one more thing that was already clear.
             var populated = ChildDirectories.Under(repositories).Directories.Count > 0;
 
             if (populated)
@@ -473,10 +491,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <see cref="PoetryDiscovery"/> checks that a name is safe to put in a command line;
     /// this checks that it is safe to put in a path, and the two do not overlap. <c>.</c> and
     /// <c>..</c> are perfectly ordinary command-line tokens, and both walk out of the directory the
-    /// step claims to be about: <c>..</c> resolves to the container this provider's own §5.6 list
-    /// says must survive, and Poetry's <c>clear</c> would then flush it, taking every environment
-    /// underneath. Poetry's own containment check does not catch that either, because it compares
-    /// the paths without resolving them.</para>
+    /// step claims to be about: <c>..</c> resolves to <c>{cache-dir}\cache</c>, which this
+    /// provider's own §5.6 list says must survive, and Poetry's <c>clear</c> removes the directory
+    /// it is handed rather than emptying it. Poetry's own containment check does not catch that
+    /// either, because it compares the paths without resolving them.</para>
     ///
     /// <para>Asked as "is the parent exactly the repository cache" rather than as a containment
     /// test, because <see cref="LongPath.Contains"/> counts a directory as containing itself, and

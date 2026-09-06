@@ -75,7 +75,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Thirty-five providers, each holding its own knowledge of one location. A provider reports "not
+Thirty-seven providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -90,6 +90,7 @@ installed" cleanly on a machine without that toolchain.
 | Go build and module caches | |
 | pip package cache | |
 | uv package cache | |
+| Poetry package cache | `poetry cache clear` per repository; never its `virtualenvs` |
 | .NET intermediate build output | `obj` directories under your own source trees |
 | Dart analysis server cache | |
 | VS Code editor caches | |

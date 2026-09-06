@@ -201,6 +201,24 @@ public sealed class PoetryCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// <c>virtualenvs</c> is declared Tier 4 rather than left to fall through as unrecognised,
+    /// and the declaration buys exactly one thing: the sentence the user reads. Nothing about
+    /// what survives would change without it, because an unrecognised child is left alone
+    /// anyway — so the wording is the whole of what there is to assert.
+    /// </summary>
+    [Fact]
+    public async Task NamesWhatTheVirtualEnvironmentsFolderHoldsRatherThanCallingItUnrecognised()
+    {
+        CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("Leaving 'virtualenvs' alone", StringComparison.Ordinal)
+            && n.Message.Contains("full dependency install", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// §5.1 answers the repository caches and nothing else. Poetry's clear builds a file cache over
     /// its repository directory and flushes that; the archives it downloaded and the wheels it built
     /// sit in a sibling no Poetry command removes, so the plan removes that one by path.
@@ -354,6 +372,27 @@ public sealed class PoetryCacheProviderTests : IDisposable
             && n.Message.Contains("virtual environments inside it", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The one value that falls between the other two containment checks.
+    /// <c>{cache-dir}\cache</c> holds the repository cache rather than sitting inside it, and
+    /// it is not the cache root either, so neither the whole-root refusal nor the per-child one
+    /// sees it. Poetry's own clear would otherwise run against a directory inside the
+    /// environment tree.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunPoetrysClearWhenTheEnvironmentsHoldTheRepositoryCache()
+    {
+        CreateCache();
+
+        var runner = Poetry(environments: Path.Combine(CacheRoot, "cache"));
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("same tree as its own repository cache", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task DoesNotLookThroughACacheDirectoryThatIsALink()
     {
@@ -420,6 +459,25 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Contains(runner.Invocations, i =>
             i.Arguments.Contains("cache clear PyPI --all", StringComparison.Ordinal));
         Assert.True(Directory.Exists(Path.Combine(repositories, "PyPI")));
+    }
+
+    /// <summary>
+    /// §5.6, and the reason the default location is named as well as the configured one.
+    /// Moving <c>virtualenvs.path</c> does not move the environments already on disk: Poetry
+    /// starts creating new ones at the new location and leaves the old tree exactly where it
+    /// was. A §5.6 list built only from the current setting would produce no evidence at all
+    /// about the environments a machine actually has.
+    /// </summary>
+    [Fact]
+    public async Task ProvesTheDefaultEnvironmentsSurvivedAfterVirtualenvsPathWasMoved()
+    {
+        var (_, _, environments) = CreateCache();
+        var moved = _temp.CreateDirectory("relocated-environments");
+
+        var plan = await CreateProvider(Poetry(environments: moved)).PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
     }
 
     /// <summary>§5.6: the negative is the whole test. An over-broad rule passes every positive one.</summary>
