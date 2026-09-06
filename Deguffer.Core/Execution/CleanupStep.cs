@@ -77,9 +77,13 @@ public abstract record CleanupStep
     /// measuring happens per path. <see cref="CleanupPlan.HasRecentContentHeldBack"/> is the
     /// question the shell actually asks, and it is that question asked over these.</para>
     ///
-    /// <para>False on a <see cref="RunCommandStep"/>, always: §5.1 leaves the tool's own eviction
-    /// command deciding what it removes, so nothing is held back from it and its figure is the
-    /// whole cache.</para>
+    /// <para>False on nearly every <see cref="RunCommandStep"/>: §5.1 leaves the tool's own eviction
+    /// command deciding what it removes, so nothing is held back from it and its figure is the whole
+    /// cache. <see cref="Providers.FileHistoryProvider"/> is the exception, and it is one because
+    /// the <em>command</em> takes an age — <c>FhManagew.exe -cleanup &lt;days&gt;</c> considers only
+    /// versions past a cut-off, so the estimate is the aged part of the folder by construction. A
+    /// target full of recent versions measures zero and is not clear, which is exactly the false
+    /// "Already clear" this flag exists to prevent.</para>
     /// </summary>
     public bool WithheldRecent { get; init; }
 }

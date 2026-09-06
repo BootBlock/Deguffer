@@ -196,6 +196,24 @@ public enum ExploreColouring
 /// the instant is fixed once per preview, so that the clean deletes exactly the files the preview
 /// said it would. See <see cref="Safety.MinimumAge"/>.</para>
 /// </param>
+/// <param name="FileHistoryRetentionDays">
+/// How old a File History version has to be before Windows may discard it. 365 days by default,
+/// which is <c>FH_RETENTION_AGE</c>'s own documented default — so Deguffer asks for what Windows
+/// would have done had a retention policy been enabled, rather than for a number of its own.
+///
+/// <para><b>It is a setting rather than a constant because it decides how much is destroyed
+/// permanently, and the answer is not the same for everybody.</b> A version is a snapshot of a file
+/// as it was, so nothing regenerates one — see <see cref="Providers.FileHistoryProvider"/> for why
+/// that puts the whole location at Tier 3. Somebody reclaiming a full drive wants 30 days and
+/// somebody keeping a working archive wants several years, and neither can be inferred.</para>
+///
+/// <para><b>One day is the floor, and it is a safety floor rather than a validation nicety.</b>
+/// <c>FhManagew.exe -cleanup 0</c> keeps only the newest version of each file <em>currently in the
+/// protection scope</em>, which silently discards every version of everything the user has since
+/// moved, renamed or deleted. That is the one input this preference must never be able to produce,
+/// so the provider clamps as well as the settings box — nothing validates
+/// <c>preferences.json</c> on the way in, and a hand-edited zero must not reach the command.</para>
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Compact,
@@ -208,7 +226,8 @@ public sealed record AppPreferences(
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false,
     bool EmptyRecycleBinsDirectly = false,
-    int KeepFilesChangedWithinHours = 0)
+    int KeepFilesChangedWithinHours = 0,
+    int FileHistoryRetentionDays = 365)
 {
     public static readonly AppPreferences Default = new();
 }

@@ -169,6 +169,10 @@ public class CrashLogTests
 
         public string? UserSecurityIdentifier => null;
 
+        public string UserName => string.Empty;
+
+        public string MachineName => string.Empty;
+
         public string? FindExecutable(string command) => null;
 
         public string? GetEnvironmentVariable(string name) => null;

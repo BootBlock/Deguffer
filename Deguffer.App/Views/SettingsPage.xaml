@@ -130,6 +130,31 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- The age Deguffer asks Windows for when it trims File History, and a setting rather
+                 than a constant because it decides how much is destroyed permanently: a saved
+                 version is a snapshot of a file as it was, and nothing recreates one. 365 days is
+                 FH_RETENTION_AGE's own documented default, so an untouched install asks for what
+                 Windows would have done had a retention policy been enabled. The minimum is 1 and
+                 not 0 for a safety reason the description states: -cleanup 0 keeps only the newest
+                 version of files still in the protection scope, discarding every version of
+                 anything the user has since moved or deleted. -->
+            <views:SettingsRow Glyph="&#xE777;"
+                               Title="Keep File History versions for"
+                               Description="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Set how old a saved version has to be before Windows may drop it. Windows always keeps the newest copy of a file it is still protecting; everything older than this that it has superseded is gone for good.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind ViewModel.FileHistoryRetentionDays, Mode=TwoWay}"
+                               Minimum="{x:Bind ViewModel.MinimumFileHistoryRetentionDays}"
+                               Maximum="{x:Bind ViewModel.MaximumFileHistoryRetentionDays}"
+                               SmallChange="1"
+                               LargeChange="30"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Days"
+                               AutomationProperties.Name="Days to keep File History versions for" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <!-- The other setting on this page that changes what Deguffer will delete rather than
                  how it looks, the guard above being the first. Stated as scope rather than as a
                  preference, because an empty list is not a disabled feature — it is Deguffer having
