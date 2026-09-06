@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Safety;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -175,5 +175,80 @@ public class LongPathTests
 
         Assert.False(LongPath.IsReparsePoint(directory));
         Assert.True(LongPath.DirectoryExists(directory));
+    }
+
+    /// <summary>
+    /// §5.6 asks this of every protected path, so what it answers for each shape is the whole of
+    /// what an emptied-in-place over-reach can be caught by.
+    ///
+    /// <para>A file, a missing path and an unreadable directory all answer false, and the last of
+    /// those is the one worth pinning: a directory Windows will not list must not be reported as
+    /// having held something, or a refusal Deguffer meets every day becomes an alarm. That is the
+    /// same direction §5.3 takes for a locked file.</para>
+    /// </summary>
+    [Fact]
+    public void HoldsAnythingAnswersOnlyForADirectoryThatCanBeListedAndIsNotEmpty()
+    {
+        using var temp = new TempDirectory();
+
+        var empty = Directory.CreateDirectory(Path.Combine(temp.Path, "empty")).FullName;
+        var full = Directory.CreateDirectory(Path.Combine(temp.Path, "full")).FullName;
+        var file = Path.Combine(full, "one.bin");
+        File.WriteAllBytes(file, new byte[8]);
+
+        Assert.False(LongPath.HoldsAnything(empty));
+        Assert.True(LongPath.HoldsAnything(full));
+
+        // A file is not a directory holding something, and neither is a path that is not there.
+        Assert.False(LongPath.HoldsAnything(file));
+        Assert.False(LongPath.HoldsAnything(Path.Combine(temp.Path, "never-existed")));
+
+        // A directory holding only another directory still holds something.
+        var nested = Directory.CreateDirectory(Path.Combine(temp.Path, "outer", "inner")).FullName;
+        Assert.True(LongPath.HoldsAnything(Path.GetDirectoryName(nested)!));
+    }
+
+    /// <summary>
+    /// The refusal case on its own, because it is the one that decides whether §5.6's new check
+    /// cries wolf. An unreadable directory answers the same as an empty one, so it can never be
+    /// recorded as having held content and can never be reported as emptied.
+    /// </summary>
+    [Fact]
+    public void AnUnreadableDirectoryHoldsNothingRatherThanRaisingAnAlarm()
+    {
+        using var temp = new TempDirectory();
+
+        var directory = Directory.CreateDirectory(Path.Combine(temp.Path, "denied")).FullName;
+        File.WriteAllBytes(Path.Combine(directory, "inside.bin"), new byte[8]);
+
+        Assert.True(LongPath.HoldsAnything(directory));
+
+        using var denied = new DeniedDirectory(directory);
+
+        Assert.False(LongPath.HoldsAnything(directory));
+    }
+
+    /// <summary>
+    /// §6.3 for the same helper: a directory whose contents sit past <c>MAX_PATH</c> still holds
+    /// something. A crash guard rather than a discriminating test, on the reasoning CLAUDE.md's G8
+    /// records — .NET prefixes long paths itself — but a helper §5.6 depends on must at least reach
+    /// content that deep.
+    /// </summary>
+    [Fact]
+    public void HoldsAnythingReachesContentPastMaxPath()
+    {
+        using var temp = new TempDirectory();
+
+        var deep = Path.Combine(temp.Path, "deep");
+        while (deep.Length < 280)
+        {
+            deep = Path.Combine(deep, new string('d', 40));
+        }
+
+        Directory.CreateDirectory(LongPath.Extended(deep));
+
+        var outermost = Path.Combine(temp.Path, "deep");
+        Assert.True(outermost.Length < 260);
+        Assert.True(LongPath.HoldsAnything(outermost));
     }
 }

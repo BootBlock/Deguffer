@@ -1281,6 +1281,24 @@ Four further things the work settled that this section did not anticipate:
   shell is not told what changed, so a Recycle Bin window left open may show a stale picture until
   it refreshes — not observed, and a stale picture rather than a stale deletion.
 
+- **§5.1's answer was reversed by issue #104, and the reasoning above turned out to be wrong on
+  both counts.** The shipped route is now `SHEmptyRecycleBin`. The preview objection does not hold:
+  what the shell is handed is the volume and what the plan names is the account's directory inside
+  it, so §7's dry run and §5.6's assertion are untouched by the change. The §5.2 objection was
+  settled by measuring the call rather than reasoning about its signature — on a scratch volume, an
+  *elevated* call on a volume root removed this account's entries and left a second account's bin, a
+  child that was not an identifier at all, and the bin root itself exactly as they were.
+
+  **What the reversal cost is speed, and the figures are why the old route is kept.** Against a bin
+  holding 1,000 recycled files as 2,000 `$I` and `$R` entries, the shell call took 4.2, 4.5 and 5.8
+  seconds across three passes where removing the same tree by path took 0.15, 0.17 and 0.17. At
+  3,000 files the two were 60.0 seconds and 0.68. The gap widens with the number of entries rather
+  than holding, so it is worst on the bin most worth emptying. The issue asked for the P/Invoke on
+  the grounds that it was quicker; it is not, and the maintainer took it anyway for the notification
+  — Windows learns the bin changed, which a path deletion cannot tell it. `EmptyRecycleBinsDirectly`
+  keeps the fast route as the user's choice, and the guard on recently changed files forces it
+  regardless, because Windows empties a bin whole.
+
 - **The seam is its own interface rather than a member on `IUserEnvironment`.** That interface is
   the signed-in user — their profile directories, their `PATH`, their environment — and the mounted
   volumes are a fact about the hardware. Describing one type as "the user and the disks" is G1's own

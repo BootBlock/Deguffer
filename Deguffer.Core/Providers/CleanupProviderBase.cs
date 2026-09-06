@@ -157,15 +157,20 @@ public abstract class CleanupProviderBase : ICleanupProvider
     protected CleanupPlan UnexaminedPlan(string why) => EmptyPlan(why) with { WasNotExamined = true };
 
     /// <summary>
-    /// §5.6 — capture which protected paths exist now, so verification can tell "survived" from
-    /// "was never there".
+    /// §5.6 — capture what each protected path was before the run, so verification can tell
+    /// "survived" from "was never there", and from "is still standing and has been emptied".
+    ///
+    /// <para>The content question costs one entry per directory, because
+    /// <see cref="LongPath.HoldsAnything"/> stops at the first, so it is a fixed cost per protected
+    /// path rather than a walk (G4).</para>
     /// </summary>
     protected static IReadOnlyList<ProtectedPath> Protect(params (string Path, string Reason)[] candidates) =>
     [
         .. candidates.Select(c => new ProtectedPath(
             c.Path,
             c.Reason,
-            LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path))),
+            LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path),
+            LongPath.HoldsAnything(c.Path))),
     ];
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
@@ -273,6 +278,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// less. A <see cref="DeleteFileStep"/> has nothing left to do once its one file is protected,
     /// and offering a row that will reclaim nothing is worse than not offering it — so it is
     /// withdrawn, and §5.6 is told to prove the file is still there afterwards.</para>
+    ///
+    /// <para><b>That reasoning holds because every deletion here honours the guard itself, and
+    /// <see cref="EmptyRecycleBinStep"/> cannot.</b> Windows empties a bin whole, so such a step
+    /// under a guard would stay and do <em>more</em> rather than less. It never arrives here in
+    /// that state — <see cref="Providers.RecycleBinProvider"/> takes the direct route whenever the
+    /// guard is on — and <see cref="PlanExecutor"/> refuses the pairing outright rather than
+    /// leaving that to one expression in one provider.</para>
     /// </summary>
     private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep)
     {

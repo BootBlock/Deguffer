@@ -77,9 +77,20 @@ public sealed class FakeRecycleBinEmptier : IRecycleBinEmptier
     {
         var bin = Path.Combine(volumeRoot, "$Recycle.Bin");
 
+        // Emptied in place, exactly as the correct behaviour empties in place. Modelling the
+        // over-reach as a *removal* would be modelling a shape the real call does not have, and a
+        // §5.6 negative that only catches the shape Windows never takes catches nothing.
         foreach (var account in Directory.EnumerateDirectories(bin))
         {
-            Directory.Delete(account, recursive: true);
+            foreach (var child in Directory.EnumerateDirectories(LongPath.Extended(account)))
+            {
+                Directory.Delete(child, recursive: true);
+            }
+
+            foreach (var file in Directory.EnumerateFiles(LongPath.Extended(account)))
+            {
+                File.Delete(file);
+            }
         }
 
         return new RecycleBinEmptyOutcome(Emptied: true);

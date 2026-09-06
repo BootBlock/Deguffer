@@ -13,7 +13,27 @@ namespace Deguffer.Core.Execution;
 /// Whether it was present when the plan was made. A path that was never there cannot have been
 /// destroyed, so only the ones that existed constitute evidence.
 /// </param>
-public sealed record ProtectedPath(string Path, string Reason, bool ExistedBefore);
+/// <param name="HeldContentBefore">
+/// Whether it was a directory holding at least one entry when the plan was made.
+///
+/// <para><b>Existence stopped being enough when a removal stopped removing.</b> Every deletion in
+/// this product used to take the directory with it, so an over-broad rule made a protected sibling
+/// vanish and <see cref="PlanVerifier"/>'s existence check saw it. A route that empties a directory
+/// <em>in place</em> — <see cref="EmptyRecycleBinStep"/> is the first — destroys the contents and
+/// leaves the directory standing, so the same over-reach leaves every protected path present and
+/// the negative passes over a bin somebody else's deleted files were in. That is the exact failure
+/// §5.6 exists to catch, and it is invisible to a question about existence.</para>
+///
+/// <para>Recorded as a boolean rather than a size or a count, because the claim worth holding the
+/// run to is "it still holds something", not "it holds the same bytes". A protected directory can
+/// legitimately gain or lose an entry between the preview and the clean, and a comparison of
+/// figures would report every one of those as an alarm.</para>
+/// </param>
+public sealed record ProtectedPath(
+    string Path,
+    string Reason,
+    bool ExistedBefore,
+    bool HeldContentBefore = false);
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
 public sealed record PlanNote(PlanNoteSeverity Severity, string Message);

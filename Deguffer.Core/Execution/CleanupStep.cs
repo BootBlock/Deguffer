@@ -187,7 +187,8 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
 public sealed record EmptyRecycleBinStep(string Path, string What) : DeleteStep(Path, What)
 {
     /// <summary>
-    /// The volume whose bin this is, which is what <c>SHEmptyRecycleBin</c> accepts.
+    /// The volume whose bin this is, which is what <c>SHEmptyRecycleBin</c> accepts, or an empty
+    /// string where <see cref="DeleteStep.Path"/> is not shaped like a bin at all.
     ///
     /// <para>Derived rather than stored, because the shape is guaranteed by the only thing that
     /// builds one: a bin is always <c>&lt;root&gt;\$Recycle.Bin\&lt;account&gt;</c>, so the root is
@@ -195,10 +196,23 @@ public sealed record EmptyRecycleBinStep(string Path, string What) : DeleteStep(
     /// tests stand synthetic volumes inside a scratch directory, where the drive's own root is not
     /// the volume the step means, and a derivation that could not be exercised there would be one
     /// nothing checks.</para>
+    ///
+    /// <para><b>Nothing is the answer for a path that is not two levels deep, and the alternative
+    /// was dangerous.</b> Falling back to the path itself reads as harmless, and is exactly wrong
+    /// for the one input that reaches the fallback while still being accepted downstream: a
+    /// <see cref="DeleteStep.Path"/> that is already a drive root. <c>GetDirectoryName</c> answers
+    /// null for it, the fallback would hand that root straight to the shell, and
+    /// <see cref="ShellRecycleBinEmptier"/>'s guard admits a root. A malformed target would have
+    /// become a whole-volume call. An empty string is refused by everything downstream, so the
+    /// degenerate case fails closed.</para>
+    ///
+    /// <para><see cref="LongPath.Display"/> first, because the shell namespace refuses the
+    /// extended-length prefix and because trimming it after splitting would leave <c>\\?\D:</c>
+    /// as the root. See <see cref="IRecycleBinEmptier"/>.</para>
     /// </summary>
     public string VolumeRoot =>
         System.IO.Path.GetDirectoryName(System.IO.Path.GetDirectoryName(LongPath.Display(Path)))
-        ?? LongPath.Display(Path);
+        ?? string.Empty;
 
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }

@@ -50,7 +50,7 @@ public sealed class PlanExecutor(
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
                 DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                EmptyRecycleBinStep empty => await EmptyAsync(empty, stepProgress, ct).ConfigureAwait(false),
+                EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
@@ -140,9 +140,38 @@ public sealed class PlanExecutor(
     /// </summary>
     private async Task<StepOutcome> EmptyAsync(
         EmptyRecycleBinStep step,
+        MinimumAge keep,
         IProgress<double>? progress,
         CancellationToken ct)
     {
+        // The guard and this route are mutually exclusive, and RecycleBinProvider is what makes
+        // them so. Re-asked here because the cost of that one expression being edited wrongly is
+        // the files the user explicitly asked to keep: Windows empties a bin whole and has no way
+        // to hold anything back, so this step under a guard would destroy them and §5.6 would not
+        // notice, since they sit inside the target rather than beside it.
+        if (keep.IsOn)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Skipped: 0,
+                "Nothing was removed: Windows cannot empty a Recycle Bin partially, and this plan "
+                + "asked for recently changed files to be left alone.");
+        }
+
+        // A path that is not shaped like a bin, which nothing can currently build. Refused rather
+        // than handed on, because the value that reaches the shell decides what the shell destroys.
+        if (string.IsNullOrEmpty(step.VolumeRoot))
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Skipped: 0,
+                "Nothing was removed: this is not the path of a Recycle Bin on a drive.");
+        }
+
         // The last honest moment to stop: the call itself cannot be cancelled once it starts, and
         // on a large bin it runs for a long time. See ShellRecycleBinEmptier.
         ct.ThrowIfCancellationRequested();
@@ -150,25 +179,38 @@ public sealed class PlanExecutor(
         var outcome = await Task.Run(() => _emptier.Empty(step.VolumeRoot), ct).ConfigureAwait(false);
 
         var after = await scanner.MeasureFromDiskAsync(step.Path, ct).ConfigureAwait(false);
-        var reclaimed = step.EstimatedBytes - after.Size.Reclaimable;
+        var remaining = after.Size.Reclaimable;
+        var reclaimed = step.EstimatedBytes - remaining;
 
         // Nothing to report along the way — the shell offers no progress of its own, and its
         // progress window is one of the three things the flags suppress.
         progress?.Report(1.0);
 
-        // Bytes are the evidence, and the HRESULT is the explanation. A refusal that freed nothing
-        // is a failed step; anything else is judged by what left the disk, on the same reasoning
-        // DeleteAsync applies to a directory that partially survived.
-        var succeeded = outcome.Emptied || reclaimed > 0;
+        // The disk is the evidence and the HRESULT is only the explanation, which is the whole
+        // reason the measurement above is taken: SHEmptyRecycleBin reports S_OK and no figures, so
+        // a success taken from the return value alone would be Deguffer repeating a claim it had
+        // just measured to be false. A bin that still holds something, having given nothing up, is
+        // a failed step whatever the shell said about it.
+        var succeeded = remaining == 0 || reclaimed > 0;
 
-        var message = (succeeded, outcome.Message) switch
+        var message = (succeeded, remaining, outcome.Message) switch
         {
-            (false, { } why) => $"{why} Everything in it is still there.",
-            (false, null) => "Nothing was removed.",
+            (false, _, { } why) => $"{why} Everything in it is still there.",
 
-            // Emptied, and the bin turned out to hold nothing by the time the shell reached it.
-            // Reported as what it is rather than as a reclaim of zero bytes.
-            (true, _) when reclaimed <= 0 => "Emptied; it held nothing by then.",
+            // The shell reported success and the bin is exactly as full as it was. Nothing else
+            // here can say what went wrong, so the sentence says what is true.
+            (false, _, null) =>
+                $"Nothing was removed: Windows reported success and the bin still holds "
+                + $"{Scanning.FreeSpace.Format(remaining)}.",
+
+            // Emptied, and it held nothing by the time the shell reached it. Distinguished from the
+            // line above by the measurement rather than by the reclaim, which is zero in both.
+            (true, _, _) when reclaimed <= 0 => "Emptied; it held nothing by then.",
+
+            // Something went and something stayed: a file another process holds open is the usual
+            // cause, and it is §5.3's ordinary outcome rather than a failure.
+            (true, > 0, _) => $"Emptied, apart from {Scanning.FreeSpace.Format(remaining)} Windows "
+                + "would not release.",
 
             _ => "Emptied.",
         };

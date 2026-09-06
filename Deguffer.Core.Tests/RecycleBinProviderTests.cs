@@ -426,10 +426,16 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3, and the one boundary in Core that requires the opposite form from every other. The
-    /// shell parses a drive root and refuses the extended-length spelling of it, so a path prepared
-    /// for the file APIs would be rejected by the very call this route exists to make — and an
-    /// outcome cannot show which form crossed, which is why the seam records it.
+    /// What actually crosses to Windows on a real plan, in the form the shell accepts.
+    ///
+    /// <para><b>It does not discriminate either strip on its own, and saying so is the point.</b>
+    /// Two independent calls put the path in display form — the provider's own
+    /// <see cref="LongPath.Display"/> on each child it classifies, and
+    /// <see cref="EmptyRecycleBinStep.VolumeRoot"/>'s — so removing either leaves this green and
+    /// only removing both fails it. That redundancy is worth having, and this test is worth having
+    /// as proof of the composition, but §6.3's discriminating check on this seam is
+    /// <see cref="TheVolumeHandedToWindowsIsStrippedOfTheExtendedLengthPrefix"/>, which feeds the
+    /// step a prefixed path directly.</para>
     /// </summary>
     [Fact]
     public async Task WhatCrossesToWindowsCarriesNoExtendedLengthPrefix()
@@ -532,12 +538,23 @@ public sealed class RecycleBinProviderTests : IDisposable
         var provider = CreateProvider(emptier: FakeRecycleBinEmptier.TakingEveryAccount());
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
 
-        Assert.False(Directory.Exists(theirs));
+        // The loss, in the shape this route's over-reach actually takes: the other account's files
+        // are gone and their directory is still standing. An assertion that the directory had gone
+        // would be testing a shape Windows does not have, and would pass while this one fails.
+        Assert.True(Directory.Exists(theirs));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(theirs));
+
         Assert.False(result.Verification!.Passed);
         Assert.Contains(
             result.Verification.Checks,
             c => c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase)
-                && c.Outcome == VerificationOutcome.Failed);
+                && c.Outcome == VerificationOutcome.Emptied);
+
+        // The one-line summary has to account for it too. A run that reports "did not pass" over a
+        // sentence saying every path survived tells the reader two different things at once.
+        Assert.Contains(result.Verification.Failures, c =>
+            c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("did not survive", result.Verification.Summary, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -565,18 +582,21 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The reclaim is what left the disk, not what the plan hoped would. The shell call reports no
-    /// figures at all, so reporting the estimate would be a number nobody checked — and a bin
-    /// emptied by something else between the preview and the clean would be reported as everything
-    /// this run reclaimed.
+    /// The ordinary success, end to end: the bin is emptied, everything it held counts as
+    /// reclaimed, and the sentence says so plainly.
+    ///
+    /// <para>It cannot tell a measured reclaim from a reported estimate, because on a bin that is
+    /// wholly emptied the two are the same number.
+    /// <see cref="WindowsClaimingSuccessOverAFullBinIsAFailedStep"/> is where they differ, and it is
+    /// what holds the reclaim to the disk.</para>
     /// </summary>
     [Fact]
-    public async Task ReportsWhatActuallyLeftTheDiskRatherThanTheEstimate()
+    public async Task ReportsTheWholeBinAsReclaimedWhenWindowsEmptiesIt()
     {
         var volume = CreateVolume("D");
-        var mine = CreateBin(volume, Sid, bytes: 8192);
+        CreateBin(volume, Sid, bytes: 8192);
 
-        var provider = CreateProvider(emptier: FakeRecycleBinEmptier.DoingNothing());
+        var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
         Assert.True(plan.EstimatedBytes > 8000);
@@ -584,9 +604,110 @@ public sealed class RecycleBinProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
         var step = Assert.Single(result.Steps);
 
+        // The estimate was over 8 KB and the fake emptied it, so a step reporting the estimate and
+        // a step reporting the measurement are indistinguishable here — except that the estimate
+        // counts the $I file the emptying also took. Both figures leaving the disk is the point.
+        Assert.True(step.Succeeded);
+        Assert.Equal(plan.EstimatedBytes, step.BytesReclaimed);
+        Assert.Equal("Emptied.", step.Message);
+    }
+
+    /// <summary>
+    /// Windows reporting success is not evidence that anything left the disk, and this is the case
+    /// where the two disagree: <c>SHEmptyRecycleBin</c> returns <c>S_OK</c> and the bin is exactly
+    /// as full as it was.
+    ///
+    /// <para>The route was taken knowing the call reports one number and no figures, so the
+    /// measurement afterwards is the only check there is on it. Repeating the shell's claim over the
+    /// top of a measurement that contradicts it would throw away the one thing that check is for —
+    /// and it is a claim the user acts on, since they are told the bin is dealt with.</para>
+    /// </summary>
+    [Fact]
+    public async Task WindowsClaimingSuccessOverAFullBinIsAFailedStep()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid, bytes: 8192);
+
+        var provider = CreateProvider(emptier: FakeRecycleBinEmptier.DoingNothing());
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+        var step = Assert.Single(result.Steps);
+
+        Assert.False(step.Succeeded);
         Assert.Equal(0, step.BytesReclaimed);
-        Assert.Contains("held nothing", step.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("held nothing", step.Message, StringComparison.Ordinal);
+        Assert.Contains("still holds", step.Message, StringComparison.Ordinal);
         Assert.NotEmpty(Directory.EnumerateFileSystemEntries(mine));
+    }
+
+    /// <summary>
+    /// The guard and this route are mutually exclusive, and the provider is what makes them so.
+    /// This drives the pairing the provider will not build, because the cost of that one expression
+    /// being edited wrongly is the files the user asked to keep — and §5.6 could not report it,
+    /// since those files sit inside the target rather than beside it.
+    /// </summary>
+    [Fact]
+    public async Task AGuardedPlanIsRefusedByTheShellRouteRatherThanEmptied()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        // The pairing the provider never produces, assembled by hand.
+        var guarded = plan with { Keep = MinimumAge.WithinHours(8, DateTime.UtcNow) };
+        Assert.IsType<EmptyRecycleBinStep>(Assert.Single(guarded.Steps));
+
+        var result = await provider.ExecuteAsync(guarded);
+
+        Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.Empty(_emptier.VolumeRoots);
+        Assert.NotEmpty(Directory.EnumerateFileSystemEntries(mine));
+    }
+
+    /// <summary>
+    /// A step whose path is not shaped like a bin has no volume to name, and the value that reaches
+    /// the shell is what decides what the shell destroys. The dangerous shape is a path that is
+    /// already a drive root: the derivation cannot go two levels up from it, and a fallback to the
+    /// path itself would have handed Windows a whole volume.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\")]
+    [InlineData(@"C:\Users")]
+    public async Task AStepThatNamesNoVolumeIsRefusedRatherThanGuessedAt(string path)
+    {
+        Assert.Equal(string.Empty, new EmptyRecycleBinStep(path, "malformed").VolumeRoot);
+
+        var provider = CreateProvider();
+        var plan = (await provider.PlanAsync()) with
+        {
+            Steps = [new EmptyRecycleBinStep(path, "malformed")],
+        };
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.Empty(_emptier.VolumeRoots);
+    }
+
+    /// <summary>
+    /// §6.3 at the one seam in Core that requires the opposite form from every other: the shell
+    /// namespace parses a drive root and refuses the extended-length spelling of it.
+    ///
+    /// <para>Asked of the step directly, and given a path that <em>does</em> carry the prefix, which
+    /// is what makes it discriminate. Driven through the provider it would not: the path a plan
+    /// carries has already been through <see cref="LongPath.Display"/> in the provider, so the strip
+    /// here and the strip there each cover for the other and removing either alone changes
+    /// nothing.</para>
+    /// </summary>
+    [Fact]
+    public void TheVolumeHandedToWindowsIsStrippedOfTheExtendedLengthPrefix()
+    {
+        var step = new EmptyRecycleBinStep(
+            LongPath.Extended(@"C:\$Recycle.Bin\" + AnotherAccount), "a bin");
+
+        Assert.StartsWith(@"\\?\", step.Path, StringComparison.Ordinal);
+        Assert.Equal(@"C:\", step.VolumeRoot);
     }
 
     /// <summary>
@@ -599,6 +720,13 @@ public sealed class RecycleBinProviderTests : IDisposable
     /// outcome-based check passes even with <see cref="LongPath.Extended"/> removed.
     /// <c>DirectoryRemoverTests.HandsEveryPathToTheFilesystemInExtendedLengthForm</c> is what
     /// actually proves the form.
+    ///
+    /// <para><b>Driven down the direct route deliberately, because that is the one this test can
+    /// still say anything about.</b> The shipped route hands the emptying to Windows, and in a test
+    /// that means handing it to <see cref="FakeRecycleBinEmptier"/> — whose own deep-tree handling
+    /// would then be what the assertion below exercised. Selecting the direct route puts
+    /// <see cref="Execution.DirectoryRemover"/> back under it. The measurement half is route-
+    /// independent and would hold either way.</para>
     /// </summary>
     [Fact]
     public async Task MeasuresAndRemovesContentPastMaxPath()
@@ -621,7 +749,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         Directory.CreateDirectory(LongPath.Extended(deep));
         File.WriteAllBytes(LongPath.Extended(file), new byte[4096]);
 
-        var provider = CreateProvider();
+        var provider = CreateProvider(AppPreferences.Default with { EmptyRecycleBinsDirectly = true });
         var plan = await provider.PlanAsync();
 
         Assert.Contains(bin, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
@@ -631,7 +759,7 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.False(LongPath.FileExists(file), "a file past MAX_PATH survived the removal.");
-        Assert.Empty(Directory.EnumerateFileSystemEntries(bin));
+        Assert.False(Directory.Exists(bin));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
