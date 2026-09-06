@@ -120,10 +120,15 @@ public readonly record struct MinimumAge
     /// offerable at all. A provider that owns such a floor must not have it loosened by a user who
     /// asked for a shorter window, or by one who asked for nothing.</para>
     ///
-    /// <para><b>Later wins, because a later cut-off keeps more.</b> The instant is the moment a file
-    /// must predate to be deletable, so the guard whose instant is later is the guard that protects
-    /// the larger set. <see cref="Off"/> is the weakest possible guard and loses to any real one,
-    /// which is why it cannot be compared as an instant — it has none.</para>
+    /// <para><b>The longer window wins, which is the <em>earlier</em> instant.</b> A file is
+    /// protected when it is at or after the cut-off, so the guard whose instant is earlier protects
+    /// the larger set: a thirty-day window keeps everything a seven-day one keeps and more. Reading
+    /// it the other way round is the mistake this paragraph exists to stop, and it is the dangerous
+    /// direction — an hour-long window would have won against a week-long floor and deleted six
+    /// days of somebody's working files.</para>
+    ///
+    /// <para><see cref="Off"/> is the weakest possible guard and loses to any real one, which is why
+    /// it cannot be compared as an instant — it has none.</para>
     ///
     /// <para>One of the two arguments is returned whole rather than a new value built from both, so
     /// <see cref="Describe"/> still names a window somebody actually asked for. A combination would
@@ -134,7 +139,7 @@ public readonly record struct MinimumAge
         {
             (null, _) => second,
             (_, null) => first,
-            var (a, b) => a >= b ? first : second,
+            var (a, b) => a <= b ? first : second,
         };
 
     /// <summary>

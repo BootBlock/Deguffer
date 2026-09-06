@@ -144,4 +144,54 @@ public class MinimumAgeTests
     {
         Assert.Equal(expected, MinimumAge.WithinHours(hours, Now).Describe());
     }
+
+    /// <summary>
+    /// The longer window wins, which is the earlier cut-off. Reading the comparison the other way
+    /// round is the mistake the method's own paragraph warns about, and it fails in the direction
+    /// that deletes: an hour-long window beating a week-long floor would take six days of files the
+    /// floor exists to keep.
+    /// </summary>
+    [Fact]
+    public void TheStricterOfTwoGuardsIsTheOneWithTheLongerWindow()
+    {
+        var hour = MinimumAge.Within(TimeSpan.FromHours(1), Now);
+        var week = MinimumAge.Within(TimeSpan.FromDays(7), Now);
+
+        Assert.Equal(week, MinimumAge.Stricter(hour, week));
+        Assert.Equal(week, MinimumAge.Stricter(week, hour));
+
+        // The thing the comparison decides, rather than which value came back: a file two days old
+        // survives under the combination and would not have survived under the shorter window.
+        Assert.True(MinimumAge.Stricter(hour, week).Protects(FileTime(Now.AddDays(-2))));
+        Assert.False(hour.Protects(FileTime(Now.AddDays(-2))));
+    }
+
+    /// <summary>
+    /// A guard that is off is the weakest there is, and loses to any real one from either side. It
+    /// has no instant, so it cannot be compared as one.
+    /// </summary>
+    [Fact]
+    public void AGuardThatIsOffLosesToAnyRealOne()
+    {
+        var week = MinimumAge.Within(TimeSpan.FromDays(7), Now);
+
+        Assert.Equal(week, MinimumAge.Stricter(MinimumAge.Off, week));
+        Assert.Equal(week, MinimumAge.Stricter(week, MinimumAge.Off));
+        Assert.False(MinimumAge.Stricter(MinimumAge.Off, MinimumAge.Off).IsOn);
+    }
+
+    /// <summary>
+    /// The winner is returned whole, so the sentence a plan prints still names a window somebody
+    /// asked for rather than one built out of two.
+    /// </summary>
+    [Fact]
+    public void TheWinningGuardKeepsItsOwnDescription()
+    {
+        var combined = MinimumAge.Stricter(
+            MinimumAge.WithinHours(8, Now), MinimumAge.Within(TimeSpan.FromDays(7), Now));
+
+        Assert.Equal("7 days", combined.Describe());
+    }
+
+    private static long FileTime(DateTime utc) => (utc - new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc)).Ticks;
 }

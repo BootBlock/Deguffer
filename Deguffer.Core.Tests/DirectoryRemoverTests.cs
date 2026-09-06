@@ -370,4 +370,134 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.Equal(0, outcome.Kept);
         Assert.Equal(2048, outcome.BytesReclaimed);
     }
+
+    /// <summary>
+    /// The bound <c>%TEMP%</c> exists for: the contents go and the folder stays. Windows does not
+    /// put a deleted temporary folder back, so a removal that took it would break the next
+    /// installer on the machine.
+    /// </summary>
+    [Fact]
+    public async Task KeepsTheRootWhereTheBoundsSayToAndStillEmptiesIt()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        _temp.CreateFile(1024, "scratch", "a.tmp");
+        _temp.CreateFile(2048, "scratch", "nested", "b.tmp");
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, bounds: new RemovalBounds(KeepRoot: true, []));
+
+        Assert.True(Directory.Exists(root), "the folder the bounds said to keep was removed");
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(1024 + 2048, outcome.BytesReclaimed);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+    }
+
+    /// <summary>
+    /// §5.3's second exclusion, and the one an age cannot express: an entry a program is working in
+    /// stays, however old everything inside it is.
+    /// </summary>
+    [Fact]
+    public async Task LeavesASparedEntryAndEverythingUnderIt()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live-session");
+        TempDirectory.Age(_temp.CreateFile(4096, "scratch", "live-session", "deep", "notes.txt"), TimeSpan.FromDays(30));
+        TempDirectory.Age(_temp.CreateFile(1024, "scratch", "abandoned.tmp"), TimeSpan.FromDays(30));
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, bounds: new RemovalBounds(KeepRoot: true, [live]));
+
+        Assert.True(File.Exists(Path.Combine(live, "deep", "notes.txt")), "a spared entry was emptied");
+        Assert.Equal(1, outcome.Spared);
+        Assert.Equal(1024, outcome.BytesReclaimed);
+        Assert.False(File.Exists(Path.Combine(root, "abandoned.tmp")));
+    }
+
+    /// <summary>
+    /// §6.3 on the comparison rather than on a deletion, which is the only place it can be observed
+    /// here: an enumeration below an extended root yields extended children, so a spared set holding
+    /// display paths would match none of them.
+    ///
+    /// <para>That failure is silent and runs in the dangerous direction — every spared entry would
+    /// be deleted, and the outcome would look exactly like a successful clear. The assertion is
+    /// therefore on what survived a spare declared in display form, which is the form a plan carries.
+    /// Stripping <c>LongPath.Extended</c> from <c>RemovalBounds.SparedPaths</c> fails this and
+    /// nothing else in the suite.</para>
+    /// </summary>
+    [Fact]
+    public async Task MatchesASparedPathDeclaredInDisplayFormAgainstTheExtendedPathsTheWalkSees()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        TempDirectory.Age(_temp.CreateFile(512, "scratch", "held", "payload.bin"), TimeSpan.FromDays(30));
+
+        var spared = Path.Combine(root, "held");
+        Assert.DoesNotContain(@"\\?\", spared, StringComparison.Ordinal);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, bounds: new RemovalBounds(KeepRoot: true, [spared]));
+
+        Assert.Equal(1, outcome.Spared);
+        Assert.True(File.Exists(Path.Combine(spared, "payload.bin")), "the spared entry was deleted");
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// A spared entry is spared whatever it turns out to be, links included. Removing the link is
+    /// still taking the scratch directory away from whatever was handed it.
+    /// </summary>
+    [Fact]
+    public async Task LeavesASparedEntryThatTurnedOutToBeALink()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var target = _temp.CreateDirectory("elsewhere");
+        var link = Path.Combine(root, "session");
+
+        Directory.CreateSymbolicLink(link, target);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, bounds: new RemovalBounds(KeepRoot: true, [link]));
+
+        Assert.Equal(1, outcome.Spared);
+        Assert.True(Directory.Exists(link), "a spared link was removed");
+    }
+
+    /// <summary>
+    /// A temporary folder that is itself a junction is left entirely alone, rather than having the
+    /// link removed as an ordinary removal would.
+    ///
+    /// Removing it would destroy the very path the caller said must survive, and following it would
+    /// empty a tree nobody classified — the vacuous §5.6 negative, since every survivor named for
+    /// that root resolves through the link.
+    /// </summary>
+    [Fact]
+    public async Task RemovesNothingWhenTheRootIsALinkAndTheBoundsSayToKeepIt()
+    {
+        var target = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(2048, "elsewhere", "payload.bin");
+
+        var link = Path.Combine(_temp.Path, "scratch");
+        Directory.CreateSymbolicLink(link, target);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            link, bounds: new RemovalBounds(KeepRoot: true, []));
+
+        Assert.True(Directory.Exists(link), "the link the caller said to keep was removed");
+        Assert.True(File.Exists(Path.Combine(target, "payload.bin")), "the removal followed a link");
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.False(outcome.RootRemoved);
+    }
+
+    /// <summary>
+    /// A folder that is not there is not the success it is for a deletion: the caller asked for a
+    /// directory that is meant to still exist, and it does not.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotCallAMissingFolderRemovedWhenItWasMeantToStay()
+    {
+        var outcome = await DirectoryRemover.RemoveAsync(
+            Path.Combine(_temp.Path, "never-existed"),
+            bounds: new RemovalBounds(KeepRoot: true, []));
+
+        Assert.False(outcome.RootRemoved);
+    }
 }

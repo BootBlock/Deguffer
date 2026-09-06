@@ -276,6 +276,63 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// The same evidence asked from the other end, for a scratch folder whose children nobody can
+    /// name in advance: which entry of this folder is something working in?
+    ///
+    /// <para>The answer is the immediate child rather than the process's own directory, because the
+    /// child is the unit a plan can spare. A process four levels down still makes the one entry
+    /// below the folder off limits, and nothing smaller can be expressed to a removal.</para>
+    /// </summary>
+    [Fact]
+    public void NamesTheImmediateChildOfAScratchFolderThatSomethingIsWorkingIn()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var session = _temp.CreateDirectory("scratch", "session-1");
+        var deep = _temp.CreateDirectory("scratch", "session-1", "build", "objects");
+
+        using var busy = StartWaiting(deep, new LiveTreeQuery(session, session));
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.True(findings.Complete);
+        Assert.Equal(session, Assert.Single(findings.Live).Directory);
+    }
+
+    /// <summary>
+    /// Without this the test above passes on a rule answering "live" to everything it is shown.
+    /// </summary>
+    [Fact]
+    public void NamesNothingInAScratchFolderNobodyIsWorkingIn()
+    {
+        var scratch = _temp.CreateDirectory("quiet");
+        _temp.CreateDirectory("quiet", "session-1");
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.True(findings.Complete);
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
+    /// A process sitting in the scratch folder itself names no child, and must not name the folder.
+    ///
+    /// The folder is never removed, so there would be nothing to spare — and reporting it would
+    /// spare every entry in it, which on a machine with a shell open in <c>%TEMP%</c> would silently
+    /// turn the whole row into a no-op.
+    /// </summary>
+    [Fact]
+    public void NamesNothingForAProcessSittingInTheScratchFolderItself()
+    {
+        var scratch = _temp.CreateDirectory("shell");
+
+        using var busy = StartWaiting(scratch, new LiveTreeQuery(scratch, scratch));
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
     /// A program that waits without reading its console, so it can be started with a chosen working
     /// directory and left running for the length of one test.
     /// </summary>
