@@ -180,6 +180,8 @@ large and tempting, but the failure modes are severe and the safe operations are
 - [Specification](docs/todo/_spec.md) — the safety model, the audit evidence behind it, and the
   decided toolchain
 - [CLAUDE.md](CLAUDE.md) — engineering gates for contributors and agents
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to ask for a change, and why pull requests are not
+  accepted
 
 ## Licence
 
