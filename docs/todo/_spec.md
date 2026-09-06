@@ -413,6 +413,13 @@ not the shell asked.
 
 1. **Detecting an unused toolchain.** Android SDK and PlatformIO are 12 GB combined and pure waste
    *if* idle. Last-access times are unreliable on NTFS by default — is there a better signal?
+
+   **Answered for PlatformIO, and not with a signal.** `pio system prune --dry-run` reports which
+   installed packages no installed development platform still requires. It is free to ask, it is
+   non-destructive, and it is the tool's own judgement rather than an inference from a timestamp —
+   so the provider offers that figure and nothing else, and offers no row at all where it comes back
+   zero. The question narrows to the Android SDK, and to any toolchain whose own tooling will not
+   answer it.
 2. **Per-workspace attribution for editor state.** `workspaceStorage` folders are opaque hashes;
    the mapping to a real path lives in each folder's `workspace.json`. Worth confirming this is
    stable across editor versions before depending on it.

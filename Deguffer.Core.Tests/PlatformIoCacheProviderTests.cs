@@ -59,6 +59,60 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         return siblings;
     }
 
+    /// <summary>
+    /// What <c>pio system prune --core-packages --platform-packages --dry-run</c> printed on the
+    /// surveyed machine: two installed <c>espressif32</c> versions between them referenced every
+    /// tool package, so nothing was reclaimable.
+    /// </summary>
+    private const string NothingUnnecessary =
+        """
+        Dry run mode (do not prune, only show data that will be removed)
+
+        Prune unnecessary core packages:
+        Calculating...
+        Space on disk: 0B
+
+        Prune unnecessary development platform packages:
+        Calculating...
+        Space on disk: 0B
+
+        Total reclaimed space: 0B
+        """;
+
+    /// <summary>
+    /// The same report from a machine that upgraded a platform in place, leaving the superseded
+    /// toolchain behind — the case the package row exists for.
+    /// </summary>
+    private const string ASupersededToolchain =
+        """
+        Dry run mode (do not prune, only show data that will be removed)
+
+        Prune unnecessary core packages:
+        Calculating...
+        Space on disk: 0B
+
+        Prune unnecessary development platform packages:
+        Calculating...
+        Package                                     Version              Size
+        ------------------------------------------  -------------------  ---------
+        platformio/toolchain-xtensa-esp32 @ ~8.4.0  8.4.0+2021r2-patch5  256.34MB
+        Space on disk: 256.34MB
+
+        Total reclaimed space: 256.34MB
+        """;
+
+    /// <summary>256.34 × 1,048,576, which is what PlatformIO's humanised total can mean.</summary>
+    private const long SupersededToolchainBytes = 268_791_972;
+
+    /// <summary>A runner that answers the package dry run and nothing else.</summary>
+    private static FakeProcessRunner Reporting(string pruneReport) =>
+        new FakeProcessRunner().Responding("--dry-run", pruneReport);
+
+    private static RunCommandStep StepContaining(CleanupPlan plan, string argument) =>
+        Assert.Single(
+            plan.Steps.OfType<RunCommandStep>(),
+            step => step.Arguments.Contains(argument, StringComparison.Ordinal));
+
     private static string InfoJson(string? coreDir = null, string? cacheDir = null)
     {
         var fields = new Dictionary<string, object>();
@@ -192,21 +246,237 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The scoping flag is the safety property. An unscoped prune also removes "unnecessary" core
-    /// and platform packages — a judgement about installed toolchains that is the user's to make.
+    /// The scoping flag is the safety property, and it survives the packages being offered too. An
+    /// unscoped prune does the cache and the packages under one description, so the user would be
+    /// agreeing to a toolchain removal by agreeing to clear a cache. Two flags, two rows, two
+    /// decisions.
     /// </summary>
     [Fact]
-    public async Task ScopesPruneToTheCacheSoInstalledPackagesAreNeverItsBusiness()
+    public async Task ScopesTheCacheStepToTheCacheEvenWhenPackagesAreOfferedBesideIt()
     {
         _environment.WithExecutable("pio");
         CreateCache();
+        CreateInstalledToolchains();
 
-        var plan = await CreateProvider().PlanAsync();
+        var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
 
-        var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
-        Assert.Contains("--cache", step.Arguments, StringComparison.Ordinal);
+        var step = StepContaining(plan, "--cache");
         Assert.DoesNotContain("--core-packages", step.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("--platform-packages", step.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §5.1 for the half of this directory that holds the gigabytes: PlatformIO is asked what its
+    /// own prune would remove, and that answer is the offer.
+    /// </summary>
+    [Fact]
+    public async Task OffersWhatPlatformIoReportsAsUnnecessaryAsASecondStep()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+        var provider = CreateProvider(Reporting(ASupersededToolchain));
+
+        var plan = await provider.PlanAsync();
+
+        var step = StepContaining(plan, "--core-packages");
+        Assert.Contains("--platform-packages", step.Arguments, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine(provider.CoreRoot, "packages"), step.MeasuredPaths);
+
+        // The figure is PlatformIO's own, rounded to two decimal places before Deguffer sees it —
+        // never a measurement of the packages directory, which holds far more than this.
+        Assert.Equal(SupersededToolchainBytes, step.EstimatedBytes);
+        Assert.True(step.Estimated.IsApproximate);
+    }
+
+    /// <summary>
+    /// The two figures are different kinds of number and must stay apart. Deguffer's probe counts
+    /// every toolchain in <c>packages</c>, most of which stays; PlatformIO's estimate counts only
+    /// what it would remove. The executor subtracts its after-measure from the probe, so pairing it
+    /// with the estimate instead would report a reclaim of minus the whole directory.
+    /// </summary>
+    [Fact]
+    public async Task CarriesDeguffersOwnProbeSeparatelyFromPlatformIosEstimate()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+
+        var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
+
+        var step = StepContaining(plan, "--core-packages");
+        Assert.NotNull(step.MeasuredBefore);
+
+        var probed = step.MeasuredBefore.Value;
+        Assert.True(probed.Reclaimable > 0, "The packages directory was not probed at all.");
+        Assert.NotEqual(step.Estimated.Reclaimable, probed.Reclaimable);
+    }
+
+    /// <summary>
+    /// The command that asks must not be able to remove anything. <c>--dry-run</c> is read-only in
+    /// PlatformIO's source, and <c>--force</c> is deliberately absent from it: were the dry-run flag
+    /// ever lost from that string, what is left prompts and aborts rather than pruning in silence.
+    /// </summary>
+    [Fact]
+    public async Task AsksWithADryRunThatWouldStopAndAskIfItEverStoppedBeingOne()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        var runner = Reporting(ASupersededToolchain);
+
+        await CreateProvider(runner).PlanAsync();
+
+        var asked = Assert.Single(runner.Invocations, i =>
+            i.Arguments.Contains("--core-packages", StringComparison.Ordinal));
+
+        Assert.Contains("--dry-run", asked.Arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("--force", asked.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>The evidence behind a multi-gigabyte row: PlatformIO's own list, named.</summary>
+    [Fact]
+    public async Task NamesThePackagesPlatformIoFlagged()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+
+        var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("platformio/toolchain-xtensa-esp32 @ ~8.4.0", StringComparison.Ordinal)
+            && n.Message.Contains("256.34MB", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The surveyed machine's own answer. Two installed platform versions referenced every tool
+    /// package, so the honest offer is no row at all — and the packages directory is not even
+    /// measured, because there is nothing for the measurement to inform.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoPackageRowWherePlatformIoReportsNothingUnnecessary()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+        var provider = CreateProvider(Reporting(NothingUnnecessary));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.DoesNotContain(
+            Path.Combine(provider.CoreRoot, "packages"),
+            plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths));
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("nothing unnecessary", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A report Deguffer cannot read is not a zero, and the difference matters: the only substitute
+    /// figure available is a measurement of <c>packages</c>, which counts the toolchains every
+    /// installed platform still needs. Nothing is offered, and the user is told why.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoPackageRowWhenPlatformIoWillNotSayWhatItWouldRemove()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+        var provider = CreateProvider(Reporting("Usage: pio system prune [OPTIONS]"));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.DoesNotContain(
+            Path.Combine(provider.CoreRoot, "packages"),
+            plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths));
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("did not report", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The two halves are independent subjects, and the larger one must not depend on the smaller
+    /// one existing. A machine that has never populated its cache can still hold a superseded
+    /// toolchain, and that is the whole of what this provider is for.
+    /// </summary>
+    [Fact]
+    public async Task StillOffersUnusedPackagesWhenTheCacheDirectoryDoesNotExist()
+    {
+        _environment.WithExecutable("pio");
+        CreateInstalledToolchains();
+
+        var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
+
+        var step = StepContaining(plan, "--core-packages");
+        Assert.Equal(SupersededToolchainBytes, step.EstimatedBytes);
+        Assert.DoesNotContain(plan.Steps.OfType<RunCommandStep>(), s =>
+            s.Arguments.Contains("--cache", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.1 and §5.6 with the package row in play, which is when the negative is worth most: the
+    /// step reaches inside <c>packages</c>, so every sibling and the folder itself are asserted to
+    /// survive rather than merely left unmentioned.
+    /// </summary>
+    [Fact]
+    public async Task TargetsNoPathAndProtectsTheToolchainsEvenWhenPackagesAreOffered()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        var siblings = CreateInstalledToolchains();
+        var provider = CreateProvider(Reporting(ASupersededToolchain));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, plan.Steps.OfType<RunCommandStep>().Count());
+        Assert.Empty(plan.TargetedPaths);
+
+        foreach (var sibling in siblings.Append(provider.CoreRoot))
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        }
+    }
+
+    /// <summary>
+    /// PLATFORMIO_CORE_DIR moves the whole core directory, and §5.6's assertions have to move with
+    /// it. Built from the default profile location instead, every protected path would be absent and
+    /// recorded as never present — six checks that pass while establishing nothing, on exactly the
+    /// installs where the guess about where PlatformIO lives has already been shown wrong.
+    /// </summary>
+    [Fact]
+    public async Task ProtectsTheCoreDirectoryPlatformIoReportedRatherThanTheDefaultOne()
+    {
+        _environment.WithExecutable("pio");
+        var relocated = Path.Combine(_temp.Path, "elsewhere", ".platformio");
+
+        string[] siblings = ["packages", "platforms", "penv", "python3", "lib"];
+        foreach (var sibling in siblings)
+        {
+            Directory.CreateDirectory(Path.Combine(relocated, sibling));
+        }
+
+        var runner = new FakeProcessRunner()
+            .Responding("system info", InfoJson(coreDir: relocated))
+            .Responding("--dry-run", ASupersededToolchain);
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(relocated, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+
+        foreach (var sibling in siblings)
+        {
+            var path = Path.Combine(relocated, sibling);
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        }
+
+        Assert.Contains(
+            Path.Combine(relocated, "packages"),
+            StepContaining(plan, "--core-packages").MeasuredPaths);
     }
 
     /// <summary>
