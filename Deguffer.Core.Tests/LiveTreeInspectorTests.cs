@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
@@ -331,6 +332,67 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         Assert.Empty(findings.Live);
     }
+
+    /// <summary>
+    /// A working directory is compared in the form the filesystem stores it, not in whatever form
+    /// the process happens to hold.
+    ///
+    /// <para><b>This is a safety assertion, and it was found by driving the real app.</b> Windows
+    /// sets the per-user <c>TEMP</c> variable to its 8.3 form on a profile whose folder name exceeds
+    /// eight characters, so a program that resolves its scratch folder from the environment reports
+    /// a working directory such as <c>C:\Users\LONGPR~1\...</c>. That is inside <c>%TEMP%</c> and
+    /// compares as though it were not, and the veto then misses a directory somebody is working in
+    /// — the direction that deletes.</para>
+    ///
+    /// <para>The fixture addresses the directory in whichever form this volume will hand back
+    /// differently: its 8.3 alias where 8.3 name creation is on, and lower case otherwise. Both go
+    /// through the same normalisation, so the assertion holds either way — but only the first of
+    /// them exercises the containment failure, so on a volume with 8.3 disabled this proves the
+    /// call happens rather than proving what it prevents.</para>
+    /// </summary>
+    [Fact]
+    public void NormalisesAWorkingDirectoryHeldInAFormTheFilesystemDoesNotUse()
+    {
+        var scratch = _temp.CreateDirectory("Scratch");
+        var session = _temp.CreateDirectory("Scratch", "Session-One");
+
+        var asAddressed = ShortFormOf(session) ?? session.ToLowerInvariant();
+        Assert.NotEqual(session, asAddressed, StringComparer.Ordinal);
+
+        using var busy = StartWaiting(asAddressed, new LiveTreeQuery(session, session));
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        // Ordinal, because the whole question is which form came back.
+        Assert.Equal(session, Assert.Single(findings.Live).Directory, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The 8.3 alias for <paramref name="path"/>, or null where this volume creates none.
+    ///
+    /// Asked of Windows rather than constructed, because whether short names exist at all is a
+    /// per-volume setting and the alias's digits depend on what else is in the folder.
+    /// </summary>
+    private static string? ShortFormOf(string path)
+    {
+        var length = GetShortPathName(path, null, 0);
+
+        if (length == 0)
+        {
+            return null;
+        }
+
+        var buffer = new char[length];
+        var written = GetShortPathName(path, buffer, length);
+        var shortForm = written > 0 && written < length ? new string(buffer, 0, (int)written) : null;
+
+        return string.Equals(shortForm, path, StringComparison.Ordinal) ? null : shortForm;
+    }
+
+    // DllImport rather than LibraryImport, which needs AllowUnsafeBlocks; the test project does not
+    // enable it and one fixture helper is a poor reason to.
+    [DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(string path, [Out] char[]? buffer, uint length);
 
     /// <summary>
     /// A program that waits without reading its console, so it can be started with a chosen working
