@@ -56,7 +56,7 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTh
 
         using var registration = ct.Register(dialog.Hide);
 
-        var result = await dialog.ShowAsync();
+        var result = await ModalDialog.ShowAsync(dialog);
 
         return result == ContentDialogResult.Primary
             ? new Confirmation(requirement.ProviderId, typed?.Text)

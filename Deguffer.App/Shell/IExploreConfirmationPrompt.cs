@@ -60,6 +60,6 @@ public sealed class ContentDialogExploreConfirmation(XamlRoot xamlRoot, ElementT
 
         using var registration = ct.Register(dialog.Hide);
 
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
     }
 }
