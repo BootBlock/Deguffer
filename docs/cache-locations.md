@@ -2366,16 +2366,32 @@ unticked with that reason on it.
 ### What is refused
 
 A temporary folder is the one location Deguffer is *told* about rather than knowing, because
-`%TEMP%` is an environment variable anything on the machine may have written. Two settings are
+`%TEMP%` is an environment variable anything on the machine may have written. Four settings are
 declined outright, with the reason shown in the preview:
 
 - One pointing at the root of a drive or a share, where emptying it would take the whole volume.
 - One that *contains* a directory Windows is built out of — the profile, either program directory,
   the Windows directory, or the machine-wide application data.
+- **One Deguffer does not recognise as a temporary folder at all.** This is the rule that does the
+  work. Neither `C:\Users\<user>\Documents` nor `C:\Windows\System32` holds anything structural, so
+  the test above passes them both — and a row labelled "Temporary files" would then delete every
+  file in them older than a week. What Deguffer recognises is a folder called `Temp` or `Tmp`, or
+  one sitting directly inside one: the default location, a `D:\Temp` you chose, and the numbered
+  per-session folders a Remote Desktop host hands out. A scratch folder called something else is
+  left alone and says so. That is deliberate rather than a limitation — Deguffer will not empty a
+  folder on the strength of a setting alone.
+- **One that nests with a folder already being offered.** Two temporary folders where one sits
+  inside the other is the pairing that destroys a live `%TEMP%`: emptying the outer one deletes the
+  inner folder rather than clearing it, and Windows does not put it back. A Remote Desktop session
+  host produces exactly that by default, so the folder your programs actually resolve to is the one
+  kept.
 
 A temporary folder that turns out to be a link to somewhere else is declined too, on the rule that
 applies everywhere in Deguffer: it does not delete through a link, because what is on the far side
 was never classified.
+
+`C:\Windows\Temp` is declared before any of your account's settings are read, so a `%TEMP%`
+pointing into it is offered once, with the administrator rights it needs, rather than twice.
 
 ### What is protected
 
