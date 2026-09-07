@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -15,12 +16,17 @@ namespace Deguffer.Core.Providers;
 /// Three requirements follow, and all three are met here rather than in the shell.</para>
 ///
 /// <list type="number">
-/// <item><b>An age filter, and one Deguffer imposes rather than one the user sets.</b> Nothing older
-/// than <see cref="StaleAfter"/> is offered, whatever the guard on recently changed files is set to
-/// — the plan carries that as its own <see cref="CleanupPlan.Keep"/>, and
-/// <see cref="MinimumAge.Stricter"/> is what stops a user's shorter window loosening it. Seven days
-/// is what Windows' own Disk Cleanup applies to these two folders, so it is the interval a machine
-/// already behaves as though it had.</item>
+/// <item><b>An age filter of this provider's own, which the guard on recently changed files cannot
+/// loosen.</b> The plan carries it as its own <see cref="CleanupPlan.Keep"/>, and
+/// <see cref="MinimumAge.Stricter"/> is what makes the two compose rather than compete. Seven days
+/// by default, which is what Windows' own Disk Cleanup applies to these two folders — so an
+/// untouched install offers what the machine already behaves as though it would.
+///
+/// <para>It is a setting, and
+/// <see cref="Configuration.AppPreferences.MinimumTemporaryFileAgeDays"/> may be zero, which is no
+/// age limit at all. That is the one value on this page that removes a safety rule rather than
+/// adjusting it, so the row says so on a warning whenever it is in force. The other two
+/// requirements below are unaffected by it, and they are what is left.</para></item>
 /// <item><b>Exclusion of what a running program is using.</b> An entry a process is running from or
 /// working in is never a target, however old its files are: the process holding it may have opened
 /// nothing this minute, so nothing is locked and the timestamps prove nothing.
@@ -58,20 +64,29 @@ namespace Deguffer.Core.Providers;
 public sealed class TempDirectoryProvider : CleanupProviderBase
 {
     /// <summary>
-    /// How long something must have sat untouched before this provider will offer it.
+    /// The bounds on <see cref="Configuration.AppPreferences.MinimumTemporaryFileAgeDays"/>,
+    /// clamped here as well as in the settings box because nothing validates
+    /// <c>preferences.json</c> on the way in.
     ///
-    /// <para>Seven days, which is §5.3's own suggestion and is also what Windows applies to these
-    /// two folders through Disk Cleanup and Storage Sense. Matching it means Deguffer offers what
-    /// the machine would already have removed on its own, rather than inventing a threshold nothing
-    /// else on the system agrees with.</para>
-    ///
-    /// <para>Public because it is the number the row's own sentences quote, and a constant quoted in
-    /// prose is one a test can hold the prose to.</para>
+    /// <para><b>Zero is deliberately the floor, and it means no age limit at all.</b> Every other
+    /// bound in this project exists to stop a value reaching something dangerous;
+    /// <see cref="FileHistoryProvider.MinimumRetentionDays"/> is one for that reason. This one
+    /// admits the dangerous value on purpose, because the alternative was a rule nobody could reach
+    /// past on their own machine — and it is admitted with the consequence stated on the row rather
+    /// than quietly. See the preference for what still protects a file at zero and what does
+    /// not.</para>
     /// </summary>
-    public static readonly TimeSpan StaleAfter = TimeSpan.FromDays(7);
+    public const int MinimumStaleDays = 0;
+
+    /// <summary>
+    /// A year. Past that the setting stops being "leave what is in use alone" and becomes a way of
+    /// switching the row off, which the tick box beside it already does more plainly.
+    /// </summary>
+    public const int MaximumStaleDays = 365;
 
     private readonly ILiveTreeInspector _liveTrees;
     private readonly ISystemDirectories _system;
+    private readonly ICurrentPreferences _preferences;
     private TempRootSet? _roots;
 
     public TempDirectoryProvider(
@@ -80,7 +95,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        ILiveTreeInspector? liveTrees = null)
+        ILiveTreeInspector? liveTrees = null,
+        ICurrentPreferences? preferences = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -89,6 +105,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+        _preferences = preferences ?? DefaultPreferences.Instance;
     }
 
     public override string Id => "temp-directories";
@@ -97,13 +114,28 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    /// <summary>
+    /// §7's cost sentence, and it quotes the cut-off actually in force rather than a number this
+    /// provider used to hard-code.
+    ///
+    /// <para><b>It has to move with the setting, and it is the sentence most likely to be
+    /// believed.</b> A row asserting "nothing offered here was touched inside seven days" while
+    /// running at two days is false by five, about the primary — and at zero the only — safety
+    /// mechanism the location has. The plan note beside it already quoted the real number, so the
+    /// two sentences on one row disagreed with each other.</para>
+    /// </summary>
     public override string WhatHappensOnNextUse =>
-        "Nothing that is running is affected. Everything offered here was last touched more than "
-        + "seven days ago, and anything a running program is working in is left where it is. What "
-        + "you lose is whatever a program stored in a temporary folder and still expects to find "
-        + "there, which installers and crash reporters occasionally do.";
+        $"Nothing that is running is affected. {OfferedPhrase(ConfiguredDays)} Anything a running "
+        + "program is working in is left where it is, and what you lose is whatever a program "
+        + "stored in a temporary folder and still expects to find there — which installers and "
+        + "crash reporters occasionally do.";
 
-    public override ProviderDescription Description { get; } = new()
+    /// <summary>
+    /// Computed rather than fixed at construction, for the reason
+    /// <see cref="WhatHappensOnNextUse"/> gives: the recommendation states the same cut-off, and a
+    /// provider whose two descriptions disagree about it is worse than one that states neither.
+    /// </summary>
+    public override ProviderDescription Description => new()
     {
         Application = "Windows, and every program on the machine that writes scratch files",
         Publisher = "Microsoft, and whichever program left each file behind",
@@ -111,10 +143,51 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             + "temporary folder and are meant to clear up afterwards. A great many never do, so "
             + "both folders grow without limit — this account's own, and the one Windows and its "
             + "services share.",
-        Recommendation = "Live working files sit among abandoned ones and look identical, so "
-            + "Deguffer offers only what nothing has touched for a week and leaves alone anything a "
-            + "running program is working in.",
+        Recommendation = ConfiguredDays > 0
+            ? "Live working files sit among abandoned ones and look identical, so Deguffer offers "
+                + $"only what nothing has touched for {Describe(ConfiguredDays)} and leaves alone "
+                + "anything a running program is working in."
+            : "Live working files sit among abandoned ones and look identical, and the age limit "
+                + "that told them apart is set to none. What a running program is working in, or "
+                + "holds open, is still left alone; nothing else here is, unless your guard on "
+                + "recently changed files holds it.",
     };
+
+    /// <summary>
+    /// The age limit in force, in whole days, clamped because nothing validates
+    /// <c>preferences.json</c> on the way in.
+    ///
+    /// <para>Read at the moment it is needed rather than held from construction, so a change in
+    /// Settings takes effect from the next preview — and read through one property rather than at
+    /// each of the three places that quote it, because a row whose sentences disagreed about the
+    /// cut-off is the defect this replaced.</para>
+    /// </summary>
+    private int ConfiguredDays => Math.Clamp(
+        _preferences.Current.MinimumTemporaryFileAgeDays, MinimumStaleDays, MaximumStaleDays);
+
+    /// <summary>
+    /// The sentence naming what is offered, for the two places that both state it.
+    ///
+    /// <para><b>The zero case says what this location does rather than what the run will do</b>, and
+    /// the distinction is the difference between true and false. This property is the provider's,
+    /// asked without a plan, so it cannot see the user's own guard on recently changed files — and
+    /// on a machine with no age limit here but an eight-hour guard set there, "everything is offered
+    /// however recently it was written" is contradicted by the estimate, by the plan's own note, and
+    /// by the note <see cref="CleanupProviderBase"/> adds beside it. Naming the absence of a limit
+    /// <em>of its own</em> is true either way, and points at the setting that is doing the
+    /// work.</para>
+    /// </summary>
+    private static string OfferedPhrase(int days) => days > 0
+        ? $"Everything offered here was last touched more than {Describe(days)} ago."
+        : "This location has no age limit of its own, so nothing here is held back for being "
+            + "recent unless your guard on recently changed files holds it.";
+
+    /// <summary>
+    /// A whole number of days as the phrase a row prints. <see cref="MinimumAge.Describe"/> answers
+    /// for a window that is on; this one is asked before there is a window, and about a value that
+    /// may be zero.
+    /// </summary>
+    private static string Describe(int days) => days == 1 ? "a day" : $"{days} days";
 
     /// <summary>
     /// The folders this provider would reach into, and any that named themselves and were refused.
@@ -141,10 +214,15 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
+        var days = ConfiguredDays;
+
         // Fixed once, here, for the same reason MinimumAge is an instant rather than a duration: the
         // preview and the clean must agree about which files are old enough, however long the
         // preview sits on screen before the user presses Clean.
-        var floor = MinimumAge.Within(StaleAfter, DateTime.UtcNow);
+        //
+        // A window of zero is MinimumAge.Off, which is the whole of what "no age limit" needs to
+        // mean — Stricter then yields the user's own guard, or nothing at all.
+        var floor = MinimumAge.Within(TimeSpan.FromDays(days), DateTime.UtcNow);
         var effective = MinimumAge.Stricter(keep, floor);
 
         var scan = DeclaredLocations.Examine(Roots.Roots, ct);
@@ -168,11 +246,36 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         var (planned, measured) = await PlanDeletionsAsync(scan.Targets, effective, ct).ConfigureAwait(false);
         var (steps, spared) = await SpareAsync(planned, live, effective, ct).ConfigureAwait(false);
 
-        notes.Add(new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Only what nothing has touched for {floor.Describe()} is offered. A temporary "
-            + "folder holds live working files among abandoned ones, and there is nothing but age "
-            + "to tell them apart."));
+        // Three sentences, because there are three states and the difference between them is a rule
+        // and its absence. Saying "only what nothing has touched for 0 days is offered" would read
+        // like a safeguard and describe none.
+        //
+        // The alarming one is chosen on the guard actually in force rather than on this provider's
+        // own, which is the distinction that made it wrong: with no floor but a guard the user set,
+        // recent files are held back after all, and a warning saying otherwise contradicts the note
+        // CleanupProviderBase adds a moment later.
+        notes.Add((floor.IsOn, effective.IsOn) switch
+        {
+            (true, _) => new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Only what nothing has touched for {floor.Describe()} is offered. A temporary "
+                + "folder holds live working files among abandoned ones, and there is nothing but "
+                + "age to tell them apart."),
+
+            // No limit of its own, and the user's guard is the whole of what holds anything back.
+            // Information rather than a warning, because something does.
+            (false, true) => new PlanNote(
+                PlanNoteSeverity.Information,
+                "No age limit is set for temporary files, so the only thing holding anything back "
+                + "here is your guard on recently changed files."),
+
+            _ => new PlanNote(
+                PlanNoteSeverity.Warning,
+                "No age limit is set, so everything in these folders is offered however recently it "
+                + "was written. A temporary folder holds live working files among abandoned ones, "
+                + "and age is the only thing that tells them apart. Anything a running program is "
+                + "working in, or holds open, is still left alone."),
+        });
 
         // Named by the entry alone. LiveTreeVeto's default names a directory by the project folder
         // holding it, which a scratch entry does not have.

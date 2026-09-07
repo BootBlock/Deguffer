@@ -173,6 +173,60 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { FileHistoryRetentionDays = WholeDays(value) });
     }
 
+    /// <summary>
+    /// The bounds on the temporary-file age, read from the provider that clamps to them so the box
+    /// and the value it produces cannot disagree.
+    /// </summary>
+    public double MinimumTemporaryFileAgeDays => TempDirectoryProvider.MinimumStaleDays;
+
+    public double MaximumTemporaryFileAgeDays => TempDirectoryProvider.MaximumStaleDays;
+
+    /// <summary>
+    /// How long something must sit untouched in a temporary folder before Deguffer offers it, on
+    /// the same terms as the two boxes above: a <see cref="double"/> because that is what a
+    /// <c>NumberBox</c> exposes, and an emptied box reports <see cref="double.NaN"/>.
+    ///
+    /// <para>NaN falls back to the shipped seven days rather than to the floor, for the reason
+    /// <see cref="FileHistoryRetentionDays"/> gives and more sharply: clearing the field is not a
+    /// request to delete everything in <c>%TEMP%</c> however recently it was written, and zero is
+    /// the value that does exactly that.</para>
+    /// </summary>
+    public double MinimumTemporaryFileAge
+    {
+        get => _preferences.Current.MinimumTemporaryFileAgeDays;
+        set => Apply(current => current with { MinimumTemporaryFileAgeDays = WholeStaleDays(value) });
+    }
+
+    /// <summary>
+    /// <see cref="MidpointRounding.AwayFromZero"/> rather than the default, which is the one place
+    /// on this page the difference decides a safety rule.
+    ///
+    /// <para>Zero here is not the smallest window but the absence of one, so every fraction of a
+    /// day has to land on <c>1</c> rather than on it. Rounding alone does not do that, in either
+    /// mode: <c>Math.Round</c> sends a midpoint to even so <c>0.5</c> becomes <b>0</b>, and
+    /// <see cref="MidpointRounding.AwayFromZero"/> moves only the midpoint, leaving every value in
+    /// <c>(0, 0.5)</c> on zero as well. Somebody typing <c>0.25</c> and meaning "a short window"
+    /// would have stored the value that offers every file in both folders however recently it was
+    /// written, without ever choosing it. So anything above zero and below a day is raised
+    /// outright, and the rounding decides only between whole days above that.</para>
+    ///
+    /// <para><see cref="WholeDays"/> below does the same arithmetic and needs none of this: its
+    /// clamp floor is one, so no rounding can reach a dangerous value there.</para>
+    /// </summary>
+    private int WholeStaleDays(double value)
+    {
+        if (double.IsNaN(value))
+        {
+            return AppPreferences.Default.MinimumTemporaryFileAgeDays;
+        }
+
+        // Zero itself is a deliberate choice and passes through. Anything between zero and a day is
+        // somebody asking for a short window, and the shortest one that exists is a day.
+        var days = value > 0 && value < 1 ? 1 : Math.Round(value, MidpointRounding.AwayFromZero);
+
+        return (int)Math.Clamp(days, MinimumTemporaryFileAgeDays, MaximumTemporaryFileAgeDays);
+    }
+
     private int WholeDays(double value) => double.IsNaN(value)
         ? AppPreferences.Default.FileHistoryRetentionDays
         : (int)Math.Clamp(

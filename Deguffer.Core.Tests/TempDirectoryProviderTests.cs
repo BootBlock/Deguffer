@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -32,13 +33,16 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
     private string MachineTemp => Path.Combine(_system.WindowsDirectory, "Temp");
 
-    private TempDirectoryProvider CreateProvider(ILiveTreeInspector? liveTrees = null) =>
+    private TempDirectoryProvider CreateProvider(
+        ILiveTreeInspector? liveTrees = null,
+        AppPreferences? preferences = null) =>
         new(
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             system: _system,
-            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive);
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
+            preferences: new FakePreferences(preferences ?? AppPreferences.Default));
 
     /// <summary>A file old enough for the provider to offer, returned so a test can name it.</summary>
     private string Abandoned(int bytes, params string[] segments) =>
@@ -615,7 +619,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The row states the interval it is applying, and states the one the constant holds. A sentence
+    /// The row states the interval it is applying, and states the one actually in force. A sentence
     /// quoting a different number from the rule it describes is worse than no sentence.
     /// </summary>
     [Fact]
@@ -625,8 +629,236 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
+        Assert.Contains(plan.Notes, n => n.Message.Contains(
+            $"{AppPreferences.Default.MinimumTemporaryFileAgeDays} days", StringComparison.Ordinal));
+
+        // And the number is the setting's rather than a constant of the provider's own.
+        var shorter = await CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 2 }).PlanAsync();
+
+        Assert.Contains(shorter.Notes, n =>
+            n.Message.Contains("2 days", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §7's cost sentence quotes the cut-off in force, not a number fixed when the class was
+    /// written.
+    ///
+    /// <para>It is the sentence the row shows on its face and in its tooltip, so a stale number
+    /// here is the user's check on the only safety mechanism this location has, reading false. The
+    /// recommendation in the provider's own description states the same thing and is asserted with
+    /// it — two sentences on one row disagreeing about the cut-off is worse than neither.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(7, "7 days")]
+    [InlineData(2, "2 days")]
+    [InlineData(1, "a day")]
+    public void StatesTheCutOffInForceOnTheRowItself(int days, string expected)
+    {
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = days });
+
+        Assert.Contains(expected, provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+        Assert.Contains(expected, provider.Description.Recommendation, StringComparison.Ordinal);
+
+        // It is prose on the face of a row, so it has to read like prose. Splitting the sentence
+        // into a helper is what dropped the capital, and no assertion about the number would
+        // notice.
+        Assert.All(
+            Sentences(provider.WhatHappensOnNextUse),
+            sentence => Assert.True(
+                char.IsUpper(sentence[0]),
+                $"a sentence on the row starts in lower case: '{sentence}'"));
+    }
+
+    /// <summary>
+    /// The row's own sentence cannot see the user's guard, so it must not claim the absence of a
+    /// protection that guard may be providing.
+    ///
+    /// <para>Stated as "no age limit of its own", which is true whether or not the guard is set. The
+    /// earlier wording said everything was offered however recently it was written, which the
+    /// estimate, the plan's note and the note beside it all contradicted on a machine with the guard
+    /// on.</para>
+    /// </summary>
+    [Fact]
+    public void DoesNotClaimNothingIsHeldBackWhenItCannotKnow()
+    {
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 });
+
+        Assert.DoesNotContain(
+            "however recently it was written",
+            provider.WhatHappensOnNextUse,
+            StringComparison.Ordinal);
+
+        Assert.Contains("no age limit of its own", provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+    }
+
+    /// <summary>The sentences of a paragraph, for an assertion about how each one starts.</summary>
+    private static IEnumerable<string> Sentences(string prose) => prose
+        .Split(". ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// And at zero it says there is none, rather than quoting a window nobody is applying.
+    /// </summary>
+    [Fact]
+    public void SaysOnTheRowItselfWhenThereIsNoCutOff()
+    {
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 });
+
+        Assert.Contains("no age limit", provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+        Assert.Contains("set to none", provider.Description.Recommendation, StringComparison.Ordinal);
+
+        // The number that would have been wrong is the one that must not appear.
+        Assert.DoesNotContain("seven days", provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+        Assert.DoesNotContain("a week", provider.Description.Recommendation, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// With no floor but a guard the user set, recent files are held back after all — so the row
+    /// must not carry the warning that says nothing is.
+    ///
+    /// <para>The warning is chosen on the guard in force rather than on this provider's own
+    /// contribution to it. Chosen on the floor alone it contradicted the note
+    /// <c>CleanupProviderBase</c> adds a moment later, which correctly says the user's window is
+    /// being honoured.</para>
+    /// </summary>
+    [Fact]
+    public async Task DoesNotWarnThatNothingIsHeldBackWhenTheUsersGuardIs()
+    {
+        _temp.CreateFile(4096, "temp", "being-written.tmp");
+
+        var plan = await CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 })
+            .PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.DoesNotContain(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("however recently it was written", StringComparison.Ordinal));
+
         Assert.Contains(plan.Notes, n =>
-            n.Message.Contains($"{(int)TempDirectoryProvider.StaleAfter.TotalDays} days", StringComparison.Ordinal));
+            n.Message.Contains("guard on recently changed files", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Zero is no age limit, and the point of the setting: a file written this second is offered.
+    ///
+    /// <para>This is the one value on the settings page that removes a safety rule rather than
+    /// adjusting one, so it is asserted end to end rather than on the plan's wording — the file the
+    /// default would have kept has actually gone by the end of it.</para>
+    /// </summary>
+    [Fact]
+    public async Task OffersEverythingWhenTheAgeLimitIsSetToZero()
+    {
+        var justWritten = _temp.CreateFile(4096, "temp", "being-written.tmp");
+
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 });
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(4096, plan.EstimatedBytes);
+        Assert.False(plan.Keep.IsOn, "a floor of zero left a guard on the plan");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(justWritten), "the age limit was set to zero and the file survived");
+        Assert.Equal(4096, result.BytesReclaimed);
+        Assert.True(Directory.Exists(UserTemp), "the folder itself went with its contents");
+    }
+
+    /// <summary>
+    /// Zero says so on a warning rather than reading as a rule that happens to be zero.
+    ///
+    /// <para>"Only what nothing has touched for 0 days is offered" is a sentence shaped like a
+    /// safeguard describing none, and it would sit on the row in the same grey as the scan-route
+    /// note. What survives at zero is named too, because a user who set it should know what is left
+    /// rather than assume it is nothing.</para>
+    /// </summary>
+    [Fact]
+    public async Task SaysPlainlyWhenThereIsNoAgeLimitAtAll()
+    {
+        _temp.CreateFile(4096, "temp", "being-written.tmp");
+
+        var plan = await CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 }).PlanAsync();
+
+        var note = Assert.Single(
+            plan.Notes, n => n.Message.Contains("No age limit", StringComparison.Ordinal));
+
+        Assert.Equal(PlanNoteSeverity.Warning, note.Severity);
+        Assert.Contains("still left alone", note.Message, StringComparison.Ordinal);
+
+        Assert.DoesNotContain(plan.Notes, n =>
+            n.Message.Contains("0 days", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The two guards still compose at zero. Setting no floor is not a way to defeat the user's own
+    /// guard on recently changed files, which is a separate decision about a different question.
+    /// </summary>
+    [Fact]
+    public async Task AGuardTheUserSetStillAppliesWhenThereIsNoFloor()
+    {
+        var justWritten = _temp.CreateFile(4096, "temp", "being-written.tmp");
+
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 });
+
+        var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(0, plan.EstimatedBytes);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(justWritten), "no floor let the clean past the user's own guard");
+    }
+
+    /// <summary>
+    /// A hand-edited <c>preferences.json</c> reaches the provider without passing the settings box,
+    /// so the bounds are applied here as well. A negative is zero, and an absurd number is a year.
+    /// </summary>
+    [Theory]
+    [InlineData(-5, 0)]
+    [InlineData(int.MinValue, 0)]
+    [InlineData(int.MaxValue, TempDirectoryProvider.MaximumStaleDays)]
+    public async Task ClampsAnAgeLimitNothingValidatedOnTheWayIn(int configured, int applied)
+    {
+        Abandoned(1024, "temp", "old.tmp");
+
+        var plan = await CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = configured })
+            .PlanAsync();
+
+        if (applied == 0)
+        {
+            Assert.False(plan.Keep.IsOn);
+            Assert.Equal(1024, plan.EstimatedBytes);
+            return;
+        }
+
+        // A year holds back the thirty-day-old file, which is how the upper clamp is observed.
+        Assert.True(plan.Keep.IsOn);
+        Assert.Equal(0, plan.EstimatedBytes);
+    }
+
+    /// <summary>
+    /// §7's age column is left blank here, and that is a decision rather than an omission.
+    ///
+    /// <para>The age of a temporary folder is whatever any program on the machine wrote last, which
+    /// is seconds ago on every machine for ever. The row would have said "written moments ago"
+    /// beside an offer that excludes everything newer than the cut-off — not merely uninformative,
+    /// but the opposite of what the row does.</para>
+    /// </summary>
+    [Fact]
+    public async Task ReportsNoAgeForAFolderWhoseAgeWouldAlwaysBeNow()
+    {
+        Abandoned(4096, "temp", "old.tmp");
+        _temp.CreateFile(64, "temp", "written-just-now.tmp");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.All(plan.Steps, step => Assert.Null(step.LastWritten));
     }
 
     /// <summary>

@@ -106,7 +106,7 @@ public sealed class CleanupPlanner
         new AzureFunctionsToolsProvider(),
         new RecycleBinProvider(preferences: preferences),
         new FileHistoryProvider(preferences: preferences),
-        new TempDirectoryProvider(liveTrees: liveTrees),
+        new TempDirectoryProvider(liveTrees: liveTrees, preferences: preferences),
         new CrashDumpProvider(),
         new WindowsServicingLogProvider(),
         new EpicLauncherLogProvider(),
