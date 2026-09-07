@@ -45,21 +45,28 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     }
 
     /// <summary>
-    /// The declared live directories that sit below one of <paramref name="directories"/>.
+    /// The declared live directories that are an <em>immediate</em> child of one of
+    /// <paramref name="directories"/>.
     ///
-    /// Matched by containment rather than by exact name, so a test declares the child path it wants
-    /// spared and this stands in for the process table that would have named it.
+    /// <para>Immediate, and never the root itself, because that is the contract
+    /// <see cref="ILiveTreeInspector.FindLiveChildren"/> keeps: it names the child a plan can spare,
+    /// and it answers nothing for a program sitting in the folder itself. A fake that reported more
+    /// than the real one ever can would let a provider pass a test against behaviour it will never
+    /// see.</para>
     /// </summary>
     public LiveTreeFindings FindLiveChildren(
         IReadOnlyList<string> directories,
-        CancellationToken ct = default)
-    {
-        return new LiveTreeFindings(
+        CancellationToken ct = default) =>
+        new(
             [.. _live
-                .Where(child => directories.Any(root => LongPath.Contains(root, child)))
+                .Where(child => directories.Any(root => IsImmediateChild(root, child)))
                 .Select(child => new LiveTree(child, ["a test says something is using it"]))],
             _complete);
-    }
+
+    private static bool IsImmediateChild(string root, string child) =>
+        Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(child)) is { } parent
+        && parent.Equals(
+            Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
 
     public void Invalidate() => InvalidateCount++;
 }

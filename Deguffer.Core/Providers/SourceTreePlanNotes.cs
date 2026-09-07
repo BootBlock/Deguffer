@@ -82,7 +82,8 @@ internal static class SourceTreePlanNotes
             notes.Add(vetoed);
         }
 
-        if (LiveTreeVeto.IncompleteNote(live.Complete) is { } incomplete)
+        if (LiveTreeVeto.IncompleteNote(live.Complete, "Close any editor or build before cleaning them.")
+            is { } incomplete)
         {
             notes.Add(incomplete);
         }

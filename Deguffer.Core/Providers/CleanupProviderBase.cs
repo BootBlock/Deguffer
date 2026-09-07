@@ -380,7 +380,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving anything changed in the last {keep.Describe()} alone, as you asked. The "
+                $"Leaving anything changed in the last {asked.Describe()} alone, as you asked. The "
                 + "sizes here already exclude those files."));
         }
 

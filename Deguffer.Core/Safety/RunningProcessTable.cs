@@ -113,8 +113,9 @@ internal static partial class RunningProcessTable
     }
 
     /// <summary>
-    /// A path in the form the filesystem stores it: 8.3 aliases expanded, and each segment's real
-    /// casing restored. Null in, null out.
+    /// A path with any 8.3 alias in it expanded to the name the filesystem stores. Null in, null
+    /// out, and unchanged for a path carrying no alias — see the last paragraph for why that is the
+    /// whole of what is needed.
     ///
     /// <para><b>This is a safety fix, not tidiness.</b> Every consumer of this table decides whether
     /// a directory is in use by asking whether one of these paths sits inside it, and that test is a

@@ -10,13 +10,20 @@ namespace Deguffer.Core.Execution;
 /// from <paramref name="Skipped"/> because it is a setting being honoured rather than Windows
 /// refusing, and only one of the two is something the user might want to act on.
 /// </param>
+/// <param name="Spared">
+/// Entries left alone because something is using them (§5.3). A third count beside the two above
+/// it, for the reason they are two: a skip is Windows refusing, a keep is a setting being honoured,
+/// and this is Deguffer declining to touch something it found in use. Only the last of the three is
+/// answered by closing the program the plan named.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
     long BytesReclaimed,
     int Skipped,
     string? Message = null,
-    int Kept = 0);
+    int Kept = 0,
+    int Spared = 0);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -38,6 +45,9 @@ public sealed record CleanupResult
 
     /// <summary>Files left alone because they had been touched inside the user's guard window.</summary>
     public int KeptCount => Steps.Sum(s => s.Kept);
+
+    /// <summary>Entries left alone because something was found to be using them (§5.3).</summary>
+    public int SparedCount => Steps.Sum(s => s.Spared);
 
     public bool Succeeded => Steps.All(s => s.Succeeded);
 }

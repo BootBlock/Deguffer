@@ -298,7 +298,7 @@ public sealed class PlanExecutor(
             // touch, and entries something is using. "Cleared" would be a false statement about a
             // folder that is exactly as full as it was.
             (true, 0) when removal.Kept > 0 || removal.Spared > 0 =>
-                $"Left alone{Held(removal.Skipped, removal.Kept, removal.Spared)}.",
+                $"Nothing was cleared{Held(removal.Skipped, removal.Kept, removal.Spared)}.",
 
             (true, 0) => "It held nothing to clear.",
 
@@ -311,7 +311,8 @@ public sealed class PlanExecutor(
             removal.BytesReclaimed,
             removal.Skipped,
             message,
-            removal.Kept);
+            removal.Kept,
+            removal.Spared);
     }
 
     private static async Task<StepOutcome> DeleteAsync(
@@ -374,7 +375,7 @@ public sealed class PlanExecutor(
 
         if (spared > 0)
         {
-            clauses.Add($"{spared} left alone because something is using them");
+            clauses.Add($"{spared} item(s) left alone because something is using them");
         }
 
         return clauses.Count == 0 ? string.Empty : ", " + string.Join(", ", clauses);

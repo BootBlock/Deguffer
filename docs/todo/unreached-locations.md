@@ -18,8 +18,9 @@ against vendor documentation and measured on one Windows 11 workstation.
 [../cache-locations.md](../cache-locations.md) is the shipped, user-facing guide to what Deguffer
 cleans today, and it carries the *rejected, with the reason* record for candidates already
 considered. Nothing already recorded there is repeated here. `%USERPROFILE%\.cache`, the Dart/Flutter
-pub cache, the Android SDK, `%LOCALAPPDATA%\Temp` and Docker are all settled subjects with their
-reasoning written down; read that first.
+pub cache, the Android SDK and Docker are all settled subjects with their reasoning written down;
+read that first. `%LOCALAPPDATA%\Temp` was among them and has since shipped — it is documented there
+as an offered provider rather than a rejected candidate.
 
 Each entry below carries a proposed tier and says plainly whether it was **measured** or only
 **researched**. That distinction is the point of the format. A measured entry was present on the

@@ -421,7 +421,8 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(step.Succeeded);
         Assert.Equal(0, result.BytesReclaimed);
         Assert.DoesNotContain("Cleared", step.Message!, StringComparison.Ordinal);
-        Assert.Contains("Left alone", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("Nothing was cleared", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("something is using them", step.Message!, StringComparison.Ordinal);
     }
 
     /// <summary>An empty folder is cleared, and says so rather than claiming a reclaim.</summary>

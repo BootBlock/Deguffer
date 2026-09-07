@@ -515,7 +515,9 @@ public sealed class TempDirectoryProviderTests : IDisposable
         var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check", StringComparison.Ordinal));
+            && n.Message.Contains("could not check", StringComparison.Ordinal)
+            && n.Message.Contains("working in them", StringComparison.Ordinal)
+            && !n.Message.Contains("project", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -548,10 +550,20 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.True(plan.Keep.IsOn, "the plan did not carry the floor the removal has to apply");
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("as you asked", StringComparison.Ordinal));
 
-        // And with a guard the user did set, the sentence appears and is about their window.
+        // And with a guard the user did set, the sentence appears and quotes THEIR window rather
+        // than the one actually in force. The floor is stricter, so the two differ — and this is the
+        // only provider on which they can, which makes it the only place the mistake is visible.
         var guarded = await CreateProvider().PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
 
-        Assert.Contains(guarded.Notes, n => n.Message.Contains("as you asked", StringComparison.Ordinal));
+        var asked = Assert.Single(
+            guarded.Notes, n => n.Message.Contains("as you asked", StringComparison.Ordinal));
+
+        Assert.Contains("8 hours", asked.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("7 days", asked.Message, StringComparison.Ordinal);
+
+        // The floor is still stated, by the provider, on a note of its own.
+        Assert.Contains(guarded.Notes, n =>
+            n.Message.Contains("nothing has touched for 7 days", StringComparison.Ordinal));
     }
 
     /// <summary>

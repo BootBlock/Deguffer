@@ -100,17 +100,21 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
     /// <summary>
     /// What the run did not remove, or nothing where it removed everything it named.
     ///
-    /// The two counts are reported beside each other and never folded together. One is Windows
-    /// refusing, which the user can act on by closing something; the other is Deguffer honouring the
-    /// setting they chose. Saying nothing about the second leaves a run that reclaimed less than the
-    /// preview implied with no stated reason on screen at all.
+    /// The three counts are reported beside each other and never folded together. One is Windows
+    /// refusing, which the user can act on by closing something; one is Deguffer honouring the
+    /// setting they chose; and one is Deguffer declining to touch an entry it found a program
+    /// working in, which they act on by closing that program. Saying nothing about any of them
+    /// leaves a run that reclaimed less than the preview implied with no stated reason on screen at
+    /// all.
     /// </summary>
     private static string LeftBehind(IReadOnlyList<CleanupResult> results)
     {
         var skipped = results.Sum(r => r.SkippedCount);
         var kept = results.Sum(r => r.KeptCount);
+        var spared = results.Sum(r => r.SparedCount);
 
         return (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty)
-            + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty);
+            + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
+            + (spared > 0 ? $" {spared} item(s) something is using were left alone." : string.Empty);
     }
 }

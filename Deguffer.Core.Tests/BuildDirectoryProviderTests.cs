@@ -485,7 +485,8 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check whether these projects are in use", StringComparison.Ordinal));
+            && n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal)
+            && n.Message.Contains("Close any editor or build", StringComparison.Ordinal));
     }
 
     // ---- §6.3, §7 and discovery ----------------------------------------------------------------

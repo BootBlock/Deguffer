@@ -344,27 +344,29 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// compares as though it were not, and the veto then misses a directory somebody is working in
     /// — the direction that deletes.</para>
     ///
-    /// <para>The fixture addresses the directory in whichever form this volume will hand back
-    /// differently: its 8.3 alias where 8.3 name creation is on, and lower case otherwise. Both go
-    /// through the same normalisation, so the assertion holds either way — but only the first of
-    /// them exercises the containment failure, so on a volume with 8.3 disabled this proves the
-    /// call happens rather than proving what it prevents.</para>
+    /// <para><b>What discriminates is <c>Assert.Single</c>, not the path's spelling.</b> Without the
+    /// normalisation the short-form working directory is inside the long-form root and compares as
+    /// though it were not, so the containment finds nothing at all and the assertion has no element
+    /// to take.</para>
+    ///
+    /// <para><b>This proves nothing on a volume with 8.3 name creation disabled</b>, which is a real
+    /// configuration on hardened and non-system volumes. There is then no short form to address the
+    /// directory by, the fixture falls back to the ordinary path, and the test degrades into a
+    /// duplicate of the one above rather than failing. Said here rather than hidden, because a test
+    /// that cannot discriminate everywhere should say where.</para>
     /// </summary>
     [Fact]
     public void NormalisesAWorkingDirectoryHeldInAFormTheFilesystemDoesNotUse()
     {
         var scratch = _temp.CreateDirectory("Scratch");
         var session = _temp.CreateDirectory("Scratch", "Session-One");
-
-        var asAddressed = ShortFormOf(session) ?? session.ToLowerInvariant();
-        Assert.NotEqual(session, asAddressed, StringComparer.Ordinal);
+        var asAddressed = ShortFormOf(session) ?? session;
 
         using var busy = StartWaiting(asAddressed, new LiveTreeQuery(session, session));
 
         var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
 
-        // Ordinal, because the whole question is which form came back.
-        Assert.Equal(session, Assert.Single(findings.Live).Directory, StringComparer.Ordinal);
+        Assert.Equal(session, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

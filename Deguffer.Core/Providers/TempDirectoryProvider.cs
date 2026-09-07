@@ -157,10 +157,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
         if (scan.FoundNothing)
         {
-            return EmptyPlan("This machine has no temporary folder Deguffer can reach.") with
-            {
-                Notes = notes,
-            };
+            var empty = EmptyPlan("This machine has no temporary folder Deguffer can reach.");
+
+            // Appended rather than assigned. Replacing the list drops the sentence EmptyPlan just
+            // wrote, which is the only thing on the row explaining the zero beside it.
+            return empty with { Notes = [.. empty.Notes, .. notes] };
         }
 
         var live = _liveTrees.FindLiveChildren([.. scan.Targets.Select(t => t.Path)], ct);
@@ -173,12 +174,16 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             + "folder holds live working files among abandoned ones, and there is nothing but age "
             + "to tell them apart."));
 
-        if (LiveNote(live.Live) is { } busy)
+        // Named by the entry alone. LiveTreeVeto's default names a directory by the project folder
+        // holding it, which a scratch entry does not have.
+        if (LiveTreeVeto.NoteFor(live.Live, l => Path.GetFileName(Path.TrimEndingDirectorySeparator(l.Directory)))
+            is { } busy)
         {
             notes.Add(busy);
         }
 
-        if (LiveTreeVeto.IncompleteNote(live.Complete) is { } incomplete)
+        if (LiveTreeVeto.IncompleteNote(
+            live.Complete, "Close whatever is working in them before cleaning.") is { } incomplete)
         {
             notes.Add(incomplete);
         }
@@ -261,32 +266,6 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         }
 
         return (steps, spared);
-    }
-
-    /// <summary>
-    /// What the user is told about the entries that were held back, or null where none were.
-    ///
-    /// <para>A warning rather than information, on <see cref="LiveTreeVeto.NoteFor"/>'s reasoning:
-    /// the plan is smaller than the folder suggests, and the reason is something the user can act on
-    /// by closing a program. It is written here rather than reusing that method because that one
-    /// names each directory's project folder, which a scratch entry does not have.</para>
-    /// </summary>
-    private static PlanNote? LiveNote(IReadOnlyList<LiveTree> live)
-    {
-        if (live.Count == 0)
-        {
-            return null;
-        }
-
-        var held = live.Select(l =>
-            $"{Path.GetFileName(Path.TrimEndingDirectorySeparator(l.Directory))} "
-            + $"({string.Join("; ", l.Holders)})");
-
-        return new PlanNote(
-            PlanNoteSeverity.Warning,
-            $"Left {string.Join(", ", held)} alone. " + (live.Count == 1
-                ? "Close what is using it and preview again to include it."
-                : "Close what is using each one and preview again to include them."));
     }
 
     private IEnumerable<string> DeclaredPaths() =>

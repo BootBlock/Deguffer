@@ -61,18 +61,32 @@ internal static class LiveTreeVeto
     /// is something the user can act on by closing the editor. Saying nothing would leave a project
     /// silently missing from a list it belongs in.
     /// </summary>
-    public static PlanNote? NoteFor(IReadOnlyList<LiveTree> vetoed)
+    /// <param name="name">
+    /// How each held directory is named to the user, or null for the project shape a source tree
+    /// wants — <c>obj in MyProject</c>.
+    ///
+    /// <para>A parameter rather than a second copy of this method, because what differs between one
+    /// subject and the next is the naming and not the sentences. A scratch entry in <c>%TEMP%</c>
+    /// has no project folder to sit in, so naming it that way would print an empty parent; the
+    /// wording either side of the name is the same advice in both cases, and one copy of it is what
+    /// keeps the two from drifting into two different pieces of advice.</para>
+    /// </param>
+    public static PlanNote? NoteFor(IReadOnlyList<LiveTree> vetoed, Func<LiveTree, string>? name = null)
     {
+        ArgumentNullException.ThrowIfNull(vetoed);
+
         if (vetoed.Count == 0)
         {
             return null;
         }
 
-        // Each project with its own holders, rather than one project's holders attributed to all of
-        // them. This is the sentence the user acts on to decide what to close, so naming the wrong
-        // process on it is worse than naming none: it sends them to shut down something innocent and
-        // leaves them believing the check misfired when the project stays on the list.
-        var held = vetoed.Select(v => $"{Name(v.Directory)} in {Name(Parent(v.Directory))} ({string.Join("; ", v.Holders)})");
+        // Each directory with its own holders, rather than one directory's holders attributed to
+        // all of them. This is the sentence the user acts on to decide what to close, so naming the
+        // wrong process on it is worse than naming none: it sends them to shut down something
+        // innocent and leaves them believing the check misfired when the entry stays on the list.
+        var held = vetoed.Select(v =>
+            $"{(name is null ? $"{Name(v.Directory)} in {Name(Parent(v.Directory))}" : name(v))} "
+            + $"({string.Join("; ", v.Holders)})");
 
         // Both grammatical forms written out, for the reason ObjPlanNotes records: driving the real
         // window is what catches a sentence that reads correctly only on a machine with more than
@@ -95,10 +109,15 @@ internal static class LiveTreeVeto
     /// §5.5 makes a measurement fallback observable for the same reason this is said out loud: a
     /// safeguard that could not run must not look like a safeguard that found nothing.
     /// </summary>
-    public static PlanNote? IncompleteNote(bool complete) => complete
+    /// <param name="advice">
+    /// What the user is told to do about it, which is the half that belongs to the subject. "Close
+    /// any editor or build" is the answer for a source tree and means nothing on a scratch folder,
+    /// where there is no project and no build. The sentence in front of it is the same either way,
+    /// so it stays here.
+    /// </param>
+    public static PlanNote? IncompleteNote(bool complete, string advice) => complete
         ? null
         : new PlanNote(
             PlanNoteSeverity.Warning,
-            "Deguffer could not check whether these projects are in use. Close any editor or build " +
-            "before cleaning them.");
+            $"Deguffer could not check whether anything is using these. {advice}");
 }

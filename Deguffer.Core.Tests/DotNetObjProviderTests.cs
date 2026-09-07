@@ -567,7 +567,8 @@ public sealed class DotNetObjProviderTests : IDisposable
         var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
 
         Assert.Contains(plan.Notes, n =>
-            n.Message.Contains("could not check whether these projects are in use", StringComparison.Ordinal));
+            n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal)
+            && n.Message.Contains("Close any editor or build", StringComparison.Ordinal));
     }
 
     /// <summary>
