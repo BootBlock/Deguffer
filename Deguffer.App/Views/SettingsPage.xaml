@@ -113,6 +113,31 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- The floor under the temporary folders, and the only box on this page whose lowest
+                 value removes a safety rule rather than adjusting one. §5.3 names blanket-clearing
+                 %TEMP% as the classic mistake precisely because live working files sit among
+                 abandoned ones and nothing but age tells them apart, so zero is admitted with the
+                 consequence written out rather than as a bare minimum on a spinner. Seven days is
+                 what Disk Cleanup and Storage Sense already apply to these folders. The two
+                 protections that survive at zero are named, because a user who sets it should know
+                 what is left rather than assume it is nothing. -->
+            <views:SettingsRow Glyph="&#xE7B8;"
+                               Title="Only offer temporary files older than"
+                               Description="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. Set how long something must sit untouched before Deguffer offers it. Set 0 for no age limit, which offers everything however recently it was written — a file a program wrote seconds ago and still expects to find is then included, and age is the only thing that would have told them apart. Anything a running program is working in, or holds open, is left alone whatever this is set to.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind ViewModel.MinimumTemporaryFileAge, Mode=TwoWay}"
+                               Minimum="{x:Bind ViewModel.MinimumTemporaryFileAgeDays}"
+                               Maximum="{x:Bind ViewModel.MaximumTemporaryFileAgeDays}"
+                               SmallChange="1"
+                               LargeChange="7"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Days"
+                               AutomationProperties.Name="Days before a temporary file is offered" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <!-- How, never what. Both routes empty this account's own bin on each drive and leave
                  every other account's alone, so §5.2's rule and §5.6's assertion are the same under
                  either and this cannot widen what a run destroys. The description says which side

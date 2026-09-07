@@ -29,7 +29,8 @@ public class PreferenceStoreTests
             RequireTypedConfirmation: true,
             EmptyRecycleBinsDirectly: true,
             KeepFilesChangedWithinHours: 8,
-            FileHistoryRetentionDays: 30)));
+            FileHistoryRetentionDays: 30,
+            MinimumTemporaryFileAgeDays: 2)));
 
         var loaded = store.Load();
 
@@ -67,6 +68,10 @@ public class PreferenceStoreTests
         // has teeth: a missing key deserialises to zero, and zero asks Windows to keep only the
         // newest version of each file still in scope.
         Assert.Equal(30, loaded.FileHistoryRetentionDays);
+
+        // Not the default, on the same reasoning again, and this one is the second with teeth: zero
+        // is a real and deliberate value here, meaning no age limit on the temporary folders at all.
+        Assert.Equal(2, loaded.MinimumTemporaryFileAgeDays);
     }
 
     /// <summary>
@@ -127,6 +132,12 @@ public class PreferenceStoreTests
         // version of each file still in the protection scope, discarding every version of anything
         // since moved or deleted. An upgraded machine has to land on 365, not on default(int).
         Assert.Equal(365, loaded.FileHistoryRetentionDays);
+
+        // The same trap, and the newer of the two: every settings file written before this
+        // preference existed is missing the key, and zero here means no age limit on %TEMP% at all.
+        // Landing on default(int) would take §5.3's floor off every machine that upgrades, without
+        // anybody choosing it and without anything on screen having changed.
+        Assert.Equal(7, loaded.MinimumTemporaryFileAgeDays);
     }
 
     /// <summary>

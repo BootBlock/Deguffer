@@ -173,6 +173,35 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { FileHistoryRetentionDays = WholeDays(value) });
     }
 
+    /// <summary>
+    /// The bounds on the temporary-file age, read from the provider that clamps to them so the box
+    /// and the value it produces cannot disagree.
+    /// </summary>
+    public double MinimumTemporaryFileAgeDays => TempDirectoryProvider.MinimumStaleDays;
+
+    public double MaximumTemporaryFileAgeDays => TempDirectoryProvider.MaximumStaleDays;
+
+    /// <summary>
+    /// How long something must sit untouched in a temporary folder before Deguffer offers it, on
+    /// the same terms as the two boxes above: a <see cref="double"/> because that is what a
+    /// <c>NumberBox</c> exposes, and an emptied box reports <see cref="double.NaN"/>.
+    ///
+    /// <para>NaN falls back to the shipped seven days rather than to the floor, for the reason
+    /// <see cref="FileHistoryRetentionDays"/> gives and more sharply: clearing the field is not a
+    /// request to delete everything in <c>%TEMP%</c> however recently it was written, and zero is
+    /// the value that does exactly that.</para>
+    /// </summary>
+    public double MinimumTemporaryFileAge
+    {
+        get => _preferences.Current.MinimumTemporaryFileAgeDays;
+        set => Apply(current => current with { MinimumTemporaryFileAgeDays = WholeStaleDays(value) });
+    }
+
+    private int WholeStaleDays(double value) => double.IsNaN(value)
+        ? AppPreferences.Default.MinimumTemporaryFileAgeDays
+        : (int)Math.Clamp(
+            Math.Round(value), MinimumTemporaryFileAgeDays, MaximumTemporaryFileAgeDays);
+
     private int WholeDays(double value) => double.IsNaN(value)
         ? AppPreferences.Default.FileHistoryRetentionDays
         : (int)Math.Clamp(

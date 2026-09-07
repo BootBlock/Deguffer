@@ -214,6 +214,32 @@ public enum ExploreColouring
 /// so the provider clamps as well as the settings box — nothing validates
 /// <c>preferences.json</c> on the way in, and a hand-edited zero must not reach the command.</para>
 /// </param>
+/// <param name="MinimumTemporaryFileAgeDays">
+/// How long something must have sat untouched in a temporary folder before Deguffer will offer it.
+/// Seven days by default, and <b>zero means no age limit at all</b>.
+///
+/// <para><b>It is a setting rather than a constant because the alternative was a floor nobody could
+/// reach past.</b> Seven days is what Windows' own Disk Cleanup and Storage Sense apply to these
+/// folders, so an untouched install offers what the machine would already have removed on its own.
+/// Somebody clearing a full drive today wants that number lower, and somebody who has been bitten
+/// by an installer keeping state in <c>%TEMP%</c> wants it higher, and neither can be
+/// inferred.</para>
+///
+/// <para><b>Zero is the one value that removes a safety rule rather than adjusting it.</b> §5.3's
+/// whole point is that a temporary folder holds live working files among abandoned ones and nothing
+/// but age tells them apart — so at zero, a file a program wrote a second ago and will read back in
+/// a minute is offered along with everything else. Two protections still stand: Windows will not
+/// release a file something holds open, and any entry a running program is working in is left alone
+/// whatever its age. Neither covers the process that wrote a file, closed it, and wants it back.
+/// The row says so, in as many words, whenever this is zero.</para>
+///
+/// <para>Stored as whole days because that is what the user chose. The instant it becomes is fixed
+/// once per preview, so the clean deletes exactly the files the preview said it would — see
+/// <see cref="Safety.MinimumAge"/>. It composes with
+/// <paramref name="KeepFilesChangedWithinHours"/> rather than competing with it: whichever of the
+/// two protects more wins, so setting this to zero does not defeat a guard the user set, and the
+/// guard cannot loosen this one either.</para>
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Compact,
@@ -227,7 +253,8 @@ public sealed record AppPreferences(
     bool RequireTypedConfirmation = false,
     bool EmptyRecycleBinsDirectly = false,
     int KeepFilesChangedWithinHours = 0,
-    int FileHistoryRetentionDays = 365)
+    int FileHistoryRetentionDays = 365,
+    int MinimumTemporaryFileAgeDays = 7)
 {
     public static readonly AppPreferences Default = new();
 }

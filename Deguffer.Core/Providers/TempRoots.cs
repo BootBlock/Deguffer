@@ -47,6 +47,21 @@ public static class TempRoots
     /// </summary>
     private const string FolderName = "Temp";
 
+    /// <summary>
+    /// §7's age column means nothing here, so the row leaves it blank.
+    ///
+    /// <para>An age is read from a location's own immediate entries, which for a temporary folder is
+    /// whatever any program on the machine wrote last — a few seconds ago, on every machine, for
+    /// ever. The row would then say "written moments ago" beside an offer that excludes everything
+    /// newer than the cut-off, which is not merely uninformative but the opposite of what the row
+    /// does.</para>
+    ///
+    /// <para>This is what <see cref="DeclaredLocation.ReportsAge"/> exists for, and a Maven
+    /// repository is the other case: a date that cannot be made to mean anything is better left off
+    /// the screen than shown, because an age is what invites the reader to delete something.</para>
+    /// </summary>
+    private const bool ReportsNoUsefulAge = false;
+
     private const string UserReason =
         "Scratch files this account's programs left behind. Installers, compilers, browsers and "
         + "test runners unpack here and are meant to clear up afterwards.";
@@ -125,13 +140,15 @@ public static class TempRoots
                 $"The folder holding {Path.GetFileName(path)} must survive — only what is inside "
                 + "the temporary folder itself is removed.",
                 RequiresElevation: false,
-                [new DeclaredLocation(Path.GetFileName(path), UserReason, DeclaredLocationKind.DirectoryContents)],
+                [new DeclaredLocation(
+                    Path.GetFileName(path), UserReason, DeclaredLocationKind.DirectoryContents, ReportsNoUsefulAge)],
                 []))
             .ToList();
 
         roots.Add(WindowsSystemRoot.Holding(
             system,
-            new DeclaredLocation(FolderName, MachineReason, DeclaredLocationKind.DirectoryContents)));
+            new DeclaredLocation(
+                FolderName, MachineReason, DeclaredLocationKind.DirectoryContents, ReportsNoUsefulAge)));
 
         return new TempRootSet(roots, refused);
     }
