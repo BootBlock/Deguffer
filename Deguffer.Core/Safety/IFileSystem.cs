@@ -68,7 +68,7 @@ public interface IFileSystem
     long? TryGetFileLength(string path);
 
     /// <summary>
-    /// The newer of the file's creation and last-write times as a FILETIME, or null when no file is
+    /// The newer of the entry's creation and last-write times as a FILETIME, or null when nothing is
     /// there — the same question <see cref="FileSystemEntry.NewestFileTime"/> answers for an
     /// enumerated entry, asked of a path nothing enumerated.
     ///
@@ -77,6 +77,14 @@ public interface IFileSystem
     /// minutes before it runs and the file may have been written to in between — and §7.1 already
     /// settles that a refusal is decided again at the point of deletion rather than only where the
     /// offer was made.</para>
+    ///
+    /// <para><b>A directory answers too, which the file-only version did not.</b>
+    /// <see cref="Execution.DirectoryRemover"/> asks it of a removal root that turns out to be a
+    /// junction, and a junction is a directory — so answering null for one meant the guard could not
+    /// see it, and a link somebody had made an hour ago was removed under a plan promising nothing
+    /// touched in the last eight hours would be. The timestamps are the link's own rather than its
+    /// target's, which is the right subject: removing the link is what takes the directory away from
+    /// whoever was using it.</para>
     /// </summary>
     long? TryGetNewestFileTime(string path);
 
@@ -138,7 +146,17 @@ public sealed class WindowsFileSystem : IFileSystem
     {
         var file = new FileInfo(path);
 
-        return file.Exists ? MinimumAge.NewestFileTimeOf(file) : null;
+        if (file.Exists)
+        {
+            return MinimumAge.NewestFileTimeOf(file);
+        }
+
+        // A directory, which for this question is a junction the removal is about to take. FileInfo
+        // reports one as not existing, so asking it alone left the guard blind to exactly the entry
+        // whose deletion it was meant to stop.
+        var directory = new DirectoryInfo(path);
+
+        return directory.Exists ? MinimumAge.NewestFileTimeOf(directory) : null;
     }
 
     public void DeleteFile(string path) => File.Delete(path);

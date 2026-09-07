@@ -141,6 +141,21 @@ public static class DirectoryRemover
         // deleting it would destroy the very path the caller said must survive.
         if (fs.IsReparsePoint(extended))
         {
+            // The guard covers the root exactly as Gather covers a link below it, and for the same
+            // reason: a junction carries its own timestamps, so one made an hour ago is an hour old
+            // whatever it points at. Without this a cache directory somebody had just relocated with
+            // mklink was removed under a plan promising nothing touched in the last eight hours
+            // would be — silently, because a link's length is zero and the outcome reported success.
+            //
+            // Asked of the path rather than of an enumerated entry, because a root is the one thing
+            // no enumeration classified. FileRemover re-asks the same question the same way.
+            if (fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest))
+            {
+                progress?.Report(1.0);
+
+                return new RemovalOutcome(0, 0, RootRemoved: false, Kept: 1);
+            }
+
             if (!bounds.KeepRoot)
             {
                 TryDeleteDirectory(extended, fs);

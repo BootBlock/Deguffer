@@ -660,7 +660,43 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         Assert.Contains(expected, provider.WhatHappensOnNextUse, StringComparison.Ordinal);
         Assert.Contains(expected, provider.Description.Recommendation, StringComparison.Ordinal);
+
+        // It is prose on the face of a row, so it has to read like prose. Splitting the sentence
+        // into a helper is what dropped the capital, and no assertion about the number would
+        // notice.
+        Assert.All(
+            Sentences(provider.WhatHappensOnNextUse),
+            sentence => Assert.True(
+                char.IsUpper(sentence[0]),
+                $"a sentence on the row starts in lower case: '{sentence}'"));
     }
+
+    /// <summary>
+    /// The row's own sentence cannot see the user's guard, so it must not claim the absence of a
+    /// protection that guard may be providing.
+    ///
+    /// <para>Stated as "no age limit of its own", which is true whether or not the guard is set. The
+    /// earlier wording said everything was offered however recently it was written, which the
+    /// estimate, the plan's note and the note beside it all contradicted on a machine with the guard
+    /// on.</para>
+    /// </summary>
+    [Fact]
+    public void DoesNotClaimNothingIsHeldBackWhenItCannotKnow()
+    {
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 });
+
+        Assert.DoesNotContain(
+            "however recently it was written",
+            provider.WhatHappensOnNextUse,
+            StringComparison.Ordinal);
+
+        Assert.Contains("no age limit of its own", provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+    }
+
+    /// <summary>The sentences of a paragraph, for an assertion about how each one starts.</summary>
+    private static IEnumerable<string> Sentences(string prose) => prose
+        .Split(". ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>
     /// And at zero it says there is none, rather than quoting a window nobody is applying.

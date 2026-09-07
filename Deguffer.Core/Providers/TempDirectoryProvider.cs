@@ -125,10 +125,10 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// two sentences on one row disagreed with each other.</para>
     /// </summary>
     public override string WhatHappensOnNextUse =>
-        $"Nothing that is running is affected. {OfferedPhrase(ConfiguredDays)}, and anything a "
-        + "running program is working in is left where it is. What you lose is whatever a program "
-        + "stored in a temporary folder and still expects to find there, which installers and crash "
-        + "reporters occasionally do.";
+        $"Nothing that is running is affected. {OfferedPhrase(ConfiguredDays)} Anything a running "
+        + "program is working in is left where it is, and what you lose is whatever a program "
+        + "stored in a temporary folder and still expects to find there — which installers and "
+        + "crash reporters occasionally do.";
 
     /// <summary>
     /// Computed rather than fixed at construction, for the reason
@@ -148,9 +148,9 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 + $"only what nothing has touched for {Describe(ConfiguredDays)} and leaves alone "
                 + "anything a running program is working in."
             : "Live working files sit among abandoned ones and look identical, and the age limit "
-                + "that told them apart is set to none — so everything is offered however recently "
-                + "it was written. Only what a running program is working in, or holds open, is "
-                + "left alone.",
+                + "that told them apart is set to none. What a running program is working in, or "
+                + "holds open, is still left alone; nothing else here is, unless your guard on "
+                + "recently changed files holds it.",
     };
 
     /// <summary>
@@ -165,11 +165,22 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     private int ConfiguredDays => Math.Clamp(
         _preferences.Current.MinimumTemporaryFileAgeDays, MinimumStaleDays, MaximumStaleDays);
 
-    /// <summary>The clause naming what is offered, for the two sentences that both state it.</summary>
+    /// <summary>
+    /// The sentence naming what is offered, for the two places that both state it.
+    ///
+    /// <para><b>The zero case says what this location does rather than what the run will do</b>, and
+    /// the distinction is the difference between true and false. This property is the provider's,
+    /// asked without a plan, so it cannot see the user's own guard on recently changed files — and
+    /// on a machine with no age limit here but an eight-hour guard set there, "everything is offered
+    /// however recently it was written" is contradicted by the estimate, by the plan's own note, and
+    /// by the note <see cref="CleanupProviderBase"/> adds beside it. Naming the absence of a limit
+    /// <em>of its own</em> is true either way, and points at the setting that is doing the
+    /// work.</para>
+    /// </summary>
     private static string OfferedPhrase(int days) => days > 0
-        ? $"everything offered here was last touched more than {Describe(days)} ago"
-        : "there is no age limit set, so everything in these folders is offered however recently it "
-            + "was written";
+        ? $"Everything offered here was last touched more than {Describe(days)} ago."
+        : "This location has no age limit of its own, so nothing here is held back for being "
+            + "recent unless your guard on recently changed files holds it.";
 
     /// <summary>
     /// A whole number of days as the phrase a row prints. <see cref="MinimumAge.Describe"/> answers
