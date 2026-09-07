@@ -205,7 +205,7 @@ public sealed partial class CleanPage : Page
             DefaultButton = ContentDialogButton.Close,
         };
 
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
     }
 
     /// <summary>
@@ -261,7 +261,7 @@ public sealed partial class CleanPage : Page
         dialog.Resources["ContentDialogMinHeight"] = height;
         dialog.Resources["ContentDialogMaxHeight"] = height;
 
-        await dialog.ShowAsync();
+        await ModalDialog.ShowAsync(dialog);
     }
 
     private void StartRequestedRescan(object sender, RoutedEventArgs e)
