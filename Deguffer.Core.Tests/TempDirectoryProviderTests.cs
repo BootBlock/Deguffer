@@ -287,11 +287,41 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// One folder declined is one sentence, however many settings point at it.
+    ///
+    /// <para>Found by driving the real app rather than here: a <c>%TMP%</c> Deguffer declines is
+    /// also what <c>Path.GetTempPath</c> answers with, so the same folder arrived as two candidates
+    /// and the preview named it twice — in the plural, about one setting. Deduplicating only the
+    /// folders that were accepted was the gap.</para>
+    /// </summary>
+    [Fact]
+    public async Task NamesARefusedFolderOnceHoweverManySettingsPointAtIt()
+    {
+        var elsewhere = _temp.CreateDirectory("papers");
+
+        // What the machine does: GetTempPath answers from the variable, so both name one folder.
+        _environment.WithTempPath(elsewhere).WithEnvironmentVariable("TMP", elsewhere);
+        Abandoned(1024, "temp", "old.tmp");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        var note = Assert.Single(
+            plan.Notes, n => n.Message.Contains("will not empty", StringComparison.Ordinal));
+
+        Assert.Equal(
+            1,
+            note.Message.Split(elsewhere, StringSplitOptions.None).Length - 1);
+
+        Assert.Contains("points a temporary-folder setting", note.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The folder Windows itself hands out per session is recognised, so the rule above refuses what
     /// is unknown rather than everything that is not the default location.
     ///
     /// A Remote Desktop host sets <c>%TEMP%</c> to a numbered folder inside the profile's own, which
-    /// is why the name is looked for at every level rather than only at the last.
+    /// is why the name is looked for at the folder holding it as well as at the folder itself.
+    /// Deeper than that is deliberately not recognised — see <c>TempRoots.IsNamedAsTemporary</c>.
     /// </summary>
     [Fact]
     public async Task RecognisesTheNumberedFolderARemoteDesktopHostHandsOut()
@@ -340,7 +370,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("sits inside one", StringComparison.Ordinal));
+            && n.Message.Contains("sits inside it", StringComparison.Ordinal));
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -349,6 +379,70 @@ public sealed class TempDirectoryProviderTests : IDisposable
             File.Exists(Path.Combine(outer, "beside.tmp")),
             "the folder that was refused was cleaned anyway");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The same pair read in the other order comes out the same way, and this is the assertion that
+    /// matters most in the file.
+    ///
+    /// <para><b>Refusing a folder does not protect it.</b> Keeping whichever of a nested pair was
+    /// read first leaves the outer one accepted on a machine whose settings name it first — and its
+    /// step then meets the inner folder as an ordinary subdirectory, empties it and removes it. The
+    /// folder Windows will not put back is gone, and the refusal did nothing about it. So the
+    /// innermost wins whatever the order: clearing the inner cannot destroy the outer, and clearing
+    /// the outer always destroys the inner.</para>
+    ///
+    /// <para>Found by a review probe rather than by this file, which had only the pair in the
+    /// convenient order.</para>
+    /// </summary>
+    [Fact]
+    public async Task KeepsTheInnerFolderEvenWhenTheOuterOneIsNamedFirst()
+    {
+        var outer = _temp.CreateDirectory("temp");
+        var session = _temp.CreateDirectory("temp", "2");
+
+        var inSession = Abandoned(4096, "temp", "2", "session.tmp");
+        Abandoned(1024, "temp", "beside.tmp");
+
+        // Path.GetTempPath prefers TMP, so this is a machine whose process resolves to the outer
+        // folder while the other setting names the inner one.
+        _environment
+            .WithTempPath(outer)
+            .WithEnvironmentVariable("TMP", outer)
+            .WithEnvironmentVariable("TEMP", session);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(session, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(outer, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(session), "the inner temporary folder was deleted");
+        Assert.False(File.Exists(inSession), "the inner folder was not cleared");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A folder underneath <c>C:\Windows\Temp</c> is already covered by the machine's own step, and
+    /// declaring it again would offer it without the administrator rights that folder needs.
+    /// </summary>
+    [Fact]
+    public async Task RefusesAFolderInsideTheMachinesOwnTemporaryFolder()
+    {
+        var inside = _temp.CreateDirectory("Windows", "Temp", "1");
+        Abandoned(2048, "Windows", "Temp", "1", "old.tmp");
+
+        _environment.WithEnvironmentVariable("TMP", inside);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(inside, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(MachineTemp, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("temporary folder Windows itself uses", StringComparison.Ordinal));
     }
 
     /// <summary>

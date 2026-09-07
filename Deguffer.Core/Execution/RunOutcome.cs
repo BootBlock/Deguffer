@@ -115,6 +115,11 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
 
         return (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty)
             + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
-            + (spared > 0 ? $" {spared} item(s) something is using were left alone." : string.Empty);
+
+            // Worded away from the first clause on purpose. Both are about something being in use,
+            // and side by side they read as one sentence printed twice — but one is Windows refusing
+            // to release a handle and the other is Deguffer declining to enter a folder it found a
+            // program working in, and only the second names a folder the user chose to keep.
+            + (spared > 0 ? $" {spared} folder(s) a running program is working in were kept." : string.Empty);
     }
 }

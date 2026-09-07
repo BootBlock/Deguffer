@@ -64,46 +64,70 @@ public static class TempRoots
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(system);
 
-        var roots = new List<DeclaredRoot>();
         var refused = new List<(string Path, string Reason)>();
+        var machineTemp = Path.Combine(system.WindowsDirectory, FolderName);
 
-        // Seeded with the machine's folder, which is declared below whatever the account's settings
-        // say. A %TEMP% pointing into C:\Windows\Temp is then declined as a user root rather than
-        // offered twice — and offered the second time without the administrator rights the real
-        // declaration carries.
-        var accepted = new List<string> { Path.Combine(system.WindowsDirectory, FolderName) };
+        // Every candidate considered, whatever came of it. An exact repeat is the ordinary case
+        // rather than a misconfiguration — all four settings name one folder on most machines — so
+        // it is skipped in silence. The machine's own folder is seeded, because it is declared below
+        // whatever the account's settings say and must not be declared twice.
+        //
+        // Refusals go through the same set rather than acceptances alone, which was observed rather
+        // than reasoned about: a %TMP% pointing somewhere Deguffer declines is also what
+        // Path.GetTempPath answers with, so the preview named one folder twice and said "settings"
+        // of what is one setting.
+        var seen = new HashSet<string>([machineTemp], StringComparer.OrdinalIgnoreCase);
+        var standing = new List<string>();
 
         foreach (var candidate in Candidates(environment))
         {
             var trimmed = Path.TrimEndingDirectorySeparator(candidate);
 
-            // An exact repeat is the ordinary case rather than a misconfiguration — all four
-            // settings name one folder on most machines — so it is skipped in silence rather than
-            // reported as something Deguffer declined.
-            if (accepted.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            if (!seen.Add(trimmed))
             {
                 continue;
             }
 
-            if (Refuse(trimmed, environment, system, accepted) is { } reason)
+            if (Refuse(trimmed, environment, system, machineTemp) is { } reason)
             {
                 refused.Add((trimmed, reason));
                 continue;
             }
 
-            accepted.Add(trimmed);
+            standing.Add(trimmed);
+        }
+
+        // §5.3's nesting rule, decided over the whole set rather than as each candidate arrives.
+        //
+        // Order cannot be allowed to decide this. Taking the first and refusing the rest keeps the
+        // outer folder whenever the settings happen to name it first, and refusing a folder does not
+        // protect it: the outer step's walk meets the inner one as an ordinary subdirectory, empties
+        // it and removes it. The folder Windows will not put back is then gone, which is the whole
+        // thing ClearDirectoryStep exists to prevent — so the innermost wins, always. Clearing the
+        // inner folder cannot destroy the outer, and clearing the outer always destroys the inner.
+        foreach (var outer in standing.Where(a => standing.Any(b => a != b && LongPath.Contains(a, b))))
+        {
+            refused.Add((
+                outer,
+                "Another temporary folder sits inside it, and emptying this one would delete that "
+                + "folder rather than clear it. The one your programs are actually using is offered "
+                + "instead."));
+        }
+
+        var roots = standing
+            .Where(a => !standing.Any(b => a != b && LongPath.Contains(a, b)))
 
             // Declared as its parent holding one named child, which is what every declared location
             // is. The parent then goes into §5.6's report as a survivor, so a run reaching into a
             // redirected temporary folder produces evidence that it stayed inside it.
-            roots.Add(new DeclaredRoot(
-                Path.GetDirectoryName(trimmed)!,
-                $"The folder holding {Path.GetFileName(trimmed)} must survive — only what is inside "
+            .Select(path => new DeclaredRoot(
+                Path.GetDirectoryName(path)!,
+                $"The folder holding {Path.GetFileName(path)} must survive — only what is inside "
                 + "the temporary folder itself is removed.",
                 RequiresElevation: false,
-                [new DeclaredLocation(Path.GetFileName(trimmed), UserReason, DeclaredLocationKind.DirectoryContents)],
-                []));
-        }
+                [new DeclaredLocation(Path.GetFileName(path), UserReason, DeclaredLocationKind.DirectoryContents)],
+                []))
+            .ToList();
 
         roots.Add(WindowsSystemRoot.Holding(
             system,
@@ -170,26 +194,26 @@ public static class TempRoots
     /// per-session folders a Remote Desktop host hands out. A scratch folder called something else
     /// is declined with the reason on screen, which is the direction §5.2 requires the unknown case
     /// to fail in.</item>
-    /// <item><b>A candidate that nests with a folder already accepted.</b> Two roots where one sits
-    /// inside the other is the case that destroys a live <c>%TEMP%</c>: the outer step's walk has no
-    /// idea the inner folder is a target of its own, so it empties it and then removes it, and the
-    /// folder Windows will not put back is gone rather than cleared. A Remote Desktop session host
-    /// produces exactly that pairing by default — <c>%TEMP%</c> is <c>…\Local\Temp\2</c> while the
-    /// default location is <c>…\Local\Temp</c> — so it is a configuration in the field rather than a
-    /// hypothetical. The first accepted wins, and <see cref="Candidates"/> yields the folder this
-    /// process would actually use first.</item>
+    /// <item><b>A candidate inside the machine's own folder.</b> <c>C:\Windows\Temp</c> is declared
+    /// whatever the account's settings say, and its step clears everything in it — so a
+    /// <c>%TEMP%</c> pointing at a folder underneath it is already covered, and declaring it again
+    /// would offer it a second time without the administrator rights the real declaration
+    /// carries.</item>
     /// </list>
+    ///
+    /// <para>Nesting between two of the account's own folders is decided in <see cref="Resolve"/>
+    /// rather than here, because it cannot be judged one candidate at a time: which of a nested pair
+    /// to keep depends on the other one, and the answer must not depend on which was read
+    /// first.</para>
     /// </summary>
-    /// <param name="accepted">
-    /// The folders already declared, including the machine's own, which is seeded before any
-    /// candidate is considered so that a <c>%TEMP%</c> pointing into <c>C:\Windows\Temp</c> cannot
-    /// be declared a second time without the administrator rights the real declaration carries.
+    /// <param name="machineTemp">
+    /// <c>C:\Windows\Temp</c>, which is always declared and is not one of these candidates.
     /// </param>
     private static string? Refuse(
         string candidate,
         IUserEnvironment environment,
         ISystemDirectories system,
-        IReadOnlyList<string> accepted)
+        string machineTemp)
     {
         if (string.IsNullOrEmpty(Path.GetDirectoryName(candidate)))
         {
@@ -219,17 +243,15 @@ public static class TempRoots
 
         if (!IsNamedAsTemporary(candidate))
         {
-            return "Nothing about it says it is a temporary folder — neither it nor any folder "
-                + "above it is called Temp or Tmp — so Deguffer will not empty it on the strength "
+            return "Nothing about it says it is a temporary folder — neither it nor the folder "
+                + "holding it is called Temp or Tmp — so Deguffer will not empty it on the strength "
                 + "of a setting alone.";
         }
 
-        // Either direction, because either one is the same accident: one walk reaches the other
-        // folder, and the folder it reaches is one that has to survive.
-        return accepted.Any(other =>
-            LongPath.Contains(candidate, other) || LongPath.Contains(other, candidate))
-            ? "Another temporary folder sits inside it, or it sits inside one, and emptying the "
-                + "outer folder would delete the inner one rather than clear it."
+        return LongPath.Contains(machineTemp, candidate)
+            ? "It sits inside the temporary folder Windows itself uses, which Deguffer already "
+                + "clears in full — so what is in here goes with it, under the administrator rights "
+                + "that folder needs."
             : null;
     }
 
