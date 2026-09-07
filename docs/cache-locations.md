@@ -2309,7 +2309,7 @@ acknowledgement before it runs.
 | | |
 | --- | --- |
 | **Location** | This account's own temporary folder, ordinarily `%LOCALAPPDATA%\Temp`, plus `C:\Windows\Temp` |
-| **Method** | Empty each folder in place, taking only what nothing has touched for seven days |
+| **Method** | Empty each folder in place, taking only what nothing has touched for seven days — a setting, and 0 means no age limit |
 | **Typical size** | 5.4 GB across the two on one workstation. It grows without limit, so a machine that has never been cleaned holds more |
 
 ### What it is
@@ -2344,8 +2344,17 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
 - **Nothing touched in the last seven days.** A temporary folder holds live working files among
   abandoned ones and they look identical — same folder, same kind of name, often the same size.
   Age is the only thing that separates them. Seven days is the interval Windows' own Disk Cleanup
-  and Storage Sense apply to these two folders, so Deguffer offers what the machine would have
-  removed on its own rather than inventing a threshold of its own.
+  and Storage Sense apply to these two folders, so an untouched Deguffer offers what the machine
+  would have removed on its own rather than inventing a threshold of its own.
+
+  **You can change it, and 0 means no age limit at all.** Settings has *Only offer temporary files
+  older than*. Raising it is uneventful. Setting it to 0 is the one value on that page that removes
+  a safety rule rather than adjusting one: everything in both folders is then offered however
+  recently it was written, including the file a program wrote a second ago and still expects to
+  find. The two protections below it survive — Windows will not release a file something holds
+  open, and an entry a running program is working in is left alone whatever the setting says — but
+  neither covers the program that wrote a file, closed it, and wants it back, which is precisely
+  what the age filter was for. The row says so on a warning whenever 0 is in force.
 - **Nothing a running program is working in.** Before it plans anything, Deguffer reads the process
   table once and asks which entries of each folder something is running from or working inside. Any
   entry that answers is left alone whatever its age, is named in the preview so you can see what is
@@ -2359,6 +2368,13 @@ clean will actually take.
 **A file Windows will not release is skipped, and that is normal.** Anything held open by a running
 program stays exactly where it is, so reclaiming less than the size shown is the expected result
 here rather than a failure.
+
+**These rows show no date, deliberately.** Every other row states when its location was last written
+to, which is how you tell a project built this morning from one abandoned last year. A temporary
+folder is written to by everything on the machine, so its answer is always "moments ago" — beside an
+offer that excludes everything newer than the cut-off, which is the opposite of what the row does. A
+date that cannot be made to mean anything is left off rather than shown, because a date is what
+invites you to delete something.
 
 `C:\Windows\Temp` needs administrator rights. On an ordinary run it is shown, sized, and left
 unticked with that reason on it.
@@ -2406,13 +2422,18 @@ if it is standing empty afterwards.
 
 ### What it costs you
 
-Almost always nothing. Everything offered was abandoned more than a week ago by a program that has
-finished with it, and nothing is running out of it.
+Almost always nothing, at the default. Everything offered was abandoned more than a week ago by a
+program that has finished with it, and nothing is running out of it.
 
 The exception is a program that treats a temporary folder as storage rather than as scratch and
 still expects to find something there — an installer keeping resume state between reboots, a crash
 reporter holding a report you have not sent. That is rare and it is bad practice, but it happens,
 and it is the reason this is not Tier 1.
+
+**At an age limit of 0 the cost is a different one**, and it is worth stating separately rather than
+as a footnote to the paragraph above: what you lose is whatever any program on the machine was
+part-way through. The age filter is the only thing that distinguishes that from rubbish, so with it
+switched off there is nothing left to make the distinction with.
 
 ### Why Tier 2, and not Tier 1
 
