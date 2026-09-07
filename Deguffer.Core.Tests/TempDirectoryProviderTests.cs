@@ -249,6 +249,128 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.2's own rule, applied to a root that arrives from an environment variable: what Deguffer
+    /// does not recognise as a temporary folder, it does not empty.
+    ///
+    /// <para>Containment alone is not enough, and this is the case that shows it. Neither of these
+    /// holds a directory Windows is built out of, so every containment test passes them — and a row
+    /// labelled "Temporary files" would then delete every file in somebody's Documents folder over
+    /// a week old.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("Documents")]
+    [InlineData("System32")]
+    [InlineData("scratch")]
+    public async Task RefusesAFolderNothingAboutWhichSaysItIsTemporary(string name)
+    {
+        var elsewhere = _temp.CreateDirectory(name);
+        Abandoned(4096, name, "letter.docx");
+
+        _environment.WithEnvironmentVariable("TMP", elsewhere);
+        Abandoned(1024, "temp", "old.tmp");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([UserTemp], plan.Steps.OfType<ClearDirectoryStep>().Select(s => s.Path));
+        Assert.DoesNotContain(elsewhere, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("called Temp or Tmp", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(elsewhere, "letter.docx")),
+            $"a folder called {name} was emptied because a setting pointed at it");
+    }
+
+    /// <summary>
+    /// The folder Windows itself hands out per session is recognised, so the rule above refuses what
+    /// is unknown rather than everything that is not the default location.
+    ///
+    /// A Remote Desktop host sets <c>%TEMP%</c> to a numbered folder inside the profile's own, which
+    /// is why the name is looked for at every level rather than only at the last.
+    /// </summary>
+    [Fact]
+    public async Task RecognisesTheNumberedFolderARemoteDesktopHostHandsOut()
+    {
+        var session = _temp.CreateDirectory("temp", "2");
+        Abandoned(4096, "temp", "2", "old.tmp");
+
+        _environment.WithTempPath(session);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(session, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Two temporary folders where one sits inside the other is the pairing that destroys a live
+    /// <c>%TEMP%</c>, and a Remote Desktop session host produces it by default.
+    ///
+    /// <para>The outer step's walk has no idea the inner folder is a target of its own: it is an
+    /// ordinary subdirectory to it, so it is emptied and then removed. The folder Windows will not
+    /// put back is then gone rather than cleared, which is the whole thing
+    /// <see cref="ClearDirectoryStep"/> exists to prevent. §5.6 reports it afterwards, which is
+    /// detection rather than prevention.</para>
+    ///
+    /// <para>The one this process would actually use wins, because <c>Candidates</c> yields it
+    /// first.</para>
+    /// </summary>
+    [Fact]
+    public async Task RefusesATemporaryFolderThatNestsWithOneAlreadyAccepted()
+    {
+        var outer = _temp.CreateDirectory("temp");
+        var session = _temp.CreateDirectory("temp", "2");
+
+        Abandoned(4096, "temp", "2", "old.tmp");
+        Abandoned(1024, "temp", "beside.tmp");
+
+        // What a session host does: this process resolves to the numbered folder, and the account's
+        // own setting still names the folder holding it.
+        _environment.WithTempPath(session).WithEnvironmentVariable("TEMP", outer);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(session, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(outer, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("sits inside one", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(session), "a temporary folder was deleted rather than cleared");
+        Assert.True(
+            File.Exists(Path.Combine(outer, "beside.tmp")),
+            "the folder that was refused was cleaned anyway");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The machine's own folder is declared before any of the account's settings are read, so a
+    /// <c>%TEMP%</c> pointing into it cannot be offered a second time — and offered that second time
+    /// without the administrator rights the real declaration carries.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotOfferTheMachinesFolderTwiceWhenASettingPointsAtIt()
+    {
+        Abandoned(2048, "Windows", "Temp", "old.tmp");
+        _environment.WithEnvironmentVariable("TMP", MachineTemp);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        var step = Assert.Single(plan.Steps, s => s.SelectionKey == MachineTemp);
+
+        Assert.True(step.RequiresElevation);
+        Assert.Equal(2048, plan.EstimatedBytes);
+    }
+
+    /// <summary>
     /// The same refusal for a redirection that holds the machine rather than being it. A variable
     /// pointing one level above the profile satisfies no name check and every containment one.
     /// </summary>
@@ -274,11 +396,11 @@ public sealed class TempDirectoryProviderTests : IDisposable
     [Fact]
     public async Task ReachesASecondTemporaryFolderTheTwoVariablesDisagreeAbout()
     {
-        var other = _temp.CreateDirectory("other-temp");
+        var other = _temp.CreateDirectory("second", "Temp");
         _environment.WithEnvironmentVariable("TEMP", other);
 
         Abandoned(1024, "temp", "old.tmp");
-        Abandoned(2048, "other-temp", "old.tmp");
+        Abandoned(2048, "second", "Temp", "old.tmp");
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -369,7 +491,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
         var outside = _temp.CreateDirectory("elsewhere");
         Abandoned(4096, "elsewhere", "payload.bin");
 
-        var linked = Path.Combine(_temp.Path, "linked-temp");
+        var linked = Path.Combine(_temp.CreateDirectory("linked"), "Temp");
         Directory.CreateSymbolicLink(linked, outside);
         _environment.WithEnvironmentVariable("TEMP", linked);
 
