@@ -641,6 +641,70 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §7's cost sentence quotes the cut-off in force, not a number fixed when the class was
+    /// written.
+    ///
+    /// <para>It is the sentence the row shows on its face and in its tooltip, so a stale number
+    /// here is the user's check on the only safety mechanism this location has, reading false. The
+    /// recommendation in the provider's own description states the same thing and is asserted with
+    /// it — two sentences on one row disagreeing about the cut-off is worse than neither.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(7, "7 days")]
+    [InlineData(2, "2 days")]
+    [InlineData(1, "a day")]
+    public void StatesTheCutOffInForceOnTheRowItself(int days, string expected)
+    {
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = days });
+
+        Assert.Contains(expected, provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+        Assert.Contains(expected, provider.Description.Recommendation, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And at zero it says there is none, rather than quoting a window nobody is applying.
+    /// </summary>
+    [Fact]
+    public void SaysOnTheRowItselfWhenThereIsNoCutOff()
+    {
+        var provider = CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 });
+
+        Assert.Contains("no age limit", provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+        Assert.Contains("set to none", provider.Description.Recommendation, StringComparison.Ordinal);
+
+        // The number that would have been wrong is the one that must not appear.
+        Assert.DoesNotContain("seven days", provider.WhatHappensOnNextUse, StringComparison.Ordinal);
+        Assert.DoesNotContain("a week", provider.Description.Recommendation, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// With no floor but a guard the user set, recent files are held back after all — so the row
+    /// must not carry the warning that says nothing is.
+    ///
+    /// <para>The warning is chosen on the guard in force rather than on this provider's own
+    /// contribution to it. Chosen on the floor alone it contradicted the note
+    /// <c>CleanupProviderBase</c> adds a moment later, which correctly says the user's window is
+    /// being honoured.</para>
+    /// </summary>
+    [Fact]
+    public async Task DoesNotWarnThatNothingIsHeldBackWhenTheUsersGuardIs()
+    {
+        _temp.CreateFile(4096, "temp", "being-written.tmp");
+
+        var plan = await CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 })
+            .PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.DoesNotContain(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("however recently it was written", StringComparison.Ordinal));
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("guard on recently changed files", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Zero is no age limit, and the point of the setting: a file written this second is offered.
     ///
     /// <para>This is the one value on the settings page that removes a safety rule rather than

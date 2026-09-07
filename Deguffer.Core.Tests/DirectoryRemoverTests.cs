@@ -488,6 +488,46 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// The guard covers a link exactly as it covers a file.
+    ///
+    /// <para>The link branch deletes, and it used to sit in front of the guard — so a junction made
+    /// a minute ago was removed under a plan promising nothing touched in the last week would be.
+    /// It failed silently in both directions that hide it: a link's length is zero, so no size
+    /// moved, and it was counted as neither kept nor skipped, so no count moved either.</para>
+    ///
+    /// <para>A link carries its own timestamps, so this is a question about the link rather than
+    /// about whatever it points at — which is right, because removing the link is what takes the
+    /// scratch directory away from the program that was handed it.</para>
+    /// </summary>
+    /// <para>Only the protected direction is asserted here. A link is created with the clock's
+    /// current time and its timestamps cannot be moved back through
+    /// <see cref="TempDirectory.Age"/> — Windows refuses to open a directory link for a
+    /// write-attributes handle — so "an old link still goes" is left to
+    /// <see cref="DeletesAJunctionWithoutFollowingItIntoTheTargetTree"/>, which removes one under
+    /// no guard at all.</para>
+    [Fact]
+    public async Task LeavesALinkTheGuardProtects()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var target = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(2048, "elsewhere", "payload.bin");
+
+        var link = Path.Combine(root, "just-made");
+        Directory.CreateSymbolicLink(link, target);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, MinimumAge.WithinHours(8, DateTime.UtcNow), bounds: new RemovalBounds(KeepRoot: true, []));
+
+        Assert.True(Directory.Exists(link), "a link made a moment ago was deleted under a guard");
+        Assert.Equal(1, outcome.Kept);
+
+        // Counted as held back by the guard rather than as skipped, because that is what happened:
+        // Windows refused nothing.
+        Assert.Equal(0, outcome.Skipped);
+        Assert.True(File.Exists(Path.Combine(target, "payload.bin")), "the removal followed a link");
+    }
+
+    /// <summary>
     /// A folder that is not there is not the success it is for a deletion: the caller asked for a
     /// directory that is meant to still exist, and it does not.
     /// </summary>

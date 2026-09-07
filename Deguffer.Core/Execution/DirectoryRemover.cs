@@ -265,6 +265,20 @@ public static class DirectoryRemover
 
             if (entry.IsReparsePoint)
             {
+                // The guard applies to a link exactly as it applies to a file, and it is asked
+                // here rather than after the branch because this branch deletes.
+                //
+                // A link carries its own timestamps, so a junction made a minute ago is a minute
+                // old whatever it points at. Without this, a plan promising "nothing touched in the
+                // last seven days is offered" removed one anyway — silently, because a link's
+                // length is zero and every scanner skips it, so no figure moved and neither count
+                // did either.
+                if (keep.Protects(entry.NewestFileTime))
+                {
+                    kept++;
+                    continue;
+                }
+
                 // Never follow a junction or symlink: deletion would escape the target tree.
                 // Remove the link itself and stop there.
                 if (entry.IsDirectory)

@@ -197,10 +197,25 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { MinimumTemporaryFileAgeDays = WholeStaleDays(value) });
     }
 
+    /// <summary>
+    /// <see cref="MidpointRounding.AwayFromZero"/> rather than the default, which is the one place
+    /// on this page the difference decides a safety rule.
+    ///
+    /// <para><c>Math.Round</c> rounds a midpoint to even, so <c>Math.Round(0.5)</c> is <b>0</b> —
+    /// and zero here is not the smallest window but the absence of one. A user typing <c>0.5</c>,
+    /// meaning "half a day, a short window", would have stored the value that offers every file in
+    /// both folders however recently it was written, without ever choosing it. Rounding away from
+    /// zero sends every fraction below a day to <c>1</c>, which is the direction that protects.</para>
+    ///
+    /// <para><see cref="WholeDays"/> below does the same arithmetic and needs no such care: its
+    /// clamp floor is one, so no rounding can reach a dangerous value there.</para>
+    /// </summary>
     private int WholeStaleDays(double value) => double.IsNaN(value)
         ? AppPreferences.Default.MinimumTemporaryFileAgeDays
         : (int)Math.Clamp(
-            Math.Round(value), MinimumTemporaryFileAgeDays, MaximumTemporaryFileAgeDays);
+            Math.Round(value, MidpointRounding.AwayFromZero),
+            MinimumTemporaryFileAgeDays,
+            MaximumTemporaryFileAgeDays);
 
     private int WholeDays(double value) => double.IsNaN(value)
         ? AppPreferences.Default.FileHistoryRetentionDays
