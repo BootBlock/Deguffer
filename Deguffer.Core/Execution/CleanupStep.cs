@@ -169,6 +169,37 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
 }
 
 /// <summary>
+/// Empty one directory in place: everything inside it goes, and the directory itself stays.
+///
+/// <para><b>It exists because <c>%TEMP%</c> is not Deguffer's to take away.</b> Every program on the
+/// machine expects the folder to be there, Windows does not put it back once it is gone, and a
+/// profile whose scratch folder has been deleted is one where the next installer fails for a reason
+/// nobody will connect to a disk cleaner. §5.2 says the same thing in its own words: never delete a
+/// tool's root directory. What is disposable here is the contents, and the contents are what this
+/// step names.</para>
+///
+/// <para><b><see cref="Spared"/> is the other half of §5.3, and it cannot be an age.</b> An entry a
+/// running program is working in is off limits however old its files are — the process holding it
+/// may have opened nothing this minute, so nothing is locked and the timestamps prove nothing. The
+/// plan therefore names those entries, and it names them for the user as well, because §5.6 asserts
+/// every one of them is still standing afterwards.</para>
+///
+/// <para><see cref="CleanupStep.SelectionKey"/> is inherited, and is the folder rather than the set:
+/// which entries are live changes between one preview and the next, and a key that moved with them
+/// would discard the user's choice about the folder every time a program started or stopped.</para>
+/// </summary>
+public sealed record ClearDirectoryStep(string Path, string What) : DeleteStep(Path, What)
+{
+    /// <summary>
+    /// Entries directly inside <see cref="DeleteStep.Path"/> that this step must leave alone,
+    /// because something is using them. Empty where nothing was found to be.
+    /// </summary>
+    public IReadOnlyList<string> Spared { get; init; } = [];
+
+    public override string Description => $"{What} — {LongPath.Display(Path)}";
+}
+
+/// <summary>
 /// Empty one volume's Recycle Bin through Windows rather than by deleting its files.
 ///
 /// <para><b>Why it is a <see cref="DeleteStep"/> and not a <see cref="RunCommandStep"/>.</b> §5.1's

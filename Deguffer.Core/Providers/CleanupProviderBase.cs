@@ -100,7 +100,18 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         var plan = await BuildPlanAsync(keep, ct).ConfigureAwait(false);
 
-        return keep.IsOn ? Guarded(plan, keep) : plan;
+        // A provider may hand back a plan already carrying a guard of its own, and the user's is
+        // not allowed to loosen it. §5.3's floor under a scratch folder is the case: live working
+        // files sit among dead ones and look identical there, so the cut-off is part of what makes
+        // the location offerable at all rather than a preference about it. Stamping the user's
+        // value over the top would have silently widened what the removal takes, on the one
+        // provider where that is the documented mistake.
+        //
+        // Every other provider returns a plan with no guard of its own, so this is exactly the
+        // user's value for all of them.
+        var effective = MinimumAge.Stricter(plan.Keep, keep);
+
+        return effective.IsOn ? Guarded(plan, effective, keep) : plan;
     }
 
     /// <summary>
@@ -206,6 +217,28 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MeasureAllAsync(paths, MinimumAge.Off, ct);
 
     /// <summary>
+    /// Measure paths a plan has undertaken <em>not</em> to delete, under the guard that plan is
+    /// running with, so a figure can have them taken out of it.
+    ///
+    /// <para>The second guarded measurement in this class, and the reason it is a separate member
+    /// rather than an argument on <see cref="MeasureAllAsync(IReadOnlyList{string}, CancellationToken)"/>
+    /// is the paragraph there: that one is a §5.1 command step's probe and must never be guarded,
+    /// because the tool decides for itself what it removes. This one is the opposite case. Its
+    /// subject is a path Deguffer <em>would</em> have deleted and has chosen to spare — §5.3's
+    /// entry that something is running out of — and the figure it produces is subtracted from a
+    /// guarded estimate, so it has to be measured on the same basis or the subtraction is between
+    /// two different quantities.</para>
+    ///
+    /// <para>Naming the two apart is what keeps a later reader from "simplifying" them into one
+    /// method with a defaulted argument, which would make the dangerous call site the easy one.</para>
+    /// </summary>
+    protected Task<ScanBatch> MeasureSparedAsync(
+        IReadOnlyList<string> paths,
+        MinimumAge keep,
+        CancellationToken ct) =>
+        MeasureAllAsync(paths, keep, ct);
+
+    /// <summary>
     /// A command step's probe measured twice: the whole of what those paths hold, and the part of it
     /// older than <paramref name="age"/>.
     ///
@@ -288,6 +321,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             {
                 TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
                 TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
+                TargetKind.DirectoryContents => new ClearDirectoryStep(target.Path, target.Reason),
                 _ => new DeleteDirectoryStep(target.Path, target.Reason),
             };
 
@@ -320,7 +354,16 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// guard is on — and <see cref="PlanExecutor"/> refuses the pairing outright rather than
     /// leaving that to one expression in one provider.</para>
     /// </summary>
-    private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep)
+    /// <param name="keep">
+    /// The guard actually in force, which is the stricter of the user's and the provider's own.
+    /// </param>
+    /// <param name="asked">
+    /// The user's own guard, for the sentence alone. The two differ only where a provider carries a
+    /// floor of its own, and the note below says "as you asked" — which would be untrue of a cut-off
+    /// the provider imposed and the user never chose. A provider with a floor explains it itself,
+    /// where the reasoning for that particular location is.
+    /// </param>
+    private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep, MinimumAge asked)
     {
         var withdrawn = plan.Steps
             .OfType<DeleteFileStep>()
@@ -333,11 +376,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // the empty one a provider returns for a toolchain that is not installed — and "the sizes
         // here already exclude those files" under "Go is not installed on this machine" describes
         // sizes that do not exist, on the majority of rows on an ordinary machine.
-        if (plan.Steps.Count > 0)
+        if (plan.Steps.Count > 0 && asked.IsOn)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving anything changed in the last {keep.Describe()} alone, as you asked. The "
+                $"Leaving anything changed in the last {asked.Describe()} alone, as you asked. The "
                 + "sizes here already exclude those files."));
         }
 
@@ -346,7 +389,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // alternative is to stop using the command while the guard is on, which would replace the
         // tool's knowledge of its own cache with ours — the exact substitution §5.2 exists to
         // refuse. NuGet's own clear reached two locations that were not under .nuget at all.
-        if (plan.Steps.OfType<RunCommandStep>().Any())
+        //
+        // Said about the user's own guard, like the note above it: a floor a provider imposes is
+        // that provider's to explain, and no provider carries both a floor and a command step.
+        if (asked.IsOn && plan.Steps.OfType<RunCommandStep>().Any())
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,

@@ -177,11 +177,28 @@ public static class DeclaredLocations
         // out of rather than every directory the declaration happens to mention.
         protectedPaths.AddRange(ancestors);
 
+        if (location.Kind == DeclaredLocationKind.DirectoryContents)
+        {
+            // Both a target and a survivor, which is the whole of what this kind means. The
+            // assertion is worth making rather than assuming: an ordinary removal takes the
+            // directory with its contents, so a bound that failed to hold would leave the folder
+            // gone and look exactly like a deletion that worked.
+            protectedPaths.Add((
+                path,
+                $"The {Path.GetFileName(path)} folder itself must survive — only what is inside it "
+                + "is removed."));
+        }
+
         targets.Add(new DeletionTarget(
             path,
             location.Reason,
             location.ReportsAge ? LastWritten(path, isFile) : null,
-            isFile ? TargetKind.File : TargetKind.Directory,
+            location.Kind switch
+            {
+                DeclaredLocationKind.File => TargetKind.File,
+                DeclaredLocationKind.DirectoryContents => TargetKind.DirectoryContents,
+                _ => TargetKind.Directory,
+            },
             root.RequiresElevation));
     }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
@@ -274,6 +275,126 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         Assert.True(inspector.FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
     }
+
+    /// <summary>
+    /// The same evidence asked from the other end, for a scratch folder whose children nobody can
+    /// name in advance: which entry of this folder is something working in?
+    ///
+    /// <para>The answer is the immediate child rather than the process's own directory, because the
+    /// child is the unit a plan can spare. A process four levels down still makes the one entry
+    /// below the folder off limits, and nothing smaller can be expressed to a removal.</para>
+    /// </summary>
+    [Fact]
+    public void NamesTheImmediateChildOfAScratchFolderThatSomethingIsWorkingIn()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var session = _temp.CreateDirectory("scratch", "session-1");
+        var deep = _temp.CreateDirectory("scratch", "session-1", "build", "objects");
+
+        using var busy = StartWaiting(deep, new LiveTreeQuery(session, session));
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.True(findings.Complete);
+        Assert.Equal(session, Assert.Single(findings.Live).Directory);
+    }
+
+    /// <summary>
+    /// Without this the test above passes on a rule answering "live" to everything it is shown.
+    /// </summary>
+    [Fact]
+    public void NamesNothingInAScratchFolderNobodyIsWorkingIn()
+    {
+        var scratch = _temp.CreateDirectory("quiet");
+        _temp.CreateDirectory("quiet", "session-1");
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.True(findings.Complete);
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
+    /// A process sitting in the scratch folder itself names no child, and must not name the folder.
+    ///
+    /// The folder is never removed, so there would be nothing to spare — and reporting it would
+    /// spare every entry in it, which on a machine with a shell open in <c>%TEMP%</c> would silently
+    /// turn the whole row into a no-op.
+    /// </summary>
+    [Fact]
+    public void NamesNothingForAProcessSittingInTheScratchFolderItself()
+    {
+        var scratch = _temp.CreateDirectory("shell");
+
+        using var busy = StartWaiting(scratch, new LiveTreeQuery(scratch, scratch));
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
+    /// A working directory is compared in the form the filesystem stores it, not in whatever form
+    /// the process happens to hold.
+    ///
+    /// <para><b>This is a safety assertion, and it was found by driving the real app.</b> Windows
+    /// sets the per-user <c>TEMP</c> variable to its 8.3 form on a profile whose folder name exceeds
+    /// eight characters, so a program that resolves its scratch folder from the environment reports
+    /// a working directory such as <c>C:\Users\LONGPR~1\...</c>. That is inside <c>%TEMP%</c> and
+    /// compares as though it were not, and the veto then misses a directory somebody is working in
+    /// — the direction that deletes.</para>
+    ///
+    /// <para><b>What discriminates is <c>Assert.Single</c>, not the path's spelling.</b> Without the
+    /// normalisation the short-form working directory is inside the long-form root and compares as
+    /// though it were not, so the containment finds nothing at all and the assertion has no element
+    /// to take.</para>
+    ///
+    /// <para><b>This proves nothing on a volume with 8.3 name creation disabled</b>, which is a real
+    /// configuration on hardened and non-system volumes. There is then no short form to address the
+    /// directory by, the fixture falls back to the ordinary path, and the test degrades into a
+    /// duplicate of the one above rather than failing. Said here rather than hidden, because a test
+    /// that cannot discriminate everywhere should say where.</para>
+    /// </summary>
+    [Fact]
+    public void NormalisesAWorkingDirectoryHeldInAFormTheFilesystemDoesNotUse()
+    {
+        var scratch = _temp.CreateDirectory("Scratch");
+        var session = _temp.CreateDirectory("Scratch", "Session-One");
+        var asAddressed = ShortFormOf(session) ?? session;
+
+        using var busy = StartWaiting(asAddressed, new LiveTreeQuery(session, session));
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.Equal(session, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The 8.3 alias for <paramref name="path"/>, or null where this volume creates none.
+    ///
+    /// Asked of Windows rather than constructed, because whether short names exist at all is a
+    /// per-volume setting and the alias's digits depend on what else is in the folder.
+    /// </summary>
+    private static string? ShortFormOf(string path)
+    {
+        var length = GetShortPathName(path, null, 0);
+
+        if (length == 0)
+        {
+            return null;
+        }
+
+        var buffer = new char[length];
+        var written = GetShortPathName(path, buffer, length);
+        var shortForm = written > 0 && written < length ? new string(buffer, 0, (int)written) : null;
+
+        return string.Equals(shortForm, path, StringComparison.Ordinal) ? null : shortForm;
+    }
+
+    // DllImport rather than LibraryImport, which needs AllowUnsafeBlocks; the test project does not
+    // enable it and one fixture helper is a poor reason to.
+    [DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(string path, [Out] char[]? buffer, uint length);
 
     /// <summary>
     /// A program that waits without reading its console, so it can be started with a chosen working

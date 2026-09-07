@@ -100,17 +100,26 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
     /// <summary>
     /// What the run did not remove, or nothing where it removed everything it named.
     ///
-    /// The two counts are reported beside each other and never folded together. One is Windows
-    /// refusing, which the user can act on by closing something; the other is Deguffer honouring the
-    /// setting they chose. Saying nothing about the second leaves a run that reclaimed less than the
-    /// preview implied with no stated reason on screen at all.
+    /// The three counts are reported beside each other and never folded together. One is Windows
+    /// refusing, which the user can act on by closing something; one is Deguffer honouring the
+    /// setting they chose; and one is Deguffer declining to touch an entry it found a program
+    /// working in, which they act on by closing that program. Saying nothing about any of them
+    /// leaves a run that reclaimed less than the preview implied with no stated reason on screen at
+    /// all.
     /// </summary>
     private static string LeftBehind(IReadOnlyList<CleanupResult> results)
     {
         var skipped = results.Sum(r => r.SkippedCount);
         var kept = results.Sum(r => r.KeptCount);
+        var spared = results.Sum(r => r.SparedCount);
 
         return (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty)
-            + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty);
+            + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
+
+            // Worded away from the first clause on purpose. Both are about something being in use,
+            // and side by side they read as one sentence printed twice — but one is Windows refusing
+            // to release a handle and the other is Deguffer declining to enter a folder it found a
+            // program working in, and only the second names a folder the user chose to keep.
+            + (spared > 0 ? $" {spared} folder(s) a running program is working in were kept." : string.Empty);
     }
 }

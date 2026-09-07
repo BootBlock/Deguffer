@@ -11,6 +11,12 @@ public enum TargetKind
     /// files. See <see cref="Execution.EmptyRecycleBinStep"/>.
     /// </summary>
     RecycleBin,
+
+    /// <summary>
+    /// Everything inside one directory, with the directory itself left standing. See
+    /// <see cref="Execution.ClearDirectoryStep"/> for why <c>%TEMP%</c> cannot be removed outright.
+    /// </summary>
+    DirectoryContents,
 }
 
 /// <summary>

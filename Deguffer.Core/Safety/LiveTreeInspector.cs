@@ -66,6 +66,92 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         return new LiveTreeFindings(live, complete);
     }
 
+    public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(directories);
+
+        if (directories.Count == 0)
+        {
+            return LiveTreeFindings.Nothing;
+        }
+
+        var table = Snapshot(ct);
+
+        // Keyed by the child path, because one program is several processes and a browser leaves
+        // four of them inside one scratch directory. Four rows naming the same folder would be read
+        // as four folders.
+        var holders = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var process in table.Processes)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // The executable's own folder rather than the executable, so that both signals ask the
+            // same question of the same kind of path: which directory is this program in? Without
+            // it the two would need different rules for the boundary case, and the one that reads
+            // a working directory would be the one that got it wrong.
+            Record(
+                process.ImagePath is { } image ? Path.GetDirectoryName(image) : null,
+                $"{process.Name} is running from inside it");
+
+            Record(process.CurrentDirectory, $"{process.Name} is working in it");
+        }
+
+        return new LiveTreeFindings(
+            [.. holders.Select(entry => new LiveTree(entry.Key, entry.Value))],
+            table.CurrentDirectoriesReadable);
+
+        void Record(string? directory, string holder)
+        {
+            if (directory is null || ChildHolding(directories, directory) is not { } child)
+            {
+                return;
+            }
+
+            if (!holders.TryGetValue(child, out var found))
+            {
+                holders[child] = found = [];
+            }
+
+            if (!found.Contains(holder, StringComparer.Ordinal))
+            {
+                found.Add(holder);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The immediate child of one of <paramref name="directories"/> that <paramref name="inside"/>
+    /// is at or below, or null where it is below none of them.
+    ///
+    /// <para>Null for a directory that <em>is</em> one of them, which is a program running from a
+    /// scratch folder's top level or sitting in it. There is no child to spare in that case, and
+    /// the folder itself is never removed — so the honest answer is that this evidence names
+    /// nothing, rather than the whole folder.</para>
+    /// </summary>
+    private static string? ChildHolding(IReadOnlyList<string> directories, string inside)
+    {
+        foreach (var directory in directories)
+        {
+            if (!LongPath.Contains(directory, inside)
+                || Path.TrimEndingDirectorySeparator(inside).Length
+                    <= Path.TrimEndingDirectorySeparator(directory).Length)
+            {
+                continue;
+            }
+
+            // The first segment below the directory, however deep the path runs. Taken as a
+            // relative path rather than by string offset so that both separators and a trailing one
+            // are the framework's problem rather than three off-by-one risks here.
+            var relative = Path.GetRelativePath(directory, inside);
+            var separator = relative.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
+
+            return Path.Combine(directory, separator < 0 ? relative : relative[..separator]);
+        }
+
+        return null;
+    }
+
     public void Invalidate()
     {
         lock (_gate)

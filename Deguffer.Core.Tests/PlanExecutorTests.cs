@@ -378,4 +378,75 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.DoesNotContain("Removed", step.Message!, StringComparison.Ordinal);
         Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A clearing step empties its folder and leaves it, and the entries it was told to spare stay
+    /// with everything under them.
+    /// </summary>
+    [Fact]
+    public async Task ClearsAFolderInPlaceAndLeavesWhatItWasToldToSpare()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live-session");
+
+        _temp.CreateFile(4096, "scratch", "abandoned.tmp");
+        _temp.CreateFile(8192, "scratch", "live-session", "working.txt");
+
+        var result = await Execute(new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] });
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(4096, result.BytesReclaimed);
+        Assert.True(Directory.Exists(scratch), "the folder itself was removed");
+        Assert.True(File.Exists(Path.Combine(live, "working.txt")), "a spared entry was emptied");
+        Assert.Contains("Cleared", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("something is using them", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder whose every entry was spared reclaims nothing and has failed at nothing. "Cleared"
+    /// would be a false statement about a folder that is exactly as full as it was, so the message
+    /// is about what stayed.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayClearedAboutAFolderThatIsStillFull()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live-session");
+        _temp.CreateFile(8192, "scratch", "live-session", "working.txt");
+
+        var result = await Execute(new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] });
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(0, result.BytesReclaimed);
+        Assert.DoesNotContain("Cleared", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("Nothing was cleared", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("something is using them", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>An empty folder is cleared, and says so rather than claiming a reclaim.</summary>
+    [Fact]
+    public async Task SaysAnEmptyFolderHeldNothingRatherThanFailing()
+    {
+        var result = await Execute(new ClearDirectoryStep(_temp.CreateDirectory("scratch"), "Scratch files"));
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Contains("held nothing", step.Message!, StringComparison.Ordinal);
+    }
+
+    private static Task<CleanupResult> Execute(CleanupStep step) =>
+        new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default).ExecuteAsync(
+            new CleanupPlan
+            {
+                ProviderId = "test",
+                ProviderName = "Test",
+                Tier = SafetyTier.RegenerableCache,
+                WhatHappensOnNextUse = "Nothing.",
+                Steps = [step],
+            },
+            runReach: null,
+            progress: null,
+            ct: CancellationToken.None);
 }

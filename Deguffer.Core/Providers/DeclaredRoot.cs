@@ -1,10 +1,24 @@
 namespace Deguffer.Core.Providers;
 
-/// <summary>Whether a declared location is a directory tree or a single file.</summary>
+/// <summary>What a declared location is, and how much of it goes.</summary>
 public enum DeclaredLocationKind
 {
     Directory,
     File,
+
+    /// <summary>
+    /// A directory whose contents are removed and which itself stays.
+    ///
+    /// <para>Declared rather than derived, because it is a fact about the location: <c>%TEMP%</c>
+    /// and <c>C:\Windows\Temp</c> are folders the rest of the machine expects to find, and Windows
+    /// puts back neither. Every other location here is a directory nothing will miss.</para>
+    ///
+    /// <para>Such a location is protected as well as targeted, so §5.6 asserts the folder is still
+    /// there afterwards. That is the assertion worth having: the ordinary removal takes a directory
+    /// with its contents, so a bound that failed to hold would look exactly like an ordinary
+    /// deletion and leave nothing to notice.</para>
+    /// </summary>
+    DirectoryContents,
 }
 
 /// <summary>

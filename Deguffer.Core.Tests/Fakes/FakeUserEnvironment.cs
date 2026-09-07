@@ -35,7 +35,26 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
     public string? LocalLowAppData { get; private set; }
 
-    public string TempPath { get; }
+    public string TempPath { get; private set; }
+
+    /// <summary>
+    /// Pretend this process resolves its temporary folder somewhere other than the profile's own.
+    ///
+    /// <para>Exists because <c>Path.GetTempPath</c> answers from the environment, so the folder a
+    /// process actually uses and the profile's default location are genuinely different directories
+    /// on a machine that redirects one — a Remote Desktop session host hands out a numbered folder
+    /// inside the default, and that pairing is what
+    /// <c>TempDirectoryProviderTests.RefusesATemporaryFolderThatNestsWithOneAlreadyAccepted</c>
+    /// needs to reproduce. A fixture that could only ever return the one path could not express
+    /// it.</para>
+    /// </summary>
+    public FakeUserEnvironment WithTempPath(string path)
+    {
+        Directory.CreateDirectory(path);
+        TempPath = path;
+
+        return this;
+    }
 
     /// <summary>
     /// A recognisably invented identifier. Real enough in shape for a provider that matches on it,

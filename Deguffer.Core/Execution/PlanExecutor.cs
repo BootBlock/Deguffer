@@ -48,6 +48,7 @@ public sealed class PlanExecutor(
             outcomes.Add(step switch
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
+                ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
@@ -246,7 +247,7 @@ public sealed class PlanExecutor(
             _ when removal is { BytesReclaimed: 0, RootRemoved: false } =>
                 $"Left alone: {removal.Kept} file(s) changed too recently.",
 
-            _ => $"Removed{Qualifier(removal.Skipped, removal.Kept)}.",
+            _ => $"Removed{Held(removal.Skipped, removal.Kept)}.",
         };
 
         return new StepOutcome(
@@ -256,6 +257,62 @@ public sealed class PlanExecutor(
             removal.Skipped,
             message,
             removal.Kept);
+    }
+
+    /// <summary>
+    /// Empty a directory and leave it standing, sparing the entries the plan named.
+    ///
+    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, IProgress{double}?, CancellationToken)"/>
+    /// under different bounds, rather than a second walk of its own: §6.3's extended-length paths,
+    /// §5.3's skip on a refusal, the guard on recently changed files and the refusal to follow a
+    /// link are all properties of that one removal, and a parallel implementation is where one of
+    /// them would go missing.</para>
+    ///
+    /// <para><b>Success is measured differently, because there is no root to have gone.</b> A
+    /// deletion can point at the directory itself; this one cannot, so what it achieved is bytes,
+    /// or the guard doing its job. A scratch folder holding nothing but live and recent files
+    /// reclaims nothing and has failed at nothing.</para>
+    /// </summary>
+    private static async Task<StepOutcome> ClearAsync(
+        ClearDirectoryStep step,
+        MinimumAge keep,
+        IProgress<double>? progress,
+        CancellationToken ct)
+    {
+        var removal = await DirectoryRemover.RemoveAsync(
+            step.Path,
+            keep,
+            progress,
+            ct,
+            fileSystem: null,
+            new RemovalBounds(KeepRoot: true, step.Spared)).ConfigureAwait(false);
+
+        var succeeded = removal.BytesReclaimed > 0 || removal.Kept > 0 || removal.Spared > 0
+            || removal.Skipped == 0;
+
+        var message = (succeeded, removal.BytesReclaimed) switch
+        {
+            (false, _) => WhyNothingHappened(removal.Skipped),
+
+            // Nothing came out, and the reasons are the ones the step promised: files too recent to
+            // touch, and entries something is using. "Cleared" would be a false statement about a
+            // folder that is exactly as full as it was.
+            (true, 0) when removal.Kept > 0 || removal.Spared > 0 =>
+                $"Nothing was cleared{Held(removal.Skipped, removal.Kept, removal.Spared)}.",
+
+            (true, 0) => "It held nothing to clear.",
+
+            _ => $"Cleared{Held(removal.Skipped, removal.Kept, removal.Spared)}.",
+        };
+
+        return new StepOutcome(
+            step.Description,
+            succeeded,
+            removal.BytesReclaimed,
+            removal.Skipped,
+            message,
+            removal.Kept,
+            removal.Spared);
     }
 
     private static async Task<StepOutcome> DeleteAsync(
@@ -291,17 +348,38 @@ public sealed class PlanExecutor(
 
     /// <summary>
     /// What a successful removal has to add about what it left behind, or nothing where it left
-    /// nothing. The two causes are named separately because they ask different things of the
-    /// reader: one is a process they can close, and the other is a setting they chose.
+    /// nothing.
+    ///
+    /// <para>The three causes are named separately because they ask different things of the reader:
+    /// Windows refused, which they may be able to act on by closing something; a setting they chose
+    /// held a file back; and Deguffer declined to touch an entry it found somebody working in. A
+    /// single count would tell them how much stayed and nothing about what to do.</para>
+    ///
+    /// <para>Composed from the clauses that apply rather than switched on every combination: three
+    /// causes make eight cases, seven of which say the same things in a different order, and the
+    /// wording would then live in eight places.</para>
     /// </summary>
-    private static string Qualifier(int skipped, int kept) => (skipped, kept) switch
+    private static string Held(int skipped, int kept, int spared = 0)
     {
-        (0, 0) => string.Empty,
-        (_, 0) => $", {skipped} item(s) left in place because they were in use",
-        (0, _) => $", {kept} file(s) left alone because they changed recently",
-        _ => $", {skipped} item(s) left in place because they were in use and "
-             + $"{kept} because they changed recently",
-    };
+        var clauses = new List<string>(3);
+
+        if (skipped > 0)
+        {
+            clauses.Add($"{skipped} item(s) left in place because they were in use");
+        }
+
+        if (kept > 0)
+        {
+            clauses.Add($"{kept} file(s) left alone because they changed recently");
+        }
+
+        if (spared > 0)
+        {
+            clauses.Add($"{spared} item(s) left alone because something is using them");
+        }
+
+        return clauses.Count == 0 ? string.Empty : ", " + string.Join(", ", clauses);
+    }
 
     /// <summary>
     /// The sentence for a deletion that achieved nothing.
