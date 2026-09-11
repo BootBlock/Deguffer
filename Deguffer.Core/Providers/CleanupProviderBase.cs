@@ -420,7 +420,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
                     // Measured during planning, so it was there when the plan was made — the same
                     // claim, and the same reasoning, as CleanupPlan.NarrowedTo makes for a step the
                     // user declined.
-                    ExistedBefore: true)),
+                    ExistedBefore: true,
+
+                    // The row's zero now excludes a real file, and this is the only place left on
+                    // the plan to say so. See CleanupPlan.HasRecentContentHeldBack.
+                    Withheld: Withholding.TooRecent)),
             ],
         };
     }

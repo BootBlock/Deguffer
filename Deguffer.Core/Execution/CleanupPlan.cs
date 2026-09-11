@@ -29,11 +29,38 @@ namespace Deguffer.Core.Execution;
 /// legitimately gain or lose an entry between the preview and the clean, and a comparison of
 /// figures would report every one of those as an alarm.</para>
 /// </param>
+/// <param name="Withheld">
+/// Whether this path is something the plan would have offered and a choice took out, rather than
+/// something a rule protects.
+///
+/// <para>It is what lets a row with nothing to reclaim say why. A path a rule protects — a tool
+/// root, an unrecognised sibling, an entry a running program is working in — was never going to be
+/// offered, and it leaves the row's zero honest. A withheld candidate is the opposite case:
+/// something real is there, Deguffer would have offered it, and the figure excludes it, so a row
+/// holding one is not clear. Nothing else on the plan can say so once the step is gone.</para>
+/// </param>
 public sealed record ProtectedPath(
     string Path,
     string Reason,
     bool ExistedBefore,
-    bool HeldContentBefore = false);
+    bool HeldContentBefore = false,
+    Withholding Withheld = Withholding.None);
+
+/// <summary>Which choice, if any, took a candidate out of a plan rather than a rule keeping it out.</summary>
+public enum Withholding
+{
+    /// <summary>
+    /// Not a withheld candidate. A rule protects it, or the user left it unticked for one run, which
+    /// is a narrowing of what runs rather than a statement about the row.
+    /// </summary>
+    None,
+
+    /// <summary>
+    /// A file the guard on recently changed files withdrew whole, because it changed inside the
+    /// window and the step had nothing else to do.
+    /// </summary>
+    TooRecent,
+}
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
 public sealed record PlanNote(PlanNoteSeverity Severity, string Message);
@@ -91,11 +118,19 @@ public sealed record CleanupPlan
     /// direction — it puts "nothing old enough" on every genuinely empty row the moment the user
     /// switches the guard on, which on an ordinary machine is most of them.</para>
     ///
+    /// <para><b>The guard holds something back in two shapes, and both are asked.</b> A directory
+    /// stays a step and does less, and says so through <see cref="CleanupStep.WithheldRecent"/>. A
+    /// file whose whole subject is recent is withdrawn, which leaves no step to say anything — only
+    /// the protection that proves it survived. Asking the steps alone put "Already clear" on a row
+    /// whose one crash dump was still on the disk.</para>
+    ///
     /// <para>Recomputed rather than stored, like <see cref="TargetedPaths"/>: this is a record, and
     /// a <c>with</c> expression copies backing fields wholesale, so a cached value would survive a
     /// change to <see cref="Steps"/> and describe the wrong plan.</para>
     /// </summary>
-    public bool HasRecentContentHeldBack => Steps.Any(s => s.WithheldRecent);
+    public bool HasRecentContentHeldBack =>
+        Steps.Any(s => s.WithheldRecent)
+        || ProtectedPaths.Any(p => p.Withheld == Withholding.TooRecent);
 
     /// <summary>
     /// Whether this plan's figures leave out something Windows would not let a previous clean take,
@@ -185,8 +220,32 @@ public sealed record CleanupPlan
     /// </summary>
     public ScanSize Estimated => Steps.Aggregate(ScanSize.Zero, (total, step) => total + step.Estimated);
 
-    /// <summary>A plan with no steps is a no-op — the toolchain is absent, or already clean.</summary>
+    /// <summary>
+    /// A plan with no steps removes nothing: the toolchain is absent, the location is already clean,
+    /// or every candidate it found was withheld. Whether it still has something to verify is
+    /// <see cref="HasSomethingToProve"/>'s question, and it is a different one.
+    /// </summary>
     public bool IsEmpty => Steps.Count == 0;
+
+    /// <summary>
+    /// Whether running this plan would establish anything even where it removes nothing: a withheld
+    /// candidate that was there when the plan was made, so finding it standing afterwards is
+    /// evidence.
+    ///
+    /// <para>Separate from <see cref="IsEmpty"/> because a plan whose every candidate was withheld
+    /// is both. It has no steps and it still makes a promise, and a run that dropped it as having
+    /// nothing to do left that promise with no evidence behind it — on exactly the run where the
+    /// user's instruction was to leave something alone. See <see cref="CleanupPlanner.ExecuteAsync"/>.
+    /// </para>
+    ///
+    /// <para><b>Withheld candidates only, never a path a rule protects.</b> A tool root or an
+    /// unrecognised sibling is protected against the plan's own deletion, and a plan with no steps
+    /// deletes nothing, so its survival proves nothing about that plan. Counting one would put every
+    /// already-clear location with a root on the disk into a run's verdict, named as though it had
+    /// been cleaned.</para>
+    /// </summary>
+    public bool HasSomethingToProve =>
+        ProtectedPaths.Any(p => p.ExistedBefore && p.Withheld != Withholding.None);
 
     /// <summary>
     /// Every path this plan would destroy, for display and for tests.

@@ -59,16 +59,198 @@ public sealed class CleanupPlannerTests
         Assert.False(finding.HasReclaimableSpace);
     }
 
-    [Fact]
-    public async Task ExecuteSkipsFindingsWithNothingToDo()
+    /// <summary>
+    /// Nothing to remove and nothing to prove is not part of the run, at any tier. Above Tier 1 that
+    /// includes not demanding an answer for a deletion that is not going to happen.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableCache)]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    [InlineData(SafetyTier.DoNotTouch)]
+    public async Task ExecuteSkipsFindingsWithNothingToDo(SafetyTier tier)
     {
-        var empty = new StubProvider("empty", bytes: 0);
+        var empty = new StubProvider("empty", bytes: 0, tier: tier);
         var planner = new CleanupPlanner([empty]);
 
         var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
 
         Assert.Empty(results);
         Assert.False(empty.WasExecuted);
+    }
+
+    /// <summary>
+    /// A plan whose every candidate was withheld has no steps and still makes a promise: the paths it
+    /// protects will be standing afterwards. Dropping it from the run as having nothing to do left
+    /// that promise with no evidence behind it, on the one run where the user's whole instruction
+    /// was to leave something alone.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanWithSomethingToProveIsStillVerified()
+    {
+        using var temp = new TempDirectory();
+        var withheld = Directory.CreateDirectory(Path.Combine(temp.Path, "withheld")).FullName;
+
+        var provider = new StubProvider("withheld", bytes: 0, protects: withheld);
+        var planner = new CleanupPlanner([provider]);
+
+        var result = Assert.Single(await planner.ExecuteAsync(await planner.PlanAllAsync()));
+
+        Assert.True(provider.WasExecuted);
+        Assert.NotNull(result.Verification);
+        Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification.Checks).Outcome);
+        Assert.True(result.Verification.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The case above is evidence only if it can fail. A survivor that is gone by the time the run
+    /// verifies is reported, not passed over.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanStillFailsVerificationWhenItsSurvivorIsGone()
+    {
+        using var temp = new TempDirectory();
+        var withheld = Directory.CreateDirectory(Path.Combine(temp.Path, "withheld")).FullName;
+
+        var planner = new CleanupPlanner([new StubProvider("withheld", bytes: 0, protects: withheld)]);
+        var findings = await planner.PlanAllAsync();
+
+        Directory.Delete(withheld);
+
+        var result = Assert.Single(await planner.ExecuteAsync(findings));
+
+        Assert.False(result.Verification!.Passed);
+        Assert.Equal(withheld, Assert.Single(result.Verification.Failures).Path);
+    }
+
+    /// <summary>
+    /// A protected path that was not there when the plan was made proves nothing by being absent
+    /// afterwards, so a plan holding only those has nothing to prove and stays out of the run.
+    /// </summary>
+    [Fact]
+    public async Task ASurvivorThatWasNeverThereIsNothingToProve()
+    {
+        using var temp = new TempDirectory();
+        var provider = new StubProvider("absent", bytes: 0, protects: Path.Combine(temp.Path, "never-made"));
+        var planner = new CleanupPlanner([provider]);
+
+        var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
+
+        Assert.Empty(results);
+        Assert.False(provider.WasExecuted);
+    }
+
+    /// <summary>
+    /// A plan with no steps whose only protection is one a rule applies — a tool root, an
+    /// unrecognised sibling — has nothing of its own to prove. That protection guards against the
+    /// plan's own deletion, and there is none, so running it would name an already-clear location in
+    /// the run's verdict as though it had been cleaned.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanProtectingOnlyByRuleStaysOutOfTheRun()
+    {
+        using var temp = new TempDirectory();
+        var provider = new StubProvider("clear", bytes: 0, protects: temp.Path, protectsByRule: true);
+        var planner = new CleanupPlanner([provider]);
+
+        var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
+
+        Assert.Empty(results);
+        Assert.False(provider.WasExecuted);
+    }
+
+    /// <summary>
+    /// A run holding nothing but verification still moves the bar, one share each. Giving them no share
+    /// there would leave the bar with nothing to divide by.
+    /// </summary>
+    [Fact]
+    public async Task ARunOfNothingButVerificationSharesTheBarBetweenThem()
+    {
+        using var temp = new TempDirectory();
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("first", bytes: 0, protects: temp.CreateDirectory("first")),
+            new StubProvider("second", bytes: 0, protects: temp.CreateDirectory("second")),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        Assert.Equal([0.5, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// A plan with no steps destroys nothing, so §7 has nothing to authorise. Demanding an answer
+    /// would throw the whole run away over a check that only reads the disk. Tier 4 is included on
+    /// purpose: what is refused there is a deletion, and this plan holds none.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    [InlineData(SafetyTier.DoNotTouch)]
+    public async Task AStepFreePlanNeedsNoConfirmationToBeVerified(SafetyTier tier)
+    {
+        using var temp = new TempDirectory();
+        var provider = new StubProvider("withheld", bytes: 0, tier: tier, protects: temp.Path);
+        var planner = new CleanupPlanner([provider]);
+
+        var result = Assert.Single(await planner.ExecuteAsync(await planner.PlanAllAsync()));
+
+        Assert.True(provider.WasExecuted);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A step-free plan is verified after every plan that deletes, whatever order the selection
+    /// arrived in. Its promise is about what the whole run leaves standing, and proving it before a
+    /// later plan has deleted anything would prove nothing about that plan. It takes no share of the
+    /// bar either, because the part of a run that takes any time is the deleting.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanIsVerifiedLastAndTakesNoShareOfTheBar()
+    {
+        using var temp = new TempDirectory();
+        List<string> journal = [];
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("withheld", bytes: 0, journal: journal, protects: temp.Path),
+            new StubProvider("work", bytes: 1_000, journal: journal),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        journal.Clear();
+        var progress = new ProgressRecorder<double>();
+
+        // Reversed, so the plan with nothing to delete arrives first.
+        await planner.ExecuteAsync([.. findings.OrderBy(f => f.EstimatedBytes)], progress: progress);
+
+        Assert.Equal(["execute:work", "execute:withheld"], journal);
+        Assert.Equal([1.0, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// The share of nothing has to hold beside a plan carrying no estimate as well. Weighed together,
+    /// the two have no figure between them and fall back to one share each, which would give the
+    /// verification half the bar and leave it parked there for as long as the command runs.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanTakesNoShareBesideAPlanWithNoEstimate()
+    {
+        using var temp = new TempDirectory();
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("withheld", bytes: 0, protects: temp.Path),
+            new StubProvider("command", bytes: 0, planStepWithoutEstimate: true),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        Assert.Equal([1.0, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
     }
 
     [Theory]
@@ -470,7 +652,9 @@ public sealed class CleanupPlannerTests
         bool awaitingSourceFolders = false,
         IReadOnlyList<double>? reports = null,
         bool planStepWithoutEstimate = false,
-        string? deletes = null) : ICleanupProvider
+        string? deletes = null,
+        string? protects = null,
+        bool protectsByRule = false) : ICleanupProvider
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
@@ -525,6 +709,16 @@ public sealed class CleanupPlannerTests
 
                 _ => [new RunCommandStep("tool", "clear", "Clear") { Estimated = new ScanSize(bytes, bytes) }],
             },
+            ProtectedPaths = protects is null
+                ? []
+                :
+                [
+                    new ProtectedPath(
+                        protects,
+                        "Withheld from this plan.",
+                        ExistedBefore: Directory.Exists(protects),
+                        Withheld: protectsByRule ? Withholding.None : Withholding.TooRecent),
+                ],
         };
 
         public Task<CleanupResult> ExecuteAsync(
@@ -535,6 +729,7 @@ public sealed class CleanupPlannerTests
         {
             WasExecuted = true;
             ReachHandedOver = runReach;
+            journal?.Add($"execute:{id}");
 
             // Stands in for the fractions a real removal emits as it works through a tree.
             foreach (var fraction in reports ?? [])
@@ -542,7 +737,14 @@ public sealed class CleanupPlannerTests
                 progress?.Report(fraction);
             }
 
-            return Task.FromResult(new CleanupResult { ProviderId = id, ProviderName = id });
+            // The real verifier rather than an empty result, so a test can tell a plan that was
+            // verified from one that was merely handed over.
+            return Task.FromResult(new CleanupResult
+            {
+                ProviderId = id,
+                ProviderName = id,
+                Verification = PlanVerifier.Verify(plan, runReach, ct),
+            });
         }
 
         public Task<VerificationResult> VerifyAsync(

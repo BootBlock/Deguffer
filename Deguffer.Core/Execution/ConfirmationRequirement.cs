@@ -73,9 +73,10 @@ public sealed record ConfirmationRequirement
     public string? RequiredPhrase { get; init; }
 
     /// <summary>
-    /// Whether §7 will put a question to the user about this plan. An empty plan is never executed
-    /// and so is never asked about, which is why emptiness is part of the rule rather than the
-    /// caller's business.
+    /// Whether §7 will put a question to the user about this plan. A plan with no steps destroys
+    /// nothing and so is never asked about, which is why emptiness is part of the rule rather than
+    /// the caller's business. That holds for one the planner runs only to verify what it withheld:
+    /// see <see cref="CleanupPlan.HasSomethingToProve"/>.
     ///
     /// The shell uses this to stand its own blanket confirmation down: asking twice about one
     /// deletion trains people to dismiss the prompt that carries the §7 consequence.
