@@ -31,11 +31,9 @@ public sealed partial class ProviderInfoView : UserControl
     private const int RowsPerPage = 50;
 
     private readonly ObservableCollection<StepViewModel> _steps = [];
-    private readonly ObservableCollection<string> _notes = [];
     private readonly Action<FindingViewModel, StepViewModel> _toggleKeep;
 
     private bool _contentsAsked;
-    private bool _notesListed;
 
     /// <summary>
     /// Assigned before InitializeComponent, so no x:Bind can evaluate against a null model whatever
@@ -51,15 +49,10 @@ public sealed partial class ProviderInfoView : UserControl
         _toggleKeep = toggleKeep;
         InitializeComponent();
 
-        // Bound here rather than in markup because the two collections are this control's own
-        // working state. Binding them in markup would mean exposing each as a public property for
-        // the sake of one x:Bind that nothing outside this file reads.
+        // Bound here rather than in markup because the collection is this control's own working
+        // state. Binding it in markup would mean exposing it as a public property for the sake of
+        // one x:Bind that nothing outside this file reads.
         StepList.ItemsSource = _steps;
-        NoteList.ItemsSource = _notes;
-
-        // The row outlives the dialog, so the subscription is bound to the dialog being on screen.
-        Loaded += (_, _) => Finding.PropertyChanged += OnFindingChanged;
-        Unloaded += (_, _) => Finding.PropertyChanged -= OnFindingChanged;
     }
 
     public FindingViewModel Finding { get; }
@@ -70,30 +63,6 @@ public sealed partial class ProviderInfoView : UserControl
         {
             _toggleKeep(Finding, step);
         }
-    }
-
-    /// <summary>
-    /// The step rows follow a keep or a release on their own, through their bindings. The notes are a
-    /// copy, and keeping an item adds a sentence to them, so they are listed again.
-    /// </summary>
-    private void OnFindingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (_notesListed && e.PropertyName is null or "" or nameof(FindingViewModel.Notes))
-        {
-            ListNotes();
-        }
-    }
-
-    private void ListNotes()
-    {
-        _notes.Clear();
-
-        foreach (var note in Finding.Notes)
-        {
-            _notes.Add(note);
-        }
-
-        _notesListed = true;
     }
 
     /// <summary>
@@ -134,8 +103,6 @@ public sealed partial class ProviderInfoView : UserControl
                 await Task.Yield();
             }
         }
-
-        ListNotes();
 
         filled.Cancel();
 

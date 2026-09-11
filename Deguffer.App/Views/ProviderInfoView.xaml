@@ -191,7 +191,11 @@
 
                         <ItemsControl x:Name="StepList" ItemTemplate="{StaticResource PlanStep}" />
 
-                        <ItemsControl x:Name="NoteList">
+                        <!-- Bound rather than copied, because keeping or releasing an item from this
+                             tab changes the notes while the dialog is open, and a copy refreshed
+                             from an event goes stale whenever the dialog's content is unloaded and
+                             reloaded around that event. -->
+                        <ItemsControl ItemsSource="{x:Bind Finding.Notes, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
                                     <TextBlock Text="{x:Bind}"
