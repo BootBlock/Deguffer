@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
@@ -9,7 +10,8 @@ namespace Deguffer.Core.Scanning;
 /// so it is explicitly *not* the scanner — it is what runs where the MFT cannot be read, and every
 /// result it produces carries the reason (see <see cref="FallbackReason"/>).
 ///
-/// It reports file lengths and nothing else. <c>FileInfo.Length</c> cannot see how many clusters a
+/// It reports file lengths, and the entries a removal would take, and nothing else.
+/// <c>FileInfo.Length</c> cannot see how many clusters a
 /// compressed or sparse file occupies, and neither can any cheap call: <c>GetCompressedFileSize</c>
 /// returns the length again for anything not compressed, and the call that does answer needs a
 /// handle per file — measured at 156 times the cost of the length pass over a 426 MB cache. So the
@@ -99,36 +101,106 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return (ScanSize.FromLengths(0), false);
+            return (ScanSize.Zero, false);
         }
 
         long total = 0;
+        long entries = 0;
 
         // An int rather than a bool because the walk sets it from several threads at once, and
         // Interlocked has no bool overload. Only ever moved to 1, so no ordering question arises.
         var withheld = 0;
 
-        BoundedFileWalk.Visit(
+        var folders = new ConcurrentBag<VisitedFolder>();
+
+        BoundedFileWalk.Visit<VisitedFolder?>(
             LongPath.Extended(path),
-            // The walk hands over a FileInfo whose attributes and timestamps were populated by the
-            // enumeration that found it, so asking its age here costs no further I/O (G4). A file
-            // the guard keeps contributes nothing, because the removal will not take it.
-            file =>
+            rootState: null,
+            (holder, contents, descend) =>
             {
-                if (keep.Protects(file))
+                var folder = new VisitedFolder(holder);
+                folders.Add(folder);
+
+                // A folder the walk was refused may hold anything, so the removal cannot empty it.
+                if (contents.WasRefused)
                 {
-                    Interlocked.Exchange(ref withheld, 1);
+                    folder.Stays();
                 }
-                else
+
+                foreach (var entry in contents.Entries)
                 {
-                    Interlocked.Add(ref total, file.Length);
+                    if (entry is DirectoryInfo child)
+                    {
+                        descend(child, folder);
+                    }
+
+                    // The walk hands over a FileInfo whose attributes and timestamps were populated by
+                    // the enumeration that found it, so asking its age here costs no further I/O (G4).
+                    // A file the guard keeps contributes nothing, because the removal will not take it.
+                    else if (entry is FileInfo file && keep.Protects(file))
+                    {
+                        Interlocked.Exchange(ref withheld, 1);
+                        folder.Stays();
+                    }
+                    else if (entry is FileInfo counted)
+                    {
+                        Interlocked.Add(ref total, counted.Length);
+                        Interlocked.Increment(ref entries);
+                    }
+                }
+
+                // A link is removed as a link: one entry, and nothing on its far side. The guard
+                // applies to it exactly as the removal applies it, by the link's own timestamp.
+                foreach (var link in contents.Links)
+                {
+                    if (keep.Protects(link))
+                    {
+                        Interlocked.Exchange(ref withheld, 1);
+                        folder.Stays();
+                    }
+                    else
+                    {
+                        Interlocked.Increment(ref entries);
+                    }
                 }
             },
             // §5.5: stream partial results. One report per breadth-first level, not per file.
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
             ct);
 
-        return (ScanSize.FromLengths(Interlocked.Read(ref total)), Volatile.Read(ref withheld) == 1);
+        var removed = Interlocked.Read(ref entries) + folders.Count(folder => !folder.HoldsSomethingThatStays);
+
+        return (
+            new ScanSize(Interlocked.Read(ref total), Interlocked.Read(ref total), Entries: removed),
+            Volatile.Read(ref withheld) == 1);
+    }
+
+    /// <summary>
+    /// One folder the walk reached, and whether the removal would leave it standing.
+    ///
+    /// <para>A folder stays while anything inside it stays, however deep, so a kept file has to mark
+    /// every folder above it. The walk is breadth-first and parallel, so no folder's children are all
+    /// known when it is reached; each folder instead holds the one above it, and a kept entry walks the
+    /// chain upward.</para>
+    /// </summary>
+    private sealed class VisitedFolder(VisitedFolder? holder)
+    {
+        private readonly VisitedFolder? _holder = holder;
+
+        private int _stays;
+
+        public bool HoldsSomethingThatStays => Volatile.Read(ref _stays) == 1;
+
+        /// <summary>
+        /// Mark this folder and every folder above it. It stops at a folder already marked, because
+        /// whatever marked that one goes on to mark everything above it.
+        /// </summary>
+        public void Stays()
+        {
+            for (var folder = this; folder is not null && Interlocked.Exchange(ref folder._stays, 1) == 0; folder = folder._holder)
+            {
+            }
+        }
     }
 
     /// <summary>
@@ -161,8 +233,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             // removal will reclaim from it, and a step with nothing to reclaim is not offerable —
             // which is the outcome a protected single file should have.
             return keep.Protects(file)
-                ? (ScanSize.FromLengths(0), true)
-                : (ScanSize.FromLengths(file.Length), false);
+                ? (ScanSize.Zero, true)
+                : (new ScanSize(file.Length, file.Length, Entries: 1), false);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {

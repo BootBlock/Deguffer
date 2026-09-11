@@ -77,6 +77,65 @@ public sealed class RecordedRefusalsTests : IDisposable
         Assert.Empty(recorder.Probed);
     }
 
+    /// <summary>
+    /// A leftover that frees no bytes is chosen on its entries, so what Windows still refuses comes
+    /// out of the count as well as the size — and a refused file keeps every folder above it standing
+    /// too. Left in, the count would offer folders the removal cannot take.
+    /// </summary>
+    [Fact]
+    public void TakesWhatWindowsStillRefusesOutOfTheCountWithEveryFolderAboveIt()
+    {
+        var leftover = _temp.CreateDirectory("leftover");
+        var held = _temp.CreateFile(64, "leftover", "tool-results", "held.txt");
+        _temp.CreateFile(32, "leftover", "tool-results", "free.txt");
+
+        Record.Replace(leftover, [Path.Combine(leftover, "tool-results")]);
+
+        var plan = Plan(new DeleteDirectoryStep(leftover, "A leftover")
+        {
+            Estimated = new ScanSize(96, 96, Entries: 4),
+            IsLeftover = true,
+        });
+
+        var applied = RecordedRefusals.Apply(
+            plan,
+            Record,
+            new RefusingFileSystem(WindowsFileSystem.Default, new Dictionary<string, RefusalReason> { [held] = RefusalReason.InUse }),
+            default);
+
+        var step = Assert.Single(applied.Steps);
+
+        // Taken: free.txt. Left: held.txt, and tool-results and leftover above it.
+        Assert.Equal(1, step.Estimated.Entries);
+        Assert.Equal(32, step.EstimatedBytes);
+    }
+
+    [Fact]
+    public void ALeftoverWhoseEveryFileIsRefusedRemovesNothing()
+    {
+        var leftover = _temp.CreateDirectory("leftover");
+        var held = _temp.CreateFile(64, "leftover", "tool-results", "held.txt");
+
+        Record.Replace(leftover, [Path.Combine(leftover, "tool-results")]);
+
+        var plan = Plan(new DeleteDirectoryStep(leftover, "A leftover")
+        {
+            Estimated = new ScanSize(64, 64, Entries: 3),
+            IsLeftover = true,
+        });
+
+        var applied = RecordedRefusals.Apply(
+            plan,
+            Record,
+            new RefusingFileSystem(WindowsFileSystem.Default, new Dictionary<string, RefusalReason> { [held] = RefusalReason.Denied }),
+            default);
+
+        var step = Assert.Single(applied.Steps);
+
+        Assert.Equal(0, step.Estimated.Entries);
+        Assert.False(step.RemovesSomething, "a leftover Windows will not let go of was offered as removable");
+    }
+
     private static CleanupPlan Plan(CleanupStep step) => new()
     {
         ProviderId = "test",

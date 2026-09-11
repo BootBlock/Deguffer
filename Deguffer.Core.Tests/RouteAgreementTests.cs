@@ -133,7 +133,7 @@ public class RouteAgreementTests
 
     /// <summary>
     /// The consequence of the above, at the seam that decides it. A step's
-    /// <see cref="CleanupStep.EstimatedBytes"/> is what both <c>Finding.HasReclaimableSpace</c> and
+    /// <see cref="CleanupStep.EstimatedBytes"/> is what both <c>Finding.HasSomethingToRemove</c> and
     /// the shell's per-step checkbox read, so a directory measured at zero is one the user is shown
     /// and cannot act on.
     ///

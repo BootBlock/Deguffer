@@ -56,7 +56,7 @@ public sealed class CleanupPlannerTests
 
         Assert.False(finding.IsPresent);
         Assert.Null(finding.Plan);
-        Assert.False(finding.HasReclaimableSpace);
+        Assert.False(finding.HasSomethingToRemove);
     }
 
     /// <summary>

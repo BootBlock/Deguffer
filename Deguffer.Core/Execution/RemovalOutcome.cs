@@ -21,12 +21,17 @@ namespace Deguffer.Core.Execution;
 /// somebody using. The user acts on it by closing that program, so the count is what tells them
 /// there is something to close.
 /// </param>
+/// <param name="EntriesRemoved">
+/// How many entries this removal took: files, links, and the folders they left empty, the root among
+/// them where it went. A path already gone when the removal began took nothing, so it counts none.
+/// </param>
 public sealed record RemovalOutcome(
     long BytesReclaimed,
     Refusals Refused,
     bool RootRemoved,
     int Kept = 0,
-    int Spared = 0)
+    int Spared = 0,
+    long EntriesRemoved = 0)
 {
     /// <summary>
     /// The entries directly inside the removal's root that held a refused file, in display form.

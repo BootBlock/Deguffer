@@ -533,6 +533,80 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains("held nothing", step.Message!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The count a run of empty leftovers reports in place of bytes, from each kind of removal Deguffer
+    /// carries out itself.
+    /// </summary>
+    [Fact]
+    public async Task ReportsHowManyEntriesEachRemovalTook()
+    {
+        var folder = _temp.CreateDirectory("leftover");
+        _temp.CreateDirectory("leftover", "empty");
+        var file = _temp.CreateFile(64, "handshake.lock");
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(
+                PlanDeleting(new DeleteDirectoryStep(folder, "A leftover")) with
+                {
+                    Steps = [new DeleteDirectoryStep(folder, "A leftover"), new DeleteFileStep(file, "A lock")],
+                },
+                runReach: null,
+                progress: null,
+                ct: CancellationToken.None);
+
+        Assert.Equal(2, result.Steps[0].EntriesRemoved);
+        Assert.Equal(1, result.Steps[1].EntriesRemoved);
+        Assert.Equal(3, result.EntriesRemoved);
+        Assert.Equal(64, result.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// A folder whose only contents were empty folders did have something cleared out of it. "It held
+    /// nothing to clear" would be a false sentence about a folder the user can see was emptied.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayAFolderOfEmptyFoldersHeldNothing()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        _temp.CreateDirectory("scratch", "empty-one");
+        _temp.CreateDirectory("scratch", "empty-two");
+
+        var result = await Execute(new ClearDirectoryStep(scratch, "Scratch files"));
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(2, step.EntriesRemoved);
+        Assert.True(Directory.Exists(scratch), "the folder cleared in place was removed");
+        Assert.DoesNotContain("held nothing", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("Cleared", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder the guard kept standing, with only empty folders taken out of it, lost something. Saying
+    /// it was left alone would deny a removal the user can see happened.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayAFolderWasLeftAloneWhenEmptyFoldersWentFromIt()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "written-just-now.bin");
+        _temp.CreateDirectory("cache", "empty");
+
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with
+        {
+            Keep = MinimumAge.WithinHours(8, DateTime.UtcNow),
+        };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Equal(1, step.EntriesRemoved);
+        Assert.False(Directory.Exists(Path.Combine(cache, "empty")));
+        Assert.DoesNotContain("Left alone", step.Message!, StringComparison.Ordinal);
+    }
+
     private Task<CleanupResult> Execute(CleanupStep step) =>
         new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
             new CleanupPlan

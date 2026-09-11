@@ -36,13 +36,19 @@ public sealed record Finding(
     /// </summary>
     public ScanSize Estimated => Plan?.Estimated ?? ScanSize.Zero;
 
-    /// <summary>Whether there is anything here worth showing the user as reclaimable.</summary>
-    public bool HasReclaimableSpace => EstimatedBytes > 0;
+    /// <summary>What choosing this row reclaims, as its size label states it. See <see cref="CleanupPlan.Reclaim"/>.</summary>
+    public ScanSize Reclaim => Plan?.Reclaim ?? ScanSize.Zero;
+
+    /// <summary>
+    /// Whether any step here removes something worth choosing it for: bytes, or the entries of a
+    /// leftover. See <see cref="CleanupStep.RemovesSomething"/>.
+    /// </summary>
+    public bool HasSomethingToRemove => Plan?.Steps.Any(step => step.RemovesSomething) == true;
 
     /// <summary>
     /// §3's "Default" column: only Tier 1 is pre-selected, and only when there is something to
     /// reclaim. This lives here rather than in the view-model so the tier table is answerable in
     /// one place.
     /// </summary>
-    public bool IsPreSelectedByDefault => HasReclaimableSpace && Provider.Tier.IsPreSelectedByDefault();
+    public bool IsPreSelectedByDefault => HasSomethingToRemove && Provider.Tier.IsPreSelectedByDefault();
 }

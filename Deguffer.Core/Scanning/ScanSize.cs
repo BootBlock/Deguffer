@@ -25,7 +25,24 @@ namespace Deguffer.Core.Scanning;
 /// reports them exactly — so hedging it would be a false qualification on every unelevated
 /// preview.</para>
 /// </param>
-public readonly record struct ScanSize(long Allocated, long Logical, bool IsApproximate = false)
+/// <param name="Entries">
+/// How many filesystem entries a removal of the measured path would take: its files, its
+/// directories and the path itself, and the links inside it, which are removed as links.
+///
+/// <para><b>Bytes are not the whole of what a removal frees.</b> A folder holding nothing measures
+/// zero bytes and is still an entry in its parent, and a leftover made of hundreds of empty folders
+/// is hundreds of entries nothing will ever read. Without a count, that leftover could not be told
+/// from a path holding nothing to remove at all.</para>
+///
+/// <para><b>Counted on the removal's own terms, and never above them.</b> A file the guard on
+/// recently changed files keeps is not counted, and neither is any folder above it, because a
+/// folder still holding something cannot be removed. The same holds for a folder the walk was
+/// refused, whose contents nobody read. Two things fall short of the removal instead, which is the
+/// safe direction for a count that decides whether anything is offered: a symbolic link to a file,
+/// which neither measuring route sees, and a sole-link prediction, which counts nothing because the
+/// tool it forecasts decides what it removes.</para>
+/// </param>
+public readonly record struct ScanSize(long Allocated, long Logical, bool IsApproximate = false, long Entries = 0)
 {
     public static readonly ScanSize Zero = new(0, 0);
 
@@ -49,7 +66,8 @@ public readonly record struct ScanSize(long Allocated, long Logical, bool IsAppr
     public static ScanSize operator +(ScanSize left, ScanSize right) => new(
         left.Allocated + right.Allocated,
         left.Logical + right.Logical,
-        left.IsApproximate || right.IsApproximate);
+        left.IsApproximate || right.IsApproximate,
+        left.Entries + right.Entries);
 
     /// <summary>
     /// A measurement with part of it taken out: what a folder holds, less the part of it a plan has
@@ -67,7 +85,8 @@ public readonly record struct ScanSize(long Allocated, long Logical, bool IsAppr
     public static ScanSize operator -(ScanSize left, ScanSize right) => new(
         Math.Max(0, left.Allocated - right.Allocated),
         Math.Max(0, left.Logical - right.Logical),
-        left.IsApproximate || right.IsApproximate);
+        left.IsApproximate || right.IsApproximate,
+        Math.Max(0, left.Entries - right.Entries));
 
     /// <summary>
     /// The single number to show and to subtract. It is <see cref="Logical"/>, and that is a

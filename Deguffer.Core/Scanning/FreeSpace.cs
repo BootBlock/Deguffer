@@ -44,8 +44,19 @@ public static class FreeSpace
     /// sum whose link counts move whenever a project installs a dependency. Saying "about" is the
     /// difference between reporting a measurement and repeating someone else's forecast.
     /// </summary>
-    public static string Format(ScanSize size) =>
-        size.IsApproximate ? $"about {Format(size.Reclaimable)}" : Format(size.Reclaimable);
+    ///
+    /// <para>Where no bytes go and entries do, the entries are the figure. A leftover of empty folders
+    /// frees nothing measurable, and "0 B" beside a row that is ready to clean reads as nothing to do.
+    /// Bytes stay the figure wherever there are any, so the count never becomes a second number in
+    /// every label.</para>
+    public static string Format(ScanSize size) => size switch
+    {
+        { Reclaimable: 0, Entries: > 0 } => Items(size.Entries),
+        { IsApproximate: true } => $"about {Format(size.Reclaimable)}",
+        _ => Format(size.Reclaimable),
+    };
+
+    private static string Items(long entries) => entries == 1 ? "1 item" : $"{entries:N0} items";
 
     /// <summary>Human-readable size, in the binary units Windows itself reports.</summary>
     public static string Format(long bytes)

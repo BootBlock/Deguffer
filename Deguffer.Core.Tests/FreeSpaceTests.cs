@@ -89,6 +89,28 @@ public class FreeSpaceTests
     /// so this fails rather than passing by coincidence if the two axes are ever swapped back —
     /// <see cref="ScanSize.Reclaimable"/> carries the three measurements that decided it.
     /// </summary>
+    /// <summary>
+    /// A leftover of empty folders frees no bytes, and "0 B" beside a row ready to clean would read as
+    /// nothing to do. What it offers is its entries, so that is what is stated.
+    /// </summary>
+    [Theory]
+    [InlineData(1, "1 item")]
+    [InlineData(428, "428 items")]
+    public void StatesTheEntriesOfSomethingThatFreesNoBytes(long entries, string expected) =>
+        Assert.Equal(expected, FreeSpace.Format(new ScanSize(0, 0, Entries: entries)));
+
+    /// <summary>
+    /// Bytes are the figure wherever there are any. The count stands in for them where there are none,
+    /// rather than becoming a second number in every label.
+    /// </summary>
+    [Fact]
+    public void StatesBytesWhereThereAreAnyWhateverTheCount() =>
+        Assert.Equal("1.5 MB", FreeSpace.Format(new ScanSize(1536 * 1024, 1536 * 1024, Entries: 300)));
+
+    [Fact]
+    public void StatesNothingAsNoBytes() =>
+        Assert.Equal("0 B", FreeSpace.Format(ScanSize.Zero));
+
     [Fact]
     public void StatesAMeasuredSizeAsTheLogicalFigure() =>
         Assert.Equal("8.6 MB", FreeSpace.Format(new ScanSize(1536 * 1024, 9_000_000)));

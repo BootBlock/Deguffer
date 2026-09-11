@@ -29,13 +29,14 @@ internal static class ProgressWeights
     /// bar by an amount that means nothing. Nothing invents one here, so the caller's job is to hand
     /// over parts that were all measured the same way.</para>
     ///
-    /// <para>Deguffer's own callers do. A step is untickable unless it has bytes to reclaim, and a
-    /// plan is narrowed to its ticked steps before it executes, so every executed step carries a
-    /// positive estimate and every executed plan therefore sums to one — see
-    /// <c>StepViewModel.CanBeSelected</c> and <see cref="CleanupPlan.NarrowedTo"/>. That invariant
-    /// belongs to the shell rather than to this rule, which is why it is written down here. The one
-    /// plan a caller may hand the planner with no estimate by design is one run only to be verified,
-    /// and <see cref="CleanupPlanner"/> weighs those apart rather than handing them here.</para>
+    /// <para>Deguffer's own callers nearly do. A step is untickable unless it removes something, and a
+    /// plan is narrowed to its ticked steps before it executes — see <c>StepViewModel.CanBeSelected</c>
+    /// and <see cref="CleanupPlan.NarrowedTo"/>. The one ticked step that carries no byte estimate is a
+    /// leftover of empty folders (<see cref="DeleteStep.IsLeftover"/>), and a share of nothing is right
+    /// for it: removing an empty folder takes no time the bar could show. A run of nothing else falls
+    /// back to the count above. The one plan a caller may hand the planner with no estimate by design is
+    /// one run only to be verified, and <see cref="CleanupPlanner"/> weighs those apart rather than
+    /// handing them here.</para>
     /// </summary>
     public static IReadOnlyList<double> For(IEnumerable<long> estimates)
     {

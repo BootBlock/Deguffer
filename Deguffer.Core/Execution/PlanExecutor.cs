@@ -189,6 +189,10 @@ public sealed class PlanExecutor(
         var remaining = after.Size.Reclaimable;
         var reclaimed = step.EstimatedBytes - remaining;
 
+        // The entries by the same subtraction. The bin's own folder stays standing and was never in
+        // the estimate's count, so it comes out of the reading afterwards as well.
+        var entriesRemoved = Math.Max(0, step.Estimated.Entries - Math.Max(0, after.Size.Entries - 1));
+
         // Nothing to report along the way — the shell offers no progress of its own, and its
         // progress window is one of the three things the flags suppress.
         progress?.Report(1.0);
@@ -223,7 +227,12 @@ public sealed class PlanExecutor(
         };
 
         return new StepOutcome(
-            step.Description, succeeded, Math.Max(0, reclaimed), Refusals.None, message);
+            step.Description,
+            succeeded,
+            Math.Max(0, reclaimed),
+            Refusals.None,
+            message,
+            EntriesRemoved: entriesRemoved);
     }
 
     private async Task<StepOutcome> DeleteAsync(
@@ -242,7 +251,11 @@ public sealed class PlanExecutor(
         // A file the guard held back counts as something achieved, because it is the outcome the
         // user asked for. A directory holding nothing else reclaims no bytes and keeps its root, so
         // without this the setting working exactly as intended would be reported as a failed step.
-        var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0;
+        //
+        // An empty folder taken out of a folder the guard kept standing is something achieved too, and
+        // it reclaims no bytes.
+        var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0
+            || removal.EntriesRemoved > 0;
 
         var message = succeeded switch
         {
@@ -252,7 +265,7 @@ public sealed class PlanExecutor(
             // held back everything this step named. Saying "Removed" here would be a false statement
             // about the user's disk, and the qualifier would not rescue it — the sentence has to be
             // about what stayed, because that is all that happened.
-            _ when removal is { BytesReclaimed: 0, RootRemoved: false } =>
+            _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } =>
                 $"Left alone: {removal.Kept} file(s) changed too recently{LeftInPlace.Clauses(removal.Refused, kept: 0)}.",
 
             _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.Kept)}.",
@@ -264,7 +277,8 @@ public sealed class PlanExecutor(
             removal.BytesReclaimed,
             removal.Refused,
             message,
-            removal.Kept);
+            removal.Kept,
+            EntriesRemoved: removal.EntriesRemoved);
     }
 
     /// <summary>
@@ -297,20 +311,22 @@ public sealed class PlanExecutor(
 
         refusals.Replace(step.Path, removal.RefusedAt);
 
-        var succeeded = removal.BytesReclaimed > 0 || removal.Kept > 0 || removal.Spared > 0
-            || removal.Refused.IsEmpty;
+        var succeeded = removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
+            || removal.Spared > 0 || removal.Refused.IsEmpty;
 
-        var message = (succeeded, removal.BytesReclaimed) switch
+        // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
+        // bytes, and it was still cleared.
+        var message = (succeeded, removal.BytesReclaimed, removal.EntriesRemoved) switch
         {
-            (false, _) => LeftInPlace.WhyNothingHappened(removal.Refused),
+            (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
             // touch, and entries something is using. "Cleared" would be a false statement about a
             // folder that is exactly as full as it was.
-            (true, 0) when removal.Kept > 0 || removal.Spared > 0 =>
+            (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 =>
                 $"Nothing was cleared{LeftInPlace.Clauses(removal.Refused, removal.Kept, removal.Spared)}.",
 
-            (true, 0) => "It held nothing to clear.",
+            (true, 0, 0) => "It held nothing to clear.",
 
             _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.Kept, removal.Spared)}.",
         };
@@ -322,7 +338,8 @@ public sealed class PlanExecutor(
             removal.Refused,
             message,
             removal.Kept,
-            removal.Spared);
+            removal.Spared,
+            removal.EntriesRemoved);
     }
 
     private async Task<StepOutcome> DeleteAsync(
@@ -358,7 +375,12 @@ public sealed class PlanExecutor(
         var message = removal.Removed ? "Removed." : LeftInPlace.WhyNothingHappened(removal.Refused);
 
         return new StepOutcome(
-            step.Description, removal.Removed, removal.BytesReclaimed, removal.Refused, message);
+            step.Description,
+            removal.Removed,
+            removal.BytesReclaimed,
+            removal.Refused,
+            message,
+            EntriesRemoved: removal.Removed ? 1 : 0);
     }
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)

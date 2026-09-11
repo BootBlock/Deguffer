@@ -168,7 +168,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public string CleaningAdvice => Tier.ToCleaningAdvice();
 
-    public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Estimated) : "—";
+    public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Reclaim) : "—";
 
     /// <summary>
     /// What this row is reporting, as the single value both its own label and the page's info bar
@@ -187,7 +187,7 @@ public sealed partial class FindingViewModel : ObservableObject
         ? FindingStatus.AwaitingSourceFolders
         : !Finding.IsPresent
         ? FindingStatus.ToolchainMissing
-        : !Finding.HasReclaimableSpace
+        : !Finding.HasSomethingToRemove
             ? Finding.Plan switch
             {
                 { HasUnreadableRoot: true } => FindingStatus.UnreadableRoot,
@@ -211,7 +211,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// nothing and leave a row that says it is selected and removes nothing. That case arrived with
     /// the Windows servicing logs, every step of which needs administrator rights.
     /// </summary>
-    public bool CanBeSelected => Finding.HasReclaimableSpace && Steps.Any(s => s.CanBeSelected);
+    public bool CanBeSelected => Finding.HasSomethingToRemove && Steps.Any(s => s.CanBeSelected);
 
     /// <summary>
     /// Whether the compact row states why it cannot be ticked. Stated here rather than negated in
@@ -231,7 +231,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// it. A row with nothing to reclaim shows "0 B" or "—", which the reason beside it already
     /// says in words.
     /// </summary>
-    public bool HasSizeToShow => Finding.HasReclaimableSpace;
+    public bool HasSizeToShow => Finding.HasSomethingToRemove;
 
     /// <summary>
     /// Whether this row is one the "show items not installed" filter hides.
@@ -257,11 +257,12 @@ public sealed partial class FindingViewModel : ObservableObject
     /// by releasing what it holds.
     ///
     /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
-    /// the label needs <see cref="Finding.HasReclaimableSpace"/> to be false, that is the sum of
-    /// every step's reclaimable bytes, and no step is negative — so every step measures zero, and
-    /// <see cref="StepViewModel.CanBeSelected"/> refuses each one. The proof holds only while both
-    /// sides count the same bytes. Moving either to <c>ScanSize.Allocated</c> would break it, and a
-    /// selected row would then be hidden by a filter that is on by default.</para>
+    /// the label needs <see cref="Finding.HasSomethingToRemove"/> to be false, which is no step
+    /// answering <see cref="CleanupStep.RemovesSomething"/>, and
+    /// <see cref="StepViewModel.CanBeSelected"/> refuses exactly the steps that do not. The proof
+    /// holds only while both sides ask that one property. A second copy of the rule on either side —
+    /// a byte test here, or <c>ScanSize.Allocated</c> there — would let a selected row be hidden by a
+    /// filter that is on by default.</para>
     /// </summary>
     public bool IsAlreadyClear => Status is FindingStatus.AlreadyClear;
 
@@ -284,7 +285,7 @@ public sealed partial class FindingViewModel : ObservableObject
 
     /// <summary>What this row contributes to the selected total, counting only ticked steps.</summary>
     public ScanSize SelectedSize =>
-        SelectedSteps.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
+        SelectedSteps.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Reclaim);
 
     /// <summary>
     /// The ceiling <see cref="SelectedSize"/> can reach: every step this row offers, ticked or not.
@@ -296,7 +297,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public ScanSize SelectableSize => Steps
         .Where(s => s.CanBeSelected)
-        .Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
+        .Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Reclaim);
 
     /// <summary>
     /// Whether the steps are individually worth choosing between. A single step <em>is</em> the
