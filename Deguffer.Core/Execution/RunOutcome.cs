@@ -112,10 +112,15 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
     ///
     /// <para>What the next preview does with a refusal is said as well, because it is the answer to
     /// the question a refusal raises: will this row keep offering what it cannot take?</para>
+    ///
+    /// <para>Folders Windows refused come after that promise, never before it. The promise is about
+    /// bytes the next preview leaves out of its figures, and a folder holds none, so a folder sentence
+    /// ahead of it would read as covered by it.</para>
     /// </summary>
     private static string LeftBehind(IReadOnlyList<CleanupResult> results)
     {
         var refused = results.Aggregate(Refusals.None, (total, result) => total + result.Refused);
+        var folders = results.Aggregate(FolderRefusals.None, (total, result) => total + result.RefusedFolders);
         var kept = results.Sum(r => r.KeptCount);
         var spared = results.Sum(r => r.SparedCount);
 
@@ -132,6 +137,12 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
             + (refused.IsEmpty
                 ? string.Empty
                 : " The next preview leaves out whatever is still refused, apart from a running program's own files.")
+            + (folders.InUse > 0
+                ? $" Another program was using {folders.InUse:N0} folder(s), so they were left in place."
+                : string.Empty)
+            + (folders.Denied > 0
+                ? $" Windows would not let Deguffer remove {folders.Denied:N0} folder(s)."
+                : string.Empty)
             + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
 
             // Worded away from the first clause on purpose. Both are about something being in use,

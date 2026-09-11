@@ -38,4 +38,22 @@ public sealed record RemovalOutcome(
     /// file in that tree for deletion on every preview.</para>
     /// </summary>
     public IReadOnlyList<string> RefusedAt { get; init; } = [];
+
+    /// <summary>
+    /// Every directory this removal tried to take and could not, in display form, whatever kept it:
+    /// Windows refusing the folder itself, or something still inside it. A root the caller asked to
+    /// keep was never tried, so it is not here.
+    ///
+    /// <para>The evidence §5.6 reads through <see cref="RunResidue"/>. A folder left standing says
+    /// where the removal went, which no question about what a folder still holds can say.</para>
+    /// </summary>
+    public IReadOnlyList<string> LeftStanding { get; init; } = [];
+
+    /// <summary>
+    /// The folders in <see cref="LeftStanding"/> that Windows refused for a reason of their own, by
+    /// reason. See <see cref="FolderRefusals"/> for why a folder held up by what it holds is not
+    /// counted. A link left standing is not counted either, for the reason a refused file link is not:
+    /// see <see cref="DirectoryRemover"/>.
+    /// </summary>
+    public FolderRefusals RefusedFolders { get; init; }
 }

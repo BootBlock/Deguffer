@@ -81,9 +81,16 @@ public interface ICleanupProvider
     /// would report a folder another provider deleted as one something outside Deguffer removed.
     /// Null means this plan is the whole run, which is what a provider executed on its own is.
     /// </param>
+    /// <param name="residue">
+    /// What the run's removals have left standing so far, which this execution adds to and verifies
+    /// against (§5.6). One record for the whole run, for the reason <paramref name="runReach"/> is one:
+    /// a folder another provider's removal went into is still a folder this run went into. Null means
+    /// this plan is the whole run.
+    /// </param>
     Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
         RunReach? runReach = null,
+        RunResidue? residue = null,
         IProgress<double>? progress = null,
         CancellationToken ct = default);
 

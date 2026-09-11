@@ -968,6 +968,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         public Task<Execution.CleanupResult> ExecuteAsync(
             Execution.CleanupPlan plan,
             Execution.RunReach? runReach = null,
+            Execution.RunResidue? residue = null,
             IProgress<double>? progress = null,
             CancellationToken ct = default) =>
             throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");

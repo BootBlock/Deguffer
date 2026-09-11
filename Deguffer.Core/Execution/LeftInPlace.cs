@@ -6,13 +6,13 @@ namespace Deguffer.Core.Execution;
 /// The words a removal step uses for what it left where it was.
 ///
 /// <para>The causes are named separately because they ask different things of the reader. Another
-/// program has files open, which closing it answers. Windows would not let Deguffer remove files,
-/// which waiting will not change. A setting they chose held files back. And Deguffer declined to
-/// touch an entry it found somebody working in. A single count would tell them how much stayed and
-/// nothing about what to do.</para>
+/// program has files open, or is working in a folder, which closing it answers. Windows would not let
+/// Deguffer remove files or folders, which waiting will not change. A setting they chose held files
+/// back. And Deguffer declined to touch an entry it found somebody working in. A single count would
+/// tell them how much stayed and nothing about what to do.</para>
 ///
-/// <para>Composed from the clauses that apply rather than switched on every combination: four causes
-/// make sixteen cases, and the wording would then live in sixteen places.</para>
+/// <para>Composed from the clauses that apply rather than switched on every combination: six causes
+/// make sixty-four cases, and the wording would then live in sixty-four places.</para>
 /// </summary>
 internal static class LeftInPlace
 {
@@ -20,9 +20,9 @@ internal static class LeftInPlace
     /// What a step that achieved something has to add about what it left behind, or nothing where it
     /// left nothing.
     /// </summary>
-    public static string Clauses(Refusals refused, int kept, int spared = 0)
+    public static string Clauses(Refusals refused, FolderRefusals folders, int kept, int spared = 0)
     {
-        var clauses = new List<string>(4);
+        var clauses = new List<string>(6);
 
         if (refused.InUse.Files > 0)
         {
@@ -32,6 +32,16 @@ internal static class LeftInPlace
         if (refused.Denied.Files > 0)
         {
             clauses.Add($"{Files(refused.Denied)} left in place because Windows would not let Deguffer remove them");
+        }
+
+        if (folders.InUse > 0)
+        {
+            clauses.Add($"{folders.InUse:N0} folder(s) left in place because another program was using them");
+        }
+
+        if (folders.Denied > 0)
+        {
+            clauses.Add($"{folders.Denied:N0} folder(s) left in place because Windows would not let Deguffer remove them");
         }
 
         if (kept > 0)
@@ -57,14 +67,14 @@ internal static class LeftInPlace
     /// guess, and "run as administrator" is advice this is almost only shown to somebody who has
     /// taken — the shell does not offer a step needing those rights to a process without them.</para>
     /// </summary>
-    public static string WhyNothingHappened(Refusals refused)
+    public static string WhyNothingHappened(Refusals refused, FolderRefusals folders)
     {
-        if (refused.IsEmpty)
+        if (refused.IsEmpty && folders.IsEmpty)
         {
             return "Nothing was removed.";
         }
 
-        var causes = new List<string>(2);
+        var causes = new List<string>(4);
 
         if (refused.Denied.Files > 0)
         {
@@ -74,6 +84,16 @@ internal static class LeftInPlace
         if (refused.InUse.Files > 0)
         {
             causes.Add($"another program had {Files(refused.InUse)} open");
+        }
+
+        if (folders.Denied > 0)
+        {
+            causes.Add($"Windows would not let Deguffer remove {folders.Denied:N0} folder(s)");
+        }
+
+        if (folders.InUse > 0)
+        {
+            causes.Add($"another program was using {folders.InUse:N0} folder(s)");
         }
 
         return $"Nothing was removed: {string.Join(", and ", causes)}.";

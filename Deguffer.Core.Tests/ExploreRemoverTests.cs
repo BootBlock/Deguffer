@@ -172,6 +172,34 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A folder a program is working in keeps the item around it standing, and the sentence says so.
+    /// Without it the item was "partly deleted" for no stated reason, and the reader had no way to know
+    /// that closing a program would let the rest go.
+    /// </summary>
+    [Fact]
+    public async Task SaysAnotherProgramWasUsingAFolderThatKeptAPartlyDeletedItem()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "junk");
+        var working = _temp.CreateDirectory("profile", "Downloads", "junk", "work");
+        _temp.CreateFile(32, "profile", "Downloads", "junk", "a.bin");
+
+        ExploreRemovalReport report;
+
+        using (new HeldDirectory(working))
+        {
+            report = await ExploreRemover.RemoveAsync(
+                [new ExploreItem(folder, IsDirectory: true, Bytes: 32)],
+                ExploreRemovalMode.Permanent,
+                _policy);
+        }
+
+        Assert.Equal(
+            "Partly deleted, 1 folder(s) left in place because another program was using them, so the folder is still there.",
+            Assert.Single(report.Refused).Message);
+        Assert.True(LongPath.DirectoryExists(working));
+    }
+
+    /// <summary>
     /// The negative that matters. A refused item is not merely absent from the report — it is still
     /// on the disk, and the shell is never asked about it.
     /// </summary>

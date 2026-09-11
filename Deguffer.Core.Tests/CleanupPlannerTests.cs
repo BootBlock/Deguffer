@@ -643,6 +643,35 @@ public sealed class CleanupPlannerTests
         Assert.Contains(@"C:\Users\testuser\src\project\obj", deleter.ReachHandedOver.TargetedPaths);
     }
 
+    /// <summary>
+    /// What one plan's removal left standing is evidence for every plan verified after it. A folder one
+    /// provider's removal went into may be a folder another provider promised to leave, so every
+    /// provider is handed the one record the whole run writes to — and the plan proving its survivors
+    /// last reads what the plan before it left inside one.
+    /// </summary>
+    [Fact]
+    public async Task APlanVerifiedLaterSeesWhatAnEarlierPlansRemovalLeftInsideItsFolder()
+    {
+        using var temp = new TempDirectory();
+        var scratch = temp.CreateDirectory("scratch");
+        var kept = temp.CreateDirectory("scratch", "kept");
+        var working = temp.CreateDirectory("scratch", "kept", "work");
+
+        var clearing = new StubProvider("clear", bytes: 1_000, deletes: scratch, leavesStanding: [working]);
+        var keeping = new StubProvider("keep", bytes: 0, protects: kept);
+        var planner = new CleanupPlanner([clearing, keeping]);
+
+        var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
+
+        Assert.NotNull(clearing.ResidueHandedOver);
+        Assert.Same(clearing.ResidueHandedOver, keeping.ResidueHandedOver);
+
+        var check = Assert.Single(results.Single(r => r.ProviderId == "keep").Verification!.Checks);
+
+        Assert.Equal(kept, check.Path);
+        Assert.Equal(VerificationOutcome.Entered, check.Outcome);
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,
@@ -654,7 +683,8 @@ public sealed class CleanupPlannerTests
         bool planStepWithoutEstimate = false,
         string? deletes = null,
         string? protects = null,
-        bool protectsByRule = false) : ICleanupProvider
+        bool protectsByRule = false,
+        IReadOnlyList<string>? leavesStanding = null) : ICleanupProvider
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
@@ -664,6 +694,9 @@ public sealed class CleanupPlannerTests
 
         /// <summary>What the planner said the whole run may destroy, for §5.6's negative.</summary>
         public RunReach? ReachHandedOver { get; private set; }
+
+        /// <summary>The record of what the run's removals left standing, as the planner handed it over.</summary>
+        public RunResidue? ResidueHandedOver { get; private set; }
 
         public void InvalidateCaches() => journal?.Add($"invalidate:{id}");
 
@@ -724,12 +757,20 @@ public sealed class CleanupPlannerTests
         public Task<CleanupResult> ExecuteAsync(
             CleanupPlan plan,
             RunReach? runReach = null,
+            RunResidue? residue = null,
             IProgress<double>? progress = null,
             CancellationToken ct = default)
         {
             WasExecuted = true;
             ReachHandedOver = runReach;
+            ResidueHandedOver = residue;
             journal?.Add($"execute:{id}");
+
+            // Stands in for what a real removal records about the folders it could not take.
+            if (deletes is not null && leavesStanding is not null)
+            {
+                residue?.Record(deletes, leavesStanding);
+            }
 
             // Stands in for the fractions a real removal emits as it works through a tree.
             foreach (var fraction in reports ?? [])
@@ -743,7 +784,7 @@ public sealed class CleanupPlannerTests
             {
                 ProviderId = id,
                 ProviderName = id,
-                Verification = PlanVerifier.Verify(plan, runReach, ct),
+                Verification = PlanVerifier.Verify(plan, runReach, residue, ct),
             });
         }
 

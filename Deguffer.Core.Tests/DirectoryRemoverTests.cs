@@ -33,6 +33,85 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.True(outcome.Refused.IsEmpty);
         Assert.Equal(1024 + 2048 + 4096, outcome.BytesReclaimed);
         Assert.False(Directory.Exists(root));
+        Assert.Empty(outcome.LeftStanding);
+        Assert.True(outcome.RefusedFolders.IsEmpty);
+    }
+
+    /// <summary>
+    /// A folder a program is working in is one Windows will not remove, and removal goes deepest first,
+    /// so that folder stays and so does every folder above it. The defect in issue #118 was that the
+    /// removal recorded none of it: a tree left standing up to the scratch folder reported nothing.
+    /// Now it names every folder it could not take, and counts the one Windows refused for itself.
+    /// </summary>
+    [Fact]
+    public async Task RecordsAFolderAProgramIsWorkingInAndTheFoldersItHoldsUp()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live");
+        var session = _temp.CreateDirectory("scratch", "live", "session");
+        var working = _temp.CreateDirectory("scratch", "live", "session", "work");
+        _temp.CreateFile(1024, "scratch", "live", "session", "work", "state.bin");
+        _temp.CreateFile(512, "scratch", "abandoned.tmp");
+
+        RemovalOutcome outcome;
+
+        using (new HeldDirectory(working))
+        {
+            outcome = await DirectoryRemover.RemoveAsync(
+                root, MinimumAge.Off, progress: null, default, fileSystem: null, new RemovalBounds(KeepRoot: true, []));
+        }
+
+        Assert.Equal(1024 + 512, outcome.BytesReclaimed);
+        Assert.Equal(new FolderRefusals(InUse: 1, Denied: 0), outcome.RefusedFolders);
+
+        // Deepest first, as they were tried. The root was kept, so it was never tried at all.
+        Assert.Equal([working, session, live], outcome.LeftStanding);
+        Assert.True(Directory.Exists(working), "the fixture let a folder a program was working in go");
+    }
+
+    /// <summary>
+    /// A folder still holding a refused file stays too, and is recorded as standing, but Windows did not
+    /// refuse the folder. The file is already counted where it was refused, and counting the folders
+    /// above it as well would tell the reader one open file kept a chain of folders.
+    /// </summary>
+    [Fact]
+    public async Task RecordsAFolderAFileHoldsUpWithoutCountingItAsRefused()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var packages = Path.Combine(root, "packages");
+        var held = _temp.CreateFile(2048, "cache", "packages", "held.nupkg");
+
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var outcome = await DirectoryRemover.RemoveAsync(root);
+
+            Assert.Equal(new RefusalTally(1, 2048), outcome.Refused.InUse);
+            Assert.True(outcome.RefusedFolders.IsEmpty);
+            Assert.Equal([packages, root], outcome.LeftStanding);
+        }
+    }
+
+    /// <summary>
+    /// A folder Windows denies is counted as denied, never as in use. Windows reports that denial for a
+    /// folder as a bare IOException, the same exception type a folder in use throws, so the reason has to
+    /// come from the error the exception carries.
+    /// </summary>
+    [Fact]
+    public async Task CountsAFolderWindowsDeniesAsDeniedRatherThanInUse()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var guarded = _temp.CreateDirectory("scratch", "guarded");
+
+        var fs = new RefusingFileSystem(
+            WindowsFileSystem.Default,
+            new Dictionary<string, RefusalReason> { [guarded] = RefusalReason.Denied });
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, MinimumAge.Off, progress: null, default, fs, new RemovalBounds(KeepRoot: true, []));
+
+        Assert.Equal(new FolderRefusals(InUse: 0, Denied: 1), outcome.RefusedFolders);
+        Assert.Equal([guarded], outcome.LeftStanding);
+        Assert.True(Directory.Exists(guarded), "the fixture let a denied folder go");
     }
 
     [Fact]
