@@ -5,6 +5,11 @@ namespace Deguffer.Core.Safety;
 /// <summary>
 /// §5.3: a locked file is the OS protecting live state. Before planning, ask which of a tool's
 /// processes are running so the plan can warn rather than half-delete a tree in use.
+///
+/// <para>Asked by name or by id, because a tool leaves two kinds of evidence. A cache names no
+/// process, so the question is whether anything of the tool's name is running. A file that records
+/// a process id — a lock file, a session registry entry — names exactly one process, and a name says
+/// nothing about it: every session of the same tool shares one.</para>
 /// </summary>
 public interface IProcessInspector
 {
@@ -13,6 +18,29 @@ public interface IProcessInspector
     /// currently running.
     /// </summary>
     IReadOnlyList<string> FindRunning(IEnumerable<string> names);
+
+    /// <summary>
+    /// Whether the process with <paramref name="processId"/> is running, and when it was created.
+    ///
+    /// <para><b>Three answers, not two.</b> <see cref="ProcessState.Undetermined"/> means the
+    /// question could not be answered, and a caller must not treat it as
+    /// <see cref="ProcessState.NotRunning"/>.</para>
+    ///
+    /// <para><b>An id is not an identity.</b> Windows reuses ids, so a caller that recorded a
+    /// creation time beside the id asks <see cref="ProcessLiveness.StateOfProcessStartedAt"/> of the
+    /// answer, which tells a recycled id from the process the record was written about.</para>
+    ///
+    /// <para><b>Asked of Windows at the moment of the call</b>, never from the snapshot
+    /// <see cref="Invalidate"/> discards. An id that was free when a snapshot was read can go to a
+    /// new process before the question is asked, so a cached "not running" ages in the direction
+    /// that deletes. <see cref="ProcessProbe"/> records the rest of that reasoning, and what each
+    /// Win32 answer was measured to mean.</para>
+    /// </summary>
+    /// <param name="processId">
+    /// The id as a file recorded it. It must be positive: the idle process at id 0 answers exactly as
+    /// a free id does, so 0 would otherwise read as a process that is not running.
+    /// </param>
+    ProcessLiveness Probe(int processId);
 
     /// <summary>
     /// Discard any cached snapshot. Called once at the start of a planning pass, so every
@@ -41,6 +69,8 @@ public sealed class ProcessInspector : IProcessInspector
         wanted.IntersectWith(Snapshot());
         return [.. wanted];
     }
+
+    public ProcessLiveness Probe(int processId) => ProcessProbe.Of(processId);
 
     public void Invalidate()
     {
