@@ -2363,11 +2363,24 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
   files are all older than the cut-off.
 
 The size shown already has both of those taken out of it, so the number in the preview is what the
-clean will actually take.
+clean will actually take — with the one exception described next.
 
-**A file Windows will not release is skipped, and that is normal.** Anything held open by a running
-program stays exactly where it is, so reclaiming less than the size shown is the expected result
-here rather than a failure.
+**A file Windows will not release is left where it is, and the next preview stops offering it.**
+Two kinds of refusal reach a temporary folder. A program that still has a file open releases it
+when the program closes. Windows can also refuse for reasons no amount of waiting changes: an access
+rule, or security software guarding a folder. On one workstation, security software refused every
+file in the browser profiles that automated test runs had left in `%TEMP%` — nearly two thousand
+folders and 5.9 GB — and refused an administrator too.
+
+Deguffer cannot know about a refusal before it has tried, so the first preview offers those files.
+The clean then reports what it could not take, with its size and which kind of refusal it was, and
+records where it happened. Every later preview asks Windows again about those places only, leaves
+out whatever is still refused, and says so on the row; a row with nothing else to offer reads
+*Refused by Windows* rather than *Already clear*. If the refusal lifts, the next preview offers the
+files again, and every clean tries them again.
+
+This is not specific to temporary folders. Every location Deguffer empties or deletes itself
+behaves the same way.
 
 **These rows show no date, deliberately.** Every other row states when its location was last written
 to, which is how you tell a project built this morning from one abandoned last year. A temporary

@@ -1,0 +1,69 @@
+using Deguffer.Core.Safety;
+
+namespace Deguffer.Core.Tests.Fakes;
+
+/// <summary>
+/// The real filesystem, except that some files refuse to be deleted, each for the reason it is
+/// given.
+///
+/// <para>Both refusals are built by hand because neither can be staged honestly otherwise. The one
+/// that started this — a filter driver refusing below the ACL — needs security software on the
+/// machine running the suite, and a sharing violation needs a handle held open across the parallel
+/// removal. What is under test is what the removal and the check do with the answer, and this is the
+/// one seam both of them ask. <see cref="UndeletableFile"/> is the real refusal, for the tests that
+/// need Windows itself to say no.</para>
+///
+/// <para>A refused file refuses the attribute reset as well when it is denied, because that is what
+/// Windows does to a file this account may not touch: the removal's read-only retry must meet the
+/// same answer twice, or the classification it makes from the second one goes untested.</para>
+/// </summary>
+public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<string, RefusalReason> refused) : IFileSystem
+{
+    private const int SharingViolation = unchecked((int)0x80070020);
+
+    private readonly Dictionary<string, RefusalReason> _refused =
+        new(refused, StringComparer.OrdinalIgnoreCase);
+
+    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
+
+    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+
+    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) => inner.EnumerateEntries(directory);
+
+    public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
+
+    public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
+
+    public void DeleteFile(string path)
+    {
+        switch (ReasonFor(path))
+        {
+            case RefusalReason.InUse:
+                throw new IOException($"In use: {path}", SharingViolation);
+            case RefusalReason.Denied:
+                throw new UnauthorizedAccessException($"Denied: {path}");
+            default:
+                inner.DeleteFile(path);
+                break;
+        }
+    }
+
+    public RefusalReason? ProbeRemoval(string path) => ReasonFor(path) ?? inner.ProbeRemoval(path);
+
+    public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
+
+    public void ClearAttributes(string path)
+    {
+        if (ReasonFor(path) == RefusalReason.Denied)
+        {
+            throw new UnauthorizedAccessException($"Denied: {path}");
+        }
+
+        inner.ClearAttributes(path);
+    }
+
+    public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
+
+    private RefusalReason? ReasonFor(string path) =>
+        _refused.TryGetValue(LongPath.Display(path), out var reason) ? reason : null;
+}

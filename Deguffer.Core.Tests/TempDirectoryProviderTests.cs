@@ -905,4 +905,114 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.False(plan.WasNotExamined);
         Assert.False(plan.HasRecentContentHeldBack);
     }
+
+    /// <summary>
+    /// Issue #117, end to end, with Windows itself refusing. Security software guarded every file in
+    /// browser profiles a test runner had left here: each preview offered them, each clean was
+    /// refused and reported them "in use", and the next preview offered the same bytes again.
+    ///
+    /// <para>The first preview still offers them, and that is the stated limit rather than an
+    /// oversight — nothing has asked Windows yet. What must hold is that the clean says what it was
+    /// refused, and that the preview after it leaves that out while still offering what has arrived
+    /// since. The refused file surviving, and §5.6 passing, are the negative.</para>
+    /// </summary>
+    [Fact]
+    public async Task LeavesOutOfTheNextPreviewWhatWindowsWouldNotLetTheCleanTake()
+    {
+        var guarded = Abandoned(4096, "temp", "playwright_chromiumdev_profile-TEST", "Default", "Cookies");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        using var undeletable = new UndeletableFile(guarded);
+
+        var provider = CreateProvider();
+        var first = await provider.PlanAsync();
+
+        Assert.Equal(4096 + 1024, first.EstimatedBytes);
+
+        var result = await provider.ExecuteAsync(first);
+
+        Assert.Equal(1024, result.BytesReclaimed);
+        Assert.Equal(new RefusalTally(1, 4096), result.Refused.Denied);
+        Assert.True(File.Exists(guarded), "the fixture let a guarded file go");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+
+        Abandoned(2048, "temp", "arrived-since.tmp");
+
+        var next = await provider.PlanAsync();
+
+        Assert.Equal(2048, next.EstimatedBytes);
+        Assert.True(next.HasRefusedContent);
+
+        var step = Assert.Single(next.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+        Assert.Equal(new RefusalTally(1, 4096), step.Refused.Denied);
+
+        Assert.Contains(next.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("Windows would not let Deguffer remove", StringComparison.Ordinal)
+            && n.Message.Contains("playwright_chromiumdev_profile-TEST", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The record says where to look, never what the answer was. Once Windows stops refusing, the very
+    /// next preview counts the bytes again — without waiting for a clean that a row measuring zero
+    /// would never have offered.
+    /// </summary>
+    [Fact]
+    public async Task CountsItAgainAsSoonAsWindowsStopsRefusing()
+    {
+        var guarded = Abandoned(4096, "temp", "profile", "Default", "Cookies");
+
+        var undeletable = new UndeletableFile(guarded);
+
+        var provider = CreateProvider();
+
+        try
+        {
+            await provider.ExecuteAsync(await provider.PlanAsync());
+            Assert.Equal(0, (await provider.PlanAsync()).EstimatedBytes);
+        }
+        finally
+        {
+            undeletable.Dispose();
+        }
+
+        var lifted = await provider.PlanAsync();
+
+        Assert.Equal(4096, lifted.EstimatedBytes);
+        Assert.False(lifted.HasRefusedContent);
+        Assert.DoesNotContain(lifted.Notes, n => n.Message.Contains("would not let Deguffer", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A file another program holds open is the other refusal, and it is said as that: the reader
+    /// answers it by closing the program, and the note is information rather than a warning.
+    /// </summary>
+    [Fact]
+    public async Task LeavesOutWhatAnotherProgramStillHoldsOpen()
+    {
+        var state = Abandoned(2048, "temp", "editor-session", "state.db");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var provider = CreateProvider();
+        var first = await provider.PlanAsync();
+
+        using (new FileStream(state, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var result = await provider.ExecuteAsync(first);
+
+            Assert.Equal(new RefusalTally(1, 2048), result.Refused.InUse);
+            Assert.Equal(default, result.Refused.Denied);
+
+            var next = await provider.PlanAsync();
+
+            Assert.Equal(0, next.EstimatedBytes);
+            Assert.Contains(next.Notes, n =>
+                n.Severity == PlanNoteSeverity.Information
+                && n.Message.Contains("Another program had", StringComparison.Ordinal)
+                && n.Message.Contains("editor-session", StringComparison.Ordinal));
+            Assert.DoesNotContain(next.Notes, n => n.Message.Contains("would not let Deguffer", StringComparison.Ordinal));
+        }
+
+        Assert.Equal(2048, (await provider.PlanAsync()).EstimatedBytes);
+    }
 }

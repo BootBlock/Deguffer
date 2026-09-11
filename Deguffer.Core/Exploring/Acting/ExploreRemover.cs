@@ -256,29 +256,27 @@ public static class ExploreRemover
             // the user did not assemble item by item.
             var file = await FileRemover.RemoveAsync(item.Path, MinimumAge.Off, ct, fs).ConfigureAwait(false);
 
+            // The removal names which kind of refusal it met, so the sentence can too: a file another
+            // program holds open is answered by closing it, and one Windows denies is not.
             return new ExploreItemOutcome(
                 item.Path,
                 file.Removed,
                 file.BytesReclaimed,
-                file.Removed
-                    ? "Deleted."
-                    : "Left in place: Deguffer was refused. A file something else holds open and one "
-                      + "this account may not touch are the same answer from here.");
+                file.Removed ? "Deleted." : LeftInPlace.WhyNothingHappened(file.Refused));
         }
 
         var tree = await DirectoryRemover.RemoveAsync(item.Path, MinimumAge.Off, progress: null, ct, fs).ConfigureAwait(false);
 
+        // A folder whose root went held nothing refused, because a refused file keeps every folder
+        // above it standing. So only the partial case has anything to say about what stayed.
         return new ExploreItemOutcome(
             item.Path,
             tree.RootRemoved,
             tree.BytesReclaimed,
             tree.RootRemoved
-                ? Deleted(tree.Skipped)
-                : $"Partly deleted — {tree.Skipped} item(s) are in use, so the folder is still there.");
+                ? "Deleted."
+                : $"Partly deleted{LeftInPlace.Clauses(tree.Refused, kept: 0)}, so the folder is still there.");
     }
-
-    private static string Deleted(int skipped) =>
-        skipped == 0 ? "Deleted." : $"Deleted, apart from {skipped} item(s) something else is using.";
 
     /// <summary>
     /// The immediate contents of every directory a removal will take something out of, by name.

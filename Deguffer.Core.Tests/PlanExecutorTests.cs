@@ -20,6 +20,75 @@ public sealed class PlanExecutorTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     /// <summary>
+    /// A record under this test's own invented profile. The executor requires one precisely so that
+    /// nothing can default to the signed-in user's, which is what a suite run would otherwise write
+    /// into.
+    /// </summary>
+    private RefusalRecord RefusalLog => RefusalRecord.For(new FakeUserEnvironment(_temp.Path));
+
+    /// <summary>
+    /// Every deletion records where Windows refused it, so the next preview of the same location can
+    /// leave out what is still refused — and a later clean that is refused nothing clears what an
+    /// earlier one recorded, or the row would go on hiding bytes that are free to go.
+    /// </summary>
+    [Fact]
+    public async Task RecordsWhereADeletionWasRefusedAndClearsItOnceNothingIs()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        var held = _temp.CreateFile(2048, "cache", "packages", "held.nupkg");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache"));
+
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var refused = await executor.ExecuteAsync(plan, runReach: null, progress: null, default);
+
+            Assert.Equal(new RefusalTally(1, 2048), refused.Refused.InUse);
+            Assert.Equal([Path.Combine(cache, "packages")], RefusalLog.At(cache));
+        }
+
+        await executor.ExecuteAsync(plan, runReach: null, progress: null, default);
+
+        Assert.Empty(RefusalLog.At(cache));
+    }
+
+    /// <summary>
+    /// A single named file is its own place, and a file the guard kept was not asked about at all —
+    /// so an earlier refusal there is still the latest answer, and must not be cleared by a step that
+    /// never reached Windows.
+    /// </summary>
+    [Fact]
+    public async Task RecordsARefusedFileAsItselfAndLeavesTheRecordAloneWhenTheGuardKeptIt()
+    {
+        var dump = _temp.CreateFile(4096, "Windows", "MEMORY.DMP");
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var step = new DeleteFileStep(dump, "A crash dump");
+
+        using (new FileStream(dump, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await executor.ExecuteAsync(PlanDeleting(step), runReach: null, progress: null, default);
+        }
+
+        Assert.Equal([dump], RefusalLog.At(dump));
+
+        var guarded = PlanDeleting(step) with { Keep = MinimumAge.WithinHours(8, DateTime.UtcNow) };
+        var kept = await executor.ExecuteAsync(guarded, runReach: null, progress: null, default);
+
+        Assert.Equal(1, Assert.Single(kept.Steps).Kept);
+        Assert.Equal([dump], RefusalLog.At(dump));
+    }
+
+    private static CleanupPlan PlanDeleting(CleanupStep step) => new()
+    {
+        ProviderId = "test",
+        ProviderName = "Test",
+        Tier = SafetyTier.RegenerableCache,
+        WhatHappensOnNextUse = "Nothing.",
+        Steps = [step],
+    };
+
+    /// <summary>
     /// A command step's reclaim is the plan-time figure minus a re-measurement of the same paths,
     /// and both readings go through the provider's own scanner. Where the volume index serves them
     /// the second one is not a measurement at all: it is the same pre-command snapshot, because
@@ -70,7 +139,7 @@ public sealed class PlanExecutorTests : IDisposable
             ],
         };
 
-        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
+        var result = await new PlanExecutor(runner, scanner, RefusalLog).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
 
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(cache), "the fixture command did not actually empty the tree.");
@@ -125,7 +194,7 @@ public sealed class PlanExecutorTests : IDisposable
             ],
         };
 
-        var result = await new PlanExecutor(runner, scanner).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
+        var result = await new PlanExecutor(runner, scanner, RefusalLog).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
 
         Assert.Equal(0, result.BytesReclaimed);
     }
@@ -186,7 +255,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(plan, runReach: null, progress, default);
 
         // Repeats are ordinary — the removal reports its last file and then its own completion —
@@ -222,7 +291,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(plan, runReach: null, progress, default);
 
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());
@@ -260,7 +329,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner())
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(plan, runReach: null, progress, default);
 
         // Two steps, two reports, and nothing else could have produced either of them.
@@ -307,7 +376,7 @@ public sealed class PlanExecutorTests : IDisposable
             Steps = [new DeleteDirectoryStep(cache, "A cache")],
         };
 
-        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
 
         var step = Assert.Single(result.Steps);
@@ -340,7 +409,7 @@ public sealed class PlanExecutorTests : IDisposable
             Steps = [new DeleteDirectoryStep(cache, "A cache")],
         };
 
-        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
 
         Assert.Equal(0, result.KeptCount);
@@ -369,7 +438,7 @@ public sealed class PlanExecutorTests : IDisposable
             Steps = [new DeleteDirectoryStep(cache, "A cache")],
         };
 
-        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default)
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
 
         var step = Assert.Single(result.Steps);
@@ -436,8 +505,8 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains("held nothing", step.Message!, StringComparison.Ordinal);
     }
 
-    private static Task<CleanupResult> Execute(CleanupStep step) =>
-        new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default).ExecuteAsync(
+    private Task<CleanupResult> Execute(CleanupStep step) =>
+        new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
             new CleanupPlan
             {
                 ProviderId = "test",
