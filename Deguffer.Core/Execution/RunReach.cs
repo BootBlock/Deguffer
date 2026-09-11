@@ -36,11 +36,12 @@ namespace Deguffer.Core.Execution;
 /// outside <c>.nuget</c> — so a run holding one has no bounded reach at all, and every disappearance
 /// in it stays the run's to answer for.</para>
 ///
-/// <para>It is asked of a disappearance and never of an emptied folder. "The run could have done
-/// it" is what makes a missing path an alarm rather than an outside removal, and it makes an emptied
-/// folder an alarm for the same reason, so it cannot also be the reason to excuse one. That excuse
-/// is <see cref="ProbedPaths"/>'s to give, and only for the folders above where the tool was
-/// sent.</para>
+/// <para>It never excuses an emptied folder. "The run could have done it" is what makes a missing
+/// path an alarm rather than an outside removal, and it makes an emptied folder an alarm for the same
+/// reason, so it cannot also be the reason to excuse one. That excuse is
+/// <see cref="ProbedPaths"/>'s to give, and only for the folders above where the tool was sent. What
+/// it does decide is how far the emptied question looks, because only a tool empties files in place
+/// and leaves their folders standing.</para>
 /// </param>
 public sealed record RunReach(
     IReadOnlyList<string> TargetedPaths,

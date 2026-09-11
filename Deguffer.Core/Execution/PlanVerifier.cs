@@ -106,15 +106,30 @@ public static class PlanVerifier
     /// runs where Deguffer controls least, and a File History drive holding other accounts' backups
     /// is one of them.</para>
     ///
-    /// <para>Content is asked where it lives rather than at the top level; see
-    /// <see cref="DirectoryContent"/>. Asked only of a directory that held something, so nothing here
-    /// reads a path that was empty to begin with, and nothing reads a file.</para>
+    /// <para><b>How far the question looks depends on what ran.</b> A tool's own command empties
+    /// files in place and can leave every folder that held them standing, so in a run holding one the
+    /// question is whether content is left anywhere below. Deguffer's own deletions take a folder with
+    /// its files, so in a run without a command a folder left holding only empty folders was not left
+    /// that way by the run. MSBuild's Clean, run while the preview sat on screen, leaves exactly that
+    /// in the <c>bin</c> beside every <c>obj</c> this run removes. There the question is whether
+    /// anything at all is left, which keeps the alarm for the shape the run itself can produce. In a
+    /// run that holds a command as well, the same outside Clean still reads as emptied: nothing here
+    /// can tell a tool's skeleton from MSBuild's.</para>
+    ///
+    /// <para>What was there before is captured through folders either way (see
+    /// <see cref="DirectoryContent"/>), so a folder that held only empty folders is never the subject.
+    /// Asked only of a directory that held something, so nothing here reads a path that was empty to
+    /// begin with, and nothing reads a file.</para>
     /// </summary>
     private static bool WasEmptied(ProtectedPath protectedPath, RunReach reach) =>
         protectedPath.HeldContentBefore
-        && !DirectoryContent.IsPresent(protectedPath.Path)
+        && !StillHoldsContent(protectedPath.Path, reach)
         && !HoldsAnyOf(protectedPath.Path, reach.TargetedPaths)
         && !HoldsAnyOf(protectedPath.Path, reach.ProbedPaths);
+
+    /// <summary>The question <see cref="WasEmptied"/> asks after the run, at the depth what ran calls for.</summary>
+    private static bool StillHoldsContent(string path, RunReach reach) =>
+        reach.Unbounded ? DirectoryContent.IsPresent(path) : DirectoryContent.HoldsAnyEntry(path);
 
     /// <summary>
     /// Whether a path that has gone missing went missing for a reason nothing in this run can

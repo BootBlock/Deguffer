@@ -28,9 +28,36 @@ namespace Deguffer.Core.Safety;
 /// <para>§6.3: the walk starts from the extended-length form, and .NET builds every child from the
 /// parent it was given. The answer is a boolean, so no test can observe that form; the test past
 /// <c>MAX_PATH</c> proves the walk reaches content that deep, and no more.</para>
+///
+/// <para><b>Two questions, and what ran decides which is asked afterwards.</b>
+/// <see cref="IsPresent"/> looks through folders, and <see cref="HoldsAnyEntry"/> stops at the top
+/// level. What a protected directory held before a run is always captured with the first. After the
+/// run, looking through folders is only evidence where a tool's own command ran, because a tool is
+/// what empties files in place and leaves their folders standing. Deguffer's own deletions take a
+/// folder with its files, so without a command a folder left holding only empty folders was left that
+/// way by something else, and the second question is the one asked. See
+/// <c>PlanVerifier.WasEmptied</c>.</para>
 /// </summary>
 public static class DirectoryContent
 {
+    /// <summary>
+    /// Whether <paramref name="path"/> is a directory holding any entry at all at its top level, an
+    /// empty folder included. False for a file, for a path that is not there, and for a directory
+    /// that cannot be listed, which is the answer <see cref="IsPresent"/> gives for the same three.
+    /// </summary>
+    public static bool HoldsAnyEntry(string path)
+    {
+        try
+        {
+            return Directory.EnumerateFileSystemEntries(LongPath.Extended(path)).Any();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // Not a directory, not there, or refused: nothing was seen.
+            return false;
+        }
+    }
+
     /// <summary>
     /// Whether <paramref name="path"/> is a directory with content anywhere below it. False for a
     /// file, for a path that is not there, and for a directory that cannot be listed.

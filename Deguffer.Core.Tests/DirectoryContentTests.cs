@@ -129,4 +129,43 @@ public sealed class DirectoryContentTests : IDisposable
         Assert.True(outermost.Length < 260);
         Assert.True(DirectoryContent.IsPresent(outermost));
     }
+
+    /// <summary>
+    /// The top-level question, asked after a run of Deguffer's own deletions. A folder holding only
+    /// empty folders holds an entry, which is what keeps MSBuild's Clean, run between the preview and
+    /// the clean, from reading as an emptying that run could not have done.
+    /// </summary>
+    [Fact]
+    public void AnEmptyFolderIsAnEntryAtTheTopLevel()
+    {
+        var skeleton = _temp.CreateDirectory("skeleton");
+        _temp.CreateDirectory("skeleton", "a", "b");
+        var full = _temp.CreateDirectory("full");
+        _temp.CreateFile(8, "full", "one.bin");
+
+        Assert.True(DirectoryContent.HoldsAnyEntry(skeleton));
+        Assert.True(DirectoryContent.HoldsAnyEntry(full));
+        Assert.False(DirectoryContent.HoldsAnyEntry(_temp.CreateDirectory("empty")));
+    }
+
+    /// <summary>
+    /// A file, a missing path and a directory that will not be listed hold no entry, the same three
+    /// answers <see cref="DirectoryContent.IsPresent"/> gives, so the question asked before a run and
+    /// the one asked after it never disagree about a refusal (§5.3).
+    /// </summary>
+    [Fact]
+    public void AFileAMissingPathAndARefusedDirectoryHoldNoEntry()
+    {
+        Assert.False(DirectoryContent.HoldsAnyEntry(_temp.CreateFile(8, "one.bin")));
+        Assert.False(DirectoryContent.HoldsAnyEntry(Path.Combine(_temp.Path, "never-existed")));
+
+        var directory = _temp.CreateDirectory("denied");
+        _temp.CreateFile(8, "denied", "inside.bin");
+
+        Assert.True(DirectoryContent.HoldsAnyEntry(directory));
+
+        using var denied = new DeniedDirectory(directory);
+
+        Assert.False(DirectoryContent.HoldsAnyEntry(directory));
+    }
 }

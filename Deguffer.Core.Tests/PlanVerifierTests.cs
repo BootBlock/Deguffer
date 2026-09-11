@@ -356,18 +356,17 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
-    /// Content is asked for where it lives, not at the top level. A removal that takes every file
-    /// and leaves the folders that held them still takes everything worth protecting, and a
-    /// top-level question sees a folder that still holds a folder and calls it a survivor.
+    /// In a run holding a tool's own command, content is asked for where it lives. A tool can take
+    /// every file and leave the folders that held them, which still takes everything worth
+    /// protecting, and a top-level question would see a folder holding a folder and call it a
+    /// survivor.
     /// </summary>
     [Fact]
-    public void AFolderWhoseFilesWentAndWhoseSubfoldersStayedWasEmptied()
+    public void AFolderAToolLeftHoldingOnlyEmptyFoldersWasEmptied()
     {
         var kept = _temp.CreateDirectory("project", "bin");
         var assembly = _temp.CreateFile(8, "project", "bin", "Debug", "net10.0", "app.dll");
-        var plan = Plan(
-            [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
-            ProtectHolding(kept));
+        var plan = Plan([Evict(_temp.CreateDirectory("tool", "cache"))], ProtectHolding(kept));
 
         File.Delete(assembly);
 
@@ -375,15 +374,42 @@ public sealed class PlanVerifierTests : IDisposable
         Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, kept));
     }
 
-    /// <summary>The same folder with its file still in place, deep below: it survived.</summary>
+    /// <summary>
+    /// The same shape in a run of Deguffer's own deletions, which take a folder with its files and so
+    /// cannot leave it. Something else did: MSBuild's Clean, run while the preview sat on screen,
+    /// leaves exactly this beside the <c>obj</c> the run removes. So the question is whether anything
+    /// at all is left, and the alarm stays for the shape this run can produce: a folder with nothing
+    /// in it.
+    /// </summary>
+    [Fact]
+    public void WithoutACommandAFolderEmptiedOnlyOfItsFilesIsNotReadAsEmptied()
+    {
+        var kept = _temp.CreateDirectory("project", "bin");
+        var output = _temp.CreateDirectory("project", "bin", "Debug");
+        var assembly = _temp.CreateFile(8, "project", "bin", "Debug", "net10.0", "app.dll");
+        var plan = Plan(
+            [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
+            ProtectHolding(kept));
+
+        File.Delete(assembly);
+
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
+
+        Directory.Delete(output, recursive: true);
+
+        Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, kept));
+    }
+
+    /// <summary>
+    /// A folder still holding a file far below, in a run where the question looks that far: it
+    /// survived.
+    /// </summary>
     [Fact]
     public void AFolderStillHoldingAFileFarBelowSurvived()
     {
         var kept = _temp.CreateDirectory("project", "bin");
         _temp.CreateFile(8, "project", "bin", "Debug", "net10.0", "app.dll");
-        var plan = Plan(
-            [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
-            ProtectHolding(kept));
+        var plan = Plan([Evict(_temp.CreateDirectory("tool", "cache"))], ProtectHolding(kept));
 
         Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
     }

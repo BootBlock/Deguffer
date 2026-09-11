@@ -585,6 +585,12 @@ reports**, whose packages hard-link back into the cache being cleaned; each pack
 itself; and **`.condarc`**, your conda configuration, which can name private channels with tokens
 embedded in the URL. Deguffer asserts they all survived the run.
 
+**One case can raise an alarm over nothing.** `--tempfiles` looks through the whole conda installation,
+environments folder included, and deletes conda's leftover temporary files there (names ending in
+`.c~` or `.trash`), leaving the folders. If an environments folder inside the installation holds no
+environment and nothing but such leftovers, it ends the run holding only empty folders, and Deguffer
+reports it as emptied. No environment was in it, so nothing you created is lost.
+
 ### What it costs you
 
 The next `conda install` downloads the packages it needs again and re-fetches the channel index,
