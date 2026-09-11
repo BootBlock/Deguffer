@@ -22,7 +22,8 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Liveness, on the rules <see cref="ClaudeCodeDerivedStateProvider"/> keeps.</b> A session
 /// Claude Code lists as running is refused and asserted. Where the list cannot be read in full, no
 /// session is offered. Nothing written in the last <see cref="ClaudeCodeSessionRegistry.RecentWindow"/> is
-/// offered either, whatever the guard on recently changed files is set to.</para>
+/// offered either, whatever the guard on recently changed files is set to, and that floor travels on the
+/// plan: a snapshot written between the preview and the clean is spared by the removal itself.</para>
 ///
 /// <para><b>§5.2.</b> Claude Code's folder is declared recognising nothing, and inside
 /// <see cref="ClaudeCodeHome.FileHistory"/> only a folder named for a session is recognised. Anything else
@@ -60,9 +61,6 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     private const string UnknownRunningReason =
         "Deguffer could not read Claude Code's list of running sessions, so it cannot tell whether this "
         + "session has ended.";
-
-    private const string UndatedReason =
-        "Deguffer could not tell when Claude Code last wrote to this session's snapshots, so they are left alone.";
 
     private readonly ClaudeCodeSessionRegistry _sessions;
 
@@ -189,7 +187,13 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
                 "Claude Code holds no rewind snapshots that Deguffer can show belong to a session that has ended."));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(snapshots.Targets, keep, ct).ConfigureAwait(false);
+        // §5.3's floor travels on the plan as well as into the preview. A session resumed between the two
+        // writes new snapshots into a folder the preview offered, and the removal has to spare them itself.
+        // Each is a copy whose creation time is new, which is what the guard reads.
+        // CleanupProviderBase.PlanAsync will not loosen it.
+        var effective = MinimumAge.Stricter(keep, survey.Floor);
+
+        var (steps, measured) = await PlanDeletionsAsync(snapshots.Targets, effective, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -222,6 +226,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
                     item.Path, item.Reason, ExistedBefore: true, Withheld: Withholding.TooRecent)),
             ],
             Notes = notes,
+            Keep = effective,
             Fallback = measured.Fallback,
             HasUnreadableRoot = snapshots.Unreadable,
             WasNotExamined = snapshots.Targets.Count == 0 && snapshots.Refused,
@@ -270,11 +275,16 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
         var sessions = _sessions.Read(ct);
 
+        // Fixed once, for the reason MinimumAge is an instant rather than a duration: the preview and the
+        // clean must agree about which snapshots are recent, however long the preview sits on screen.
+        var now = DateTime.UtcNow;
+
         return new Survey(
             home,
             folder,
             sessions,
-            Classify(folder, sessions, DateTime.UtcNow - ClaudeCodeSessionRegistry.RecentWindow, ct));
+            MinimumAge.Within(ClaudeCodeSessionRegistry.RecentWindow, now),
+            Classify(folder, sessions, now - ClaudeCodeSessionRegistry.RecentWindow, ct));
     }
 
     private static ClaudeCodeClassification Classify(
@@ -317,22 +327,9 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             }
             else
             {
-                switch (DirectoryAge.Of(path, ct))
-                {
-                    // A folder that would not be listed has no age, and an age read from its own timestamp
-                    // alone is the half that reads older than the truth.
-                    case null:
-                        sorting.Refuse(path, UndatedReason);
-                        break;
-
-                    case DateTime written when written >= recentSinceUtc:
-                        sorting.HoldRecent(path);
-                        break;
-
-                    case DateTime written:
-                        sorting.Offer(new DeletionTarget(path, SnapshotsReason, written));
-                        break;
-                }
+                // Not a leftover: a session's snapshots are the record of its files, offered for what they
+                // hold. An empty folder among them frees nothing, so it is shown and never chosen.
+                sorting.OfferFolderOnceOldEnough(path, SnapshotsReason, recentSinceUtc, isLeftover: false, ct);
             }
         }
 
@@ -349,10 +346,14 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     /// <param name="Home">Claude Code's folder.</param>
     /// <param name="Folder">The snapshot folder inside it.</param>
     /// <param name="Sessions">What the list of running sessions said.</param>
+    /// <param name="Floor">
+    /// The same cut-off the classification held recent sessions back by, as a guard the removal applies.
+    /// </param>
     /// <param name="Snapshots">What was decided about each session's snapshots.</param>
     private sealed record Survey(
         string Home,
         string Folder,
         ClaudeCodeSessionList Sessions,
+        MinimumAge Floor,
         ClaudeCodeClassification Snapshots);
 }

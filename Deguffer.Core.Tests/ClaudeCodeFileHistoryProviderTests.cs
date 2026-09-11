@@ -78,6 +78,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.Equal(SafetyTier.UserData, plan.Tier);
         Assert.Equal(2, plan.Steps.Count);
+        Assert.All(plan.Steps.OfType<DeleteStep>(), step => Assert.False(step.IsLeftover, step.Path));
         Assert.False(new Finding(provider, IsPresent: true, plan).IsPreSelectedByDefault);
 
         var result = await provider.ExecuteAsync(plan);
@@ -125,6 +126,33 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(session, StringComparison.OrdinalIgnoreCase) && p.Withheld == Withholding.TooRecent);
+    }
+
+    /// <summary>
+    /// The floor travels on the plan, not only into the preview. A session resumed between the preview and
+    /// the clean writes new snapshots into a folder the preview offered. Each is a copy, so its last-write
+    /// time is its source file's and only its creation time is new. The removal spares it, and the folder
+    /// holding it stands.
+    /// </summary>
+    [Fact]
+    public async Task ASnapshotWrittenAfterThePreviewIsSparedByTheClean()
+    {
+        var session = OldSession(SessionA);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([session], plan.TargetedPaths);
+
+        var resumed = _claude.CreateFile(Path.Combine(session, "fedcba9876543210@v1"), 256);
+        File.SetLastWriteTimeUtc(LongPath.Extended(resumed), DateTime.UtcNow.AddDays(-150));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(resumed), "a snapshot taken after the preview was removed");
+        Assert.True(Directory.Exists(session), "the folder of a resumed session was removed");
+        Assert.False(File.Exists(Path.Combine(session, "0123456789abcdef@v1")), "the old snapshots were left behind");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -228,6 +256,11 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
 
         Assert.NotEmpty(plan.Steps);
         AssertKept(plan, path);
+
+        // Kept by the rule that does not recognise it, and not by a later one that happens to refuse it: a
+        // file named like a session reaches the dating step without that rule, and is refused as undated.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase)
+            && p.Reason == ClaudeCodeClassificationBuilder.UnrecognisedReason);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -364,24 +397,39 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A session folder that is a link is named and refused, never dated through or offered. The link and
+    /// what it points at are both aged, so the recency floor cannot be what keeps it out of the plan.
+    /// </summary>
     [Fact]
     public async Task ASessionFolderThatIsALinkIsNamedAndNeverFollowed()
     {
         var outside = Path.Combine(_temp.Path, "outside-snapshots");
         var bystander = _claude.CreateFile(Path.Combine(outside, "0123456789abcdef@v1"), 64);
+        TempDirectory.Age(bystander, Old);
 
         Directory.CreateDirectory(_claude.FileHistory);
-        Directory.CreateSymbolicLink(Path.Combine(_claude.FileHistory, SessionA), outside);
+        var link = Path.Combine(_claude.FileHistory, SessionA);
+        Directory.CreateSymbolicLink(link, outside);
+        AgeFolder(link, Old);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasRecentContentHeldBack);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase)
+            && p.ExistedBefore
+            && p.Withheld == Withholding.None
+            && p.Reason == CacheLevelWalk.LinkReason);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
 
-        await provider.ExecuteAsync(plan);
+        var result = await provider.ExecuteAsync(plan);
 
+        Assert.True(LongPath.IsReparsePoint(link), "the linked session folder was removed");
         Assert.True(File.Exists(bystander), "a snapshot was deleted through a linked session folder");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     [Fact]

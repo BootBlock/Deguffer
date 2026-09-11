@@ -1007,7 +1007,8 @@ It removes each session's folder, one step each, and shows when each was last wr
 - **A session Claude Code lists as running is left alone**, and each entry in that list is checked
   against Windows. If the list cannot be read, no session is offered, and the row says so.
 - **Nothing written in the last 7 days is offered**, whatever the list says, and whatever the guard on
-  recently changed files is set to. A session can run for days.
+  recently changed files is set to. A session can run for days. The same cut-off applies again when you
+  press Clean, so a session you resume after the preview keeps the snapshots it has taken since.
 - **Only a folder named for a session is recognised.** Anything else in `file-history` is left alone.
 
 ### What is protected

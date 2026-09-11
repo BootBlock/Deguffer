@@ -162,6 +162,39 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// The snapshot folder is declared rather than merely unrecognised: this row names it as the rewind
+    /// snapshots row's, never reaches into it, and proves it left it standing. An old session's snapshots
+    /// inside are exactly what that other row offers, so a rule here that reached in by shape would take
+    /// them.
+    /// </summary>
+    [Fact]
+    public async Task TheRewindSnapshotFolderIsNeverReachedAndIsAssertedWithItsOwnReason()
+    {
+        CreateOneOfEachLeftover();
+        var session = _claude.RewindSnapshots(SessionC, folderAge: Old, snapshotAge: Old);
+
+        var declared = ClaudeCodeDerivedStateProvider.HomeChildren.Classify(ClaudeCodeHome.FileHistory);
+
+        Assert.Equal(SafetyTier.DoNotTouch, declared.Tier);
+        Assert.NotEqual(ClaudeCodeDerivedStateProvider.HomeChildren.Classify("not-declared").Reason, declared.Reason);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.NotEmpty(plan.Steps);
+        Assert.All(plan.TargetedPaths, path => Assert.False(
+            LongPath.Contains(_claude.FileHistory, path), $"{path} is inside the snapshot folder."));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(_claude.FileHistory, StringComparison.OrdinalIgnoreCase)
+            && p.ExistedBefore
+            && p.Reason == declared.Reason);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(session), "an old session's rewind snapshots were removed by the leftovers row");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
     /// <summary>§5.2 inside a project folder, where the memory sits beside the sessions.</summary>
     [Theory]
     [InlineData("memory")]

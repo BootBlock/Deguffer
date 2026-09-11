@@ -81,7 +81,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Forty providers, each holding its own knowledge of one location. A provider reports "not
+Forty-one providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -125,6 +125,7 @@ installed" cleanly on a machine without that toolchain.
 | Rust build output | `target` directories under your own source trees |
 | Unity project library | |
 | Superseded application versions | Older versions a Squirrel-updated app still keeps |
+| Temporary files | Emptied in place, taking only what nothing has touched for seven days |
 
 **Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.
 
@@ -179,7 +180,7 @@ knowledge.
 File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
 elevated, and walks whatever the table cannot account for. Still to come: VS Code workspace storage
 with per-workspace ages, Docker (reporting reclaim *inside* the VHDX separately from host space),
-Android SDK, and temp directories with age filters and process exclusions.
+and Android SDK.
 
 Deliberately out of scope: `WinSxS`, `Windows\Installer`, and installer package caches. They are
 large and tempting, but the failure modes are severe and the safe operations are already exposed by

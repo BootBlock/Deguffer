@@ -63,9 +63,6 @@ internal static class ClaudeCodeSessionFolders
         "Deguffer could not list every Claude Code project folder, so it cannot tell whether this "
         + "session still has a conversation.";
 
-    private const string UndatedReason =
-        "Deguffer could not tell when Claude Code last wrote to this, so it is left alone.";
-
     /// <summary>The output sessions spilled beside a conversation that no longer exists.</summary>
     public static ClaudeCodeClassification SpilledOutputs(ClaudeCodeEvidence evidence, CancellationToken ct)
     {
@@ -141,7 +138,8 @@ internal static class ClaudeCodeSessionFolders
                         continue;
                 }
 
-                OfferOnceOldEnough(sorting, sidecar.Path, SpilledOutputReason, evidence, ct);
+                sorting.OfferFolderOnceOldEnough(
+                    sidecar.Path, SpilledOutputReason, evidence.RecentSinceUtc, isLeftover: true, ct);
             }
         }
 
@@ -210,7 +208,8 @@ internal static class ClaudeCodeSessionFolders
             }
             else
             {
-                OfferOnceOldEnough(sorting, path, EnvironmentReason, evidence, ct);
+                sorting.OfferFolderOnceOldEnough(
+                    path, EnvironmentReason, evidence.RecentSinceUtc, isLeftover: true, ct);
             }
         }
 
@@ -222,39 +221,6 @@ internal static class ClaudeCodeSessionFolders
         }
 
         return sorting.Build();
-    }
-
-    /// <summary>
-    /// Offer a session folder that has passed every other test, unless something wrote it recently.
-    ///
-    /// <para><b>Dated by the folder, never by the files deep inside it.</b> <see cref="DirectoryAge"/>
-    /// reads the newest of the folder's own timestamp and its immediate entries', and NTFS moves the
-    /// folder's own timestamp whenever an entry is added or removed. An old date on a file inside can
-    /// therefore never make a folder in use read as old. That matters beside Claude Code's rewind
-    /// snapshots, whose files were measured carrying their source file's date, months older than the
-    /// folder holding them.</para>
-    /// </summary>
-    private static void OfferOnceOldEnough(
-        ClaudeCodeClassificationBuilder sorting,
-        string path,
-        string reason,
-        ClaudeCodeEvidence evidence,
-        CancellationToken ct)
-    {
-        switch (DirectoryAge.Of(path, ct))
-        {
-            case null:
-                sorting.Refuse(path, UndatedReason);
-                break;
-
-            case DateTime written when written >= evidence.RecentSinceUtc:
-                sorting.HoldRecent(path);
-                break;
-
-            case DateTime written:
-                sorting.Offer(new DeletionTarget(path, reason, written, IsLeftover: true));
-                break;
-        }
     }
 
     /// <summary>
