@@ -133,7 +133,6 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     [InlineData("debug")]
     [InlineData("tasks")]
     [InlineData("plans")]
-    [InlineData("file-history")]
     [InlineData("backups")]
     [InlineData("output-styles")]
     [InlineData("hooks")]

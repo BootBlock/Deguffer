@@ -81,7 +81,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Thirty-nine providers, each holding its own knowledge of one location. A provider reports "not
+Forty providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -137,6 +137,7 @@ installed" cleanly on a machine without that toolchain.
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
 | Claude Code MCP server logs | |
+| Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |
 
 **Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
 excluded by construction rather than by enumeration.

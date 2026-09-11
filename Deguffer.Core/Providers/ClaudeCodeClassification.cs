@@ -71,7 +71,7 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// the second check behind it.
     /// </summary>
     public static string RecentReason =>
-        $"Claude Code wrote this in the last {ClaudeCodeDerivedStateProvider.RecentWindow.TotalDays:0} days, "
+        $"Claude Code wrote this in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days, "
         + "and a session that is still running may be using it.";
 
     public const string UnrecognisedReason =
