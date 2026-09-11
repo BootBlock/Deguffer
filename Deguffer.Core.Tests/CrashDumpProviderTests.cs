@@ -457,6 +457,31 @@ public sealed class CrashDumpProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A row whose one dump the guard withdrew is full, not clear. Withdrawing the step takes the file
+    /// out of the figures and leaves no step to say the guard held anything back, so the row read
+    /// "Already clear" over a dump that is still on the disk.
+    /// </summary>
+    [Fact]
+    public async Task ARowWhoseOnlyDumpTheGuardWithdrewIsNotReportedAsClear()
+    {
+        var memoryDump = Path.Combine(Windows, "MEMORY.DMP");
+        File.WriteAllBytes(memoryDump, new byte[131072]);
+        var guard = MinimumAge.WithinHours(8, DateTime.UtcNow);
+
+        var withdrawn = await CreateProvider().PlanAsync(guard);
+
+        Assert.Equal(0, withdrawn.EstimatedBytes);
+        Assert.True(withdrawn.HasRecentContentHeldBack);
+
+        // The same zero with nothing withdrawn claims nothing.
+        File.Delete(memoryDump);
+        var genuinelyEmpty = await CreateProvider().PlanAsync(guard);
+
+        Assert.Equal(0, genuinelyEmpty.EstimatedBytes);
+        Assert.False(genuinelyEmpty.HasRecentContentHeldBack);
+    }
+
+    /// <summary>
     /// The same dump, older than the window, is offered and removed exactly as before. A guard that
     /// held everything back would be indistinguishable from one that worked.
     /// </summary>
