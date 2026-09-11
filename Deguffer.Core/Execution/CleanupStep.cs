@@ -169,6 +169,12 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
     /// concrete step so a new kind of deletion cannot arrive keyed on something else.
     /// </summary>
     public override string SelectionKey => Path;
+
+    /// <summary>
+    /// What this item is apart from its path, where its provider can say. Null for an item whose only
+    /// name is where it is, which is an item nobody can keep. See <see cref="ItemIdentity"/>.
+    /// </summary>
+    public ItemIdentity? Identity { get; init; }
 }
 
 /// <summary>

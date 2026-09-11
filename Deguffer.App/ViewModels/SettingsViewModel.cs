@@ -17,14 +17,56 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly PreferenceService _preferences;
     private readonly SourceRootService _sourceRoots;
+    private readonly KeepService _keeps;
 
-    public SettingsViewModel(PreferenceService preferences, SourceRootService sourceRoots)
+    public SettingsViewModel(PreferenceService preferences, SourceRootService sourceRoots, KeepService keeps)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
+        _keeps = keeps;
 
         SourceRoots = [.. sourceRoots.Current];
+        KeptItems = [.. InDisplayOrder(keeps.Current)];
     }
+
+    /// <summary>
+    /// Every item the user keeps, including ones no scan finds any more.
+    ///
+    /// <para>Listed in full because the keep list only ever narrows what Deguffer offers, and a
+    /// narrowing nobody can see is how an item stays protected long after anyone remembers why. An
+    /// entry whose item has gone costs nothing, and it is not dropped automatically: a cache on a drive
+    /// that is not connected today is still kept tomorrow.</para>
+    /// </summary>
+    public ObservableCollection<KeptItem> KeptItems { get; }
+
+    public bool HasNoKeptItems => KeptItems.Count == 0;
+
+    /// <summary>
+    /// Whether the saved keep list could not be read at startup. Stated on the page for as long as it
+    /// is true, rather than as a failed save after a click, because it is a fact about a file the user
+    /// has to repair or remove, and until they do, the list here is not the one they saved.
+    /// </summary>
+    public bool KeepListUnreadable => _keeps.StoredListUnreadable;
+
+    /// <summary>Stop keeping <paramref name="item"/>, and re-read the list from the service.</summary>
+    public void ReleaseKeptItem(KeptItem item)
+    {
+        // An unreadable stored list is already stated on the page, and is not a write that failed.
+        SaveFailed = !_keeps.Release(item.ProviderId, item.Item.Key) && !_keeps.StoredListUnreadable;
+
+        KeptItems.Clear();
+
+        foreach (var kept in InDisplayOrder(_keeps.Current))
+        {
+            KeptItems.Add(kept);
+        }
+
+        OnPropertyChanged(nameof(HasNoKeptItems));
+    }
+
+    private static IEnumerable<KeptItem> InDisplayOrder(KeepList list) => list.Items
+        .OrderBy(item => item.ProviderName, StringComparer.CurrentCultureIgnoreCase)
+        .ThenBy(item => item.Item.Name, StringComparer.CurrentCultureIgnoreCase);
 
     /// <summary>
     /// The folders Deguffer may look for build output in. Along with the guard on recently changed

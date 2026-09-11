@@ -337,6 +337,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = measured.WithheldRecent[i],
+                Identity = target.Identity,
             });
         }
 

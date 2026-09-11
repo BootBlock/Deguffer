@@ -25,21 +25,35 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     private bool _syncingSelection;
 
+    /// <summary>
+    /// The finding as its provider planned it, before the keep list took anything out. Held so that
+    /// releasing an item puts it back with its size and its age, without a rescan.
+    /// </summary>
+    private readonly Finding _found;
+
     /// <param name="memory">
     /// What this row and its steps were last left ticked as. It answers per step as well as per
     /// row, so restoring a ticked row does not re-tick the individual workspaces the user had
     /// unticked inside it.
     /// </param>
-    public FindingViewModel(Finding finding, SelectionMemory memory)
+    /// <param name="keepList">
+    /// What the user keeps. Applied through <see cref="CleanupPlan.WithKeepList"/> before anything
+    /// below reads the plan, so every figure, status and default this row states is about what it
+    /// will actually offer.
+    /// </param>
+    public FindingViewModel(Finding finding, SelectionMemory memory, KeepList keepList)
     {
-        Finding = finding;
+        _found = finding;
+        Finding = WithKeepList(finding, keepList);
 
         var provider = finding.Provider;
-        var startsSelected = memory.RowStartsSelected(provider.Id, provider.Tier, finding.IsPreSelectedByDefault);
+        var startsSelected = memory.RowStartsSelected(provider.Id, provider.Tier, Finding.IsPreSelectedByDefault);
 
-        // Materialised once. These are bound per row, and rebuilding a list inside a property
-        // getter puts an allocation on every binding evaluation.
-        Notes = [.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
+        // Materialised once per plan. These are bound per row, and rebuilding a list inside a
+        // property getter puts an allocation on every binding evaluation.
+        Notes = NotesOf(Finding);
+        var offered = OfferedSteps(Finding);
+
         Steps =
         [
             // A step that cannot be acted on starts unticked whatever the finding's default is:
@@ -50,9 +64,14 @@ public sealed partial class FindingViewModel : ObservableObject
             // was a copy, and it went stale the moment a second reason to disable a checkbox
             // arrived — a step needing administrator rights would have started ticked, rendered
             // disabled, and been skipped by the loop that clears the row.
+            //
+            // Every step the provider planned is listed, kept ones included, so a kept item is seen
+            // and released from the same place it was kept. Which of them are kept is read off the
+            // plan the keep list produced, so the matching rule stays in Core.
             .. finding.Plan?.Steps.Select(s => new StepViewModel(
                 s,
-                memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected))
+                memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected),
+                isKept: !offered.Contains(s))
             {
                 // Only meaningful once the whole set is known, and a single step is the whole row.
                 IsIndividuallySelectable = finding.Plan.Steps.Count > 1,
@@ -114,7 +133,11 @@ public sealed partial class FindingViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsListed { get; set; } = true;
 
-    public Finding Finding { get; }
+    /// <summary>
+    /// The finding with the keep list applied, which is what this row describes and what a run is
+    /// built from. It changes when the keep list does; see <see cref="ApplyKeepList"/>.
+    /// </summary>
+    public Finding Finding { get; private set; }
 
     public string Name => Finding.Provider.Name;
 
@@ -171,6 +194,7 @@ public sealed partial class FindingViewModel : ObservableObject
                 { WasNotExamined: true } => FindingStatus.NotExamined,
                 { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
                 { HasRefusedContent: true } => FindingStatus.RefusedByWindows,
+                { HoldsKeepListItems: true } => FindingStatus.OnKeepList,
                 _ => FindingStatus.AlreadyClear,
             }
             : CanBeSelected
@@ -224,12 +248,13 @@ public sealed partial class FindingViewModel : ObservableObject
     ///
     /// Read off <see cref="Status"/> rather than restating the condition that produces it, because
     /// a second copy of that condition is free to disagree with the words on screen — and what this
-    /// filter promises is that it hides exactly the rows saying "Already clear". The four
+    /// filter promises is that it hides exactly the rows saying "Already clear". The five
     /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
     /// let Deguffer list, a location Deguffer declined to look at or could not locate, a cache
-    /// whose every file is inside the guard on recently changed files, and a folder whose contents
-    /// Windows would not let the last clean take. All four stay listed, because each is a thing the
-    /// user may want to act on.
+    /// whose every file is inside the guard on recently changed files, a folder whose contents
+    /// Windows would not let the last clean take, and a location holding only what the user keeps.
+    /// All five stay listed, because each is a thing the user may want to act on — the last of them
+    /// by releasing what it holds.
     ///
     /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
     /// the label needs <see cref="Finding.HasReclaimableSpace"/> to be false, that is the sum of
@@ -280,7 +305,72 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool HasSelectableSteps => Steps.Count > 1 && Steps.Any(s => s.CanBeSelected);
 
-    public IReadOnlyList<string> Notes { get; }
+    public IReadOnlyList<string> Notes { get; private set; }
+
+    /// <summary>
+    /// Bring this row up to date with a keep list that changed while it was on screen, from its own
+    /// Contents tab or from Settings while the page was away.
+    ///
+    /// <para>Re-derived from what the provider planned rather than edited in place, so a released item
+    /// comes back with its size and its age, and the rules deciding what this row states run once, in
+    /// Core, for a changed list exactly as for a new one.</para>
+    ///
+    /// <para>A kept item is unticked as it is kept, and comes back unticked when it is released:
+    /// keeping it was the user's last word about it.</para>
+    /// </summary>
+    public void ApplyKeepList(KeepList keepList)
+    {
+        // Most rows' providers name no items at all, and those rows can hold hundreds of steps.
+        if (keepList.KeysFor(_found.Provider.Id).Count == 0 && !Steps.Any(step => step.IsKept))
+        {
+            return;
+        }
+
+        var applied = WithKeepList(_found, keepList);
+        var offered = OfferedSteps(applied);
+
+        if (Steps.All(step => step.IsKept == !offered.Contains(step.Step)))
+        {
+            return;
+        }
+
+        Finding = applied;
+        Notes = NotesOf(applied);
+
+        _syncingSelection = true;
+
+        foreach (var step in Steps)
+        {
+            step.IsKept = !offered.Contains(step.Step);
+
+            if (step.IsKept)
+            {
+                step.IsSelected = false;
+            }
+        }
+
+        IsSelected = Steps.Any(s => s.IsSelected);
+        _syncingSelection = false;
+
+        // Everything this row states is read off the plan that just changed, so every binding on it
+        // is refreshed rather than a list of names that the next new property would be missing from.
+        OnPropertyChanged(string.Empty);
+
+        SelectionChanged?.Invoke(this);
+    }
+
+    private static Finding WithKeepList(Finding finding, KeepList keepList) => finding.Plan is { } plan
+        ? finding with { Plan = plan.WithKeepList(keepList.KeysFor(finding.Provider.Id)) }
+        : finding;
+
+    /// <summary>
+    /// The steps a plan still offers, as a set: a row can hold one step per workspace, and each of its
+    /// steps is looked up in here.
+    /// </summary>
+    private static HashSet<CleanupStep> OfferedSteps(Finding finding) => [.. finding.Plan?.Steps ?? []];
+
+    private static IReadOnlyList<string> NotesOf(Finding finding) =>
+        [.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
 
     /// <summary>
     /// What to remember about this row, so a later scan starts where the user left it.

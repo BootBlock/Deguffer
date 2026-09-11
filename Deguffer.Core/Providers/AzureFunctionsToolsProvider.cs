@@ -233,7 +233,11 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
                 // does not rewrite it — so the answer here is when this release arrived, which is
                 // what separates one the tooling fetched last week from one nobody has needed since
                 // 2019.
-                DirectoryAge.Of(child.FullName, ct)));
+                DirectoryAge.Of(child.FullName, ct),
+
+                // The version is the release, whichever profile holds it, so a release kept for an
+                // old Functions project stays kept.
+                Identity: new ItemIdentity(child.Name, $"Azure Functions Core Tools {child.Name}")));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);

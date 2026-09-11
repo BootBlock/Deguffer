@@ -31,7 +31,7 @@ public sealed partial class ProviderInfoView : UserControl
     private const int RowsPerPage = 50;
 
     private readonly ObservableCollection<StepViewModel> _steps = [];
-    private readonly ObservableCollection<string> _notes = [];
+    private readonly Action<FindingViewModel, StepViewModel> _toggleKeep;
 
     private bool _contentsAsked;
 
@@ -39,24 +39,36 @@ public sealed partial class ProviderInfoView : UserControl
     /// Assigned before InitializeComponent, so no x:Bind can evaluate against a null model whatever
     /// the framework's initialisation order does next — the same order CleanPage relies on.
     /// </summary>
-    public ProviderInfoView(FindingViewModel finding)
+    /// <param name="toggleKeep">
+    /// Keeps or releases one item. The page's rather than this control's, because the keep list is
+    /// shared by every row and the page's totals move with it.
+    /// </param>
+    public ProviderInfoView(FindingViewModel finding, Action<FindingViewModel, StepViewModel> toggleKeep)
     {
         Finding = finding;
+        _toggleKeep = toggleKeep;
         InitializeComponent();
 
-        // Bound here rather than in markup because the two collections are this control's own
-        // working state. Binding them in markup would mean exposing each as a public property for
-        // the sake of one x:Bind that nothing outside this file reads.
+        // Bound here rather than in markup because the collection is this control's own working
+        // state. Binding it in markup would mean exposing it as a public property for the sake of
+        // one x:Bind that nothing outside this file reads.
         StepList.ItemsSource = _steps;
-        NoteList.ItemsSource = _notes;
     }
 
     public FindingViewModel Finding { get; }
 
+    private void OnKeepClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: StepViewModel step })
+        {
+            _toggleKeep(Finding, step);
+        }
+    }
+
     /// <summary>
     /// The Contents tab pays for itself only when it is opened, which is the whole reason the two
-    /// questions are on separate tabs. Filled once: the plan behind it does not change while the
-    /// dialog is up, and re-filling would duplicate every row.
+    /// questions are on separate tabs. The steps are filled once: a keep or a release changes a
+    /// step's state rather than the set of steps, and re-filling would duplicate every row.
     /// </summary>
     private async void OnSectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -90,11 +102,6 @@ public sealed partial class ProviderInfoView : UserControl
             {
                 await Task.Yield();
             }
-        }
-
-        foreach (var note in Finding.Notes)
-        {
-            _notes.Add(note);
         }
 
         filled.Cancel();
