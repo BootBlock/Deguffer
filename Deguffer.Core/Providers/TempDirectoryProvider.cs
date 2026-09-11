@@ -119,6 +119,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     /// <summary>
     /// §7's cost sentence, and it quotes the cut-off actually in force rather than a number this
     /// provider used to hard-code.

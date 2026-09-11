@@ -83,6 +83,8 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The store downloads each picture again the first time the page showing it is opened, so "
         + "the storefront fills in more slowly once. Your installed games, your library and your "

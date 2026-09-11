@@ -93,6 +93,23 @@ public sealed class VsCodeLogProviderTests : IDisposable
         Assert.True(Directory.Exists(logs) && Directory.Exists(crashpad));
     }
 
+    [Fact]
+    public async Task ListsEachRecordUnderItsEditor()
+    {
+        var code = CreateEditor("Code");
+        var insiders = CreateEditor("Code - Insiders");
+
+        CreateDirectory(Path.Combine(code, "logs", "20260101T090000"));
+        CreateDirectory(Path.Combine(insiders, "Crashpad", "reports"));
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal("Code", steps[Path.Combine(code, "logs")].Group);
+        Assert.Equal("Code - Insiders", steps[Path.Combine(insiders, "Crashpad")].Group);
+    }
+
     /// <summary>
     /// §5.2's dangerous direction, and the case unique to this provider: the caches
     /// <see cref="VsCodeCacheProvider"/> removes are Tier 4 <em>here</em>. They are that provider's

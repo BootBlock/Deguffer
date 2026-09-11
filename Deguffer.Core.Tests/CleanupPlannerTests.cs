@@ -673,6 +673,8 @@ public sealed class CleanupPlannerTests
 
         public SafetyTier Tier => tier;
 
+        public StepGrain Grain => StepGrain.Parts;
+
         public string WhatHappensOnNextUse => "Nothing.";
 
         public ProviderDescription Description { get; } = new()

@@ -415,6 +415,28 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache is listed under the application and the profile it belongs to, because those are what
+    /// a reader recognises: nobody chooses between 'Code Cache' folders by name. A cache kept in the
+    /// application's own folder belongs to no one profile, so it is listed under the application.
+    /// </summary>
+    [Fact]
+    public async Task ListsEachCacheUnderTheApplicationAndProfileItBelongsTo()
+    {
+        var app = CreateApplication("Browserish");
+        var shared = CreateDirectory(Path.Combine(app, "GPUCache"));
+        var work = CreateDirectory(Path.Combine(app, "Default", "Code Cache"));
+        var personal = CreateDirectory(Path.Combine(app, "Profile 1", "Code Cache"));
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal("Browserish", steps[shared].Group);
+        Assert.Equal("Browserish — Default", steps[work].Group);
+        Assert.Equal("Browserish — Profile 1", steps[personal].Group);
+    }
+
+    /// <summary>
     /// A profile directory is a known word and a number, on Playwright's pattern. Anything else is
     /// never looked inside — which matters because a folder the user made themselves is exactly
     /// where a hand-taken backup of a profile would sit.

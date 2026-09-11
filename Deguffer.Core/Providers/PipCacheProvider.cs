@@ -49,6 +49,8 @@ public sealed class PipCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next pip install re-downloads packages, and rebuilds any wheel pip had previously " +
         "built from source — which for a package with C extensions means compiling it again. " +

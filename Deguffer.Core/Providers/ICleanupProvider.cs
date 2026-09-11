@@ -17,6 +17,15 @@ public interface ICleanupProvider
 
     SafetyTier Tier { get; }
 
+    /// <summary>
+    /// Whether this provider's steps are parts of one location or items the user chooses between. See
+    /// <see cref="StepGrain"/> for why it is declared rather than read off the number of steps.
+    ///
+    /// Required of every provider rather than defaulted, for the reason <see cref="Description"/> is:
+    /// a default would decide silently, for every provider nobody thought about, how its row is chosen.
+    /// </summary>
+    StepGrain Grain { get; }
+
     /// <summary>§7: what the user pays for this, stated up front.</summary>
     string WhatHappensOnNextUse { get; }
 

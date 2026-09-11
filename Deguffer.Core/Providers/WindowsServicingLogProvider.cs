@@ -75,6 +75,8 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The record of every update, repair and upgrade this machine has already carried out is "
         + "destroyed, so none of it can be read afterwards to work out why one of them failed. "

@@ -45,10 +45,17 @@ public enum TargetKind
 /// What the item is apart from its path, for a provider whose items can be put on the keep list.
 /// See <see cref="Execution.ItemIdentity"/>.
 /// </param>
+/// <param name="Facets">
+/// What a reader choosing between items is told about this one. Null for none. See
+/// <see cref="Execution.ItemFacet"/>.
+/// </param>
+/// <param name="Group">The heading it is listed under. See <see cref="Execution.DeleteStep.Group"/>.</param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
     DateTime? LastWritten = null,
     TargetKind Kind = TargetKind.Directory,
     bool RequiresElevation = false,
-    Execution.ItemIdentity? Identity = null);
+    Execution.ItemIdentity? Identity = null,
+    IReadOnlyList<Execution.ItemFacet>? Facets = null,
+    string? Group = null);

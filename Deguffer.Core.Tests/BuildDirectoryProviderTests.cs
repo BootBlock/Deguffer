@@ -69,6 +69,49 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Equal([modules], (await PlanWith(Node)).TargetedPaths);
     }
 
+    /// <summary>
+    /// A project is listed under the approved folder it was found in and named in a column of its own,
+    /// because a list of hundreds of build directory paths cannot otherwise be read down.
+    /// </summary>
+    [Fact]
+    public async Task ListsEachProjectUnderTheApprovedFolderItWasFoundIn()
+    {
+        var work = _temp.CreateDirectory("work");
+        var personal = _temp.CreateDirectory("personal");
+        _roots.Save([work, personal]);
+
+        var billing = BuildDirectoryFixture.CreateNodeProject(Path.Combine(work, "billing"));
+        var blog = BuildDirectoryFixture.CreateNodeProject(Path.Combine(personal, "blog"));
+
+        var steps = (await PlanWith(Node)).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(work, steps[billing].Group);
+        Assert.Equal([new ItemFacet("Project", "billing")], steps[billing].Facets);
+        Assert.Equal(personal, steps[blog].Group);
+    }
+
+    /// <summary>
+    /// One approved folder inside another. The project reads under the nearer one, which is the folder
+    /// the user approved with it in mind, whichever order the two were approved in.
+    /// </summary>
+    [Fact]
+    public async Task AProjectInsideTwoApprovedFoldersIsListedUnderTheNearerOne()
+    {
+        var src = _temp.CreateDirectory("src");
+        var client = Path.Combine(src, "client");
+        Directory.CreateDirectory(client);
+        _roots.Save([src, client]);
+
+        var app = BuildDirectoryFixture.CreateNodeProject(Path.Combine(client, "app"));
+
+        var step = Assert.Single((await PlanWith(Node)).Steps.OfType<DeleteStep>());
+
+        Assert.Equal(app, step.Path);
+        Assert.Equal(client, step.Group);
+    }
+
     [Theory]
     [InlineData(".venv")]
     [InlineData("venv")]

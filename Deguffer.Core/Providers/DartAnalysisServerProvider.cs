@@ -60,6 +60,8 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next time a Dart or Flutter project is opened, the analysis server re-analyses it from "
         + "source. Errors, completion and navigation are slower until that first pass finishes.";

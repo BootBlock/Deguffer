@@ -59,6 +59,8 @@ public sealed class GoCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next go build downloads the modules it needs again and recompiles every package from "
         + "source, so it takes noticeably longer once and then behaves as before. Your own code, the "

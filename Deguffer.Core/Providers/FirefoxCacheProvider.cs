@@ -161,6 +161,8 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "Firefox fetches pages from the network instead of from disk for a while, and rebuilds its " +
         "startup cache the first time it opens, so one start is slower. Bookmarks, history, saved " +
@@ -375,7 +377,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
                 if (classification.Tier.IsOfferable())
                 {
-                    targets.Add(new DeletionTarget(path, classification.Reason));
+                    targets.Add(new DeletionTarget(path, classification.Reason, Group: profile.Name));
                     continue;
                 }
 

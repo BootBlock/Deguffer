@@ -127,6 +127,8 @@ public sealed class RecycleBinProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "Every file waiting in these Recycle Bins is destroyed, so nothing you deleted can be "
         + "restored any more. Deleting a file afterwards works exactly as it did before.";

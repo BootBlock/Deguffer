@@ -78,6 +78,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The record of every past editor session and every crash it reported is destroyed, so none " +
         "of it can be attached to a bug report afterwards. The editor keeps writing new logs " +
@@ -180,7 +182,7 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
 
             var walk = CacheLevelWalk.Under([new CacheLevel(string.Empty, FolderChildren)], editor.Path, ct);
 
-            targets.AddRange(walk.Targets);
+            targets.AddRange(walk.Targets.Select(target => target with { Group = editor.Name }));
             declined.AddRange(walk.Declined);
             survivors.AddRange(walk.Survivors);
             notes.AddRange(walk.Notes);

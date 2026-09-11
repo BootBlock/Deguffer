@@ -80,6 +80,12 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    /// <summary>
+    /// One database per workspace, each rebuilt the next time that workspace is opened. The shared
+    /// precompiled headers are listed beside them as an item of their own.
+    /// </summary>
+    public override StepGrain Grain => StepGrain.Items;
+
     public override string WhatHappensOnNextUse =>
         "The next time a C++ project is opened, the extension rebuilds its precompiled headers. " +
         "IntelliSense is slower until that finishes.";

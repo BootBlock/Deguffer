@@ -84,6 +84,8 @@ public sealed class SteamCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The Steam client fetches store, library and community pages from the network instead of "
         + "from disk for a while, so they draw more slowly the first time. It may ask you to sign "

@@ -55,6 +55,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public abstract SafetyTier Tier { get; }
 
+    public abstract StepGrain Grain { get; }
+
     public abstract string WhatHappensOnNextUse { get; }
 
     public abstract ProviderDescription Description { get; }
@@ -338,6 +340,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = measured.WithheldRecent[i],
                 Identity = target.Identity,
+                Facets = target.Facets ?? [],
+                Group = target.Group,
             });
         }
 

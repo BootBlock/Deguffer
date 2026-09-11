@@ -51,6 +51,8 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "A later install that needs a removed package downloads it again. Projects and their "
         + "node_modules are untouched: anything a project still links stays in the store.";

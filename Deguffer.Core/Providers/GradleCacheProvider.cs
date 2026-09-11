@@ -52,6 +52,8 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next Gradle build re-downloads its dependencies and the wrapper distribution, then runs normally.";
 

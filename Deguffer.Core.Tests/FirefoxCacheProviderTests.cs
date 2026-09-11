@@ -626,6 +626,23 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    [Fact]
+    public async Task ListsEachCacheUnderItsProfile()
+    {
+        var work = AddProfile("work");
+        var personal = AddProfile("personal");
+
+        var workCache = CreateDirectory(Path.Combine(work.Local, "cache2"));
+        var personalCache = CreateDirectory(Path.Combine(personal.Local, "cache2"));
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal("work", steps[workCache].Group);
+        Assert.Equal("personal", steps[personalCache].Group);
+    }
+
     /// <summary>
     /// §7 scopes the age column to per-workspace and per-project data. Each of these is one whole
     /// cache for one profile, so a timestamp on it would be a number with nothing to mean.

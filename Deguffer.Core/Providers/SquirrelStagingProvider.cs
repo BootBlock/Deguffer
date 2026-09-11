@@ -116,6 +116,8 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "Nothing changes for any application. Each one still starts, still updates itself, and "
         + "still applies its next update as a patch rather than a whole download, because the "

@@ -942,6 +942,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         public SafetyTier Tier => SafetyTier.RegenerableCache;
 
+        public Execution.StepGrain Grain => Execution.StepGrain.Parts;
+
         public string WhatHappensOnNextUse => "Nothing.";
 
         public ProviderDescription Description { get; } = new()

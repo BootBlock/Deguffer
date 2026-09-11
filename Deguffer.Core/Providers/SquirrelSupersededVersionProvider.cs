@@ -68,6 +68,9 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    /// <summary>Each step is one application's version, which the user may want to roll back to.</summary>
+    public override StepGrain Grain => StepGrain.Items;
+
     public override string WhatHappensOnNextUse =>
         "Every application still starts, and starts the version you are using now — its shortcut "
         + "picks the newest build in the folder each time. What you give up is the build it "
@@ -245,7 +248,12 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                  // the build the same.
                  Identity: new ItemIdentity(
                      $"{installation.Name}/{version.Name}",
-                     $"{installation.Name} {version.Number}")))
+                     $"{installation.Name} {version.Number}"),
+
+                 // Listed under the application, so the builds one updater left behind read as one
+                 // group and each is told apart by its number.
+                 Facets: [new ItemFacet("Version", version.Number.ToString())],
+                 Group: installation.Name))
             .ToList();
 
         // §5.6, and only once the targets are settled. Every build this provider is not removing is

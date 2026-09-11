@@ -88,6 +88,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next vcpkg install rebuilds the affected libraries from source instead of unpacking a "
         + "cached binary, which for a large library is tens of minutes, and downloads their source "

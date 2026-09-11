@@ -94,6 +94,9 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    /// <summary>Each release is a version the user may still be running a project against.</summary>
+    public override StepGrain Grain => StepGrain.Items;
+
     public override string WhatHappensOnNextUse =>
         "The next time Visual Studio opens or runs a Functions project that needs a release which "
         + "was removed, it downloads that release again before the project will start — a few "
@@ -237,7 +240,8 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
                 // The version is the release, whichever profile holds it, so a release kept for an
                 // old Functions project stays kept.
-                Identity: new ItemIdentity(child.Name, $"Azure Functions Core Tools {child.Name}")));
+                Identity: new ItemIdentity(child.Name, $"Azure Functions Core Tools {child.Name}"),
+                Facets: [new ItemFacet("Version", child.Name)]));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
