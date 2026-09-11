@@ -22,7 +22,8 @@ public sealed class CleanupPlanner
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
     /// web caches, the Squirrel updater's staging and the builds it superseded, the Dart analysis
-    /// server's byte store, the Azure Functions Core Tools releases Visual Studio downloads, the
+    /// server's byte store, the Azure Functions Core Tools releases Visual Studio downloads, what
+    /// Claude Code's sessions leave behind and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
@@ -32,8 +33,8 @@ public sealed class CleanupPlanner
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, PlatformIO, Playwright, the Azure Functions Core Tools
     /// releases and the superseded Squirrel builds, which are Tier 2, and the
-    /// Recycle Bins, the File History target, the crash dumps, the servicing logs and the Epic
-    /// launcher's logs, which are Tier 3. Neither tier is ever
+    /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
+    /// launcher's logs, the VS Code logs and Claude Code's MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
     /// held to it.
@@ -104,6 +105,7 @@ public sealed class CleanupPlanner
         new PlaywrightBrowsersProvider(),
         new SquirrelSupersededVersionProvider(discovery: squirrel, liveTrees: liveTrees),
         new AzureFunctionsToolsProvider(),
+        new ClaudeCodeDerivedStateProvider(),
         new RecycleBinProvider(preferences: preferences),
         new FileHistoryProvider(preferences: preferences),
         new TempDirectoryProvider(liveTrees: liveTrees, preferences: preferences),
@@ -111,6 +113,7 @@ public sealed class CleanupPlanner
         new WindowsServicingLogProvider(),
         new EpicLauncherLogProvider(),
         new VsCodeLogProvider(),
+        new ClaudeCodeMcpLogProvider(),
     ];
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;

@@ -19,6 +19,83 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.Equal(0, outcome.BytesReclaimed);
     }
 
+    /// <summary>A path already gone was not removed by this run, so nothing is counted for it.</summary>
+    [Fact]
+    public async Task CountsNothingForATreeThatWasAlreadyGone() =>
+        Assert.Equal(0, (await DirectoryRemover.RemoveAsync(Path.Combine(_temp.Path, "never-existed"))).EntriesRemoved);
+
+    [Fact]
+    public async Task CountsEveryEntryItRemovedTheFolderIncluded()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(1024, "cache", "a.bin");
+        _temp.CreateFile(0, "cache", "deep", "empty.tmp");
+        _temp.CreateDirectory("cache", "deep", "nothing");
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        // cache, deep and nothing, a.bin and empty.tmp.
+        Assert.Equal(5, outcome.EntriesRemoved);
+        Assert.False(Directory.Exists(root));
+    }
+
+    /// <summary>The removal a leftover of empty folders is offered for: no bytes, one entry.</summary>
+    [Fact]
+    public async Task AnEmptyFolderRemovedIsOneEntryAndNoBytes()
+    {
+        var outcome = await DirectoryRemover.RemoveAsync(_temp.CreateDirectory("session"));
+
+        Assert.Equal(1, outcome.EntriesRemoved);
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    /// <summary>What stays is not counted: a file the guard keeps, and every folder holding it.</summary>
+    [Fact]
+    public async Task CountsNothingTheGuardKeptOrAnyFolderHoldingIt()
+    {
+        var root = _temp.CreateDirectory("cache");
+        TempDirectory.Age(_temp.CreateFile(10, "cache", "old.bin"), TimeSpan.FromDays(30));
+        _temp.CreateFile(10, "cache", "live", "recent.bin");
+        _temp.CreateDirectory("cache", "gone");
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        // Removed: old.bin and gone. Stayed: recent.bin, live and cache.
+        Assert.Equal(2, outcome.EntriesRemoved);
+        Assert.True(Directory.Exists(root));
+    }
+
+    /// <summary>A link inside the tree is removed as a link: one entry, and its far side untouched.</summary>
+    [Fact]
+    public async Task ALinkRemovedIsOneEntryAndItsFarSideIsUntouched()
+    {
+        var outside = _temp.CreateDirectory("elsewhere");
+        var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
+
+        var root = _temp.CreateDirectory("cache");
+        Directory.CreateSymbolicLink(Path.Combine(root, "linked"), outside);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.Equal(2, outcome.EntriesRemoved);
+        Assert.True(File.Exists(bystander), "the removal followed a link");
+    }
+
+    [Fact]
+    public async Task ARootThatIsALinkIsOneEntryAndItsFarSideIsUntouched()
+    {
+        var outside = _temp.CreateDirectory("elsewhere");
+        var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
+
+        var root = Path.Combine(_temp.Path, "cache");
+        Directory.CreateSymbolicLink(root, outside);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.Equal(1, outcome.EntriesRemoved);
+        Assert.True(File.Exists(bystander), "the removal followed a link at its root");
+    }
+
     [Fact]
     public async Task RemovesANestedTreeAndReportsWhatItReclaimed()
     {

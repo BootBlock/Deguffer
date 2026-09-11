@@ -647,6 +647,11 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.True(step.Succeeded);
         Assert.Equal(plan.EstimatedBytes, step.BytesReclaimed);
         Assert.Equal("Emptied.", step.Message);
+
+        // The entries are measured the same way, before and after, and the bin's own folder — which
+        // Windows leaves standing — is on neither side of the subtraction.
+        Assert.True(step.EntriesRemoved > 0, "an emptied bin reported removing no entries");
+        Assert.Equal(Assert.Single(plan.Steps).Estimated.Entries, step.EntriesRemoved);
     }
 
     /// <summary>

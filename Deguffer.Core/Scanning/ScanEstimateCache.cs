@@ -41,7 +41,11 @@ public sealed class ScanEstimateCache
         Load();
     }
 
-    private sealed record Entry(long Allocated, long Logical, bool IsApproximate, DateTimeOffset MeasuredAt);
+    /// <param name="Entries">
+    /// Absent from a file written before the count existed, which then reads as nothing counted. The
+    /// figure is shown only until the real measurement arrives, so that costs one briefly low number.
+    /// </param>
+    private sealed record Entry(long Allocated, long Logical, bool IsApproximate, DateTimeOffset MeasuredAt, long Entries = 0);
 
     /// <summary>The last known size of <paramref name="path"/>, if it is recent enough to show.</summary>
     public ScanSize? TryGet(string path)
@@ -63,7 +67,7 @@ public sealed class ScanEstimateCache
                 return null;
             }
 
-            return new ScanSize(entry.Allocated, entry.Logical, entry.IsApproximate);
+            return new ScanSize(entry.Allocated, entry.Logical, entry.IsApproximate, entry.Entries);
         }
     }
 
@@ -73,7 +77,8 @@ public sealed class ScanEstimateCache
 
         lock (_gate)
         {
-            var replacement = new Entry(size.Allocated, size.Logical, size.IsApproximate, DateTimeOffset.UtcNow);
+            var replacement = new Entry(
+                size.Allocated, size.Logical, size.IsApproximate, DateTimeOffset.UtcNow, size.Entries);
 
             // Re-measuring an unchanged cache is the common case, and rewriting the whole file to
             // record the same numbers with a newer timestamp is pure I/O on the scanning path.
@@ -81,6 +86,7 @@ public sealed class ScanEstimateCache
                 && existing.Allocated == size.Allocated
                 && existing.Logical == size.Logical
                 && existing.IsApproximate == size.IsApproximate
+                && existing.Entries == size.Entries
                 && !IsStale(existing);
 
             _entries[key] = replacement;

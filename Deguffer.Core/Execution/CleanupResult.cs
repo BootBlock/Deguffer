@@ -17,6 +17,11 @@ namespace Deguffer.Core.Execution;
 /// this is Deguffer declining to touch something it found in use. Only this one names the program to
 /// close, because the plan found the program before the removal began.
 /// </param>
+/// <param name="EntriesRemoved">
+/// How many entries the step took, for a removal whose reclaim is its entries rather than its bytes —
+/// a leftover of empty folders frees nothing measurable and still leaves the disk tidier. Zero for a
+/// §5.1 command, which reports what it freed and nothing about what it removed.
+/// </param>
 /// <param name="RefusedFolders">
 /// Folders Windows would not remove for a reason of their own, most often one a program is working
 /// in. Apart from <paramref name="Refused"/> because a folder holds no bytes: see
@@ -30,6 +35,7 @@ public sealed record StepOutcome(
     string? Message = null,
     int Kept = 0,
     int Spared = 0,
+    long EntriesRemoved = 0,
     FolderRefusals RefusedFolders = default);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
@@ -46,6 +52,9 @@ public sealed record CleanupResult
     public VerificationResult? Verification { get; init; }
 
     public long BytesReclaimed => Steps.Sum(s => s.BytesReclaimed);
+
+    /// <summary>Entries the run took, across every step. See <see cref="StepOutcome.EntriesRemoved"/>.</summary>
+    public long EntriesRemoved => Steps.Sum(s => s.EntriesRemoved);
 
     /// <summary>Files left in place because Windows would not release them (§5.3), by reason.</summary>
     public Refusals Refused => Steps.Aggregate(Refusals.None, (total, step) => total + step.Refused);

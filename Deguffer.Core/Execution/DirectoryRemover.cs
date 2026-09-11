@@ -93,7 +93,13 @@ public static class DirectoryRemover
 
             progress?.Report(1.0);
 
-            return new RemovalOutcome(0, Refusals.None, RootRemoved: !fs.DirectoryExists(extended))
+            var linkRemoved = !fs.DirectoryExists(extended);
+
+            return new RemovalOutcome(
+                0,
+                Refusals.None,
+                RootRemoved: linkRemoved,
+                EntriesRemoved: linkRemoved && !bounds.KeepRoot ? 1 : 0)
             {
                 LeftStanding = linkStayed ? [LongPath.Display(extended)] : [],
             };
@@ -105,16 +111,24 @@ public static class DirectoryRemover
         var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
         var leftStanding = new List<string>();
 
+        // Every entry this removal takes, so a tree of empty folders reports what went rather than
+        // nothing: files, links and folders alike.
+        long removed = 0;
+
         // A link is removed as a link and holds no bytes of its own, so a refusal to remove one
         // moves no figure and is not counted. A directory link that stays is still recorded as
         // standing, because what §5.6 reads from it is where the removal went, not what it weighed.
         foreach (var link in inventory.Links)
         {
-            if (!link.IsDirectory)
+            var gone = link.IsDirectory
+                ? TryDeleteDirectory(link.FullName, fs) is null
+                : TryDeleteFile(link.FullName, fs) is null;
+
+            if (gone)
             {
-                TryDeleteFile(link.FullName, fs);
+                removed++;
             }
-            else if (TryDeleteDirectory(link.FullName, fs) is not null)
+            else if (link.IsDirectory)
             {
                 leftStanding.Add(link.FullName);
             }
@@ -142,6 +156,7 @@ public static class DirectoryRemover
             else
             {
                 Interlocked.Add(ref reclaimed, file.Length);
+                Interlocked.Increment(ref removed);
             }
 
             var completed = Interlocked.Increment(ref done);
@@ -173,6 +188,7 @@ public static class DirectoryRemover
 
             if (TryDeleteDirectory(directory, fs) is not { } standing)
             {
+                removed++;
                 continue;
             }
 
@@ -193,7 +209,8 @@ public static class DirectoryRemover
             refused.Total,
             RootRemoved: !bounds.KeepRoot && !fs.DirectoryExists(extended),
             inventory.Kept,
-            inventory.Spared)
+            inventory.Spared,
+            Interlocked.Read(ref removed))
         {
             RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
@@ -264,8 +281,9 @@ public static class DirectoryRemover
     }
 
     /// <summary>
-    /// Delete one empty directory, and say why it is still there — or null where it went, or where it
-    /// had already gone.
+    /// Delete one empty directory, and say why it is still there — or null where it is gone: removed
+    /// here, or already gone by the time this reached it, which is the same post-condition
+    /// <see cref="TryDeleteFile"/> reports for a file.
     /// </summary>
     private static Standing? TryDeleteDirectory(string extendedPath, IFileSystem fs)
     {

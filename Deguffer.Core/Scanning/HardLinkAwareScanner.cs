@@ -127,6 +127,11 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     /// dependencies, and the tool's eviction chooses by its own reference records rather than by
     /// counting links. A figure the next hour can change must not present itself as precise.
     /// </summary>
+    /// <remarks>
+    /// Counts no entries. What this predicts is what a tool's own eviction frees, and that tool
+    /// decides what it removes, so there is no removal of Deguffer's here whose entries could be
+    /// counted.
+    /// </remarks>
     private static ScanSize Approximate(long allocated, long logical) =>
         new(allocated, logical, IsApproximate: true);
 

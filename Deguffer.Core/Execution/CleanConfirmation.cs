@@ -88,13 +88,13 @@ public sealed record CleanConfirmation
         ArgumentNullException.ThrowIfNull(plans);
 
         return new CleanConfirmation(
-            [.. plans.Select(p => new CleanConfirmationItem(p.ProviderName, FreeSpace.Format(p.Estimated)))],
+            [.. plans.Select(p => new CleanConfirmationItem(p.ProviderName, FreeSpace.Format(p.Reclaim)))],
             [
                 .. plans
                     .Where(p => p.Tier != SafetyTier.RegenerableCache)
                     .Select(p => new CleanConfirmationLoss(
                         p.ProviderName, ConfirmationRequirement.ConsequenceOf(p))),
             ],
-            FreeSpace.Format(plans.Aggregate(ScanSize.Zero, (total, p) => total + p.Estimated)));
+            FreeSpace.Format(plans.Aggregate(ScanSize.Zero, (total, p) => total + p.Reclaim)));
     }
 }

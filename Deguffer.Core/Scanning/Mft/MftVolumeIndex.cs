@@ -59,7 +59,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         if (!keep.Protects(tree.Newest[record]))
         {
-            return new ScanSize(tree.Allocated[record], tree.Logical[record]);
+            return new ScanSize(tree.Allocated[record], tree.Logical[record], Entries: 1);
         }
 
         withheldRecent = true;
@@ -251,54 +251,94 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// makes for a table it could not fully read: a total missing one file is still a total, and
     /// nothing downstream can tell it from a correct one. The cost is that this path takes the walk;
     /// the alternative cost is a cache reported as clear when it is not.
+    ///
+    /// <para><b>Entries are counted on the removal's terms.</b> A folder stays while anything inside
+    /// it stays, so a file the guard keeps has to mark every folder above it. Recursion would carry
+    /// that upward for free; here each folder reached records the position of the folder holding it,
+    /// and a kept entry walks that chain.</para>
     /// </summary>
     private ScanSize? SumSubtree(uint root, MinimumAge keep, out bool withheldRecent)
     {
         long allocated = 0;
         long logical = 0;
+        long entries = 0;
 
-        withheldRecent = false;
+        var kept = false;
+        var folders = new List<(int Holder, bool Stays)>();
 
-        var stack = new Stack<uint>();
-        stack.Push(root);
+        var stack = new Stack<(uint Node, int Holder)>();
+        stack.Push((root, -1));
 
-        while (stack.TryPop(out var node))
+        while (stack.TryPop(out var item))
         {
-            // A link holds nothing and contributes nothing: whatever it points at keeps its own
-            // place in the table, and the walk does not enter one either.
+            var node = item.Node;
+
+            // A link holds nothing and contributes no bytes: whatever it points at keeps its own
+            // place in the table, and the walk does not enter one either. A link to a folder is still
+            // an entry, removed as a link, and the walk counts it by its own timestamp; a link to a
+            // file is one the walk never sees, so it is not counted here either.
             if (tree.IsReparsePoint[node])
             {
+                if (tree.IsDirectory[node])
+                {
+                    CountOrKeep(node, item.Holder);
+                }
+
                 continue;
             }
 
             if (tree.SizeUnknown[node])
             {
+                withheldRecent = false;
                 return null;
             }
 
-            // The guard withholds bytes. It never prunes the traversal, and the descent below is
-            // deliberately outside this test rather than inside it: NTFS moves a directory's
-            // timestamp whenever an entry is added, removed or renamed, so a `continue` here would
-            // drop a whole subtree of stale files because one recent thing was written beside them.
-            // The directories themselves need no exemption — a directory's size in this table is
-            // zero by construction (MftRecordParser hands ScanSize.Zero for one, because its
-            // contents are counted through their own records), so withholding it withholds nothing.
-            if (keep.Protects(tree.Newest[node]))
+            // The guard never prunes the traversal, and a folder is never kept by its own timestamp:
+            // NTFS moves a directory's timestamp whenever an entry is added, removed or renamed, so a
+            // `continue` here would drop a whole subtree of stale files because one recent thing was
+            // written beside them. The guard is about files, and a folder stays only while something
+            // inside it does.
+            if (tree.IsDirectory[node])
             {
-                withheldRecent = true;
+                var position = folders.Count;
+                folders.Add((item.Holder, false));
+
+                for (var i = links.Start[node]; i < links.Start[node + 1]; i++)
+                {
+                    stack.Push((links.Children[i], position));
+                }
+
+                continue;
             }
-            else
+
+            if (CountOrKeep(node, item.Holder))
             {
                 allocated += tree.Allocated[node];
                 logical += tree.Logical[node];
             }
-
-            for (var i = links.Start[node]; i < links.Start[node + 1]; i++)
-            {
-                stack.Push(links.Children[i]);
-            }
         }
 
-        return new ScanSize(allocated, logical);
+        withheldRecent = kept;
+
+        return new ScanSize(allocated, logical, Entries: entries + folders.Count(folder => !folder.Stays));
+
+        // Whether the removal takes this entry. One it leaves keeps every folder above it standing.
+        bool CountOrKeep(uint node, int holder)
+        {
+            if (!keep.Protects(tree.Newest[node]))
+            {
+                entries++;
+                return true;
+            }
+
+            kept = true;
+
+            for (var position = holder; position >= 0 && !folders[position].Stays; position = folders[position].Holder)
+            {
+                folders[position] = (folders[position].Holder, true);
+            }
+
+            return false;
+        }
     }
 }

@@ -937,6 +937,49 @@ logs](#windows-servicing-logs) below, for the same reason.
 
 ---
 
+## Claude Code MCP server logs
+
+**Tier 3 — user data in a cache costume.** Never pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\claude-cli-nodejs\Cache\<project>\mcp-logs-<server>` |
+| **Method** | Delete each server's log folder |
+| **Typical size** | 320 KB across 242 files on the machine this was measured on, the oldest ten weeks old |
+
+### What it is
+
+Every time Claude Code starts an MCP server, it writes what that server reported to a new file, in a
+folder per server per project. The folders sit outside Claude Code's own folder, and
+`CLAUDE_CONFIG_DIR` does not move them. On the measured machine, eleven of the files were older than
+the 30 days after which Claude Code removes a session's own folders, so nothing clears them.
+
+### What Deguffer does
+
+It removes each `mcp-logs-<server>` folder, one step each, and shows when each was last written to.
+Nothing else in a project's folder is recognised.
+
+### What is protected
+
+The cache folder, the `claude-cli-nodejs` folder above it, every project's folder, and everything in a
+project's folder that is not a server's log folder.
+
+### What it costs you
+
+**Permanently.** Nothing re-creates the log of a server run that has already ended. If a server's
+author has asked you for its log, this is where it is.
+
+There is no age cut-off, deliberately, for the reason given for the VS Code logs above: the log you
+need may be this morning's. The guard on recently changed files is yours to set on top of that.
+
+### Why Tier 3
+
+Tier 1 requires that whatever produced the content re-creates it on demand, so that nothing is lost.
+Nothing re-creates a record of something that happened. This is the same judgement as [VS Code editor
+logs and crash reports](#vs-code-editor-logs-and-crash-reports) above, for the same reason.
+
+---
+
 ## Firefox caches
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -1437,6 +1480,97 @@ and says so.
 Every file here is one the updater itself was supposed to delete and did not. Nothing reads the
 staging directories once an update has finished, and a package the application's own index has
 stopped naming is one that application will never open again.
+
+---
+
+## Claude Code session leftovers
+
+**Tier 1 — regenerable cache.** Pre-selected wherever there is something to remove.
+
+| | |
+| --- | --- |
+| **Location** | Named folders inside `%USERPROFILE%\.claude`, or wherever `CLAUDE_CONFIG_DIR` points |
+| **Method** | Delete what a session or an editor left behind, once whatever wrote it has ended |
+| **Typical size** | Under 4 MB on the machine this was measured on, across more than a thousand entries |
+
+### What it is
+
+Claude Code, Anthropic's coding agent, keeps each session's working state in one folder, beside your
+conversations, each project's memory, your settings and your sign-in. It clears old sessions out
+itself after 30 days by default. Some of what a session leaves behind is outside that clean-up, and
+the rest stays for the whole 30 days:
+
+| Leftover | Where | What shows it is finished with |
+| --- | --- | --- |
+| An editor's handshake file | `ide\<port>.lock` | The editor process it names has ended |
+| A messaging key | `sessions\<process>.<hash>.key` | The Claude Code process it names has ended |
+| Spilled tool output | `projects\<project>\<session>\`, holding only `tool-results` | No project folder holds that session's conversation, and the session is not running |
+| A hook environment | `session-env\<session>\` | The same |
+| A shell capture | `shell-snapshots\snapshot-*.sh` | It was taken before every running session began |
+| Unsent usage events | `telemetry\1p_failed_events.<session>.<id>.json` | The session it names is not running |
+
+On the measured machine, 203 of 217 handshake files named an editor that had closed, the oldest three
+months earlier, and each still held that editor's connection token. 428 environment folders belonged
+to sessions that had ended, and every one of them was empty.
+
+### What Deguffer does
+
+**Nothing is offered on its name alone.**
+
+- **A file that names a process** is offered once Deguffer has asked Windows about that process and
+  found it has ended. A process it could not ask about keeps its file. A handshake file an editor
+  wrote outside Windows, and a key written in another process namespace such as WSL, are never
+  offered, because the id they record is not one this machine issued. Where a key records when its
+  process started, a process id that has since passed to another program is told apart from the
+  process itself.
+- **Anything that names a session** is offered only where Claude Code's own list of running sessions
+  (`sessions\<process>.json`) does not list it, and each entry in that list is checked against
+  Windows too. If the list cannot be read, nothing that names a session is offered, and the row says
+  so.
+- **Whether a session still has a conversation is asked of every project folder at once.** A session's
+  folders can sit under a different project folder from its transcript. If any project folder cannot
+  be listed, no session is called an orphan.
+- **Nothing that names a session, or no process at all, is offered if Claude Code wrote it in the last
+  7 days**, whatever the list says. A session can run for days, and an older version of Claude Code
+  does not keep the list at all. A file that names a process needs no such wait, because that process
+  has been asked about directly. A folder is dated
+  by its own timestamp and its immediate contents, never by the files deep inside it: a file copied
+  into place keeps the date of the file it was copied from.
+- **A session folder holding anything besides spilled tool output**, such as a subagent's
+  conversation, is left for you.
+
+An empty folder frees no bytes, so the row counts what it removes in entries as well. A row made only
+of empty leftovers says how many items it would remove rather than showing "0 B" and offering nothing.
+
+§5.1 was asked, and the answer is no. Claude Code has no command that removes these alone: its own
+purge removes a whole project's conversations and memory together.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `.claude` itself, and every folder at its top level | Your conversations, memory, settings, hooks and styles, and anything a later release adds. Nothing at that level is ever removed |
+| `.credentials.json` | Your sign-in |
+| `settings.json`, `CLAUDE.md` | Your settings and your own instructions |
+| `projects\<project>\memory` | That project's memory, which Claude Code's own clean-up never removes either |
+| `sessions\<process>.json` | The list of running sessions, which Deguffer reads and never removes |
+| `%USERPROFILE%\.claude.json` | Claude Code's own configuration: your account, and each project's trust decisions |
+| `%USERPROFILE%\.claude-swap-backup` | Not Claude Code's at all. Another program's saved sign-ins, under a name that begins the same way |
+
+A conversation that still exists, and the output beside it, is never removed here. Whether to remove
+a conversation is a choice about your own history, and this row never makes it.
+
+### What it costs you
+
+Nothing. Every conversation, its memory, your settings and your sign-in stay. A session that starts
+afterwards writes its own handshake files, keys and shell capture exactly as before.
+
+### Why Tier 1
+
+Everything here was left by a process or a session that has ended, and nothing reads it again. An
+editor that has closed never connects through its handshake file, and Claude Code itself treats a key
+whose process has gone as unusable. Losing any of it loses nothing of yours: the usage events are
+Anthropic's diagnostics, not your data.
 
 ---
 
