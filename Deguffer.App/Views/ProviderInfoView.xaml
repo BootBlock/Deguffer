@@ -43,7 +43,7 @@
 
                     <!-- Said in words beside the disabled checkbox, for the reason the elevation line
                          below is (§6.5): a greyed-out control states no reason on its own. -->
-                    <TextBlock Text="On your keep list — Deguffer will not offer it, and checks after every clean that it is still there"
+                    <TextBlock Text="On your keep list — Deguffer will not offer it, and every clean checks that it is still there"
                                Visibility="{x:Bind IsKept, Mode=OneWay}"
                                Style="{StaticResource SecondaryText}"
                                TextWrapping="Wrap"
@@ -54,6 +54,7 @@
                          identify apart from its path, because only that can be kept. -->
                     <Button Content="{x:Bind KeepActionLabel, Mode=OneWay}"
                             Visibility="{x:Bind CanBeKept}"
+                            IsEnabled="{x:Bind CanChangeKeepList, Mode=OneWay}"
                             Tag="{x:Bind}"
                             Click="OnKeepClicked"
                             Padding="10,2"

@@ -391,10 +391,10 @@ public sealed record CleanupPlan
                 new PlanNote(
                     PlanNoteSeverity.Information,
                     kept.Count == 1
-                        ? "One item here is on your keep list. Deguffer leaves it alone, and checks after "
-                          + "every clean that it is still there."
-                        : $"{kept.Count} items here are on your keep list. Deguffer leaves them alone, and "
-                          + "checks after every clean that they are still there."),
+                        ? "One item here is on your keep list. Deguffer leaves it alone, and every clean checks "
+                          + "that it is still there."
+                        : $"{kept.Count} items here are on your keep list. Deguffer leaves them alone, and every "
+                          + "clean checks that they are still there."),
             ],
         };
     }

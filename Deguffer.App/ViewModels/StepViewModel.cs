@@ -51,6 +51,13 @@ public sealed partial class StepViewModel : ObservableObject
     /// <summary>Whether this item can go on the keep list at all, which needs an identity to match it by.</summary>
     public bool CanBeKept => Identity is not null;
 
+    /// <summary>
+    /// Whether the keep button may be pressed now. Set by the page, which refuses a change to the
+    /// keep list while a preview or a clean is running.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanChangeKeepList { get; set; }
+
     public string KeepActionLabel => IsKept ? "Stop keeping" : "Keep";
 
     /// <summary>

@@ -1,6 +1,5 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
-using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -90,26 +89,82 @@ public sealed class KeepStoreTests : IDisposable
     }
 
     /// <summary>
-    /// The two files have opposite safety polarity, so neither may ever be read as the other. Saving
-    /// a keep list writes no selection, and a selection file sitting where the keep list is expected
-    /// keeps nothing — and above all ticks nothing.
+    /// The two files have opposite safety polarity, so a keep list never goes where a selection is
+    /// remembered. Saving one leaves the remembered selection exactly as it was, byte for byte.
     /// </summary>
     [Fact]
-    public void TheKeepListAndTheSelectionMemoryAreNeverReadAsEachOther()
+    public void SavingAKeepListNeverTouchesTheRememberedSelection()
     {
-        Assert.True(new KeepStore(_environment).Save(new KeepList([Chromium])));
-
-        Assert.False(File.Exists(Path.Combine(Folder, "selection.json")));
-        Assert.False(new SelectionMemory(new SelectionStore(_environment).Load())
-            .RowStartsSelected("playwright", SafetyTier.RegenerableWithCost, byDefault: false));
-
-        // A remembered selection copied over the keep list: well-formed JSON of the wrong shape.
         new SelectionStore(_environment).Save(new Dictionary<string, RememberedSelection>
         {
-            ["playwright"] = new(IsSelected: true, new Dictionary<string, bool> { ["chromium-1228"] = true }),
+            ["playwright"] = new(IsSelected: false, new Dictionary<string, bool> { ["chromium-1228"] = false }),
         });
-        File.Copy(Path.Combine(Folder, "selection.json"), StoreFile, overwrite: true);
 
-        Assert.Empty(new KeepStore(_environment).Load().Items);
+        var selectionFile = Path.Combine(Folder, "selection.json");
+        var before = File.ReadAllBytes(selectionFile);
+
+        Assert.True(new KeepStore(_environment).Save(new KeepList([Chromium])));
+
+        Assert.Equal(before, File.ReadAllBytes(selectionFile));
+        Assert.True(File.Exists(StoreFile));
+    }
+
+    /// <summary>
+    /// A file the store could not make sense of may still hold every entry the user kept, so the next
+    /// keep must not be saved over it. The session keeps nothing, which is the narrow failure; the file
+    /// keeps everything, which is what makes that failure temporary.
+    /// </summary>
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("[{\"ProviderId\": \"playwright\"")]
+    [InlineData("{\"playwright\": [\"chromium-1228\"]}")]
+    public void AFileItCouldNotReadIsNeverWrittenOver(string content)
+    {
+        Directory.CreateDirectory(Folder);
+        File.WriteAllText(StoreFile, content);
+
+        var store = new KeepStore(_environment);
+
+        Assert.Empty(store.Load().Items);
+        Assert.False(store.Save(new KeepList([Chromium])));
+        Assert.Equal(content, File.ReadAllText(StoreFile));
+    }
+
+    /// <summary>
+    /// The ordinary way a good file becomes unreadable: something else has it open as Deguffer starts.
+    /// Every entry is still in it, and the next keep must not replace them with one.
+    /// </summary>
+    [Fact]
+    public void AFileHeldOpenAtStartupIsNeverWrittenOver()
+    {
+        Assert.True(new KeepStore(_environment).Save(new KeepList([Chromium])));
+        var saved = File.ReadAllText(StoreFile);
+
+        var store = new KeepStore(_environment);
+
+        using (new FileStream(StoreFile, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Empty(store.Load().Items);
+        }
+
+        var another = new KeptItem("azure-functions-tools", "Azure Functions Core Tools releases", new ItemIdentity("4.18.1", "4.18.1"));
+
+        Assert.False(store.Save(new KeepList([another])));
+        Assert.Equal(saved, File.ReadAllText(StoreFile));
+    }
+
+    /// <summary>A field of the wrong type costs its own entry, and the rest of the list is still kept.</summary>
+    [Fact]
+    public void AnEntryWithAFieldOfTheWrongTypeCostsOnlyThatEntry()
+    {
+        Directory.CreateDirectory(Folder);
+        File.WriteAllText(StoreFile, """
+            [
+              { "ProviderId": "playwright", "ProviderName": "Playwright browsers", "Item": { "Key": 1228, "Name": "chromium" } },
+              { "ProviderId": "playwright", "ProviderName": "Playwright browsers", "Item": { "Key": "firefox-1532", "Name": "firefox-1532" } }
+            ]
+            """);
+
+        Assert.Equal("firefox-1532", Assert.Single(new KeepStore(_environment).Load().Items).Item.Key);
     }
 }

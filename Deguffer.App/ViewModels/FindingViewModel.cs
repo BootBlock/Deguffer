@@ -330,6 +330,12 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public void ApplyKeepList(KeepList keepList)
     {
+        // Most rows' providers name no items at all, and those rows can hold hundreds of steps.
+        if (keepList.KeysFor(_found.Provider.Id).Count == 0 && !Steps.Any(step => step.IsKept))
+        {
+            return;
+        }
+
         var applied = WithKeepList(_found, keepList);
         var offered = OfferedSteps(applied);
 

@@ -11,8 +11,11 @@ namespace Deguffer.Core.Tests;
 /// it names its items and deletes real directories, rather than because the rules are Playwright's.
 ///
 /// <para>Every test that runs a plan asserts the negative (§5.6) as well as the positive: what was
-/// kept is still there, contents and all, and so are the cache root and the registry beside the
-/// builds.</para>
+/// kept or never recognised is still there, and so is the registry beside the builds.</para>
+///
+/// <para>What these cannot reach is the tick itself. Whether a kept item's checkbox can be ticked is
+/// decided in the shell, which has no test project yet, so the Core half is asserted here — a kept
+/// item is not a step, so no selection of steps can run it — and the shell half is driven.</para>
 /// </summary>
 public sealed class KeepListPlanTests : IDisposable
 {
@@ -102,6 +105,9 @@ public sealed class KeepListPlanTests : IDisposable
             new[] { Path.Combine(root, Chromium), Path.Combine(root, Firefox) }.Order(StringComparer.OrdinalIgnoreCase),
             result.Verification!.Checks.Select(c => c.Path).Order(StringComparer.OrdinalIgnoreCase));
         Assert.True(result.Verification.Passed, result.Verification.Summary);
+        Assert.True(File.Exists(Path.Combine(root, Chromium, "payload.bin")), "a kept build was touched");
+        Assert.True(File.Exists(Path.Combine(root, Firefox, "payload.bin")), "a kept build was touched");
+        Assert.True(File.Exists(Path.Combine(root, ".links", "marker")), "Playwright's registry did not survive");
 
         Directory.Delete(Path.Combine(root, Chromium), recursive: true);
 
@@ -130,6 +136,9 @@ public sealed class KeepListPlanTests : IDisposable
 
         Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification!.Checks, c => c.Path == kept).Outcome);
         Assert.True(result.Verification.Passed, result.Verification.Summary);
+        Assert.False(Directory.Exists(Path.Combine(root, Firefox)));
+        Assert.True(Directory.Exists(kept), "a kept build was deleted");
+        Assert.True(File.Exists(Path.Combine(root, ".links", "marker")), "Playwright's registry did not survive");
     }
 
     /// <summary>
@@ -193,6 +202,8 @@ public sealed class KeepListPlanTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(Path.Combine(stranger, "payload.bin")), "an unrecognised child was touched");
+        Assert.False(Directory.Exists(Path.Combine(root, Chromium)));
+        Assert.True(File.Exists(Path.Combine(root, ".links", "marker")), "Playwright's registry did not survive");
     }
 
     [Fact]

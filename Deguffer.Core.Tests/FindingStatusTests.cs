@@ -12,7 +12,7 @@ namespace Deguffer.Core.Tests;
 public sealed class FindingStatusTests
 {
     /// <summary>
-    /// The dangerous direction: exactly one state may claim the folder is clear. The three
+    /// The dangerous direction: exactly one state may claim the folder is clear. The four
     /// neighbouring states measure zero as well, and telling the user a folder is clear when
     /// Deguffer never read it is the whole of issue #38.
     /// </summary>

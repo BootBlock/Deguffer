@@ -25,6 +25,9 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly KeepService _keeps;
     private readonly Func<IConfirmationPrompt> _prompt;
 
+    /// <summary>The keep list the rows were last brought up to date with. See <see cref="ApplyKeepList"/>.</summary>
+    private KeepList? _appliedKeepList;
+
     /// <summary>
     /// Whether the info bar is still showing the sentence the last preview put there.
     ///
@@ -377,17 +380,6 @@ public sealed partial class CleanViewModel : ObservableObject
         // the one that executes — equal by value today, but not a property to depend on silently.
         var selected = selectedRows.Select(f => f.SelectedFinding).ToList();
 
-        // Every row left out of the run still owes it the proof that its kept items are standing
-        // afterwards (§5.6). A row whose every item is kept can never be ticked, so this is the only
-        // route by which those items are checked at all. Such a plan destroys nothing, so it is never
-        // asked about and never swept into the blanket confirmation; the planner runs it after every
-        // deletion.
-        var proving = Findings
-            .Where(f => !f.IsSelected)
-            .Select(f => f.KeepListFinding)
-            .OfType<Finding>()
-            .ToList();
-
         // Read once for the whole run. The preference can change under a live page — Settings is a
         // navigation away — and asking under one rule then executing under another would either
         // demand a phrase nobody was shown a box for, or skip an ask the run then relies on.
@@ -447,6 +439,24 @@ public sealed partial class CleanViewModel : ObservableObject
                     InfoBarSeverity.Warning);
                 return;
             }
+
+            // Every row this run will not clean still owes it the proof that its kept items are
+            // standing afterwards (§5.6): a row left unticked, a row whose every item is kept and so
+            // can never be ticked, and a ticked row whose confirmation was declined. A row that runs
+            // proves its own, because narrowing keeps them protected. A plan that only proves destroys
+            // nothing, so it is never asked about, and the planner runs it after every deletion.
+            //
+            // Built after the confirmations, because until they are answered nobody knows which of the
+            // ticked rows will run.
+            var running = selectedRows
+                .Where((row, i) => authorised.Contains(selected[i]))
+                .ToHashSet();
+
+            var proving = Findings
+                .Where(row => !running.Contains(row))
+                .Select(row => row.KeepListFinding)
+                .OfType<Finding>()
+                .ToList();
 
             var progress = new Progress<string>(message => Report(message));
             var completed = new Progress<double>(SetCleanProgress);
@@ -640,6 +650,9 @@ public sealed partial class CleanViewModel : ObservableObject
         // ticked, which is the ordinary case for per-item selection.
         row.SelectionChanged += OnRowSelectionChanged;
 
+        // Rows arrive while a preview is running, when the keep list is not to be changed.
+        AllowKeepListChanges(row, !IsBusy);
+
         var index = 0;
         // The row's own figure rather than the finding's, so a kept item does not place a row by
         // space it will never offer.
@@ -829,9 +842,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     public void ToggleKeep(FindingViewModel row, StepViewModel step)
     {
-        if (step.Identity is not { } identity)
+        // The rule the disabled button presents, answered here as well because a click can land in
+        // the moment a run starts. See OnIsBusyChanged.
+        if (IsBusy || step.Identity is not { } identity)
         {
-            // The button is shown only where there is an identity to keep the item by.
             return;
         }
 
@@ -858,9 +872,21 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// Bring every row up to date with the keep list, which the Settings page can change while this
     /// page is away.
+    ///
+    /// <para>Nothing is done where the list is the one already applied. A <see cref="KeepList"/> is
+    /// replaced rather than changed, so the same instance means nothing has changed — which is every
+    /// return to this page that did not pass through one, and re-deriving every row's plan on each of
+    /// those is per-row work for no answer (G4).</para>
     /// </summary>
     public void ApplyKeepList()
     {
+        if (ReferenceEquals(_keeps.Current, _appliedKeepList))
+        {
+            return;
+        }
+
+        _appliedKeepList = _keeps.Current;
+
         foreach (var row in Findings)
         {
             row.ApplyKeepList(_keeps.Current);
@@ -873,6 +899,29 @@ public sealed partial class CleanViewModel : ObservableObject
         if (_barShowsPreviewSummary)
         {
             ReportPreviewSummary();
+        }
+    }
+
+    /// <summary>
+    /// No keep or release while a preview or a clean is running. The run in progress was built from
+    /// the list as it stood, so a keep clicked mid-clean would say an item is protected while the plan
+    /// already executing deletes it. A dialog left holding a row from before a rescan stays refused
+    /// too, because only the rows on the page are allowed again.
+    /// </summary>
+    partial void OnIsBusyChanged(bool value)
+    {
+        foreach (var row in Findings)
+        {
+            AllowKeepListChanges(row, !value);
+        }
+    }
+
+    /// <summary>Pushed down to each step, because a step template cannot reach this page through x:Bind.</summary>
+    private static void AllowKeepListChanges(FindingViewModel row, bool allowed)
+    {
+        foreach (var step in row.Steps)
+        {
+            step.CanChangeKeepList = allowed;
         }
     }
 

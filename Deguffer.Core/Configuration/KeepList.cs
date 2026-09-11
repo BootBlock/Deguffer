@@ -54,7 +54,7 @@ public sealed class KeepList
     public IReadOnlyList<KeptItem> Items { get; }
 
     /// <summary>
-    /// The keys kept for one provider, in the form <see cref="Execution.CleanupPlan.Keeping"/> takes.
+    /// The keys kept for one provider, in the form <see cref="Execution.CleanupPlan.WithKeepList"/> takes.
     /// A set rather than the items, because matching a step is the only question a plan asks of it.
     /// </summary>
     public IReadOnlySet<string> KeysFor(string providerId) =>

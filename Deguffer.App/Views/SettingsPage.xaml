@@ -55,10 +55,10 @@
                  carry a decision off the screen. Presentation only, and it hides rather than skips
                  — every location is still scanned, so this takes effect on the list already on
                  screen with no rescan. The description says which rows it does not touch, because
-                 three others measure zero without being clear at all. -->
+                 four others measure zero without being clear at all. -->
             <views:SettingsRow Glyph="&#xE71C;"
                                Title="Show items that are already clear"
-                               Description="A location Deguffer has nothing left to reclaim from is hidden by default, as it offers nothing to decide. Switch this on to list them as well. Rows that could not be read, ones Deguffer did not look at, or whose files are all too recent to touch, are always listed.">
+                               Description="A location Deguffer has nothing left to reclaim from is hidden by default, as it offers nothing to decide. Switch this on to list them as well. Rows that could not be read, ones Deguffer did not look at, ones whose files are all too recent to touch, and ones holding only items on your keep list are always listed.">
                 <views:SettingsRow.Control>
                     <ToggleSwitch IsOn="{x:Bind ViewModel.ShowAlreadyClear, Mode=TwoWay}"
                                   AutomationProperties.Name="Show items that are already clear" />
@@ -239,7 +239,7 @@
 
             <views:SettingsRow Glyph="&#xE718;"
                                Title="Items Deguffer never offers"
-                               Description="Keep an item from the Contents tab of its row on the Storage page. Deguffer leaves a kept item out of every clean, and checks after each one that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
+                               Description="Keep an item from the Contents tab of its row on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
 
             <TextBlock Text="Nothing is kept."
                        Style="{StaticResource SecondaryText}"

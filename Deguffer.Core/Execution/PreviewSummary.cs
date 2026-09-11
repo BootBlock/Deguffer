@@ -25,7 +25,7 @@ public static class PreviewSummary
 {
     /// <summary>
     /// What a new state gets until somebody gives it words of its own, and what a mixture of causes
-    /// gets in any case. Naming two of four causes would be less true than naming none.
+    /// gets in any case. Naming two of five causes would be less true than naming none.
     /// </summary>
     private const string MixedCauses =
         "Nothing to reclaim, and not every location here is clear. Check what each row reports.";

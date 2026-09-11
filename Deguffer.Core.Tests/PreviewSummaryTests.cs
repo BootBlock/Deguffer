@@ -6,7 +6,7 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// The sentence the Storage page states above the rows, which has to agree with them.
 ///
-/// The defect this covers (issue #38) is a bar that read the byte totals instead of the rows. Four
+/// The defect this covers (issue #38) is a bar that read the byte totals instead of the rows. Five
 /// states measure zero without being clear, so a test on the totals cannot tell a clean machine
 /// from one whose caches Deguffer was not allowed to read — and the bar announced "already clear"
 /// directly above a row saying otherwise. Every case below is one of those disagreements.
@@ -24,7 +24,7 @@ public sealed class PreviewSummaryTests
         PreviewSummary.For(statuses, Selectable, Selected, Elevate);
 
     /// <summary>
-    /// The four states that measure zero and are not clear. None of them may draw the claim that
+    /// The five states that measure zero and are not clear. None of them may draw the claim that
     /// the caches are already clear, whatever the totals say.
     /// </summary>
     [Theory]
