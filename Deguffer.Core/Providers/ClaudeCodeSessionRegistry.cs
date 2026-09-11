@@ -14,7 +14,7 @@ namespace Deguffer.Core.Providers;
 /// never "long ago": <see cref="ClaudeCodeSessionList.Predates"/> reads it as a start that could be
 /// the earliest of all.
 /// </param>
-public sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? StartedAt);
+internal sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? StartedAt);
 
 /// <summary>What Claude Code's list of running sessions said, and whether it could be read in full.</summary>
 /// <param name="Live">Every session still running, or that nothing could establish had stopped.</param>
@@ -24,7 +24,7 @@ public sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? Sta
 /// running" and "we could not tell" lead to opposite decisions about a folder a running session is
 /// still writing to. A caller refuses everything that depends on the list while this is false.
 /// </param>
-public sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> Live, bool Complete)
+internal sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> Live, bool Complete)
 {
     private readonly HashSet<string> _ids =
         new(Live.Select(session => session.SessionId), StringComparer.OrdinalIgnoreCase);
@@ -62,7 +62,7 @@ public sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> 
 /// of entry — an interactive session, a background one, a daemon and a daemon's worker — so the list
 /// is not only the sessions somebody has open in a terminal or an editor.</para>
 /// </summary>
-public sealed partial class ClaudeCodeSessionRegistry
+internal sealed partial class ClaudeCodeSessionRegistry
 {
     /// <summary>
     /// Far past anything Claude Code writes, which is under a kilobyte, and small enough that a file

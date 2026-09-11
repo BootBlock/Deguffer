@@ -8,7 +8,7 @@ namespace Deguffer.Core.Providers;
 /// <param name="IsLink">
 /// Whether it is a junction or a symbolic link. Named rather than dropped, and never followed.
 /// </param>
-public sealed record ClaudeCodeSidecar(string Path, string SessionId, bool IsLink);
+internal sealed record ClaudeCodeSidecar(string Path, string SessionId, bool IsLink);
 
 /// <summary>One project folder under <see cref="ClaudeCodeHome.Projects"/>, and what it holds.</summary>
 /// <param name="Path">The folder, in display form. Never a target: the project's memory is inside it.</param>
@@ -19,7 +19,7 @@ public sealed record ClaudeCodeSidecar(string Path, string SessionId, bool IsLin
 /// Everything else in the folder except the transcripts. The project's <c>memory</c> is among these,
 /// and it is the reason a project folder is never a target.
 /// </param>
-public sealed record ClaudeCodeProjectFolder(
+internal sealed record ClaudeCodeProjectFolder(
     string Path,
     IReadOnlyList<ClaudeCodeSidecar> Sidecars,
     IReadOnlyList<FileSystemInfo> Others);
@@ -35,7 +35,7 @@ public sealed record ClaudeCodeProjectFolder(
 /// False where anything above could not be established. A session this walk found no transcript for
 /// may then have one in a folder it did not see, so nothing may be called an orphan.
 /// </param>
-public sealed record ClaudeCodeProjects(
+internal sealed record ClaudeCodeProjects(
     IReadOnlyList<ClaudeCodeProjectFolder> Folders,
     IReadOnlySet<string> TranscriptIds,
     IReadOnlyList<string> Unreadable,
@@ -56,7 +56,7 @@ public sealed record ClaudeCodeProjects(
 /// their own session's transcript. A set difference taken one project folder at a time would have
 /// called their output an orphan.</para>
 /// </summary>
-public sealed class ClaudeCodeProjectsDiscovery
+internal sealed class ClaudeCodeProjectsDiscovery
 {
     private const string TranscriptExtension = ".jsonl";
 

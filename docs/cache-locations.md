@@ -1549,8 +1549,8 @@ purge removes a whole project's conversations and memory together.
 | `%USERPROFILE%\.claude.json` | Claude Code's own configuration: your account, and each project's trust decisions |
 | `%USERPROFILE%\.claude-swap-backup` | Not Claude Code's at all. Another program's saved sign-ins, under a name that begins the same way |
 
-A conversation that still exists, and the output beside it, is neither removed nor checked here.
-Whether to remove a conversation is a separate decision, and a separate row.
+A conversation that still exists, and the output beside it, is never removed here. Whether to remove
+a conversation is a choice about your own history, and this row never makes it.
 
 ### What it costs you
 

@@ -25,6 +25,7 @@ public sealed class FileRemoverTests : IDisposable
         var outcome = await FileRemover.RemoveAsync(file);
 
         Assert.True(outcome.Removed);
+        Assert.True(outcome.Took);
         Assert.Equal(8192, outcome.BytesReclaimed);
         Assert.True(outcome.Refused.IsEmpty);
         Assert.False(File.Exists(file));
@@ -32,7 +33,8 @@ public sealed class FileRemoverTests : IDisposable
 
     /// <summary>
     /// A file that went between planning and execution. The post-condition the caller wants — the
-    /// named path is gone — holds, so this is a success with nothing reclaimed rather than a skip.
+    /// named path is gone — holds, so this is a success with nothing reclaimed rather than a skip. It is
+    /// not something this removal took, though, and a result counting it would say an item went.
     /// </summary>
     [Fact]
     public async Task AFileThatIsAlreadyGoneCountsAsRemoved()
@@ -40,6 +42,7 @@ public sealed class FileRemoverTests : IDisposable
         var outcome = await FileRemover.RemoveAsync(Path.Combine(_temp.Path, "never-existed.dmp"));
 
         Assert.True(outcome.Removed);
+        Assert.False(outcome.Took, "a file that was already gone was counted as taken");
         Assert.Equal(0, outcome.BytesReclaimed);
         Assert.True(outcome.Refused.IsEmpty);
     }
@@ -75,6 +78,7 @@ public sealed class FileRemoverTests : IDisposable
         var outcome = await FileRemover.RemoveAsync(link);
 
         Assert.True(outcome.Removed);
+        Assert.True(outcome.Took);
         Assert.Equal(0, outcome.BytesReclaimed);
         Assert.False(File.Exists(link));
         Assert.True(File.Exists(bystander), "a file was deleted through a link");

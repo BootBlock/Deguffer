@@ -168,12 +168,12 @@ internal static partial class ClaudeCodeTimedFiles
     }
 
     /// <summary>
-    /// The newer of a file's creation and last-write times, on <see cref="MinimumAge"/>'s reasoning: a
-    /// file copied into place keeps the last-write time of its source, and its creation time is when it
-    /// arrived.
+    /// The newer of a file's creation and last-write times, asked of <see cref="MinimumAge"/> because
+    /// that is where the rule is stated once: a file copied into place keeps the last-write time of its
+    /// source, and its creation time is when it arrived.
     /// </summary>
     private static DateTime Written(FileSystemInfo entry) =>
-        entry.CreationTimeUtc > entry.LastWriteTimeUtc ? entry.CreationTimeUtc : entry.LastWriteTimeUtc;
+        DateTime.FromFileTimeUtc(MinimumAge.NewestFileTimeOf(entry));
 
     private static bool IsPlainFile(FileSystemInfo entry) =>
         entry is FileInfo && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint);

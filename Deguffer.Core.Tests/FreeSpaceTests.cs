@@ -85,11 +85,6 @@ public class FreeSpaceTests
         Assert.Equal("1.5 MB", FreeSpace.Format(ScanSize.FromLengths(1536 * 1024)));
 
     /// <summary>
-    /// The number stated is the logical one. The allocated figure is deliberately different here,
-    /// so this fails rather than passing by coincidence if the two axes are ever swapped back —
-    /// <see cref="ScanSize.Reclaimable"/> carries the three measurements that decided it.
-    /// </summary>
-    /// <summary>
     /// A leftover of empty folders frees no bytes, and "0 B" beside a row ready to clean would read as
     /// nothing to do. What it offers is its entries, so that is what is stated.
     /// </summary>
@@ -111,6 +106,11 @@ public class FreeSpaceTests
     public void StatesNothingAsNoBytes() =>
         Assert.Equal("0 B", FreeSpace.Format(ScanSize.Zero));
 
+    /// <summary>
+    /// The number stated is the logical one. The allocated figure is deliberately different here,
+    /// so this fails rather than passing by coincidence if the two axes are ever swapped back —
+    /// <see cref="ScanSize.Reclaimable"/> carries the three measurements that decided it.
+    /// </summary>
     [Fact]
     public void StatesAMeasuredSizeAsTheLogicalFigure() =>
         Assert.Equal("8.6 MB", FreeSpace.Format(new ScanSize(1536 * 1024, 9_000_000)));

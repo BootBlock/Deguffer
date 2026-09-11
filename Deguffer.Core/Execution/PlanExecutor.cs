@@ -380,7 +380,7 @@ public sealed class PlanExecutor(
             removal.BytesReclaimed,
             removal.Refused,
             message,
-            EntriesRemoved: removal.Removed ? 1 : 0);
+            EntriesRemoved: removal.Took ? 1 : 0);
     }
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)

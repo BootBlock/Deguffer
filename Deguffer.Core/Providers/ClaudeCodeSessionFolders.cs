@@ -20,7 +20,9 @@ namespace Deguffer.Core.Providers;
 /// Asserting it would report a §5.6 failure in any run where a provider that does remove sessions
 /// takes it: <see cref="PlanVerifier"/> reads a path any step in the run targeted as destroyed by the
 /// run, never as removed from outside it. The same holds for a session folder this pass could not
-/// show to be an orphan.</para>
+/// show to be an orphan, and for one whose conversation is gone but which holds more than spilled
+/// output, such as a subagent's conversation: removing that is the same choice about the user's
+/// history.</para>
 /// </summary>
 internal static class ClaudeCodeSessionFolders
 {
@@ -77,7 +79,7 @@ internal static class ClaudeCodeSessionFolders
 
         foreach (var refused in projects.Unreadable)
         {
-            sorting.Unlisted(refused);
+            sorting.Unlisted(refused, ClaudeCodeClassificationBuilder.UnlistedReason);
         }
 
         var running = 0;
@@ -128,11 +130,12 @@ internal static class ClaudeCodeSessionFolders
                 switch (HoldsOnlySpilledOutput(sidecar.Path))
                 {
                     case null:
-                        sorting.Unlisted(sidecar.Path);
+                        sorting.Unlisted(sidecar.Path, ClaudeCodeClassificationBuilder.UnlistedReason);
                         continue;
 
                     // A subagent's transcript, or anything else Claude Code may put beside the spilled
-                    // output, is conversation rather than something derived from one.
+                    // output, is conversation rather than something derived from one. Not asserted,
+                    // for the reason a session that still has a transcript is not.
                     case false:
                         conversations++;
                         continue;

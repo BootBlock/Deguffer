@@ -397,4 +397,51 @@ public sealed class ClaudeCodeLivenessTests : IDisposable
         Assert.True(File.Exists(path), $"{folder}\\{name} was removed");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
+
+    /// <summary>
+    /// The same rule for a folder, in each place that expects a file or a folder named for a session. A
+    /// folder named like a leftover file is not that file, and a folder in <c>session-env</c> belongs to a
+    /// session only when a session's id is the whole of its name.
+    /// </summary>
+    [Theory]
+    [InlineData("session-env", "not-a-session")]
+    [InlineData("session-env", SessionA + ".old")]
+    [InlineData("ide", "51234.lock")]
+    [InlineData("shell-snapshots", "snapshot-bash-1700000000000-abc123.sh")]
+    [InlineData("telemetry", "1p_failed_events." + SessionA + "." + BatchId + ".json")]
+    public async Task AFolderNotNamedForWhatItsPlaceHoldsIsTier4AndSurvives(string folder, string name)
+    {
+        var path = Path.Combine(_claude.Home, folder, name);
+        var inside = _claude.CreateFile(Path.Combine(path, "inside.bin"), 64);
+        TempDirectory.Age(inside, Old);
+        AgeFolder(path, Old);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        AssertKept(plan, path);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(path), $"{folder}\\{name} was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A file copied into place keeps the last-write time of the file it came from, and its creation
+    /// time is when it arrived. Dated by its last write alone, one that arrived an hour ago would read
+    /// as a month old and be offered.
+    /// </summary>
+    [Fact]
+    public async Task AFileIsDatedByTheNewerOfWhenItWasCreatedAndLastWritten()
+    {
+        var events = _claude.FailedEvents(SessionA, age: Old);
+        File.SetCreationTimeUtc(LongPath.Extended(events), DateTime.UtcNow.AddHours(-1));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(events, StringComparison.OrdinalIgnoreCase) && p.Withheld == Withholding.TooRecent);
+    }
 }

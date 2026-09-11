@@ -126,8 +126,6 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     public ClaudeCodeDerivedStateProvider(
         IUserEnvironment? environment = null,
-        ClaudeCodeProjectsDiscovery? projects = null,
-        ClaudeCodeSessionRegistry? sessions = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null)
@@ -137,8 +135,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
     {
-        _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment);
-        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector);
+        _projects = new ClaudeCodeProjectsDiscovery(Environment);
+        _sessions = new ClaudeCodeSessionRegistry(Environment, Inspector);
     }
 
     public override string Id => "claude-code-leftovers";

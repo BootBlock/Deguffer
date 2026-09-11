@@ -561,6 +561,22 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// A file that went between the preview and the clean is gone, which is a success, and this clean
+    /// took nothing, so it adds no item to what the result says was removed. A folder already gone
+    /// counts none for the same reason.
+    /// </summary>
+    [Fact]
+    public async Task CountsNoEntryForAFileThatWasAlreadyGone()
+    {
+        var result = await Execute(new DeleteFileStep(Path.Combine(_temp.Path, "handshake.lock"), "A lock"));
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(0, step.EntriesRemoved);
+        Assert.Equal(0, result.EntriesRemoved);
+    }
+
+    /// <summary>
     /// A folder whose only contents were empty folders did have something cleared out of it. "It held
     /// nothing to clear" would be a false sentence about a folder the user can see was emptied.
     /// </summary>

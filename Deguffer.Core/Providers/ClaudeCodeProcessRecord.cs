@@ -7,10 +7,11 @@ namespace Deguffer.Core.Providers;
 /// <summary>
 /// Whether the process a Claude Code record names is still running, asked of this machine.
 ///
-/// <para>Three of Claude Code's files name a process by its id: an entry in the list of running
-/// sessions, a messaging key, and an editor's handshake lock. None of them means anything until the
-/// id is asked about, and each can be misread in the same two ways, so both answers are written
-/// once.</para>
+/// <para>Two of Claude Code's files name a process by its id and record where and when it ran: an
+/// entry in the list of running sessions, and a messaging key. Neither means anything until the id is
+/// asked about, and both can be misread in the same two ways, so both answers are written once. An
+/// editor's handshake file names a process too and records neither. It says only whether its editor
+/// ran in Windows, and <see cref="ClaudeCodeProcessFiles"/> reads that for itself.</para>
 /// </summary>
 internal static class ClaudeCodeProcessRecord
 {

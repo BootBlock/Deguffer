@@ -51,7 +51,8 @@ internal sealed record ClaudeCodeClassification(
 /// <para>Shared because every kind carries the same safety facts, and a hand-written copy per kind is
 /// where one of them goes missing: a folder that is a link is named and never listed through, a folder
 /// that refused to be listed says so rather than reading as empty, and everything left alone is
-/// asserted rather than merely omitted.</para>
+/// asserted rather than merely omitted. The one exception is what another provider may remove, and
+/// each kind that has one names it where it is decided.</para>
 /// </summary>
 internal sealed class ClaudeCodeClassificationBuilder
 {
@@ -76,6 +77,9 @@ internal sealed class ClaudeCodeClassificationBuilder
     public const string UnrecognisedReason =
         "Not something Deguffer recognises in Claude Code's folder, so it is left alone.";
 
+    public const string UnlistedReason =
+        "Deguffer could not list what is in this folder, so nothing in it was examined and it is left alone.";
+
     /// <summary>
     /// Start on one folder: name it for the declaration, assert it, and list it. Null where there is
     /// nothing to classify, because the folder is absent, is a link, or refused to be listed — and in
@@ -95,14 +99,14 @@ internal sealed class ClaudeCodeClassificationBuilder
         }
 
         _folders.Add(folder);
-        Keep(folder, reason);
 
         if (FolderEntries.Of(folder) is not { } entries)
         {
-            Unlisted(folder);
+            Unlisted(folder, reason);
             return null;
         }
 
+        Keep(folder, reason);
         return entries;
     }
 
@@ -131,9 +135,13 @@ internal sealed class ClaudeCodeClassificationBuilder
         _notes.Add(CacheLevelWalk.Note(path));
     }
 
-    /// <summary>A folder that refused to be listed, so nothing inside it was examined.</summary>
-    public void Unlisted(string path)
+    /// <summary>
+    /// A folder that refused to be listed, so nothing inside it was examined. Asserted like anything
+    /// else left alone: a folder nobody could list is still a folder that must be there afterwards.
+    /// </summary>
+    public void Unlisted(string path, string reason)
     {
+        Keep(path, reason);
         _unreadable = true;
         _notes.Add(UnreadableRoot.Note(path));
     }

@@ -195,11 +195,22 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     /// styles and hooks, the configuration backups, a project's memory, the list of running sessions,
     /// and a different program's credentials under a similar name. Four beats each: not targeted,
     /// protected as present before, present on the disk after, and a passing verification.
+    ///
+    /// <para>A conversation and the output beside it are not asserted by the plan, for the reason
+    /// <see cref="NeitherOffersNorAssertsASessionThatStillHasAConversation"/> gives. That makes this test
+    /// the only place their survival of a clean is proved, so they are proved here, on the disk.</para>
     /// </summary>
     [Fact]
     public async Task EverythingThatMustSurviveIsAssertedAndDoesSurvive()
     {
         CreateOneOfEachLeftover();
+
+        string[] conversation =
+        [
+            _claude.Transcript(SessionB),
+            _claude.SpilledOutput(SessionB, age: Old),
+            _claude.Transcript(SessionC, OtherProjectFolder),
+        ];
 
         string[] mustSurvive =
         [
@@ -233,11 +244,12 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
 
         var result = await provider.ExecuteAsync(plan);
 
-        foreach (var path in mustSurvive)
+        foreach (var path in mustSurvive.Concat(conversation))
         {
             Assert.True(File.Exists(path) || Directory.Exists(path), $"{path} did not survive the clean.");
         }
 
+        Assert.All(conversation, path => Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -284,6 +296,8 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     /// <summary>
     /// Spilled tool output is derived from a conversation. A subagent's transcript is a conversation,
     /// so a session folder holding one is not a leftover this provider may take, whatever else is true.
+    /// Nor is it asserted, for the reason a session that still has its transcript is not, so its
+    /// survival is proved on the disk.
     /// </summary>
     [Fact]
     public async Task ASessionFolderHoldingASubagentsConversationIsLeftForTheUser()
@@ -297,11 +311,36 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.DoesNotContain(sidecar, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(sidecar, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.Notes, n => n.Message.Contains("subagent", StringComparison.Ordinal));
 
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(Path.Combine(sidecar, "subagents", "agent.jsonl")), "a subagent's conversation was removed");
+    }
+
+    /// <summary>
+    /// A session folder that will not be listed may hold anything, so it is left alone, the plan says it
+    /// could not look, and the clean proves the folder is still there like anything else left alone.
+    /// </summary>
+    [Fact]
+    public async Task ASessionFolderThatWillNotBeListedIsLeftAloneAndAssertedToSurvive()
+    {
+        var sidecar = _claude.SpilledOutput(SessionA, age: Old);
+
+        using var denied = new DeniedDirectory(sidecar);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(sidecar, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(sidecar, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.True(plan.HasUnreadableRoot);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(sidecar), "a session folder nobody could list was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -434,6 +473,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         Assert.DoesNotContain(sidecar, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(environmentFolder, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(endedLock, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(refused, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
             && n.Message.Contains("project folder", StringComparison.Ordinal));

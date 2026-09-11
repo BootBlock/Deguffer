@@ -31,12 +31,10 @@ public sealed record Finding(
     public long EstimatedBytes => Plan?.EstimatedBytes ?? 0;
 
     /// <summary>
-    /// The same total with both numbers and the approximation flag intact, for the label the user
-    /// reads. <see cref="EstimatedBytes"/> stays the number to sort and compare by.
+    /// What choosing this row reclaims, as its size label states it, with the approximation flag
+    /// intact. See <see cref="CleanupPlan.Reclaim"/>. <see cref="EstimatedBytes"/> stays the number to
+    /// sort and compare by.
     /// </summary>
-    public ScanSize Estimated => Plan?.Estimated ?? ScanSize.Zero;
-
-    /// <summary>What choosing this row reclaims, as its size label states it. See <see cref="CleanupPlan.Reclaim"/>.</summary>
     public ScanSize Reclaim => Plan?.Reclaim ?? ScanSize.Zero;
 
     /// <summary>

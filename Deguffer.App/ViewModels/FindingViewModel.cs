@@ -290,7 +290,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <summary>
     /// The ceiling <see cref="SelectedSize"/> can reach: every step this row offers, ticked or not.
     ///
-    /// Steps rather than <see cref="Finding.Estimated"/>, and only the selectable ones, so the two
+    /// Steps rather than <see cref="Finding.Reclaim"/>, and only the selectable ones, so the two
     /// figures the info bar states side by side count the same bytes. Taking the finding's own total
     /// would include a step whose checkbox is disabled, and the bar would then offer space that no
     /// amount of ticking can reach.
