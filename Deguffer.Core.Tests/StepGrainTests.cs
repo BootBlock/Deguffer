@@ -37,6 +37,7 @@ public class StepGrainTests
         [
             "azure-functions-tools",
             "cargo-target",
+            "claude-code-file-history",
             "dotnet-obj",
             "node-modules",
             "playwright",

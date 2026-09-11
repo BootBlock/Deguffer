@@ -112,19 +112,24 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShownItems));
         OnPropertyChanged(nameof(HasNoMatches));
 
-        Refresh();
+        // Each heading works out its own checkbox as it is built, so what is left is the list's own.
+        RefreshFigures();
     }
 
-    private void OnRowSelectionChanged(FindingViewModel row) => Refresh();
-
-    /// <summary>Bring every checkbox that stands for several items, and every figure, up to date with the row.</summary>
-    private void Refresh()
+    /// <summary>A tick, a keep or a release can move every heading's checkbox and every figure here.</summary>
+    private void OnRowSelectionChanged(FindingViewModel row)
     {
         foreach (var group in Shown)
         {
             group.Refresh();
         }
 
+        RefreshFigures();
+    }
+
+    /// <summary>Bring the checkbox over every shown item, the hidden count and the selected count up to date with the row.</summary>
+    private void RefreshFigures()
+    {
         AllShownState = ItemSelection.StateOf(ShownItems.Select(step => (step.IsSelected, step.CanBeSelected)));
         CanToggleAllShown = ShownItems.Any(step => step.CanBeSelected);
         HiddenSelected = _filter.HiddenSelected(Row.Steps.Select(step => (step.Step, step.IsSelected)));

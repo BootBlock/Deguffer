@@ -301,7 +301,7 @@ public sealed partial class CleanPage : Page
 
             if (child is HyperlinkButton { Tag: FindingViewModel tagged } link
                 && ReferenceEquals(tagged, row)
-                && AutomationProperties.GetName(link) == row.ItemsLinkName)
+                && AutomationProperties.GetName(link) == row.Text.ItemsLinkName)
             {
                 return link;
             }

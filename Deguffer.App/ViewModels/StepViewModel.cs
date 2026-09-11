@@ -112,17 +112,6 @@ public sealed partial class StepViewModel : ObservableObject
     public bool NeedsElevationFirst => Step.RequiresElevation && !ElevatedRelaunch.IsElevated;
 
     /// <summary>
-    /// Whether this step gets a checkbox of its own. Set by the owning row from its provider's
-    /// <see cref="StepGrain"/>, because it is a fact about the set rather than about this step: every
-    /// item is chosen on its own, and a single part is the whole row, which the row's own checkbox
-    /// already decides.
-    ///
-    /// A step template cannot reach its parent through <c>x:Bind</c>, which is why the answer is
-    /// pushed down here rather than read back up.
-    /// </summary>
-    public bool IsIndividuallySelectable { get; init; }
-
-    /// <summary>
     /// This step's value under each of its row's facet columns, in order, with an empty string where it
     /// has none. Set by the owning row, which works the columns out once across every step. See
     /// <see cref="Deguffer.Core.Choosing.ItemColumns"/>.

@@ -132,7 +132,7 @@
         <PivotItem x:Name="ContentsSection" Header="Contents">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="{x:Bind Finding.DetailHeader}"
+                    <TextBlock Text="{x:Bind Finding.Text.DetailHeader}"
                                Style="{StaticResource FieldLabel}" />
 
                     <!-- A row whose toolchain is absent has no plan at all, so this tab would
@@ -145,12 +145,12 @@
                          the list can be searched, the Selected total is on screen, and a thousand
                          items cost only the ones in view. This says where they are and goes there. -->
                     <StackPanel Spacing="8" Visibility="{x:Bind Finding.OffersItems}">
-                        <TextBlock Text="{x:Bind Finding.ItemsSentence}"
+                        <TextBlock Text="{x:Bind Finding.Text.ItemsSentence}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    TextWrapping="Wrap" />
                         <Button Content="Show the items"
                                 Click="OnShowItemsClicked"
-                                AutomationProperties.Name="{x:Bind Finding.ItemsLinkName}" />
+                                AutomationProperties.Name="{x:Bind Finding.Text.ItemsLinkName}" />
                     </StackPanel>
 
                     <ContentControl Content="{x:Bind Finding.SoleStep}"

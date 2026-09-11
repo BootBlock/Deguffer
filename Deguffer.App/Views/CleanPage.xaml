@@ -84,13 +84,13 @@
                      finds. It shows the count because that is what says whether the list is worth
                      opening. -->
                 <HyperlinkButton Grid.Column="2"
-                                 Content="{x:Bind ItemsLinkLabel}"
+                                 Content="{x:Bind Text.ItemsLinkLabel}"
                                  Visibility="{x:Bind OffersItems}"
                                  Padding="4,2"
                                  VerticalAlignment="Center"
                                  Tag="{x:Bind}"
                                  Click="OnItemsLinkClicked"
-                                 AutomationProperties.Name="{x:Bind ItemsLinkName}" />
+                                 AutomationProperties.Name="{x:Bind Text.ItemsLinkName}" />
 
                 <TextBlock Grid.Column="3"
                            Text="{x:Bind StatusLabel, Mode=OneWay}"
@@ -189,13 +189,13 @@
                             <!-- Beside the explanation's link, and before it, because for a row whose
                                  items are chosen one by one, choosing them is what the row is for. -->
                             <HyperlinkButton Grid.Column="2"
-                                             Content="{x:Bind ItemsLinkLabel}"
+                                             Content="{x:Bind Text.ItemsLinkLabel}"
                                              Visibility="{x:Bind OffersItems}"
                                              VerticalAlignment="Center"
                                              Padding="0,2"
                                              Tag="{x:Bind}"
                                              Click="OnItemsLinkClicked"
-                                             AutomationProperties.Name="{x:Bind ItemsLinkName}" />
+                                             AutomationProperties.Name="{x:Bind Text.ItemsLinkName}" />
 
                             <HyperlinkButton Grid.Column="3"
                                              Content="What is this?"
@@ -203,7 +203,7 @@
                                              Padding="0,2"
                                              Tag="{x:Bind}"
                                              Click="OnWhatIsThisClicked"
-                                             AutomationProperties.Name="{x:Bind InformationLinkName}" />
+                                             AutomationProperties.Name="{x:Bind Text.InformationLinkName}" />
                         </Grid>
 
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
@@ -243,7 +243,7 @@
         <DataTemplate x:Key="CompactFinding" x:DataType="vm:FindingViewModel">
             <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
                 <Expander Grid.Row="0"
-                          AutomationProperties.Name="{x:Bind DetailToggleName}"
+                          AutomationProperties.Name="{x:Bind Text.DetailToggleName}"
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Stretch"
                           Background="Transparent"
@@ -269,7 +269,7 @@
                                          Padding="0,2"
                                          Tag="{x:Bind}"
                                          Click="OnWhatIsThisClicked"
-                                         AutomationProperties.Name="{x:Bind InformationLinkName}" />
+                                         AutomationProperties.Name="{x:Bind Text.InformationLinkName}" />
                     </StackPanel>
                 </Expander>
 

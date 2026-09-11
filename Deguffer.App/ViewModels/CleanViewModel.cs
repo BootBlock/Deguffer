@@ -153,9 +153,22 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>The same fact the other way round, because x:Bind has no operators.</summary>
     public bool IsShowingFindings => ShownItems is null;
 
-    /// <summary>List <paramref name="row"/>'s items in place of the rows.</summary>
+    /// <summary>
+    /// List <paramref name="row"/>'s items in place of the rows.
+    ///
+    /// <para><b>Only for a row still on the page.</b> A row's dialog stays open while a preview, or the
+    /// re-plan after a clean, replaces every row, and its button still holds the row it was opened for.
+    /// A list for that row would take ticks the page no longer reads: nothing remembers them, the Selected
+    /// figure ignores them, and Clean runs the row that replaced it. An item unticked there to keep it out
+    /// of the next clean would still be deleted.</para>
+    /// </summary>
     public void ShowItems(FindingViewModel row)
     {
+        if (!Findings.Contains(row))
+        {
+            return;
+        }
+
         CloseItems();
         ShownItems = new ItemListViewModel(row);
     }

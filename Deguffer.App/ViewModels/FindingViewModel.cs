@@ -79,11 +79,11 @@ public sealed partial class FindingViewModel : ObservableObject
                 memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected),
                 isKept: !offered.Contains(s))
             {
-                // Declared by the provider rather than read off the count. See StepGrain.
-                IsIndividuallySelectable = provider.Grain.OffersEachStep(finding.Plan.Steps.Count),
                 FacetValues = columns.ValuesOf(s),
             }) ?? [],
         ];
+
+        Text = new FindingRowText(Name, Steps.Count, finding.AwaitingSourceFolders);
 
         // Subscribed only once every step exists. Handing each step a callback in its constructor
         // re-entered this one — the first pre-selected step raised the change before Steps had been
@@ -308,24 +308,13 @@ public sealed partial class FindingViewModel : ObservableObject
 
     /// <summary>
     /// Whether this row's steps are listed to be chosen one by one, which is what puts the link to the
-    /// item list on the row. The same declaration and the same rule as each step's own checkbox, so
-    /// the link is never offered for a list with nothing in it to choose on its own.
+    /// item list on the row. Declared by the provider rather than read off the count; see
+    /// <see cref="StepGrain"/>.
     /// </summary>
     public bool OffersItems => Finding.Provider.Grain.OffersEachStep(Steps.Count);
 
-    /// <summary>What the row's link to its item list says: how many items the list holds.</summary>
-    public string ItemsLinkLabel => Steps.Count == 1 ? "1 item" : $"{Steps.Count} items";
-
-    /// <summary>
-    /// What a screen reader calls that link. The words on screen are a count, and a count says nothing
-    /// about whose items they are.
-    /// </summary>
-    public string ItemsLinkName => $"Choose from the items in {Name}";
-
-    /// <summary>What the Contents tab says in place of the items it no longer lists.</summary>
-    public string ItemsSentence => Steps.Count == 1
-        ? "One item, listed on the Storage page with its size and its age."
-        : $"{Steps.Count} items, listed on the Storage page, where each can be chosen on its own.";
+    /// <summary>What this row says about itself in words that do not change. See <see cref="FindingRowText"/>.</summary>
+    public FindingRowText Text { get; }
 
     /// <summary>
     /// The one step of a row that has nothing to choose between, which the Contents tab still states
@@ -435,38 +424,6 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool HasNoDetail => !HasDetail;
 
-    /// <summary>
-    /// What the Contents tab holds, named for which of the three things it is.
-    ///
-    /// A row with nowhere approved to look has left nothing alone: it has not looked. Calling its
-    /// guidance "what was left alone" borrows §5.2's protected-path vocabulary for a sentence that
-    /// is asking the user for something, and puts the only instruction on the screen behind a label
-    /// that reads as a report.
-    /// </summary>
-    public string DetailHeader => Steps.Count > 0
-        ? "What this will do"
-        : Finding.AwaitingSourceFolders
-            ? "What Deguffer needs"
-            : "What was left alone";
-
-    /// <summary>
-    /// What a screen reader calls the compact row's disclosure. The whole row is that disclosure's
-    /// header there, so it derives no name of its own and would otherwise be announced as an
-    /// unnamed button.
-    ///
-    /// Named for the row rather than for what is inside it, because in the compact view the
-    /// disclosure always holds the sentence §7 asks each row to state, whether or not there is a
-    /// plan under it, and <see cref="DetailHeader"/> names only the plan half.
-    /// </summary>
-    public string DetailToggleName => $"More about {Name}";
-
-    /// <summary>
-    /// What a screen reader calls this row's information link. Every row's link reads "What is
-    /// this?", so without a name of its own a reader hears the same three words down the whole list
-    /// with nothing to tell one from another.
-    /// </summary>
-    public string InformationLinkName => $"What is {Name}?";
-
     /// <summary>Ticking the row ticks everything in it; unticking it clears the lot.</summary>
     partial void OnIsSelectedChanged(bool value)
     {
@@ -485,9 +442,9 @@ public sealed partial class FindingViewModel : ObservableObject
     /// the item list that stands for a group or for everything a search shows. A step that cannot be
     /// ticked is passed over, for the reasons <see cref="StepViewModel.CanBeSelected"/> gives.
     ///
-    /// <para>One notification and one event, however many steps change. Raising them per step made a
-    /// click on a group of a thousand items a thousand recalculated totals, each summing the whole
-    /// row, and a thousand writes of the remembered selection to disk.</para>
+    /// <para>One notification and one event, however many steps change. Each event recalculates the
+    /// page's totals over every row and writes the remembered selection to disk, so a click on a group of
+    /// a thousand items that set its steps one at a time would do both a thousand times.</para>
     /// </summary>
     public void SetSelected(IEnumerable<StepViewModel> steps, bool value)
     {

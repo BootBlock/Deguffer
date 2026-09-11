@@ -96,13 +96,17 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     /// One approved folder inside another. The project reads under the nearer one, which is the folder
     /// the user approved with it in mind, whichever order the two were approved in.
     /// </summary>
-    [Fact]
-    public async Task AProjectInsideTwoApprovedFoldersIsListedUnderTheNearerOne()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AProjectInsideTwoApprovedFoldersIsListedUnderTheNearerOne(bool nearerApprovedFirst)
     {
         var src = _temp.CreateDirectory("src");
         var client = Path.Combine(src, "client");
         Directory.CreateDirectory(client);
-        _roots.Save([src, client]);
+
+        string[] approved = nearerApprovedFirst ? [client, src] : [src, client];
+        _roots.Save(approved);
 
         var app = BuildDirectoryFixture.CreateNodeProject(Path.Combine(client, "app"));
 

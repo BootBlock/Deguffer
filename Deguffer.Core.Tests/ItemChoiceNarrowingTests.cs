@@ -36,16 +36,19 @@ public sealed class ItemChoiceNarrowingTests : IDisposable
             _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
         var plan = await provider.PlanAsync();
 
-        // What the list does: group, search, then click the heading of what is left on screen.
-        var shown = new ItemFilter("1300").Showing(ItemGroups.Of(plan.Steps, step => step), step => step);
+        // What the list does: group, search, then click the heading of what is left on screen. The whole
+        // build name is searched rather than its revision, because every description ends in a path under
+        // a scratch folder whose random name can hold any four digits, and would then match every build.
+        var shown = new ItemFilter("chromium-1300").Showing(ItemGroups.Of(plan.Steps, step => step), step => step);
         var chromium = Assert.Single(shown);
         Assert.Equal("chromium", chromium.Name);
 
-        // Tier 2 starts unticked, and every build here has something to reclaim.
+        // Tier 2 starts unticked, so the heading is clear, and the click writes its value to every build
+        // under it that can be ticked. The run is built from what the click wrote.
         var state = ItemSelection.StateOf(chromium.Items.Select(step => (false, step.RemovesSomething)));
-        Assert.True(ItemSelection.ValueForClick(state));
+        var written = ItemSelection.ValueForClick(state);
 
-        var narrowed = plan.NarrowedTo([.. chromium.Items]);
+        var narrowed = plan.NarrowedTo([.. chromium.Items.Where(step => written && step.RemovesSomething)]);
 
         var taken = Path.Combine(root, "chromium-1300");
         Assert.Equal([taken], narrowed.TargetedPaths);

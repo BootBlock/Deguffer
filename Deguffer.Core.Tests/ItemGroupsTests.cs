@@ -53,7 +53,8 @@ public class ItemGroupsTests
         var alsoLoose = Item("b", 5, null);
         var grouped = Item("c", 50, "Work");
 
-        var groups = ItemGroups.Of<CleanupStep>([alsoLoose, grouped, loose], step => step);
+        // The named group is met first, so only its size can put the unnamed group ahead of it.
+        var groups = ItemGroups.Of<CleanupStep>([grouped, alsoLoose, loose], step => step);
 
         Assert.Equal([null, "Work"], groups.Select(g => g.Name));
         Assert.Equal([loose, alsoLoose], groups[0].Items);

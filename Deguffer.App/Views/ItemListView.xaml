@@ -30,8 +30,8 @@
         <DataTemplate x:Key="ItemRow" x:DataType="vm:StepViewModel">
             <Grid ColumnSpacing="10" Padding="12,8" ColumnDefinitions="Auto,*,Auto,96">
 
-                <!-- Every item gets a checkbox here: the list is only offered where each item is
-                     chosen on its own, which is the rule that also decides this checkbox. -->
+                <!-- Every item gets a checkbox: the list is offered only for a row whose steps are
+                     chosen one by one. See FindingViewModel.OffersItems. -->
                 <CheckBox Grid.Column="0"
                           MinWidth="0"
                           VerticalAlignment="Top"

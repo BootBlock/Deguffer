@@ -29,8 +29,8 @@ public class ItemFilterTests
     }
 
     /// <summary>
-    /// "API" is only in the project and "2024" only in the heading, so neither the path nor any one
-    /// field holds both words. Every word must be found, wherever it is.
+    /// "2024" is only in the heading, and "API" is in the project and the path but not the heading, so
+    /// no one field holds both words. Every word must be found, wherever it is.
     /// </summary>
     [Fact]
     public void EveryWordHasToAppearSomewhereInTheItemRegardlessOfCase()
