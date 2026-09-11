@@ -132,6 +132,21 @@ public sealed class PreviewSummaryTests
     }
 
     /// <summary>
+    /// A row of empty leftovers is ready to clean with no bytes in it. Ticked, it has to read as
+    /// selected — "Tick the rows you want" over rows already ticked would be false — and its count is
+    /// the figure the sentence states.
+    /// </summary>
+    [Fact]
+    public void TreatsTickedLeftoversThatFreeNoBytesAsSelected()
+    {
+        var leftovers = new ScanSize(0, 0, Entries: 428);
+
+        Assert.Equal(
+            "428 items can be reclaimed, 428 items selected. Review the rows, then Clean.",
+            PreviewSummary.For([FindingStatus.ReadyToClean], leftovers, leftovers, Elevate));
+    }
+
+    /// <summary>
     /// Real space this process may not act on is neither ready nor clear. It outranks the zero-byte
     /// causes because it is the one the user can do something about from this screen.
     /// </summary>

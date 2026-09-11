@@ -90,7 +90,13 @@ public static class DirectoryRemover
 
             progress?.Report(1.0);
 
-            return new RemovalOutcome(0, Refusals.None, RootRemoved: !fs.DirectoryExists(extended));
+            var linkRemoved = !fs.DirectoryExists(extended);
+
+            return new RemovalOutcome(
+                0,
+                Refusals.None,
+                RootRemoved: linkRemoved,
+                EntriesRemoved: linkRemoved && !bounds.KeepRoot ? 1 : 0);
         }
 
         // Two passes: gather the tree first so progress is a real fraction rather than a guess,
@@ -98,17 +104,21 @@ public static class DirectoryRemover
         // leave us deleting a partially-understood tree.
         var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
 
+        // Every entry this removal takes, so a tree of empty folders reports what went rather than
+        // nothing: files, links and folders alike.
+        long removed = 0;
+
         // A link is removed as a link and holds no bytes of its own, so a refusal to remove one
         // moves no figure and is not counted.
         foreach (var link in inventory.Links)
         {
-            if (link.IsDirectory)
+            var gone = link.IsDirectory
+                ? TryDeleteDirectory(link.FullName, fs)
+                : TryDeleteFile(link.FullName, fs) is null;
+
+            if (gone)
             {
-                TryDeleteDirectory(link.FullName, fs);
-            }
-            else
-            {
-                TryDeleteFile(link.FullName, fs);
+                removed++;
             }
         }
 
@@ -134,6 +144,7 @@ public static class DirectoryRemover
             else
             {
                 Interlocked.Add(ref reclaimed, file.Length);
+                Interlocked.Increment(ref removed);
             }
 
             var completed = Interlocked.Increment(ref done);
@@ -157,7 +168,10 @@ public static class DirectoryRemover
                 continue;
             }
 
-            TryDeleteDirectory(directory, fs);
+            if (TryDeleteDirectory(directory, fs))
+            {
+                removed++;
+            }
         }
 
         progress?.Report(1.0);
@@ -169,7 +183,8 @@ public static class DirectoryRemover
             refused.Total,
             RootRemoved: !bounds.KeepRoot && !fs.DirectoryExists(extended),
             inventory.Kept,
-            inventory.Spared)
+            inventory.Spared,
+            Interlocked.Read(ref removed))
         {
             RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
         };
@@ -237,16 +252,24 @@ public static class DirectoryRemover
         }
     }
 
-    private static void TryDeleteDirectory(string extendedPath, IFileSystem fs)
+    /// <returns>
+    /// Whether the directory is gone: removed here, or already gone by the time this reached it, which
+    /// is the same post-condition <see cref="TryDeleteFile"/> reports for a file.
+    /// </returns>
+    private static bool TryDeleteDirectory(string extendedPath, IFileSystem fs)
     {
         try
         {
             fs.DeleteDirectory(extendedPath);
-            return;
+            return true;
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
+        catch (DirectoryNotFoundException)
         {
-            // Not empty, in use, already gone — or the read-only bit, which the retry below is for.
+            return true;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // Not empty, in use — or the read-only bit, which the retry below is for.
         }
 
         // Windows refuses to remove a directory carrying the read-only attribute exactly as it
@@ -262,7 +285,7 @@ public static class DirectoryRemover
         // reparse point would act on the far side, which nothing here has classified.
         if (fs.TryGetAttributes(extendedPath) is not { } attributes || !attributes.HasFlag(FileAttributes.ReadOnly))
         {
-            return;
+            return false;
         }
 
         // Emptiness is asked only of a real directory, and it costs nothing there: clearing the bit
@@ -273,19 +296,21 @@ public static class DirectoryRemover
         // removing the link without following it is what the caller asked for.
         if (!attributes.HasFlag(FileAttributes.ReparsePoint) && !IsEmpty(extendedPath, fs))
         {
-            return;
+            return false;
         }
 
         try
         {
             fs.ClearAttributes(extendedPath);
             fs.DeleteDirectory(extendedPath);
+            return true;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
         {
             // Held open, or something arrived in it between the two calls. The read-only bit is
             // cleared and the directory stays, which is the same residue TryDeleteFile leaves on the
             // same path — and it is a directory this plan named for removal either way.
+            return false;
         }
     }
 

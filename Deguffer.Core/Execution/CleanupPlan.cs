@@ -229,6 +229,12 @@ public sealed record CleanupPlan
     public ScanSize Estimated => Steps.Aggregate(ScanSize.Zero, (total, step) => total + step.Estimated);
 
     /// <summary>
+    /// What choosing every step here reclaims, as the shell states it. See
+    /// <see cref="CleanupStep.Reclaim"/> for how that differs from <see cref="Estimated"/>.
+    /// </summary>
+    public ScanSize Reclaim => Steps.Aggregate(ScanSize.Zero, (total, step) => total + step.Reclaim);
+
+    /// <summary>
     /// A plan with no steps removes nothing: the toolchain is absent, the location is already clean,
     /// or every candidate it found was withheld. Whether it still has something to verify is
     /// <see cref="HasSomethingToProve"/>'s question, and it is a different one.

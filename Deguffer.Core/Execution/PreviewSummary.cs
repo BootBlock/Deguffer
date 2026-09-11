@@ -33,10 +33,10 @@ public static class PreviewSummary
     /// <param name="statuses">Every row of the preview, in any order.</param>
     /// <param name="selectable">
     /// Everything the user could tick across the whole preview — the ceiling
-    /// <paramref name="selected"/> can reach. It is above zero whenever any row reports
+    /// <paramref name="selected"/> can reach. It holds something whenever any row reports
     /// <see cref="FindingStatus.ReadyToClean"/>, because that status needs a step that can be ticked
-    /// and measures more than nothing. The caller upholds that, which is why the branch below states
-    /// the figure rather than re-testing it.
+    /// and removes something — bytes, or a leftover's entries. The caller upholds that, which is why
+    /// the branch below states the figure rather than re-testing it.
     /// </param>
     /// <param name="selected">What is currently ticked.</param>
     /// <param name="elevateLabel">
@@ -57,7 +57,10 @@ public static class PreviewSummary
             // sentence used to report only what is ticked. §3 pre-selects Tier 1 alone, so on a
             // machine whose reclaimable rows are all Tier 2 or Tier 3 nothing starts ticked, and
             // the bar read "0 B can be reclaimed" over rows offering gigabytes.
-            var next = selected.Reclaimable > 0
+            //
+            // Entries count as ticked too: a row of empty leftovers frees no bytes, and telling the
+            // user to tick rows they have already ticked would be false.
+            var next = selected.Reclaimable > 0 || selected.Entries > 0
                 ? "Review the rows, then Clean."
                 : "Tick the rows you want, then Clean.";
 

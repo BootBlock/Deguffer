@@ -81,7 +81,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Thirty-seven providers, each holding its own knowledge of one location. A provider reports "not
+Thirty-nine providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -108,6 +108,7 @@ installed" cleanly on a machine without that toolchain.
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
+| Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
 
 **Tier 2 — regenerable, with cost.** Re-created by re-downloading or rebuilding.
 
@@ -135,6 +136,7 @@ installed" cleanly on a machine without that toolchain.
 | Windows servicing logs | |
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
+| Claude Code MCP server logs | |
 
 **Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
 excluded by construction rather than by enumeration.

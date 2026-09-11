@@ -5,15 +5,29 @@ namespace Deguffer.Core.Tests.Fakes;
 /// <summary>Declares which of a tool's processes are "running", for the §5.3 warning path.</summary>
 public sealed class FakeProcessInspector(params string[] running) : IProcessInspector
 {
+    private readonly Dictionary<int, ProcessLiveness> _processes = [];
+
     public static FakeProcessInspector NothingRunning => new();
 
     public int InvalidateCount { get; private set; }
+
+    /// <summary>
+    /// Declare what one id answers, so a provider reading a file that names a process can be shown
+    /// keeping the file for a running process, offering it for an ended one, and refusing it where
+    /// nothing could be established.
+    /// </summary>
+    public FakeProcessInspector WithProcess(int processId, ProcessLiveness liveness)
+    {
+        _processes[processId] = liveness;
+        return this;
+    }
 
     public IReadOnlyList<string> FindRunning(IEnumerable<string> names) =>
         [.. names.Intersect(running, StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
-    /// Every id answers <see cref="ProcessLiveness.NotRunning"/>, as a free id does on a real machine.
+    /// What <see cref="WithProcess"/> declared for the id, and otherwise
+    /// <see cref="ProcessLiveness.NotRunning"/>, as a free id answers on a real machine.
     ///
     /// <para>An id below 1 is refused as the real probe refuses it, so a provider that passes one
     /// fails here rather than reading it as a process that is not running.</para>
@@ -22,7 +36,7 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(processId);
 
-        return ProcessLiveness.NotRunning;
+        return _processes.GetValueOrDefault(processId, ProcessLiveness.NotRunning);
     }
 
     public void Invalidate() => InvalidateCount++;

@@ -333,16 +333,30 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
             steps.Add(step with
             {
-                Estimated = measured.Sizes[i],
+                Estimated = target.Kind is TargetKind.DirectoryContents or TargetKind.RecycleBin
+                    ? WithoutItsOwnEntry(measured.Sizes[i])
+                    : measured.Sizes[i],
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = measured.WithheldRecent[i],
                 Identity = target.Identity,
+                IsLeftover = target.IsLeftover,
             });
         }
 
         return (steps, measured);
     }
+
+    /// <summary>
+    /// A measurement of a folder emptied in place, which stays standing, so its own entry is not
+    /// among what the step takes.
+    ///
+    /// <para>The measurement counted that entry only where nothing inside the folder stays. Where
+    /// something does, this counts one short — the direction a count deciding whether anything is
+    /// offered may be wrong in.</para>
+    /// </summary>
+    private static ScanSize WithoutItsOwnEntry(ScanSize size) =>
+        size with { Entries = Math.Max(0, size.Entries - 1) };
 
     /// <summary>
     /// The guard applied to a finished plan: carried onto it, said out loud, and — for a step whose
