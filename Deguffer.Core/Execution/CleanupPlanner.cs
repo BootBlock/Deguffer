@@ -192,6 +192,13 @@ public sealed class CleanupPlanner
     /// <summary>
     /// Execute the given plans in sequence. Sequential is deliberate: two package managers
     /// hammering the same disk at once is slower, not faster, and progress stays meaningful.
+    ///
+    /// <para><b>A plan with no steps and something to prove is run too, last, and only to be
+    /// verified.</b> Every candidate it found was withheld, so what it holds is a promise that those
+    /// paths will be standing afterwards (§5.6) — and that promise is about what the whole run
+    /// leaves, so it is checked once every deletion has happened. It destroys nothing, so §7 asks
+    /// nothing of it and the bar gives it no share. See <see cref="CleanupPlan.HasSomethingToProve"/>.
+    /// </para>
     /// </summary>
     /// <param name="confirmations">
     /// The answers §7 requires for anything above Tier 1, collected before execution begins because
@@ -220,13 +227,19 @@ public sealed class CleanupPlanner
 
         confirmations ??= [];
 
-        // A finding with nothing to remove is not part of the run, so it is dropped before the
-        // weights are worked out rather than skipped inside the loop. Otherwise every empty
-        // selection would claim a share of the bar and then complete instantly.
+        // A finding with nothing to remove and nothing to prove is not part of the run, so it is
+        // dropped here rather than skipped inside the loop. One with nothing to remove and a
+        // survivor to prove stays, because verifying that survivor is the whole of what it is for.
+        //
+        // Those go last, whatever order the selection arrived in: their promise is about what the
+        // whole run leaves standing, and checking it before a later plan has deleted anything would
+        // prove nothing about that plan. OrderBy is stable, so the plans that delete keep the order
+        // they were given.
         var plans = selected
             .Select(f => (Finding: f, Plan: f.Plan))
-            .Where(p => p.Plan is { IsEmpty: false })
+            .Where(p => p.Plan is { IsEmpty: false } or { HasSomethingToProve: true })
             .Select(p => (p.Finding, Plan: p.Plan!))
+            .OrderBy(p => p.Plan.IsEmpty)
             .ToList();
 
         // §5.6's negative is answered against what the whole run may destroy, not against each
@@ -236,7 +249,7 @@ public sealed class CleanupPlanner
         // proceeds.
         var reach = RunReach.Of([.. plans.Select(p => p.Plan)]);
 
-        var weights = ProgressWeights.For(plans.Select(p => p.Plan.EstimatedBytes));
+        var weights = Weigh([.. plans.Select(p => p.Plan)]);
         var total = weights.Sum();
         var results = new List<CleanupResult>(plans.Count);
         var done = 0.0;
@@ -250,14 +263,23 @@ public sealed class CleanupPlanner
             // §7's extra confirmation for anything above Tier 1. The requirement is derived here
             // rather than trusted from the caller: a shell that forgot to ask, or asked for the
             // wrong subject, must fail closed rather than delete.
-            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
-
-            if (!requirement.IsSatisfiedBy(confirmations))
+            //
+            // A plan with no steps is not asked about at any tier. It destroys nothing, so there is
+            // nothing to authorise, and failing closed on it would throw the rest of the run away
+            // over a check that only reads the disk.
+            if (!plan.IsEmpty)
             {
-                throw new ConfirmationRequiredException(requirement);
+                var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
+
+                if (!requirement.IsSatisfiedBy(confirmations))
+                {
+                    throw new ConfirmationRequiredException(requirement);
+                }
             }
 
-            status?.Report($"Cleaning {finding.Provider.Name}…");
+            status?.Report(plan.IsEmpty
+                ? $"Checking what {finding.Provider.Name} left alone…"
+                : $"Cleaning {finding.Provider.Name}…");
 
             results.Add(await finding.Provider
                 .ExecuteAsync(
@@ -275,5 +297,35 @@ public sealed class CleanupPlanner
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Each plan's share of the bar: a plan that deletes is weighted by what it frees, and a plan run
+    /// only to be verified gets nothing, because the part of a run that takes any time is the
+    /// deleting.
+    ///
+    /// <para>Weighed apart rather than handed to <see cref="ProgressWeights"/> as a zero. That rule
+    /// shares the bar equally where nothing carries a figure, so beside a command step whose tool
+    /// reports none the verification would take half, and the bar would sit there while the command
+    /// ran. Only a run holding nothing but verification shares the bar between those plans.</para>
+    /// </summary>
+    private static IReadOnlyList<double> Weigh(IReadOnlyList<CleanupPlan> plans)
+    {
+        var deleting = ProgressWeights.For(plans.Where(p => !p.IsEmpty).Select(p => p.EstimatedBytes));
+
+        if (deleting.Count == 0)
+        {
+            return ProgressWeights.For(plans.Select(_ => 0L));
+        }
+
+        var weights = new List<double>(plans.Count);
+        var next = 0;
+
+        foreach (var plan in plans)
+        {
+            weights.Add(plan.IsEmpty ? 0 : deleting[next++]);
+        }
+
+        return weights;
     }
 }

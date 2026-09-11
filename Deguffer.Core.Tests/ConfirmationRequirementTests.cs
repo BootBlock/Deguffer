@@ -140,6 +140,29 @@ public sealed class ConfirmationRequirementTests
     }
 
     /// <summary>
+    /// A plan the planner runs only to verify what it withheld destroys nothing either. It must not
+    /// stand the blanket confirmation down, and it must not be swept into it.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableCache)]
+    [InlineData(SafetyTier.RegenerableWithCost)]
+    [InlineData(SafetyTier.UserData)]
+    public void AStepFreePlanWithSomethingToProveIsNeverAQuestion(SafetyTier tier)
+    {
+        var plan = PlanFor(tier) with
+        {
+            ProtectedPaths =
+            [
+                new ProtectedPath(@"C:\Users\testuser\.cache\subject\withheld", "Withheld.", ExistedBefore: true),
+            ],
+        };
+
+        Assert.True(plan.HasSomethingToProve);
+        Assert.False(ConfirmationRequirement.PromptsUser(plan));
+        Assert.Empty(ConfirmationRequirement.NotPromptedFor([plan], p => p));
+    }
+
+    /// <summary>
     /// The mixed selection, which is where this went wrong in practice: one Tier 2 row alongside
     /// Tier 1 rows. The Tier 1 rows are not covered by §7, so they must come back here — a shell
     /// that concludes "§7 has this selection covered" deletes them having asked nothing at all,
