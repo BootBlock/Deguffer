@@ -248,7 +248,7 @@ public sealed class PlanVerifierTests : IDisposable
         var protectedPath = _temp.CreateDirectory("project", "obj");
 
         var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("elsewhere", "obj"), "Output")], Protect(protectedPath));
-        var reach = new RunReach([.. plan.TargetedPaths, otherPlansTarget], Unbounded: false);
+        var reach = new RunReach([.. plan.TargetedPaths, otherPlansTarget], ProbedPaths: [], Unbounded: false);
 
         Directory.Delete(project, recursive: true);
 
@@ -270,13 +270,158 @@ public sealed class PlanVerifierTests : IDisposable
         var protectedPath = _temp.CreateDirectory("cache", "config");
 
         var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("elsewhere", "obj"), "Output")], Protect(protectedPath));
-        var reach = new RunReach(plan.TargetedPaths, Unbounded: true);
+        var reach = new RunReach(plan.TargetedPaths, ProbedPaths: [], Unbounded: true);
 
         Directory.Delete(tree, recursive: true);
 
         Assert.Equal(VerificationOutcome.RemovedFromOutside, OutcomeFor(plan, protectedPath));
         Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, protectedPath, reach));
     }
+
+    /// <summary>
+    /// §5.1 leaves a command deciding what it removes, and that is a reason to answer for whatever
+    /// the run empties, never a reason to excuse it. A folder the plan protected and never sent the
+    /// tool into is the over-reach this check exists for, whatever else the run holds.
+    /// </summary>
+    [Fact]
+    public void ACommandStepDoesNotExcuseEmptyingAFolderItNeverDeclared()
+    {
+        var cache = _temp.CreateDirectory("tool", "cache");
+        var config = _temp.CreateDirectory("tool", "config");
+        var settings = _temp.CreateFile(8, "tool", "config", "settings.json");
+
+        var plan = Plan([Evict(cache)], ProtectHolding(config));
+
+        File.Delete(settings);
+
+        Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, config));
+        Assert.False(PlanVerifier.Verify(plan).Passed);
+    }
+
+    /// <summary>
+    /// The case the exemption is for. A tool's cache and the root holding it are both protected, and
+    /// the command is sent to clear exactly that cache, so both end the run holding nothing. Each of
+    /// them holds the path the tool was sent to, which is the plan's own declared work.
+    ///
+    /// <para>The cache and the root are separate assertions because they exercise different halves
+    /// of the containment: the cache is the probed path itself, and the root sits above it. The
+    /// negative, a folder beside the cache that the tool was never sent to, is
+    /// <see cref="ACommandStepDoesNotExcuseEmptyingAFolderItNeverDeclared"/>.</para>
+    /// </summary>
+    [Fact]
+    public void AFolderHoldingACommandsDeclaredReachMayEndTheRunEmpty()
+    {
+        var root = _temp.CreateDirectory("tool");
+        var cache = _temp.CreateDirectory("tool", "cache");
+        var entry = _temp.CreateFile(8, "tool", "cache", "entry.bin");
+
+        var plan = Plan([Evict(cache)], ProtectHolding(root), ProtectHolding(cache));
+
+        // Emptied in place, which is the shape a tool's own clear commonly leaves.
+        File.Delete(entry);
+
+        // The shape the exemption has to excuse, asserted rather than assumed: nothing is left
+        // anywhere under the root.
+        Assert.False(DirectoryContent.IsPresent(root));
+
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, root));
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, cache));
+    }
+
+    /// <summary>
+    /// A run is many plans, so the declared reach that excuses an emptied folder is the whole run's,
+    /// as a target is. It excuses the folders above the path the other plan's tool was sent to, and
+    /// nothing beside it.
+    /// </summary>
+    [Fact]
+    public void AnotherPlansDeclaredReachExcusesOnlyTheFoldersAboveIt()
+    {
+        var shared = _temp.CreateDirectory("shared");
+        var theirCache = _temp.CreateDirectory("shared", "cache");
+        _temp.CreateFile(8, "shared", "cache", "entry.bin");
+        var config = _temp.CreateDirectory("config");
+        var settings = _temp.CreateFile(8, "config", "settings.json");
+
+        var plan = Plan(
+            [new DeleteDirectoryStep(_temp.CreateDirectory("elsewhere", "obj"), "Output")],
+            ProtectHolding(shared),
+            ProtectHolding(config));
+        var reach = RunReach.Of([plan, Plan([Evict(theirCache)])]);
+
+        Directory.Delete(theirCache, recursive: true);
+        File.Delete(settings);
+
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, shared, reach));
+        Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, config, reach));
+    }
+
+    /// <summary>
+    /// In a run holding a tool's own command, content is asked for where it lives. A tool can take
+    /// every file and leave the folders that held them, which still takes everything worth
+    /// protecting, and a top-level question would see a folder holding a folder and call it a
+    /// survivor.
+    /// </summary>
+    [Fact]
+    public void AFolderAToolLeftHoldingOnlyEmptyFoldersWasEmptied()
+    {
+        var kept = _temp.CreateDirectory("project", "bin");
+        var assembly = _temp.CreateFile(8, "project", "bin", "Debug", "net10.0", "app.dll");
+        var plan = Plan([Evict(_temp.CreateDirectory("tool", "cache"))], ProtectHolding(kept));
+
+        File.Delete(assembly);
+
+        Assert.True(Directory.Exists(Path.GetDirectoryName(assembly)));
+        Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, kept));
+    }
+
+    /// <summary>
+    /// The same shape in a run with no tool's command. MSBuild's Clean, run while the preview sat on
+    /// screen, leaves exactly this beside the <c>obj</c> the run removes, and Deguffer never touched
+    /// it, so the question here is whether anything at all is left. A folder with nothing in it is
+    /// still an alarm. What the top-level question passes over as well, a chain of empty folders
+    /// Deguffer's own removal leaves when Windows refuses one, is the cost
+    /// <c>PlanVerifier.WasEmptied</c> states.
+    /// </summary>
+    [Fact]
+    public void WithoutACommandAFolderEmptiedOnlyOfItsFilesIsNotReadAsEmptied()
+    {
+        var kept = _temp.CreateDirectory("project", "bin");
+        var output = _temp.CreateDirectory("project", "bin", "Debug");
+        var assembly = _temp.CreateFile(8, "project", "bin", "Debug", "net10.0", "app.dll");
+        var plan = Plan(
+            [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
+            ProtectHolding(kept));
+
+        File.Delete(assembly);
+
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
+
+        Directory.Delete(output, recursive: true);
+
+        Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, kept));
+    }
+
+    /// <summary>
+    /// A folder still holding a file far below, in a run where the question looks that far: it
+    /// survived.
+    /// </summary>
+    [Fact]
+    public void AFolderStillHoldingAFileFarBelowSurvived()
+    {
+        var kept = _temp.CreateDirectory("project", "bin");
+        _temp.CreateFile(8, "project", "bin", "Debug", "net10.0", "app.dll");
+        var plan = Plan([Evict(_temp.CreateDirectory("tool", "cache"))], ProtectHolding(kept));
+
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
+    }
+
+    /// <summary>A protected directory recorded as holding something, as a provider's capture records it.</summary>
+    private static ProtectedPath ProtectHolding(string path) =>
+        new(path, "It must survive.", ExistedBefore: true, HeldContentBefore: true);
+
+    /// <summary>A tool's own eviction command, sent to clear <paramref name="cache"/>.</summary>
+    private static RunCommandStep Evict(string cache) =>
+        new("tool.exe", "cache clean", "Clear the cache using the tool's own command") { MeasuredPaths = [cache] };
 
     /// <summary>
     /// A protected path spelled with a trailing separator, which a provider's own Path.Combine can

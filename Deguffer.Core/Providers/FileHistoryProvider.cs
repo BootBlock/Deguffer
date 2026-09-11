@@ -290,15 +290,25 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     /// leave every saved version on the drive intact and unreachable, which is a failure no size
     /// comparison would show.</para>
     ///
-    /// <para><b>What the run then proves is that these folders are still there, and no more than
-    /// that.</b> <see cref="PlanVerifier"/>'s stronger question, whether a protected directory
-    /// survived but was emptied, is switched off for every plan holding a
-    /// <see cref="RunCommandStep"/>: <see cref="RunReach.Of"/> marks such a run unbounded, because
-    /// §5.1 hands the tool a command whose reach nothing here can state, and
-    /// <c>PlanVerifier.WasEmptied</c> declines to draw a conclusion from that. So a cleanup that
-    /// removed another account's folder outright is caught, and one that emptied it in place is not.
-    /// That is a property of §5.6 against every command step in the product rather than of this
-    /// provider, and it is stated here because Tier 3 is where it costs most.</para>
+    /// <para><b>What the run then proves.</b> Each of these folders must still be there, and each
+    /// that held content must still hold some. <see cref="PlanVerifier"/> excuses an emptied folder
+    /// only where it holds a path the command was sent to clear, and the three that hold
+    /// <c>Data</c> — the <c>FileHistory</c> folder, this account's and this machine's — are the only
+    /// such folders here. So another account or machine emptied in place is caught, and so is either
+    /// catalogue, wherever this account may list the folder in question.</para>
+    ///
+    /// <para><b>What it cannot prove.</b> The over-reach this command could realistically have is
+    /// trimming another account's old versions the way it trims this one's, and that leaves the
+    /// account's newest versions and its catalogue in place. The folder still holds content, so no
+    /// question about content catches it. Only a comparison of figures would, and the figures of a
+    /// folder Deguffer does not own change for ordinary reasons between the preview and the
+    /// clean.</para>
+    ///
+    /// <para>Nor can it prove anything about emptying a folder this account may not list.
+    /// <see cref="DirectoryContent"/> records such a folder as holding nothing, so its emptying is
+    /// never asked about, and a subfolder it may not list reads as content however much went from
+    /// around it. Both withhold an alarm rather than raise a false one, which is §5.3's direction
+    /// for a refusal.</para>
     /// </summary>
     /// <param name="unreadable">
     /// Whether a folder refused to be listed, so its children were never classified and the

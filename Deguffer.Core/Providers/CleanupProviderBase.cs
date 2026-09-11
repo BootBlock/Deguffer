@@ -177,9 +177,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// §5.6 — capture what each protected path was before the run, so verification can tell
     /// "survived" from "was never there", and from "is still standing and has been emptied".
     ///
-    /// <para>The content question costs one entry per directory, because
-    /// <see cref="LongPath.HoldsAnything"/> stops at the first, so it is a fixed cost per protected
-    /// path rather than a walk (G4).</para>
+    /// <para>The content question stops at the first content it finds, so it costs a listing or two
+    /// per protected path rather than a walk of everything the path holds (G4). See
+    /// <see cref="DirectoryContent"/>.</para>
     /// </summary>
     protected static IReadOnlyList<ProtectedPath> Protect(params (string Path, string Reason)[] candidates) =>
     [
@@ -187,7 +187,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             c.Path,
             c.Reason,
             LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path),
-            LongPath.HoldsAnything(c.Path))),
+            DirectoryContent.IsPresent(c.Path))),
     ];
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>

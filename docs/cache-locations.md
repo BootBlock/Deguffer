@@ -585,6 +585,12 @@ reports**, whose packages hard-link back into the cache being cleaned; each pack
 itself; and **`.condarc`**, your conda configuration, which can name private channels with tokens
 embedded in the URL. Deguffer asserts they all survived the run.
 
+**One case can raise an alarm over nothing.** `--tempfiles` looks through the whole conda installation,
+environments folder included, and deletes conda's leftover temporary files there (names ending in
+`.c~` or `.trash`), leaving the folders. If an environments folder inside the installation holds no
+environment and nothing but such leftovers, it ends the run holding only empty folders, and Deguffer
+reports it as emptied. No environment was in it, so nothing you created is lost.
+
 ### What it costs you
 
 The next `conda install` downloads the packages it needs again and re-fetches the channel index,
@@ -2264,11 +2270,24 @@ external disk with the rest of your files on it — but Deguffer names the folde
 the whole drive, so those are the ones the check covers.
 
 **What the check proves, exactly.** The command is Windows' own, so what it reaches is Windows'
-decision rather than Deguffer's, and §5.6 is the answer to that: after the run, each folder above
-must still be there. A cleanup that removed one outright is reported as a failure. A cleanup that
-left a folder standing and took the versions out of it is not — Deguffer withholds that stronger
-judgement from any step that hands a tool its own command, because §5.1 gives that command a reach
-Deguffer cannot state. That applies to every such step in the app, not to this one alone.
+decision rather than Deguffer's, and §5.6 is the answer to that. After the run, each folder above
+must still be there, and each one that held something must still hold something somewhere inside
+it: a file, a link, or a folder Deguffer is not allowed to open. A cleanup that removed another
+account's backup is reported as a failure, and so is one that left the folders standing and took
+everything out of them. The folders that lead down to this machine's saved versions are the
+exception to the second half, because Windows was sent there: they may end the run holding nothing
+when every version in them was old enough to go.
+
+**What it cannot prove.** A cleanup that trimmed another account's old versions the way it trims
+yours would leave that account's newest versions and its catalogue behind. The folder still holds
+files, so the check passes. Only a comparison of sizes could see it, and the size of a folder
+Deguffer does not own changes between a preview and a clean for ordinary reasons.
+
+The emptied-in-place half also depends on what your account may read. A folder Deguffer is not
+allowed to open is never recorded as holding anything, so emptying it is never reported. A folder
+inside it that Deguffer may not open counts as something still there, however much went from around
+it. Both only ever keep an alarm from being raised: neither can report a failure that did not
+happen.
 
 ### What it costs you
 

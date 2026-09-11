@@ -215,6 +215,15 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// installation prefix holds the base environment, <c>envs</c> holds the user's environments
     /// whose packages hard-link back into the cache being cleaned, and <c>.condarc</c> can carry
     /// private channel URLs with embedded tokens.
+    ///
+    /// <para><b>One false alarm §5.6 can raise here, and why it is left.</b> <c>--tempfiles</c> walks
+    /// the whole installation prefix, <c>envs</c> included, and deletes every file ending in
+    /// <c>.c~</c> or <c>.trash</c> while leaving the folders (conda's <c>find_tempfiles</c>). An
+    /// environments folder under the prefix whose only content is such files, with no environment
+    /// left in it, ends the run holding only empty folders, and the emptied-in-place check reports it.
+    /// Nothing an environment needs goes. Declaring the prefix as where the command is sent would not
+    /// excuse it, because that exemption covers the folders above a path the tool is sent to and never
+    /// the folders inside one, and it would take the check off the base environment too.</para>
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         CondaInstallation installation,
