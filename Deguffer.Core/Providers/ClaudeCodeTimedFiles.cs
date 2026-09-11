@@ -17,7 +17,7 @@ namespace Deguffer.Core.Providers;
 /// running keeps its file. Claude Code tries to send those events again, and a running session may be
 /// adding to the same file.</para>
 ///
-/// <para>Both are then held back for <see cref="ClaudeCodeDerivedStateProvider.RecentWindow"/> as well,
+/// <para>Both are then held back for <see cref="ClaudeCodeSessionRegistry.RecentWindow"/> as well,
 /// for the reason the list alone is not trusted: a version of Claude Code older than the list is
 /// invisible to it.</para>
 /// </summary>

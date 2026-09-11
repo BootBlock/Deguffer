@@ -57,6 +57,32 @@ public sealed class ClaudeCodeFixture
 
     public string Telemetry => Path.Combine(Home, "telemetry");
 
+    public string FileHistory => Path.Combine(Home, "file-history");
+
+    /// <summary>
+    /// One session's rewind snapshots. A snapshot keeps the last-write time of the file it copied, so the
+    /// snapshots and their folder are aged apart: <paramref name="snapshotAge"/> for the files, and
+    /// <paramref name="folderAge"/> for the folder, set last because adding a file moves it.
+    /// </summary>
+    public string RewindSnapshots(string session, TimeSpan? folderAge = null, TimeSpan? snapshotAge = null)
+    {
+        var folder = Path.Combine(FileHistory, session);
+
+        foreach (var name in new[] { "0123456789abcdef@v1", "0123456789abcdef@v2" })
+        {
+            var snapshot = CreateFile(Path.Combine(folder, name), 256);
+
+            if (snapshotAge is { } by)
+            {
+                TempDirectory.Age(snapshot, by);
+            }
+        }
+
+        AgeFolder(folder, folderAge);
+
+        return folder;
+    }
+
     public string Transcript(string session, string folder = ProjectFolder) =>
         CreateFile(Path.Combine(Project(folder), session + ".jsonl"), 128);
 

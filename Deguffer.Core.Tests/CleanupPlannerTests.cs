@@ -371,6 +371,7 @@ public sealed class CleanupPlannerTests
                 "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
                 "claude-code-leftovers", "recycle-bin", "file-history", "temp-directories", "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs",
+                "claude-code-file-history",
             ],
             planner.Providers.Select(p => p.Id));
 
@@ -385,7 +386,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
-                "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs",
+                "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs", "claude-code-file-history",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 

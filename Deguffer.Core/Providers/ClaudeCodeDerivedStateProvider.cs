@@ -33,7 +33,7 @@ namespace Deguffer.Core.Providers;
 /// process has been asked about and has ended. Anything naming a session is offered only where Claude
 /// Code's list of running sessions does not name it — and where that list cannot be read, nothing of
 /// that kind is offered at all. On top of that, nothing of that kind, and nothing that names no process
-/// at all, is offered if it was written in the last <see cref="RecentWindow"/>: a session can run for
+/// at all, is offered if it was written in the last <see cref="ClaudeCodeSessionRegistry.RecentWindow"/>: a session can run for
 /// days, and a version of Claude Code older than the list is invisible to it. A file naming a process
 /// needs no such floor, because the process it names has been asked about directly.</para>
 ///
@@ -45,14 +45,6 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// How long anything Claude Code wrote is left alone, whatever else is true of it. §5.3's default
-    /// age filter for a location where live working files sit among abandoned ones, and a floor rather
-    /// than a preference: the guard on recently changed files is off unless the user asks for it, and a
-    /// safety property must not rest on a setting.
-    /// </summary>
-    public static readonly TimeSpan RecentWindow = TimeSpan.FromDays(7);
-
     /// <summary>
     /// Claude Code's folder, one level down. Every name here is Tier 4: the folders are kept and only
     /// what is recognised inside them goes, and anything the table does not name is Tier 4 by
@@ -90,6 +82,11 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             SafetyTier.DoNotTouch,
             "Usage events Claude Code could not send. It stays: only the events of sessions that have ended are "
             + "removed."),
+        new ChildClassification(
+            ClaudeCodeHome.FileHistory,
+            SafetyTier.DoNotTouch,
+            "Claude Code's rewind snapshots, one folder per session. This row never removes them: they are the "
+            + "Claude Code rewind snapshots row's, offered one session at a time."),
     ]);
 
     private static readonly IReadOnlyList<CacheLevel> HomeLevel = [new CacheLevel(string.Empty, HomeChildren)];
@@ -125,8 +122,13 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     private Survey? _survey;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
+    /// <param name="sessions">
+    /// Claude Code's list of running sessions, shared with <see cref="ClaudeCodeFileHistoryProvider"/> so
+    /// that one planning pass reads it, and asks about each process in it, once.
+    /// </param>
     public ClaudeCodeDerivedStateProvider(
         IUserEnvironment? environment = null,
+        ClaudeCodeSessionRegistry? sessions = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null)
@@ -137,7 +139,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default)
     {
         _projects = new ClaudeCodeProjectsDiscovery(Environment);
-        _sessions = new ClaudeCodeSessionRegistry(Environment, Inspector);
+        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector);
     }
 
     public override string Id => "claude-code-leftovers";
@@ -332,7 +334,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
                 $"Left {ClaudeCodeClassificationBuilder.Count(recent, "leftover", "leftovers")} alone that Claude Code "
-                + $"wrote in the last {RecentWindow.TotalDays:0} days. A session can run for days, so recent "
+                + $"wrote in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days. A session can run for days, so recent "
                 + "leftovers are not offered even when nothing lists their session as running.");
         }
     }
@@ -381,7 +383,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             home,
             _projects.Look(ct),
             _sessions.Read(ct),
-            DateTime.UtcNow - RecentWindow);
+            DateTime.UtcNow - ClaudeCodeSessionRegistry.RecentWindow);
 
         return new Survey(
             CacheLevelWalk.Under(HomeLevel, home, ct),

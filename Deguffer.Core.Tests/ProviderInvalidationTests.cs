@@ -186,6 +186,8 @@ public sealed class ProviderInvalidationTests : IDisposable
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
+        : parameter == typeof(ClaudeCodeSessionRegistry)
+            ? new ClaudeCodeSessionRegistry(_environment, FakeProcessInspector.NothingRunning)
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
