@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.Core.Choosing;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
@@ -54,6 +55,11 @@ public sealed partial class FindingViewModel : ObservableObject
         Notes = NotesOf(Finding);
         var offered = OfferedSteps(Finding);
 
+        // Worked out once across every step, so each row of the item list is handed its values in the
+        // same column order as every other. See ItemColumns.
+        var columns = ItemColumns.Of(finding.Plan?.Steps ?? []);
+        FacetColumns = columns.Labels;
+
         Steps =
         [
             // A step that cannot be acted on starts unticked whatever the finding's default is:
@@ -73,8 +79,9 @@ public sealed partial class FindingViewModel : ObservableObject
                 memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected),
                 isKept: !offered.Contains(s))
             {
-                // Only meaningful once the whole set is known, and a single step is the whole row.
-                IsIndividuallySelectable = finding.Plan.Steps.Count > 1,
+                // Declared by the provider rather than read off the count. See StepGrain.
+                IsIndividuallySelectable = provider.Grain.OffersEachStep(finding.Plan.Steps.Count),
+                FacetValues = columns.ValuesOf(s),
             }) ?? [],
         ];
 
@@ -299,17 +306,43 @@ public sealed partial class FindingViewModel : ObservableObject
         .Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
 
     /// <summary>
-    /// Whether the steps are individually worth choosing between. A single step <em>is</em> the
-    /// whole finding, so offering a checkbox against it as well as against the row would put two
-    /// controls on screen for one decision — and unticking either would visibly move the other.
+    /// Whether this row's steps are listed to be chosen one by one, which is what puts the link to the
+    /// item list on the row. The same declaration and the same rule as each step's own checkbox, so
+    /// the link is never offered for a list with nothing in it to choose on its own.
     /// </summary>
-    public bool HasSelectableSteps => Steps.Count > 1 && Steps.Any(s => s.CanBeSelected);
+    public bool OffersItems => Finding.Provider.Grain.OffersEachStep(Steps.Count);
+
+    /// <summary>What the row's link to its item list says: how many items the list holds.</summary>
+    public string ItemsLinkLabel => Steps.Count == 1 ? "1 item" : $"{Steps.Count} items";
+
+    /// <summary>
+    /// What a screen reader calls that link. The words on screen are a count, and a count says nothing
+    /// about whose items they are.
+    /// </summary>
+    public string ItemsLinkName => $"Choose from the items in {Name}";
+
+    /// <summary>What the Contents tab says in place of the items it no longer lists.</summary>
+    public string ItemsSentence => Steps.Count == 1
+        ? "One item, listed on the Storage page with its size and its age."
+        : $"{Steps.Count} items, listed on the Storage page, where each can be chosen on its own.";
+
+    /// <summary>
+    /// The one step of a row that has nothing to choose between, which the Contents tab still states
+    /// in full: §7 makes the plan inspectable before anything is deleted. Null for a row whose steps
+    /// are listed as items, and for a row with none.
+    /// </summary>
+    public StepViewModel? SoleStep => !OffersItems && Steps.Count == 1 ? Steps[0] : null;
+
+    public bool HasSoleStep => SoleStep is not null;
+
+    /// <summary>The headings of the item list's facet columns, in order. Empty where no step carries a facet.</summary>
+    public IReadOnlyList<string> FacetColumns { get; }
 
     public IReadOnlyList<string> Notes { get; private set; }
 
     /// <summary>
     /// Bring this row up to date with a keep list that changed while it was on screen, from its own
-    /// Contents tab or from Settings while the page was away.
+    /// item list or from Settings while the page was away.
     ///
     /// <para>Re-derived from what the provider planned rather than edited in place, so a released item
     /// comes back with its size and its age, and the rules deciding what this row states run once, in
@@ -443,15 +476,32 @@ public sealed partial class FindingViewModel : ObservableObject
             return;
         }
 
+        SetSelected(Steps, value);
+    }
+
+    /// <summary>
+    /// Tick or clear several steps as one thing the user did: the row's own checkbox, or a checkbox in
+    /// the item list that stands for a group or for everything a search shows. A step that cannot be
+    /// ticked is passed over, for the reasons <see cref="StepViewModel.CanBeSelected"/> gives.
+    ///
+    /// <para>One notification and one event, however many steps change. Raising them per step made a
+    /// click on a group of a thousand items a thousand recalculated totals, each summing the whole
+    /// row, and a thousand writes of the remembered selection to disk.</para>
+    /// </summary>
+    public void SetSelected(IEnumerable<StepViewModel> steps, bool value)
+    {
         _syncingSelection = true;
 
-        foreach (var step in Steps.Where(s => s.CanBeSelected))
+        foreach (var step in steps.Where(s => s.CanBeSelected))
         {
             step.IsSelected = value;
         }
 
+        // Rolled up rather than set to the value, which is the invariant the rest of this type holds.
+        IsSelected = Steps.Any(s => s.IsSelected);
         _syncingSelection = false;
 
+        OnPropertyChanged(nameof(SelectedSize));
         SelectionChanged?.Invoke(this);
     }
 
@@ -469,14 +519,15 @@ public sealed partial class FindingViewModel : ObservableObject
 
     private void OnStepSelectionChanged()
     {
-        // Raised for every step, guard or no guard: the figure beside the row is bound to it, and
-        // it moves as each step of a row-wide toggle lands.
-        OnPropertyChanged(nameof(SelectedSize));
-
         if (_syncingSelection)
         {
+            // One step of a change to several. Whoever set the guard raises the total and the event
+            // once, when every step has landed: nothing repaints between two steps of one change,
+            // so a notification per step bought nothing but work.
             return;
         }
+
+        OnPropertyChanged(nameof(SelectedSize));
 
         _syncingSelection = true;
         IsSelected = Steps.Any(s => s.IsSelected);

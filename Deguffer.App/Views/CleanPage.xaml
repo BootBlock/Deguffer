@@ -55,7 +55,7 @@
             minimum width is set so that even that trim is shallow.
         -->
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
-            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto,72" Padding="16,8,0,8">
+            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,Auto,*,Auto,72" Padding="16,8,0,8">
 
                 <!-- §7's sentence, announced where the decision is made. A tooltip cannot serve a
                      screen reader or a keyboard, and this is the control both of them land on to
@@ -78,7 +78,21 @@
                            VerticalAlignment="Center"
                            ToolTipService.ToolTip="{x:Bind WhatHappensOnNextUse}" />
 
-                <TextBlock Grid.Column="2"
+                <!-- On the row line itself, unlike the "What is this?" link, which compact folds into
+                     the disclosure. For a row whose items are chosen one by one, choosing them is
+                     the decision the row is for, and a decision two levels down is one nobody
+                     finds. It shows the count because that is what says whether the list is worth
+                     opening. -->
+                <HyperlinkButton Grid.Column="2"
+                                 Content="{x:Bind ItemsLinkLabel}"
+                                 Visibility="{x:Bind OffersItems}"
+                                 Padding="4,2"
+                                 VerticalAlignment="Center"
+                                 Tag="{x:Bind}"
+                                 Click="OnItemsLinkClicked"
+                                 AutomationProperties.Name="{x:Bind ItemsLinkName}" />
+
+                <TextBlock Grid.Column="3"
                            Text="{x:Bind StatusLabel, Mode=OneWay}"
                            Visibility="{x:Bind CannotBeSelected, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"
@@ -95,7 +109,7 @@
                      page gives is on the chip itself. The chip is not a tab stop, so a tooltip
                      alone would leave a screen reader with the two words: the same sentence is
                      its help text. -->
-                <ContentControl Grid.Column="3"
+                <ContentControl Grid.Column="4"
                                 HorizontalAlignment="Right"
                                 Content="{x:Bind TierLabel}"
                                 Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
@@ -103,7 +117,7 @@
                                 AutomationProperties.Name="{x:Bind TierLabel}"
                                 AutomationProperties.HelpText="{x:Bind TierExplanation}" />
 
-                <TextBlock Grid.Column="4"
+                <TextBlock Grid.Column="5"
                            Text="{x:Bind SizeLabel, Mode=OneWay}"
                            Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
                            Style="{StaticResource Figure}"
@@ -142,7 +156,7 @@
                              them gives up anything, after the tier is already legible. The label
                              in full stays on the chip's automation name, and the sentence saying
                              what the tier means stays on its tooltip and help text. -->
-                        <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto">
+                        <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto,Auto">
                             <TextBlock Text="{x:Bind Name}"
                                        Style="{StaticResource SectionHeading}"
                                        FontSize="15"
@@ -172,7 +186,18 @@
                                  so the row reads as prose from the name down to the figures with
                                  nothing after it, and the link is at a fixed place on every row
                                  instead of wherever that row's sentence happens to stop wrapping. -->
+                            <!-- Beside the explanation's link, and before it, because for a row whose
+                                 items are chosen one by one, choosing them is what the row is for. -->
                             <HyperlinkButton Grid.Column="2"
+                                             Content="{x:Bind ItemsLinkLabel}"
+                                             Visibility="{x:Bind OffersItems}"
+                                             VerticalAlignment="Center"
+                                             Padding="0,2"
+                                             Tag="{x:Bind}"
+                                             Click="OnItemsLinkClicked"
+                                             AutomationProperties.Name="{x:Bind ItemsLinkName}" />
+
+                            <HyperlinkButton Grid.Column="3"
                                              Content="What is this?"
                                              VerticalAlignment="Center"
                                              Padding="0,2"
@@ -377,12 +402,17 @@
 
                              Bounded and scrolling for the reason the confirmation dialog's list is:
                              one run can have a check per project on the disk, and a card that grows
-                             with it pushes the list of findings off the screen. -->
+                             with it pushes the list of findings off the screen.
+
+                             A repeater rather than an ItemsControl, because once items are chosen one
+                             by one every item left out is a check of its own, and a run over a
+                             thousand items can report on hundreds. The repeater realises only what
+                             the bounded viewport shows. -->
                         <ScrollViewer MaxHeight="180"
                                       VerticalScrollBarVisibility="Auto"
                                       Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}">
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.RunVerificationNotes}">
-                                <ItemsControl.ItemTemplate>
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.RunVerificationNotes}">
+                                <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="execution:VerificationCheck">
                                         <StackPanel Margin="0,0,0,8">
                                             <TextBlock Text="{x:Bind Path}"
@@ -400,8 +430,8 @@
                                                        IsTextSelectionEnabled="True" />
                                         </StackPanel>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
                         </ScrollViewer>
                     </StackPanel>
                 </Grid>
@@ -455,34 +485,46 @@
              hairline separators inside one card read as one thing to scan down. -->
         <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0">
             <Grid>
-                <!-- Says what to do next rather than leaving a blank card that reads as a screen
-                     which has already failed. -->
-                <StackPanel VerticalAlignment="Center"
-                            HorizontalAlignment="Center"
-                            Spacing="6"
-                            Padding="40"
-                            Visibility="{x:Bind ViewModel.HasNothingListed, Mode=OneWay}">
-                    <TextBlock Text="{x:Bind ViewModel.EmptyStateTitle, Mode=OneWay}"
-                               Style="{StaticResource SectionHeading}"
-                               FontSize="15"
-                               HorizontalAlignment="Center" />
-                    <TextBlock Style="{StaticResource SecondaryText}"
-                               FontSize="13"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="380"
-                               Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}" />
-                </StackPanel>
+                <!-- Collapsed rather than removed while a row's items are listed, so the rows come
+                     back scrolled to where the reader left them. -->
+                <Grid Visibility="{x:Bind ViewModel.IsShowingFindings, Mode=OneWay}">
+                    <!-- Says what to do next rather than leaving a blank card that reads as a screen
+                         which has already failed. -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="6"
+                                Padding="40"
+                                Visibility="{x:Bind ViewModel.HasNothingListed, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind ViewModel.EmptyStateTitle, Mode=OneWay}"
+                                   Style="{StaticResource SectionHeading}"
+                                   FontSize="15"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Style="{StaticResource SecondaryText}"
+                                   FontSize="13"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="380"
+                                   Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}" />
+                    </StackPanel>
 
-                <ScrollViewer Padding="0,4">
-                    <!-- The template is set from the stored preference in code-behind. The
-                         shipped default is named here as well, so the list is never left
-                         untemplated whatever order the framework loads and shows this page in,
-                         and so the markup does not disagree with what most windows will draw. -->
-                    <ItemsControl x:Name="FindingsList"
-                                  ItemsSource="{x:Bind ViewModel.Findings}"
-                                  ItemTemplate="{StaticResource CompactFinding}" />
-                </ScrollViewer>
+                    <ScrollViewer Padding="0,4">
+                        <!-- The template is set from the stored preference in code-behind. The
+                             shipped default is named here as well, so the list is never left
+                             untemplated whatever order the framework loads and shows this page in,
+                             and so the markup does not disagree with what most windows will draw. -->
+                        <ItemsControl x:Name="FindingsList"
+                                      ItemsSource="{x:Bind ViewModel.Findings}"
+                                      ItemTemplate="{StaticResource CompactFinding}" />
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- One row's items, in place of the rows. Filled from code-behind with a list built
+                     for that row; see CleanPage.ShowItemsOrRows. -->
+                <ContentControl x:Name="ItemsHost"
+                                Visibility="{x:Bind ViewModel.IsShowingItems, Mode=OneWay}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                IsTabStop="False" />
             </Grid>
         </Border>
 

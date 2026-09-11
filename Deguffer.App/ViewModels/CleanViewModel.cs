@@ -45,7 +45,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// decisions to make again.
     /// </param>
     /// <param name="keeps">
-    /// What the user keeps, which every row is built against and which the rows' own Contents tabs
+    /// What the user keeps, which every row is built against and which the rows' own item lists
     /// change.
     /// </param>
     /// <param name="prompt">
@@ -134,6 +134,38 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial bool ShowAlreadyClear { get; set; }
 
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
+
+    /// <summary>
+    /// The row whose items are listed in place of the rows, or null while the rows are shown.
+    ///
+    /// <para>On this page rather than in a dialog, because choosing items is the main thing such a row
+    /// is for, and the Selected total and Clean belong beside the choice. What a run takes is still
+    /// each row's own selection, so a clean started while the list is open is the same clean as one
+    /// started from the rows.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsShowingItems))]
+    [NotifyPropertyChangedFor(nameof(IsShowingFindings))]
+    public partial ItemListViewModel? ShownItems { get; private set; }
+
+    public bool IsShowingItems => ShownItems is not null;
+
+    /// <summary>The same fact the other way round, because x:Bind has no operators.</summary>
+    public bool IsShowingFindings => ShownItems is null;
+
+    /// <summary>List <paramref name="row"/>'s items in place of the rows.</summary>
+    public void ShowItems(FindingViewModel row)
+    {
+        CloseItems();
+        ShownItems = new ItemListViewModel(row);
+    }
+
+    /// <summary>Put the rows back.</summary>
+    public void CloseItems()
+    {
+        ShownItems?.Dispose();
+        ShownItems = null;
+    }
 
     [ObservableProperty]
     public partial string Status { get; set; } =
@@ -562,6 +594,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private async Task LoadPreviewAsync(CancellationToken ct)
     {
+        // An item list belongs to a row that is about to be thrown away, and a tick in it would change
+        // a row no run can reach.
+        CloseItems();
+
         foreach (var row in Findings)
         {
             row.SelectionChanged -= OnRowSelectionChanged;
@@ -821,7 +857,7 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Keep one item, or stop keeping it, from its row's Contents tab.
+    /// Keep one item, or stop keeping it, from its row's item list.
     ///
     /// <para>The list is then applied to every row rather than this one alone, so the page's totals
     /// and its sentence move with the row. A change that could not be saved is said out loud, because

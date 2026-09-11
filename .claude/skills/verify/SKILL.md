@@ -49,12 +49,18 @@ C:\Users\<user>\AppData\Local\DriveNet\DriveNet.Cli.exe
   *opens*, which is what verifies the `InitializeWithWindow` interop, but not that a selection
   round-trips. Cover the code behind the picker another way. Close the dialog with `Stop-Process` on
   the `PickerHost` PID, or it blocks the app.
-- **Plan notes and step rows are two clicks away, inside a modal.** They live on the `Contents` tab
-  of each row's information dialog, so `find` matches none of their text until you open it: in
-  compact, `--action expand` the row's "More about …" button first, then click its
-  `What is …?` `Hyperlink`, then click the `Contents` `TabItem`. Until then an assertion against a
-  note reads as absent when it is merely unopened. The tab fills on demand, so it is empty for a
-  moment after the click.
+- **Plan notes are two clicks away, inside a modal.** They live on the `Contents` tab of each row's
+  information dialog, so `find` matches none of their text until you open it: in compact,
+  `--action expand` the row's "More about …" button first, then click its `What is …?`
+  `Hyperlink`, then switch to the `Contents` `TabItem`. Until then an assertion against a note reads
+  as absent when it is merely unopened.
+- **A row's items are on the Storage page, not in the dialog.** A row that offers its steps one by
+  one shows a count link on the row line in both views, named `Choose from the items in …`, and it
+  replaces the rows with that row's item list. The list virtualizes, so `find` matches only the
+  items realised on screen: narrow it with the search box (`setFocus` on the `Search these items`
+  `Edit` first, or `type` lands in whatever holds focus) rather than scrolling for an item. `Back to
+  every location` or Escape brings the rows back. A row with a single part still states its one
+  step on the dialog's `Contents` tab.
 - **The dialog's own close button is `--automation-id CloseButton`.** Matching it by the name
   `Close` also matches the window's title-bar button, and picking that one shuts the app down
   mid-run — which reads as a crash rather than as a mis-click.

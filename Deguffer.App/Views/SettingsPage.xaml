@@ -245,7 +245,7 @@
 
             <views:SettingsRow Glyph="&#xE718;"
                                Title="Items Deguffer never offers"
-                               Description="Keep an item from the Contents tab of its row on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
+                               Description="Keep an item from its row's list of items on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
 
             <TextBlock Text="Nothing is kept."
                        Style="{StaticResource SecondaryText}"
@@ -254,8 +254,12 @@
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoKeptItems, Mode=OneWay}" />
 
-            <ItemsControl ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,2,0,0">
-                <ItemsControl.ItemTemplate>
+            <!-- A repeater rather than an ItemsControl, because a keep list grows one entry per item
+                 kept and the items can number in the hundreds. It realises only the entries inside
+                 the page's scrolling viewport, and draws none of a list's selection chrome over a
+                 list that has nothing to select. -->
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="configuration:KeptItem">
                         <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
                               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -285,8 +289,8 @@
                                     AutomationProperties.HelpText="{x:Bind Item.Name}" />
                         </Grid>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
 
             <TextBlock Style="{StaticResource SecondaryText}"
                        FontSize="12"
