@@ -262,20 +262,20 @@ public static class ExploreRemover
                 item.Path,
                 file.Removed,
                 file.BytesReclaimed,
-                file.Removed ? "Deleted." : LeftInPlace.WhyNothingHappened(file.Refused));
+                file.Removed ? "Deleted." : LeftInPlace.WhyNothingHappened(file.Refused, FolderRefusals.None));
         }
 
         var tree = await DirectoryRemover.RemoveAsync(item.Path, MinimumAge.Off, progress: null, ct, fs).ConfigureAwait(false);
 
-        // A folder whose root went held nothing refused, because a refused file keeps every folder
-        // above it standing. So only the partial case has anything to say about what stayed.
+        // A folder whose root went held nothing refused, because a refused file or folder keeps every
+        // folder above it standing. So only the partial case has anything to say about what stayed.
         return new ExploreItemOutcome(
             item.Path,
             tree.RootRemoved,
             tree.BytesReclaimed,
             tree.RootRemoved
                 ? "Deleted."
-                : $"Partly deleted{LeftInPlace.Clauses(tree.Refused, kept: 0)}, so the folder is still there.");
+                : $"Partly deleted{LeftInPlace.Clauses(tree.Refused, tree.RefusedFolders, kept: 0)}, so the folder is still there.");
     }
 
     /// <summary>

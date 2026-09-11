@@ -26,12 +26,19 @@ public sealed class PlanExecutor(
     /// this plan alone, because a run is many plans and a folder another provider deleted is not a
     /// folder something outside Deguffer deleted. Null means this plan is the whole run.
     /// </param>
+    /// <param name="residue">
+    /// What the run's removals have left standing, which each removal here adds to and §5.6 then
+    /// reads — see <see cref="RunResidue"/>. Null means this plan is the whole run, and it is given a
+    /// record of its own.
+    /// </param>
     public async Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
         RunReach? runReach,
+        RunResidue? residue,
         IProgress<double>? progress,
         CancellationToken ct)
     {
+        var leftStanding = residue ?? new RunResidue();
         var stopwatch = Stopwatch.StartNew();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
 
@@ -54,8 +61,8 @@ public sealed class PlanExecutor(
             outcomes.Add(step switch
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
-                ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
+                DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
@@ -78,7 +85,7 @@ public sealed class PlanExecutor(
             Duration = stopwatch.Elapsed,
 
             // §5.6 is not a separate user action: acting and proving what survived are one step.
-            Verification = PlanVerifier.Verify(plan, runReach, ct),
+            Verification = PlanVerifier.Verify(plan, runReach, leftStanding, ct),
         };
     }
 
@@ -238,12 +245,14 @@ public sealed class PlanExecutor(
     private async Task<StepOutcome> DeleteAsync(
         DeleteDirectoryStep step,
         MinimumAge keep,
+        RunResidue leftStanding,
         IProgress<double>? progress,
         CancellationToken ct)
     {
         var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
         refusals.Replace(step.Path, removal.RefusedAt);
+        leftStanding.Record(step.Path, removal.LeftStanding);
 
         // A refusal is not a failure (§5.3). The step only fails if the directory survived intact
         // and nothing at all was reclaimed — that is, we achieved nothing.
@@ -259,16 +268,17 @@ public sealed class PlanExecutor(
 
         var message = succeeded switch
         {
-            false => LeftInPlace.WhyNothingHappened(removal.Refused),
+            false => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out and the folder is still standing, which is the guard's own case: it
             // held back everything this step named. Saying "Removed" here would be a false statement
             // about the user's disk, and the qualifier would not rescue it — the sentence has to be
             // about what stayed, because that is all that happened.
             _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } =>
-                $"Left alone: {removal.Kept} file(s) changed too recently{LeftInPlace.Clauses(removal.Refused, kept: 0)}.",
+                $"Left alone: {removal.Kept} file(s) changed too recently"
+                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, kept: 0)}.",
 
-            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.Kept)}.",
+            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept)}.",
         };
 
         return new StepOutcome(
@@ -278,13 +288,14 @@ public sealed class PlanExecutor(
             removal.Refused,
             message,
             removal.Kept,
-            EntriesRemoved: removal.EntriesRemoved);
+            EntriesRemoved: removal.EntriesRemoved,
+            RefusedFolders: removal.RefusedFolders);
     }
 
     /// <summary>
     /// Empty a directory and leave it standing, sparing the entries the plan named.
     ///
-    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, IProgress{double}?, CancellationToken)"/>
+    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, RunResidue, IProgress{double}?, CancellationToken)"/>
     /// under different bounds, rather than a second walk of its own: §6.3's extended-length paths,
     /// §5.3's skip on a refusal, the guard on recently changed files and the refusal to follow a
     /// link are all properties of that one removal, and a parallel implementation is where one of
@@ -298,6 +309,7 @@ public sealed class PlanExecutor(
     private async Task<StepOutcome> ClearAsync(
         ClearDirectoryStep step,
         MinimumAge keep,
+        RunResidue leftStanding,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -310,25 +322,29 @@ public sealed class PlanExecutor(
             new RemovalBounds(KeepRoot: true, step.Spared)).ConfigureAwait(false);
 
         refusals.Replace(step.Path, removal.RefusedAt);
+        leftStanding.Record(step.Path, removal.LeftStanding);
 
+        // A folder Windows refused is a refusal as much as a file is. Without it, a clear whose only
+        // outcome was a folder a program is working in would pass as a folder that held nothing.
         var succeeded = removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
-            || removal.Spared > 0 || removal.Refused.IsEmpty;
+            || removal.Spared > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty);
 
         // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
         // bytes, and it was still cleared.
         var message = (succeeded, removal.BytesReclaimed, removal.EntriesRemoved) switch
         {
-            (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused),
+            (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
             // touch, and entries something is using. "Cleared" would be a false statement about a
             // folder that is exactly as full as it was.
             (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 =>
-                $"Nothing was cleared{LeftInPlace.Clauses(removal.Refused, removal.Kept, removal.Spared)}.",
+                "Nothing was cleared"
+                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared)}.",
 
             (true, 0, 0) => "It held nothing to clear.",
 
-            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.Kept, removal.Spared)}.",
+            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared)}.",
         };
 
         return new StepOutcome(
@@ -339,7 +355,8 @@ public sealed class PlanExecutor(
             message,
             removal.Kept,
             removal.Spared,
-            removal.EntriesRemoved);
+            removal.EntriesRemoved,
+            removal.RefusedFolders);
     }
 
     private async Task<StepOutcome> DeleteAsync(
@@ -372,7 +389,7 @@ public sealed class PlanExecutor(
 
         refusals.Replace(step.Path, removal.Refused.IsEmpty ? [] : [step.Path]);
 
-        var message = removal.Removed ? "Removed." : LeftInPlace.WhyNothingHappened(removal.Refused);
+        var message = removal.Removed ? "Removed." : LeftInPlace.WhyNothingHappened(removal.Refused, FolderRefusals.None);
 
         return new StepOutcome(
             step.Description,

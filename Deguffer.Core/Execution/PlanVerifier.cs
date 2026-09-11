@@ -14,9 +14,14 @@ public static class PlanVerifier
     /// What the whole run may destroy, which is what a disappearance is measured against. Null
     /// means this plan is the whole run, which is true of a provider verified on its own.
     /// </param>
+    /// <param name="residue">
+    /// What the run's removals have left standing so far. Null means nothing was removed, which is
+    /// true of a verification with no execution behind it.
+    /// </param>
     public static VerificationResult Verify(
         CleanupPlan plan,
         RunReach? runReach = null,
+        RunResidue? residue = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -27,13 +32,13 @@ public static class PlanVerifier
         foreach (var protectedPath in plan.ProtectedPaths)
         {
             ct.ThrowIfCancellationRequested();
-            checks.Add(Check(protectedPath, reach));
+            checks.Add(Check(protectedPath, reach, residue));
         }
 
         return new VerificationResult { Checks = checks };
     }
 
-    private static VerificationCheck Check(ProtectedPath protectedPath, RunReach reach)
+    private static VerificationCheck Check(ProtectedPath protectedPath, RunReach reach, RunResidue? residue)
     {
         // A path that was never there cannot be evidence of survival. Recording it with an honest
         // detail keeps the report from overstating what the run actually established.
@@ -48,6 +53,20 @@ public static class PlanVerifier
 
         if (LongPath.FileExists(protectedPath.Path) || LongPath.DirectoryExists(protectedPath.Path))
         {
+            // Asked before the emptied question, because it is the more exact of the two. It names
+            // Deguffer's own removal as the one that went inside, where an emptied folder may still be
+            // a tool's doing in a run that holds a command. And it does not depend on what the folder
+            // still holds, which is the thing a refusal hides.
+            if (residue?.Entered(protectedPath.Path) == true)
+            {
+                return new VerificationCheck(
+                    protectedPath.Path,
+                    protectedPath.Reason,
+                    VerificationOutcome.Entered,
+                    "ENTERED — the folder is still here, but a removal in this run went inside it and "
+                    + "could not take everything it tried to.");
+            }
+
             return WasEmptied(protectedPath, reach)
                 ? new VerificationCheck(
                     protectedPath.Path,
@@ -114,13 +133,14 @@ public static class PlanVerifier
     /// that in the <c>bin</c> beside every <c>obj</c> this run removes, and an alarm about it would cry
     /// wolf about a folder Deguffer never touched.</para>
     ///
-    /// <para><b>What that costs.</b> Deguffer's own removal can leave the same shape. It tolerates a
-    /// directory Windows refuses to remove, such as one a process is working in, and records no such
-    /// refusal, so an over-reach that meets one leaves a chain of empty folders down to it. In a run
-    /// without a command that chain reads as a survivor. A Temp clear that failed to spare a live
-    /// entry, whose process works a few folders below it, is the case it hides. In a run that holds a
-    /// command as well, the outside Clean still reads as emptied, because nothing here can tell a
-    /// tool's skeleton from MSBuild's.</para>
+    /// <para><b>What that costs, and what answers it instead.</b> Deguffer's own removal can leave the
+    /// same shape. Windows refuses to remove a directory a process is working in, so an over-reach
+    /// that meets one leaves a chain of empty folders down to it, and in a run without a command the
+    /// top-level question reads that chain as holding something. A Temp clear that failed to spare a
+    /// live entry, whose process works a few folders below it, is the case. It is not passed over,
+    /// because the removal records what it left standing and <see cref="RunResidue.Entered"/> is asked
+    /// first. What the choice still costs is the outside Clean in a run that holds a command as well,
+    /// which reads as emptied, because nothing here can tell a tool's skeleton from MSBuild's.</para>
     ///
     /// <para>What was there before is captured through folders either way (see
     /// <see cref="DirectoryContent"/>), so a folder that held only empty folders is never the subject.

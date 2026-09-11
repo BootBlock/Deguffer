@@ -252,6 +252,12 @@ public sealed class CleanupPlanner
         // proceeds.
         var reach = RunReach.Of([.. plans.Select(p => p.Plan)]);
 
+        // What the run's removals leave standing, written by each plan as it executes and read by
+        // every verification after it. One record for the whole run, for the reason the reach is one
+        // value: a folder one provider's removal went into may be a folder another provider promised
+        // to leave. See RunResidue.
+        var residue = new RunResidue();
+
         var weights = Weigh([.. plans.Select(p => p.Plan)]);
         var total = weights.Sum();
         var results = new List<CleanupResult>(plans.Count);
@@ -288,6 +294,7 @@ public sealed class CleanupPlanner
                 .ExecuteAsync(
                     plan,
                     reach,
+                    residue,
                     ScaledProgress.Within(progress, done / total, weights[i] / total),
                     ct)
                 .ConfigureAwait(false));

@@ -224,6 +224,7 @@ public sealed class ElevationOfferTests
         public Task<CleanupResult> ExecuteAsync(
             CleanupPlan plan,
             RunReach? runReach = null,
+            RunResidue? residue = null,
             IProgress<double>? progress = null,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
