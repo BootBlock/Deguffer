@@ -6,12 +6,11 @@ namespace Deguffer.Core.Tests.Fakes;
 /// The real filesystem, except that some files refuse to be deleted, each for the reason it is
 /// given.
 ///
-/// <para>Both refusals are built by hand because neither can be staged honestly otherwise. The one
-/// that started this — a filter driver refusing below the ACL — needs security software on the
-/// machine running the suite, and a sharing violation needs a handle held open across the parallel
-/// removal. What is under test is what the removal and the check do with the answer, and this is the
-/// one seam both of them ask. <see cref="UndeletableFile"/> is the real refusal, for the tests that
-/// need Windows itself to say no.</para>
+/// <para>Built by hand for what the real refusals cannot give a test: a chosen reason for each of
+/// several files at chosen depths in one tree, answered the same way by the deletion and by the open
+/// for deletion. A held <see cref="FileStream"/> and <see cref="UndeletableFile"/> are Windows'
+/// own refusals, for the tests that need Windows itself to say no; this is for the tests about what
+/// the removal and the check do with the answer.</para>
 ///
 /// <para>A refused file refuses the attribute reset as well when it is denied, because that is what
 /// Windows does to a file this account may not touch: the removal's read-only retry must meet the

@@ -10,9 +10,9 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Applied to every plan on its way out of a provider, not by each provider.</b> The defect
 /// it closes was in none of them. A temporary folder showed it first — a quarter of a million files
 /// in guarded browser profiles, offered by every preview, refused by every clean, and offered again —
-/// but any location Deguffer deletes itself would do the same with a file it may not remove, or with
-/// an executable still running out of it. See <see cref="RefusalRecord"/> for why only the places a
-/// clean was refused are asked again.</para>
+/// but any location Deguffer deletes itself would do the same with a file it may not remove. See
+/// <see cref="RefusalRecord"/> for why only the places a clean was refused are asked again, and
+/// <see cref="DeletionProbe"/> for the one refusal the question cannot see.</para>
 /// </summary>
 internal static class RecordedRefusals
 {

@@ -20,10 +20,14 @@ namespace Deguffer.Core.Safety;
 /// places a previous clean found Windows refusing, where most files usually still refuse — see
 /// <see cref="Execution.RefusalCheck"/>.</para>
 ///
-/// <para>An executable something is running from opens for deletion and then refuses the deletion
-/// itself, so this answers that it would go. The removal reports it refused, and the next check
-/// counts it again. Such a directory is the live-process veto's to spare rather than this probe's to
-/// see.</para>
+/// <para><b>One refusal it cannot see.</b> An executable something is running from opens for
+/// deletion and then refuses the deletion itself — observed with a running copy of a system
+/// executable, which this open accepted and <c>File.Delete</c> then refused with access denied. So
+/// this answers that it would go, the removal reports it refused, and the next preview offers it
+/// again until the program exits. A library a running program has loaded is held the same way. The
+/// only exact question is setting the disposition that deletes, which is not a question. Where a
+/// provider knows which directory a program runs from, the live-process veto spares it before this
+/// is asked.</para>
 /// </summary>
 internal static partial class DeletionProbe
 {

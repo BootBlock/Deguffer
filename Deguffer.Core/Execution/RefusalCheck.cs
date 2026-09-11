@@ -17,6 +17,8 @@ internal sealed record RefusalFinding(Refusals Refused, IReadOnlyList<(string Pl
 /// </summary>
 internal static class RefusalCheck
 {
+    private static readonly RefusalFinding Nothing = new(Refusals.None, []);
+
     /// <param name="recorded">
     /// The places <see cref="RefusalRecord"/> holds for <paramref name="step"/>, in display form.
     /// </param>
@@ -27,6 +29,14 @@ internal static class RefusalCheck
         IFileSystem fs,
         CancellationToken ct)
     {
+        // A root that is a link is removed as a link, or left alone where it must stay, and never
+        // entered — so nothing beneath it is anything the removal would attempt. Asking about the far
+        // side would open files nobody classified and take them out of a figure about somewhere else.
+        if (LongPath.Configured(step.Path) is not { } root || fs.IsReparsePoint(LongPath.Extended(root)))
+        {
+            return Nothing;
+        }
+
         var bounds = new RemovalBounds(KeepRoot: false, step is ClearDirectoryStep clear ? clear.Spared : []);
 
         var options = new ParallelOptions
@@ -38,17 +48,14 @@ internal static class RefusalCheck
         var refused = Refusals.None;
         var places = new List<(string, Refusals)>();
 
-        foreach (var place in recorded)
+        foreach (var place in PlacesOf(root, recorded))
         {
             ct.ThrowIfCancellationRequested();
 
             var extended = LongPath.Extended(place);
 
-            // The record is read from a file on the user's disk rather than derived here, so it is
-            // not trusted to name a place inside this step: one outside it would be opened for
-            // deletion and then taken out of a figure it was never part of. A spared entry is already
-            // out of that figure, and the removal will not enter it.
-            if (!LongPath.Contains(step.Path, place) || bounds.SparedPaths.Contains(extended))
+            // A spared entry is already out of the estimate, and the removal will not enter it.
+            if (bounds.SparedPaths.Contains(extended))
             {
                 continue;
             }
@@ -64,6 +71,25 @@ internal static class RefusalCheck
 
         return new RefusalFinding(refused, places);
     }
+
+    /// <summary>
+    /// The recorded places that have the shape the removal records: the step's own path, or an entry
+    /// directly inside it — each once, in one spelling.
+    ///
+    /// <para>The record is a file on the user's disk, so nothing in it is trusted to have that shape.
+    /// A prefix test is not enough: <c>&lt;step&gt;\x\..\..\Documents</c> starts with the step's path
+    /// and resolves outside it. A place nested deeper would be counted a second time under its parent,
+    /// and could sit inside a spared entry that the spared set only matches by its own path. Resolving
+    /// first, and then requiring the step to be the place or the directory holding it, closes all
+    /// three.</para>
+    /// </summary>
+    private static IEnumerable<string> PlacesOf(string root, IReadOnlyList<string> recorded) =>
+        recorded
+            .Select(LongPath.Configured)
+            .OfType<string>()
+            .Where(place => place.Equals(root, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Path.GetDirectoryName(place), root, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     private static Refusals Check(
         string extended,

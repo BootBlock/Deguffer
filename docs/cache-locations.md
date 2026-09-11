@@ -2380,6 +2380,11 @@ out whatever is still refused, and says so on the row; a row with nothing else t
 *Refused by Windows* rather than *Already clear*. If the refusal lifts, the next preview offers the
 files again, and every clean tries them again.
 
+One refusal stays invisible to a preview: a running program's own files. Windows lets Deguffer
+open a running executable, or a library a running program has loaded, as though it could delete
+it, and refuses only the deletion itself. The clean reports those files as refused, and the preview
+goes on offering them until the program exits.
+
 This is not specific to temporary folders. Every location Deguffer empties or deletes itself
 behaves the same way.
 

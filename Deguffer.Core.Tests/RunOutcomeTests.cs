@@ -128,7 +128,10 @@ public sealed class RunOutcomeTests
             $"Windows would not let Deguffer remove 252 file(s) ({FreeSpace.Format(guarded)}).",
             statement,
             StringComparison.Ordinal);
-        Assert.Contains("The next preview leaves out whatever is still refused.", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "The next preview leaves out whatever is still refused, apart from a running program's own files.",
+            statement,
+            StringComparison.Ordinal);
 
         Assert.DoesNotContain("in use", statement, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Another program", statement, StringComparison.Ordinal);

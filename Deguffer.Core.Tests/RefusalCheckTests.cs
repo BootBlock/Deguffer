@@ -179,4 +179,92 @@ public sealed class RefusalCheckTests : IDisposable
         Assert.Equal(2, recorder.Probed.Count);
         Assert.All(recorder.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// A place that only looks inside the step is not asked about. A prefix test passes
+    /// <c>&lt;step&gt;\x\..\..\..\Documents</c>, which resolves outside it — and the check would then
+    /// open every file there for deletion and take their size out of a figure they were never part of.
+    /// </summary>
+    [Fact]
+    public void NeverOpensARecordedPlaceThatOnlyLooksInsideTheStep()
+    {
+        var step = _temp.CreateDirectory("profile", "temp");
+        var denied = _temp.CreateFile(4096, "Documents", "letter.docx");
+        var disguised = Path.Combine(step, "x", "..", "..", "..", "Documents");
+
+        Assert.True(LongPath.Contains(step, disguised), "the fixture no longer passes a prefix test");
+
+        var recorder = new RecordingFileSystem(Refusing((denied, RefusalReason.Denied)));
+
+        var finding = RefusalCheck.Of(new ClearDirectoryStep(step, "Scratch"), [disguised], MinimumAge.Off, recorder, default);
+
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// One place named twice, in two spellings, is one place. Counting it twice would take its size
+    /// out of the estimate twice, and the clamp at zero would hide that the figure had gone too low.
+    /// </summary>
+    [Fact]
+    public void CountsAPlaceOnceHoweverOftenAndInWhateverSpellingTheRecordNamesIt()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var profile = _temp.CreateDirectory("temp", "profile");
+        var denied = _temp.CreateFile(4096, "temp", "profile", "Cookies");
+
+        var finding = RefusalCheck.Of(
+            new ClearDirectoryStep(step, "Scratch"),
+            [profile, profile + Path.DirectorySeparatorChar, LongPath.Extended(profile)],
+            MinimumAge.Off,
+            Refusing((denied, RefusalReason.Denied)),
+            default);
+
+        Assert.Equal(new RefusalTally(1, 4096), finding.Refused.Denied);
+    }
+
+    /// <summary>
+    /// A place nested inside a spared entry is inside that entry, whatever the spared set matches by
+    /// name. Only the step itself or an entry directly inside it is the shape the removal records, so a
+    /// deeper place is not asked about at all — and a live program's files are not opened for deletion.
+    /// </summary>
+    [Fact]
+    public void NeverOpensAPlaceNestedInsideAnEntryTheStepSpares()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var live = _temp.CreateDirectory("temp", "live-session");
+        var nested = _temp.CreateDirectory("temp", "live-session", "cache");
+        var denied = _temp.CreateFile(4096, "temp", "live-session", "cache", "working.db");
+
+        var recorder = new RecordingFileSystem(Refusing((denied, RefusalReason.Denied)));
+
+        var finding = RefusalCheck.Of(
+            new ClearDirectoryStep(step, "Scratch") { Spared = [live] }, [nested], MinimumAge.Off, recorder, default);
+
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// A step root that has become a link is removed as a link, or left alone, and never entered. So
+    /// nothing on its far side is anything the removal would attempt, and nothing there is opened.
+    /// </summary>
+    [Fact]
+    public void OpensNothingBeneathAStepRootThatIsALink()
+    {
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(4096, "elsewhere", "profile", "Cookies");
+
+        var root = Path.Combine(_temp.Path, "temp");
+        Directory.CreateSymbolicLink(root, elsewhere);
+
+        var throughLink = Path.Combine(root, "profile", "Cookies");
+        var recorder = new RecordingFileSystem(Refusing((throughLink, RefusalReason.Denied)));
+
+        var finding = RefusalCheck.Of(
+            new ClearDirectoryStep(root, "Scratch"), [Path.Combine(root, "profile")], MinimumAge.Off, recorder, default);
+
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(recorder.Probed);
+    }
 }

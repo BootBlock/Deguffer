@@ -23,8 +23,6 @@ public readonly record struct Refusals(RefusalTally InUse, RefusalTally Denied)
 
     public bool IsEmpty => InUse.Files == 0 && Denied.Files == 0;
 
-    public int Files => InUse.Files + Denied.Files;
-
     public long Bytes => InUse.Bytes + Denied.Bytes;
 
     /// <summary>One file of <paramref name="bytes"/>, refused for <paramref name="reason"/>.</summary>

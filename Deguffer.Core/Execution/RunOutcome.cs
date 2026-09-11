@@ -127,7 +127,11 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
                 ? $" Windows would not let Deguffer remove {refused.Denied.Files:N0} file(s) "
                   + $"({FreeSpace.Format(refused.Denied.Bytes)})."
                 : string.Empty)
-            + (refused.IsEmpty ? string.Empty : " The next preview leaves out whatever is still refused.")
+            // Qualified, because one refusal is invisible to the preview's question: a running
+            // program's own files open for deletion and refuse only the deletion. See DeletionProbe.
+            + (refused.IsEmpty
+                ? string.Empty
+                : " The next preview leaves out whatever is still refused, apart from a running program's own files.")
             + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
 
             // Worded away from the first clause on purpose. Both are about something being in use,

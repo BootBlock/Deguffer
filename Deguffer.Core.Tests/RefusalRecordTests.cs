@@ -114,4 +114,38 @@ public sealed class RefusalRecordTests : IDisposable
 
         Assert.Empty(new RefusalRecord(_environment).At(_temp.Path));
     }
+
+    /// <summary>
+    /// A record that parses and names nothing sensible is skipped entry by entry, not thrown out of
+    /// the constructor. The record is built inside every provider's constructor, so a blank key
+    /// stopped every provider being created on every start. A <c>null</c> list threw from the next
+    /// clean of that location, after its files had gone and before §5.6 verified what survived.
+    /// </summary>
+    [Fact]
+    public void SkipsAnEntryThatNamesNoPlaceRatherThanFailing()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var place = _temp.CreateDirectory("temp", "profile");
+        var other = _temp.CreateDirectory("elsewhere");
+
+        var file = Path.Combine(_environment.LocalAppData, "Deguffer", "refusals.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string?[]?>
+        {
+            [""] = [place],
+            ["   "] = [place],
+            [step] = ["", null, @"relative\path", place, place],
+            [other] = null,
+        }));
+
+        var record = new RefusalRecord(_environment);
+
+        Assert.Equal([place], record.At(step));
+        Assert.Empty(record.At(other));
+
+        var held = Path.Combine(other, "held");
+        record.Replace(other, [held]);
+
+        Assert.Equal([held], record.At(other));
+    }
 }

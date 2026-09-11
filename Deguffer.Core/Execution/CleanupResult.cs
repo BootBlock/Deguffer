@@ -12,10 +12,10 @@ namespace Deguffer.Core.Execution;
 /// refusing, and only one of the two is something the user might want to act on.
 /// </param>
 /// <param name="Spared">
-/// Entries left alone because something is using them (§5.3). A third count beside the two above
-/// it, for the reason they are two: a skip is Windows refusing, a keep is a setting being honoured,
-/// and this is Deguffer declining to touch something it found in use. Only the last of the three is
-/// answered by closing the program the plan named.
+/// Entries left alone because something is using them (§5.3). Kept apart from the two above it, for
+/// the reason they are apart: a refusal is Windows declining, a keep is a setting being honoured, and
+/// this is Deguffer declining to touch something it found in use. Only this one names the program to
+/// close, because the plan found the program before the removal began.
 /// </param>
 public sealed record StepOutcome(
     string Description,

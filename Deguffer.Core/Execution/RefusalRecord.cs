@@ -19,9 +19,10 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>It records where to look, never what the answer was.</b> Every preview asks again, so a
 /// refusal that has since lifted is counted at once, without waiting for a clean that the row would
-/// no longer offer. What it cannot see is a place never cleaned over: the first preview on a machine
-/// offers what the clean then reports it could not take, and every preview after that one does
-/// not.</para>
+/// no longer offer. Two things it cannot see. A place never cleaned over: the first preview on a
+/// machine offers what the clean then reports it could not take, and the previews after it do not.
+/// And a running program's own files, which open for deletion and refuse only the deletion itself —
+/// see <see cref="DeletionProbe"/>.</para>
 ///
 /// <para><b>One instance per file, by construction.</b> Every provider records into the same file,
 /// and two instances over it would each save their own view and discard the other's.
@@ -68,12 +69,22 @@ public sealed class RefusalRecord
     /// <summary>
     /// The places the last clean of <paramref name="stepPath"/> found Windows refusing, in display
     /// form, or none.
+    ///
+    /// <para>A step's path is looked up in the one spelling <see cref="LongPath.Configured"/> gives
+    /// it. The executor records against the path it removed and the preview asks with the path it
+    /// planned; a trailing separator or §6.3's prefix on either side would otherwise make the record
+    /// silently miss, and the row would go back to offering what Windows refuses.</para>
     /// </summary>
     public IReadOnlyList<string> At(string stepPath)
     {
+        if (LongPath.Configured(stepPath) is not { } key)
+        {
+            return [];
+        }
+
         lock (_gate)
         {
-            return _entries.TryGetValue(Key(stepPath), out var places) ? places : [];
+            return _entries.TryGetValue(key, out var places) ? places : [];
         }
     }
 
@@ -85,11 +96,16 @@ public sealed class RefusalRecord
     {
         ArgumentNullException.ThrowIfNull(refusedAt);
 
-        var key = Key(stepPath);
+        if (LongPath.Configured(stepPath) is not { } key)
+        {
+            return;
+        }
+
+        string[] places = [.. Wellformed(refusedAt)];
 
         lock (_gate)
         {
-            if (refusedAt.Count == 0)
+            if (places.Length == 0)
             {
                 if (!_entries.Remove(key))
                 {
@@ -101,12 +117,12 @@ public sealed class RefusalRecord
                 // The ordinary case after the first clean is the same refusals again, and rewriting
                 // the file to say so is I/O at the end of every step for nothing.
                 if (_entries.TryGetValue(key, out var existing)
-                    && existing.SequenceEqual(refusedAt, StringComparer.OrdinalIgnoreCase))
+                    && existing.SequenceEqual(places, StringComparer.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
-                _entries[key] = [.. refusedAt];
+                _entries[key] = places;
             }
 
             Save();
@@ -117,22 +133,17 @@ public sealed class RefusalRecord
         Path.Combine(environment.LocalAppData, "Deguffer", "refusals.json");
 
     /// <summary>
-    /// A step's path in one spelling. The executor records against the path it removed and the
-    /// preview asks with the path it planned, and those are the same string today — but a trailing
-    /// separator or §6.3's prefix on either side would make the record silently miss, and the row
-    /// would go back to offering what Windows refuses.
+    /// The places that name somewhere, each once, in one spelling. Everything read back out of the
+    /// file goes through this, because the file is on the user's disk: a blank entry, a JSON
+    /// <c>null</c> or a relative path is not a place, and handed on it would throw inside every
+    /// preview of that location — or, reaching <see cref="Replace"/>, after a clean had already
+    /// deleted what it could and before §5.6 verified what survived.
     /// </summary>
-    private static string Key(string path)
-    {
-        try
-        {
-            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(LongPath.Display(path)));
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return path;
-        }
-    }
+    private static IEnumerable<string> Wellformed(IEnumerable<string?>? places) =>
+        (places ?? [])
+            .Select(LongPath.Configured)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     private void Load()
     {
@@ -143,17 +154,23 @@ public sealed class RefusalRecord
                 return;
             }
 
-            var loaded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(
+            var loaded = JsonSerializer.Deserialize<Dictionary<string, string?[]?>>(
                 File.ReadAllText(LongPath.Extended(_file)), SerializerOptions);
 
-            foreach (var (path, places) in loaded ?? [])
+            foreach (var (path, recorded) in loaded ?? [])
             {
                 // A location that has gone since is never planned again, so nothing would ever clear
                 // its entry. Dropped on the way in, so the file cannot accumulate every project a
-                // machine has had.
-                if (LongPath.DirectoryExists(path) || LongPath.FileExists(path))
+                // machine has had — and a key that is not a path at all is dropped with it.
+                if (LongPath.Configured(path) is not { } key
+                    || !(LongPath.DirectoryExists(key) || LongPath.FileExists(key)))
                 {
-                    _entries[Key(path)] = places;
+                    continue;
+                }
+
+                if (Wellformed(recorded).ToArray() is { Length: > 0 } places)
+                {
+                    _entries[key] = places;
                 }
             }
         }
