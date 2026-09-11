@@ -99,6 +99,8 @@ public sealed class FileHistoryProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "Saved versions older than the retention age are gone permanently, so you can no longer go "
         + "back to how a file was on a date before it. Windows will not remove the newest copy of a "

@@ -1,10 +1,13 @@
+using System.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace Deguffer.App.Views;
@@ -17,6 +20,9 @@ public sealed partial class CleanPage : Page
     /// came from is still visible around it.
     /// </summary>
     private const double ShareOfWindow = 0.75;
+
+    /// <summary>The row whose item list is on screen, so the keyboard can go back to it when the list closes.</summary>
+    private FindingViewModel? _itemsShownFor;
 
     public CleanPage()
     {
@@ -41,6 +47,9 @@ public sealed partial class CleanPage : Page
         // A scan and its results outlive a trip to Settings; rebuilding the page on the way back
         // would throw away a preview the user has not acted on yet.
         NavigationCacheMode = NavigationCacheMode.Required;
+
+        // The view-model is this page's own, so the subscription lives exactly as long as both do.
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
 
         // Bound to the page being on screen rather than to its construction: the preference only
         // governs a clean started from here, and a subscription to a process-lifetime static event
@@ -228,6 +237,84 @@ public sealed partial class CleanPage : Page
         }
     }
 
+    /// <summary>List the row's items in place of the rows. The row arrives on the link's Tag, as above.</summary>
+    private void OnItemsLinkClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is HyperlinkButton { Tag: FindingViewModel finding })
+        {
+            ViewModel.ShowItems(finding);
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CleanViewModel.ShownItems))
+        {
+            ShowItemsOrRows();
+        }
+    }
+
+    /// <summary>
+    /// Put the item list the view-model names on the card, or take it off and give the keyboard back
+    /// to the row it came from.
+    ///
+    /// <para>The list is built afresh each time rather than kept, because it belongs to one row of one
+    /// preview. The rows' own list is collapsed rather than rebuilt while it is away, so it comes back
+    /// scrolled to where the reader left it.</para>
+    /// </summary>
+    private void ShowItemsOrRows()
+    {
+        if (ViewModel.ShownItems is { } items)
+        {
+            _itemsShownFor = items.Row;
+            ItemsHost.Content = new ItemListView(items, ViewModel.ToggleKeep, ViewModel.CloseItems);
+            return;
+        }
+
+        ItemsHost.Content = null;
+
+        if (_itemsShownFor is { } row)
+        {
+            _itemsShownFor = null;
+
+            // Deferred, because the rows are only just visible again and a control that has not been
+            // laid out cannot take focus. A preview that replaced the rows leaves nothing to find,
+            // and that is correct: the row the list came from no longer exists.
+            DispatcherQueue.TryEnqueue(() => FocusItemsLinkOf(row));
+        }
+    }
+
+    private void FocusItemsLinkOf(FindingViewModel row)
+    {
+        if (FindingsList.ContainerFromItem(row) is DependencyObject container
+            && ItemsLinkIn(container, row) is { } link)
+        {
+            link.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private static HyperlinkButton? ItemsLinkIn(DependencyObject parent, FindingViewModel row)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+
+            if (child is HyperlinkButton { Tag: FindingViewModel tagged } link
+                && ReferenceEquals(tagged, row)
+                && AutomationProperties.GetName(link) == row.Text.ItemsLinkName)
+            {
+                return link;
+            }
+
+            if (ItemsLinkIn(child, row) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     private async Task ShowProviderInfoAsync(FindingViewModel finding)
     {
         var dialog = new ContentDialog
@@ -241,7 +328,6 @@ public sealed partial class CleanPage : Page
             RequestedTheme = ActualTheme,
 
             Title = finding.Name,
-            Content = new ProviderInfoView(finding, ViewModel.ToggleKeep),
             CloseButtonText = "Close",
             DefaultButton = ContentDialogButton.Close,
 
@@ -250,6 +336,13 @@ public sealed partial class CleanPage : Page
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Stretch,
         };
+
+        // Assigned once the dialog exists, because the content's way to the item list closes it.
+        dialog.Content = new ProviderInfoView(finding, row =>
+        {
+            dialog.Hide();
+            ViewModel.ShowItems(row);
+        });
 
         // Three quarters of the window, in both directions. The dialog's template sizes itself from
         // these four theme resources, and pinning each pair to the same number is what turns a

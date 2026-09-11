@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.ItemListView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    KeyboardAcceleratorPlacementMode="Hidden">
+
+    <UserControl.KeyboardAccelerators>
+        <KeyboardAccelerator Key="Escape" Invoked="OnEscapeInvoked" />
+    </UserControl.KeyboardAccelerators>
+
+    <UserControl.Resources>
+        <!-- Handed to the list from code-behind rather than bound, because a list whose items have
+             no headings is given the items directly: a grouped source holding one nameless group
+             still draws a header over it. -->
+        <CollectionViewSource x:Key="GroupedItems" IsSourceGrouped="True" />
+
+        <!-- One width for every facet cell and for its heading. WinUI 3 has no SharedSizeGroup and
+             each row builds its own Grid, so an Auto width would put every row's values at a
+             different offset from the heading they sit under. -->
+        <x:Double x:Key="FacetColumnWidth">150</x:Double>
+
+        <ItemsPanelTemplate x:Key="FacetCells">
+            <StackPanel Orientation="Horizontal" Spacing="10" />
+        </ItemsPanelTemplate>
+
+        <!-- One item. §7 makes age a first-class column for this kind of data, and the facets are
+             the provider's own columns beside it: the project, the version, the browser. -->
+        <DataTemplate x:Key="ItemRow" x:DataType="vm:StepViewModel">
+            <Grid ColumnSpacing="10" Padding="12,8" ColumnDefinitions="Auto,*,Auto,96">
+
+                <!-- Every item gets a checkbox: the list is offered only for a row whose steps are
+                     chosen one by one. See FindingViewModel.OffersItems. -->
+                <CheckBox Grid.Column="0"
+                          MinWidth="0"
+                          VerticalAlignment="Top"
+                          Margin="0,-4,0,0"
+                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                          IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
+                          AutomationProperties.Name="{x:Bind Description}" />
+
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{x:Bind Description}"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               FontSize="13" />
+
+                    <!-- Said in words beside the disabled checkbox, for the reason the elevation line
+                         below is (§6.5): a greyed-out control states no reason on its own. -->
+                    <TextBlock Text="On your keep list — Deguffer will not offer it, and every clean checks that it is still there"
+                               Visibility="{x:Bind IsKept, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               FontSize="12" />
+
+                    <!-- A button rather than a link: this changes what Deguffer will delete. Shown only
+                         for an item its provider can identify apart from its path, because only that
+                         can be kept. -->
+                    <Button Content="{x:Bind KeepActionLabel, Mode=OneWay}"
+                            Visibility="{x:Bind CanBeKept}"
+                            IsEnabled="{x:Bind CanChangeKeepList, Mode=OneWay}"
+                            Tag="{x:Bind}"
+                            Click="OnKeepClicked"
+                            Padding="10,2"
+                            Margin="0,2,0,0"
+                            AutomationProperties.Name="{x:Bind KeepActionName, Mode=OneWay}" />
+
+                    <TextBlock Text="Needs administrator rights — use the Elevate button"
+                               Visibility="{x:Bind NeedsElevationFirst}"
+                               Style="{StaticResource SecondaryText}"
+                               FontSize="12" />
+                </StackPanel>
+
+                <ItemsControl Grid.Column="2"
+                              VerticalAlignment="Top"
+                              IsTabStop="False"
+                              ItemsSource="{x:Bind FacetValues}"
+                              ItemsPanel="{StaticResource FacetCells}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <!-- Trimmed rather than wrapped, so a long project name cannot make one
+                                 row taller than its neighbours; the whole value is on the tooltip. -->
+                            <TextBlock Text="{x:Bind}"
+                                       Width="{StaticResource FacetColumnWidth}"
+                                       Style="{StaticResource SecondaryText}"
+                                       FontSize="13"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTipService.ToolTip="{x:Bind}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Grid.Column="3" VerticalAlignment="Top">
+                    <TextBlock Text="{x:Bind SizeLabel}"
+                               Style="{StaticResource SecondaryText}"
+                               TextAlignment="Right"
+                               FontSize="12" />
+
+                    <!-- Text, never colour alone (§6.5). No automation name, because one would replace
+                         the value a screen reader announces; the text already says "ago". -->
+                    <TextBlock Text="{x:Bind AgeLabel}"
+                               Visibility="{x:Bind HasAge}"
+                               Style="{StaticResource SecondaryText}"
+                               TextAlignment="Right"
+                               FontSize="12" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8" Padding="0,12,0,0">
+
+        <Grid Grid.Row="0" Padding="16,0" ColumnSpacing="12" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+            <!-- A link, because going back changes nothing. Escape does the same. -->
+            <HyperlinkButton Grid.Column="0"
+                             Padding="0,2"
+                             VerticalAlignment="Center"
+                             Click="OnBackClicked"
+                             AutomationProperties.Name="Back to every location">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE72B;" FontSize="12" AutomationProperties.AccessibilityView="Raw" />
+                    <TextBlock Text="All locations" />
+                </StackPanel>
+            </HyperlinkButton>
+
+            <TextBlock Grid.Column="1"
+                       Text="{x:Bind ViewModel.Row.Name}"
+                       Style="{StaticResource SectionHeading}"
+                       FontSize="15"
+                       VerticalAlignment="Center" />
+
+            <!-- Tier is text on a tinted chip, never colour alone (§6.5), with its explanation on the
+                 chip by pointer and by help text, as it is on the row. -->
+            <ContentControl Grid.Column="2"
+                            Content="{x:Bind ViewModel.Row.TierLabel}"
+                            Style="{x:Bind ViewModel.Row.Tier, Converter={StaticResource TierChipStyle}}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.Row.TierExplanation}"
+                            AutomationProperties.Name="{x:Bind ViewModel.Row.TierLabel}"
+                            AutomationProperties.HelpText="{x:Bind ViewModel.Row.TierExplanation}" />
+
+            <TextBlock Grid.Column="4"
+                       Text="{x:Bind ViewModel.SelectionLabel, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       TextWrapping="NoWrap"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- §7's sentence, written out. Every item listed here is offered for deletion, and no row
+             may be offered without what it costs being reachable from it. -->
+        <TextBlock Grid.Row="1"
+                   Padding="16,0"
+                   Text="{x:Bind ViewModel.Row.WhatHappensOnNextUse}"
+                   Style="{StaticResource SecondaryText}"
+                   FontSize="13" />
+
+        <StackPanel Grid.Row="2" Padding="16,0" Spacing="4">
+            <TextBox x:Name="SearchBox"
+                     Width="400"
+                     HorizontalAlignment="Left"
+                     PlaceholderText="Search these items"
+                     Text="{x:Bind ViewModel.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Search these items" />
+
+            <TextBlock Text="{x:Bind ViewModel.HiddenSelectionLabel, Mode=OneWay}"
+                       Visibility="{x:Bind ViewModel.HasHiddenSelection, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       FontWeight="SemiBold"
+                       FontSize="12" />
+        </StackPanel>
+
+        <!-- The column headings, laid out on the item row's own columns so each heading stands over
+             its values. -->
+        <Grid Grid.Row="3" Padding="12,0" ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto,96">
+            <CheckBox Grid.Column="0"
+                      MinWidth="0"
+                      IsChecked="{x:Bind ViewModel.AllShownState, Mode=OneWay}"
+                      IsEnabled="{x:Bind ViewModel.CanToggleAllShown, Mode=OneWay}"
+                      Command="{x:Bind ViewModel.ToggleAllShownCommand}"
+                      AutomationProperties.Name="Every item shown" />
+
+            <TextBlock Grid.Column="1" Text="Item" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+
+            <ItemsControl Grid.Column="2"
+                          VerticalAlignment="Center"
+                          IsTabStop="False"
+                          ItemsSource="{x:Bind ViewModel.Row.FacetColumns}"
+                          ItemsPanel="{StaticResource FacetCells}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{x:Bind}"
+                                   Width="{StaticResource FacetColumnWidth}"
+                                   Style="{StaticResource FieldLabel}"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Grid.Column="3"
+                       Text="Size"
+                       Style="{StaticResource FieldLabel}"
+                       TextAlignment="Right"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <Grid Grid.Row="4">
+            <!-- Virtualizing, so a row of a thousand items realises only the ones on screen. It must
+                 not sit inside a ScrollViewer of its own: given unbounded height, it would realise
+                 every item, which is the cost this list exists to remove. -->
+            <ListView x:Name="RowsList"
+                      SelectionMode="None"
+                      IsItemClickEnabled="False"
+                      Padding="0,0,0,12"
+                      ItemTemplate="{StaticResource ItemRow}">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="MinHeight" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+
+                <ListView.GroupStyle>
+                    <GroupStyle HidesIfEmpty="True">
+                        <GroupStyle.HeaderContainerStyle>
+                            <Style TargetType="ListViewHeaderItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="12,12,12,4" />
+                            </Style>
+                        </GroupStyle.HeaderContainerStyle>
+
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="vm:ItemGroupViewModel">
+                                <!-- The heading's checkbox covers the items under it that the search
+                                     shows, and a click on a mixed one clears them. See
+                                     ItemSelection.ValueForClick. -->
+                                <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto">
+                                    <CheckBox Grid.Column="0"
+                                              MinWidth="0"
+                                              IsChecked="{x:Bind State, Mode=OneWay}"
+                                              IsEnabled="{x:Bind CanToggle, Mode=OneWay}"
+                                              Command="{x:Bind ToggleCommand}"
+                                              AutomationProperties.Name="{x:Bind ToggleName}" />
+
+                                    <!-- Sizes set here, because a list header's own style sets a
+                                         heading-sized font that every text inside it inherits. -->
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind Title}"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Column="2"
+                                               Text="{x:Bind Summary}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12"
+                                               TextWrapping="NoWrap"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+            </ListView>
+
+            <TextBlock Text="No item matches the search."
+                       Visibility="{x:Bind ViewModel.HasNoMatches, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Top"
+                       Margin="0,24,0,0" />
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -87,6 +88,27 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
+    }
+
+    /// <summary>
+    /// Each build is listed under its application and told apart by its number, so a machine holding
+    /// a dozen Squirrel applications reads as a dozen headings rather than one list of folders.
+    /// </summary>
+    [Fact]
+    public async Task ListsEachBuildUnderItsApplicationWithItsVersion()
+    {
+        var chatterbox = CreateApplication("Chatterbox", "3.6.3", "3.10.0");
+        var notekeeper = CreateApplication("Notekeeper", "1.0.0", "1.1.0");
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        var superseded = steps[Path.Combine(chatterbox, "app-3.6.3")];
+        Assert.Equal("Chatterbox", superseded.Group);
+        Assert.Equal([new ItemFacet("Version", "3.6.3")], superseded.Facets);
+
+        Assert.Equal("Notekeeper", steps[Path.Combine(notekeeper, "app-1.0.0")].Group);
     }
 
     /// <summary>An application holding one build has nothing to give up, and says so plainly.</summary>

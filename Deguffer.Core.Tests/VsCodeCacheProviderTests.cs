@@ -139,6 +139,23 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
     }
 
+    [Fact]
+    public async Task ListsEachCacheUnderItsEditor()
+    {
+        var code = CreateEditor("Code");
+        var insiders = CreateEditor("Code - Insiders");
+
+        var codeCache = CreateDirectory(Path.Combine(code, "CachedData"));
+        var insidersCache = CreateDirectory(Path.Combine(insiders, "WebStorage", "42", "CacheStorage"));
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal("Code", steps[codeCache].Group);
+        Assert.Equal("Code - Insiders", steps[insidersCache].Group);
+    }
+
     /// <summary>
     /// A webview cache alone is a source. It is the only declared cache that sits three levels down,
     /// so a presence probe that only looked at the folder's own children would report the editor as

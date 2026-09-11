@@ -87,6 +87,8 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next Maven build downloads every dependency it needs again, which for a large project "
         + "is gigabytes over the network. Anything you installed locally with 'mvn install' was "

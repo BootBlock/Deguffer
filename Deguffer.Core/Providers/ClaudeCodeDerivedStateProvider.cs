@@ -148,6 +148,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "Nothing you use changes. Your conversations, their memory, your settings and your sign-in stay, and "
         + "each session that starts writes its own handshake files, keys and shell captures exactly as "

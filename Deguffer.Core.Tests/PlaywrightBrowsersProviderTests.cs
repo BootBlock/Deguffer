@@ -125,6 +125,30 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Builds are listed under their browser and told apart by revision. A browser's own name can hold
+    /// hyphens, so the revision is what follows the last one.
+    /// </summary>
+    [Fact]
+    public async Task ListsEachBuildUnderItsBrowserWithItsRevision()
+    {
+        var root = CreateRoot("chromium-1228", "chromium-tip-of-tree-1229", "firefox-1532");
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        var chromium = steps[Path.Combine(root, "chromium-1228")];
+        Assert.Equal("chromium", chromium.Group);
+        Assert.Equal([new ItemFacet("Revision", "1228")], chromium.Facets);
+
+        var tipOfTree = steps[Path.Combine(root, "chromium-tip-of-tree-1229")];
+        Assert.Equal("chromium-tip-of-tree", tipOfTree.Group);
+        Assert.Equal([new ItemFacet("Revision", "1229")], tipOfTree.Facets);
+
+        Assert.Equal("firefox", steps[Path.Combine(root, "firefox-1532")].Group);
+    }
+
+    /// <summary>
     /// The headless shell and tip-of-tree builds carry underscores and extra hyphens in the part
     /// before the revision, which a naive "split on the last hyphen" rule would mis-handle.
     /// </summary>

@@ -78,6 +78,8 @@ public sealed class CrashDumpProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The record of every crash and stop error listed here is destroyed, so none of it can be "
         + "attached to a bug report or opened in a debugger afterwards. Windows keeps writing new "

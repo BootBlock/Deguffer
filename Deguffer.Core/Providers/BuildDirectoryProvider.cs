@@ -66,6 +66,12 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     protected BuildDirectoryKind Kind { get; }
 
     /// <summary>
+    /// One step per project, for every kind of build directory. Sealed, because what makes it true is
+    /// the search this class does, and a subclass is a declaration of a directory name.
+    /// </summary>
+    public sealed override StepGrain Grain => StepGrain.Items;
+
+    /// <summary>
     /// What a recognised one is, completing "could not be confirmed as …" and describing each step.
     /// Written for the user, so it reads as a noun phrase rather than as an identifier.
     /// </summary>
@@ -144,7 +150,9 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 .. live.Cleared.Select(target => new DeletionTarget(
                     target.Path,
                     $"{Subject} for {Path.GetFileName(target.Project)}",
-                    DirectoryAge.Of(target.Path, ct))),
+                    DirectoryAge.Of(target.Path, ct),
+                    Facets: [new ItemFacet("Project", Path.GetFileName(target.Project))],
+                    Group: ApprovedRootHeading.For(ApprovedRoots, target.Path))),
             ],
             keep,
             ct).ConfigureAwait(false);

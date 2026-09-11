@@ -78,6 +78,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next build re-downloads cached package archives and registry responses. Where "
         + "PlatformIO also named packages that nothing installed still refers to, the next build "

@@ -63,6 +63,9 @@ public sealed class DotNetObjProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    /// <summary>One step per project, and a project is something the user knows by name.</summary>
+    public override StepGrain Grain => StepGrain.Items;
+
     /// <summary>
     /// §7. The caveat is stated plainly rather than promising purely local regeneration: restore
     /// normally resolves from the NuGet global packages cache and is fully offline, but cleaning
@@ -206,7 +209,9 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 .. targets.Select(t => new DeletionTarget(
                     t.Path,
                     $"Intermediate build output for {t.Project.ProjectName}",
-                    DirectoryAge.Of(t.Path, ct))),
+                    DirectoryAge.Of(t.Path, ct),
+                    Facets: [new ItemFacet("Project", t.Project.ProjectName)],
+                    Group: ApprovedRootHeading.For(ApprovedRoots, t.Path))),
             ],
             keep,
             ct).ConfigureAwait(false);

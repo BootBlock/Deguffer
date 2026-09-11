@@ -203,6 +203,8 @@ public sealed class ElevationOfferTests
 
         public SafetyTier Tier => SafetyTier.RegenerableCache;
 
+        public StepGrain Grain => StepGrain.Parts;
+
         public string WhatHappensOnNextUse => "Nothing.";
 
         public ProviderDescription Description { get; } = new()

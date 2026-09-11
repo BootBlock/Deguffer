@@ -108,6 +108,19 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         Assert.Contains(Path.Combine(releases, "4.18.1"), plan.TargetedPaths);
     }
 
+    [Fact]
+    public async Task NamesEachReleasesVersionInAColumn()
+    {
+        var releases = CreateReleases("1.13.2", "4.18.1");
+
+        var steps = (await CreateProvider().PlanAsync()).Steps
+            .OfType<DeleteStep>()
+            .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal([new ItemFacet("Version", "4.18.1")], steps[Path.Combine(releases, "4.18.1")].Facets);
+        Assert.Equal([new ItemFacet("Version", "1.13.2")], steps[Path.Combine(releases, "1.13.2")].Facets);
+    }
+
     /// <summary>Every runtime line's numbering, including the long build numbers older feeds served.</summary>
     [Theory]
     [InlineData("4.0.5455")]

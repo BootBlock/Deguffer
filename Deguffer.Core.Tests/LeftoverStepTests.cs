@@ -170,6 +170,8 @@ public sealed class LeftoverStepTests : IDisposable
 
         public override SafetyTier Tier => tier;
 
+        public override StepGrain Grain => StepGrain.Parts;
+
         public override string WhatHappensOnNextUse => "Nothing a test cares about.";
 
         public override ProviderDescription Description { get; } = new()

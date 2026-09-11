@@ -143,6 +143,8 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The driver recompiles each shader the first time it is wanted again, so a game or 3D " +
         "application stutters briefly on its next run and then behaves exactly as before.";

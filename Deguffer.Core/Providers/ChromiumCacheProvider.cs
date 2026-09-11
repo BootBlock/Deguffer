@@ -149,6 +149,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "Each application fetches the web content it had cached and recompiles its scripts the " +
         "first time it is opened again, so it starts more slowly once. Sign-ins, saved passwords " +
@@ -295,7 +297,13 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
                 var walk = CacheLevelWalk.Under(Levels, profile, ct);
 
-                targets.AddRange(walk.Targets);
+                // Listed under the application and the profile, because those are what a reader
+                // knows: nobody chooses between 'Code Cache' folders by name.
+                var heading = profile.Equals(application.Path, StringComparison.OrdinalIgnoreCase)
+                    ? application.Name
+                    : $"{application.Name} — {Path.GetFileName(profile)}";
+
+                targets.AddRange(walk.Targets.Select(target => target with { Group = heading }));
                 declined.AddRange(walk.Declined);
                 survivors.AddRange(walk.Survivors);
                 notes.AddRange(walk.Notes);

@@ -148,6 +148,8 @@ public sealed class CargoCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next cargo build downloads the crate archives it needs again and unpacks them, so it "
         + "spends longer fetching before it compiles. Registry metadata, the clones of git "

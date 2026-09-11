@@ -101,6 +101,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next poetry install re-downloads package archives, re-fetches the metadata Poetry "
         + "resolves against, and rebuilds any wheel Poetry had built from a source distribution. "

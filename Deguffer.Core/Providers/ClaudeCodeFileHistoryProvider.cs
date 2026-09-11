@@ -92,6 +92,9 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    /// <summary>Each step is one session's snapshots, offered and dated one session at a time.</summary>
+    public override StepGrain Grain => StepGrain.Items;
+
     public override string WhatHappensOnNextUse =>
         "Those sessions can no longer rewind the files they edited to how they were before. The files as they are "
         + "now, your conversations and your settings are untouched, and every session takes its own snapshots "

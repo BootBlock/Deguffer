@@ -36,6 +36,8 @@ public sealed class UvCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next uv install re-downloads and re-unpacks packages. Existing virtual environments " +
         "and uv-installed tools are untouched.";

@@ -56,6 +56,8 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The record of every crash and every session the launcher has already had is destroyed, so "
         + "none of it can be attached to a support ticket afterwards. The launcher writes a fresh "

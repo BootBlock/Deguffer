@@ -137,6 +137,8 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The editor recompiles its own code and rescans its extensions the first time it starts " +
         "again, so it opens more slowly once. Your settings, extensions, workspace state and local " +
@@ -277,7 +279,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
             var walk = CacheLevelWalk.Under(LevelsOf(editor), folder, ct);
 
-            targets.AddRange(walk.Targets);
+            targets.AddRange(walk.Targets.Select(target => target with { Group = editor.UserData.Name }));
             declined.AddRange(walk.Declined);
             survivors.AddRange(walk.Survivors);
             notes.AddRange(walk.Notes);

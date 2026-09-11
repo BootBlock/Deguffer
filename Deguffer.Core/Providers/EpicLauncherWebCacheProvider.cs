@@ -143,6 +143,8 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The store fetches its pages and pictures from the network instead of from disk the first "
         + "time the launcher is opened again, and recompiles the scripts behind them, so the store "

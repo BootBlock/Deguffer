@@ -36,6 +36,8 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next restore re-downloads packages from your configured feeds. Projects and their configuration are untouched.";
 

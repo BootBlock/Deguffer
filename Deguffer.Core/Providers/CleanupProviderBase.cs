@@ -55,6 +55,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public abstract SafetyTier Tier { get; }
 
+    public abstract StepGrain Grain { get; }
+
     public abstract string WhatHappensOnNextUse { get; }
 
     public abstract ProviderDescription Description { get; }
@@ -342,6 +344,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 WithheldRecent = measured.WithheldRecent[i],
                 Identity = target.Identity,
                 IsLeftover = target.IsLeftover,
+                Facets = target.Facets ?? [],
+                Group = target.Group,
             });
         }
 

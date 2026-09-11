@@ -73,6 +73,8 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.UserData;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The record of what each MCP server reported while Claude Code ran it is destroyed, so none of it can be "
         + "attached to a bug report afterwards. Claude Code keeps writing new logs exactly as before, and your "

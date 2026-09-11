@@ -216,6 +216,21 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
     public bool IsLeftover { get; init; }
 
     public override ScanSize Reclaim => IsLeftover ? Estimated : base.Reclaim;
+
+    /// <summary>
+    /// What a reader choosing between items is told about this one beyond its path, in the order its
+    /// provider wants the columns. Empty for most steps. See <see cref="ItemFacet"/>.
+    /// </summary>
+    public IReadOnlyList<ItemFacet> Facets { get; init; } = [];
+
+    /// <summary>
+    /// The heading this item is listed under, such as the approved folder a project was found in or the
+    /// browser profile a cache belongs to. Null where its provider's items fall under no heading.
+    ///
+    /// <para>Presentation only, like <see cref="Facets"/>. A heading lets hundreds of items be read and
+    /// chosen a group at a time. Nothing about a run depends on which group a step is in.</para>
+    /// </summary>
+    public string? Group { get; init; }
 }
 
 /// <summary>

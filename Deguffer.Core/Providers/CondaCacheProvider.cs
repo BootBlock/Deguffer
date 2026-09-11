@@ -61,6 +61,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next conda install downloads packages and re-fetches the channel index. Your "
         + "environments are untouched: conda keeps every package an environment still links.";

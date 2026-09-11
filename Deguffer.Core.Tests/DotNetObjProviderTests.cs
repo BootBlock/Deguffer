@@ -125,6 +125,19 @@ public sealed class DotNetObjProviderTests : IDisposable
             s.What.Contains("Example.csproj", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task ListsTheProjectByNameUnderTheApprovedFolderItWasFoundIn()
+    {
+        var root = ApproveRoot();
+        var obj = ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
+
+        var step = Assert.Single((await CreateProvider().PlanAsync()).Steps.OfType<DeleteStep>());
+
+        Assert.Equal(obj, step.Path);
+        Assert.Equal(root, step.Group);
+        Assert.Equal([new ItemFacet("Project", "Example.csproj")], step.Facets);
+    }
+
     /// <summary>
     /// The consent model. The index knows every directory on the volume, and a cheap answer must
     /// not become permission — an <c>obj</c> outside every approved root is never offered, however

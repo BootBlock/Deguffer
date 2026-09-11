@@ -66,6 +66,9 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
+    /// <summary>Each build is a browser at a revision a test suite may pin.</summary>
+    public override StepGrain Grain => StepGrain.Items;
+
     public override string WhatHappensOnNextUse =>
         "Playwright tests stop running until 'playwright install' is run again, which re-downloads " +
         "roughly a gigabyte of browser builds. Test code, configuration and reports are untouched.";
@@ -213,6 +216,10 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
                 continue;
             }
 
+            // The revision is everything after the last hyphen: RecognisedChild ends every name in
+            // one, followed only by digits, however many hyphens the browser's own name holds.
+            var revision = child.Name.LastIndexOf('-');
+
             // Enumeration runs in extended form; a plan always holds display paths, and I/O
             // re-extends at the point of use.
             targets.Add(new DeletionTarget(
@@ -221,7 +228,9 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
                 // The build's own name is the build, wherever LocationVariable puts the cache, so a
                 // kept build stays kept when the user moves it.
-                Identity: new ItemIdentity(child.Name, child.Name)));
+                Identity: new ItemIdentity(child.Name, child.Name),
+                Facets: [new ItemFacet("Revision", child.Name[(revision + 1)..])],
+                Group: child.Name[..revision]));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);

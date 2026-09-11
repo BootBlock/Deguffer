@@ -34,6 +34,8 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
+    public override StepGrain Grain => StepGrain.Parts;
+
     public override string WhatHappensOnNextUse =>
         "The next npm install re-downloads packages from the registry. Installed node_modules are untouched.";
 
