@@ -378,6 +378,76 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The same over-reach in the shape a trim leaves rather than the shape a deletion leaves: every
+    /// saved version of another account gone, and every folder that held one still standing. A
+    /// question about existence passes over that.
+    ///
+    /// <para>Two things used to hide it, and the test needs both gone. A run holding a command step
+    /// was excused from the emptied-in-place question outright, and that question looked only at the
+    /// top level, where the account's folder still holds its machine's folder.</para>
+    /// </summary>
+    [Fact]
+    public async Task ACleanupThatEmptiedAnotherAccountInPlaceFailsTheNegative()
+    {
+        var drive = CreateConfiguredDrive();
+        var theirs = CreateAnotherAccountsHistory(drive);
+        var theirData = Path.Combine(theirs, AnotherMachine, "Data");
+
+        _runner.Replying(_ =>
+        {
+            File.Delete(Path.Combine(theirData, "theirs.docx"));
+            return new CommandOutcome(0, string.Empty, string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.True(Directory.Exists(theirData));
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(
+            result.Verification.Failures,
+            c => c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase)
+                && c.Outcome == VerificationOutcome.Emptied);
+    }
+
+    /// <summary>
+    /// The command doing what it is for, on a drive holding nothing else: every version of this
+    /// machine goes, and the folders above <c>Data</c> end the run holding only empty folders. Each of
+    /// them holds the path the command was sent to clear, so that is the plan's own declared work,
+    /// and an alarm over it would cry wolf on the ordinary run.
+    /// </summary>
+    [Fact]
+    public async Task ACleanupThatTookEveryVersionOfThisMachineRaisesNoAlarm()
+    {
+        var drive = CreateConfiguredDrive();
+        var history = CreateHistory(drive);
+
+        _runner.Replying(_ =>
+        {
+            foreach (var version in Directory.EnumerateFiles(history, "*", SearchOption.AllDirectories).ToList())
+            {
+                File.Delete(version);
+            }
+
+            return new CommandOutcome(0, string.Empty, string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        // The shape the exemption exists for, asserted rather than assumed: every folder above Data
+        // was recorded as holding something, and none of them holds a file now.
+        Assert.All(
+            [Path.Combine(drive, "FileHistory"), Path.GetDirectoryName(history)!, history],
+            folder => Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore));
+        Assert.Empty(Directory.EnumerateFiles(history, "*", SearchOption.AllDirectories));
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// The backup drive is unplugged, which is the ordinary state of an external one. A zero here is
     /// about what was examined, and nothing was — so the row must not read as clear.
     /// </summary>

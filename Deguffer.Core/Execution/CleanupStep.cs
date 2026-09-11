@@ -106,10 +106,15 @@ public abstract record CleanupStep
 public sealed record RunCommandStep(string FileName, string Arguments, string What) : CleanupStep
 {
     /// <summary>
-    /// The locations we expect the command to clear. Used only to measure what it actually
-    /// reclaimed — the command remains the authority on *what* gets removed, which is the whole
-    /// point of §5.1. NuGet's own clear reached two locations that were not under <c>.nuget</c>
-    /// at all, so this list is a probe, never a target.
+    /// The locations we expect the command to clear. The command remains the authority on *what*
+    /// gets removed, which is the whole point of §5.1. NuGet's own clear reached two locations that
+    /// were not under <c>.nuget</c> at all, so this list is a probe, never a target.
+    ///
+    /// <para>It has two readers, and a path added for one reaches the other. The executor measures
+    /// these locations again to report what the command reclaimed. And §5.6 reads them as where the
+    /// tool was sent: a protected folder holding one of them may end the run empty without an alarm
+    /// (see <see cref="RunReach.ProbedPaths"/>). So a location listed only to improve the figure
+    /// also excuses every protected folder above it.</para>
     /// </summary>
     public IReadOnlyList<string> MeasuredPaths { get; init; } = [];
 

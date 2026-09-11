@@ -276,6 +276,38 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.6 when the developer runs a Clean of their own while the preview sits on screen. MSBuild's
+    /// Clean deletes the output files it built and leaves <c>bin\Debug\&lt;framework&gt;</c> standing,
+    /// so <c>bin</c> ends the run holding only empty folders. Deguffer never touched it, so the run is
+    /// not reported as having emptied it.
+    /// </summary>
+    [Fact]
+    public async Task AnOutsideCleanBetweenPreviewAndCleanIsNotReportedAsEmptyingBin()
+    {
+        var root = ApproveRoot();
+        var directory = Path.Combine(root, "Example");
+        var obj = ProjectFixture.CreateProject(directory, "Example");
+        var bin = Path.Combine(directory, "bin");
+        var output = Directory.CreateDirectory(Path.Combine(bin, "Debug", "net10.0")).FullName;
+        File.WriteAllBytes(Path.Combine(output, "Example.dll"), new byte[2048]);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(bin, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore);
+
+        // The Clean: the output file goes, and the folders that held it stay.
+        File.Delete(Path.Combine(output, "Example.dll"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(obj));
+        Assert.True(Directory.Exists(output));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// §7's cross-check. A tracked file inside an <c>obj</c> means it is committed content whatever
     /// the manifest beside it claims, so recognition is overruled and the directory is protected.
     /// </summary>
