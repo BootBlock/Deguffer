@@ -31,7 +31,7 @@
                           Margin="0,-2,0,0"
                           Visibility="{x:Bind IsIndividuallySelectable}"
                           IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                          IsEnabled="{x:Bind CanBeSelected}"
+                          IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                           AutomationProperties.Name="{x:Bind Description}" />
 
                 <StackPanel Grid.Column="1" Spacing="2">
@@ -40,6 +40,25 @@
                                TextWrapping="Wrap"
                                IsTextSelectionEnabled="True"
                                FontSize="13" />
+
+                    <!-- Said in words beside the disabled checkbox, for the reason the elevation line
+                         below is (§6.5): a greyed-out control states no reason on its own. -->
+                    <TextBlock Text="On your keep list — Deguffer will not offer it, and checks after every clean that it is still there"
+                               Visibility="{x:Bind IsKept, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap"
+                               FontSize="12" />
+
+                    <!-- A button rather than a link: this changes what Deguffer will delete, where the
+                         row's link only opens an explanation. Shown only for an item its provider can
+                         identify apart from its path, because only that can be kept. -->
+                    <Button Content="{x:Bind KeepActionLabel, Mode=OneWay}"
+                            Visibility="{x:Bind CanBeKept}"
+                            Tag="{x:Bind}"
+                            Click="OnKeepClicked"
+                            Padding="10,2"
+                            Margin="0,2,0,0"
+                            AutomationProperties.Name="{x:Bind KeepActionName, Mode=OneWay}" />
 
                     <!-- Shown when Deguffer can see the location and cannot remove it as it is
                          running. Text rather than a disabled checkbox alone (§6.5): a control that

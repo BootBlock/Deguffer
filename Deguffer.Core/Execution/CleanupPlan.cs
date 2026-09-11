@@ -60,6 +60,12 @@ public enum Withholding
     /// window and the step had nothing else to do.
     /// </summary>
     TooRecent,
+
+    /// <summary>
+    /// An item on the user's keep list, protected on its existence alone. See
+    /// <see cref="CleanupPlan.WithKeepList"/> for why its contents are not asked about.
+    /// </summary>
+    OnKeepList,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -240,6 +246,16 @@ public sealed record CleanupPlan
         ProtectedPaths.Any(p => p.ExistedBefore && p.Withheld != Withholding.None);
 
     /// <summary>
+    /// Whether an item this plan found is on the user's keep list, and so was left out of it.
+    ///
+    /// <para>The same shape as <see cref="HasRecentContentHeldBack"/>, and there for the same reason.
+    /// A row whose every item is kept has nothing to reclaim, and "Already clear" would then be a claim
+    /// about a location holding exactly what the user asked Deguffer to leave. The sentence is in
+    /// <see cref="Notes"/>, and this is the same fact in the form the shell can act on.</para>
+    /// </summary>
+    public bool HoldsKeepListItems => ProtectedPaths.Any(p => p.Withheld == Withholding.OnKeepList);
+
+    /// <summary>
     /// Every path this plan would destroy, for display and for tests.
     ///
     /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
@@ -274,9 +290,9 @@ public sealed record CleanupPlan
     {
         ArgumentNullException.ThrowIfNull(chosen);
 
-        // Named for the user's choice rather than for what is kept, because "keep" now means the
-        // guard on recently changed files everywhere else in this project, and the two decide
-        // different things about the same plan.
+        // Named for the user's choice rather than for what is kept, because "keep" already means the
+        // guard on recently changed files and the keep list elsewhere in this project, and each of
+        // those decides something different about the same plan.
         var selected = Steps.Where(chosen.Contains).ToList();
 
         if (selected.Count == Steps.Count)
@@ -314,4 +330,86 @@ public sealed record CleanupPlan
             ProtectedPaths = [.. ProtectedPaths, .. declined],
         };
     }
+
+    /// <summary>
+    /// This plan with every item on the keep list taken out of it, and each of those protected instead.
+    ///
+    /// <para><b>Matched on <see cref="DeleteStep.Identity"/>, never on the path.</b> A path changes
+    /// when a cache is relocated or a project is moved, and the item does not. A keep entry matched on
+    /// the path would silently stop matching, and the item would be offered again, which is the one
+    /// direction a protection must not fail in. A step with no identity is never kept.</para>
+    ///
+    /// <para><b>Protected on existence alone.</b> <see cref="ProtectedPath.HeldContentBefore"/> lets
+    /// §5.6 catch a directory emptied in place, and for a kept item it would catch the wrong thing.
+    /// The tool that owns the item goes on working on it: an updater replaces the build beside the one
+    /// kept, and a tool that sweeps its own store sweeps a kept item's contents with the rest. A kept
+    /// directory emptied between the preview and the clean is then ordinary, and nothing Deguffer did
+    /// caused it. An alarm about it would cry wolf about a folder Deguffer never touched, and a §5.6
+    /// alarm that cries wolf is worth less than no alarm. What an over-broad rule does to a kept item
+    /// is delete it, and existence still catches that.</para>
+    ///
+    /// <para><b>Applied before <see cref="NarrowedTo"/>.</b> A kept item is no longer a step, so a
+    /// shell that chose every step it was shown still cannot run one. Applying this to a plan that
+    /// already had it applied changes nothing.</para>
+    /// </summary>
+    /// <param name="keys">
+    /// The keys kept for this plan's provider, as <see cref="Configuration.KeepList.KeysFor"/> gives
+    /// them, with that set's own comparison.
+    /// </param>
+    public CleanupPlan WithKeepList(IReadOnlySet<string> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        var kept = Steps
+            .OfType<DeleteStep>()
+            .Where(step => step.Identity is { } identity && keys.Contains(identity.Key))
+            .ToList();
+
+        if (kept.Count == 0)
+        {
+            return this;
+        }
+
+        return this with
+        {
+            Steps = [.. Steps.Except(kept)],
+            ProtectedPaths =
+            [
+                .. ProtectedPaths,
+                .. kept.Select(step => new ProtectedPath(
+                    step.Path,
+                    "On your keep list, so Deguffer left it alone.",
+                    // Measured during planning, so it was there when the plan was made: the claim
+                    // NarrowedTo makes, for the reason it gives.
+                    ExistedBefore: true,
+                    HeldContentBefore: false,
+                    Withheld: Withholding.OnKeepList)),
+            ],
+            Notes =
+            [
+                .. Notes,
+                new PlanNote(
+                    PlanNoteSeverity.Information,
+                    kept.Count == 1
+                        ? "One item here is on your keep list. Deguffer leaves it alone, and checks after "
+                          + "every clean that it is still there."
+                        : $"{kept.Count} items here are on your keep list. Deguffer leaves them alone, and "
+                          + "checks after every clean that they are still there."),
+            ],
+        };
+    }
+
+    /// <summary>
+    /// This plan reduced to what a run owes its keep list: nothing to do, and the kept items to prove.
+    ///
+    /// <para>For a row the user did not tick. Nothing in it runs, and its kept items still have to be
+    /// shown standing once the run is over, because an over-broad rule somewhere else in that run is
+    /// exactly what could take one. Its other protections are left out: they guard against this
+    /// plan's own deletion, and there is none.</para>
+    /// </summary>
+    public CleanupPlan KeepListItemsOnly() => this with
+    {
+        Steps = [],
+        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld == Withholding.OnKeepList)],
+    };
 }

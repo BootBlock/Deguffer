@@ -69,6 +69,12 @@ class of error is invisible until it is irreversible.
 - **Verify the negative.** After acting, assert that the things that should have survived did —
   config files, protected directories — and report it. This turns "I think it worked" into
   evidence, and catches an over-broad rule on the first run rather than the hundredth.
+- **What you keep stays kept.** An item Deguffer can recognise wherever it is stored (a Playwright
+  browser build, an Azure Functions Core Tools release, a superseded application version) can be put
+  on a keep list from its row's Contents tab. A kept item is left out of every clean, checked after
+  each one to be still there, and listed on the Settings page until you release it. The list is
+  stored apart from the remembered selection, because a lost entry only offers something again,
+  where a misread tick would pre-select it.
 - **A locked file is the OS protecting live state.** Access-denied is skipped, not escalated.
 - **Long paths are mandatory.** NuGet and Node trees routinely exceed `MAX_PATH`, and truncating
   there is the likeliest cause of a silent partial deletion.

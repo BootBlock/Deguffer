@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:views="using:Deguffer.App.Views"
+    xmlns:configuration="using:Deguffer.Core.Configuration"
     Background="Transparent">
 
     <ScrollViewer Padding="28,8,28,28">
@@ -226,6 +227,56 @@
                                     Tag="{x:Bind}"
                                     Click="OnRemoveSourceRoot"
                                     AutomationProperties.Name="Remove source folder" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- The one setting on this page that only ever narrows what Deguffer deletes. Listed in
+                 full, including items no scan finds any more, so it never becomes a protection
+                 nobody can see. Items are added where they are seen, on the Storage page. -->
+            <TextBlock Text="Keep list" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <views:SettingsRow Glyph="&#xE718;"
+                               Title="Items Deguffer never offers"
+                               Description="Keep an item from the Contents tab of its row on the Storage page. Deguffer leaves a kept item out of every clean, and checks after each one that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
+
+            <TextBlock Text="Nothing is kept."
+                       Style="{StaticResource SecondaryText}"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Margin="4,0,0,0"
+                       Visibility="{x:Bind ViewModel.HasNoKeptItems, Mode=OneWay}" />
+
+            <ItemsControl ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="configuration:KeptItem">
+                        <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
+                              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                              BorderThickness="1"
+                              CornerRadius="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="{x:Bind Item.Name}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind Item.Name}" />
+                                <TextBlock Text="{x:Bind ProviderName}"
+                                           Style="{StaticResource SecondaryText}"
+                                           FontSize="12"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Content="Stop keeping"
+                                    Tag="{x:Bind}"
+                                    Click="OnReleaseKeptItem"
+                                    AutomationProperties.Name="Stop keeping"
+                                    AutomationProperties.HelpText="{x:Bind Item.Name}" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

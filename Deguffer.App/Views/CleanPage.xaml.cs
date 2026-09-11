@@ -26,6 +26,7 @@ public sealed partial class CleanPage : Page
             CleanupPlanner.CreateDefault(App.Preferences),
             UserEnvironment.Current,
             App.Selections,
+            App.Keeps,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         InitializeComponent();
@@ -69,6 +70,10 @@ public sealed partial class CleanPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyPreferences();
+
+        // Settings can release a kept item while this page is away, and a row still showing it as
+        // kept would leave the user unable to tick something they have just asked to be offered.
+        ViewModel.ApplyKeepList();
         App.Preferences.Changed += OnPreferencesChanged;
     }
 
@@ -236,7 +241,7 @@ public sealed partial class CleanPage : Page
             RequestedTheme = ActualTheme,
 
             Title = finding.Name,
-            Content = new ProviderInfoView(finding),
+            Content = new ProviderInfoView(finding, ViewModel.ToggleKeep),
             CloseButtonText = "Close",
             DefaultButton = ContentDialogButton.Close,
 

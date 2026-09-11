@@ -19,9 +19,14 @@ public sealed partial class StepViewModel : ObservableObject
     /// actually be acted on, so the caller states the row's intent and the answer to "may this be
     /// ticked?" stays in one place — see <see cref="CanBeSelected"/>.
     /// </param>
-    public StepViewModel(CleanupStep step, bool preSelect)
+    /// <param name="isKept">
+    /// Whether the keep list took this step out of the row's plan. Set before the tick, because a kept
+    /// item is never pre-selected, whatever the row says.
+    /// </param>
+    public StepViewModel(CleanupStep step, bool preSelect, bool isKept)
     {
         Step = step;
+        IsKept = isKept;
         IsSelected = preSelect && CanBeSelected;
     }
 
@@ -29,6 +34,30 @@ public sealed partial class StepViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
+
+    /// <summary>
+    /// Whether this item is on the user's keep list. Observable, because the user keeps and releases
+    /// it from the dialog it is listed in, and the checkbox beside it has to follow.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanBeSelected))]
+    [NotifyPropertyChangedFor(nameof(KeepActionLabel))]
+    [NotifyPropertyChangedFor(nameof(KeepActionName))]
+    public partial bool IsKept { get; set; }
+
+    /// <summary>What the item is apart from its path, where its provider can say. See <see cref="ItemIdentity"/>.</summary>
+    public ItemIdentity? Identity => (Step as DeleteStep)?.Identity;
+
+    /// <summary>Whether this item can go on the keep list at all, which needs an identity to match it by.</summary>
+    public bool CanBeKept => Identity is not null;
+
+    public string KeepActionLabel => IsKept ? "Stop keeping" : "Keep";
+
+    /// <summary>
+    /// What a screen reader calls the keep button. Every row's button reads "Keep", so without the item
+    /// in its name a reader hears the same word down the whole list.
+    /// </summary>
+    public string KeepActionName => $"{KeepActionLabel} {Description}";
 
     public string Description => Step.Description;
 
@@ -49,14 +78,17 @@ public sealed partial class StepViewModel : ObservableObject
 
     /// <summary>
     /// Nothing to reclaim means nothing to choose, and neither does a step this process has no
-    /// rights to carry out.
+    /// rights to carry out, nor an item the user keeps.
     ///
     /// Pairing the step's declaration with the token the app is actually running under happens here
     /// rather than in Core, because the declaration is a fact about the location and the token is a
     /// fact about this process. A plan that described the disk differently depending on who asked
     /// would be a worse thing to have than one line of conjunction in the shell.
+    ///
+    /// A kept item is not in the row's plan at all, so a tick on it would count towards the selected
+    /// total and remove nothing. Refusing it here is what the row-wide toggle and the roll-up read.
     /// </summary>
-    public bool CanBeSelected => Step.EstimatedBytes > 0 && !NeedsElevationFirst;
+    public bool CanBeSelected => Step.EstimatedBytes > 0 && !NeedsElevationFirst && !IsKept;
 
     /// <summary>
     /// Whether this step is one Deguffer can see and cannot remove as it is currently running.

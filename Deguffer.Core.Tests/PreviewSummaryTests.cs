@@ -31,6 +31,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.UnreadableRoot)]
     [InlineData(FindingStatus.NotExamined)]
     [InlineData(FindingStatus.RecentContentHeldBack)]
+    [InlineData(FindingStatus.OnKeepList)]
     [InlineData(FindingStatus.AwaitingSourceFolders)]
     public void DoesNotCallTheCachesClearOverARowThatIsNotClear(FindingStatus unclear)
     {
@@ -45,6 +46,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.UnreadableRoot, "would not let Deguffer read")]
     [InlineData(FindingStatus.NotExamined, "were not examined")]
     [InlineData(FindingStatus.RecentContentHeldBack, "not old enough")]
+    [InlineData(FindingStatus.OnKeepList, "on your keep list")]
     [InlineData(FindingStatus.AwaitingSourceFolders, "need a source folder")]
     public void NamesTheCauseWhenOnlyOneKindOfRowIsUnclear(FindingStatus unclear, string expected)
     {

@@ -74,7 +74,7 @@ public static class PreviewSummary
         }
 
         // Every row measures zero from here on, which is not the same as every row being clear.
-        // Four states measure zero for a reason of their own and say so in their own words; what is
+        // Five states measure zero for a reason of their own and say so in their own words; what is
         // left after removing the two that are genuinely nothing to act on is the reason the bar
         // has to agree with.
         present.Remove(FindingStatus.AlreadyClear);
@@ -105,6 +105,8 @@ public static class PreviewSummary
         // would describe a setting the reader may never have switched on.
         FindingStatus.RecentContentHeldBack =>
             "Nothing to reclaim, and some of these hold only files that are not old enough to remove.",
+        FindingStatus.OnKeepList =>
+            "Nothing to reclaim, and some of these hold only items on your keep list.",
         FindingStatus.AwaitingSourceFolders =>
             "Nothing to reclaim, and some of these locations need a source folder before Deguffer "
             + "can look.",

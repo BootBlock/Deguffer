@@ -41,9 +41,14 @@ public enum TargetKind
 /// Whether removing this needs administrator rights. A declaration about the location, carried onto
 /// the step so a plan can say plainly what it can see and cannot remove.
 /// </param>
+/// <param name="Identity">
+/// What the item is apart from its path, for a provider whose items can be put on the keep list.
+/// See <see cref="Execution.ItemIdentity"/>.
+/// </param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
     DateTime? LastWritten = null,
     TargetKind Kind = TargetKind.Directory,
-    bool RequiresElevation = false);
+    bool RequiresElevation = false,
+    Execution.ItemIdentity? Identity = null);

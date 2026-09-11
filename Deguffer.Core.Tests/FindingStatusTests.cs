@@ -22,6 +22,7 @@ public sealed class FindingStatusTests
     [InlineData(FindingStatus.UnreadableRoot)]
     [InlineData(FindingStatus.NotExamined)]
     [InlineData(FindingStatus.RecentContentHeldBack)]
+    [InlineData(FindingStatus.OnKeepList)]
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
     public void OnlyTheClearStateSaysAlreadyClear(FindingStatus status)

@@ -47,6 +47,12 @@ public enum FindingStatus
     /// </summary>
     RecentContentHeldBack,
 
+    /// <summary>
+    /// A location whose items are on the user's keep list. It measures zero because the user asked
+    /// for that, and it is full.
+    /// </summary>
+    OnKeepList,
+
     /// <summary>Examined, and there is genuinely nothing in it.</summary>
     AlreadyClear,
 
@@ -65,10 +71,10 @@ public static class FindingStatusExtensions
     /// <summary>
     /// The two or three words the row states beside its size.
     ///
-    /// <para>"Already clear" is a claim about the folder, and the three states above it must not be
+    /// <para>"Already clear" is a claim about the folder, and the four states above it must not be
     /// reported as that: a folder Windows would not let Deguffer list, a location Deguffer declined
-    /// to look at, and a cache held back by the guard window. Each of the three measures zero and
-    /// none of them is clear.</para>
+    /// to look at, a cache held back by the guard window, and a location holding what the user keeps.
+    /// Each of the four measures zero and none of them is clear.</para>
     ///
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
@@ -87,6 +93,7 @@ public static class FindingStatusExtensions
         FindingStatus.UnreadableRoot => "Could not be read",
         FindingStatus.NotExamined => "Not examined",
         FindingStatus.RecentContentHeldBack => "Nothing old enough",
+        FindingStatus.OnKeepList => "On your keep list",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.

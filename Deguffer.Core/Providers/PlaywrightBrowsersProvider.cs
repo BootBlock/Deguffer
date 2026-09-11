@@ -217,7 +217,11 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             // re-extends at the point of use.
             targets.Add(new DeletionTarget(
                 LongPath.Display(child.FullName),
-                $"Playwright browser build '{child.Name}', re-downloaded by 'playwright install'."));
+                $"Playwright browser build '{child.Name}', re-downloaded by 'playwright install'.",
+
+                // The build's own name is the build, wherever LocationVariable puts the cache, so a
+                // kept build stays kept when the user moves it.
+                Identity: new ItemIdentity(child.Name, child.Name)));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);

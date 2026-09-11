@@ -47,6 +47,13 @@ public partial class App : Application
         new(new SelectionStore(UserEnvironment.Current));
 
     /// <summary>
+    /// What the user keeps, shared for the same reason: the Storage page builds its rows against it
+    /// and Settings releases from it, and two instances would disagree about what is protected.
+    /// </summary>
+    public static KeepService Keeps { get; } =
+        new(new KeepStore(UserEnvironment.Current));
+
+    /// <summary>
     /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no
     /// route to its own window, and a picker without an owner handle throws rather than opening.
     /// </summary>

@@ -64,7 +64,7 @@
                           MinWidth="0"
                           VerticalAlignment="Center"
                           IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                          IsEnabled="{x:Bind CanBeSelected}"
+                          IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                           AutomationProperties.Name="{x:Bind Name}"
                           AutomationProperties.HelpText="{x:Bind WhatHappensOnNextUse}" />
 
@@ -79,8 +79,8 @@
                            ToolTipService.ToolTip="{x:Bind WhatHappensOnNextUse}" />
 
                 <TextBlock Grid.Column="2"
-                           Text="{x:Bind StatusLabel}"
-                           Visibility="{x:Bind CannotBeSelected}"
+                           Text="{x:Bind StatusLabel, Mode=OneWay}"
+                           Visibility="{x:Bind CannotBeSelected, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"
                            FontSize="12"
                            TextWrapping="NoWrap"
@@ -104,8 +104,8 @@
                                 AutomationProperties.HelpText="{x:Bind TierExplanation}" />
 
                 <TextBlock Grid.Column="4"
-                           Text="{x:Bind SizeLabel}"
-                           Visibility="{x:Bind HasSizeToShow}"
+                           Text="{x:Bind SizeLabel, Mode=OneWay}"
+                           Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
                            Style="{StaticResource Figure}"
                            FontSize="15"
                            TextAlignment="Right"
@@ -126,7 +126,7 @@
                               MinWidth="0"
                               Margin="0,2,0,0"
                               IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                              IsEnabled="{x:Bind CanBeSelected}"
+                              IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                               AutomationProperties.Name="{x:Bind Name}" />
 
                     <StackPanel Grid.Column="1" Spacing="6">
@@ -187,10 +187,10 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
-                        <TextBlock Text="{x:Bind SizeLabel}"
+                        <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}"
                                    HorizontalAlignment="Right" />
-                        <TextBlock Text="{x:Bind StatusLabel}"
+                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
                                    Style="{StaticResource SecondaryText}"
                                    FontSize="11"
                                    TextAlignment="Right"

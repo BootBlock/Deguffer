@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -21,6 +22,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly CleanupPlanner _planner;
     private readonly IUserEnvironment _environment;
     private readonly SelectionService _selections;
+    private readonly KeepService _keeps;
     private readonly Func<IConfirmationPrompt> _prompt;
 
     /// <summary>
@@ -39,6 +41,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// A scan re-plans from scratch, so without this every preview hands the user the same list of
     /// decisions to make again.
     /// </param>
+    /// <param name="keeps">
+    /// What the user keeps, which every row is built against and which the rows' own Contents tabs
+    /// change.
+    /// </param>
     /// <param name="prompt">
     /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
     /// not exist while the view-model is being constructed.
@@ -47,11 +53,13 @@ public sealed partial class CleanViewModel : ObservableObject
         CleanupPlanner planner,
         IUserEnvironment environment,
         SelectionService selections,
+        KeepService keeps,
         Func<IConfirmationPrompt> prompt)
     {
         _planner = planner;
         _environment = environment;
         _selections = selections;
+        _keeps = keeps;
         _prompt = prompt;
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
@@ -369,6 +377,17 @@ public sealed partial class CleanViewModel : ObservableObject
         // the one that executes — equal by value today, but not a property to depend on silently.
         var selected = selectedRows.Select(f => f.SelectedFinding).ToList();
 
+        // Every row left out of the run still owes it the proof that its kept items are standing
+        // afterwards (§5.6). A row whose every item is kept can never be ticked, so this is the only
+        // route by which those items are checked at all. Such a plan destroys nothing, so it is never
+        // asked about and never swept into the blanket confirmation; the planner runs it after every
+        // deletion.
+        var proving = Findings
+            .Where(f => !f.IsSelected)
+            .Select(f => f.KeepListFinding)
+            .OfType<Finding>()
+            .ToList();
+
         // Read once for the whole run. The preference can change under a live page — Settings is a
         // navigation away — and asking under one rule then executing under another would either
         // demand a phrase nobody was shown a box for, or skip an ask the run then relies on.
@@ -440,7 +459,7 @@ public sealed partial class CleanViewModel : ObservableObject
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
-                        authorised, confirmations, requireTypedPhrase, progress, completed, ct),
+                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, ct),
                     ct);
             }
             finally
@@ -610,7 +629,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private void AddRowInSizeOrder(Finding finding)
     {
-        var row = new FindingViewModel(finding, _selections.Memory);
+        var row = new FindingViewModel(finding, _selections.Memory, _keeps.Current);
 
         // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
@@ -622,7 +641,9 @@ public sealed partial class CleanViewModel : ObservableObject
         row.SelectionChanged += OnRowSelectionChanged;
 
         var index = 0;
-        while (index < Findings.Count && Findings[index].Finding.EstimatedBytes >= finding.EstimatedBytes)
+        // The row's own figure rather than the finding's, so a kept item does not place a row by
+        // space it will never offer.
+        while (index < Findings.Count && Findings[index].Finding.EstimatedBytes >= row.Finding.EstimatedBytes)
         {
             index++;
         }
@@ -636,11 +657,13 @@ public sealed partial class CleanViewModel : ObservableObject
     /// and everything else is read against it. Recomputed on every insert because rows arrive one
     /// provider at a time (§5.5) and the largest is not known until the last one lands.
     ///
-    /// The list is held in descending size order, so the first row is the reference.
+    /// The largest is asked for rather than taken from the first row. Keeping an item shrinks its row
+    /// where it stands, and the list is not reshuffled under the user for that, so the first row is
+    /// not always the largest.
     /// </summary>
     private void UpdateShares()
     {
-        var largest = Findings.Count > 0 ? Findings[0].Finding.EstimatedBytes : 0;
+        var largest = Findings.Count > 0 ? Findings.Max(f => f.Finding.EstimatedBytes) : 0;
 
         foreach (var row in Findings)
         {
@@ -790,6 +813,63 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // The bar states what is ticked, so it has to follow the ticking. Reported only at the end
         // of a preview, the figure was frozen at preview time and went stale on the first click.
+        if (_barShowsPreviewSummary)
+        {
+            ReportPreviewSummary();
+        }
+    }
+
+    /// <summary>
+    /// Keep one item, or stop keeping it, from its row's Contents tab.
+    ///
+    /// <para>The list is then applied to every row rather than this one alone, so the page's totals
+    /// and its sentence move with the row. A change that could not be saved is said out loud, because
+    /// a kept item silently offered again after a restart is the failure the keep list exists to
+    /// prevent.</para>
+    /// </summary>
+    public void ToggleKeep(FindingViewModel row, StepViewModel step)
+    {
+        if (step.Identity is not { } identity)
+        {
+            // The button is shown only where there is an identity to keep the item by.
+            return;
+        }
+
+        var providerId = row.Finding.Provider.Id;
+        var keeping = !step.IsKept;
+
+        var saved = keeping
+            ? _keeps.Keep(new KeptItem(providerId, row.Name, identity))
+            : _keeps.Release(providerId, identity.Key);
+
+        ApplyKeepList();
+
+        if (!saved)
+        {
+            Report(
+                keeping
+                    ? $"Kept {identity.Name} for now, but Deguffer could not save the keep list, so it will be "
+                      + "offered again after a restart. Check that %LOCALAPPDATA%\\Deguffer is writable."
+                    : $"{identity.Name} is still on your keep list: Deguffer could not save the change.",
+                InfoBarSeverity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Bring every row up to date with the keep list, which the Settings page can change while this
+    /// page is away.
+    /// </summary>
+    public void ApplyKeepList()
+    {
+        foreach (var row in Findings)
+        {
+            row.ApplyKeepList(_keeps.Current);
+        }
+
+        RefilterRows();
+        UpdateShares();
+        UpdateSelectionTotal();
+
         if (_barShowsPreviewSummary)
         {
             ReportPreviewSummary();

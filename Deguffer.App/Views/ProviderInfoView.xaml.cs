@@ -32,16 +32,23 @@ public sealed partial class ProviderInfoView : UserControl
 
     private readonly ObservableCollection<StepViewModel> _steps = [];
     private readonly ObservableCollection<string> _notes = [];
+    private readonly Action<FindingViewModel, StepViewModel> _toggleKeep;
 
     private bool _contentsAsked;
+    private bool _notesListed;
 
     /// <summary>
     /// Assigned before InitializeComponent, so no x:Bind can evaluate against a null model whatever
     /// the framework's initialisation order does next — the same order CleanPage relies on.
     /// </summary>
-    public ProviderInfoView(FindingViewModel finding)
+    /// <param name="toggleKeep">
+    /// Keeps or releases one item. The page's rather than this control's, because the keep list is
+    /// shared by every row and the page's totals move with it.
+    /// </param>
+    public ProviderInfoView(FindingViewModel finding, Action<FindingViewModel, StepViewModel> toggleKeep)
     {
         Finding = finding;
+        _toggleKeep = toggleKeep;
         InitializeComponent();
 
         // Bound here rather than in markup because the two collections are this control's own
@@ -49,14 +56,50 @@ public sealed partial class ProviderInfoView : UserControl
         // the sake of one x:Bind that nothing outside this file reads.
         StepList.ItemsSource = _steps;
         NoteList.ItemsSource = _notes;
+
+        // The row outlives the dialog, so the subscription is bound to the dialog being on screen.
+        Loaded += (_, _) => Finding.PropertyChanged += OnFindingChanged;
+        Unloaded += (_, _) => Finding.PropertyChanged -= OnFindingChanged;
     }
 
     public FindingViewModel Finding { get; }
 
+    private void OnKeepClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: StepViewModel step })
+        {
+            _toggleKeep(Finding, step);
+        }
+    }
+
+    /// <summary>
+    /// The step rows follow a keep or a release on their own, through their bindings. The notes are a
+    /// copy, and keeping an item adds a sentence to them, so they are listed again.
+    /// </summary>
+    private void OnFindingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_notesListed && e.PropertyName is null or "" or nameof(FindingViewModel.Notes))
+        {
+            ListNotes();
+        }
+    }
+
+    private void ListNotes()
+    {
+        _notes.Clear();
+
+        foreach (var note in Finding.Notes)
+        {
+            _notes.Add(note);
+        }
+
+        _notesListed = true;
+    }
+
     /// <summary>
     /// The Contents tab pays for itself only when it is opened, which is the whole reason the two
-    /// questions are on separate tabs. Filled once: the plan behind it does not change while the
-    /// dialog is up, and re-filling would duplicate every row.
+    /// questions are on separate tabs. The steps are filled once: a keep or a release changes a
+    /// step's state rather than the set of steps, and re-filling would duplicate every row.
     /// </summary>
     private async void OnSectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -92,10 +135,7 @@ public sealed partial class ProviderInfoView : UserControl
             }
         }
 
-        foreach (var note in Finding.Notes)
-        {
-            _notes.Add(note);
-        }
+        ListNotes();
 
         filled.Cancel();
 

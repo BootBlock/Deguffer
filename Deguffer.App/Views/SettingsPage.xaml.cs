@@ -1,4 +1,5 @@
 using Deguffer.App.ViewModels;
+using Deguffer.Core.Configuration;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
@@ -9,7 +10,7 @@ public sealed partial class SettingsPage : Page
 {
     public SettingsPage()
     {
-        ViewModel = new SettingsViewModel(App.Preferences, App.SourceRoots);
+        ViewModel = new SettingsViewModel(App.Preferences, App.SourceRoots, App.Keeps);
         InitializeComponent();
     }
 
@@ -48,6 +49,14 @@ public sealed partial class SettingsPage : Page
         if (sender is FrameworkElement { Tag: string root })
         {
             ViewModel.RemoveSourceRoot(root);
+        }
+    }
+
+    private void OnReleaseKeptItem(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: KeptItem item })
+        {
+            ViewModel.ReleaseKeptItem(item);
         }
     }
 }
