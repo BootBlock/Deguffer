@@ -295,7 +295,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     /// only where it holds a path the command was sent to clear, and the three that hold
     /// <c>Data</c> — the <c>FileHistory</c> folder, this account's and this machine's — are the only
     /// such folders here. So another account or machine emptied in place is caught, and so is either
-    /// catalogue.</para>
+    /// catalogue, wherever this account may list the folder in question.</para>
     ///
     /// <para><b>What it cannot prove.</b> The over-reach this command could realistically have is
     /// trimming another account's old versions the way it trims this one's, and that leaves the
@@ -303,6 +303,12 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     /// question about content catches it. Only a comparison of figures would, and the figures of a
     /// folder Deguffer does not own change for ordinary reasons between the preview and the
     /// clean.</para>
+    ///
+    /// <para>Nor can it prove anything about emptying a folder this account may not list.
+    /// <see cref="DirectoryContent"/> records such a folder as holding nothing, so its emptying is
+    /// never asked about, and a subfolder it may not list reads as content however much went from
+    /// around it. Both withhold an alarm rather than raise a false one, which is §5.3's direction
+    /// for a refusal.</para>
     /// </summary>
     /// <param name="unreadable">
     /// Whether a folder refused to be listed, so its children were never classified and the

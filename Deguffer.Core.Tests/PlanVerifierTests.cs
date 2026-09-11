@@ -299,10 +299,14 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
-    /// The case the exemption is for. A tool's cache and the root holding it are protected, and the
-    /// command is sent to clear exactly that cache, so both can end the run holding nothing. The
-    /// sibling beside the cache is the negative: the tool was never sent there, and it still holds
-    /// what it held.
+    /// The case the exemption is for. A tool's cache and the root holding it are both protected, and
+    /// the command is sent to clear exactly that cache, so both end the run holding nothing. Each of
+    /// them holds the path the tool was sent to, which is the plan's own declared work.
+    ///
+    /// <para>The cache and the root are separate assertions because they exercise different halves
+    /// of the containment: the cache is the probed path itself, and the root sits above it. The
+    /// negative, a folder beside the cache that the tool was never sent to, is
+    /// <see cref="ACommandStepDoesNotExcuseEmptyingAFolderItNeverDeclared"/>.</para>
     /// </summary>
     [Fact]
     public void AFolderHoldingACommandsDeclaredReachMayEndTheRunEmpty()
@@ -310,18 +314,18 @@ public sealed class PlanVerifierTests : IDisposable
         var root = _temp.CreateDirectory("tool");
         var cache = _temp.CreateDirectory("tool", "cache");
         var entry = _temp.CreateFile(8, "tool", "cache", "entry.bin");
-        var config = _temp.CreateDirectory("tool", "config");
-        _temp.CreateFile(8, "tool", "config", "settings.json");
 
-        var plan = Plan([Evict(cache)], ProtectHolding(root), ProtectHolding(cache), ProtectHolding(config));
+        var plan = Plan([Evict(cache)], ProtectHolding(root), ProtectHolding(cache));
 
         // Emptied in place, which is the shape a tool's own clear commonly leaves.
         File.Delete(entry);
 
+        // The shape the exemption has to excuse, asserted rather than assumed: nothing is left
+        // anywhere under the root.
+        Assert.False(DirectoryContent.IsPresent(root));
+
         Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, root));
         Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, cache));
-        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, config));
-        Assert.True(File.Exists(Path.Combine(config, "settings.json")));
     }
 
     /// <summary>
