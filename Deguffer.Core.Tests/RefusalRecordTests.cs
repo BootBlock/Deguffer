@@ -73,6 +73,24 @@ public sealed class RefusalRecordTests : IDisposable
     }
 
     /// <summary>
+    /// One place named twice, in two spellings, is kept once, in one spelling. Kept twice, the
+    /// preview would take its size out of the estimate twice, and the clamp at zero would hide that
+    /// the figure had gone too low.
+    /// </summary>
+    [Fact]
+    public void KeepsEachPlaceOnceInOneSpelling()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var place = _temp.CreateDirectory("temp", "profile");
+
+        RefusalRecord.For(_environment).Replace(
+            step, [place, place + Path.DirectorySeparatorChar, LongPath.Extended(place)]);
+
+        Assert.Equal([place], RefusalRecord.For(_environment).At(step));
+        Assert.Equal([place], new RefusalRecord(_environment).At(step));
+    }
+
+    /// <summary>
     /// A location that has gone is never planned again, so nothing would ever clear its entry.
     /// </summary>
     [Fact]

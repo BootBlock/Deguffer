@@ -203,27 +203,6 @@ public sealed class RefusalCheckTests : IDisposable
     }
 
     /// <summary>
-    /// One place named twice, in two spellings, is one place. Counting it twice would take its size
-    /// out of the estimate twice, and the clamp at zero would hide that the figure had gone too low.
-    /// </summary>
-    [Fact]
-    public void CountsAPlaceOnceHoweverOftenAndInWhateverSpellingTheRecordNamesIt()
-    {
-        var step = _temp.CreateDirectory("temp");
-        var profile = _temp.CreateDirectory("temp", "profile");
-        var denied = _temp.CreateFile(4096, "temp", "profile", "Cookies");
-
-        var finding = RefusalCheck.Of(
-            new ClearDirectoryStep(step, "Scratch"),
-            [profile, profile + Path.DirectorySeparatorChar, LongPath.Extended(profile)],
-            MinimumAge.Off,
-            Refusing((denied, RefusalReason.Denied)),
-            default);
-
-        Assert.Equal(new RefusalTally(1, 4096), finding.Refused.Denied);
-    }
-
-    /// <summary>
     /// A place nested inside a spared entry is inside that entry, whatever the spared set matches by
     /// name. Only the step itself or an entry directly inside it is the shape the removal records, so a
     /// deeper place is not asked about at all — and a live program's files are not opened for deletion.

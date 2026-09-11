@@ -74,22 +74,20 @@ internal static class RefusalCheck
 
     /// <summary>
     /// The recorded places that have the shape the removal records: the step's own path, or an entry
-    /// directly inside it — each once, in one spelling.
+    /// directly inside it.
     ///
-    /// <para>The record is a file on the user's disk, so nothing in it is trusted to have that shape.
-    /// A prefix test is not enough: <c>&lt;step&gt;\x\..\..\Documents</c> starts with the step's path
-    /// and resolves outside it. A place nested deeper would be counted a second time under its parent,
-    /// and could sit inside a spared entry that the spared set only matches by its own path. Resolving
-    /// first, and then requiring the step to be the place or the directory holding it, closes all
-    /// three.</para>
+    /// <para>The record resolves every place it reads and keeps each once — see
+    /// <see cref="RefusalRecord"/> — but it cannot know which step a place belongs under, so that is
+    /// asked here. A prefix test is not enough: <c>&lt;step&gt;\x\..\..\Documents</c> starts with the
+    /// step's path and resolves outside it. A place nested deeper would be counted a second time under
+    /// its parent, and could sit inside a spared entry the spared set only matches by its own path.
+    /// Requiring the step to be the place, or the directory holding it, closes all three — and any
+    /// other spelling of a place fails it, which leaves bytes in the estimate rather than taking them
+    /// out.</para>
     /// </summary>
     private static IEnumerable<string> PlacesOf(string root, IReadOnlyList<string> recorded) =>
-        recorded
-            .Select(LongPath.Configured)
-            .OfType<string>()
-            .Where(place => place.Equals(root, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(Path.GetDirectoryName(place), root, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+        recorded.Where(place => place.Equals(root, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Path.GetDirectoryName(place), root, StringComparison.OrdinalIgnoreCase));
 
     private static Refusals Check(
         string extended,
