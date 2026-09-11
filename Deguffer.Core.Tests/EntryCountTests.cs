@@ -140,6 +140,23 @@ public sealed class EntryCountTests : IDisposable
         Assert.Equal(0, result.Size.Logical);
     }
 
+    /// <summary>
+    /// The guard applies to a link by the link's own timestamp, as the removal applies it. A link made
+    /// a moment ago is kept, so the folder holding it stays, and neither is counted.
+    /// </summary>
+    [Fact]
+    public async Task ALinkTheGuardKeepsKeepsItsFolderOutOfTheCount()
+    {
+        var outside = _temp.CreateDirectory("elsewhere");
+        var cache = _temp.CreateDirectory("cache");
+        Directory.CreateSymbolicLink(Path.Combine(cache, "linked"), outside);
+
+        var result = await Walk.MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(0, result.Size.Entries);
+        Assert.True(result.WithheldRecent);
+    }
+
     [Fact]
     public void TheIndexCountsTheFolderEveryFolderInItEveryFileAndEveryFolderLink()
     {

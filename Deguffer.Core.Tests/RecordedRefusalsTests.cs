@@ -136,6 +136,31 @@ public sealed class RecordedRefusalsTests : IDisposable
         Assert.False(step.RemovesSomething, "a leftover Windows will not let go of was offered as removable");
     }
 
+    /// <summary>
+    /// A folder cleared in place stays whatever is refused, and its own entry was never in the count,
+    /// so only what is inside it comes out.
+    /// </summary>
+    [Fact]
+    public void TakesOnlyWhatIsInsideAFolderClearedInPlaceOutOfTheCount()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var held = _temp.CreateFile(64, "scratch", "session", "held.txt");
+        _temp.CreateFile(32, "scratch", "session", "free.txt");
+
+        Record.Replace(scratch, [Path.Combine(scratch, "session")]);
+
+        var plan = Plan(new ClearDirectoryStep(scratch, "Scratch files") { Estimated = new ScanSize(96, 96, Entries: 3) });
+
+        var applied = RecordedRefusals.Apply(
+            plan,
+            Record,
+            new RefusingFileSystem(WindowsFileSystem.Default, new Dictionary<string, RefusalReason> { [held] = RefusalReason.InUse }),
+            default);
+
+        // Taken: free.txt. Left: held.txt and session. The scratch folder itself was never counted.
+        Assert.Equal(1, Assert.Single(applied.Steps).Estimated.Entries);
+    }
+
     private static CleanupPlan Plan(CleanupStep step) => new()
     {
         ProviderId = "test",
