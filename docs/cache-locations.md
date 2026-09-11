@@ -2132,11 +2132,17 @@ external disk with the rest of your files on it — but Deguffer names the folde
 the whole drive, so those are the ones the check covers.
 
 **What the check proves, exactly.** The command is Windows' own, so what it reaches is Windows'
-decision rather than Deguffer's, and §5.6 is the answer to that: after the run, each folder above
-must still be there. A cleanup that removed one outright is reported as a failure. A cleanup that
-left a folder standing and took the versions out of it is not — Deguffer withholds that stronger
-judgement from any step that hands a tool its own command, because §5.1 gives that command a reach
-Deguffer cannot state. That applies to every such step in the app, not to this one alone.
+decision rather than Deguffer's, and §5.6 is the answer to that. After the run, each folder above
+must still be there, and each one that held a file must still hold a file somewhere inside it. A
+cleanup that removed another account's backup is reported as a failure, and so is one that left
+the folders standing and took every file out of them. The folders that lead down to this machine's
+saved versions are the exception to the second half, because Windows was sent there: they may end
+the run holding nothing when every version in them was old enough to go.
+
+**What it cannot prove.** A cleanup that trimmed another account's old versions the way it trims
+yours would leave that account's newest versions and its catalogue behind. The folder still holds
+files, so the check passes. Only a comparison of sizes could see it, and the size of a folder
+Deguffer does not own changes between a preview and a clean for ordinary reasons.
 
 ### What it costs you
 

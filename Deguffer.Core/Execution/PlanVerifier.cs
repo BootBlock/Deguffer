@@ -87,22 +87,34 @@ public static class PlanVerifier
     /// present, the negative passes, and what it passed over is another person's deleted files.
     /// See <see cref="ProtectedPath.HeldContentBefore"/>.</para>
     ///
-    /// <para><b>The run's own targets are the exemption, and it is the same reasoning
-    /// <see cref="HoldsATarget"/> already carries.</b> A protected path is often the parent of a
+    /// <para><b>What the run named is the exemption, and it is the reasoning
+    /// <see cref="HoldsAnyOf"/> already carries.</b> A protected path is often the parent of a
     /// target — a volume's <c>$Recycle.Bin</c> is protected and this account's bin inside it is
     /// removed — so on a machine with one account that parent legitimately ends the run empty.
     /// Reading that as an alarm would fire on the ordinary case and teach the reader to ignore it.
     /// A directory holding nothing this run named, that held something before and holds nothing now,
     /// has no such explanation.</para>
     ///
-    /// <para>Asked only of a directory that held something, so nothing here reads a path that was
-    /// empty to begin with, and nothing reads a file.</para>
+    /// <para><b>A tool's own command names where it is sent.</b> Its
+    /// <see cref="RunCommandStep.MeasuredPaths"/> are the plan's statement of what the tool will
+    /// clear, so a tool root holding its cache can end the run empty for the reason above, and so can
+    /// the cache itself. See <see cref="RunReach.ProbedPaths"/>.</para>
+    ///
+    /// <para><b>An unbounded reach is not an exemption.</b> §5.1 gives a command a reach nobody can
+    /// state, and that makes an emptied folder the run's to answer for exactly as it makes a missing
+    /// one. Reading it as a reason to excuse every emptied folder would switch this check off on the
+    /// runs where Deguffer controls least, and a File History drive holding other accounts' backups
+    /// is one of them.</para>
+    ///
+    /// <para>Content is asked where it lives rather than at the top level; see
+    /// <see cref="DirectoryContent"/>. Asked only of a directory that held something, so nothing here
+    /// reads a path that was empty to begin with, and nothing reads a file.</para>
     /// </summary>
     private static bool WasEmptied(ProtectedPath protectedPath, RunReach reach) =>
         protectedPath.HeldContentBefore
-        && !LongPath.HoldsAnything(protectedPath.Path)
-        && !reach.Unbounded
-        && !HoldsATarget(protectedPath.Path, reach.TargetedPaths);
+        && !DirectoryContent.IsPresent(protectedPath.Path)
+        && !HoldsAnyOf(protectedPath.Path, reach.TargetedPaths)
+        && !HoldsAnyOf(protectedPath.Path, reach.ProbedPaths);
 
     /// <summary>
     /// Whether a path that has gone missing went missing for a reason nothing in this run can
@@ -155,7 +167,7 @@ public static class PlanVerifier
         // targeted folder means a targeted path, which the line above has already answered.
         return Path.GetDirectoryName(Display(path)) is { Length: > 0 } parent
             && !LongPath.DirectoryExists(parent)
-            && !HoldsATarget(parent, reach.TargetedPaths);
+            && !HoldsAnyOf(parent, reach.TargetedPaths);
     }
 
     /// <summary>
@@ -169,8 +181,9 @@ public static class PlanVerifier
         targets.Any(target => LongPath.Contains(Display(target), Display(path)));
 
     /// <summary>
-    /// Whether this run deleted anything inside <paramref name="folder"/>, which is the question
-    /// <see cref="IsTargeted"/> asks the other way round.
+    /// Whether any of <paramref name="paths"/> sits inside <paramref name="folder"/>, which is the
+    /// question <see cref="IsTargeted"/> asks the other way round. Asked of the run's targets, it is
+    /// whether this run deleted anything inside the folder.
     ///
     /// <para>It is what stops the outside reading excusing the plainest over-reach there is:
     /// execution that goes one directory higher than the plan named. A step targeting
@@ -178,8 +191,8 @@ public static class PlanVerifier
     /// missing, its folder missing, and neither of them under any target — every condition for
     /// "something else did it", about a directory this run was working inside.</para>
     /// </summary>
-    private static bool HoldsATarget(string folder, IReadOnlyList<string> targets) =>
-        targets.Any(target => LongPath.Contains(Display(folder), Display(target)));
+    private static bool HoldsAnyOf(string folder, IReadOnlyList<string> paths) =>
+        paths.Any(path => LongPath.Contains(Display(folder), Display(path)));
 
     /// <summary>
     /// A path in the one form the comparisons above are valid in: no extended-length prefix, and no

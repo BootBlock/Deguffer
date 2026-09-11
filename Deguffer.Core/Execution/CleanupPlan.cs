@@ -14,7 +14,9 @@ namespace Deguffer.Core.Execution;
 /// destroyed, so only the ones that existed constitute evidence.
 /// </param>
 /// <param name="HeldContentBefore">
-/// Whether it was a directory holding at least one entry when the plan was made.
+/// Whether it was a directory with content anywhere below it when the plan was made: a file, a link,
+/// or a directory that would not be listed. A folder holding only empty folders does not count; see
+/// <see cref="DirectoryContent"/> for why.
 ///
 /// <para><b>Existence stopped being enough when a removal stopped removing.</b> Every deletion in
 /// this product used to take the directory with it, so an over-broad rule made a protected sibling
@@ -330,7 +332,7 @@ public sealed record CleanupPlan
                 // This is the site the declined Recycle Bin depends on. A bin the user unticked is
                 // still standing after a call that emptied it anyway, so existence proves nothing
                 // and this is the whole of what §5.6 has left to compare.
-                LongPath.HoldsAnything(s.Path)));
+                DirectoryContent.IsPresent(s.Path)));
 
         return this with
         {

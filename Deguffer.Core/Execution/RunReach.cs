@@ -17,25 +17,48 @@ namespace Deguffer.Core.Execution;
 /// plan without saying what else the run will touch.</para>
 /// </summary>
 /// <param name="TargetedPaths">Every path the run's plans will destroy outright.</param>
+/// <param name="ProbedPaths">
+/// Every path a tool's own eviction command in the run is sent to clear: each
+/// <see cref="RunCommandStep.MeasuredPaths"/>, gathered across the plans.
+///
+/// <para>Not a target, and it bounds nothing. §5.1 leaves the command deciding what it removes, so
+/// <see cref="Unbounded"/> still makes every disappearance the run's to answer for. What these paths
+/// are is the plan's own statement of where the tool was sent, and that is what §5.6's
+/// emptied-in-place question needs: a protected folder holding one of them can end the run empty
+/// because the run said it would work there. A protected folder holding none of them has no such
+/// explanation, whatever else the run holds.</para>
+/// </param>
 /// <param name="Unbounded">
 /// Whether any plan hands a tool its own eviction command, whose reach nothing here can state.
 ///
-/// §5.1 keeps that command as the preferred route precisely because the tool knows about locations
-/// Deguffer does not — <c>dotnet nuget locals all --clear</c> cleared four, two of them outside
-/// <c>.nuget</c> — so a run holding one has no bounded reach at all, and every disappearance in it
-/// stays the run's to answer for.
+/// <para>§5.1 keeps that command as the preferred route precisely because the tool knows about
+/// locations Deguffer does not — <c>dotnet nuget locals all --clear</c> cleared four, two of them
+/// outside <c>.nuget</c> — so a run holding one has no bounded reach at all, and every disappearance
+/// in it stays the run's to answer for.</para>
+///
+/// <para>It is asked of a disappearance and never of an emptied folder. "The run could have done
+/// it" is what makes a missing path an alarm rather than an outside removal, and it makes an emptied
+/// folder an alarm for the same reason, so it cannot also be the reason to excuse one. That excuse
+/// is <see cref="ProbedPaths"/>'s to give, and only for the folders above where the tool was
+/// sent.</para>
 /// </param>
-public sealed record RunReach(IReadOnlyList<string> TargetedPaths, bool Unbounded)
+public sealed record RunReach(
+    IReadOnlyList<string> TargetedPaths,
+    IReadOnlyList<string> ProbedPaths,
+    bool Unbounded)
 {
     /// <summary>A run that will destroy nothing, for a verification with no execution behind it.</summary>
-    public static readonly RunReach Nothing = new([], Unbounded: false);
+    public static readonly RunReach Nothing = new([], [], Unbounded: false);
 
     public static RunReach Of(IReadOnlyList<CleanupPlan> plans)
     {
         ArgumentNullException.ThrowIfNull(plans);
 
+        var commands = plans.SelectMany(plan => plan.Steps.OfType<RunCommandStep>()).ToList();
+
         return new RunReach(
             [.. plans.SelectMany(plan => plan.TargetedPaths)],
-            plans.Any(plan => plan.Steps.OfType<RunCommandStep>().Any()));
+            [.. commands.SelectMany(command => command.MeasuredPaths)],
+            Unbounded: commands.Count > 0);
     }
 }
