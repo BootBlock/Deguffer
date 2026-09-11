@@ -32,9 +32,10 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Nothing is offered on its name alone.</b> A file naming a process is offered once that
 /// process has been asked about and has ended. Anything naming a session is offered only where Claude
 /// Code's list of running sessions does not name it — and where that list cannot be read, nothing of
-/// that kind is offered at all. On top of that, nothing written in the last
-/// <see cref="RecentWindow"/> is offered: a session can run for days, and a version of Claude Code
-/// older than the list is invisible to it.</para>
+/// that kind is offered at all. On top of that, nothing of that kind, and nothing that names no process
+/// at all, is offered if it was written in the last <see cref="RecentWindow"/>: a session can run for
+/// days, and a version of Claude Code older than the list is invisible to it. A file naming a process
+/// needs no such floor, because the process it names has been asked about directly.</para>
 ///
 /// <para><b>§5.6, scoped to what no other provider removes.</b> A path this plan asserts and another
 /// provider in the same run legitimately deletes reads as a failure, not as an outside removal. So

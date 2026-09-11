@@ -1530,8 +1530,10 @@ to sessions that had ended, and every one of them was empty.
 - **Whether a session still has a conversation is asked of every project folder at once.** A session's
   folders can sit under a different project folder from its transcript. If any project folder cannot
   be listed, no session is called an orphan.
-- **Nothing Claude Code wrote in the last 7 days is offered**, whatever the list says. A session can
-  run for days, and an older version of Claude Code does not keep the list at all. A folder is dated
+- **Nothing that names a session, or no process at all, is offered if Claude Code wrote it in the last
+  7 days**, whatever the list says. A session can run for days, and an older version of Claude Code
+  does not keep the list at all. A file that names a process needs no such wait, because that process
+  has been asked about directly. A folder is dated
   by its own timestamp and its immediate contents, never by the files deep inside it: a file copied
   into place keeps the date of the file it was copied from.
 - **A session folder holding anything besides spilled tool output**, such as a subagent's
