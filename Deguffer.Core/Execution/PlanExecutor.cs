@@ -281,7 +281,7 @@ public sealed class PlanExecutor(
     /// <summary>
     /// Empty a directory and leave it standing, sparing the entries the plan named.
     ///
-    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, IProgress{double}?, CancellationToken)"/>
+    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, RunResidue, IProgress{double}?, CancellationToken)"/>
     /// under different bounds, rather than a second walk of its own: §6.3's extended-length paths,
     /// §5.3's skip on a refusal, the guard on recently changed files and the refusal to follow a
     /// link are all properties of that one removal, and a parallel implementation is where one of
