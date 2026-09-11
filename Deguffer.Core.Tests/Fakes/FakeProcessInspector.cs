@@ -13,8 +13,7 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         [.. names.Intersect(running, StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
-    /// Every id answers <see cref="ProcessLiveness.NotRunning"/>, as a free id does on a real machine:
-    /// the same "nothing is running" this fake means for <see cref="FindRunning"/>.
+    /// Every id answers <see cref="ProcessLiveness.NotRunning"/>, as a free id does on a real machine.
     ///
     /// <para>An id below 1 is refused as the real probe refuses it, so a provider that passes one
     /// fails here rather than reading it as a process that is not running.</para>

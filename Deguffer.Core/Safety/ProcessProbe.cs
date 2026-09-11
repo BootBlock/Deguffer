@@ -43,9 +43,9 @@ namespace Deguffer.Core.Safety;
 /// cannot answer this, since a process may exit with <c>STILL_ACTIVE</c>'s own value, 259.
 /// <b>An exited process still held open keeps its id, and that is the ordinary aftermath of an exit
 /// rather than an edge case.</b> The other 21 released ids all stayed openable: 14 for the whole of a
-/// five-second watch, and 7 for a 150-second one and still minutes later, by which time the process
-/// that had started them had exited too and <c>Process.GetProcesses</c> no longer listed them. What
-/// held them was not identified. A successful open is therefore not evidence of a running
+/// five-second watch, and 7 for a 150-second one. Those 7 were still openable after the process that
+/// had started them had exited too, when an enumeration by <c>Process.GetProcesses</c> did not list
+/// them. What held them was not identified. A successful open is therefore not evidence of a running
 /// process.</item>
 /// </list>
 ///
