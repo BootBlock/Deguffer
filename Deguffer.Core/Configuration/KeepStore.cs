@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Configuration;
@@ -73,9 +74,16 @@ public sealed class KeepStore
     }
 
     /// <summary>
+    /// Whether the last <see cref="Load"/> found a file it could not read, so nothing will be written
+    /// over it. A caller says so in those words rather than as a failed write: the folder is writable,
+    /// and the file is what needs attention.
+    /// </summary>
+    public bool RefusesToSave => _refusesToSave;
+
+    /// <summary>
     /// Persist <paramref name="list"/>. Returns whether it was written, so a caller can say that a
     /// choice will not survive a restart rather than implying it will. False as well, and nothing
-    /// written, where the last <see cref="Load"/> found a file it could not read.
+    /// written, where <see cref="RefusesToSave"/>.
     /// </summary>
     public bool Save(KeepList list)
     {
@@ -86,10 +94,16 @@ public sealed class KeepStore
             return false;
         }
 
+        var written = _file + ".tmp";
+
         try
         {
             Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(list.Items, SerializerOptions));
+
+            // Written beside the file and moved over it, so a save that is interrupted leaves the
+            // previous list whole rather than a truncated one the next launch cannot read.
+            File.WriteAllText(LongPath.Extended(written), JsonSerializer.Serialize(list.Items, SerializerOptions));
+            File.Move(LongPath.Extended(written), LongPath.Extended(_file), overwrite: true);
 
             return true;
         }
@@ -100,13 +114,14 @@ public sealed class KeepStore
     }
 
     /// <summary>
-    /// Each entry of the list, in the shape <see cref="KeptItem"/> declares.
+    /// Each entry of the list, read field by field in the shape <see cref="KeptItem"/> declares.
     ///
-    /// <para>Read one entry at a time, so a damaged entry costs its own line and nothing else: a null,
-    /// an entry with no item, an item with no key, and a field of the wrong type. A whole-list read
-    /// would throw on the last of those and lose every entry beside it. A missing name falls back to
-    /// the key rather than dropping the entry, because the key is what protects the item and the name
-    /// only describes it.</para>
+    /// <para>Field by field rather than deserialised whole, so damage costs only what it touches. An
+    /// entry is dropped only where its provider or its key cannot be read, because those are the two
+    /// things that match an item, and an entry missing either protected nothing. A name that is missing
+    /// or of the wrong type falls back to the provider's id or the item's key: it only describes the
+    /// item, and dropping the entry for it would offer the item again and remove it from the file at
+    /// the next save.</para>
     /// </summary>
     private static KeepList Usable(JsonElement entries)
     {
@@ -114,32 +129,29 @@ public sealed class KeepStore
 
         foreach (var entry in entries.EnumerateArray())
         {
-            KeptItem? item;
-
-            try
-            {
-                item = entry.Deserialize<KeptItem>(SerializerOptions);
-            }
-            catch (JsonException)
-            {
-                // A field of the wrong type, which matches nothing and so protected nothing.
-                continue;
-            }
-
-            if (item is not { Item.Key: { } key }
-                || string.IsNullOrWhiteSpace(key)
-                || string.IsNullOrWhiteSpace(item.ProviderId))
+            if (Text(entry, nameof(KeptItem.ProviderId)) is not { } providerId
+                || !entry.TryGetProperty(nameof(KeptItem.Item), out var item)
+                || Text(item, nameof(ItemIdentity.Key)) is not { } key)
             {
                 continue;
             }
 
-            usable.Add(item with
-            {
-                ProviderName = string.IsNullOrWhiteSpace(item.ProviderName) ? item.ProviderId : item.ProviderName,
-                Item = item.Item with { Name = string.IsNullOrWhiteSpace(item.Item.Name) ? key : item.Item.Name },
-            });
+            usable.Add(new KeptItem(
+                providerId,
+                Text(entry, nameof(KeptItem.ProviderName)) ?? providerId,
+                new ItemIdentity(key, Text(item, nameof(ItemIdentity.Name)) ?? key)));
         }
 
         return new KeepList(usable);
     }
+
+    /// <summary>A named field's text, or null where the element is not an object or the field is not usable text.</summary>
+    private static string? Text(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object
+        && element.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+        && value.GetString() is { } text
+        && !string.IsNullOrWhiteSpace(text)
+            ? text
+            : null;
 }

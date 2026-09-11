@@ -41,10 +41,18 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool HasNoKeptItems => KeptItems.Count == 0;
 
+    /// <summary>
+    /// Whether the saved keep list could not be read at startup. Stated on the page for as long as it
+    /// is true, rather than as a failed save after a click, because it is a fact about a file the user
+    /// has to repair or remove, and until they do, the list here is not the one they saved.
+    /// </summary>
+    public bool KeepListUnreadable => _keeps.StoredListUnreadable;
+
     /// <summary>Stop keeping <paramref name="item"/>, and re-read the list from the service.</summary>
     public void ReleaseKeptItem(KeptItem item)
     {
-        SaveFailed = !_keeps.Release(item.ProviderId, item.Item.Key);
+        // An unreadable stored list is already stated on the page, and is not a write that failed.
+        SaveFailed = !_keeps.Release(item.ProviderId, item.Item.Key) && !_keeps.StoredListUnreadable;
 
         KeptItems.Clear();
 

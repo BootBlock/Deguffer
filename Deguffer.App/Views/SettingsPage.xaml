@@ -237,6 +237,12 @@
                  nobody can see. Items are added where they are seen, on the Storage page. -->
             <TextBlock Text="Keep list" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
 
+            <InfoBar IsOpen="{x:Bind ViewModel.KeepListUnreadable}"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Title="Keep list not read"
+                     Message="Deguffer could not read keep.json in %LOCALAPPDATA%\Deguffer when it started, so nothing saved in it is kept this session, and no change made here is saved over it. Repair or remove that file, then restart Deguffer." />
+
             <views:SettingsRow Glyph="&#xE718;"
                                Title="Items Deguffer never offers"
                                Description="Keep an item from the Contents tab of its row on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />

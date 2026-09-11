@@ -278,18 +278,6 @@ public sealed partial class FindingViewModel : ObservableObject
         ? Finding with { Plan = plan.NarrowedTo([.. SelectedSteps.Select(s => s.Step)]) }
         : Finding;
 
-    /// <summary>
-    /// What a run owes this row when the user has not ticked it, or null where it owes nothing.
-    ///
-    /// <para>A row whose every item is kept can never be ticked, because it has nothing to remove, and
-    /// a row the user left unticked is not part of the run. Its kept items still have to be shown
-    /// standing afterwards, because an over-broad rule somewhere else in the run is exactly what
-    /// could take one. See <see cref="CleanupPlan.KeepListItemsOnly"/>.</para>
-    /// </summary>
-    public Finding? KeepListFinding => Finding.Plan is { HoldsKeepListItems: true } plan
-        ? Finding with { Plan = plan.KeepListItemsOnly() }
-        : null;
-
     public IReadOnlyList<StepViewModel> SelectedSteps => [.. Steps.Where(s => s.IsSelected)];
 
     /// <summary>What this row contributes to the selected total, counting only ticked steps.</summary>

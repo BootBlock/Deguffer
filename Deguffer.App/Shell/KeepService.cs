@@ -29,6 +29,13 @@ public sealed class KeepService
     public KeepList Current { get; private set; }
 
     /// <summary>
+    /// Whether the saved keep list could not be read at startup, so this session starts keeping
+    /// nothing and no change it makes is saved over that file. The pages say so in those words: the
+    /// folder is writable, and the file is what needs attention. See <see cref="KeepStore"/>.
+    /// </summary>
+    public bool StoredListUnreadable => _store.RefusesToSave;
+
+    /// <summary>
     /// Keep <paramref name="item"/>. Returns whether that reached disk, so a caller can say the item
     /// will be offered again after a restart rather than implying it will not.
     /// </summary>
@@ -40,20 +47,25 @@ public sealed class KeepService
     }
 
     /// <summary>
-    /// Stop keeping one provider's item. Returns whether that reached disk, and where it did not, the
+    /// Stop keeping one provider's item. Returns whether that reached disk. Where a write failed, the
     /// item stays kept.
+    ///
+    /// <para>The one exception is <see cref="StoredListUnreadable"/>, where the release is applied
+    /// anyway. Nothing this session keeps is in the file then, so the saved keep that refusing would
+    /// protect does not exist, and refusing would only make a keep clicked by mistake impossible to
+    /// undo until a restart.</para>
     /// </summary>
     public bool Release(string providerId, string key)
     {
         var released = Current.Without(providerId, key);
 
-        if (!_store.Save(released))
+        if (!_store.Save(released) && !_store.RefusesToSave)
         {
             return false;
         }
 
         Current = released;
 
-        return true;
+        return !_store.RefusesToSave;
     }
 }

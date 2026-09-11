@@ -441,22 +441,10 @@ public sealed partial class CleanViewModel : ObservableObject
             }
 
             // Every row this run will not clean still owes it the proof that its kept items are
-            // standing afterwards (§5.6): a row left unticked, a row whose every item is kept and so
-            // can never be ticked, and a ticked row whose confirmation was declined. A row that runs
-            // proves its own, because narrowing keeps them protected. A plan that only proves destroys
-            // nothing, so it is never asked about, and the planner runs it after every deletion.
-            //
-            // Built after the confirmations, because until they are answered nobody knows which of the
-            // ticked rows will run.
-            var running = selectedRows
-                .Where((row, i) => authorised.Contains(selected[i]))
-                .ToHashSet();
-
-            var proving = Findings
-                .Where(row => !running.Contains(row))
-                .Select(row => row.KeepListFinding)
-                .OfType<Finding>()
-                .ToList();
+            // standing afterwards (§5.6), and the planner runs that proof after every deletion. Asked
+            // after the confirmations, because until they are answered nobody knows which of the
+            // ticked rows will run. See KeepListProof.
+            var proving = KeepListProof.For(Findings.Select(row => row.Finding), authorised);
 
             var progress = new Progress<string>(message => Report(message));
             var completed = new Progress<double>(SetCleanProgress);
@@ -861,10 +849,14 @@ public sealed partial class CleanViewModel : ObservableObject
         if (!saved)
         {
             Report(
-                keeping
-                    ? $"Kept {identity.Name} for now, but Deguffer could not save the keep list, so it will be "
-                      + "offered again after a restart. Check that %LOCALAPPDATA%\\Deguffer is writable."
-                    : $"{identity.Name} is still on your keep list: Deguffer could not save the change.",
+                _keeps.StoredListUnreadable
+                    ? $"{(keeping ? "Kept" : "Stopped keeping")} {identity.Name} for this session only. Deguffer "
+                      + "could not read the keep list saved in %LOCALAPPDATA%\\Deguffer\\keep.json when it "
+                      + "started, so it is not saving over it. Repair or remove that file, then restart Deguffer."
+                    : keeping
+                        ? $"Kept {identity.Name} for now, but Deguffer could not save the keep list, so it will be "
+                          + "offered again after a restart. Check that %LOCALAPPDATA%\\Deguffer is writable."
+                        : $"{identity.Name} is still on your keep list: Deguffer could not save the change.",
                 InfoBarSeverity.Warning);
         }
     }

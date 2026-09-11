@@ -5,8 +5,9 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The keep list on disk. The damaged cases land on keeping nothing, and the one property worth the
-/// most is that this file and the selection memory can never be read as each other.
+/// The keep list on disk. A damaged file keeps nothing for the session and is left exactly as it was,
+/// and the one property worth the most is that the keep list and the remembered selection never read
+/// or write each other's file.
 /// </summary>
 public sealed class KeepStoreTests : IDisposable
 {
@@ -46,8 +47,10 @@ public sealed class KeepStoreTests : IDisposable
     }
 
     /// <summary>
-    /// A file that cannot be read is not a list the user made. Keeping nothing offers what was kept,
-    /// and the preview and §7's confirmations still stand in front of that. Guessing does not.
+    /// A file that cannot be read keeps nothing this session. Keeping nothing offers what was kept, and
+    /// the preview and §7's confirmations still stand in front of that; guessing at what the file meant
+    /// does not. The file itself may still hold every entry, which is why it is never written over:
+    /// see <see cref="AFileItCouldNotReadIsNeverWrittenOver"/>.
     /// </summary>
     [Theory]
     [InlineData("")]
@@ -110,6 +113,25 @@ public sealed class KeepStoreTests : IDisposable
     }
 
     /// <summary>
+    /// The reading half of the same property. A remembered selection on disk is not a keep list that
+    /// could not be read: it is not the keep list's file at all, so the store keeps nothing from it and
+    /// has no reason to refuse the first save.
+    /// </summary>
+    [Fact]
+    public void TheKeepListNeverReadsTheRememberedSelection()
+    {
+        new SelectionStore(_environment).Save(new Dictionary<string, RememberedSelection>
+        {
+            ["playwright"] = new(IsSelected: true, new Dictionary<string, bool> { ["chromium-1228"] = true }),
+        });
+
+        var store = new KeepStore(_environment);
+
+        Assert.Empty(store.Load().Items);
+        Assert.False(store.RefusesToSave);
+    }
+
+    /// <summary>
     /// A file the store could not make sense of may still hold every entry the user kept, so the next
     /// keep must not be saved over it. The session keeps nothing, which is the narrow failure; the file
     /// keeps everything, which is what makes that failure temporary.
@@ -126,8 +148,24 @@ public sealed class KeepStoreTests : IDisposable
         var store = new KeepStore(_environment);
 
         Assert.Empty(store.Load().Items);
+        Assert.True(store.RefusesToSave);
         Assert.False(store.Save(new KeepList([Chromium])));
         Assert.Equal(content, File.ReadAllText(StoreFile));
+    }
+
+    /// <summary>
+    /// A first run has no file to lose, so it is the one failed read that must not refuse: refusing
+    /// there would stop the keep list ever being saved on a new machine.
+    /// </summary>
+    [Fact]
+    public void AMissingFileIsNoReasonToRefuseASave()
+    {
+        var store = new KeepStore(_environment);
+
+        Assert.Empty(store.Load().Items);
+        Assert.False(store.RefusesToSave);
+        Assert.True(store.Save(new KeepList([Chromium])));
+        Assert.Equal([Chromium], new KeepStore(_environment).Load().Items);
     }
 
     /// <summary>
@@ -153,18 +191,29 @@ public sealed class KeepStoreTests : IDisposable
         Assert.Equal(saved, File.ReadAllText(StoreFile));
     }
 
-    /// <summary>A field of the wrong type costs its own entry, and the rest of the list is still kept.</summary>
+    /// <summary>
+    /// Damage costs only what it touches. A key that cannot be read matches nothing, so that entry goes.
+    /// Names of the wrong type only describe an item, so that entry stays kept, under its provider's id
+    /// and its key.
+    /// </summary>
     [Fact]
-    public void AnEntryWithAFieldOfTheWrongTypeCostsOnlyThatEntry()
+    public void AFieldOfTheWrongTypeCostsOnlyWhatItTouches()
     {
         Directory.CreateDirectory(Folder);
         File.WriteAllText(StoreFile, """
             [
               { "ProviderId": "playwright", "ProviderName": "Playwright browsers", "Item": { "Key": 1228, "Name": "chromium" } },
-              { "ProviderId": "playwright", "ProviderName": "Playwright browsers", "Item": { "Key": "firefox-1532", "Name": "firefox-1532" } }
+              { "ProviderId": "playwright", "ProviderName": 5, "Item": { "Key": "firefox-1532", "Name": ["firefox"] } },
+              "not an entry"
             ]
             """);
 
-        Assert.Equal("firefox-1532", Assert.Single(new KeepStore(_environment).Load().Items).Item.Key);
+        var store = new KeepStore(_environment);
+        var item = Assert.Single(store.Load().Items);
+
+        Assert.False(store.RefusesToSave);
+        Assert.Equal("firefox-1532", item.Item.Key);
+        Assert.Equal("firefox-1532", item.Item.Name);
+        Assert.Equal("playwright", item.ProviderName);
     }
 }

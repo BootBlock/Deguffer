@@ -41,7 +41,7 @@ public sealed class PreviewSummaryTests
         Assert.StartsWith("Nothing to reclaim", summary, StringComparison.Ordinal);
     }
 
-    /// <summary>Each of the four gets words naming its own cause when it is the only one present.</summary>
+    /// <summary>Each of the five gets words naming its own cause when it is the only one present.</summary>
     [Theory]
     [InlineData(FindingStatus.UnreadableRoot, "would not let Deguffer read")]
     [InlineData(FindingStatus.NotExamined, "were not examined")]
@@ -54,7 +54,7 @@ public sealed class PreviewSummaryTests
     }
 
     /// <summary>
-    /// Naming two causes of four would be less true than naming none, so a mixture sends the reader
+    /// Naming two causes of five would be less true than naming none, so a mixture sends the reader
     /// to the rows, which each state their own.
     /// </summary>
     [Fact]
