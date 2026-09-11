@@ -113,6 +113,44 @@ public sealed class CleanupProviderBaseTests : IDisposable
             n.Message.Contains("its own tool", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// What Windows refused a clean is left out of the next preview for every provider, not only
+    /// the temporary folder where issue #117 was found. It is stamped here, beside the guard, for the
+    /// reason the guard is: no provider held the defect, and none may forget the fix.
+    ///
+    /// <para>Driven through a whole-directory deletion rather than a clear, so the seam is shown
+    /// reaching a step kind the temporary folder never plans. The refused entry is the one under the
+    /// cache, and the rest of the cache is still offered.</para>
+    /// </summary>
+    [Fact]
+    public async Task EveryProviderLeavesOutWhatWindowsStillRefusedItsLastClean()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        var held = Path.Combine(caches, "modules-2", "files-2.1", "held.jar");
+        Directory.CreateDirectory(Path.GetDirectoryName(held)!);
+        File.WriteAllBytes(held, new byte[4096]);
+
+        var provider = Provider();
+        var first = await provider.PlanAsync();
+        var step = Assert.Single(first.Steps.OfType<DeleteDirectoryStep>(), s => s.Path == caches);
+
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var result = await provider.ExecuteAsync(first);
+
+            Assert.Equal(new RefusalTally(1, 4096), result.Refused.InUse);
+            Assert.True(File.Exists(held));
+
+            File.WriteAllBytes(Path.Combine(caches, "arrived-since.bin"), new byte[1024]);
+
+            var next = await provider.PlanAsync();
+            var again = Assert.Single(next.Steps.OfType<DeleteDirectoryStep>(), s => s.Path == step.Path);
+
+            Assert.Equal(1024, again.EstimatedBytes);
+            Assert.Equal(new RefusalTally(1, 4096), again.Refused.InUse);
+        }
+    }
+
     private GradleCacheProvider Provider() =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
 

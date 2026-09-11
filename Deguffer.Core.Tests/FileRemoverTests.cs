@@ -26,7 +26,7 @@ public sealed class FileRemoverTests : IDisposable
 
         Assert.True(outcome.Removed);
         Assert.Equal(8192, outcome.BytesReclaimed);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
         Assert.False(File.Exists(file));
     }
 
@@ -41,7 +41,7 @@ public sealed class FileRemoverTests : IDisposable
 
         Assert.True(outcome.Removed);
         Assert.Equal(0, outcome.BytesReclaimed);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
     }
 
     /// <summary>
@@ -115,8 +115,29 @@ public sealed class FileRemoverTests : IDisposable
         var outcome = await FileRemover.RemoveAsync(file);
 
         Assert.False(outcome.Removed);
-        Assert.Equal(1, outcome.Skipped);
+        Assert.Equal(new RefusalTally(1, 2048), outcome.Refused.InUse);
+        Assert.Equal(default, outcome.Refused.Denied);
         Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.True(File.Exists(file));
+    }
+
+    /// <summary>
+    /// A file Windows itself will not let this account delete, refused below the removal rather
+    /// than by a fake — the unelevated delete under the Windows directory this step is built for
+    /// arrives exactly this way. It is denied, with its size, and not "in use".
+    /// </summary>
+    [Fact]
+    public async Task AFileWindowsDeniesIsReportedAsDeniedRatherThanInUse()
+    {
+        var file = _temp.CreateFile(4096, "dumps", "MEMORY.DMP");
+
+        using var undeletable = new UndeletableFile(file);
+
+        var outcome = await FileRemover.RemoveAsync(file);
+
+        Assert.False(outcome.Removed);
+        Assert.Equal(new RefusalTally(1, 4096), outcome.Refused.Denied);
+        Assert.Equal(default, outcome.Refused.InUse);
         Assert.True(File.Exists(file));
     }
 
@@ -150,7 +171,7 @@ public sealed class FileRemoverTests : IDisposable
             file, MinimumAge.Off, default, new VanishingFileSystem(WindowsFileSystem.Default, thrown));
 
         Assert.True(outcome.Removed);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
     }
 
     /// <summary>
@@ -172,6 +193,8 @@ public sealed class FileRemoverTests : IDisposable
         public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
 
         public void DeleteFile(string path) => throw (Exception)Activator.CreateInstance(thrown)!;
+
+        public RefusalReason? ProbeRemoval(string path) => inner.ProbeRemoval(path);
 
         public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
 
@@ -227,7 +250,7 @@ public sealed class FileRemoverTests : IDisposable
         Assert.True(File.Exists(file), "a file inside the guard window was deleted");
         Assert.True(outcome.Kept);
         Assert.False(outcome.Removed);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
         Assert.Equal(0, outcome.BytesReclaimed);
     }
 

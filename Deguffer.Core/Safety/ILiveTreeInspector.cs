@@ -62,9 +62,9 @@ public sealed record LiveTreeFindings(IReadOnlyList<LiveTree> Live, bool Complet
 /// §5.3 generalised from <c>%TEMP%</c> to a directory anywhere: <em>is anything using this right
 /// now?</em>
 ///
-/// <para><see cref="IProcessInspector"/> answers a different question — whether a process of a given
-/// name exists anywhere on the machine — and that question is the wrong one for a source tree twice
-/// over. It is too broad, because one Unity editor open on some other project would veto every Unity
+/// <para><see cref="IProcessInspector"/> answers different questions — whether a process of a given
+/// name exists anywhere on the machine, or one with a given id — and neither fits a source tree. A
+/// tree records no process id, and the name is the wrong question twice over. It is too broad, because one Unity editor open on some other project would veto every Unity
 /// project on the disk. And it is too narrow, because the process actually holding a directory open
 /// is often not the one whose name a reader would think of: a live Visual Studio solution's
 /// <c>.vs</c> index is held open by <c>DevHub.exe</c>, a service host, while <c>devenv</c> holds

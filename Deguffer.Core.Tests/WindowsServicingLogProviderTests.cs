@@ -237,21 +237,22 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.Equal(1, result.SkippedCount);
+        Assert.Equal(1, result.Refused.InUse.Files);
+        Assert.True(result.Refused.Denied.Files == 0, "a log another process held open was reported as denied");
         Assert.True(result.BytesReclaimed > 0, "the log that was not held should still have gone");
         Assert.True(File.Exists(Path.Combine(cbs, "CBS.log")), "a held log was deleted");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
-    /// A step that achieved nothing reports that, without guessing why.
+    /// A step that achieved nothing says which kind of refusal it met, and nothing beyond that.
     ///
-    /// The outcome cannot tell the two causes apart: an unelevated delete under the Windows
-    /// directory is refused file by file, which arrives as the same skip a locked file produces.
-    /// §5.3's "in use" wording would send the user looking for a process to close that is not there,
-    /// and naming administrator rights instead is advice the reader has already taken, because the
-    /// shell does not offer such a step to a process without them. So the message states what
-    /// happened, the plan states what needs administrator rights, and neither asserts the other.
+    /// <para>A log another process holds open is in use, and the deletion says so with a sharing
+    /// violation, so the message can name it. An unelevated delete under the Windows directory is
+    /// denied instead — see <see cref="AStepWindowsDeniedIsNotCalledInUse"/>. What neither message
+    /// does is guess why Windows denied: naming administrator rights is advice the reader has already
+    /// taken, because the shell does not offer such a step to a process without them, so the plan
+    /// states what needs administrator rights and the message states what happened.</para>
     /// </summary>
     [Fact]
     public async Task AStepThatAchievedNothingSaysSoWithoutGuessingWhy()
@@ -271,8 +272,35 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.False(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);
         Assert.DoesNotContain("Removed", outcome.Message!, StringComparison.Ordinal);
-        Assert.Contains("1 item(s)", outcome.Message!, StringComparison.Ordinal);
+        Assert.Contains("another program had 1 file(s)", outcome.Message!, StringComparison.Ordinal);
+        Assert.DoesNotContain("administrator", outcome.Message!, StringComparison.OrdinalIgnoreCase);
         Assert.True(Directory.Exists(cbs));
+    }
+
+    /// <summary>
+    /// The case the old wording got wrong. An unelevated delete under the Windows directory is
+    /// denied file by file, and reporting that as "in use" sends the reader looking for a program to
+    /// close that is not there. Windows' own refusal is staged here, so the classification is the one
+    /// a real denial produces.
+    /// </summary>
+    [Fact]
+    public async Task AStepWindowsDeniedIsNotCalledInUse()
+    {
+        var cbs = Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        using var denied = new UndeletableFile(Path.Combine(cbs, "CBS.log"));
+
+        var result = await provider.ExecuteAsync(plan);
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(1, result.Refused.Denied.Files);
+        Assert.Contains("Windows would not let Deguffer remove 1 file(s)", outcome.Message!, StringComparison.Ordinal);
+        Assert.DoesNotContain("in use", outcome.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("another program", outcome.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

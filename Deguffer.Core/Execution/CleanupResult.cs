@@ -1,26 +1,27 @@
 namespace Deguffer.Core.Execution;
 
 /// <summary>What happened to one step.</summary>
-/// <param name="Skipped">
-/// §5.3: access denied is not a failure. A locked file is the OS protecting live state, and it
-/// is recorded rather than escalated.
+/// <param name="Refused">
+/// §5.3: a file Windows will not release is not a failure. It is recorded rather than escalated,
+/// with its bytes and the reason Windows gave — see <see cref="Refusals"/> for why a count alone was
+/// not enough.
 /// </param>
 /// <param name="Kept">
 /// Files left alone because the user asked for anything touched recently to be left. Reported apart
-/// from <paramref name="Skipped"/> because it is a setting being honoured rather than Windows
+/// from <paramref name="Refused"/> because it is a setting being honoured rather than Windows
 /// refusing, and only one of the two is something the user might want to act on.
 /// </param>
 /// <param name="Spared">
-/// Entries left alone because something is using them (§5.3). A third count beside the two above
-/// it, for the reason they are two: a skip is Windows refusing, a keep is a setting being honoured,
-/// and this is Deguffer declining to touch something it found in use. Only the last of the three is
-/// answered by closing the program the plan named.
+/// Entries left alone because something is using them (§5.3). Kept apart from the two above it, for
+/// the reason they are apart: a refusal is Windows declining, a keep is a setting being honoured, and
+/// this is Deguffer declining to touch something it found in use. Only this one names the program to
+/// close, because the plan found the program before the removal began.
 /// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
     long BytesReclaimed,
-    int Skipped,
+    Refusals Refused,
     string? Message = null,
     int Kept = 0,
     int Spared = 0);
@@ -40,8 +41,8 @@ public sealed record CleanupResult
 
     public long BytesReclaimed => Steps.Sum(s => s.BytesReclaimed);
 
-    /// <summary>Items left in place because something held them open (§5.3).</summary>
-    public int SkippedCount => Steps.Sum(s => s.Skipped);
+    /// <summary>Files left in place because Windows would not release them (§5.3), by reason.</summary>
+    public Refusals Refused => Steps.Aggregate(Refusals.None, (total, step) => total + step.Refused);
 
     /// <summary>Files left alone because they had been touched inside the user's guard window.</summary>
     public int KeptCount => Steps.Sum(s => s.Kept);

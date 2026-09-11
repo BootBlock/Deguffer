@@ -13,8 +13,16 @@ namespace Deguffer.Core.Tests.Fakes;
 public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
 {
     private readonly ConcurrentQueue<string> _paths = new();
+    private readonly ConcurrentQueue<string> _probed = new();
 
     public IReadOnlyCollection<string> Paths => _paths;
+
+    /// <summary>
+    /// The paths opened for deletion without deleting them. Kept apart from <see cref="Paths"/>,
+    /// which holds them too, because that open is the one call here with a cost to another program
+    /// — see <c>DeletionProbe</c> — and a test has to be able to say where it happened.
+    /// </summary>
+    public IReadOnlyCollection<string> Probed => _probed;
 
     public bool DirectoryExists(string path)
     {
@@ -50,6 +58,13 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     {
         _paths.Enqueue(path);
         inner.DeleteFile(path);
+    }
+
+    public RefusalReason? ProbeRemoval(string path)
+    {
+        _paths.Enqueue(path);
+        _probed.Enqueue(path);
+        return inner.ProbeRemoval(path);
     }
 
     public void DeleteDirectory(string path)

@@ -13,6 +13,7 @@ namespace Deguffer.Core.Providers;
 public abstract class CleanupProviderBase : ICleanupProvider
 {
     private readonly PlanExecutor _executor;
+    private readonly RefusalRecord _refusals;
 
     /// <param name="emptier">
     /// How a <see cref="EmptyRecycleBinStep"/> is carried out, for the one provider that plans one.
@@ -30,7 +31,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Environment = environment;
         Inspector = inspector;
         Scanner = scanner;
-        _executor = new PlanExecutor(runner, scanner, emptier);
+        _refusals = RefusalRecord.For(environment);
+        _executor = new PlanExecutor(runner, scanner, _refusals, emptier);
         Runner = runner;
     }
 
@@ -110,8 +112,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // Every other provider returns a plan with no guard of its own, so this is exactly the
         // user's value for all of them.
         var effective = MinimumAge.Stricter(plan.Keep, keep);
+        var guarded = effective.IsOn ? Guarded(plan, effective, keep) : plan;
 
-        return effective.IsOn ? Guarded(plan, effective, keep) : plan;
+        // Stamped here for the reason the guard is: no provider held the defect, and a provider
+        // cannot be allowed to forget the fix. After the guard, so what is asked again is exactly
+        // what the guard leaves to the removal, and the subtraction is from the guarded figure.
+        return RecordedRefusals.Apply(guarded, _refusals, WindowsFileSystem.Default, ct);
     }
 
     /// <summary>

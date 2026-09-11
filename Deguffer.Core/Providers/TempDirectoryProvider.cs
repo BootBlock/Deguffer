@@ -32,8 +32,13 @@ namespace Deguffer.Core.Providers;
 /// nothing this minute, so nothing is locked and the timestamps prove nothing.
 /// <see cref="ILiveTreeInspector.FindLiveChildren"/> answers that in one pass over the process
 /// table, and each entry it names is asserted to have survived (§5.6).</item>
-/// <item><b>Access denied treated as ordinary.</b> A locked file is Windows protecting live state,
-/// so <see cref="DirectoryRemover"/> counts it and moves on, which is what it already does.</item>
+/// <item><b>A refusal treated as ordinary.</b> A file Windows will not release is live state, or
+/// something guarding it, so <see cref="DirectoryRemover"/> leaves it and moves on. What it leaves is
+/// reported with its size and its reason, and the next preview leaves out whatever is still refused,
+/// apart from a running program's own files — see <see cref="RefusalRecord"/>. This folder is where that was found: every file in browser
+/// profiles that test runners had left here was refused below the ACL, most likely by security
+/// software, so each clean reported a quarter of a million files "in use" and each preview offered
+/// their 5.9 GB again.</item>
 /// </list>
 ///
 /// <para><b>The folder itself stays, and that is not a nicety.</b> Every program on the machine

@@ -3,32 +3,32 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Execution;
 
 /// <param name="BytesReclaimed">The file's length, or zero if it was left in place.</param>
-/// <param name="Skipped">
-/// 1 when the file was left in place, 0 otherwise. §5.3 makes that ordinary rather than a fault,
-/// and it names no cause: a file held open and one this process may not touch are the same answer
-/// from here, which is the distinction <see cref="PlanExecutor"/> is careful not to assert either.
+/// <param name="Refused">
+/// The file and its length when Windows would not release it, by reason, and nothing otherwise.
+/// §5.3 makes that ordinary rather than a fault. The reason is the one the deletion reported: a file
+/// another program holds open, or a refusal of any other kind — see <see cref="RefusalReason"/>.
 /// </param>
 /// <param name="Removed">Whether the file is gone.</param>
 /// <param name="Kept">
 /// Whether it was left alone because the user asked for anything touched recently to be left. A
-/// separate answer from <paramref name="Skipped"/> for the reason
+/// separate answer from <paramref name="Refused"/> for the reason
 /// <see cref="RemovalOutcome.Kept"/> gives: one is Windows refusing and the other is Deguffer
 /// obeying, and they are different sentences to whoever reads the result.
 /// </param>
-public sealed record FileRemovalOutcome(long BytesReclaimed, int Skipped, bool Removed, bool Kept = false);
+public sealed record FileRemovalOutcome(long BytesReclaimed, Refusals Refused, bool Removed, bool Kept = false);
 
 /// <summary>
 /// Deletes one named file.
 ///
 /// Separate from <see cref="DirectoryRemover"/> rather than a mode of it, because the two have
 /// different failure shapes and only one of them can partially succeed. A tree removal walks,
-/// deletes what it can and reports what it skipped; this either removes the one path it was given
-/// or does not.
+/// deletes what it can and reports what it was refused; this either removes the one path it was
+/// given or does not.
 ///
-/// §6.3: the path goes through the extended-length prefix, and §5.3: a file something else holds
-/// open is skipped rather than escalated. A link is removed as a link and never followed, which
-/// here means the target is never touched — the same rule <see cref="DirectoryRemover"/> applies to
-/// its own root.
+/// §6.3: the path goes through the extended-length prefix, and §5.3: a file Windows will not
+/// release is left rather than escalated. A link is removed as a link and never followed, which here
+/// means the target is never touched — the same rule <see cref="DirectoryRemover"/> applies to its
+/// own root.
 /// </summary>
 public static class FileRemover
 {
@@ -64,7 +64,7 @@ public static class FileRemover
         // zero and the link-not-target removal are decisions a reader can check.
         if (fs.IsReparsePoint(extended))
         {
-            return Delete(extended, fs, reclaimed: 0);
+            return Delete(extended, fs, length: 0);
         }
 
         // Something that is not a file has taken the name. Not this step's to remove, and the
@@ -72,14 +72,14 @@ public static class FileRemover
         // failing anyway.
         if (fs.DirectoryExists(extended))
         {
-            return new FileRemovalOutcome(0, 0, Removed: false);
+            return new FileRemovalOutcome(0, Refusals.None, Removed: false);
         }
 
         // The guard, on the file this step actually names. Asked after the link and directory
         // branches above, so the timestamp read is the one belonging to the thing being removed.
         if (fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest))
         {
-            return new FileRemovalOutcome(0, 0, Removed: false, Kept: true);
+            return new FileRemovalOutcome(0, Refusals.None, Removed: false, Kept: true);
         }
 
         // Measured before the deletion, because afterwards there is nothing to ask. An unknown
@@ -90,7 +90,7 @@ public static class FileRemover
         return Delete(extended, fs, fs.TryGetFileLength(extended) ?? 0);
     }
 
-    private static FileRemovalOutcome Delete(string extended, IFileSystem fs, long reclaimed)
+    private static FileRemovalOutcome Delete(string extended, IFileSystem fs, long length)
     {
         try
         {
@@ -104,9 +104,14 @@ public static class FileRemover
                 fs.ClearAttributes(extended);
                 fs.DeleteFile(extended);
             }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // It went between the two attempts, which is the race the arm below answers too.
+                return new FileRemovalOutcome(0, Refusals.None, Removed: true);
+            }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                return new FileRemovalOutcome(0, 1, Removed: false);
+                return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length), Removed: false);
             }
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
@@ -115,14 +120,14 @@ public static class FileRemover
             // same success DirectoryRemover.TryDeleteFile reports for the identical race — and
             // DirectoryNotFoundException derives from IOException, so without this arm the catch
             // below would call a file that is gone "left in place".
-            return new FileRemovalOutcome(0, 0, Removed: true);
+            return new FileRemovalOutcome(0, Refusals.None, Removed: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // Held open — a dump still being written, most likely. §5.3: skip it.
-            return new FileRemovalOutcome(0, 1, Removed: false);
+            // Held open — a dump still being written, most likely. §5.3: leave it.
+            return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length), Removed: false);
         }
 
-        return new FileRemovalOutcome(reclaimed, 0, Removed: true);
+        return new FileRemovalOutcome(length, Refusals.None, Removed: true);
     }
 }

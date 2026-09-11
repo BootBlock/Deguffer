@@ -25,7 +25,7 @@ public static class PreviewSummary
 {
     /// <summary>
     /// What a new state gets until somebody gives it words of its own, and what a mixture of causes
-    /// gets in any case. Naming two of five causes would be less true than naming none.
+    /// gets in any case. Naming two of six causes would be less true than naming none.
     /// </summary>
     private const string MixedCauses =
         "Nothing to reclaim, and not every location here is clear. Check what each row reports.";
@@ -74,7 +74,7 @@ public static class PreviewSummary
         }
 
         // Every row measures zero from here on, which is not the same as every row being clear.
-        // Five states measure zero for a reason of their own and say so in their own words; what is
+        // Six states measure zero for a reason of their own and say so in their own words; what is
         // left after removing the two that are genuinely nothing to act on is the reason the bar
         // has to agree with.
         present.Remove(FindingStatus.AlreadyClear);
@@ -105,6 +105,11 @@ public static class PreviewSummary
         // would describe a setting the reader may never have switched on.
         FindingStatus.RecentContentHeldBack =>
             "Nothing to reclaim, and some of these hold only files that are not old enough to remove.",
+        // Neither kind of refusal is named, for the reason the row's label names neither: "would not
+        // let Deguffer remove" is true of a file another program holds open as well as of one Windows
+        // denies, and the rows' notes are where the difference and the sizes are.
+        FindingStatus.RefusedByWindows =>
+            "Nothing to reclaim, and Windows would not let Deguffer remove what some of these hold.",
         FindingStatus.OnKeepList =>
             "Nothing to reclaim, and some of these hold only items on your keep list.",
         FindingStatus.AwaitingSourceFolders =>

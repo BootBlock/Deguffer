@@ -8,9 +8,15 @@ namespace Deguffer.Core.Execution;
 /// Carries out a plan. Holds no knowledge of any cache — it dispatches the steps a provider
 /// already decided on, and reports what happened.
 /// </summary>
+/// <param name="refusals">
+/// Where each removal records the places Windows refused, so the next preview of the same location
+/// can leave out what is still refused. Required rather than defaulted: the default would be the
+/// signed-in user's own record, and a caller that forgot to pass one would write into it.
+/// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
+    RefusalRecord refusals,
     IRecycleBinEmptier? emptier = null)
 {
     private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
@@ -111,14 +117,14 @@ public sealed class PlanExecutor(
         // than clamping to zero and claiming nothing was reclaimed.
         var message = reclaimed < 0
             ? $"{outcome.Message} (the cache grew since the preview; " +
-              $"{Scanning.FreeSpace.Format(after)} remains)"
+              $"{FreeSpace.Format(after)} remains)"
             : outcome.Message;
 
         return new StepOutcome(
             step.Description,
             outcome.Succeeded,
             BytesReclaimed: Math.Max(0, reclaimed),
-            Skipped: 0,
+            Refusals.None,
             message);
     }
 
@@ -156,7 +162,7 @@ public sealed class PlanExecutor(
                 step.Description,
                 Succeeded: false,
                 BytesReclaimed: 0,
-                Skipped: 0,
+                Refusals.None,
                 "Nothing was removed: Windows cannot empty a Recycle Bin partially, and this plan "
                 + "asked for recently changed files to be left alone.");
         }
@@ -169,7 +175,7 @@ public sealed class PlanExecutor(
                 step.Description,
                 Succeeded: false,
                 BytesReclaimed: 0,
-                Skipped: 0,
+                Refusals.None,
                 "Nothing was removed: this is not the path of a Recycle Bin on a drive.");
         }
 
@@ -202,7 +208,7 @@ public sealed class PlanExecutor(
             // here can say what went wrong, so the sentence says what is true.
             (false, _, null) =>
                 $"Nothing was removed: Windows reported success and the bin still holds "
-                + $"{Scanning.FreeSpace.Format(remaining)}.",
+                + $"{FreeSpace.Format(remaining)}.",
 
             // Emptied, and it held nothing by the time the shell reached it. Distinguished from the
             // line above by the measurement rather than by the reclaim, which is zero in both.
@@ -210,17 +216,17 @@ public sealed class PlanExecutor(
 
             // Something went and something stayed: a file another process holds open is the usual
             // cause, and it is §5.3's ordinary outcome rather than a failure.
-            (true, > 0, _) => $"Emptied, apart from {Scanning.FreeSpace.Format(remaining)} Windows "
+            (true, > 0, _) => $"Emptied, apart from {FreeSpace.Format(remaining)} Windows "
                 + "would not release.",
 
             _ => "Emptied.",
         };
 
         return new StepOutcome(
-            step.Description, succeeded, Math.Max(0, reclaimed), Skipped: 0, message);
+            step.Description, succeeded, Math.Max(0, reclaimed), Refusals.None, message);
     }
 
-    private static async Task<StepOutcome> DeleteAsync(
+    private async Task<StepOutcome> DeleteAsync(
         DeleteDirectoryStep step,
         MinimumAge keep,
         IProgress<double>? progress,
@@ -228,8 +234,10 @@ public sealed class PlanExecutor(
     {
         var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
-        // Skipped items are not a failure (§5.3). The step only fails if the directory survived
-        // intact and nothing at all was reclaimed — that is, we achieved nothing.
+        refusals.Replace(step.Path, removal.RefusedAt);
+
+        // A refusal is not a failure (§5.3). The step only fails if the directory survived intact
+        // and nothing at all was reclaimed — that is, we achieved nothing.
         //
         // A file the guard held back counts as something achieved, because it is the outcome the
         // user asked for. A directory holding nothing else reclaims no bytes and keeps its root, so
@@ -238,23 +246,23 @@ public sealed class PlanExecutor(
 
         var message = succeeded switch
         {
-            false => WhyNothingHappened(removal.Skipped),
+            false => LeftInPlace.WhyNothingHappened(removal.Refused),
 
             // Nothing came out and the folder is still standing, which is the guard's own case: it
             // held back everything this step named. Saying "Removed" here would be a false statement
             // about the user's disk, and the qualifier would not rescue it — the sentence has to be
             // about what stayed, because that is all that happened.
             _ when removal is { BytesReclaimed: 0, RootRemoved: false } =>
-                $"Left alone: {removal.Kept} file(s) changed too recently.",
+                $"Left alone: {removal.Kept} file(s) changed too recently{LeftInPlace.Clauses(removal.Refused, kept: 0)}.",
 
-            _ => $"Removed{Held(removal.Skipped, removal.Kept)}.",
+            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.Kept)}.",
         };
 
         return new StepOutcome(
             step.Description,
             succeeded,
             removal.BytesReclaimed,
-            removal.Skipped,
+            removal.Refused,
             message,
             removal.Kept);
     }
@@ -273,7 +281,7 @@ public sealed class PlanExecutor(
     /// or the guard doing its job. A scratch folder holding nothing but live and recent files
     /// reclaims nothing and has failed at nothing.</para>
     /// </summary>
-    private static async Task<StepOutcome> ClearAsync(
+    private async Task<StepOutcome> ClearAsync(
         ClearDirectoryStep step,
         MinimumAge keep,
         IProgress<double>? progress,
@@ -287,35 +295,37 @@ public sealed class PlanExecutor(
             fileSystem: null,
             new RemovalBounds(KeepRoot: true, step.Spared)).ConfigureAwait(false);
 
+        refusals.Replace(step.Path, removal.RefusedAt);
+
         var succeeded = removal.BytesReclaimed > 0 || removal.Kept > 0 || removal.Spared > 0
-            || removal.Skipped == 0;
+            || removal.Refused.IsEmpty;
 
         var message = (succeeded, removal.BytesReclaimed) switch
         {
-            (false, _) => WhyNothingHappened(removal.Skipped),
+            (false, _) => LeftInPlace.WhyNothingHappened(removal.Refused),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
             // touch, and entries something is using. "Cleared" would be a false statement about a
             // folder that is exactly as full as it was.
             (true, 0) when removal.Kept > 0 || removal.Spared > 0 =>
-                $"Nothing was cleared{Held(removal.Skipped, removal.Kept, removal.Spared)}.",
+                $"Nothing was cleared{LeftInPlace.Clauses(removal.Refused, removal.Kept, removal.Spared)}.",
 
             (true, 0) => "It held nothing to clear.",
 
-            _ => $"Cleared{Held(removal.Skipped, removal.Kept, removal.Spared)}.",
+            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.Kept, removal.Spared)}.",
         };
 
         return new StepOutcome(
             step.Description,
             succeeded,
             removal.BytesReclaimed,
-            removal.Skipped,
+            removal.Refused,
             message,
             removal.Kept,
             removal.Spared);
     }
 
-    private static async Task<StepOutcome> DeleteAsync(
+    private async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,
         MinimumAge keep,
         IProgress<double>? progress,
@@ -329,72 +339,27 @@ public sealed class PlanExecutor(
         // Kept is a success for the same reason it is on a directory: nothing was removed because
         // nothing was meant to be. There is only the one file, so the whole message says so rather
         // than qualifying a removal that did not happen.
+        //
+        // The record is left as it was, because nothing asked Windows anything: a refusal recorded
+        // by an earlier clean is still the latest answer there is.
         if (removal.Kept)
         {
             return new StepOutcome(
                 step.Description,
                 Succeeded: true,
                 BytesReclaimed: 0,
-                Skipped: 0,
+                Refusals.None,
                 "Left alone: it changed too recently.",
                 Kept: 1);
         }
 
-        var message = removal.Removed ? "Removed." : WhyNothingHappened(removal.Skipped);
+        refusals.Replace(step.Path, removal.Refused.IsEmpty ? [] : [step.Path]);
+
+        var message = removal.Removed ? "Removed." : LeftInPlace.WhyNothingHappened(removal.Refused);
 
         return new StepOutcome(
-            step.Description, removal.Removed, removal.BytesReclaimed, removal.Skipped, message);
+            step.Description, removal.Removed, removal.BytesReclaimed, removal.Refused, message);
     }
-
-    /// <summary>
-    /// What a successful removal has to add about what it left behind, or nothing where it left
-    /// nothing.
-    ///
-    /// <para>The three causes are named separately because they ask different things of the reader:
-    /// Windows refused, which they may be able to act on by closing something; a setting they chose
-    /// held a file back; and Deguffer declined to touch an entry it found somebody working in. A
-    /// single count would tell them how much stayed and nothing about what to do.</para>
-    ///
-    /// <para>Composed from the clauses that apply rather than switched on every combination: three
-    /// causes make eight cases, seven of which say the same things in a different order, and the
-    /// wording would then live in eight places.</para>
-    /// </summary>
-    private static string Held(int skipped, int kept, int spared = 0)
-    {
-        var clauses = new List<string>(3);
-
-        if (skipped > 0)
-        {
-            clauses.Add($"{skipped} item(s) left in place because they were in use");
-        }
-
-        if (kept > 0)
-        {
-            clauses.Add($"{kept} file(s) left alone because they changed recently");
-        }
-
-        if (spared > 0)
-        {
-            clauses.Add($"{spared} item(s) left alone because something is using them");
-        }
-
-        return clauses.Count == 0 ? string.Empty : ", " + string.Join(", ", clauses);
-    }
-
-    /// <summary>
-    /// The sentence for a deletion that achieved nothing.
-    ///
-    /// It names no cause, and that is the decision rather than an omission. The two available
-    /// causes are indistinguishable from here — an unelevated delete under the Windows directory is
-    /// refused file by file, which arrives as exactly the skip a locked file produces — and naming
-    /// either would be a guess. Naming <em>both</em> was tried and is worse: the shell does not
-    /// offer a step needing administrator rights to a process that has none, so this is reached
-    /// almost only on an elevated run, where "run as administrator" is advice the reader has
-    /// already taken. The plan carries what needs administrator rights; this reports what happened.
-    /// </summary>
-    private static string WhyNothingHappened(int skipped) => skipped == 0
-        ? "Nothing was removed."
-        : $"Nothing was removed: Windows would not release {skipped} item(s).";
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {

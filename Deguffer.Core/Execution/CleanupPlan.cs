@@ -139,6 +139,14 @@ public sealed record CleanupPlan
         || ProtectedPaths.Any(p => p.Withheld == Withholding.TooRecent);
 
     /// <summary>
+    /// Whether this plan's figures leave out something Windows would not let a previous clean take,
+    /// and still would not when this plan was made. The same shape as
+    /// <see cref="HasRecentContentHeldBack"/>, for the same reason: a row whose every byte is refused
+    /// measures zero and is not clear. Recomputed rather than stored, for the reason given there.
+    /// </summary>
+    public bool HasRefusedContent => Steps.Any(s => !s.Refused.IsEmpty);
+
+    /// <summary>
     /// Which route measured this plan's paths. <see cref="FallbackReason.None"/> for a plan with
     /// nothing to measure, which is correct: an empty plan gives the user no reason to elevate.
     ///

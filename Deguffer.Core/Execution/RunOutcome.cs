@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Execution;
 
 /// <summary>How a finished run's §5.6 verification came out, worst first.</summary>
@@ -100,20 +102,36 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
     /// <summary>
     /// What the run did not remove, or nothing where it removed everything it named.
     ///
-    /// The three counts are reported beside each other and never folded together. One is Windows
-    /// refusing, which the user can act on by closing something; one is Deguffer honouring the
-    /// setting they chose; and one is Deguffer declining to touch an entry it found a program
-    /// working in, which they act on by closing that program. Saying nothing about any of them
-    /// leaves a run that reclaimed less than the preview implied with no stated reason on screen at
-    /// all.
+    /// <para>The causes are reported beside each other and never folded together. Another program
+    /// holding files open is answered by closing it. Windows refusing for any other reason is not
+    /// answered by waiting, and it is stated with its size, because a count of files reads as a
+    /// handful of locked ones whatever it holds — "252994 item(s) in use were left alone" was the
+    /// whole account of 5.9 GB a clean could not take, and the next preview offered it again. One
+    /// more cause is Deguffer honouring the setting the user chose, and the last is Deguffer declining
+    /// to touch an entry it found a program working in.</para>
+    ///
+    /// <para>What the next preview does with a refusal is said as well, because it is the answer to
+    /// the question a refusal raises: will this row keep offering what it cannot take?</para>
     /// </summary>
     private static string LeftBehind(IReadOnlyList<CleanupResult> results)
     {
-        var skipped = results.Sum(r => r.SkippedCount);
+        var refused = results.Aggregate(Refusals.None, (total, result) => total + result.Refused);
         var kept = results.Sum(r => r.KeptCount);
         var spared = results.Sum(r => r.SparedCount);
 
-        return (skipped > 0 ? $" {skipped} item(s) in use were left alone." : string.Empty)
+        return (refused.InUse.Files > 0
+                ? $" Another program had {refused.InUse.Files:N0} file(s) "
+                  + $"({FreeSpace.Format(refused.InUse.Bytes)}) open, so they were left in place."
+                : string.Empty)
+            + (refused.Denied.Files > 0
+                ? $" Windows would not let Deguffer remove {refused.Denied.Files:N0} file(s) "
+                  + $"({FreeSpace.Format(refused.Denied.Bytes)})."
+                : string.Empty)
+            // Qualified, because one refusal is invisible to the preview's question: a running
+            // program's own files open for deletion and refuse only the deletion. See DeletionProbe.
+            + (refused.IsEmpty
+                ? string.Empty
+                : " The next preview leaves out whatever is still refused, apart from a running program's own files.")
             + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
 
             // Worded away from the first clause on purpose. Both are about something being in use,
