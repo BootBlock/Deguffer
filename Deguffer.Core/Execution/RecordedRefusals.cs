@@ -10,16 +10,15 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Applied to every plan on its way out of a provider, not by each provider.</b> The defect
 /// it closes was in none of them. A temporary folder showed it first — a quarter of a million files
 /// in guarded browser profiles, offered by every preview, refused by every clean, and offered again —
-/// but a cache whose files security software guards, or a build tree with an executable still
-/// running out of it, did the same. See <see cref="RefusalRecord"/> for why only the places a clean
-/// was refused are asked again.</para>
+/// but any location Deguffer deletes itself would do the same with a file it may not remove, or with
+/// an executable still running out of it. See <see cref="RefusalRecord"/> for why only the places a
+/// clean was refused are asked again.</para>
 /// </summary>
 internal static class RecordedRefusals
 {
     /// <summary>
-    /// How many of the places still refused a note names before counting the rest. Enough to tell a
-    /// reader what they are — "playwright_chromiumdev_profile-…" three times says more than any
-    /// count — without a sentence two thousand names long.
+    /// How many of the places still refused a note names before counting the rest: enough for a
+    /// reader to recognise what is holding the space, without a sentence two thousand names long.
     /// </summary>
     private const int NamedPlaces = 3;
 
@@ -76,7 +75,7 @@ internal static class RecordedRefusals
             yield return new PlanNote(
                 PlanNoteSeverity.Warning,
                 $"Windows would not let Deguffer remove {FreeSpace.Format(refused.Denied.Bytes)} of this "
-                + $"({refused.Denied.Files:N0} file(s){Where(places, p => p.Denied.Files > 0)}) when it last "
+                + $"({refused.Denied.Files:N0} file(s){Where(places, p => p.Denied)}) when it last "
                 + "cleaned, and still refuses, so the size shown leaves it out. Deguffer tries again each "
                 + "time it cleans.");
         }
@@ -86,16 +85,28 @@ internal static class RecordedRefusals
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
                 $"Another program had {FreeSpace.Format(refused.InUse.Bytes)} of this open "
-                + $"({refused.InUse.Files:N0} file(s){Where(places, p => p.InUse.Files > 0)}) when Deguffer "
+                + $"({refused.InUse.Files:N0} file(s){Where(places, p => p.InUse)}) when Deguffer "
                 + "last cleaned, and still does, so the size shown leaves it out.");
         }
     }
 
+    /// <summary>
+    /// The places holding one kind of refusal, largest first. Driving the real window settled the
+    /// order: alphabetically, the three names a reader saw were whichever places happened to sort
+    /// first, which says nothing about where the refused space is.
+    /// </summary>
     private static string Where(
         IReadOnlyList<(string Place, Refusals Refused)> places,
-        Func<Refusals, bool> heldHere)
+        Func<Refusals, RefusalTally> kind)
     {
-        var named = places.Where(p => heldHere(p.Refused)).Select(p => p.Place).ToList();
+        var named = places
+            .Select(p => (p.Place, Tally: kind(p.Refused)))
+            .Where(p => p.Tally.Files > 0)
+            .OrderByDescending(p => p.Tally.Bytes)
+            .ThenBy(p => p.Place, StringComparer.OrdinalIgnoreCase)
+            .Select(p => p.Place)
+            .ToList();
+
         var rest = named.Count - NamedPlaces;
 
         return ", in "

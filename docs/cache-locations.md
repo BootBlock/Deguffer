@@ -2368,9 +2368,10 @@ clean will actually take — with the one exception described next.
 **A file Windows will not release is left where it is, and the next preview stops offering it.**
 Two kinds of refusal reach a temporary folder. A program that still has a file open releases it
 when the program closes. Windows can also refuse for reasons no amount of waiting changes: an access
-rule, or security software guarding a folder. On one workstation, security software refused every
-file in the browser profiles that automated test runs had left in `%TEMP%` — nearly two thousand
-folders and 5.9 GB — and refused an administrator too.
+rule, or security software guarding a folder. On one workstation, something below the access rules
+— most likely security software protecting browser data — refused every file in the browser
+profiles that automated test runs had left in `%TEMP%`: nearly two thousand folders and 5.9 GB. It
+refused an administrator too.
 
 Deguffer cannot know about a refusal before it has tried, so the first preview offers those files.
 The clean then reports what it could not take, with its size and which kind of refusal it was, and

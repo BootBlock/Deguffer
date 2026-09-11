@@ -96,8 +96,8 @@ public interface IFileSystem
     ///
     /// <para>Nothing is deleted. The file is opened for deletion and closed again, which is the only
     /// question that reaches a filter driver refusing below the ACL. See
-    /// <see cref="DeletionProbe"/> for what that costs another program, and why it is asked only of
-    /// files a previous clean found refused.</para>
+    /// <see cref="DeletionProbe"/> for what that costs another program, and why it is asked only
+    /// inside the places a previous clean found refused.</para>
     /// </summary>
     RefusalReason? ProbeRemoval(string path);
 

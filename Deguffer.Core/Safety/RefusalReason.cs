@@ -8,7 +8,8 @@ namespace Deguffer.Core.Safety;
 /// A file Windows refuses for any other reason stays refused however long the user waits: an access
 /// rule, security software guarding a folder, or an executable something is running from. Reporting
 /// both as "in use" sent the reader looking for a program that was not there — observed on a
-/// workstation where security software guarded 5.9 GB of browser profiles in <c>%TEMP%</c>, and
+/// workstation where something below the ACL, most likely security software, guarded 5.9 GB of
+/// browser profiles in <c>%TEMP%</c>, and
 /// every clean reported a quarter of a million files "in use" and then offered them again.</para>
 /// </summary>
 public enum RefusalReason

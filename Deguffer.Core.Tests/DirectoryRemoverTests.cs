@@ -127,7 +127,7 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// <summary>
     /// A file Windows denies is reported as denied, with its size — never as "in use".
     ///
-    /// <para>The defect in issue #117: security software refused every file in guarded browser
+    /// <para>The defect in issue #117: Windows refused every file in guarded browser
     /// profiles, the removal counted each as a skip, and the run said a quarter of a million items
     /// were "in use" about 5.9 GB nothing would ever release. The read-only retry is what makes the
     /// classification easy to get wrong, because the first refusal is always an access refusal —

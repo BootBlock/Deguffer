@@ -907,8 +907,8 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Issue #117, end to end, with Windows itself refusing. Security software guarded every file in
-    /// browser profiles a test runner had left here: each preview offered them, each clean was
+    /// Issue #117, end to end, with Windows itself refusing. Something below the ACL guarded every
+    /// file in browser profiles a test runner had left here: each preview offered them, each clean was
     /// refused and reported them "in use", and the next preview offered the same bytes again.
     ///
     /// <para>The first preview still offers them, and that is the stated limit rather than an

@@ -111,7 +111,7 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
-    /// The defect in issue #117, in the words it produced: 5.9 GB that security software would not
+    /// The defect in issue #117, in the words it produced: 5.9 GB that Windows would not
     /// let go was reported as "252994 item(s) in use were left alone", which reads as a handful of
     /// locked files — and the next preview offered all of it again. A denial is not a file in use,
     /// its size is what tells the reader the run fell short, and the reader is owed the answer to

@@ -35,9 +35,10 @@ namespace Deguffer.Core.Providers;
 /// <item><b>A refusal treated as ordinary.</b> A file Windows will not release is live state, or
 /// something guarding it, so <see cref="DirectoryRemover"/> leaves it and moves on. What it leaves is
 /// reported with its size and its reason, and the next preview leaves out whatever is still refused
-/// — see <see cref="RefusalRecord"/>. This folder is where that was found: security software refusing
-/// every file in browser profiles that test runners had left here, so each clean reported a quarter of
-/// a million files "in use" and each preview offered their 5.9 GB again.</item>
+/// — see <see cref="RefusalRecord"/>. This folder is where that was found: every file in browser
+/// profiles that test runners had left here was refused below the ACL, most likely by security
+/// software, so each clean reported a quarter of a million files "in use" and each preview offered
+/// their 5.9 GB again.</item>
 /// </list>
 ///
 /// <para><b>The folder itself stays, and that is not a nicety.</b> Every program on the machine

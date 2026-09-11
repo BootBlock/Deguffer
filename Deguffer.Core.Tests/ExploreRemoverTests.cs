@@ -120,6 +120,58 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A file left in place says which kind of refusal left it. The old sentence said a file held open
+    /// and one this account may not touch "are the same answer from here", and the removal can now
+    /// tell them apart: the reader answers the first by closing a program.
+    /// </summary>
+    [Fact]
+    public async Task SaysAnotherProgramHadAFileOpenWhenThatIsWhatLeftItInPlace()
+    {
+        var file = _temp.CreateFile(16, "profile", "Downloads", "open.bin");
+        ExploreRemovalReport report;
+
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            report = await ExploreRemover.RemoveAsync(
+                [new ExploreItem(file, IsDirectory: false, Bytes: 16)],
+                ExploreRemovalMode.Permanent,
+                _policy);
+        }
+
+        Assert.Contains("another program had 1 file(s)", Assert.Single(report.Refused).Message, StringComparison.Ordinal);
+        Assert.True(LongPath.FileExists(file));
+    }
+
+    /// <summary>
+    /// And a folder that could only be partly deleted says Windows denied what it still holds, rather
+    /// than calling it "in use" — which is what sent a reader looking for a program that was not there.
+    /// </summary>
+    [Fact]
+    public async Task SaysWindowsDeniedWhatAPartlyDeletedFolderStillHolds()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "junk");
+        _temp.CreateFile(32, "profile", "Downloads", "junk", "a.bin");
+        var denied = _temp.CreateFile(32, "profile", "Downloads", "junk", "guarded.bin");
+
+        var fs = new RefusingFileSystem(
+            WindowsFileSystem.Default,
+            new Dictionary<string, RefusalReason> { [denied] = RefusalReason.Denied });
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            ExploreRemovalMode.Permanent,
+            _policy,
+            recycleBin: null,
+            fileSystem: fs);
+
+        var message = Assert.Single(report.Refused).Message;
+
+        Assert.Contains("Windows would not let Deguffer remove them", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("in use", message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(LongPath.FileExists(denied));
+    }
+
+    /// <summary>
     /// The negative that matters. A refused item is not merely absent from the report — it is still
     /// on the disk, and the shell is never asked about it.
     /// </summary>

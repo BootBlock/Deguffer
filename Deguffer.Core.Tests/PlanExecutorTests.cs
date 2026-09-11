@@ -79,6 +79,34 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal([dump], RefusalLog.At(dump));
     }
 
+    /// <summary>
+    /// A clear that took something and was denied the rest says so in those words. Windows' own
+    /// refusal is staged, so the reason is the one a real denial produces rather than a fake's.
+    /// </summary>
+    [Fact]
+    public async Task SaysAClearLeftWhatWindowsDeniedRatherThanCallingItInUse()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+        var guarded = _temp.CreateFile(2048, "scratch", "profile", "Cookies");
+
+        using var undeletable = new UndeletableFile(guarded);
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(
+            PlanDeleting(new ClearDirectoryStep(scratch, "Scratch files")), runReach: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Contains(
+            $"1 file(s) ({FreeSpace.Format(2048)}) left in place because Windows would not let Deguffer remove them",
+            step.Message!,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("in use", step.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(guarded), "the fixture let a denied file go");
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

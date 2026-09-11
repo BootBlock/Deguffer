@@ -16,8 +16,9 @@ namespace Deguffer.Core.Safety;
 ///
 /// <para><b>It is not free of side effects, and the callers are chosen for that.</b> While the
 /// handle is open, another program's open that does not share delete access fails. The handle lives
-/// for microseconds and a refused open creates none, which is why this is asked only of files a
-/// previous clean already found Windows refusing — see <see cref="Execution.RefusalCheck"/>.</para>
+/// for microseconds and a refused open creates none, which is why this is asked only inside the
+/// places a previous clean found Windows refusing, where most files usually still refuse — see
+/// <see cref="Execution.RefusalCheck"/>.</para>
 ///
 /// <para>An executable something is running from opens for deletion and then refuses the deletion
 /// itself, so this answers that it would go. The removal reports it refused, and the next check

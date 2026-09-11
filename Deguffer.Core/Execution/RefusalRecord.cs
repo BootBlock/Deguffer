@@ -14,8 +14,8 @@ namespace Deguffer.Core.Execution;
 /// file Deguffer measures would do that across millions of files on every preview, and would take
 /// every location Deguffer deletes itself off §5.5's fast path, because the file table cannot ask
 /// it. The clean already asks the real question of every file it attempts, so the preview asks
-/// again only where the clean was refused. There the answer is nearly always "still refused", and a
-/// refused open leaves no handle to get in anybody's way.</para>
+/// again only where the clean was refused. Most files there usually still refuse, and a refused open
+/// leaves no handle to get in anybody's way.</para>
 ///
 /// <para><b>It records where to look, never what the answer was.</b> Every preview asks again, so a
 /// refusal that has since lifted is counted at once, without waiting for a clean that the row would
