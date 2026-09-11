@@ -31,12 +31,11 @@ namespace Deguffer.Core.Safety;
 ///
 /// <para><b>Two questions, and what ran decides which is asked afterwards.</b>
 /// <see cref="IsPresent"/> looks through folders, and <see cref="HoldsAnyEntry"/> stops at the top
-/// level. What a protected directory held before a run is always captured with the first. After the
-/// run, looking through folders is only evidence where a tool's own command ran, because a tool is
-/// what empties files in place and leaves their folders standing. Deguffer's own deletions take a
-/// folder with its files, so without a command a folder left holding only empty folders was left that
-/// way by something else, and the second question is the one asked. See
-/// <c>PlanVerifier.WasEmptied</c>.</para>
+/// level. What a protected directory held before a run is always captured with the first. After a run
+/// holding a tool's own command the first is asked again, because a tool empties files in place and
+/// can leave their folders standing. After any other run the second is asked, so that a skeleton an
+/// outside build tool left is not read as the run's doing. <c>PlanVerifier.WasEmptied</c> states what
+/// that choice passes over.</para>
 /// </summary>
 public static class DirectoryContent
 {

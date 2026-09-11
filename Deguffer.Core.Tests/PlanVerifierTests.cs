@@ -375,11 +375,12 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
-    /// The same shape in a run of Deguffer's own deletions, which take a folder with its files and so
-    /// cannot leave it. Something else did: MSBuild's Clean, run while the preview sat on screen,
-    /// leaves exactly this beside the <c>obj</c> the run removes. So the question is whether anything
-    /// at all is left, and the alarm stays for the shape this run can produce: a folder with nothing
-    /// in it.
+    /// The same shape in a run with no tool's command. MSBuild's Clean, run while the preview sat on
+    /// screen, leaves exactly this beside the <c>obj</c> the run removes, and Deguffer never touched
+    /// it, so the question here is whether anything at all is left. A folder with nothing in it is
+    /// still an alarm. What the top-level question passes over as well, a chain of empty folders
+    /// Deguffer's own removal leaves when Windows refuses one, is the cost
+    /// <c>PlanVerifier.WasEmptied</c> states.
     /// </summary>
     [Fact]
     public void WithoutACommandAFolderEmptiedOnlyOfItsFilesIsNotReadAsEmptied()

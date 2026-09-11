@@ -108,13 +108,19 @@ public static class PlanVerifier
     ///
     /// <para><b>How far the question looks depends on what ran.</b> A tool's own command empties
     /// files in place and can leave every folder that held them standing, so in a run holding one the
-    /// question is whether content is left anywhere below. Deguffer's own deletions take a folder with
-    /// its files, so in a run without a command a folder left holding only empty folders was not left
-    /// that way by the run. MSBuild's Clean, run while the preview sat on screen, leaves exactly that
-    /// in the <c>bin</c> beside every <c>obj</c> this run removes. There the question is whether
-    /// anything at all is left, which keeps the alarm for the shape the run itself can produce. In a
-    /// run that holds a command as well, the same outside Clean still reads as emptied: nothing here
-    /// can tell a tool's skeleton from MSBuild's.</para>
+    /// question is whether content is left anywhere below. In a run without one, the question is
+    /// whether anything at all is left. A folder holding only empty folders is there most often
+    /// something else's doing: MSBuild's Clean, run while the preview sat on screen, leaves exactly
+    /// that in the <c>bin</c> beside every <c>obj</c> this run removes, and an alarm about it would cry
+    /// wolf about a folder Deguffer never touched.</para>
+    ///
+    /// <para><b>What that costs.</b> Deguffer's own removal can leave the same shape. It tolerates a
+    /// directory Windows refuses to remove, such as one a process is working in, and records no such
+    /// refusal, so an over-reach that meets one leaves a chain of empty folders down to it. In a run
+    /// without a command that chain reads as a survivor. A Temp clear that failed to spare a live
+    /// entry, whose process works a few folders below it, is the case it hides. In a run that holds a
+    /// command as well, the outside Clean still reads as emptied, because nothing here can tell a
+    /// tool's skeleton from MSBuild's.</para>
     ///
     /// <para>What was there before is captured through folders either way (see
     /// <see cref="DirectoryContent"/>), so a folder that held only empty folders is never the subject.

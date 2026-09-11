@@ -40,8 +40,9 @@ namespace Deguffer.Core.Execution;
 /// path an alarm rather than an outside removal, and it makes an emptied folder an alarm for the same
 /// reason, so it cannot also be the reason to excuse one. That excuse is
 /// <see cref="ProbedPaths"/>'s to give, and only for the folders above where the tool was sent. What
-/// it does decide is how far the emptied question looks, because only a tool empties files in place
-/// and leaves their folders standing.</para>
+/// it does decide is how far the emptied question looks: a tool empties files in place and can leave
+/// every folder standing, which is the shape the deeper question exists for. See
+/// <c>PlanVerifier.WasEmptied</c> for what a run without one is asked, and what that costs.</para>
 /// </param>
 public sealed record RunReach(
     IReadOnlyList<string> TargetedPaths,

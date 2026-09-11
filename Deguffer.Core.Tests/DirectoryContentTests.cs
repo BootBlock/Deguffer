@@ -4,9 +4,10 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// §5.6 asks <see cref="DirectoryContent.IsPresent"/> of every protected directory twice, when the
-/// plan is made and after the run, so what it answers for each shape is the whole of what an
-/// emptied-in-place over-reach can be caught by.
+/// §5.6 asks <see cref="DirectoryContent.IsPresent"/> of every protected directory when the plan is
+/// made, and asks it again after a run that holds a tool's own command; after any other run it asks
+/// <see cref="DirectoryContent.HoldsAnyEntry"/>. What the two answer for each shape is the whole of
+/// what an emptied-in-place over-reach can be caught by.
 ///
 /// <para>The two directions cost different things. Content read where there is none records a folder
 /// as having held something, and its survival then proves nothing. No content read where there is

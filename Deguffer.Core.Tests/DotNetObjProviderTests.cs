@@ -278,8 +278,8 @@ public sealed class DotNetObjProviderTests : IDisposable
     /// <summary>
     /// §5.6 when the developer runs a Clean of their own while the preview sits on screen. MSBuild's
     /// Clean deletes the output files it built and leaves <c>bin\Debug\&lt;framework&gt;</c> standing,
-    /// so <c>bin</c> ends the run holding only empty folders. Deguffer never touched it, and removing
-    /// <c>obj</c> could not have left that shape, so the run is not reported as having emptied it.
+    /// so <c>bin</c> ends the run holding only empty folders. Deguffer never touched it, so the run is
+    /// not reported as having emptied it.
     /// </summary>
     [Fact]
     public async Task AnOutsideCleanBetweenPreviewAndCleanIsNotReportedAsEmptyingBin()
