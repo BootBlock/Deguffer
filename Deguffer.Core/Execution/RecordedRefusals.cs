@@ -48,9 +48,12 @@ internal static class RecordedRefusals
                 continue;
             }
 
+            // The count comes out with the bytes. A leftover that frees no bytes is chosen on its
+            // entries, so leaving the refused ones in would offer folders the removal cannot take.
             steps.Add(step with
             {
-                Estimated = step.Estimated - ScanSize.FromLengths(found.Refused.Bytes),
+                Estimated = step.Estimated
+                    - new ScanSize(found.Refused.Bytes, found.Refused.Bytes, Entries: found.Standing),
                 Refused = found.Refused,
             });
 

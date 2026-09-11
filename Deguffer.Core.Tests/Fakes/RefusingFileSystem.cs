@@ -49,7 +49,25 @@ public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<st
 
     public RefusalReason? ProbeRemoval(string path) => ReasonFor(path) ?? inner.ProbeRemoval(path);
 
-    public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
+    /// <summary>
+    /// A listed directory refuses too, in the form Windows gives each reason for a folder: a sharing
+    /// violation where something is using it, and a bare <see cref="IOException"/> with no Win32 error
+    /// where it is denied. The second is not <see cref="UnauthorizedAccessException"/>, which is what
+    /// the same denial of a file throws.
+    /// </summary>
+    public void DeleteDirectory(string path)
+    {
+        switch (ReasonFor(path))
+        {
+            case RefusalReason.InUse:
+                throw new IOException($"In use: {path}", SharingViolation);
+            case RefusalReason.Denied:
+                throw new IOException($"Access to the path '{path}' is denied.");
+            default:
+                inner.DeleteDirectory(path);
+                break;
+        }
+    }
 
     public void ClearAttributes(string path)
     {

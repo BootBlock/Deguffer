@@ -12,6 +12,12 @@ namespace Deguffer.Core.Execution;
 /// </summary>
 public static class DirectoryRemover
 {
+    /// <summary>
+    /// ERROR_DIR_NOT_EMPTY: the answer Windows gives for a folder held up by what is still inside it,
+    /// as opposed to one it refused for itself.
+    /// </summary>
+    private const int ErrorDirectoryNotEmpty = 145;
+
     /// <param name="fileSystem">
     /// Defaults to the real filesystem. Injectable so a test can assert that every path crossing
     /// the boundary is in extended-length form — see <see cref="IFileSystem"/> for why the outcome
@@ -83,32 +89,48 @@ public static class DirectoryRemover
                 return new RemovalOutcome(0, Refusals.None, RootRemoved: false, Kept: 1);
             }
 
-            if (!bounds.KeepRoot)
-            {
-                TryDeleteDirectory(extended, fs);
-            }
+            var linkStayed = !bounds.KeepRoot && TryDeleteDirectory(extended, fs) is not null;
 
             progress?.Report(1.0);
 
-            return new RemovalOutcome(0, Refusals.None, RootRemoved: !fs.DirectoryExists(extended));
+            var linkRemoved = !fs.DirectoryExists(extended);
+
+            return new RemovalOutcome(
+                0,
+                Refusals.None,
+                RootRemoved: linkRemoved,
+                EntriesRemoved: linkRemoved && !bounds.KeepRoot ? 1 : 0)
+            {
+                LeftStanding = linkStayed ? [LongPath.Display(extended)] : [],
+            };
         }
 
         // Two passes: gather the tree first so progress is a real fraction rather than a guess,
         // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
         // leave us deleting a partially-understood tree.
         var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+        var leftStanding = new List<string>();
+
+        // Every entry this removal takes, so a tree of empty folders reports what went rather than
+        // nothing: files, links and folders alike.
+        long removed = 0;
 
         // A link is removed as a link and holds no bytes of its own, so a refusal to remove one
-        // moves no figure and is not counted.
+        // moves no figure and is not counted. A directory link that stays is still recorded as
+        // standing, because what §5.6 reads from it is where the removal went, not what it weighed.
         foreach (var link in inventory.Links)
         {
-            if (link.IsDirectory)
+            var gone = link.IsDirectory
+                ? TryDeleteDirectory(link.FullName, fs) is null
+                : TryDeleteFile(link.FullName, fs) is null;
+
+            if (gone)
             {
-                TryDeleteDirectory(link.FullName, fs);
+                removed++;
             }
-            else
+            else if (link.IsDirectory)
             {
-                TryDeleteFile(link.FullName, fs);
+                leftStanding.Add(link.FullName);
             }
         }
 
@@ -134,6 +156,7 @@ public static class DirectoryRemover
             else
             {
                 Interlocked.Add(ref reclaimed, file.Length);
+                Interlocked.Increment(ref removed);
             }
 
             var completed = Interlocked.Increment(ref done);
@@ -143,10 +166,16 @@ public static class DirectoryRemover
             }
         });
 
+        var refusedFolders = FolderRefusals.None;
+
         // Deepest first, so a directory is only removed once its children are gone. Ordering by
         // path length is a correct topological order here, not a shortcut: a parent's path is
         // always a strict prefix of its descendants', so it is always strictly shorter.
-        // Directories still holding a refused file simply stay — the correct outcome, not an error.
+        //
+        // A directory still holding something refused stays, and so does one Windows refuses for
+        // itself. Neither is an error (§5.3), and both are recorded: a folder left standing is where
+        // this removal went, and only the second is a refusal the reader has not already been told
+        // about.
         foreach (var directory in inventory.Directories.OrderByDescending(d => d.Length))
         {
             ct.ThrowIfCancellationRequested();
@@ -157,7 +186,18 @@ public static class DirectoryRemover
                 continue;
             }
 
-            TryDeleteDirectory(directory, fs);
+            if (TryDeleteDirectory(directory, fs) is not { } standing)
+            {
+                removed++;
+                continue;
+            }
+
+            leftStanding.Add(directory);
+
+            if (standing.Refused is { } reason)
+            {
+                refusedFolders += FolderRefusals.One(reason);
+            }
         }
 
         progress?.Report(1.0);
@@ -169,9 +209,12 @@ public static class DirectoryRemover
             refused.Total,
             RootRemoved: !bounds.KeepRoot && !fs.DirectoryExists(extended),
             inventory.Kept,
-            inventory.Spared)
+            inventory.Spared,
+            Interlocked.Read(ref removed))
         {
             RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
+            LeftStanding = [.. leftStanding.Select(LongPath.Display)],
+            RefusedFolders = refusedFolders,
         };
     }
 
@@ -237,16 +280,28 @@ public static class DirectoryRemover
         }
     }
 
-    private static void TryDeleteDirectory(string extendedPath, IFileSystem fs)
+    /// <summary>
+    /// Delete one empty directory, and say why it is still there — or null where it is gone: removed
+    /// here, or already gone by the time this reached it, which is the same post-condition
+    /// <see cref="TryDeleteFile"/> reports for a file.
+    /// </summary>
+    private static Standing? TryDeleteDirectory(string extendedPath, IFileSystem fs)
     {
+        Exception refusal;
+
         try
         {
             fs.DeleteDirectory(extendedPath);
-            return;
+            return null;
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
+        catch (DirectoryNotFoundException)
         {
-            // Not empty, in use, already gone — or the read-only bit, which the retry below is for.
+            return null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // Not empty, in use, refused — or the read-only bit, which the retry below is for.
+            refusal = ex;
         }
 
         // Windows refuses to remove a directory carrying the read-only attribute exactly as it
@@ -260,9 +315,12 @@ public static class DirectoryRemover
         // it. The attributes are the only honest answer, so they are read rather than guessed at.
         // Reading them is also what keeps this away from a link: clearing attributes through a
         // reparse point would act on the far side, which nothing here has classified.
+        //
+        // Attributes that cannot be read belong to a directory still there, most likely, since the
+        // deletion above did not report it missing. So the refusal stands as it was given.
         if (fs.TryGetAttributes(extendedPath) is not { } attributes || !attributes.HasFlag(FileAttributes.ReadOnly))
         {
-            return;
+            return StandingAfter(refusal);
         }
 
         // Emptiness is asked only of a real directory, and it costs nothing there: clearing the bit
@@ -273,21 +331,41 @@ public static class DirectoryRemover
         // removing the link without following it is what the caller asked for.
         if (!attributes.HasFlag(FileAttributes.ReparsePoint) && !IsEmpty(extendedPath, fs))
         {
-            return;
+            return Standing.HeldUp;
         }
 
         try
         {
             fs.ClearAttributes(extendedPath);
             fs.DeleteDirectory(extendedPath);
+            return null;
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
             // Held open, or something arrived in it between the two calls. The read-only bit is
             // cleared and the directory stays, which is the same residue TryDeleteFile leaves on the
             // same path — and it is a directory this plan named for removal either way.
+            return StandingAfter(ex);
         }
     }
+
+    /// <summary>
+    /// What a refusal to remove a directory says about why it stayed.
+    ///
+    /// <para>Windows answers a folder that still holds something with an error of its own, so that
+    /// case is told apart from a folder refused for itself. Observed on Windows 11 for the
+    /// extended-length form §6.3 requires: ERROR_DIR_NOT_EMPTY for a folder holding a folder, a
+    /// sharing violation for a folder another process has as its working directory, and a bare
+    /// IOException for a folder the account is denied.</para>
+    /// </summary>
+    private static Standing StandingAfter(Exception refusal) =>
+        refusal is IOException io && (io.HResult & 0xFFFF) == ErrorDirectoryNotEmpty
+            ? Standing.HeldUp
+            : new Standing(RefusalReasons.Of(refusal));
 
     /// <summary>
     /// Whether the directory holds nothing. Asked only of a directory already known not to be a
@@ -304,5 +382,14 @@ public static class DirectoryRemover
             // Unreadable or already gone: neither is a directory to go on clearing attributes on.
             return false;
         }
+    }
+
+    /// <summary>
+    /// Why a directory the removal tried to take is still there: the reason Windows gave where it
+    /// refused the folder itself, and none where something still inside the folder held it up.
+    /// </summary>
+    private readonly record struct Standing(RefusalReason? Refused)
+    {
+        public static Standing HeldUp => new(Refused: null);
     }
 }

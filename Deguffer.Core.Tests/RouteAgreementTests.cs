@@ -133,9 +133,9 @@ public class RouteAgreementTests
 
     /// <summary>
     /// The consequence of the above, at the seam that decides it. A step's
-    /// <see cref="CleanupStep.EstimatedBytes"/> is what both <c>Finding.HasReclaimableSpace</c> and
-    /// the shell's per-step checkbox read, so a directory measured at zero is one the user is shown
-    /// and cannot act on.
+    /// <see cref="CleanupStep.RemovesSomething"/> is what both <c>Finding.HasSomethingToRemove</c> and
+    /// the shell's per-step checkbox read, and for a cache rather than a leftover it answers from the
+    /// bytes alone, so a directory measured at zero is one the user is shown and cannot act on.
     ///
     /// <para>Asserted through a step rather than through a <see cref="ScanSize"/> alone, because the
     /// size was never the defect: the defect was a populated directory arriving at the shell as
@@ -159,6 +159,7 @@ public class RouteAgreementTests
 
         Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
         Assert.Equal(300, step.EstimatedBytes);
+        Assert.True(step.RemovesSomething);
     }
 
     /// <summary>

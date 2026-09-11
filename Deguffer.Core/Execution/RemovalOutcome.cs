@@ -21,12 +21,17 @@ namespace Deguffer.Core.Execution;
 /// somebody using. The user acts on it by closing that program, so the count is what tells them
 /// there is something to close.
 /// </param>
+/// <param name="EntriesRemoved">
+/// How many entries this removal took: files, links, and the folders they left empty, the root among
+/// them where it went. A path already gone when the removal began took nothing, so it counts none.
+/// </param>
 public sealed record RemovalOutcome(
     long BytesReclaimed,
     Refusals Refused,
     bool RootRemoved,
     int Kept = 0,
-    int Spared = 0)
+    int Spared = 0,
+    long EntriesRemoved = 0)
 {
     /// <summary>
     /// The entries directly inside the removal's root that held a refused file, in display form.
@@ -38,4 +43,22 @@ public sealed record RemovalOutcome(
     /// file in that tree for deletion on every preview.</para>
     /// </summary>
     public IReadOnlyList<string> RefusedAt { get; init; } = [];
+
+    /// <summary>
+    /// Every directory this removal tried to take and could not, in display form, whatever kept it:
+    /// Windows refusing the folder itself, or something still inside it. A root the caller asked to
+    /// keep was never tried, so it is not here.
+    ///
+    /// <para>The evidence §5.6 reads through <see cref="RunResidue"/>. A folder left standing says
+    /// where the removal went, which no question about what a folder still holds can say.</para>
+    /// </summary>
+    public IReadOnlyList<string> LeftStanding { get; init; } = [];
+
+    /// <summary>
+    /// The folders in <see cref="LeftStanding"/> that Windows refused for a reason of their own, by
+    /// reason. See <see cref="FolderRefusals"/> for why a folder held up by what it holds is not
+    /// counted. A link left standing is not counted either, for the reason a refused file link is not:
+    /// see <see cref="DirectoryRemover"/>.
+    /// </summary>
+    public FolderRefusals RefusedFolders { get; init; }
 }

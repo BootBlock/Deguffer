@@ -17,6 +17,16 @@ namespace Deguffer.Core.Execution;
 /// this is Deguffer declining to touch something it found in use. Only this one names the program to
 /// close, because the plan found the program before the removal began.
 /// </param>
+/// <param name="EntriesRemoved">
+/// How many entries the step took, for a removal whose reclaim is its entries rather than its bytes —
+/// a leftover of empty folders frees nothing measurable and still leaves the disk tidier. Zero for a
+/// §5.1 command, which reports what it freed and nothing about what it removed.
+/// </param>
+/// <param name="RefusedFolders">
+/// Folders Windows would not remove for a reason of their own, most often one a program is working
+/// in. Apart from <paramref name="Refused"/> because a folder holds no bytes: see
+/// <see cref="FolderRefusals"/>.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -24,7 +34,9 @@ public sealed record StepOutcome(
     Refusals Refused,
     string? Message = null,
     int Kept = 0,
-    int Spared = 0);
+    int Spared = 0,
+    long EntriesRemoved = 0,
+    FolderRefusals RefusedFolders = default);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -41,8 +53,15 @@ public sealed record CleanupResult
 
     public long BytesReclaimed => Steps.Sum(s => s.BytesReclaimed);
 
+    /// <summary>Entries the run took, across every step. See <see cref="StepOutcome.EntriesRemoved"/>.</summary>
+    public long EntriesRemoved => Steps.Sum(s => s.EntriesRemoved);
+
     /// <summary>Files left in place because Windows would not release them (§5.3), by reason.</summary>
     public Refusals Refused => Steps.Aggregate(Refusals.None, (total, step) => total + step.Refused);
+
+    /// <summary>Folders Windows would not remove for a reason of their own, by reason.</summary>
+    public FolderRefusals RefusedFolders =>
+        Steps.Aggregate(FolderRefusals.None, (total, step) => total + step.RefusedFolders);
 
     /// <summary>Files left alone because they had been touched inside the user's guard window.</summary>
     public int KeptCount => Steps.Sum(s => s.Kept);
@@ -89,6 +108,14 @@ public enum VerificationOutcome
     /// apart at all.
     /// </summary>
     Emptied,
+
+    /// <summary>
+    /// It is still there, and a removal this run began above it went inside it and could not take
+    /// everything it tried to. The same alarm as <see cref="Failed"/>, in the shape a refusal leaves:
+    /// whatever the folder still holds, Deguffer's own deletion reached into a path it promised to
+    /// leave. See <see cref="RunResidue"/>.
+    /// </summary>
+    Entered,
 }
 
 /// <summary>One assertion about something that should have survived, and how it came out.</summary>
@@ -111,14 +138,15 @@ public sealed record VerificationResult
     /// <c>with</c> copies backing fields, so a cache would outlive a change to
     /// <see cref="Checks"/>.
     ///
-    /// <para><see cref="VerificationOutcome.Emptied"/> counts here beside
-    /// <see cref="VerificationOutcome.Failed"/>, because the two differ only in what the wreckage
-    /// looks like: one path was destroyed and the other was emptied, and both mean a rule reached
-    /// further than it was meant to. Keeping them apart would let <see cref="Passed"/> report false
-    /// while <see cref="Summary"/> said every path survived.</para>
+    /// <para><see cref="VerificationOutcome.Emptied"/> and <see cref="VerificationOutcome.Entered"/>
+    /// count here beside <see cref="VerificationOutcome.Failed"/>, because the three differ only in
+    /// what the wreckage looks like: one path was destroyed, one was emptied, and one was gone into,
+    /// and all of them mean a rule reached further than it was meant to. Keeping them apart would let
+    /// <see cref="Passed"/> report false while <see cref="Summary"/> said every path survived.</para>
     /// </summary>
     public IReadOnlyList<VerificationCheck> Failures =>
-        [.. Checks.Where(c => c.Outcome is VerificationOutcome.Failed or VerificationOutcome.Emptied)];
+        [.. Checks.Where(c => c.Outcome
+            is VerificationOutcome.Failed or VerificationOutcome.Emptied or VerificationOutcome.Entered)];
 
     /// <summary>
     /// The paths something else took while the preview sat on screen. Kept apart from

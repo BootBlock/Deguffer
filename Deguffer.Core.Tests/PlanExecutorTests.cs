@@ -42,13 +42,13 @@ public sealed class PlanExecutorTests : IDisposable
 
         using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            var refused = await executor.ExecuteAsync(plan, runReach: null, progress: null, default);
+            var refused = await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, default);
 
             Assert.Equal(new RefusalTally(1, 2048), refused.Refused.InUse);
             Assert.Equal([Path.Combine(cache, "packages")], RefusalLog.At(cache));
         }
 
-        await executor.ExecuteAsync(plan, runReach: null, progress: null, default);
+        await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, default);
 
         Assert.Empty(RefusalLog.At(cache));
     }
@@ -67,13 +67,13 @@ public sealed class PlanExecutorTests : IDisposable
 
         using (new FileStream(dump, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            await executor.ExecuteAsync(PlanDeleting(step), runReach: null, progress: null, default);
+            await executor.ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
         }
 
         Assert.Equal([dump], RefusalLog.At(dump));
 
         var guarded = PlanDeleting(step) with { Keep = MinimumAge.WithinHours(8, DateTime.UtcNow) };
-        var kept = await executor.ExecuteAsync(guarded, runReach: null, progress: null, default);
+        var kept = await executor.ExecuteAsync(guarded, runReach: null, residue: null, progress: null, default);
 
         Assert.Equal(1, Assert.Single(kept.Steps).Kept);
         Assert.Equal([dump], RefusalLog.At(dump));
@@ -94,7 +94,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
         var result = await executor.ExecuteAsync(
-            PlanDeleting(new ClearDirectoryStep(scratch, "Scratch files")), runReach: null, progress: null, default);
+            PlanDeleting(new ClearDirectoryStep(scratch, "Scratch files")), runReach: null, residue: null, progress: null, default);
 
         var step = Assert.Single(result.Steps);
 
@@ -167,7 +167,7 @@ public sealed class PlanExecutorTests : IDisposable
             ],
         };
 
-        var result = await new PlanExecutor(runner, scanner, RefusalLog).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
+        var result = await new PlanExecutor(runner, scanner, RefusalLog).ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
 
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(cache), "the fixture command did not actually empty the tree.");
@@ -222,7 +222,7 @@ public sealed class PlanExecutorTests : IDisposable
             ],
         };
 
-        var result = await new PlanExecutor(runner, scanner, RefusalLog).ExecuteAsync(plan, runReach: null, progress: null, ct: default);
+        var result = await new PlanExecutor(runner, scanner, RefusalLog).ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
 
         Assert.Equal(0, result.BytesReclaimed);
     }
@@ -284,7 +284,7 @@ public sealed class PlanExecutorTests : IDisposable
         var progress = new ProgressRecorder<double>();
 
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
-            .ExecuteAsync(plan, runReach: null, progress, default);
+            .ExecuteAsync(plan, runReach: null, residue: null, progress, default);
 
         // Repeats are ordinary — the removal reports its last file and then its own completion —
         // so the claim is about which values appear and in what order, not how many times.
@@ -320,7 +320,7 @@ public sealed class PlanExecutorTests : IDisposable
         var progress = new ProgressRecorder<double>();
 
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
-            .ExecuteAsync(plan, runReach: null, progress, default);
+            .ExecuteAsync(plan, runReach: null, residue: null, progress, default);
 
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());
     }
@@ -358,7 +358,7 @@ public sealed class PlanExecutorTests : IDisposable
         var progress = new ProgressRecorder<double>();
 
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
-            .ExecuteAsync(plan, runReach: null, progress, default);
+            .ExecuteAsync(plan, runReach: null, residue: null, progress, default);
 
         // Two steps, two reports, and nothing else could have produced either of them.
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
@@ -405,7 +405,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
 
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
-            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: CancellationToken.None);
 
         var step = Assert.Single(result.Steps);
 
@@ -438,7 +438,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
 
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
-            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: CancellationToken.None);
 
         Assert.Equal(0, result.KeptCount);
         Assert.Equal(4096, result.BytesReclaimed);
@@ -467,7 +467,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
 
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
-            .ExecuteAsync(plan, runReach: null, progress: null, ct: CancellationToken.None);
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: CancellationToken.None);
 
         var step = Assert.Single(result.Steps);
 
@@ -522,6 +522,110 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains("something is using them", step.Message!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The case issue #118 names, end to end through a real removal. A clear that fails to spare a
+    /// folder a program is working in takes every file in it and leaves that folder and the chain above
+    /// it. The run holds no tool's command, so a question about content reads the chain as a survivor.
+    /// What the removal left standing inside the protected folder is read instead.
+    /// </summary>
+    [Fact]
+    public async Task AClearThatWentIntoAFolderItShouldHaveSparedFailsVerification()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live");
+        var working = _temp.CreateDirectory("scratch", "live", "session", "work");
+        _temp.CreateFile(4096, "scratch", "live", "session", "work", "state.bin");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+
+        var plan = PlanDeleting(new ClearDirectoryStep(scratch, "Scratch files")) with
+        {
+            // Protected as the provider protects a live entry, and left out of Spared: that omission
+            // is the over-reach under test.
+            ProtectedPaths =
+            [
+                new ProtectedPath(live, "A program is working in it.", ExistedBefore: true, HeldContentBefore: true),
+            ],
+        };
+
+        CleanupResult result;
+
+        using (new HeldDirectory(working))
+        {
+            result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+                .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
+        }
+
+        Assert.False(File.Exists(Path.Combine(working, "state.bin")), "the removal never went inside the folder");
+        Assert.True(Directory.Exists(live), "the fixture let the folder a program was working in go");
+
+        var check = Assert.Single(result.Verification!.Checks);
+
+        Assert.Equal(VerificationOutcome.Entered, check.Outcome);
+        Assert.False(result.Verification.Passed);
+    }
+
+    /// <summary>
+    /// A clear that left a folder a program is working in says so, rather than "Cleared." about a
+    /// folder still holding it. The reader answers it by closing that program, which is why the reason
+    /// is named.
+    /// </summary>
+    [Fact]
+    public async Task SaysAClearLeftAFolderAnotherProgramWasUsing()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var working = _temp.CreateDirectory("scratch", "tool", "work");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+
+        CleanupResult result;
+
+        using (new HeldDirectory(working))
+        {
+            result = await Execute(new ClearDirectoryStep(scratch, "Scratch files"));
+        }
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(new FolderRefusals(InUse: 1, Denied: 0), step.RefusedFolders);
+        Assert.Equal(new FolderRefusals(InUse: 1, Denied: 0), result.RefusedFolders);
+        Assert.Equal(
+            "Cleared, 1 folder(s) left in place because another program was using them.",
+            step.Message);
+    }
+
+    /// <summary>
+    /// A folder that is the whole of a step, and that a program is working in, is not removed and nothing
+    /// else happened. The sentence says why rather than "Nothing was removed." with no reason at all, and
+    /// a clear whose only outcome was such a folder is not reported as a folder that held nothing.
+    /// </summary>
+    [Fact]
+    public async Task SaysWhyAFolderAProgramIsWorkingInWasNotRemoved()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        var scratch = _temp.CreateDirectory("scratch");
+        var working = _temp.CreateDirectory("scratch", "work");
+
+        CleanupResult deleted;
+        CleanupResult cleared;
+
+        using (new HeldDirectory(cache))
+        using (new HeldDirectory(working))
+        {
+            deleted = await Execute(new DeleteDirectoryStep(cache, "A cache"));
+            cleared = await Execute(new ClearDirectoryStep(scratch, "Scratch files"));
+        }
+
+        var delete = Assert.Single(deleted.Steps);
+        var clear = Assert.Single(cleared.Steps);
+
+        Assert.False(delete.Succeeded);
+        Assert.Equal("Nothing was removed: another program was using 1 folder(s).", delete.Message);
+        Assert.True(Directory.Exists(cache));
+
+        Assert.False(clear.Succeeded);
+        Assert.Equal("Nothing was removed: another program was using 1 folder(s).", clear.Message);
+    }
+
     /// <summary>An empty folder is cleared, and says so rather than claiming a reclaim.</summary>
     [Fact]
     public async Task SaysAnEmptyFolderHeldNothingRatherThanFailing()
@@ -531,6 +635,97 @@ public sealed class PlanExecutorTests : IDisposable
 
         Assert.True(step.Succeeded);
         Assert.Contains("held nothing", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The count a run of empty leftovers reports in place of bytes, from each kind of removal Deguffer
+    /// carries out itself.
+    /// </summary>
+    [Fact]
+    public async Task ReportsHowManyEntriesEachRemovalTook()
+    {
+        var folder = _temp.CreateDirectory("leftover");
+        _temp.CreateDirectory("leftover", "empty");
+        var file = _temp.CreateFile(64, "handshake.lock");
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(
+                PlanDeleting(new DeleteDirectoryStep(folder, "A leftover")) with
+                {
+                    Steps = [new DeleteDirectoryStep(folder, "A leftover"), new DeleteFileStep(file, "A lock")],
+                },
+                runReach: null,
+                residue: null,
+                progress: null,
+                ct: CancellationToken.None);
+
+        Assert.Equal(2, result.Steps[0].EntriesRemoved);
+        Assert.Equal(1, result.Steps[1].EntriesRemoved);
+        Assert.Equal(3, result.EntriesRemoved);
+        Assert.Equal(64, result.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// A file that went between the preview and the clean is gone, which is a success, and this clean
+    /// took nothing, so it adds no item to what the result says was removed. A folder already gone
+    /// counts none for the same reason.
+    /// </summary>
+    [Fact]
+    public async Task CountsNoEntryForAFileThatWasAlreadyGone()
+    {
+        var result = await Execute(new DeleteFileStep(Path.Combine(_temp.Path, "handshake.lock"), "A lock"));
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(0, step.EntriesRemoved);
+        Assert.Equal(0, result.EntriesRemoved);
+    }
+
+    /// <summary>
+    /// A folder whose only contents were empty folders did have something cleared out of it. "It held
+    /// nothing to clear" would be a false sentence about a folder the user can see was emptied.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayAFolderOfEmptyFoldersHeldNothing()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        _temp.CreateDirectory("scratch", "empty-one");
+        _temp.CreateDirectory("scratch", "empty-two");
+
+        var result = await Execute(new ClearDirectoryStep(scratch, "Scratch files"));
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(step.Succeeded);
+        Assert.Equal(2, step.EntriesRemoved);
+        Assert.True(Directory.Exists(scratch), "the folder cleared in place was removed");
+        Assert.DoesNotContain("held nothing", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("Cleared", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder the guard kept standing, with only empty folders taken out of it, lost something. Saying
+    /// it was left alone would deny a removal the user can see happened.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotSayAFolderWasLeftAloneWhenEmptyFoldersWentFromIt()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "written-just-now.bin");
+        _temp.CreateDirectory("cache", "empty");
+
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with
+        {
+            Keep = MinimumAge.WithinHours(8, DateTime.UtcNow),
+        };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: CancellationToken.None);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Equal(1, step.EntriesRemoved);
+        Assert.False(Directory.Exists(Path.Combine(cache, "empty")));
+        Assert.DoesNotContain("Left alone", step.Message!, StringComparison.Ordinal);
     }
 
     private Task<CleanupResult> Execute(CleanupStep step) =>
@@ -544,6 +739,7 @@ public sealed class PlanExecutorTests : IDisposable
                 Steps = [step],
             },
             runReach: null,
+            residue: null,
             progress: null,
             ct: CancellationToken.None);
 }

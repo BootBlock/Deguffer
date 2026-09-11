@@ -15,7 +15,17 @@ namespace Deguffer.Core.Execution;
 /// <see cref="RemovalOutcome.Kept"/> gives: one is Windows refusing and the other is Deguffer
 /// obeying, and they are different sentences to whoever reads the result.
 /// </param>
-public sealed record FileRemovalOutcome(long BytesReclaimed, Refusals Refused, bool Removed, bool Kept = false);
+/// <param name="Took">
+/// Whether this removal is what took the file. False where it was already gone, or went before the
+/// deletion reached it: <paramref name="Removed"/> is still true then, because the path is gone, and
+/// nothing was taken. See <see cref="RemovalOutcome.EntriesRemoved"/>.
+/// </param>
+public sealed record FileRemovalOutcome(
+    long BytesReclaimed,
+    Refusals Refused,
+    bool Removed,
+    bool Kept = false,
+    bool Took = false);
 
 /// <summary>
 /// Deletes one named file.
@@ -87,10 +97,13 @@ public static class FileRemover
         // separates them: removing a path that is not there succeeds silently, and one we may not
         // touch throws. Deciding it here from an existence check instead reported "Removed." for a
         // file that was still on the disk, because a refusal and an absence look the same to one.
-        return Delete(extended, fs, fs.TryGetFileLength(extended) ?? 0);
+        // Once the deletion has succeeded, though, an unknown length can only have been an absence,
+        // and that is what says this removal took nothing.
+        return Delete(extended, fs, fs.TryGetFileLength(extended));
     }
 
-    private static FileRemovalOutcome Delete(string extended, IFileSystem fs, long length)
+    /// <param name="length">The file's length, or null where no file was there to measure.</param>
+    private static FileRemovalOutcome Delete(string extended, IFileSystem fs, long? length)
     {
         try
         {
@@ -111,7 +124,7 @@ public static class FileRemover
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length), Removed: false);
+                return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length ?? 0), Removed: false);
             }
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
@@ -125,9 +138,9 @@ public static class FileRemover
         catch (IOException ex)
         {
             // Held open — a dump still being written, most likely. §5.3: leave it.
-            return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length), Removed: false);
+            return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length ?? 0), Removed: false);
         }
 
-        return new FileRemovalOutcome(length, Refusals.None, Removed: true);
+        return new FileRemovalOutcome(length ?? 0, Refusals.None, Removed: true, Took: length is not null);
     }
 }

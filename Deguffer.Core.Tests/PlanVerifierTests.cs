@@ -378,9 +378,9 @@ public sealed class PlanVerifierTests : IDisposable
     /// The same shape in a run with no tool's command. MSBuild's Clean, run while the preview sat on
     /// screen, leaves exactly this beside the <c>obj</c> the run removes, and Deguffer never touched
     /// it, so the question here is whether anything at all is left. A folder with nothing in it is
-    /// still an alarm. What the top-level question passes over as well, a chain of empty folders
-    /// Deguffer's own removal leaves when Windows refuses one, is the cost
-    /// <c>PlanVerifier.WasEmptied</c> states.
+    /// still an alarm. The same shape left by Deguffer's own removal, when Windows refuses a folder
+    /// inside it, is answered by what that removal recorded instead: see
+    /// <see cref="AProtectedFolderARemovalWentIntoWasEntered"/>.
     /// </summary>
     [Fact]
     public void WithoutACommandAFolderEmptiedOnlyOfItsFilesIsNotReadAsEmptied()
@@ -413,6 +413,111 @@ public sealed class PlanVerifierTests : IDisposable
         var plan = Plan([Evict(_temp.CreateDirectory("tool", "cache"))], ProtectHolding(kept));
 
         Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
+    }
+
+    /// <summary>
+    /// The defect in issue #118. A clear that went into a folder it should have spared met a folder a
+    /// program was working in, which Windows would not remove. It took every file and left a chain of
+    /// empty folders, so the protected folder still held a folder and read as a survivor. What the
+    /// removal left standing inside it is the evidence, whatever the folder still holds.
+    /// </summary>
+    [Fact]
+    public void AProtectedFolderARemovalWentIntoWasEntered()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live");
+        var working = _temp.CreateDirectory("scratch", "live", "session", "work");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files")], ProtectHolding(live));
+
+        // The shape the record has to see through, asserted rather than assumed: without it, a survivor.
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, live));
+
+        var residue = new RunResidue();
+        residue.Record(scratch, [working, Path.GetDirectoryName(working)!, live]);
+
+        var verification = PlanVerifier.Verify(plan, runReach: null, residue);
+
+        Assert.Equal(VerificationOutcome.Entered, Assert.Single(verification.Checks).Outcome);
+        Assert.Equal(live, Assert.Single(verification.Failures).Path);
+        Assert.False(verification.Passed);
+    }
+
+    /// <summary>
+    /// The partial over-reach no question about content can see: one file the removal was refused,
+    /// still sitting in the protected folder. The folder is exactly as present as a survivor.
+    /// </summary>
+    [Fact]
+    public void AProtectedFolderStillHoldingAFileARemovalWasRefusedWasEntered()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live");
+        _temp.CreateFile(8, "scratch", "live", "session.lock");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files")], ProtectHolding(live));
+
+        var residue = new RunResidue();
+        residue.Record(scratch, [live]);
+
+        Assert.Equal(VerificationOutcome.Entered, PlanVerifier.Verify(plan, runReach: null, residue).Checks.Single().Outcome);
+    }
+
+    /// <summary>
+    /// The negative. A removal's own root holds what it left behind by right, a folder above the root
+    /// holds its target, and a protected folder beside the one it went into was never entered at all.
+    /// None of them is accused.
+    /// </summary>
+    [Fact]
+    public void WhatARemovalLeftStandingAccusesOnlyTheFolderItWentInto()
+    {
+        var tool = _temp.CreateDirectory("tool");
+        var cache = _temp.CreateDirectory("tool", "cache");
+        var entry = _temp.CreateDirectory("tool", "cache", "entry");
+        var beside = _temp.CreateDirectory("tool", "cache", "beside");
+        _temp.CreateFile(8, "tool", "cache", "beside", "keep.bin");
+
+        var plan = Plan(
+            [new DeleteDirectoryStep(cache, "A cache")],
+            ProtectHolding(tool),
+            ProtectHolding(cache),
+            ProtectHolding(beside),
+            ProtectHolding(entry));
+
+        var residue = new RunResidue();
+        residue.Record(cache, [entry, cache]);
+
+        var outcomes = PlanVerifier.Verify(plan, runReach: null, residue).Checks.ToDictionary(c => c.Path, c => c.Outcome);
+
+        Assert.Equal(VerificationOutcome.Survived, outcomes[tool]);
+        Assert.Equal(VerificationOutcome.Survived, outcomes[cache]);
+        Assert.Equal(VerificationOutcome.Survived, outcomes[beside]);
+        Assert.Equal(VerificationOutcome.Entered, outcomes[entry]);
+    }
+
+    /// <summary>
+    /// A target inside a protected folder answers for what its own removal left, and for nothing a
+    /// removal from above left beside it. Excusing the whole folder because it holds a target would
+    /// pass over exactly that second removal.
+    /// </summary>
+    [Fact]
+    public void ATargetInsideAProtectedFolderExcusesOnlyWhatItsOwnRemovalLeft()
+    {
+        var outer = _temp.CreateDirectory("outer");
+        var project = _temp.CreateDirectory("outer", "project");
+        var obj = _temp.CreateDirectory("outer", "project", "obj");
+        var inObj = _temp.CreateDirectory("outer", "project", "obj", "held");
+        var inBin = _temp.CreateDirectory("outer", "project", "bin", "held");
+
+        var plan = Plan(
+            [new DeleteDirectoryStep(obj, "Output"), new ClearDirectoryStep(outer, "Everything")],
+            ProtectHolding(project));
+
+        var fromTheTarget = new RunResidue();
+        fromTheTarget.Record(obj, [inObj]);
+
+        var fromAbove = new RunResidue();
+        fromAbove.Record(outer, [inBin]);
+
+        Assert.Equal(VerificationOutcome.Survived, PlanVerifier.Verify(plan, runReach: null, fromTheTarget).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Entered, PlanVerifier.Verify(plan, runReach: null, fromAbove).Checks.Single().Outcome);
     }
 
     /// <summary>A protected directory recorded as holding something, as a provider's capture records it.</summary>

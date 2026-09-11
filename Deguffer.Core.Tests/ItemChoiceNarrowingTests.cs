@@ -42,7 +42,7 @@ public sealed class ItemChoiceNarrowingTests : IDisposable
         Assert.Equal("chromium", chromium.Name);
 
         // Tier 2 starts unticked, and every build here has something to reclaim.
-        var state = ItemSelection.StateOf(chromium.Items.Select(step => (false, step.EstimatedBytes > 0)));
+        var state = ItemSelection.StateOf(chromium.Items.Select(step => (false, step.RemovesSomething)));
         Assert.True(ItemSelection.ValueForClick(state));
 
         var narrowed = plan.NarrowedTo([.. chromium.Items]);

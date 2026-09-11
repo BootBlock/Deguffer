@@ -19,11 +19,12 @@ public sealed class RunOutcomeTests
         VerificationOutcome outcome = VerificationOutcome.Survived,
         Refusals refused = default,
         int kept = 0,
-        long reclaimed = 0) => new()
+        long reclaimed = 0,
+        FolderRefusals folders = default) => new()
         {
             ProviderId = name.ToLowerInvariant(),
             ProviderName = name,
-            Steps = [new StepOutcome("Remove the cache", true, reclaimed, refused, null, kept)],
+            Steps = [new StepOutcome("Remove the cache", true, reclaimed, refused, null, kept, RefusedFolders: folders)],
             Verification = new VerificationResult
             {
                 Checks =
@@ -146,6 +147,39 @@ public sealed class RunOutcomeTests
         Assert.Contains("Another program had 1 file(s)", statement, StringComparison.Ordinal);
         Assert.Contains("Windows would not let Deguffer remove 2 file(s)", statement, StringComparison.Ordinal);
         Assert.Equal(1, statement.Split("The next preview").Length - 1);
+    }
+
+    /// <summary>
+    /// Folders Windows would not let go are stated apart from files, in the same two kinds, and never
+    /// under the promise about the next preview. That promise is about bytes the preview leaves out,
+    /// and a folder holds none.
+    /// </summary>
+    [Fact]
+    public void StatesTheFoldersWindowsWouldNotLetGoApartFromTheFiles()
+    {
+        var statement = RunOutcome.For(
+            [Result("Temporary files", folders: new FolderRefusals(InUse: 2, Denied: 1))]).Statement;
+
+        Assert.Equal(
+            "All protected paths survived. Another program was using 2 folder(s), so they were left in place. "
+            + "Windows would not let Deguffer remove 1 folder(s).",
+            statement);
+    }
+
+    /// <summary>
+    /// With files refused as well, the folders come after the promise about the next preview, so the
+    /// promise does not read as covering them.
+    /// </summary>
+    [Fact]
+    public void PutsTheFoldersAfterThePromiseAboutTheNextPreview()
+    {
+        var statement = RunOutcome.For(
+            [Result("Temporary files", refused: InUse(1, 10), folders: new FolderRefusals(InUse: 1, Denied: 0))]).Statement;
+
+        Assert.True(
+            statement.IndexOf("The next preview", StringComparison.Ordinal)
+            < statement.IndexOf("folder(s)", StringComparison.Ordinal),
+            statement);
     }
 
     [Fact]

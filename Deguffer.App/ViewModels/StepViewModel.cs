@@ -68,7 +68,7 @@ public sealed partial class StepViewModel : ObservableObject
 
     public string Description => Step.Description;
 
-    public string SizeLabel => FreeSpace.Format(Step.Estimated);
+    public string SizeLabel => FreeSpace.Format(Step.Reclaim);
 
     /// <summary>
     /// §7's age column. Rendered as text rather than as a colour-coded indicator: §6.5 requires the
@@ -94,8 +94,12 @@ public sealed partial class StepViewModel : ObservableObject
     ///
     /// A kept item is not in the row's plan at all, so a tick on it would count towards the selected
     /// total and remove nothing. Refusing it here is what the row-wide toggle and the roll-up read.
+    ///
+    /// "Nothing to reclaim" is <see cref="CleanupStep.RemovesSomething"/>'s answer rather than a byte
+    /// test, so a leftover of empty folders can be chosen and an empty cache folder its tool re-creates
+    /// still cannot.
     /// </summary>
-    public bool CanBeSelected => Step.EstimatedBytes > 0 && !NeedsElevationFirst && !IsKept;
+    public bool CanBeSelected => Step.RemovesSomething && !NeedsElevationFirst && !IsKept;
 
     /// <summary>
     /// Whether this step is one Deguffer can see and cannot remove as it is currently running.

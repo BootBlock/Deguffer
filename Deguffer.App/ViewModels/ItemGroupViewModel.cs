@@ -31,7 +31,7 @@ public sealed partial class ItemGroupViewModel : List<StepViewModel>, INotifyPro
         // second group, or its items would read as part of the heading above them.
         Title = group.Name ?? "Other items";
 
-        var size = group.Items.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Estimated);
+        var size = group.Items.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Reclaim);
         Summary = $"{(Count == 1 ? "1 item" : $"{Count} items")}, {FreeSpace.Format(size)}";
 
         Refresh();

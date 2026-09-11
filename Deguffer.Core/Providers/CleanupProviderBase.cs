@@ -136,6 +136,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     public Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
         RunReach? runReach = null,
+        RunResidue? residue = null,
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
@@ -147,14 +148,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 $"Plan belongs to provider '{plan.ProviderId}', not '{Id}'.", nameof(plan));
         }
 
-        return _executor.ExecuteAsync(plan, runReach, progress, ct);
+        return _executor.ExecuteAsync(plan, runReach, residue, progress, ct);
     }
 
     public Task<VerificationResult> VerifyAsync(
         CleanupPlan plan,
         RunReach? runReach = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, ct));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue: null, ct));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()
@@ -335,11 +336,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
             steps.Add(step with
             {
-                Estimated = measured.Sizes[i],
+                Estimated = target.Kind is TargetKind.DirectoryContents or TargetKind.RecycleBin
+                    ? WithoutItsOwnEntry(measured.Sizes[i])
+                    : measured.Sizes[i],
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = measured.WithheldRecent[i],
                 Identity = target.Identity,
+                IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],
                 Group = target.Group,
             });
@@ -347,6 +351,17 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
         return (steps, measured);
     }
+
+    /// <summary>
+    /// A measurement of a folder emptied in place, which stays standing, so its own entry is not
+    /// among what the step takes.
+    ///
+    /// <para>The measurement counted that entry only where nothing inside the folder stays. Where
+    /// something does, this counts one short — the direction a count deciding whether anything is
+    /// offered may be wrong in.</para>
+    /// </summary>
+    private static ScanSize WithoutItsOwnEntry(ScanSize size) =>
+        size with { Entries = Math.Max(0, size.Entries - 1) };
 
     /// <summary>
     /// The guard applied to a finished plan: carried onto it, said out loud, and — for a step whose

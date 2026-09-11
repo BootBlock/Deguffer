@@ -714,8 +714,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private RunOutcome RecordRunResult(IReadOnlyList<CleanupResult> results, long? freeBefore)
     {
-        var removed = results.Sum(r => r.BytesReclaimed);
-        RemovedLabel = FreeSpace.Format(removed);
+        // Entries beside the bytes, so a clean that took only empty leftovers says what it removed
+        // rather than "0 B". FreeSpace states the count only where no bytes went.
+        var bytes = results.Sum(r => r.BytesReclaimed);
+        RemovedLabel = FreeSpace.Format(new ScanSize(bytes, bytes, Entries: results.Sum(r => r.EntriesRemoved)));
 
         var freeAfter = FreeSpace.ForPath(_environment.UserProfile);
         FreeSpaceChangeLabel = freeBefore is { } before && freeAfter is { } after

@@ -45,6 +45,10 @@ public enum TargetKind
 /// What the item is apart from its path, for a provider whose items can be put on the keep list.
 /// See <see cref="Execution.ItemIdentity"/>.
 /// </param>
+/// <param name="IsLeftover">
+/// Whether the path itself is the leftover, which nothing will create again. See
+/// <see cref="Execution.DeleteStep.IsLeftover"/>.
+/// </param>
 /// <param name="Facets">
 /// What a reader choosing between items is told about this one. Null for none. See
 /// <see cref="Execution.ItemFacet"/>.
@@ -57,5 +61,6 @@ public readonly record struct DeletionTarget(
     TargetKind Kind = TargetKind.Directory,
     bool RequiresElevation = false,
     Execution.ItemIdentity? Identity = null,
+    bool IsLeftover = false,
     IReadOnlyList<Execution.ItemFacet>? Facets = null,
     string? Group = null);

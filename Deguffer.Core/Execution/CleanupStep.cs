@@ -38,6 +38,24 @@ public abstract record CleanupStep
     public long EstimatedBytes => Estimated.Reclaimable;
 
     /// <summary>
+    /// What choosing this step reclaims, as the shell states it and adds it up: its bytes, and — for a
+    /// leftover — its entries.
+    ///
+    /// <para>Separate from <see cref="Estimated"/>, which is what was measured. Every deletion is
+    /// measured in entries, and for most of them the count is not what they are offered for: an empty
+    /// cache folder is an entry its tool puts straight back. See <see cref="DeleteStep.IsLeftover"/>
+    /// for why only a leftover's entries are part of what choosing it reclaims.</para>
+    /// </summary>
+    public virtual ScanSize Reclaim => Estimated with { Entries = 0 };
+
+    /// <summary>
+    /// Whether carrying this step out removes anything worth choosing it for. Asked of
+    /// <see cref="Reclaim"/> and nothing else, so the checkbox, the row's status and the totals beside
+    /// it cannot come to disagree about what "nothing to remove" means.
+    /// </summary>
+    public bool RemovesSomething => Reclaim.Reclaimable > 0 || Reclaim.Entries > 0;
+
+    /// <summary>
     /// When this step's subject was last written, or null where the provider cannot tell.
     ///
     /// §7 makes age a first-class column for per-workspace and per-project data, on the grounds
@@ -180,6 +198,24 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
     /// name is where it is, which is an item nobody can keep. See <see cref="ItemIdentity"/>.
     /// </summary>
     public ItemIdentity? Identity { get; init; }
+
+    /// <summary>
+    /// Whether the path itself is what is being reclaimed — something nothing will create again —
+    /// rather than a folder its owner re-creates the next time it runs.
+    ///
+    /// <para><b>It decides whether a step that frees no bytes may be chosen.</b> An empty cache folder
+    /// is an entry the removal takes, and its tool puts it back at its next launch: offering it would
+    /// keep a row at "Ready to clean" permanently while freeing nothing that lasts. An empty folder a
+    /// session left behind after it ended comes back never, and removing it is the whole of what its
+    /// provider is for. Nothing about the two folders tells them apart, so the provider that knows
+    /// what wrote the path says which it is.</para>
+    ///
+    /// <para>False by default, which is every cache: a step then needs bytes to be chosen, exactly as
+    /// before entries were counted.</para>
+    /// </summary>
+    public bool IsLeftover { get; init; }
+
+    public override ScanSize Reclaim => IsLeftover ? Estimated : base.Reclaim;
 
     /// <summary>
     /// What a reader choosing between items is told about this one beyond its path, in the order its
