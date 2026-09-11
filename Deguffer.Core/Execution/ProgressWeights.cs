@@ -34,8 +34,8 @@ internal static class ProgressWeights
     /// positive estimate and every executed plan therefore sums to one — see
     /// <c>StepViewModel.CanBeSelected</c> and <see cref="CleanupPlan.NarrowedTo"/>. That invariant
     /// belongs to the shell rather than to this rule, which is why it is written down here. The one
-    /// plan that reaches a run with no estimate by design is one run only to be verified, and
-    /// <see cref="CleanupPlanner"/> weighs those apart rather than handing them here.</para>
+    /// plan a caller may hand the planner with no estimate by design is one run only to be verified,
+    /// and <see cref="CleanupPlanner"/> weighs those apart rather than handing them here.</para>
     /// </summary>
     public static IReadOnlyList<double> For(IEnumerable<long> estimates)
     {

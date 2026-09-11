@@ -141,6 +141,47 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// A plan with no steps whose only protection is one a rule applies — a tool root, an
+    /// unrecognised sibling — has nothing of its own to prove. That protection guards against the
+    /// plan's own deletion, and there is none, so running it would name an already-clear location in
+    /// the run's verdict as though it had been cleaned.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanProtectingOnlyByRuleStaysOutOfTheRun()
+    {
+        using var temp = new TempDirectory();
+        var provider = new StubProvider("clear", bytes: 0, protects: temp.Path, protectsByRule: true);
+        var planner = new CleanupPlanner([provider]);
+
+        var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
+
+        Assert.Empty(results);
+        Assert.False(provider.WasExecuted);
+    }
+
+    /// <summary>
+    /// A run holding nothing but verification still moves the bar, one share each. Giving them no share
+    /// there would leave the bar with nothing to divide by.
+    /// </summary>
+    [Fact]
+    public async Task ARunOfNothingButVerificationSharesTheBarBetweenThem()
+    {
+        using var temp = new TempDirectory();
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("first", bytes: 0, protects: temp.CreateDirectory("first")),
+            new StubProvider("second", bytes: 0, protects: temp.CreateDirectory("second")),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var progress = new ProgressRecorder<double>();
+
+        await planner.ExecuteAsync(findings, progress: progress);
+
+        Assert.Equal([0.5, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
     /// A plan with no steps destroys nothing, so §7 has nothing to authorise. Demanding an answer
     /// would throw the whole run away over a check that only reads the disk. Tier 4 is included on
     /// purpose: what is refused there is a deletion, and this plan holds none.
@@ -612,7 +653,8 @@ public sealed class CleanupPlannerTests
         IReadOnlyList<double>? reports = null,
         bool planStepWithoutEstimate = false,
         string? deletes = null,
-        string? protects = null) : ICleanupProvider
+        string? protects = null,
+        bool protectsByRule = false) : ICleanupProvider
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
@@ -669,7 +711,14 @@ public sealed class CleanupPlannerTests
             },
             ProtectedPaths = protects is null
                 ? []
-                : [new ProtectedPath(protects, "Withheld from this plan.", ExistedBefore: Directory.Exists(protects))],
+                :
+                [
+                    new ProtectedPath(
+                        protects,
+                        "Withheld from this plan.",
+                        ExistedBefore: Directory.Exists(protects),
+                        Withheld: protectsByRule ? Withholding.None : Withholding.TooRecent),
+                ],
         };
 
         public Task<CleanupResult> ExecuteAsync(

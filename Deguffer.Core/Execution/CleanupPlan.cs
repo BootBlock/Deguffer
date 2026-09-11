@@ -30,11 +30,13 @@ namespace Deguffer.Core.Execution;
 /// figures would report every one of those as an alarm.</para>
 /// </param>
 /// <param name="Withheld">
-/// Whether this path is a candidate the plan found and left out, rather than one it never offered.
+/// Whether this path is something the plan would have offered and a choice took out, rather than
+/// something a rule protects.
 ///
-/// <para>It is what lets a row with nothing to reclaim say why. A path the plan never offered — a
-/// tool root, an unrecognised sibling — leaves the row's zero honest. A withheld candidate is the
-/// opposite case: something real is there, Deguffer found it, and the figure excludes it, so a row
+/// <para>It is what lets a row with nothing to reclaim say why. A path a rule protects — a tool
+/// root, an unrecognised sibling, an entry a running program is working in — was never going to be
+/// offered, and it leaves the row's zero honest. A withheld candidate is the opposite case:
+/// something real is there, Deguffer would have offered it, and the figure excludes it, so a row
 /// holding one is not clear. Nothing else on the plan can say so once the step is gone.</para>
 /// </param>
 public sealed record ProtectedPath(
@@ -44,11 +46,12 @@ public sealed record ProtectedPath(
     bool HeldContentBefore = false,
     Withholding Withheld = Withholding.None);
 
-/// <summary>Why a candidate a plan found was left out of it rather than offered.</summary>
+/// <summary>Which choice, if any, took a candidate out of a plan rather than a rule keeping it out.</summary>
 public enum Withholding
 {
     /// <summary>
-    /// Not a withheld candidate. The plan never offered it, or the user left it unticked for one run.
+    /// Not a withheld candidate. A rule protects it, or the user left it unticked for one run, which
+    /// is a narrowing of what runs rather than a statement about the row.
     /// </summary>
     None,
 
@@ -217,16 +220,24 @@ public sealed record CleanupPlan
     public bool IsEmpty => Steps.Count == 0;
 
     /// <summary>
-    /// Whether running this plan would establish anything even where it removes nothing: a protected
-    /// path that was there when the plan was made, so finding it standing afterwards is evidence.
+    /// Whether running this plan would establish anything even where it removes nothing: a withheld
+    /// candidate that was there when the plan was made, so finding it standing afterwards is
+    /// evidence.
     ///
     /// <para>Separate from <see cref="IsEmpty"/> because a plan whose every candidate was withheld
     /// is both. It has no steps and it still makes a promise, and a run that dropped it as having
     /// nothing to do left that promise with no evidence behind it — on exactly the run where the
     /// user's instruction was to leave something alone. See <see cref="CleanupPlanner.ExecuteAsync"/>.
     /// </para>
+    ///
+    /// <para><b>Withheld candidates only, never a path a rule protects.</b> A tool root or an
+    /// unrecognised sibling is protected against the plan's own deletion, and a plan with no steps
+    /// deletes nothing, so its survival proves nothing about that plan. Counting one would put every
+    /// already-clear location with a root on the disk into a run's verdict, named as though it had
+    /// been cleaned.</para>
     /// </summary>
-    public bool HasSomethingToProve => ProtectedPaths.Any(p => p.ExistedBefore);
+    public bool HasSomethingToProve =>
+        ProtectedPaths.Any(p => p.ExistedBefore && p.Withheld != Withholding.None);
 
     /// <summary>
     /// Every path this plan would destroy, for display and for tests.

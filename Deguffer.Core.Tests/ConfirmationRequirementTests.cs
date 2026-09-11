@@ -153,7 +153,11 @@ public sealed class ConfirmationRequirementTests
         {
             ProtectedPaths =
             [
-                new ProtectedPath(@"C:\Users\testuser\.cache\subject\withheld", "Withheld.", ExistedBefore: true),
+                new ProtectedPath(
+                    @"C:\Users\testuser\.cache\subject\withheld",
+                    "Withheld.",
+                    ExistedBefore: true,
+                    Withheld: Withholding.TooRecent),
             ],
         };
 
