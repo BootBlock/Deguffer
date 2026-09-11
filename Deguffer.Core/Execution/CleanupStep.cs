@@ -86,6 +86,17 @@ public abstract record CleanupStep
     /// "Already clear" this flag exists to prevent.</para>
     /// </summary>
     public bool WithheldRecent { get; init; }
+
+    /// <summary>
+    /// What Windows still would not release here, of the places the last clean of this step was
+    /// refused — already taken out of <see cref="Estimated"/>.
+    ///
+    /// <para>Carried as well as subtracted, for the reason <see cref="WithheldRecent"/> is: once
+    /// something is left out, a zero is ambiguous, and the shell makes a claim out of a zero. "Already
+    /// clear" beside a folder holding gigabytes Windows will not let go is the same false sentence in
+    /// a different place. See <see cref="RefusalRecord"/> for why only those places are asked.</para>
+    /// </summary>
+    public Refusals Refused { get; init; }
 }
 
 /// <summary>

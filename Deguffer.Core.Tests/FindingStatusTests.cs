@@ -12,9 +12,10 @@ namespace Deguffer.Core.Tests;
 public sealed class FindingStatusTests
 {
     /// <summary>
-    /// The dangerous direction: exactly one state may claim the folder is clear. The three
+    /// The dangerous direction: exactly one state may claim the folder is clear. The four
     /// neighbouring states measure zero as well, and telling the user a folder is clear when
-    /// Deguffer never read it is the whole of issue #38.
+    /// Deguffer never read it is the whole of issue #38 — or when Windows would not let it take what
+    /// is there, which is issue #117.
     /// </summary>
     [Theory]
     [InlineData(FindingStatus.AwaitingSourceFolders)]
@@ -22,6 +23,7 @@ public sealed class FindingStatusTests
     [InlineData(FindingStatus.UnreadableRoot)]
     [InlineData(FindingStatus.NotExamined)]
     [InlineData(FindingStatus.RecentContentHeldBack)]
+    [InlineData(FindingStatus.RefusedByWindows)]
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
     public void OnlyTheClearStateSaysAlreadyClear(FindingStatus status)

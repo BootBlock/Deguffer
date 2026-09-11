@@ -27,6 +27,8 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
 
     public void DeleteFile(string path) => inner.DeleteFile(path);
 
+    public RefusalReason? ProbeRemoval(string path) => inner.ProbeRemoval(path);
+
     public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
 
     public void ClearAttributes(string path) => inner.ClearAttributes(path);

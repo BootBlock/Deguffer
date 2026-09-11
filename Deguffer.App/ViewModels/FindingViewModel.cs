@@ -170,6 +170,7 @@ public sealed partial class FindingViewModel : ObservableObject
                 { HasUnreadableRoot: true } => FindingStatus.UnreadableRoot,
                 { WasNotExamined: true } => FindingStatus.NotExamined,
                 { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
+                { HasRefusedContent: true } => FindingStatus.RefusedByWindows,
                 _ => FindingStatus.AlreadyClear,
             }
             : CanBeSelected
@@ -223,11 +224,12 @@ public sealed partial class FindingViewModel : ObservableObject
     ///
     /// Read off <see cref="Status"/> rather than restating the condition that produces it, because
     /// a second copy of that condition is free to disagree with the words on screen — and what this
-    /// filter promises is that it hides exactly the rows saying "Already clear". The three
+    /// filter promises is that it hides exactly the rows saying "Already clear". The four
     /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
-    /// let Deguffer list, a location Deguffer declined to look at or could not locate, and a cache
-    /// whose every file is inside the guard on recently changed files. All three stay listed,
-    /// because each is a thing the user may want to act on.
+    /// let Deguffer list, a location Deguffer declined to look at or could not locate, a cache
+    /// whose every file is inside the guard on recently changed files, and a folder whose contents
+    /// Windows would not let the last clean take. All four stay listed, because each is a thing the
+    /// user may want to act on.
     ///
     /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
     /// the label needs <see cref="Finding.HasReclaimableSpace"/> to be false, that is the sum of

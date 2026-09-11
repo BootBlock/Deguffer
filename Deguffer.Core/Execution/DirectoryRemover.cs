@@ -1,80 +1,7 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
-
-/// <param name="BytesReclaimed">Bytes of files actually deleted.</param>
-/// <param name="Skipped">Entries left in place because something held them (§5.3).</param>
-/// <param name="RootRemoved">Whether the target directory itself is gone.</param>
-/// <param name="Kept">
-/// Files left in place because the user asked for anything touched recently to be left alone.
-///
-/// Counted apart from <paramref name="Skipped"/> rather than added to it, because the two are
-/// different sentences to the reader: a skip is Windows refusing, which the user can act on by
-/// closing something, and this is Deguffer honouring a setting they chose. Reporting a deliberate
-/// choice as an obstruction would send them looking for a process that is not there.
-/// </param>
-/// <param name="Spared">
-/// Entries the caller named as off limits and this removal did not descend into (§5.3).
-///
-/// A third sentence again, for the same reason the second is separate: this is neither Windows
-/// refusing nor a setting the user chose, but Deguffer declining to touch something it found
-/// somebody using. The user acts on it by closing that program, so the count is what tells them
-/// there is something to close.
-/// </param>
-public sealed record RemovalOutcome(
-    long BytesReclaimed,
-    int Skipped,
-    bool RootRemoved,
-    int Kept = 0,
-    int Spared = 0);
-
-/// <summary>
-/// What a removal must leave behind, beyond the guard on recently changed files.
-///
-/// <para>Both members exist for §5.3's scratch folders, and neither can be expressed as an age.
-/// <c>%TEMP%</c> is not a cache Deguffer may take away — every program on the machine expects the
-/// folder itself to be there, and Windows does not put it back — so its <em>contents</em> are the
-/// subject and the directory is not. And a folder a running program is working in is off limits
-/// however old its files are, because the process holding it may have opened nothing this minute.
-/// </para>
-///
-/// <para><b>They travel together because they are one caller's answer to one question.</b> A
-/// removal that kept the root but forgot the exclusions would empty a live program's scratch
-/// directory, and one that honoured the exclusions but not the root would delete the folder the
-/// exclusions were inside. Passing them as one value is what stops half of that arriving.</para>
-/// </summary>
-/// <param name="KeepRoot">
-/// Whether the directory named by the removal must itself survive. False for every ordinary
-/// deletion, where the directory is the thing being removed.
-/// </param>
-/// <param name="Spared">
-/// Paths this removal must not delete or descend into, in display form. Compared at every level
-/// rather than only against the root's own children, so a caller sparing something nested is
-/// honoured rather than silently ignored — the direction §5.2 requires an unrecognised case to fail
-/// in.
-/// </param>
-public sealed record RemovalBounds(bool KeepRoot, IReadOnlyList<string> Spared)
-{
-    /// <summary>Nothing held back: the tree goes, root included.</summary>
-    public static readonly RemovalBounds None = new(KeepRoot: false, []);
-
-    /// <summary>
-    /// The spared paths as a set the walk can ask cheaply, in the form
-    /// <see cref="Safety.FileSystemEntry.FullName"/> arrives in.
-    ///
-    /// <para>Built once per removal rather than per entry: the walk asks this of every file and
-    /// directory in a tree of hundreds of thousands, and a linear scan of a list there is per-entry
-    /// work for an answer a hash lookup gives (G4).</para>
-    ///
-    /// <para><see cref="LongPath.Extended"/> on the way in, because an enumeration below an extended
-    /// root yields extended children, and a set holding display paths would match none of them —
-    /// which fails silently and in the dangerous direction: every spared path would be deleted.</para>
-    /// </summary>
-    internal IReadOnlySet<string> SparedPaths { get; } =
-        Spared.Count == 0
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(Spared.Select(LongPath.Extended), StringComparer.OrdinalIgnoreCase);
-}
 
 /// <summary>
 /// Deletes a directory tree.
@@ -127,21 +54,21 @@ public static class DirectoryRemover
         {
             // A caller keeping the root is asking about a directory that is meant to still be
             // there, so its absence is not the success it is for a deletion.
-            return new RemovalOutcome(0, 0, RootRemoved: !bounds.KeepRoot);
+            return new RemovalOutcome(0, Refusals.None, RootRemoved: !bounds.KeepRoot);
         }
 
         // The root is the one entry no enumeration classified, so it is the one place a link can
         // still be walked through. Enumerating a junction returns the target's children, which are
-        // ordinary directories and files, so Gather would delete a tree nobody looked at and the
+        // ordinary directories and files, so the walk would gather a tree nobody looked at and the
         // §5.6 negative — written against paths inside the profile — would pass. Remove the link
-        // and stop, exactly as Gather does for a link it finds below.
+        // and stop, exactly as the walk does for a link it finds below.
         //
         // A caller keeping the root removes nothing at all here. Its subject is what is inside the
         // directory, and a link has no inside — following it would empty whatever it points at, and
         // deleting it would destroy the very path the caller said must survive.
         if (fs.IsReparsePoint(extended))
         {
-            // The guard covers the root exactly as Gather covers a link below it, and for the same
+            // The guard covers the root exactly as the walk covers a link below it, and for the same
             // reason: a junction carries its own timestamps, so one made an hour ago is an hour old
             // whatever it points at. Without this a cache directory somebody had just relocated with
             // mklink was removed under a plan promising nothing touched in the last eight hours
@@ -153,7 +80,7 @@ public static class DirectoryRemover
             {
                 progress?.Report(1.0);
 
-                return new RemovalOutcome(0, 0, RootRemoved: false, Kept: 1);
+                return new RemovalOutcome(0, Refusals.None, RootRemoved: false, Kept: 1);
             }
 
             if (!bounds.KeepRoot)
@@ -163,20 +90,33 @@ public static class DirectoryRemover
 
             progress?.Report(1.0);
 
-            return new RemovalOutcome(0, 0, RootRemoved: !fs.DirectoryExists(extended));
+            return new RemovalOutcome(0, Refusals.None, RootRemoved: !fs.DirectoryExists(extended));
         }
 
         // Two passes: gather the tree first so progress is a real fraction rather than a guess,
         // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
         // leave us deleting a partially-understood tree.
-        var directories = new List<string>();
-        var files = new List<(string Path, long Length)>();
-        var (kept, spared) = Gather(extended, keep, bounds, directories, files, fs, ct);
+        var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+
+        // A link is removed as a link and holds no bytes of its own, so a refusal to remove one
+        // moves no figure and is not counted.
+        foreach (var link in inventory.Links)
+        {
+            if (link.IsDirectory)
+            {
+                TryDeleteDirectory(link.FullName, fs);
+            }
+            else
+            {
+                TryDeleteFile(link.FullName, fs);
+            }
+        }
 
         long reclaimed = 0;
-        var skipped = 0;
         var done = 0;
-        var total = Math.Max(files.Count, 1);
+        var total = Math.Max(inventory.Files.Count, 1);
+        var refused = new RefusalCounter();
+        var refusedAt = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
 
         var options = new ParallelOptions
         {
@@ -184,19 +124,20 @@ public static class DirectoryRemover
             MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 4, 32),
         };
 
-        Parallel.ForEach(files, options, file =>
+        Parallel.ForEach(inventory.Files, options, file =>
         {
-            if (TryDeleteFile(file.Path, fs))
+            if (TryDeleteFile(file.Path, fs) is { } reason)
             {
-                Interlocked.Add(ref reclaimed, file.Length);
+                refused.Add(reason, file.Length);
+                refusedAt.TryAdd(EntryHolding(extended, file.Path), 0);
             }
             else
             {
-                Interlocked.Increment(ref skipped);
+                Interlocked.Add(ref reclaimed, file.Length);
             }
 
             var completed = Interlocked.Increment(ref done);
-            if (completed % 256 == 0 || completed == files.Count)
+            if (completed % 256 == 0 || completed == inventory.Files.Count)
             {
                 progress?.Report((double)completed / total);
             }
@@ -205,8 +146,8 @@ public static class DirectoryRemover
         // Deepest first, so a directory is only removed once its children are gone. Ordering by
         // path length is a correct topological order here, not a shortcut: a parent's path is
         // always a strict prefix of its descendants', so it is always strictly shorter.
-        // Directories still holding a skipped file simply stay — the correct outcome, not an error.
-        foreach (var directory in directories.OrderByDescending(d => d.Length))
+        // Directories still holding a refused file simply stay — the correct outcome, not an error.
+        foreach (var directory in inventory.Directories.OrderByDescending(d => d.Length))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -221,118 +162,43 @@ public static class DirectoryRemover
 
         progress?.Report(1.0);
 
-        // The root is in `directories`, so the loop above has already attempted it — unless the
-        // caller asked for it to stay, in which case it is still there and that is the success.
+        // The root is among the directories, so the loop above has already attempted it — unless
+        // the caller asked for it to stay, in which case it is still there and that is the success.
         return new RemovalOutcome(
             reclaimed,
-            skipped,
+            refused.Total,
             RootRemoved: !bounds.KeepRoot && !fs.DirectoryExists(extended),
-            kept,
-            spared);
+            inventory.Kept,
+            inventory.Spared)
+        {
+            RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
+        };
     }
 
     /// <summary>
-    /// Collect the tree, and return how many files the guard held back and how many entries the
-    /// bounds did.
-    ///
-    /// Both exclusions are applied here rather than in the deletion pass because this is where the
-    /// evidence already is: the enumeration that classified the entry read its timestamp and its
-    /// path, and gathering is also where a file the removal must not touch stops being a candidate
-    /// at all. An entry filtered out here is never handed to <see cref="TryDeleteFile"/> or
-    /// <see cref="TryDeleteDirectory"/>, so there is no second place holding the same rule.
+    /// The entry directly inside <paramref name="root"/> that <paramref name="path"/> is at or
+    /// below. Both arrive from the same walk in the same extended form, so the prefix is known to
+    /// match and only the separator after it has to be found.
     /// </summary>
-    private static (int Kept, int Spared) Gather(
-        string extendedDirectory,
-        MinimumAge keep,
-        RemovalBounds bounds,
-        List<string> directories,
-        List<(string, long)> files,
-        IFileSystem fs,
-        CancellationToken ct)
+    private static string EntryHolding(string root, string path)
     {
-        ct.ThrowIfCancellationRequested();
-        directories.Add(extendedDirectory);
+        // A volume root keeps its separator, and every other root has none after it.
+        var start = root.EndsWith(Path.DirectorySeparatorChar) ? root.Length : root.Length + 1;
+        var end = path.IndexOf(Path.DirectorySeparatorChar, start);
 
-        IReadOnlyList<FileSystemEntry> entries;
-        try
-        {
-            entries = fs.EnumerateEntries(extendedDirectory);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Unreadable directory: nothing to gather, and §5.3 says skip rather than fail.
-            return (0, 0);
-        }
-
-        var kept = 0;
-        var spared = 0;
-
-        foreach (var entry in entries)
-        {
-            // Asked before the link branch below, because a spared entry is spared whatever it
-            // turns out to be. A scratch directory a running program was handed as a junction is
-            // still that program's, and removing the link is still taking it away.
-            if (bounds.SparedPaths.Contains(entry.FullName))
-            {
-                spared++;
-                continue;
-            }
-
-            if (entry.IsReparsePoint)
-            {
-                // The guard applies to a link exactly as it applies to a file, and it is asked
-                // here rather than after the branch because this branch deletes.
-                //
-                // A link carries its own timestamps, so a junction made a minute ago is a minute
-                // old whatever it points at. Without this, a plan promising "nothing touched in the
-                // last seven days is offered" removed one anyway — silently, because a link's
-                // length is zero and every scanner skips it, so no figure moved and neither count
-                // did either.
-                if (keep.Protects(entry.NewestFileTime))
-                {
-                    kept++;
-                    continue;
-                }
-
-                // Never follow a junction or symlink: deletion would escape the target tree.
-                // Remove the link itself and stop there.
-                if (entry.IsDirectory)
-                {
-                    TryDeleteDirectory(entry.FullName, fs);
-                }
-                else
-                {
-                    TryDeleteFile(entry.FullName, fs);
-                }
-
-                continue;
-            }
-
-            if (entry.IsDirectory)
-            {
-                var below = Gather(entry.FullName, keep, bounds, directories, files, fs, ct);
-                kept += below.Kept;
-                spared += below.Spared;
-            }
-            else if (keep.Protects(entry.NewestFileTime))
-            {
-                kept++;
-            }
-            else
-            {
-                files.Add((entry.FullName, entry.Length));
-            }
-        }
-
-        return (kept, spared);
+        return end < 0 ? path : path[..end];
     }
 
-    private static bool TryDeleteFile(string extendedPath, IFileSystem fs)
+    /// <summary>
+    /// Delete one file, and say why Windows would not let it go — or null where it went, or where it
+    /// had already gone.
+    /// </summary>
+    private static RefusalReason? TryDeleteFile(string extendedPath, IFileSystem fs)
     {
         try
         {
             fs.DeleteFile(extendedPath);
-            return true;
+            return null;
         }
         catch (UnauthorizedAccessException)
         {
@@ -341,25 +207,33 @@ public static class DirectoryRemover
             {
                 fs.ClearAttributes(extendedPath);
                 fs.DeleteFile(extendedPath);
-                return true;
+                return null;
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // It went between the two attempts. Calling that a refusal would report a file
+                // Windows kept that is not on the disk at all.
+                return null;
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                return false;
+                // The second answer is the one that counts: a read-only file something holds open
+                // refuses first for the bit and then for the handle.
+                return RefusalReasons.Of(ex);
             }
         }
         catch (FileNotFoundException)
         {
-            return true;
+            return null;
         }
         catch (DirectoryNotFoundException)
         {
-            return true;
+            return null;
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // Held open by a live process. §5.3: this is the OS protecting state; skip it.
-            return false;
+            // Held open by a live process, most often. §5.3: this is the OS protecting state; skip it.
+            return RefusalReasons.Of(ex);
         }
     }
 

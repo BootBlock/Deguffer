@@ -47,6 +47,17 @@ public enum FindingStatus
     /// </summary>
     RecentContentHeldBack,
 
+    /// <summary>
+    /// A location whose every byte a previous clean could not take, and which Windows still will not
+    /// release: it measures zero and it is full.
+    ///
+    /// <para>Both kinds of refusal reach here — another program holding files open, and Windows
+    /// declining for any other reason — and the label names neither. The plan's notes say which, and
+    /// how much, and the label has twenty characters to say it in. See
+    /// <see cref="CleanupStep.Refused"/>.</para>
+    /// </summary>
+    RefusedByWindows,
+
     /// <summary>Examined, and there is genuinely nothing in it.</summary>
     AlreadyClear,
 
@@ -65,10 +76,10 @@ public static class FindingStatusExtensions
     /// <summary>
     /// The two or three words the row states beside its size.
     ///
-    /// <para>"Already clear" is a claim about the folder, and the three states above it must not be
+    /// <para>"Already clear" is a claim about the folder, and the four states above it must not be
     /// reported as that: a folder Windows would not let Deguffer list, a location Deguffer declined
-    /// to look at, and a cache held back by the guard window. Each of the three measures zero and
-    /// none of them is clear.</para>
+    /// to look at, a cache held back by the guard window, and a folder whose contents Windows would
+    /// not let a clean take. Each of the four measures zero and none of them is clear.</para>
     ///
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
@@ -87,6 +98,7 @@ public static class FindingStatusExtensions
         FindingStatus.UnreadableRoot => "Could not be read",
         FindingStatus.NotExamined => "Not examined",
         FindingStatus.RecentContentHeldBack => "Nothing old enough",
+        FindingStatus.RefusedByWindows => "Refused by Windows",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.

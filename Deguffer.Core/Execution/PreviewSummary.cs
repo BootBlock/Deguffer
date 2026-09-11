@@ -105,6 +105,11 @@ public static class PreviewSummary
         // would describe a setting the reader may never have switched on.
         FindingStatus.RecentContentHeldBack =>
             "Nothing to reclaim, and some of these hold only files that are not old enough to remove.",
+        // Neither kind of refusal is named, for the reason the row's label names neither: "would not
+        // let Deguffer remove" is true of a file another program holds open as well as of one Windows
+        // denies, and the rows' notes are where the difference and the sizes are.
+        FindingStatus.RefusedByWindows =>
+            "Nothing to reclaim, and Windows would not let Deguffer remove what some of these hold.",
         FindingStatus.AwaitingSourceFolders =>
             "Nothing to reclaim, and some of these locations need a source folder before Deguffer "
             + "can look.",

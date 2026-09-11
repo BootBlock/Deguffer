@@ -90,6 +90,17 @@ public interface IFileSystem
 
     void DeleteFile(string path);
 
+    /// <summary>
+    /// Why Windows would refuse to let this process delete the file at <paramref name="path"/> right
+    /// now, or null where it would not — or where nothing is there to refuse.
+    ///
+    /// <para>Nothing is deleted. The file is opened for deletion and closed again, which is the only
+    /// question that reaches a filter driver refusing below the ACL. See
+    /// <see cref="DeletionProbe"/> for what that costs another program, and why it is asked only
+    /// inside the places a previous clean found refused.</para>
+    /// </summary>
+    RefusalReason? ProbeRemoval(string path);
+
     /// <summary>Removes an empty directory; never recursive, so ordering stays the caller's.</summary>
     void DeleteDirectory(string path);
 
@@ -160,6 +171,8 @@ public sealed class WindowsFileSystem : IFileSystem
     }
 
     public void DeleteFile(string path) => File.Delete(path);
+
+    public RefusalReason? ProbeRemoval(string path) => DeletionProbe.Probe(path);
 
     public void DeleteDirectory(string path) => Directory.Delete(path, recursive: false);
 

@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
 
@@ -16,13 +17,13 @@ public sealed class RunOutcomeTests
     private static CleanupResult Result(
         string name,
         VerificationOutcome outcome = VerificationOutcome.Survived,
-        int skipped = 0,
+        Refusals refused = default,
         int kept = 0,
         long reclaimed = 0) => new()
         {
             ProviderId = name.ToLowerInvariant(),
             ProviderName = name,
-            Steps = [new StepOutcome("Remove the cache", true, reclaimed, skipped, null, kept)],
+            Steps = [new StepOutcome("Remove the cache", true, reclaimed, refused, null, kept)],
             Verification = new VerificationResult
             {
                 Checks =
@@ -35,6 +36,10 @@ public sealed class RunOutcomeTests
                 ],
             },
         };
+
+    private static Refusals InUse(int files, long bytes) => new(new RefusalTally(files, bytes), default);
+
+    private static Refusals Denied(int files, long bytes) => new(default, new RefusalTally(files, bytes));
 
     [Fact]
     public void SaysTheProtectedPathsSurvivedWhenTheyDid()
@@ -72,41 +77,85 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
-    /// A failed run says one thing. Counts of what was left behind are routine, and appending them
-    /// to a missing protected path buries the only sentence on the screen that is an alarm.
+    /// A failed run says one thing. What was left behind is routine, and appending it to a missing
+    /// protected path buries the only sentence on the screen that is an alarm.
     /// </summary>
     [Fact]
     public void LeadsWithTheFailureRatherThanWhatTheRunLeftBehind()
     {
-        var outcome = RunOutcome.For([Result("npm", VerificationOutcome.Failed, skipped: 3, kept: 7)]);
+        var outcome = RunOutcome.For(
+            [Result("npm", VerificationOutcome.Failed, InUse(3, 3000) + Denied(4, 4000), kept: 7)]);
 
         Assert.True(outcome.VerificationFailed);
-        Assert.DoesNotContain("left alone", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("left in place", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("would not let Deguffer", outcome.Statement, StringComparison.Ordinal);
         Assert.DoesNotContain("too recently", outcome.Statement, StringComparison.Ordinal);
         Assert.Contains("please report this", outcome.Statement, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// §5.3's skipped count and the guard window's kept count are different facts. One is Windows
-    /// refusing, which the user can act on by closing something; the other is Deguffer honouring a
-    /// setting they chose. Folding them together loses the only difference that matters.
+    /// What Windows would not release and what the guard window kept are different facts. One is
+    /// Windows declining, and the other is Deguffer honouring a setting the user chose. Folding them
+    /// together loses the only difference that matters.
     /// </summary>
     [Fact]
-    public void ReportsWhatWasSkippedApartFromWhatWasKeptBack()
+    public void ReportsWhatWindowsRefusedApartFromWhatWasKeptBack()
     {
-        var outcome = RunOutcome.For([Result("npm", skipped: 2), Result("NuGet", kept: 5)]);
+        var outcome = RunOutcome.For([Result("npm", refused: InUse(2, 2048)), Result("NuGet", kept: 5)]);
 
-        Assert.Contains("2 item(s) in use were left alone.", outcome.Statement, StringComparison.Ordinal);
+        Assert.Contains(
+            $"Another program had 2 file(s) ({FreeSpace.Format(2048)}) open, so they were left in place.",
+            outcome.Statement,
+            StringComparison.Ordinal);
         Assert.Contains("5 file(s) changed too recently to remove.", outcome.Statement, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData(0, 0, "All protected paths survived.")]
-    [InlineData(4, 0, "All protected paths survived. 4 item(s) in use were left alone.")]
-    [InlineData(0, 6, "All protected paths survived. 6 file(s) changed too recently to remove.")]
-    public void SaysNothingAboutACountOfZero(int skipped, int kept, string expected)
+    /// <summary>
+    /// The defect in issue #117, in the words it produced: 5.9 GB that Windows would not
+    /// let go was reported as "252994 item(s) in use were left alone", which reads as a handful of
+    /// locked files — and the next preview offered all of it again. A denial is not a file in use,
+    /// its size is what tells the reader the run fell short, and the reader is owed the answer to
+    /// whether the row will keep offering it.
+    /// </summary>
+    [Fact]
+    public void SaysHowMuchWindowsWouldNotLetGoAndWhatTheNextPreviewDoesWithIt()
     {
-        Assert.Equal(expected, RunOutcome.For([Result("npm", skipped: skipped, kept: kept)]).Statement);
+        const long guarded = 6_340_000_000;
+
+        var statement = RunOutcome.For([Result("Temporary files", refused: Denied(252, guarded))]).Statement;
+
+        Assert.Contains(
+            $"Windows would not let Deguffer remove 252 file(s) ({FreeSpace.Format(guarded)}).",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The next preview leaves out whatever is still refused, apart from a running program's own files.",
+            statement,
+            StringComparison.Ordinal);
+
+        Assert.DoesNotContain("in use", statement, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Another program", statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>Both kinds together are both stated, and the promise about the next preview once.</summary>
+    [Fact]
+    public void StatesBothKindsOfRefusalAndThePromiseOnce()
+    {
+        var statement = RunOutcome.For([Result("npm", refused: InUse(1, 10)), Result("NuGet", refused: Denied(2, 20))]).Statement;
+
+        Assert.Contains("Another program had 1 file(s)", statement, StringComparison.Ordinal);
+        Assert.Contains("Windows would not let Deguffer remove 2 file(s)", statement, StringComparison.Ordinal);
+        Assert.Equal(1, statement.Split("The next preview").Length - 1);
+    }
+
+    [Fact]
+    public void SaysNothingAboutARefusalOrAKeepOfZero()
+    {
+        Assert.Equal("All protected paths survived.", RunOutcome.For([Result("npm")]).Statement);
+
+        Assert.Equal(
+            "All protected paths survived. 6 file(s) changed too recently to remove.",
+            RunOutcome.For([Result("npm", kept: 6)]).Statement);
     }
 
     /// <summary>
@@ -184,9 +233,9 @@ public sealed class RunOutcomeTests
     public void KeepsWhatTheRunLeftBehindBesideAnOutsideRemoval()
     {
         var outcome = RunOutcome.For(
-            [Result("npm", VerificationOutcome.RemovedFromOutside, skipped: 2, kept: 5)]);
+            [Result("npm", VerificationOutcome.RemovedFromOutside, InUse(2, 200), kept: 5)]);
 
-        Assert.Contains("2 item(s) in use were left alone.", outcome.Statement, StringComparison.Ordinal);
+        Assert.Contains("Another program had 2 file(s)", outcome.Statement, StringComparison.Ordinal);
         Assert.Contains("5 file(s) changed too recently to remove.", outcome.Statement, StringComparison.Ordinal);
     }
 

@@ -30,7 +30,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
         Assert.True(outcome.RootRemoved);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
         Assert.Equal(1024 + 2048 + 4096, outcome.BytesReclaimed);
         Assert.False(Directory.Exists(root));
     }
@@ -112,11 +112,75 @@ public sealed class DirectoryRemoverTests : IDisposable
         {
             var outcome = await DirectoryRemover.RemoveAsync(root);
 
-            Assert.Equal(1, outcome.Skipped);
+            // In use, with its size, and not denied: the reader answers the first by closing a
+            // program, and nothing answers the second.
+            Assert.Equal(new RefusalTally(1, 2048), outcome.Refused.InUse);
+            Assert.Equal(default, outcome.Refused.Denied);
+            Assert.Equal([held], outcome.RefusedAt);
+
             Assert.Equal(1024, outcome.BytesReclaimed);
             Assert.False(outcome.RootRemoved);
             Assert.True(File.Exists(held));
         }
+    }
+
+    /// <summary>
+    /// A file Windows denies is reported as denied, with its size — never as "in use".
+    ///
+    /// <para>The defect in issue #117: Windows refused every file in guarded browser
+    /// profiles, the removal counted each as a skip, and the run said a quarter of a million items
+    /// were "in use" about 5.9 GB nothing would ever release. The read-only retry is what makes the
+    /// classification easy to get wrong, because the first refusal is always an access refusal —
+    /// the reason has to come from the second attempt.</para>
+    /// </summary>
+    [Fact]
+    public async Task ReportsAFileWindowsDeniesAsDeniedRatherThanInUse()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var denied = _temp.CreateFile(4096, "scratch", "profile", "Default", "Cookies");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+
+        var fs = new RefusingFileSystem(
+            WindowsFileSystem.Default,
+            new Dictionary<string, RefusalReason> { [denied] = RefusalReason.Denied });
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, MinimumAge.Off, progress: null, default, fs, new RemovalBounds(KeepRoot: true, []));
+
+        Assert.Equal(new RefusalTally(1, 4096), outcome.Refused.Denied);
+        Assert.Equal(default, outcome.Refused.InUse);
+        Assert.Equal(1024, outcome.BytesReclaimed);
+
+        Assert.True(File.Exists(denied), "the fixture let a denied file go");
+        Assert.False(File.Exists(Path.Combine(root, "abandoned.tmp")), "a refusal stopped the rest of the clear");
+    }
+
+    /// <summary>
+    /// The place a refusal is recorded against is the entry directly under the root, however deep the
+    /// refused file sits. That entry is what the next preview asks about again, so recording the
+    /// file's own directory would miss its siblings, and recording the root would open every file in
+    /// the tree for deletion on every preview.
+    /// </summary>
+    [Fact]
+    public async Task RecordsARefusalAgainstTheEntryDirectlyUnderTheRoot()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var profile = Path.Combine(root, "profile");
+        var deep = _temp.CreateFile(64, "scratch", "profile", "Default", "Cache", "data_0");
+        var beside = _temp.CreateFile(64, "scratch", "held.log");
+
+        var fs = new RefusingFileSystem(
+            WindowsFileSystem.Default,
+            new Dictionary<string, RefusalReason>
+            {
+                [deep] = RefusalReason.Denied,
+                [beside] = RefusalReason.InUse,
+            });
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, MinimumAge.Off, progress: null, default, fs, new RemovalBounds(KeepRoot: true, []));
+
+        Assert.Equal([beside, profile], outcome.RefusedAt);
     }
 
     /// <summary>
@@ -331,7 +395,7 @@ public sealed class DirectoryRemoverTests : IDisposable
 
         Assert.Equal(1024, outcome.BytesReclaimed);
         Assert.Equal(1, outcome.Kept);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
         Assert.False(outcome.RootRemoved);
     }
 
@@ -350,7 +414,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.WithinHours(1, DateTime.UtcNow));
 
         Assert.Equal(2, outcome.Kept);
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
         Assert.Equal(4096, outcome.BytesReclaimed);
     }
 
@@ -523,7 +587,7 @@ public sealed class DirectoryRemoverTests : IDisposable
 
         // Counted as held back by the guard rather than as skipped, because that is what happened:
         // Windows refused nothing.
-        Assert.Equal(0, outcome.Skipped);
+        Assert.True(outcome.Refused.IsEmpty);
         Assert.True(File.Exists(Path.Combine(target, "payload.bin")), "the removal followed a link");
     }
 
