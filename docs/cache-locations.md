@@ -980,6 +980,62 @@ logs and crash reports](#vs-code-editor-logs-and-crash-reports) above, for the s
 
 ---
 
+## Claude Code rewind snapshots
+
+**Tier 3 — user data.** Never pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.claude\file-history\<session>`, or inside `CLAUDE_CONFIG_DIR` where that is set |
+| **Method** | Delete each session's snapshot folder |
+| **Typical size** | About 105 MB across 6,279 files on the machine this was measured on |
+
+### What it is
+
+Before Claude Code edits a file, it saves a copy, so that a session can be rewound to how its files
+were. It keeps one folder of these per session in its own folder. Claude Code removes a session's
+folder itself once nothing has written to it for its retention period, 30 days unless you changed it.
+
+### What Deguffer does
+
+It removes each session's folder, one step each, and shows when each was last written to.
+
+- **A session is dated by its folder, never by the snapshots in it.** A snapshot keeps the date of
+  the file it copied. On the measured machine, 574 of 1,159 sampled snapshots were more than an hour
+  older than their folder, some by five months. Dated by its files, a session in use this morning
+  would look months old.
+- **A session Claude Code lists as running is left alone**, and each entry in that list is checked
+  against Windows. If the list cannot be read, no session is offered, and the row says so.
+- **Nothing written in the last 7 days is offered**, whatever the list says, and whatever the guard on
+  recently changed files is set to. A session can run for days. The same cut-off applies again when you
+  press Clean, so a session you resume after the preview keeps the snapshots it has taken since.
+- **Only a folder named for a session is recognised.** Anything else in `file-history` is left alone.
+
+### What is protected
+
+Claude Code's folder, `file-history` itself, the folder of any session that is running or was written
+to in the last 7 days, and everything in `file-history` that is not a session's folder. The rest of
+Claude Code's folder is outside this row: [Claude Code session leftovers](#claude-code-session-leftovers)
+covers it.
+
+### What it costs you
+
+**Permanently.** Those sessions can no longer rewind the files they edited to how they were before.
+The files as they are now, your conversations and your settings are untouched, and new sessions take
+their own snapshots as before.
+
+With the typed confirmation turned on, clearing this and
+[Claude Code MCP server logs](#claude-code-mcp-server-logs) in one pass means typing both names. They
+are separate rows because what each must leave standing, and how each decides that something is
+finished with, differ. VS Code has three rows for the same reason.
+
+### Why Tier 3
+
+Nothing re-creates a snapshot. It is the record of a file as it was, which is the judgement made for
+[crash dumps and error reports](#crash-dumps-and-error-reports).
+
+---
+
 ## Firefox caches
 
 **Tier 1 — regenerable cache.** Pre-selected.

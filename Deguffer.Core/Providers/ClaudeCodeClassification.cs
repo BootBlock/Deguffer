@@ -71,7 +71,7 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// the second check behind it.
     /// </summary>
     public static string RecentReason =>
-        $"Claude Code wrote this in the last {ClaudeCodeDerivedStateProvider.RecentWindow.TotalDays:0} days, "
+        $"Claude Code wrote this in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days, "
         + "and a session that is still running may be using it.";
 
     public const string UnrecognisedReason =
@@ -79,6 +79,9 @@ internal sealed class ClaudeCodeClassificationBuilder
 
     public const string UnlistedReason =
         "Deguffer could not list what is in this folder, so nothing in it was examined and it is left alone.";
+
+    public const string UndatedReason =
+        "Deguffer could not tell when Claude Code last wrote to this, so it is left alone.";
 
     /// <summary>
     /// Start on one folder: name it for the declaration, assert it, and list it. Null where there is
@@ -127,6 +130,44 @@ internal sealed class ClaudeCodeClassificationBuilder
 
     /// <summary>Recognised and finished with by every other test, and written too recently to offer.</summary>
     public void HoldRecent(string path) => _recent.Add((path, RecentReason));
+
+    /// <summary>
+    /// Offer a folder that has passed every other test, unless something wrote to it recently.
+    ///
+    /// <para><b>Dated by the folder, never by the files deep inside it.</b> <see cref="DirectoryAge"/>
+    /// reads the newest of the folder's own timestamp and its immediate entries', and NTFS moves the
+    /// folder's own timestamp whenever an entry is added or removed. An old date on a file inside can
+    /// therefore never make a folder in use read as old. That matters most beside Claude Code's rewind
+    /// snapshots, whose files were measured carrying their source file's date, months older than the
+    /// folder holding them.</para>
+    ///
+    /// <para>A folder that would not be listed has no age and is refused: its own timestamp alone is
+    /// the half that reads older than the truth.</para>
+    /// </summary>
+    /// <param name="recentSinceUtc">Anything written at or after this instant is held back.</param>
+    /// <param name="isLeftover">Whether the folder is a leftover. See <see cref="DeleteStep.IsLeftover"/>.</param>
+    public void OfferFolderOnceOldEnough(
+        string path,
+        string reason,
+        DateTime recentSinceUtc,
+        bool isLeftover,
+        CancellationToken ct)
+    {
+        switch (DirectoryAge.Of(path, ct))
+        {
+            case null:
+                Refuse(path, UndatedReason);
+                break;
+
+            case DateTime written when written >= recentSinceUtc:
+                HoldRecent(path);
+                break;
+
+            case DateTime written:
+                Offer(new DeletionTarget(path, reason, written, IsLeftover: isLeftover));
+                break;
+        }
+    }
 
     /// <summary>A link where something recognisable was expected: named, asserted, never followed.</summary>
     public void Link(string path)

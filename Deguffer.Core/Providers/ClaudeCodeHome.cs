@@ -43,6 +43,9 @@ public static partial class ClaudeCodeHome
     /// <summary>The handshake file each connected editor writes so that Claude Code can find it.</summary>
     public const string Ide = "ide";
 
+    /// <summary>A folder per session of the copies taken before each edit, so the session can be rewound.</summary>
+    public const string FileHistory = "file-history";
+
     /// <summary>
     /// A session id as Claude Code writes one. The same pattern Claude Code checks its own names
     /// against, so a folder this accepts is one Claude Code would also take for a session's.

@@ -14,7 +14,7 @@ namespace Deguffer.Core.Providers;
 /// never "long ago": <see cref="ClaudeCodeSessionList.Predates"/> reads it as a start that could be
 /// the earliest of all.
 /// </param>
-internal sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? StartedAt);
+public sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? StartedAt);
 
 /// <summary>What Claude Code's list of running sessions said, and whether it could be read in full.</summary>
 /// <param name="Live">Every session still running, or that nothing could establish had stopped.</param>
@@ -24,7 +24,7 @@ internal sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? S
 /// running" and "we could not tell" lead to opposite decisions about a folder a running session is
 /// still writing to. A caller refuses everything that depends on the list while this is false.
 /// </param>
-internal sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> Live, bool Complete)
+public sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> Live, bool Complete)
 {
     private readonly HashSet<string> _ids =
         new(Live.Select(session => session.SessionId), StringComparer.OrdinalIgnoreCase);
@@ -62,8 +62,17 @@ internal sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession
 /// of entry — an interactive session, a background one, a daemon and a daemon's worker — so the list
 /// is not only the sessions somebody has open in a terminal or an editor.</para>
 /// </summary>
-internal sealed partial class ClaudeCodeSessionRegistry
+public sealed partial class ClaudeCodeSessionRegistry
 {
+    /// <summary>
+    /// How long anything Claude Code wrote is left alone, whatever this list says. A session can run for
+    /// days, and a version of Claude Code older than the list is invisible to it, so time is the second
+    /// check behind every answer the list gives. §5.3's default age filter, and a floor rather than a
+    /// preference: the guard on recently changed files is off unless the user asks for it, and a safety
+    /// property must not rest on a setting.
+    /// </summary>
+    public static readonly TimeSpan RecentWindow = TimeSpan.FromDays(7);
+
     /// <summary>
     /// Far past anything Claude Code writes, which is under a kilobyte, and small enough that a file
     /// which only shares the name is refused rather than read.
@@ -90,7 +99,8 @@ internal sealed partial class ClaudeCodeSessionRegistry
     }
 
     /// <summary>
-    /// The list, read once for the life of a planning pass (G4). Every entry's process is asked about
+    /// The list, read once for the life of a planning pass (G4), and shared by every provider over Claude
+    /// Code's folder so that no process is asked about twice. Every entry's process is asked about
     /// when the list is read, so a session that ends during the pass is still listed — the direction
     /// that leaves its files alone.
     /// </summary>

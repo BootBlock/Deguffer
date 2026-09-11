@@ -23,7 +23,7 @@ public sealed class CleanupPlanner
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
     /// web caches, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, the Azure Functions Core Tools releases Visual Studio downloads, what
-    /// Claude Code's sessions leave behind and the logs of the MCP servers it runs, the
+    /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
@@ -34,7 +34,7 @@ public sealed class CleanupPlanner
     /// environments, conda, Maven, vcpkg, PlatformIO, Playwright, the Azure Functions Core Tools
     /// releases and the superseded Squirrel builds, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
-    /// launcher's logs, the VS Code logs and Claude Code's MCP server logs, which are Tier 3. Neither tier is ever
+    /// launcher's logs, the VS Code logs, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
     /// held to it.
@@ -63,6 +63,11 @@ public sealed class CleanupPlanner
         // holding hundreds of children twice per pass.
         var squirrel = new SquirrelDiscovery(UserEnvironment.Current);
 
+        // One reading of Claude Code's list of running sessions for both providers over its folder, on the
+        // same reasoning: every entry in it costs a process probe, and two unshared registries would ask
+        // about each running process twice per pass.
+        var claudeSessions = new ClaudeCodeSessionRegistry(UserEnvironment.Current, ProcessInspector.Default);
+
         return new CleanupPlanner(
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees),
@@ -70,12 +75,13 @@ public sealed class CleanupPlanner
             new CargoTargetProvider(roots, sourceTrees, liveTrees),
             new NodeModulesProvider(roots, sourceTrees, liveTrees),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees),
-            .. CacheProviders(squirrel, liveTrees, preferences ?? DefaultPreferences.Instance),
+            .. CacheProviders(squirrel, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
         SquirrelDiscovery squirrel,
+        ClaudeCodeSessionRegistry claudeSessions,
         ILiveTreeInspector liveTrees,
         ICurrentPreferences preferences) =>
     [
@@ -105,7 +111,7 @@ public sealed class CleanupPlanner
         new PlaywrightBrowsersProvider(),
         new SquirrelSupersededVersionProvider(discovery: squirrel, liveTrees: liveTrees),
         new AzureFunctionsToolsProvider(),
-        new ClaudeCodeDerivedStateProvider(),
+        new ClaudeCodeDerivedStateProvider(sessions: claudeSessions),
         new RecycleBinProvider(preferences: preferences),
         new FileHistoryProvider(preferences: preferences),
         new TempDirectoryProvider(liveTrees: liveTrees, preferences: preferences),
@@ -114,6 +120,7 @@ public sealed class CleanupPlanner
         new EpicLauncherLogProvider(),
         new VsCodeLogProvider(),
         new ClaudeCodeMcpLogProvider(),
+        new ClaudeCodeFileHistoryProvider(sessions: claudeSessions),
     ];
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
