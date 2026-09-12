@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -142,6 +143,10 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.DoesNotContain(_environment.LocalAppData, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+
+        // §7.1 refuses every path a provider names as protected, on the second route as on the first.
+        var policy = ExploreActionPolicy.For(new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+        Assert.False(policy.MayRemove(_environment.LocalAppData).IsAllowed);
     }
 
     /// <summary>

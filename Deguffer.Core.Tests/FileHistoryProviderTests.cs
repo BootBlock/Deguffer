@@ -523,10 +523,21 @@ public sealed class FileHistoryProviderTests : IDisposable
     {
         var drive = CreateConfiguredDrive();
 
-        var root = Assert.Single(CreateProvider().ToolRoots);
+        var root = Assert.Single(
+            CreateProvider().ToolRoots,
+            r => r.Path.Equals(Path.Combine(drive, "FileHistory"), StringComparison.Ordinal));
 
-        Assert.Equal(Path.Combine(drive, "FileHistory"), root.Path);
         Assert.False(root.Recognises("Data"));
+
+        // The settings folder beside it, which the plan names as a path that must survive and §7.1
+        // therefore refuses in Explore.
+        var settings = Assert.Single(
+            CreateProvider().ToolRoots,
+            r => r.Path.Equals(
+                Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration"),
+                StringComparison.Ordinal));
+
+        Assert.False(settings.Recognises("Config1.xml"));
         Assert.False(root.Recognises(FakeUserEnvironment.Account));
     }
 

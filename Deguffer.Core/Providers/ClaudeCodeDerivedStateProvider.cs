@@ -186,7 +186,9 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own
     /// level, and one declaration per folder a leftover is recognised in, recognising exactly what this
-    /// pass would offer from it.
+    /// pass would offer from it. The two neighbours outside the folder are declared as well, recognising
+    /// nothing, because the plan names them as paths that must survive and §7.1 has Explore refuse
+    /// every such path.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
@@ -353,6 +355,16 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         return
         [
             ToolRoot.Of(survey.Evidence.Home, HomeReason, HomeChildren),
+            new ToolRoot(
+                Path.Combine(Environment.UserProfile, ".claude.json"),
+                "This is Claude Code's own configuration: your account, and each project's trust decisions "
+                + "and servers. Deguffer never removes it.",
+                static _ => false),
+            new ToolRoot(
+                Path.Combine(Environment.UserProfile, ".claude-swap-backup"),
+                "This is not part of Claude Code. Another program keeps saved sign-ins here, under a name that "
+                + "begins the same way, and Deguffer never removes it.",
+                static _ => false),
             .. survey.Kinds
                 .SelectMany(kind => kind.Folders)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

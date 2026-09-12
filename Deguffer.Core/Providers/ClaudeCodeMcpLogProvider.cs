@@ -111,13 +111,14 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
             && (survey.Targets.Count > 0 || survey.Declined.Count > 0 || survey.Unreadable));
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside: the cache folder, recognising nothing, and each
-    /// project's folder, recognising a server's log folder by its name.
+    /// §5.2 as §7.1 needs it read from outside: the tool's folder and the cache folder in it, both
+    /// recognising nothing, and each project's folder, recognising a server's log folder by its name.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         _toolRoots ??= Look() is { } survey
             ?
             [
+                new ToolRoot(Path.GetDirectoryName(CacheFolder)!, ToolFolderReason, static _ => false),
                 new ToolRoot(CacheFolder, CacheFolderReason, static _ => false),
                 .. survey.ProjectFolders.Select(folder => new ToolRoot(folder, ProjectFolderReason, IsLogFolderName)),
             ]

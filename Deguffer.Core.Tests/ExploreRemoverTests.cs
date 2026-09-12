@@ -552,4 +552,38 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.Empty(report.Removed);
         Assert.True(LongPath.FileExists(properties));
     }
+
+    /// <summary>
+    /// §5.6 for a folder holding a tool's root, picked beside an ordinary folder. The folder holding the
+    /// root stays, with the root and its settings in it, the ordinary folder goes, and the check on what
+    /// stood beside them passes.
+    /// </summary>
+    [Fact]
+    public async Task AFolderHoldingAToolRootStaysOnTheDiskWithTheRootInIt()
+    {
+        var root = _temp.CreateDirectory("profile", "AppData", "Local", "Vendor", "Tool");
+        var settings = _temp.CreateFile(8, "profile", "AppData", "Local", "Vendor", "Tool", "settings.json");
+        var vendor = Path.GetDirectoryName(root)!;
+        var ordinary = _temp.CreateDirectory("profile", "AppData", "Local", "Ordinary");
+        _temp.CreateFile(32, "profile", "AppData", "Local", "Ordinary", "big.bin");
+
+        var policy = new ExploreActionPolicy(
+            [],
+            [new ToolRoot(root, "A vendor tool's own folder.", static _ => false)]);
+
+        var report = await ExploreRemover.RemoveAsync(
+            [
+                new ExploreItem(vendor, IsDirectory: true, Bytes: 8),
+                new ExploreItem(ordinary, IsDirectory: true, Bytes: 32),
+            ],
+            ExploreRemovalMode.Permanent,
+            policy);
+
+        Assert.True(LongPath.FileExists(settings));
+        Assert.Equal(vendor, Assert.Single(report.Refused).Path);
+        Assert.Contains(root, report.Refused[0].Message, StringComparison.Ordinal);
+        Assert.Equal(ordinary, Assert.Single(report.Removed).Path);
+        Assert.False(LongPath.DirectoryExists(ordinary));
+        Assert.True(report.Verification.Passed, report.Summary);
+    }
 }
