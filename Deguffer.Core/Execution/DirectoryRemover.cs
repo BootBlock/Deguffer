@@ -215,6 +215,7 @@ public static class DirectoryRemover
             RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
             RefusedFolders = refusedFolders,
+            MailStores = [.. inventory.MailStores.Select(LongPath.Display)],
         };
     }
 

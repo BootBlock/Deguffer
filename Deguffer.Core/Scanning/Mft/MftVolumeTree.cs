@@ -55,12 +55,34 @@ public sealed class MftVolumeTree(int count)
     /// </summary>
     public long[] Newest { get; } = new long[count];
 
+    private readonly Dictionary<uint, string> _mailStoreNames = [];
+
     /// <summary>
     /// Names are kept for directories only. Path resolution never needs a file's name — a subtree
     /// total is the sum of its records regardless of what they are called — and skipping them is
     /// the difference between tens of megabytes of strings and hundreds on a full volume.
+    ///
+    /// <para>The one exception is kept apart, in <see cref="MailStoreNames"/>, so that everything
+    /// reading this array can go on assuming it names directories alone.</para>
     /// </summary>
     public string?[] Names { get; } = new string?[count];
+
+    /// <summary>
+    /// The records that are Outlook mail stores, which no total may include (§9). A flag per record
+    /// rather than a lookup, because a subtree total asks it of every file it sums.
+    ///
+    /// <para>Decided while the table is read, because it is the only moment a file's name is in
+    /// hand: <see cref="Names"/> keeps no file names, so nothing afterwards could tell a store from
+    /// any other file. See <see cref="MailStore"/>.</para>
+    /// </summary>
+    public bool[] IsMailStore { get; } = new bool[count];
+
+    /// <summary>
+    /// The name of each mail store, and of no other file. A store's path has to be rebuilt so the
+    /// plan can protect it, and a handful of names costs nothing beside the string per record that
+    /// naming every file would.
+    /// </summary>
+    public IReadOnlyDictionary<uint, string> MailStoreNames => _mailStoreNames;
 
     /// <summary>
     /// Which records the table actually described. Records not present are neither summed nor
@@ -83,6 +105,11 @@ public sealed class MftVolumeTree(int count)
         if (record.IsDirectory)
         {
             Names[number] = record.Name;
+        }
+        else if (MailStore.Is(record.Name))
+        {
+            IsMailStore[number] = true;
+            _mailStoreNames[(uint)number] = record.Name;
         }
     }
 

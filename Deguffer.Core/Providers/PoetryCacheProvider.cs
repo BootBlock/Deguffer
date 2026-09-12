@@ -79,7 +79,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     ]);
 
     /// <summary>No paths measured, for the routes that produce no command step at all.</summary>
-    private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, []);
+    private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, [], []);
 
     private readonly PoetryDiscovery _discovery;
 

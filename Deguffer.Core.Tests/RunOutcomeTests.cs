@@ -193,6 +193,25 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
+    /// §9's stores are the run's to report as well as each step's, in words of their own: nothing
+    /// refused them, no setting kept them, and nothing was using them. Said nowhere, a folder that a
+    /// clean left standing reads as a clean that did not finish.
+    /// </summary>
+    [Fact]
+    public void SaysTheOutlookDataFilesItLeftAndWhy()
+    {
+        var result = Result("Temporary files") with
+        {
+            Steps = [new StepOutcome("Clear the folder", true, 1024, Refusals.None, MailStores: 2)],
+        };
+
+        Assert.Equal(
+            "All protected paths survived. 2 Outlook data file(s) were left where they were, because "
+            + "Deguffer never removes one.",
+            RunOutcome.For([result]).Statement);
+    }
+
+    /// <summary>
     /// The reclaimed figure is not the sentence's to state. §5.4 puts it on the page under a label
     /// of its own, next to the free-space change it is deliberately kept separate from, and a
     /// sentence repeating it beside that label is one more thing able to contradict it.

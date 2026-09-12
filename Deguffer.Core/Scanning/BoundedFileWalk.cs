@@ -15,6 +15,13 @@ namespace Deguffer.Core.Scanning;
 /// volume — while a caller drawing the tree still has to show that they are there. Hiding them
 /// outright is what the walk used to do, and it makes a directory the user can see disappear.
 /// </param>
+/// <param name="ReparseFiles">
+/// The children that are files carrying a reparse point: a symbolic link to a file, and also a OneDrive
+/// placeholder or a deduplicated file, which are not links and whose content a removal would take.
+/// Kept out of <paramref name="Entries"/> so a caller totalling bytes counts none of them, as the walk
+/// always has, and handed back so a caller asking a file's type still meets them. See
+/// <see cref="Safety.MailStore"/>.
+/// </param>
 /// <param name="WasRefused">
 /// Whether the directory could not be listed at all. §5.3 makes that ordinary rather than an error,
 /// so the walk still skips it silently — but a caller reporting a total needs to know the total is
@@ -23,6 +30,7 @@ namespace Deguffer.Core.Scanning;
 internal readonly record struct DirectoryContents(
     IReadOnlyList<FileSystemInfo> Entries,
     IReadOnlyList<DirectoryInfo> Links,
+    IReadOnlyList<FileInfo> ReparseFiles,
     bool WasRefused);
 
 /// <summary>
@@ -54,9 +62,14 @@ internal static class BoundedFileWalk
     /// <paramref name="onFile"/> then carries the prefix too, because .NET builds each child from
     /// the parent it was given.
     /// </param>
+    /// <param name="onReparseFile">
+    /// Called, concurrently, for each file carrying a reparse point, which <paramref name="onFile"/>
+    /// never sees. See <see cref="DirectoryContents.ReparseFiles"/>.
+    /// </param>
     public static void Visit(
         string root,
         Action<FileInfo> onFile,
+        Action<FileInfo> onReparseFile,
         Action onLevel,
         CancellationToken ct)
     {
@@ -75,6 +88,11 @@ internal static class BoundedFileWalk
                     {
                         onFile(file);
                     }
+                }
+
+                foreach (var marked in contents.ReparseFiles)
+                {
+                    onReparseFile(marked);
                 }
             },
             onLevel,
@@ -163,6 +181,7 @@ internal static class BoundedFileWalk
     {
         var entries = new List<FileSystemInfo>();
         var links = new List<DirectoryInfo>();
+        var reparseFiles = new List<FileInfo>();
 
         try
         {
@@ -176,14 +195,18 @@ internal static class BoundedFileWalk
                 {
                     links.Add(link);
                 }
+                else if (info is FileInfo marked)
+                {
+                    reparseFiles.Add(marked);
+                }
             }
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
             // Expected on a live machine. Skip, and say that we did.
-            return new DirectoryContents(entries, links, WasRefused: true);
+            return new DirectoryContents(entries, links, reparseFiles, WasRefused: true);
         }
 
-        return new DirectoryContents(entries, links, WasRefused: false);
+        return new DirectoryContents(entries, links, reparseFiles, WasRefused: false);
     }
 }

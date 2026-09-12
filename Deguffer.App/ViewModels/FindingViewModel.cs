@@ -202,6 +202,7 @@ public sealed partial class FindingViewModel : ObservableObject
                 { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
                 { HasRefusedContent: true } => FindingStatus.RefusedByWindows,
                 { HoldsKeepListItems: true } => FindingStatus.OnKeepList,
+                { HoldsMailStores: true } => FindingStatus.MailStoresHeldBack,
                 _ => FindingStatus.AlreadyClear,
             }
             : CanBeSelected
@@ -255,13 +256,14 @@ public sealed partial class FindingViewModel : ObservableObject
     ///
     /// Read off <see cref="Status"/> rather than restating the condition that produces it, because
     /// a second copy of that condition is free to disagree with the words on screen — and what this
-    /// filter promises is that it hides exactly the rows saying "Already clear". The five
+    /// filter promises is that it hides exactly the rows saying "Already clear". The six
     /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
     /// let Deguffer list, a location Deguffer declined to look at or could not locate, a cache
     /// whose every file is inside the guard on recently changed files, a folder whose contents
-    /// Windows would not let the last clean take, and a location holding only what the user keeps.
-    /// All five stay listed, because each is a thing the user may want to act on — the last of them
-    /// by releasing what it holds.
+    /// Windows would not let the last clean take, a location holding only what the user keeps, and
+    /// a location holding only Outlook data files. All six stay listed, because each is a thing the
+    /// user may want to act on — the keep-list row by releasing what it holds, and the Outlook row by
+    /// moving the file somewhere it belongs.
     ///
     /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
     /// the label needs <see cref="Finding.HasSomethingToRemove"/> to be false, which is no step

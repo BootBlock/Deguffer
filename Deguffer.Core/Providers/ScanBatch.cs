@@ -21,10 +21,16 @@ namespace Deguffer.Core.Providers;
 /// the UI has to decide whether elevating would actually help, and matching on display text to
 /// answer that is how a reworded string silently disables the offer.
 /// </param>
+/// <param name="MailStores">
+/// One entry per path: the Outlook mail stores its measurement left out, by path. Per path for the
+/// reason <paramref name="WithheldRecent"/> is, because each becomes a property of the step that
+/// removes that path. See <see cref="CleanupStep.MailStores"/>.
+/// </param>
 public sealed record ScanBatch(
     IReadOnlyList<ScanSize> Sizes,
     FallbackReason Fallback,
-    IReadOnlyList<bool> WithheldRecent)
+    IReadOnlyList<bool> WithheldRecent,
+    IReadOnlyList<IReadOnlyList<string>> MailStores)
 {
     public ScanSize Total => Sizes.Aggregate(ScanSize.Zero, (sum, size) => sum + size);
 

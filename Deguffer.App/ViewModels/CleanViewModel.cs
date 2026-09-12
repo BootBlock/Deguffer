@@ -485,11 +485,11 @@ public sealed partial class CleanViewModel : ObservableObject
                 return;
             }
 
-            // Every row this run will not clean still owes it the proof that its kept items are
-            // standing afterwards (§5.6), and the planner runs that proof after every deletion. Asked
-            // after the confirmations, because until they are answered nobody knows which of the
-            // ticked rows will run. See KeepListProof.
-            var proving = KeepListProof.For(Findings.Select(row => row.Finding), authorised);
+            // Every row this run will not clean still owes it the proof that its kept items and its
+            // Outlook data files are standing afterwards (§5.6), and the planner runs that proof after
+            // every deletion. Asked after the confirmations, because until they are answered nobody
+            // knows which of the ticked rows will run. See StandingProof.
+            var proving = StandingProof.For(Findings.Select(row => row.Finding), authorised);
 
             var progress = new Progress<string>(message => Report(message));
             var completed = new Progress<double>(SetCleanProgress);

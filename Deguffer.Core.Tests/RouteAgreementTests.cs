@@ -51,6 +51,38 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// §9 on both routes at once. An elevated run and an unelevated one have to leave the same store
+    /// out of the same total and name it by the same path, or a row's figure and the protection
+    /// proven after its clean would depend on how the app was started.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesAgreeAboutAnOutlookDataFile()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "scratch",
+            new TreeFile("abandoned.tmp", 4096),
+            new TreeDirectory(
+                "Temp1_mail.zip",
+                new TreeFile("archive.pst", 65536),
+                new TreeFile("readme.txt", 100))));
+
+        var walked = await Walking().MeasureAsync(path);
+        var indexed = await Indexing(path, fixture).MeasureAsync(path);
+
+        Assert.Equal(ScanStrategy.ParallelEnumeration, walked.Strategy);
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+
+        Assert.Equal(4096 + 100, walked.Size.Logical);
+        Assert.Equal(walked.Size.Logical, indexed.Size.Logical);
+        Assert.Equal(walked.Size.Entries, indexed.Size.Entries);
+
+        Assert.Equal([Path.Combine(path, "Temp1_mail.zip", "archive.pst")], walked.MailStores);
+        Assert.Equal(walked.MailStores, indexed.MailStores, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// A single file, which is what <c>C:\Windows\MEMORY.DMP</c> is, and where the two routes turn
     /// out to be one.
     ///

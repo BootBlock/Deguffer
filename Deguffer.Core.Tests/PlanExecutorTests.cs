@@ -107,6 +107,158 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(File.Exists(guarded), "the fixture let a denied file go");
     }
 
+    /// <summary>
+    /// §9 through each of the three removals a plan can hold. The store stays, the step still
+    /// succeeds at what it could do, and its sentence names the rule rather than a refusal, the guard
+    /// or a program in use — the three things a reader would otherwise go looking for.
+    /// </summary>
+    [Fact]
+    public async Task ADirectoryStepLeavesAnOutlookDataFileAndSaysWhy()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        var archive = _temp.CreateFile(4096, "cache", "saved", "archive.pst");
+        _temp.CreateFile(1024, "cache", "blob.bin");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(
+            PlanDeleting(new DeleteDirectoryStep(cache, "A cache")), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(File.Exists(archive), "an Outlook data file was deleted");
+        Assert.True(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.Equal(1, result.MailStoreCount);
+        Assert.Equal(1024, step.BytesReclaimed);
+        Assert.Contains("1 Outlook data file(s) left alone", step.Message!, StringComparison.Ordinal);
+        Assert.DoesNotContain("changed recently", step.Message!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AClearStepLeavesAnOutlookDataFileAndSaysWhy()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var archive = _temp.CreateFile(4096, "scratch", "Temp1_mail.zip", "archive.pst");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(
+            PlanDeleting(new ClearDirectoryStep(scratch, "Scratch files")), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(File.Exists(archive), "an Outlook data file was deleted");
+        Assert.True(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.StartsWith("Cleared", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("1 Outlook data file(s) left alone", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A step whose whole subject is a store did nothing, and nothing was meant to go: the same shape
+    /// as a file the guard kept, and reported the same way — a success that says what stayed.
+    /// </summary>
+    [Fact]
+    public async Task AFileStepNamingAnOutlookDataFileLeavesItAndSaysWhy()
+    {
+        var archive = _temp.CreateFile(4096, "Downloads", "archive.pst");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(
+            PlanDeleting(new DeleteFileStep(archive, "A file")), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(File.Exists(archive), "an Outlook data file was deleted");
+        Assert.True(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.Equal(0, step.EntriesRemoved);
+        Assert.Contains("Outlook data file", step.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A plan is made minutes before it runs, and a store can arrive in between — an archive saved
+    /// into a cache folder while the preview sat on screen. A tool's own command cannot leave it, so
+    /// the executor looks on the disk again immediately before it runs one, as it asks the guard
+    /// again before it deletes a file.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunAToolsCommandWhenAStoreArrivedInsideWhatItClearsAfterThePreview()
+    {
+        var cache = _temp.CreateDirectory("npm-cache");
+        _temp.CreateFile(4096, "npm-cache", "_cacache", "blob");
+
+        var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
+        {
+            Estimated = new ScanSize(4096, 4096),
+            MeasuredPaths = [cache],
+        };
+
+        var archive = _temp.CreateFile(8192, "npm-cache", "saved", "archive.pst");
+
+        var runner = new FakeProcessRunner();
+        var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Empty(runner.Invocations);
+        Assert.False(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.Contains(archive, step.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(archive));
+    }
+
+    /// <summary>The same for a Recycle Bin Windows would empty whole: a store deleted into it after the preview.</summary>
+    [Fact]
+    public async Task DoesNotEmptyABinWhenAStoreArrivedInItAfterThePreview()
+    {
+        var volume = _temp.CreateDirectory("volumes", "D");
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+        var store = _temp.CreateFile(8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RA1B2C3.pst");
+
+        var emptier = new FakeRecycleBinEmptier();
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, emptier);
+        var result = await executor.ExecuteAsync(
+            PlanDeleting(new EmptyRecycleBinStep(bin, "A bin")), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Empty(emptier.VolumeRoots);
+        Assert.False(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.True(File.Exists(store));
+        Assert.True(Directory.Exists(volume));
+    }
+
+    /// <summary>
+    /// A Recycle Bin removed file by file goes whole or not at all: a deleted folder and the record
+    /// that restores it are two entries. Stepping over a store that arrived in one after the preview
+    /// would keep the store and take its record, so an indivisible step is looked at again on the disk
+    /// and refused whole.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRemoveAnIndivisibleFolderWhenAStoreArrivedInItAfterThePreview()
+    {
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+        var step = new DeleteDirectoryStep(bin, "A bin") { IsIndivisible = true };
+
+        var store = _temp.CreateFile(
+            8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456", "mail", "archive.pst");
+        var record = _temp.CreateFile(544, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$IDEF456");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
+
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.True(File.Exists(store), "a store was removed");
+        Assert.True(File.Exists(record), "the record that restores the folder holding a store was removed");
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(1, outcome.MailStores);
+        Assert.Contains(store, outcome.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

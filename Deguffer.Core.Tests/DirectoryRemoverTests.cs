@@ -556,6 +556,83 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// §9: an Outlook mail store is never removed, wherever a removal meets one. The negative is the
+    /// assertion: the store, and every folder holding it, are still on the disk afterwards, while
+    /// everything around them — a name that only resembles a store among them — is gone.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAnOutlookDataFileAndEveryFolderHoldingIt()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var archive = _temp.CreateFile(4096, "scratch", "extracted", "mail", "archive.pst");
+        var mailbox = _temp.CreateFile(2048, "scratch", "someone@example.com.OST");
+        var lookalike = _temp.CreateFile(512, "scratch", "extracted", "archive.pst.txt");
+        var ordinary = _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.True(File.Exists(archive), "an Outlook data file was deleted");
+        Assert.True(File.Exists(mailbox), "an offline mailbox was deleted");
+        Assert.True(Directory.Exists(Path.GetDirectoryName(archive)!), "the folder holding a data file was removed");
+        Assert.True(Directory.Exists(root), "the root went, so a data file inside it was lost");
+        Assert.False(outcome.RootRemoved);
+
+        Assert.False(File.Exists(lookalike), "a name that only resembles a data file was kept");
+        Assert.False(File.Exists(ordinary));
+        Assert.Equal(512 + 1024, outcome.BytesReclaimed);
+
+        Assert.Equal(
+            [archive, mailbox],
+            outcome.MailStores.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(0, outcome.Kept);
+        Assert.True(outcome.Refused.IsEmpty);
+    }
+
+    /// <summary>
+    /// A store the guard would also have kept is reported as a store. The rule is unconditional and
+    /// the guard is a preference, so the sentence that reaches the reader has to name the rule — the
+    /// guard's "changed recently" would tell them it goes once it is old enough.
+    /// </summary>
+    [Fact]
+    public async Task AStoreTheGuardWouldAlsoKeepIsCountedAsAStore()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var archive = _temp.CreateFile(4096, "cache", "written-just-now.pst");
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.True(File.Exists(archive));
+        Assert.Equal([archive], outcome.MailStores);
+        Assert.Equal(0, outcome.Kept);
+    }
+
+    /// <summary>
+    /// The store question is asked before the link question, because the mark Windows puts on a link
+    /// is also on files that are not links: a OneDrive placeholder and a deduplicated file carry it,
+    /// and deleting either deletes its content. Nothing here reads which kind of mark a file carries,
+    /// so a file named like a store is left whatever it turns out to be. A real link to a store is left
+    /// too, which costs nothing — and it is the real link this test can make on any machine.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFileNamedLikeAStoreEvenWhereItCarriesTheMarkOfALink()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var target = _temp.CreateFile(4096, "elsewhere", "archive.pst");
+        var abandoned = _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+        var link = Path.Combine(root, "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root);
+
+        Assert.True(LongPath.IsReparsePoint(link), "a file carrying a link's mark and named like a store was removed");
+        Assert.True(File.Exists(target));
+        Assert.False(File.Exists(abandoned));
+        Assert.Equal([link], outcome.MailStores);
+        Assert.False(outcome.RootRemoved);
+    }
+
+    /// <summary>
     /// Kept and skipped are counted apart because they are different sentences to the reader: one is
     /// Windows refusing, which they can act on, and the other is a setting they chose.
     /// </summary>

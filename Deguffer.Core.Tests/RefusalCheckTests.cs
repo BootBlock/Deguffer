@@ -128,6 +128,29 @@ public sealed class RefusalCheckTests : IDisposable
     }
 
     /// <summary>
+    /// §9's store is not something the removal attempts, so the check neither opens it for deletion
+    /// nor counts it. Counting it would take its bytes out of an estimate that never held them, and
+    /// opening it gets in the way of Outlook, which may be reading it.
+    /// </summary>
+    [Fact]
+    public void NeverOpensAnOutlookDataFileInARecordedPlace()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var place = _temp.CreateDirectory("temp", "extracted");
+        var archive = _temp.CreateFile(4096, "temp", "extracted", "archive.pst");
+        var denied = _temp.CreateFile(1024, "temp", "extracted", "Cookies");
+
+        var recorder = new RecordingFileSystem(
+            Refusing((archive, RefusalReason.InUse), (denied, RefusalReason.Denied)));
+
+        var finding = RefusalCheck.Of(new ClearDirectoryStep(step, "Scratch"), [place], MinimumAge.Off, recorder, default);
+
+        Assert.Equal(new RefusalTally(1, 1024), finding.Refused.Denied);
+        Assert.True(finding.Refused.InUse.Files == 0, "a data file was counted as refused");
+        Assert.DoesNotContain(recorder.Probed, p => LongPath.Display(p).Equals(archive, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// The record is a file on the user's disk. A place in it outside the step is not trusted: it
     /// would be opened for deletion and then taken out of a figure it was never part of.
     /// </summary>

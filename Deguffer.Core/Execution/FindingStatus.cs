@@ -64,6 +64,13 @@ public enum FindingStatus
     /// </summary>
     OnKeepList,
 
+    /// <summary>
+    /// A location whose only content is Outlook mail stores, which Deguffer never removes (§9). It
+    /// measures zero and it is not empty, and a tool's own command withheld because of one is the
+    /// same case: the row has something in it and nothing Deguffer will take.
+    /// </summary>
+    MailStoresHeldBack,
+
     /// <summary>Examined, and there is genuinely nothing in it.</summary>
     AlreadyClear,
 
@@ -82,11 +89,11 @@ public static class FindingStatusExtensions
     /// <summary>
     /// The two or three words the row states beside its size.
     ///
-    /// <para>"Already clear" is a claim about the folder, and the five states above it must not be
+    /// <para>"Already clear" is a claim about the folder, and the six states above it must not be
     /// reported as that: a folder Windows would not let Deguffer list, a location Deguffer declined
     /// to look at, a cache held back by the guard window, a folder whose contents Windows would not
-    /// let a clean take, and a location holding what the user keeps. Each of the five measures zero
-    /// and none of them is clear.</para>
+    /// let a clean take, a location holding what the user keeps, and a location holding Outlook data
+    /// files. Each of the six measures zero and none of them is clear.</para>
     ///
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
@@ -107,6 +114,7 @@ public static class FindingStatusExtensions
         FindingStatus.RecentContentHeldBack => "Nothing old enough",
         FindingStatus.RefusedByWindows => "Refused by Windows",
         FindingStatus.OnKeepList => "On your keep list",
+        FindingStatus.MailStoresHeldBack => "Outlook data kept",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.

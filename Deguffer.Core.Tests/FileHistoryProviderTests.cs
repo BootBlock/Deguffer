@@ -167,6 +167,33 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §9 reaches Windows' own cleanup. <c>-cleanup</c> removes a saved version once it is past the
+    /// age and either a newer one exists or the file has left what File History protects — so the
+    /// last saved copy of an Outlook data file the user has since deleted is exactly what it takes.
+    /// Deguffer cannot tell it which versions to keep, so it does not run the command at all while a
+    /// version of one is saved, and it names the version it found.
+    /// </summary>
+    [Fact]
+    public async Task WithholdsWindowsOwnCleanupWhileAVersionOfAnOutlookDataFileIsSaved()
+    {
+        var drive = CreateConfiguredDrive();
+        var archive = CreateVersion(
+            Path.Combine(CreateHistory(drive), "Data"), "archive (2024_01_02 03_04_05 UTC).pst", 4096, TimeSpan.FromDays(800));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(archive, StringComparison.OrdinalIgnoreCase)
+            && p.Withheld == Withholding.MailStore);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Outlook data file", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(_runner.Invocations, i => i.Arguments.Contains("-cleanup", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The first of Microsoft's two conditions, measured. The command considers only versions past
     /// the retention age, so a figure counting the whole folder would promise bytes the clean will
     /// not take — §5.4's broken promise arriving from the other direction.

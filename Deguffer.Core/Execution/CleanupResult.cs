@@ -27,6 +27,11 @@ namespace Deguffer.Core.Execution;
 /// in. Apart from <paramref name="Refused"/> because a folder holds no bytes: see
 /// <see cref="FolderRefusals"/>.
 /// </param>
+/// <param name="MailStores">
+/// Outlook mail stores the step found and left where they were, because Deguffer never removes one.
+/// Apart from every count above, because none of their sentences is true of it: nothing refused, no
+/// setting was honoured, and nothing was using the file.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -36,7 +41,8 @@ public sealed record StepOutcome(
     int Kept = 0,
     int Spared = 0,
     long EntriesRemoved = 0,
-    FolderRefusals RefusedFolders = default);
+    FolderRefusals RefusedFolders = default,
+    int MailStores = 0);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -68,6 +74,9 @@ public sealed record CleanupResult
 
     /// <summary>Entries left alone because something was found to be using them (§5.3).</summary>
     public int SparedCount => Steps.Sum(s => s.Spared);
+
+    /// <summary>Outlook mail stores left where they were. See <see cref="StepOutcome.MailStores"/>.</summary>
+    public int MailStoreCount => Steps.Sum(s => s.MailStores);
 
     public bool Succeeded => Steps.All(s => s.Succeeded);
 }

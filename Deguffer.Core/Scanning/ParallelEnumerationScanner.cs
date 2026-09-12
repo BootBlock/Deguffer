@@ -60,7 +60,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         CancellationToken ct = default) =>
         new(Task.Run(
             () => TryMeasureFile(path, keep) is { } file
-                ? ScanResult.Direct(file.Size, file.WithheldRecent)
+                ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
                 : Slow(Measure(path, keep, progress, ct)),
             ct));
 
@@ -90,10 +90,10 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
-    private ScanResult Slow((ScanSize Size, bool WithheldRecent) measured) =>
-        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent);
+    private ScanResult Slow((ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) measured) =>
+        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent) with { MailStores = measured.MailStores };
 
-    private static (ScanSize Size, bool WithheldRecent) Measure(
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -101,7 +101,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return (ScanSize.Zero, false);
+            return (ScanSize.Zero, false, []);
         }
 
         long total = 0;
@@ -112,6 +112,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         var withheld = 0;
 
         var folders = new ConcurrentBag<VisitedFolder>();
+        var stores = new ConcurrentBag<string>();
 
         BoundedFileWalk.Visit<VisitedFolder?>(
             LongPath.Extended(path),
@@ -132,6 +133,14 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     if (entry is DirectoryInfo child)
                     {
                         descend(child, folder);
+                    }
+
+                    // §9, and before the guard for the reason the removal asks it first: the store is
+                    // left whatever its age, so it is out of the total and its folders stay.
+                    else if (entry is FileInfo store && MailStore.Is(store.Name))
+                    {
+                        stores.Add(LongPath.Display(store.FullName));
+                        folder.Stays();
                     }
 
                     // The walk hands over a FileInfo whose attributes and timestamps were populated by
@@ -163,6 +172,19 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                         Interlocked.Increment(ref entries);
                     }
                 }
+
+                // A file carrying a reparse point is counted by nothing here, as the walk never has
+                // counted one. One named like a store is still named and keeps its folders, because the
+                // removal leaves it whatever its mark means: a OneDrive placeholder and a deduplicated
+                // file carry the mark too.
+                foreach (var marked in contents.ReparseFiles)
+                {
+                    if (MailStore.Is(marked.Name))
+                    {
+                        stores.Add(LongPath.Display(marked.FullName));
+                        folder.Stays();
+                    }
+                }
             },
             // §5.5: stream partial results. One report per breadth-first level, not per file.
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
@@ -172,7 +194,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
 
         return (
             new ScanSize(Interlocked.Read(ref total), Interlocked.Read(ref total), Entries: removed),
-            Volatile.Read(ref withheld) == 1);
+            Volatile.Read(ref withheld) == 1,
+            [.. stores.Order(StringComparer.OrdinalIgnoreCase)]);
     }
 
     /// <summary>
@@ -214,16 +237,31 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// scanner did — produces a step nobody can select, because a step with nothing to reclaim is
     /// not offerable.
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent)? TryMeasureFile(string path, MinimumAge keep)
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores)? TryMeasureFile(
+        string path,
+        MinimumAge keep)
     {
         try
         {
             var file = new FileInfo(LongPath.Extended(path));
 
+            if (!file.Exists)
+            {
+                return null;
+            }
+
+            // §9: zero, and named, whatever its age and whatever mark it carries, because the removal
+            // leaves it either way. The same answer a kept file gets, for the same reason, with the
+            // store's own name on it so the plan can protect it.
+            if (MailStore.Is(file.Name))
+            {
+                return (ScanSize.Zero, false, [LongPath.Display(file.FullName)]);
+            }
+
             // A link's length is its own, not its target's, and following one would count a tree
             // this scanner never looked inside — the same rule BoundedFileWalk applies to every
             // entry it enumerates.
-            if (!file.Exists || file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if (file.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
                 return null;
             }
@@ -233,8 +271,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             // removal will reclaim from it, and a step with nothing to reclaim is not offerable —
             // which is the outcome a protected single file should have.
             return keep.Protects(file)
-                ? (ScanSize.Zero, true)
-                : (new ScanSize(file.Length, file.Length, Entries: 1), false);
+                ? (ScanSize.Zero, true, [])
+                : (new ScanSize(file.Length, file.Length, Entries: 1), false, []);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {

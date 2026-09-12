@@ -464,7 +464,9 @@ public sealed class RecycleBinProviderTests : IDisposable
         var provider = CreateProvider(AppPreferences.Default with { EmptyRecycleBinsDirectly = true });
         var plan = await provider.PlanAsync();
 
-        Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps));
+        // A bin removed file by file goes whole or not at all: a deleted item's content and its
+        // record belong together. See DeleteStep.IsIndivisible.
+        Assert.True(Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps)).IsIndivisible);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -472,6 +474,76 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.Empty(_emptier.VolumeRoots);
         Assert.False(Directory.Exists(mine));
         Assert.True(Directory.Exists(Path.Combine(volume, BinName)), "the bin root was removed");
+    }
+
+    /// <summary>
+    /// §9 in the Recycle Bin. A deleted Outlook data file is still one: the bin is the last place it
+    /// can be restored from, and emptying the bin is the step that ends that. Windows empties a bin
+    /// whole, so a bin holding one is left exactly as it is — while every other volume's bin is
+    /// emptied as usual.
+    /// </summary>
+    [Fact]
+    public async Task LeavesABinHoldingAnOutlookDataFileAsItIsAndEmptiesTheOthers()
+    {
+        var d = CreateVolume("D");
+        var e = CreateVolume("E");
+
+        var withStore = Path.Combine(d, BinName, Sid);
+        Directory.CreateDirectory(withStore);
+        var store = Path.Combine(withStore, "$RA1B2C3.pst");
+        var storeRecord = Path.Combine(withStore, "$IA1B2C3.pst");
+        File.WriteAllBytes(store, new byte[8192]);
+        File.WriteAllBytes(storeRecord, new byte[544]);
+        var besideIt = Path.Combine(withStore, "$RZ9Y8X7.txt");
+        File.WriteAllBytes(besideIt, new byte[4096]);
+
+        var plain = CreateBin(e, Sid);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(plain, Assert.Single(plan.TargetedPaths), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(store, StringComparison.OrdinalIgnoreCase)
+            && p.Withheld == Withholding.MailStore);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Outlook data file", StringComparison.Ordinal)
+            && n.Message.Contains(d, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal([e], _emptier.VolumeRoots);
+        Assert.True(File.Exists(store), "a deleted Outlook data file was destroyed");
+        Assert.True(File.Exists(storeRecord), "the record that lets it be restored was destroyed");
+        Assert.True(File.Exists(besideIt), "the bin holding a data file was emptied around it");
+        Assert.True(result.Verification!.Passed);
+    }
+
+    /// <summary>
+    /// The direct route could step over the store and take the rest, and that is still wrong: a
+    /// deleted folder is one entry and its record is another, so emptying around a store inside a
+    /// deleted folder leaves the folder with no record, and nothing can restore it. The bin is left
+    /// whole on this route too.
+    /// </summary>
+    [Fact]
+    public async Task LeavesABinWhoseDeletedFolderHoldsAStoreOnTheDirectRouteToo()
+    {
+        var d = CreateVolume("D");
+
+        var bin = Path.Combine(d, BinName, Sid);
+        var store = Path.Combine(bin, "$RDEF456", "mail", "archive.pst");
+        Directory.CreateDirectory(Path.GetDirectoryName(store)!);
+        File.WriteAllBytes(store, new byte[8192]);
+        var record = Path.Combine(bin, "$IDEF456");
+        File.WriteAllBytes(record, new byte[544]);
+
+        var provider = CreateProvider(AppPreferences.Default with { EmptyRecycleBinsDirectly = true });
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(store), "a deleted Outlook data file was destroyed");
+        Assert.True(File.Exists(record), "the record of the deleted folder holding it was destroyed");
     }
 
     /// <summary>

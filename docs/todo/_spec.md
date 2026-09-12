@@ -468,7 +468,7 @@ A Tier 2 provider was the alternative, and two rules rule it out:
 `InstallCleanup.exe` is not an answer either. Microsoft documents it as a last resort after a repair
 or uninstall has already failed, and warns that it can remove features belonging to other products.
 
-**Outlook's data files are refused by type in Explore, wherever they are saved.** An offline mailbox (`.ost`)
+**Outlook's data files are never removed, by any route, wherever they are saved.** An offline mailbox (`.ost`)
 is routinely the largest single file on a business machine, and advice to delete it is everywhere.
 It is not a cache in §3's sense. Microsoft documents a Sync Issues folder inside it that is never
 copied to the server, and the one sentence permitting its deletion is conditional on an Exchange
@@ -477,11 +477,20 @@ deliberately leaves the Outbox alone. A personal data file (`.pst`) is not a cop
 it is where a POP or IMAP account delivers and where an archive goes.
 
 No provider targets either, and absence from every allow-list is not enough on its own, because a
-`.pst` is wherever somebody saved it and a size picture puts it in front of them. So Explore refuses
-both by extension, together with Outlook's own folder under `%LOCALAPPDATA%` and any folder named
-`Outlook Files`, and hovering one says what it is and how Outlook itself makes it smaller.
+`.pst` is wherever somebody saved it — a temporary folder, a build directory, a data disk — and a size
+picture puts it in front of them. So the rule is a type rather than a place, and every route asks it:
 
-The type rule is Explore's alone. No Storage route asks a file's type before removing it, so a data
-file saved inside a location a provider empties — a temporary folder past its age limit, a build
-directory — goes with that location's other contents. `docs/cache-locations.md` records the whole
-argument, that boundary, and what would change the refusal.
+- A removal Deguffer performs itself steps over a store and leaves the folders holding it, and the
+  measurement that forecasts it leaves the store out. A file named like a store is left even where it
+  carries the mark of a link, because a OneDrive placeholder and a deduplicated file carry it too.
+- A step whose removal is not Deguffer's to steer is withheld while a store is inside its reach: a
+  tool's own command (§5.1), File History's cleanup, and a Recycle Bin on either route, since a bin's
+  deleted items and the records that restore them go together. Immediately before a command runs or a
+  bin is emptied, the disk is looked at again.
+- Every store a plan finds is protected by its path, so §5.6 fails a run that lost one, whether or not
+  the store's own row ran.
+- Explore refuses a store by extension, together with Outlook's own folder under `%LOCALAPPDATA%` and
+  any folder named `Outlook Files`, and refuses to move a folder holding one to the Recycle Bin.
+  Hovering a store says what it is and how Outlook itself makes it smaller.
+
+`docs/cache-locations.md` records the whole argument, and what would change the refusal.

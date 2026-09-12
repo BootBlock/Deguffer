@@ -8,12 +8,17 @@ namespace Deguffer.Core.Execution;
 /// <param name="Links">Junctions and symbolic links, which are removed as links and never followed.</param>
 /// <param name="Kept">Files and links the guard on recently changed files held back.</param>
 /// <param name="Spared">Entries the bounds held back, which the walk did not descend into.</param>
+/// <param name="MailStores">
+/// Outlook mail stores the walk met, in the extended form it met them in. Never among
+/// <paramref name="Files"/>, so nothing hands one to a delete. See <see cref="MailStore"/>.
+/// </param>
 internal sealed record RemovalInventory(
     IReadOnlyList<string> Directories,
     IReadOnlyList<(string Path, long Length)> Files,
     IReadOnlyList<FileSystemEntry> Links,
     int Kept,
-    int Spared);
+    int Spared,
+    IReadOnlyList<string> MailStores);
 
 /// <summary>
 /// The walk a removal makes before it deletes anything, shared with the check that asks what Windows
@@ -43,10 +48,11 @@ internal static class RemovalWalk
         var directories = new List<string>();
         var files = new List<(string, long)>();
         var links = new List<FileSystemEntry>();
+        var mailStores = new List<string>();
 
-        var (kept, spared) = Visit(extendedRoot, keep, bounds, directories, files, links, fs, ct);
+        var (kept, spared) = Visit(extendedRoot, keep, bounds, directories, files, links, mailStores, fs, ct);
 
-        return new RemovalInventory(directories, files, links, kept, spared);
+        return new RemovalInventory(directories, files, links, kept, spared, mailStores);
     }
 
     private static (int Kept, int Spared) Visit(
@@ -56,6 +62,7 @@ internal static class RemovalWalk
         List<string> directories,
         List<(string, long)> files,
         List<FileSystemEntry> links,
+        List<string> mailStores,
         IFileSystem fs,
         CancellationToken ct)
     {
@@ -87,6 +94,19 @@ internal static class RemovalWalk
                 continue;
             }
 
+            // §9, asked before the link branch and before the guard. Before the link branch, because the
+            // mark Windows puts on a link is also on files that are not links — a OneDrive placeholder, a
+            // deduplicated file — and deleting one of those deletes its content. Nothing here reads which
+            // kind of mark a file carries, so a file named like a store is left whatever it carries. Before
+            // the guard, because the rule is unconditional and the guard is a preference, so a store both
+            // would keep is reported as the store it is. Its folders stay standing by the rule every kept
+            // file relies on — a folder still holding something cannot be removed.
+            if (!entry.IsDirectory && MailStore.Is(entry.FullName))
+            {
+                mailStores.Add(entry.FullName);
+                continue;
+            }
+
             if (entry.IsReparsePoint)
             {
                 // The guard applies to a link exactly as it applies to a file.
@@ -110,7 +130,7 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
-                var below = Visit(entry.FullName, keep, bounds, directories, files, links, fs, ct);
+                var below = Visit(entry.FullName, keep, bounds, directories, files, links, mailStores, fs, ct);
                 kept += below.Kept;
                 spared += below.Spared;
             }

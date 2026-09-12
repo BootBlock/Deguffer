@@ -152,9 +152,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
             }
         }
 
-        var prefix = driveLetter + @":\";
         var found = index.FindDirectoriesNamed(name, ct)
-            .Select(components => prefix + string.Join(Path.DirectorySeparatorChar, components))
+            .Select(components => PathOf(driveLetter, components))
             .ToList();
 
         lock (_searchGate)
@@ -199,16 +198,29 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // Assigned first because the call sits behind a null-conditional, which leaves an out
         // parameter unassigned on the branch where there is no index to ask.
         var withheldRecent = false;
+        IReadOnlyList<IReadOnlyList<string>> stores = [];
 
-        if (index?.TryMeasure(volumePath.Components, keep, out withheldRecent) is { } size)
+        if (index?.TryMeasure(volumePath.Components, keep, out withheldRecent, out stores) is { } size)
         {
             progress?.Report(size);
-            return ValueTask.FromResult(ScanResult.Fast(size, withheldRecent));
+
+            return ValueTask.FromResult(ScanResult.Fast(size, withheldRecent) with
+            {
+                MailStores = [.. stores.Select(s => PathOf(volumePath.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
+            });
         }
 
         var fallbackReason = reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : reason;
         return _fallback.Because(fallbackReason).MeasureAsync(path, keep, progress, ct);
     }
+
+    /// <summary>
+    /// A path the index rebuilt as components below a volume root, in the display form the walk
+    /// reports. One place, so a directory found by name and a mail store found by a total are spelled
+    /// the same way as everything else a plan compares them with.
+    /// </summary>
+    private static string PathOf(char driveLetter, IReadOnlyList<string> components) =>
+        driveLetter + @":\" + string.Join(Path.DirectorySeparatorChar, components);
 
     /// <summary>
     /// Drop the volume indexes so the next pass reads the table afresh.

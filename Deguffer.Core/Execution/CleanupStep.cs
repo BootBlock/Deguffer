@@ -115,6 +115,17 @@ public abstract record CleanupStep
     /// a different place. See <see cref="RefusalRecord"/> for why only those places are asked.</para>
     /// </summary>
     public Refusals Refused { get; init; }
+
+    /// <summary>
+    /// The Outlook mail stores this step's measurement found inside what it would remove, already
+    /// left out of <see cref="Estimated"/>. See <see cref="MailStore"/>.
+    ///
+    /// <para>Carried for the plan to act on rather than for the removal, which leaves a store without
+    /// being told to. A removal Deguffer performs itself steps over each one, so its step stays and
+    /// does less; a step that cannot — a tool's own command, or Windows emptying a Recycle Bin whole —
+    /// has to be withheld, and only this list says which steps those are before anything runs.</para>
+    /// </summary>
+    public IReadOnlyList<string> MailStores { get; init; } = [];
 }
 
 /// <summary>
@@ -238,6 +249,22 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
 /// </summary>
 public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(Path, What)
 {
+    /// <summary>
+    /// Whether this directory goes as a whole or not at all, because its parts only mean something
+    /// together.
+    ///
+    /// <para><b>A Recycle Bin removed file by file is the case.</b> Each deleted item is two entries —
+    /// its content and the record Windows keeps beside it to restore it — so a removal that stepped
+    /// over an Outlook mail store inside a deleted folder would keep the store and take its record,
+    /// leaving it on the disk with nothing able to put it back (§9). A step like that is withheld
+    /// while it holds a store, and looked at again on the disk immediately before it runs, as
+    /// <see cref="EmptyRecycleBinStep"/> is.</para>
+    ///
+    /// <para>False by default, which is every other removal: a cache or a build directory is a
+    /// collection of independent files, and stepping over a store in one leaves the rest meaningful.</para>
+    /// </summary>
+    public bool IsIndivisible { get; init; }
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 

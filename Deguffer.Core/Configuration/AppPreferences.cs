@@ -115,9 +115,9 @@ public enum ExploreColouring
 ///
 /// Only the rows that actually say "Already clear". A location Windows would not let Deguffer
 /// list, one Deguffer declined to look at or could not locate, one whose every file is inside the
-/// guard on recently changed files, one whose contents Windows would not let a clean remove, and one
-/// holding only items on the keep list, all measure zero and are not clear at all — each says so in
-/// its own words, and none of them is hidden by this.
+/// guard on recently changed files, one whose contents Windows would not let a clean remove, one
+/// holding only items on the keep list, and one holding only Outlook data files, all measure zero and
+/// are not clear at all — each says so in its own words, and none of them is hidden by this.
 ///
 /// Presentation only, and it hides rather than skips, on the same terms as
 /// <paramref name="ShowNotInstalled"/>: every provider is still scanned, so switching it on lists

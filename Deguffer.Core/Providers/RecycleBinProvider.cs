@@ -258,7 +258,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
                 + "leave anything behind."));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+        var (planned, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -271,7 +271,14 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             ProviderName = Name,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
-            Steps = steps,
+
+            // §9 in a bin. A deleted Outlook data file is still one, and the bin is the last place it can
+            // be restored from. Neither route can leave it behind: Windows empties a bin whole, and the
+            // direct route would step over the file but take the record Windows keeps beside a deleted
+            // item — so a store inside a deleted folder would stay on the disk with nothing able to
+            // restore it. So the direct route's steps go whole or not at all, and the plan withholds a bin
+            // holding a store on either route. See DeleteDirectoryStep.IsIndivisible and MailStorePlan.
+            Steps = [.. planned.Select(step => step is DeleteDirectoryStep direct ? direct with { IsIndivisible = true } : step)],
             ProtectedPaths = Protect([.. survivors, .. declined]),
             Notes = notes,
             Fallback = measured.Fallback,

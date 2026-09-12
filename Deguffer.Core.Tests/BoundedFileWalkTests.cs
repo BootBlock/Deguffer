@@ -241,7 +241,7 @@ public sealed class BoundedFileWalkTests : IDisposable
     {
         var seen = new List<string>();
 
-        BoundedFileWalk.Visit(root, file => seen.Add(file.FullName), () => { }, default);
+        BoundedFileWalk.Visit(root, file => seen.Add(file.FullName), _ => { }, () => { }, default);
 
         Assert.Equal(2, seen.Count);
         return seen;

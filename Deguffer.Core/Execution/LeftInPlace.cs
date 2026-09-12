@@ -8,11 +8,12 @@ namespace Deguffer.Core.Execution;
 /// <para>The causes are named separately because they ask different things of the reader. Another
 /// program has files open, or is working in a folder, which closing it answers. Windows would not let
 /// Deguffer remove files or folders, which waiting will not change. A setting they chose held files
-/// back. And Deguffer declined to touch an entry it found somebody working in. A single count would
-/// tell them how much stayed and nothing about what to do.</para>
+/// back. Deguffer declined to touch an entry it found somebody working in. And an Outlook mail store is
+/// never removed at all, which asks nothing of them. A single count would tell them how much stayed
+/// and nothing about what to do.</para>
 ///
-/// <para>Composed from the clauses that apply rather than switched on every combination: six causes
-/// make sixty-four cases, and the wording would then live in sixty-four places.</para>
+/// <para>Composed from the clauses that apply rather than switched on every combination: seven causes
+/// make a hundred and twenty-eight cases, and the wording would then live in every one of them.</para>
 /// </summary>
 internal static class LeftInPlace
 {
@@ -20,9 +21,9 @@ internal static class LeftInPlace
     /// What a step that achieved something has to add about what it left behind, or nothing where it
     /// left nothing.
     /// </summary>
-    public static string Clauses(Refusals refused, FolderRefusals folders, int kept, int spared = 0)
+    public static string Clauses(Refusals refused, FolderRefusals folders, int kept, int spared = 0, int mailStores = 0)
     {
-        var clauses = new List<string>(6);
+        var clauses = new List<string>(7);
 
         if (refused.InUse.Files > 0)
         {
@@ -52,6 +53,11 @@ internal static class LeftInPlace
         if (spared > 0)
         {
             clauses.Add($"{spared} item(s) left alone because something is using them");
+        }
+
+        if (mailStores > 0)
+        {
+            clauses.Add($"{mailStores} Outlook data file(s) left alone, because Deguffer never removes one");
         }
 
         return clauses.Count == 0 ? string.Empty : ", " + string.Join(", ", clauses);

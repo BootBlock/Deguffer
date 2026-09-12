@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -12,6 +13,21 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public abstract class CleanupProviderBase : ICleanupProvider
 {
+    /// <summary>
+    /// The Outlook mail stores the measurements behind the plan being built have met, for
+    /// <see cref="PlanAsync"/> to give to the commands whose reach holds them (§9).
+    ///
+    /// <para><b>Collected here because every measurement a provider makes goes through this class</b>,
+    /// and a command step is built by hand in each provider that has one. Asking each of them to copy
+    /// what its measurement found onto its step is the parallel edit one of them forgets, and the one
+    /// that forgets runs a tool over a store. This way no provider can.</para>
+    ///
+    /// <para>Scoped to one call of <see cref="PlanAsync"/> by the asynchronous flow it runs in, so plans
+    /// built at the same time — the planner builds them in parallel — never see each other's stores.
+    /// Static because the flow, not the instance, is what it is keyed by (G5).</para>
+    /// </summary>
+    private static readonly AsyncLocal<ConcurrentBag<string>?> MeasuredMailStores = new();
+
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
 
@@ -102,7 +118,16 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     public async Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
     {
-        var plan = await BuildPlanAsync(keep, ct).ConfigureAwait(false);
+        var measured = new ConcurrentBag<string>();
+        MeasuredMailStores.Value = measured;
+
+        var built = await BuildPlanAsync(keep, ct).ConfigureAwait(false);
+
+        // §9, stamped here for the reason the guard is: a store has to be protected, and a step that
+        // cannot leave one withheld, on every plan, and no provider may be able to forget either. First,
+        // so a file step whose subject is a store is withheld as the store it is rather than as a
+        // recent file, and so the refusals asked about below are those of the steps that remain.
+        var plan = MailStorePlan.Apply(built, measured);
 
         // A provider may hand back a plan already carrying a guard of its own, and the user's is
         // not allowed to loosen it. §5.3's floor under a scratch folder is the case: live working
@@ -286,6 +311,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         var sizes = new List<ScanSize>(paths.Count);
         var withheld = new List<bool>(paths.Count);
+        var stores = new List<IReadOnlyList<string>>(paths.Count);
         var fallback = FallbackReason.None;
 
         foreach (var path in paths)
@@ -295,6 +321,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
             var measured = await Scanner.MeasureAsync(path, keep, progress: null, ct).ConfigureAwait(false);
             sizes.Add(measured.Size);
             withheld.Add(measured.WithheldRecent);
+            stores.Add(measured.MailStores);
+
+            foreach (var store in measured.MailStores)
+            {
+                MeasuredMailStores.Value?.Add(store);
+            }
 
             // Paths in one plan can sit on different volumes and so take different routes; the
             // first reason to appear is the one the user is shown.
@@ -304,7 +336,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             }
         }
 
-        return new ScanBatch(sizes, fallback, withheld);
+        return new ScanBatch(sizes, fallback, withheld, stores);
     }
 
     /// <summary>
@@ -342,6 +374,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = measured.WithheldRecent[i],
+                MailStores = measured.MailStores[i],
                 Identity = target.Identity,
                 IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],

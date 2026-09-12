@@ -143,7 +143,8 @@ installed" cleanly on a machine without that toolchain.
 
 **Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
 excluded by construction rather than by enumeration. Outlook's mailbox and data files are named as
-well, because they can be saved anywhere: Explore refuses an `.ost` or a `.pst` wherever it finds one.
+well, because they can be saved anywhere: Deguffer never removes an `.ost` or a `.pst`, by any route,
+wherever it finds one.
 
 ## Building
 

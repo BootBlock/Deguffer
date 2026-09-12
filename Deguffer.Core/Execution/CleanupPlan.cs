@@ -68,6 +68,13 @@ public enum Withholding
     /// <see cref="CleanupPlan.WithKeepList"/> for why its contents are not asked about.
     /// </summary>
     OnKeepList,
+
+    /// <summary>
+    /// An Outlook mail store the plan's own measurement found inside what it would remove, which
+    /// Deguffer never removes (§9). Protected on its existence, because it is a file. See
+    /// <see cref="MailStorePlan"/>.
+    /// </summary>
+    MailStore,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -272,6 +279,14 @@ public sealed record CleanupPlan
     public bool HoldsKeepListItems => ProtectedPaths.Any(p => p.Withheld == Withholding.OnKeepList);
 
     /// <summary>
+    /// Whether this plan found an Outlook mail store and is leaving it where it is. The same shape as
+    /// <see cref="HoldsKeepListItems"/>, for the same reason: a row whose only content is a store has
+    /// nothing to reclaim, and "Already clear" would be a claim about a location holding a file
+    /// Deguffer will never remove.
+    /// </summary>
+    public bool HoldsMailStores => ProtectedPaths.Any(p => p.Withheld == Withholding.MailStore);
+
+    /// <summary>
     /// Every path this plan would destroy, for display and for tests.
     ///
     /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
@@ -416,16 +431,18 @@ public sealed record CleanupPlan
     }
 
     /// <summary>
-    /// This plan reduced to what a run owes its keep list: nothing to do, and the kept items to prove.
+    /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves
+    /// standing whatever anyone chooses to prove — its kept items and its Outlook data files.
     ///
-    /// <para>For a row the user did not tick. Nothing in it runs, and its kept items still have to be
-    /// shown standing once the run is over, because an over-broad rule somewhere else in that run is
-    /// exactly what could take one. Its other protections are left out: they guard against this
-    /// plan's own deletion, and there is none.</para>
+    /// <para>For a row the user did not tick, or whose confirmation was declined. Nothing in it runs,
+    /// and those files still have to be shown standing once the run is over, because an over-broad rule
+    /// somewhere else in that run is exactly what could take one. Its other protections are left out:
+    /// they guard against this plan's own deletion, and there is none. See
+    /// <see cref="StandingProof"/>.</para>
     /// </summary>
-    public CleanupPlan KeepListItemsOnly() => this with
+    public CleanupPlan ProofOnly() => this with
     {
         Steps = [],
-        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld == Withholding.OnKeepList)],
+        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld is Withholding.OnKeepList or Withholding.MailStore)],
     };
 }

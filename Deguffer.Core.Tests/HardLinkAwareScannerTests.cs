@@ -233,4 +233,50 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         Assert.Equal(0, guarded.Size.Reclaimable);
         Assert.Equal(8192, (await HardLinkAwareScanner.Default.MeasureAsync(file)).Size.Reclaimable);
     }
+
+    /// <summary>
+    /// §9 on the third route. Its figure forecasts a tool's own eviction, and a store inside that
+    /// tool's folder is what withholds the command, so the store has to be named here as the other
+    /// two routes name it — and left out of the forecast either way.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAnOutlookDataFileOutOfTheTotalAndNamesIt()
+    {
+        using var temp = new TempDirectory();
+        var archive = temp.CreateFile(1_000_000, "store", "saved", "archive.pst");
+        var blob = temp.CreateFile(4096, "store", "v3", "blob.bin");
+
+        var result = await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(temp.Path, "store"));
+
+        Assert.Equal(new FileInfo(blob).Length, result.Size.Reclaimable);
+        Assert.Equal([archive], result.MailStores);
+    }
+
+    [Fact]
+    public async Task MeasuresASingleOutlookDataFileAsNothingAndNamesIt()
+    {
+        using var temp = new TempDirectory();
+        var archive = temp.CreateFile(8192, "store", "someone@example.com.ost");
+
+        var result = await HardLinkAwareScanner.Default.MeasureAsync(archive);
+
+        Assert.Equal(0, result.Size.Reclaimable);
+        Assert.Equal([archive], result.MailStores);
+    }
+
+    /// <summary>The same for a file carrying a link's mark, which this route's walk otherwise never hands on.</summary>
+    [Fact]
+    public async Task NamesAFileNamedLikeAStoreThatCarriesTheMarkOfALink()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(4096, "store", "v3", "blob.bin");
+        var target = temp.CreateFile(8192, "elsewhere", "archive.pst");
+        var link = Path.Combine(temp.CreateDirectory("store", "saved"), "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        var result = await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(temp.Path, "store"));
+
+        Assert.Equal([link], result.MailStores);
+    }
 }
