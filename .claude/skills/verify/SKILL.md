@@ -78,7 +78,7 @@ C:\Users\<user>\AppData\Local\DriveNet\DriveNet.Cli.exe
 ## Before you screenshot anything
 
 A capture of the preview flow shows the real cache paths and the real profile name of whoever took
-it. [No secrets or personal data](../../../CLAUDE.md#no-secrets-or-personal-data-mandatory) covers
+it. [No secrets or personal data](../../../CLAUDE.md#no-secrets-or-personal-data) covers
 a screenshot exactly as it covers a fixture. Never attach a raw capture to an issue, a pull request
 or a commit. Crop it, or re-capture against synthetic data.
 

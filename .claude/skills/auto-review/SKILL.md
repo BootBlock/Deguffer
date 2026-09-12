@@ -25,8 +25,8 @@ allowed-tools:
 
 # auto-review: agent-invocable working-diff review
 
-This skill is the **mandated review gate** for Deguffer issue work, named at step 6 of
-[Actioning a GitHub issue](../../../CLAUDE.md#actioning-a-github-issue-workflow). It reproduces the
+This skill is the **mandated review gate** for Deguffer issue work, which
+[Actioning a GitHub issue](../../../CLAUDE.md#actioning-a-github-issue) triggers. It reproduces the
 bundled reviewer's **find, then validate, then high-signal-only** rubric, adapted to review the
 **local working-tree diff** rather than a GitHub pull request, which is the need here: a change is
 reviewed *before* it is merged, and before a pull request exists.

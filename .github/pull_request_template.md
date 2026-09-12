@@ -19,7 +19,8 @@
       the unrecognised siblings and anything in Tier 4 all survived.
 - [ ] If this changes tier classification, a test covers the **unrecognised** child landing in
       Tier 4 (§5.2).
-- [ ] If this touches path handling, a test exercises a path past `MAX_PATH` (§6.3).
+- [ ] If this touches path handling, a test asserts the path handed onward carries `\\?\` (§6.3).
+      A path past `MAX_PATH` proves nothing, because .NET adds the prefix itself.
 - [ ] The tests run through `FakeUserEnvironment` and the `IProcessRunner` / `IProcessInspector`
       seams, not against a real npm, NuGet or Gradle install.
 - [ ] Where the change has a runtime surface, I drove the app and observed it.
@@ -28,4 +29,3 @@
 - [ ] The engineering gates hold: one responsibility per file (G1), no god objects (G2), no
       AI-trope code (G3), `EnumerateX` and bounded parallelism (G4), singletons and
       `static readonly` lookups reused (G5).
-- [ ] If this adds or changes a rule in `CLAUDE.md`, `AGENTS.md` indexes it.
