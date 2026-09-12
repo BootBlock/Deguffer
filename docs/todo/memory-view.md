@@ -82,10 +82,10 @@ and it is not exact:**
   GPU allocations — is not in it.
 
 Commit charge answers a different question — how close the machine is to failing allocations — and
-section 6 argues it is the more useful one. A view sized by private working set and headed by commit charge
-states both honestly. Task Manager's default *Memory* column is the private working set; Microsoft
-documents the counter behind it but not the column, and a Windows Internals co-author describes it as
-the private working set, with a suspended packaged process shown as zero
+section 6 argues it is the more useful one. A view sized by private working set and headed by
+commit charge states both honestly. Task Manager's default *Memory* column is the private working
+set; Microsoft documents the counter behind it but not the column, and a Windows Internals co-author
+describes it as the private working set, with a suspended packaged process shown as zero
 ([Yosifovich](https://scorpiosoftware.net/2023/04/12/memory-information-in-task-manager/)).
 
 ## 3. Measuring it
@@ -138,11 +138,14 @@ where the call fails.
 
 A snapshot is stale as soon as it is taken, and process identifiers are reused. Anything that acts
 on a process identifies it by identifier *and* `CreateTime`, and checks both again immediately
-before acting. Windows 11 26100.4770 documents `SystemBasicProcessInformation`, whose records carry
-a `SequenceNumber` for detecting identifier reuse "instead of process CreateTime", and which the
-same page recommends over `SystemProcessInformation` wherever it will do. Its structure holds no
-memory figures, and it is newer than Deguffer's minimum Windows version, so it can replace the
-creation time only as the identity check, and only where it exists.
+before acting. `SystemBasicProcessInformation`, available as of Windows 11 26100.4770, carries a
+`SequenceNumber` for detecting identifier reuse "instead of process CreateTime", and the
+[NtQuerySystemInformation](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntquerysysteminformation)
+page recommends it over `SystemProcessInformation` wherever it will do. The structure that page
+shows holds no memory figures, though the same page also calls it identical to
+`SYSTEM_PROCESS_INFORMATION` apart from that member, and which is right was not tested. It is newer
+than Deguffer's minimum Windows version, so at most it replaces the creation time as the identity
+check, where it exists.
 
 ## 4. The memory no process owns
 
@@ -261,21 +264,25 @@ is shown and not offered.
 that a window or an application should terminate". The default handling destroys the window, and an
 application "can prompt the user for confirmation" first
 ([WM_CLOSE](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-close)), so unsaved work is the
-program's own question, asked in its own words. A program that asks, refuses or keeps a hidden window
-is still running when the wait ends, and the view says so and does nothing more.
+program's own question, asked in its own words. A program that asks, refuses or keeps a hidden
+window is still running when the wait ends, and the view says so and does nothing more.
 
 **A console window is never one of those windows**, whichever process it appears to belong to.
 Closing a console sends `CTRL_CLOSE_EVENT` to every process attached to it; the default handler
 exits, and a process that handles the event is ended by the system when its handler returns or
 after 5 seconds ([HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)).
-The console host reports the console's client process as the window's owner, falling back to the
-oldest attached process
-([windowio.cpp](https://github.com/microsoft/terminal/blob/main/src/interactivity/win32/windowio.cpp)),
-so a search for a process's top-level windows finds its console window too, and posting the close
-there ends every attached program without any of them asking about unsaved work. A design never
-posts to a console window, and a process whose only top-level window is a console is a console
-program. What the hidden window a terminal such as Windows Terminal gives each console does with
-`WM_CLOSE` was not checked.
+The console host makes one attached process the reported owner of its window: the first to attach,
+or once that has gone the root process, then the oldest attached process, and the host itself only
+when none is attached
+([windowio.cpp](https://github.com/microsoft/terminal/blob/main/src/interactivity/win32/windowio.cpp)).
+A search for that process's top-level windows therefore finds the console window too, and posting
+the close there ends every attached program without any of them asking about unsaved work. A
+pseudoconsole, which is how a terminal such as Windows Terminal hosts a console, has a hidden
+top-level window of its own, owned by the same rule and given no handling of `WM_CLOSE` beyond the
+default
+([InteractivityFactory.cpp](https://github.com/microsoft/terminal/blob/main/src/interactivity/base/InteractivityFactory.cpp));
+what closing it does to the attached programs was not checked. So a design posts only to visible
+top-level windows that belong to no console host, and refuses a process that has none.
 
 **The Restart Manager is not that route**, though it looks like one. It sends
 `WM_QUERYENDSESSION` and `WM_ENDSESSION` with `ENDSESSION_CLOSEAPP`, then `WM_CLOSE` to what is still
@@ -294,7 +301,7 @@ user's own close. `RmForceShutdown` terminates what does not respond in 30 secon
 | What | Why |
 | --- | --- |
 | Terminating anything | `TerminateProcess` runs no more of the program's code, so nothing is saved ([TerminateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)). |
-| A process with no top-level window | There is no close to send it. §5.2's reasoning applies: what has no recognised route is not offered. |
+| A process with no visible top-level window outside a console host | There is no close of its own to send it. §5.2's reasoning applies: what has no recognised route is not offered. |
 | A console program | It has no close of its own to send. The console control signals another program can raise are Ctrl+C and Ctrl+Break, by attaching to the console ([GenerateConsoleCtrlEvent](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)), and Ctrl+C stops a build rather than closing anything. Closing the console window ends every attached process (above). |
 | A service | Stopping needs the `SERVICE_STOP` right, which a service's default security grants only to LocalSystem and Administrators ([Service security and access rights](https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights)), and a service that accepts the stop control; a trigger-start service starts again when its trigger fires ([Service trigger events](https://learn.microsoft.com/en-us/windows/win32/services/service-trigger-events)); disabling one is what "free up RAM" advice gets wrong. The open question in unreached-locations.md is decided first. |
 | A suspended packaged application | Windows reclaims it when it needs to (section 6). |
@@ -366,14 +373,14 @@ In the order the decisions depend on each other:
 1. **Whether Deguffer is about more than disk.** A change to §1 and §2, and the maintainer's. If not,
    this document is the answer, and it stays a reference.
 2. **A read-only view first**, specified as a new §7 subsection before any code: the three-part tree
-   from section 5, sized by private working set, headed by commit charge against the commit limit, with the
-   unseparated remainder drawn and labelled. It has value with no action at all.
-3. **Whether it acts.** If it does, it sends the program's own close to a windowed application in
-   the user's session, never to a console window, refuses everything in the table in section 7 with its reason, identifies the target
-   by identifier and creation time, checks again immediately before sending, and reports commit
-   charge before and after.
+   from section 5, sized by private working set, headed by commit charge against the commit limit,
+   with the unseparated remainder drawn and labelled. It has value with no action at all.
+3. **Whether it acts.** If it does, it sends the program's own close to the visible windows of a
+   windowed application in the user's session, never to a console host's window, refuses everything
+   in the table in section 7 with its reason, identifies the target by identifier and creation time,
+   checks again immediately before sending, and reports commit charge before and after.
 4. **Services stay out** until the open question in unreached-locations.md is decided, and a memory
    view is not a reason to decide it.
 
-If it is adopted, the work splits along the seams in section 8: the specification, the snapshot source and
-its tests, the layout seam over the tree, the page, and the close action last.
+If it is adopted, the work splits along the seams in section 8: the specification, the snapshot
+source and its tests, the layout seam over the tree, the page, and the close action last.
