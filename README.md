@@ -142,7 +142,8 @@ installed" cleanly on a machine without that toolchain.
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |
 
 **Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
-excluded by construction rather than by enumeration.
+excluded by construction rather than by enumeration. Outlook's mailbox and data files are named as
+well, because they can be saved anywhere: Explore refuses an `.ost` or a `.pst` wherever it finds one.
 
 ## Building
 

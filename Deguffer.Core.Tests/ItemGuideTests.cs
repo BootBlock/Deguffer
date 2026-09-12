@@ -165,6 +165,74 @@ public sealed class ItemGuideTests : IDisposable
     }
 
     /// <summary>
+    /// A type of file, found on any file of that type at any depth on any drive, whatever case its
+    /// extension is written in.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\testuser\Documents\Outlook Files\archive.pst")]
+    [InlineData(@"D:\archive.pst")]
+    [InlineData(@"E:\Mail\2014\ARCHIVE.PST")]
+    public void AnExtensionEntryIsFoundOnEveryFileOfThatType(string path)
+    {
+        var guide = Guide(new KnownItem(KnownPlace.AnywhereByExtension, ".pst", "a data file", "No."));
+
+        Assert.Equal("a data file", guide.Describe(path)?.Summary);
+    }
+
+    /// <summary>
+    /// And on nothing that merely contains the extension somewhere in its name. Telling somebody that
+    /// a text file is their mail is the wrong answer in the direction that costs them the text file.
+    /// </summary>
+    [Theory]
+    [InlineData(@"D:\archive.pst.txt")]
+    [InlineData(@"D:\archive.pstx")]
+    [InlineData(@"D:\pst")]
+    [InlineData(@"D:\.pst\readme.txt")]
+    public void ANameThatOnlyContainsTheExtensionIsNotDescribed(string path)
+    {
+        var guide = Guide(new KnownItem(KnownPlace.AnywhereByExtension, ".pst", "a data file", "No."));
+
+        Assert.Null(guide.Describe(path));
+    }
+
+    /// <summary>
+    /// The weakest claim of all, so an entry written about the path, and one written about the name,
+    /// both beat it.
+    /// </summary>
+    [Fact]
+    public void AnAnchoredEntryAndANameBothBeatAnExtension()
+    {
+        var guide = Guide(
+            At(KnownPlace.LocalAppData, @"Microsoft\Outlook\anchored.pst"),
+            new KnownItem(KnownPlace.Anywhere, "named.pst", "a name", "No."),
+            new KnownItem(KnownPlace.AnywhereByExtension, ".pst", "a data file", "No."));
+
+        Assert.Equal(
+            "anchored.pst is what it is",
+            guide.Describe(Path.Combine(_environment.LocalAppData, "Microsoft", "Outlook", "anchored.pst"))?.Summary);
+        Assert.Equal("a name", guide.Describe(@"D:\named.pst")?.Summary);
+        Assert.Equal("a data file", guide.Describe(@"D:\other.pst")?.Summary);
+    }
+
+    /// <summary>
+    /// The map's case. A mailbox file sitting in a folder the catalogue also describes is answered
+    /// by what it is rather than by where it is, because the pointer is on the file.
+    /// </summary>
+    [Fact]
+    public void AFileOfAKnownTypeInsideADescribedFolderIsItsOwnAnswer()
+    {
+        var guide = Guide(
+            At(KnownPlace.LocalAppData, @"Microsoft\Outlook"),
+            new KnownItem(KnownPlace.AnywhereByExtension, ".ost", "an offline mailbox", "No."));
+
+        var found = guide.DescribeNearest(
+            Path.Combine(_environment.LocalAppData, "Microsoft", "Outlook", "someone@example.com.ost"));
+
+        Assert.Equal("an offline mailbox", found?.Item.Summary);
+        Assert.True(found?.IsExact);
+    }
+
+    /// <summary>
     /// Matching is case-insensitive and goes through <c>LongPath.Configured</c>, because the paths
     /// arrive from a scan rather than from this file. NTFS does not tell two spellings apart, and a
     /// path carrying <c>..</c> compares equal to nothing at all.
