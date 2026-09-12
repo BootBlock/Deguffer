@@ -38,8 +38,15 @@ public sealed partial record RoslynHostDirectory(string Program, int Solutions, 
 {
     private const string DatabaseFile = "storage.ide";
 
-    /// <summary>The database and what Roslyn keeps beside it. No other file is recognised.</summary>
-    private static readonly HashSet<string> IndexFiles = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// The database and what Roslyn keeps beside it. No other file is recognised.
+    ///
+    /// <para>Matched in exactly this case, as <c>sqlite3</c> and <c>v2</c> are, because Roslyn writes every one
+    /// of these names from a constant. Another casing is something Roslyn did not write, and a directory
+    /// with per-directory case sensitivity turned on can hold <c>v2</c> and <c>V2</c> side by side, which an
+    /// ignore-case match would read as one.</para>
+    /// </summary>
+    private static readonly HashSet<string> IndexFiles = new(StringComparer.Ordinal)
     {
         DatabaseFile,
         "storage.ide-wal",
@@ -140,7 +147,7 @@ public sealed partial record RoslynHostDirectory(string Program, int Solutions, 
 
             // The lock and the SQLite companions exist around a database, never instead of one, so a
             // directory holding only those has no index in it to vouch for.
-            sawDatabase |= entry.Name.Equals(DatabaseFile, StringComparison.OrdinalIgnoreCase);
+            sawDatabase |= entry.Name.Equals(DatabaseFile, StringComparison.Ordinal);
             newest = Later(newest, entry.LastWriteTimeUtc);
         }
 
@@ -148,8 +155,9 @@ public sealed partial record RoslynHostDirectory(string Program, int Solutions, 
     }
 
     /// <summary>
-    /// The only entry in <paramref name="parent"/>, where it is a real directory called
-    /// <paramref name="name"/>; otherwise null.
+    /// The only entry in <paramref name="parent"/>, where it is a real directory called exactly
+    /// <paramref name="name"/>; otherwise null. Every entry has to pass, and no directory holds two entries
+    /// with one exact name, so passing means there was one.
     /// </summary>
     private static DirectoryInfo? SoleDirectory(DirectoryInfo parent, string name)
     {
@@ -157,10 +165,9 @@ public sealed partial record RoslynHostDirectory(string Program, int Solutions, 
 
         foreach (var entry in parent.EnumerateFileSystemInfos())
         {
-            if (found is not null
-                || entry is not DirectoryInfo directory
+            if (entry is not DirectoryInfo directory
                 || IsLink(directory)
-                || !directory.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                || !directory.Name.Equals(name, StringComparison.Ordinal))
             {
                 return null;
             }

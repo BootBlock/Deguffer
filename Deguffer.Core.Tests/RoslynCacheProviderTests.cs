@@ -134,7 +134,9 @@ public sealed class RoslynCacheProviderTests : IDisposable
     [InlineData("a solution folder Roslyn did not name")]
     [InlineData("a file beside sqlite3")]
     [InlineData("a folder beside v2")]
+    [InlineData("a version folder named in another case")]
     [InlineData("the database directly under sqlite3")]
+    [InlineData("a database named in another case")]
     [InlineData("an unrecognised file beside the database")]
     [InlineData("a folder named like a database companion")]
     [InlineData("companions with no database")]
@@ -399,9 +401,19 @@ public sealed class RoslynCacheProviderTests : IDisposable
                 Directory.CreateDirectory(Path.Combine(solution, "sqlite3", "v1"));
                 break;
 
+            case "a version folder named in another case":
+                Directory.Delete(index, recursive: true);
+                Put(Path.Combine(solution, "sqlite3", "V2", "storage.ide"), 64);
+                break;
+
             case "the database directly under sqlite3":
                 Directory.Delete(index, recursive: true);
                 Put(Path.Combine(solution, "sqlite3", "storage.ide"), 64);
+                break;
+
+            case "a database named in another case":
+                File.Delete(Path.Combine(index, "storage.ide"));
+                Put(Path.Combine(index, "Storage.ide"), 64);
                 break;
 
             case "an unrecognised file beside the database":
