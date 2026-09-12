@@ -20,14 +20,15 @@ user can see what is using it and gracefully close the applications and services
   closest, and it misses compressed pages, shared pages and memory the kernel, drivers and the
   compositor hold on the process's behalf.
 - **A picture of RAM cannot add up without parts no process owns**, and separating those exactly
-  needs administrator rights.
+  probably needs administrator rights.
 - **Closing things rarely helps, and a size picture invites the reader to believe it does.** Low free
   memory is Windows working as designed. The condition in which closing an application gives real
   relief is commit charge near the commit limit, so that is the number such a view would have to
-  lead with, as the Clean page leads with free space.
+  lead with, as Storage leads with free space.
 - **The safe action is the application's own close**, never termination, and only for a windowed
   application in the user's own session. Services, console programs and windowless processes are
-  shown and never acted on.
+  shown and not offered, and services stay out at least until the open question about service
+  control is decided.
 - **Explore's layouts, hit tests and rasterisers could draw it**; its tree, knowledge and acting code
   are built on paths and could not be reused.
 - **It is outside the product as the specification stands.** It would be the first feature about
@@ -63,7 +64,7 @@ assumes it:
 | Figure | Where it comes from | What it counts |
 | --- | --- | --- |
 | Working set | `WorkingSetSize` | This process's pages in RAM now, private and shared together. Summed across processes it counts every shared page once per process. |
-| Private working set | `WorkingSetPrivateSize` (undocumented field, §3); `PROCESS_MEMORY_COUNTERS_EX2.PrivateWorkingSetSize`; the `Process\Working Set - Private` counter | Pages in RAM that no other process can use. |
+| Private working set | `WorkingSetPrivateSize` (undocumented field, section 3); `PROCESS_MEMORY_COUNTERS_EX2.PrivateWorkingSetSize`; the `Process\Working Set - Private` counter | Pages in RAM that no other process can use. |
 | Commit charge (private bytes) | `PagefileUsage` / `PrivateUsage`; `PrivatePageCount` | Private memory the process has committed, whether it is in RAM, compressed or paged out. Task Manager's *Commit size*. |
 | Virtual size | `VirtualSize` | Address space reserved. It consumes no physical memory and is no use here. |
 | Pool quota | `QuotaPagedPoolUsage`, `QuotaNonPagedPoolUsage` | Kernel pool charged to the process. |
@@ -81,7 +82,7 @@ and it is not exact:**
   GPU allocations — is not in it.
 
 Commit charge answers a different question — how close the machine is to failing allocations — and
-§6 argues it is the more useful one. A view sized by private working set and headed by commit charge
+section 6 argues it is the more useful one. A view sized by private working set and headed by commit charge
 states both honestly. Task Manager's default *Memory* column is the private working set; Microsoft
 documents the counter behind it but not the column, and a Windows Internals co-author describes it as
 the private working set, with a suspended packaged process shown as zero
@@ -127,15 +128,21 @@ where the call fails.
   `PrivatePageCount`, which is commit
   ([ProcessManager.Windows.cs](https://github.com/dotnet/runtime/blob/main/src/libraries/System.Diagnostics.Process/src/System/Diagnostics/ProcessManager.Windows.cs)).
 - `QueryWorkingSetEx` gives a per-page share count and so a proportional share of shared pages, but
-  it needs `PROCESS_QUERY_INFORMATION`, which protected processes refuse
+  it needs `PROCESS_QUERY_INFORMATION`
   ([QueryWorkingSetEx](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-queryworkingsetex)),
+  which protected processes refuse
+  ([Process security and access rights](https://learn.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights)),
   and a page-by-page walk of every process is not a snapshot.
 - Performance counters work unelevated, but the survey measured a single sample of
   `\Process(*)\Working Set - Private` at over a second. The cause was not found.
 
 A snapshot is stale as soon as it is taken, and process identifiers are reused. Anything that acts
 on a process identifies it by identifier *and* `CreateTime`, and checks both again immediately
-before acting.
+before acting. Windows 11 26100.4770 documents `SystemBasicProcessInformation`, whose records carry
+a `SequenceNumber` for detecting identifier reuse "instead of process CreateTime", and which the
+same page recommends over `SystemProcessInformation` wherever it will do. Its structure holds no
+memory figures, and it is newer than Deguffer's minimum Windows version, so it can replace the
+creation time only as the identity check, and only where it exists.
 
 ## 4. The memory no process owns
 
@@ -161,14 +168,17 @@ leak, though most of it is cache that is already available.
   on the probe machine, giving the free, zeroed, modified and standby page counts, standby by
   priority. `GetPhysicallyInstalledSystemMemory` less the physical total gives the hardware-reserved
   part ([GetPhysicallyInstalledSystemMemory](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getphysicallyinstalledsystemmemory)).
-- **Elevated, the exact breakdown is reachable.** RAMMap's split into process private, mapped file,
-  shareable, page table, pool, driver locked, kernel stack and so on comes from the physical page
-  database, which `SystemSuperfetchInformation` returns only to a caller holding
-  `SeProfileSingleProcessPrivilege` ([Chappell](https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/query.htm)),
-  which by default means Administrators. Sysinternals does not document how RAMMap does it
-  ([RAMMap](https://learn.microsoft.com/en-us/sysinternals/downloads/rammap)), and that class was not
-  exercised here.
-- **Virtual machines are one process on the host.** WSL 2 appears as `vmmem` / `VmmemWSL`, holding
+- **The exact breakdown probably needs elevation.** RAMMap's split into process private, mapped
+  file, shareable, page table, pool, driver locked, kernel stack and so on needs the physical page
+  database, which no documented API returns, and Sysinternals does not document how RAMMap reads it
+  ([RAMMap](https://learn.microsoft.com/en-us/sysinternals/downloads/rammap)). The nearest published
+  evidence is Geoff Chappell's: the input structure he gives for the prefetcher class also serves
+  `SystemSuperfetchInformation`, and a user-mode caller of the prefetcher class must hold
+  `SeProfileSingleProcessPrivilege`
+  ([Chappell](https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/query.htm)),
+  which the unelevated token on the probe machine did not hold. Neither class was exercised here, so
+  that the breakdown needs elevation is an inference.
+- **Virtual machines are one process on the host.** WSL 2 appears as a `vmmem` process, holding
   the guest's page cache until it is reclaimed
   ([WSL memory reclaim](https://devblogs.microsoft.com/commandline/memory-reclaim-in-the-windows-subsystem-for-linux-2/)).
 
@@ -185,8 +195,8 @@ A treemap needs a tree, and processes are not one by nature.
   ([ENUM_SERVICE_STATUS_PROCESS](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-enumservicesstatusexw)),
   silently omitting services the caller may not query. On the probe machine it listed 131 running
   services in 122 host processes; every one of the 94 `svchost` processes hosted at least one, and 5
-  hosts held more than one. Windows gives each service its own host on machines with more than 3.5 GB
-  of RAM, except services marked `SvcHostSplitDisable`
+  hosts held more than one. Windows gives each service its own host on the Client Desktop SKU with
+  more than 3.5 GB of RAM, except services marked `SvcHostSplitDisable`
   ([Service host grouping](https://learn.microsoft.com/en-us/windows/application-management/svchost-service-refactoring)).
   Memory in a shared host cannot be divided between its services, so the host is the smallest part
   the picture can size.
@@ -200,8 +210,9 @@ A treemap needs a tree, and processes are not one by nature.
   `PROCESS_QUERY_LIMITED_INFORMATION`
   ([GetPackageFullName](https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getpackagefullname)).
 - **"Application" has no documented definition.** Task Manager's split into apps, background
-  processes and Windows processes is a heuristic: a visible window, a critical flag and a built-in
-  list ([The Old New Thing](https://devblogs.microsoft.com/oldnewthing/20171219-00/?p=97606)). No
+  processes and Windows processes is a heuristic: a visible window makes an app, a critical flag
+  makes a Windows process, and anything else is a background process
+  ([The Old New Thing](https://devblogs.microsoft.com/oldnewthing/20171219-00/?p=97606)). No
   documented source describes how it folds a browser's many processes into one row; a process tree
   with the creation-time check is the practical approximation.
 
@@ -246,12 +257,25 @@ can cause exactly that: an unsaved document, a build half-way through, a downloa
 the program's own close, which is §5.1's rule restated for this subject, and everything without one
 is shown and not offered.
 
-**The program's own close is `WM_CLOSE` to its top-level windows**, which is what the user's own click
-on the close button sends. The default handling destroys the window, and an application "can prompt
-the user for confirmation" first ([WM_CLOSE](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-close)),
-so unsaved work is the program's own question, asked in its own words. A program that asks, refuses
-or keeps a hidden window is still running when the wait ends, and the view says so and does nothing
-more.
+**The program's own close is `WM_CLOSE` to its top-level windows**, the message "sent as a signal
+that a window or an application should terminate". The default handling destroys the window, and an
+application "can prompt the user for confirmation" first
+([WM_CLOSE](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-close)), so unsaved work is the
+program's own question, asked in its own words. A program that asks, refuses or keeps a hidden window
+is still running when the wait ends, and the view says so and does nothing more.
+
+**A console window is never one of those windows**, whichever process it appears to belong to.
+Closing a console sends `CTRL_CLOSE_EVENT` to every process attached to it; the default handler
+exits, and a process that handles the event is ended by the system when its handler returns or
+after 5 seconds ([HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)).
+The console host reports the console's client process as the window's owner, falling back to the
+oldest attached process
+([windowio.cpp](https://github.com/microsoft/terminal/blob/main/src/interactivity/win32/windowio.cpp)),
+so a search for a process's top-level windows finds its console window too, and posting the close
+there ends every attached program without any of them asking about unsaved work. A design never
+posts to a console window, and a process whose only top-level window is a console is a console
+program. What the hidden window a terminal such as Windows Terminal gives each console does with
+`WM_CLOSE` was not checked.
 
 **The Restart Manager is not that route**, though it looks like one. It sends
 `WM_QUERYENDSESSION` and `WM_ENDSESSION` with `ENDSESSION_CLOSEAPP`, then `WM_CLOSE` to what is still
@@ -271,29 +295,33 @@ user's own close. `RmForceShutdown` terminates what does not respond in 30 secon
 | --- | --- |
 | Terminating anything | `TerminateProcess` runs no more of the program's code, so nothing is saved ([TerminateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)). |
 | A process with no top-level window | There is no close to send it. §5.2's reasoning applies: what has no recognised route is not offered. |
-| A console program | Another program's console can be sent only Ctrl+C or Ctrl+Break, and only by attaching to it ([GenerateConsoleCtrlEvent](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)). Ctrl+C stops a build; it is not a close. |
-| A service | Stopping needs elevation and `SERVICE_ACCEPT_STOP`; a trigger-start service starts again when its trigger fires ([Service trigger events](https://learn.microsoft.com/en-us/windows/win32/services/service-trigger-events)); disabling one is what "free up RAM" advice gets wrong. The open question in unreached-locations.md is decided first. |
-| A suspended packaged application | Windows reclaims it when it needs to (§6). |
+| A console program | It has no close of its own to send. The console control signals another program can raise are Ctrl+C and Ctrl+Break, by attaching to the console ([GenerateConsoleCtrlEvent](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)), and Ctrl+C stops a build rather than closing anything. Closing the console window ends every attached process (above). |
+| A service | Stopping needs the `SERVICE_STOP` right, which a service's default security grants only to LocalSystem and Administrators ([Service security and access rights](https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights)), and a service that accepts the stop control; a trigger-start service starts again when its trigger fires ([Service trigger events](https://learn.microsoft.com/en-us/windows/win32/services/service-trigger-events)); disabling one is what "free up RAM" advice gets wrong. The open question in unreached-locations.md is decided first. |
+| A suspended packaged application | Windows reclaims it when it needs to (section 6). |
 | A critical process | Ending one stops the machine with bug check `CRITICAL_PROCESS_DIED` ([0xEF](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died)). `IsProcessCritical` needs only `PROCESS_QUERY_LIMITED_INFORMATION` ([IsProcessCritical](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocesscritical)). |
-| A process whose criticality cannot be read | The unelevated probe could not open any of Windows' own processes, so this refusal covers them there. Elevated was not measured, so the refusal is stated as a rule, not left to access being denied. |
+| A process whose criticality cannot be read | Unelevated, the probe could open none of the twelve system processes it checked by name, and none of the 344 it could open reported itself critical. Elevated was not measured, so the refusal is stated as a rule, not left to access being denied. |
 | Another session, another user, Deguffer itself, `explorer.exe`, `dwm.exe` | Not the user's to close from here, or closing them takes the desktop with them. |
 
 **§5.6 is weaker here, and a design would have to say so.** The positive check is exact: the process
 with that identifier and creation time has exited, or it has not. The negative is not: processes exit
 on their own all the time, and a closed application's own child processes are expected to go with it,
 so "nothing else stopped" cannot be proven by comparing two snapshots. What can be asserted is that
-nothing outside the selected process tree was sent a message, and a design should decide whether to
-report other exits in the same window rather than claim none.
+Deguffer sent nothing to anything outside the selected process tree, and a design should decide
+whether to report other exits in the same window rather than claim none.
 
 ## 8. What Deguffer could reuse
 
 Surveyed against `Deguffer.Core/Exploring` and the Explore page.
 
 - **Reusable:** `TreemapLayout`, `IcicleLayout` and `SunburstLayout`, both hit tests, both
-  rasterisers and the branch palette. They read four things from the tree — a node's size, its
-  children, whether it is a container, and its parent — and nothing about paths or disks. They take
-  the concrete `sealed class ExploreTree`, so reuse needs a seam over those four, with the disk tree
-  and a memory tree as its two implementations.
+  rasterisers and `TilePalette`. Only the three layouts read the tree, and they read four things
+  from it: a node's size, its children, whether it is a container, and the tree's child order, which
+  the treemap and the sunburst require to be by size. Nothing in them reads a path or a disk. They
+  take the concrete `sealed class ExploreTree`, so reuse needs a seam over those four, with the disk
+  tree and a memory tree as its two implementations. The hit tests, rasterisers and palette take
+  tiles, sectors, colours and integers, and no tree at all. `ExploreSurface`, which chooses each
+  node's colour, also reads its parent and its last-written time, so the seam would carry the parent
+  as well, and age colouring would not carry over.
 - **Not reusable:** `ExploreTree` and `ExploreTreeBuilder` carry a root path and filesystem
   timestamps, and the builder's contract is that a directory's own size is zero, which a process with
   children breaks. `ExplorePlace` matches nodes across rescans by path, and a memory view refreshes
@@ -338,14 +366,14 @@ In the order the decisions depend on each other:
 1. **Whether Deguffer is about more than disk.** A change to §1 and §2, and the maintainer's. If not,
    this document is the answer, and it stays a reference.
 2. **A read-only view first**, specified as a new §7 subsection before any code: the three-part tree
-   from §5, sized by private working set, headed by commit charge against the commit limit, with the
+   from section 5, sized by private working set, headed by commit charge against the commit limit, with the
    unseparated remainder drawn and labelled. It has value with no action at all.
 3. **Whether it acts.** If it does, it sends the program's own close to a windowed application in
-   the user's session, refuses everything in the table in §7 with its reason, identifies the target
+   the user's session, never to a console window, refuses everything in the table in section 7 with its reason, identifies the target
    by identifier and creation time, checks again immediately before sending, and reports commit
    charge before and after.
 4. **Services stay out** until the open question in unreached-locations.md is decided, and a memory
    view is not a reason to decide it.
 
-If it is adopted, the work splits along the seams in §8: the specification, the snapshot source and
+If it is adopted, the work splits along the seams in section 8: the specification, the snapshot source and
 its tests, the layout seam over the tree, the page, and the close action last.
