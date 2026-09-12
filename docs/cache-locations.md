@@ -2993,7 +2993,8 @@ machine: Microsoft's [Cached Exchange Mode planning guide][ost-plan] gives **50 
 maximum, and says local files are *"50 percent to 80 percent larger than the mailbox size reported in
 Exchange Server"*. Advice to delete it is everywhere, because Outlook downloads it again.
 
-Deguffer never offers it, and Explore refuses it. The reasons, in the order that decides it:
+Deguffer never offers it, no route removes one, and Explore refuses it. The reasons, in the order
+that decides it:
 
 **1. §5.2 disposes of it before tiering does.** The `.ost` is not a recognised child of a cache
 directory. It is the tool's primary data file, sitting in the tool's own folder beside `RoamCache`,
@@ -3048,11 +3049,13 @@ where items moved off a mail server to keep the mailbox small end up. New ones a
 `Documents\Outlook Files` by default, and in `%LOCALAPPDATA%\Microsoft\Outlook` on older versions.
 
 **It is on an explicit exclusion list, not merely absent from an inclusion list.** No provider
-targets one, and that is not enough in Explore, which draws the whole drive by size. A `.pst` is frequently several gigabytes, which is exactly what puts it
-in front of somebody, and it can be saved anywhere — a data disk, a folder you named, a share — so no
-list of paths can find every one.
+targets one, and that is not enough. A `.pst` is frequently several gigabytes, which is exactly what
+puts it in front of somebody in a size picture, and it can be saved anywhere — a data disk, a folder
+you named, a share, a temporary folder an archive was opened from — so no list of paths can find
+every one. Deguffer therefore asks one question of every file, by every route it removes anything
+by: is it an `.ost` or a `.pst`? If it is, it stays.
 
-So Explore refuses by type rather than by place:
+In Explore that is a refusal by type rather than by place:
 
 | Refused | Why |
 | --- | --- |
@@ -3061,17 +3064,30 @@ So Explore refuses by type rather than by place:
 | Any folder named `Outlook Files`, and everything in it | Outlook's default folder for data files, found by name because OneDrive and folder redirection move Documents |
 
 A name that only resembles one — `archive.pst.txt`, `archive.pstx`, a folder called
-`Outlook Files backup` — is ordinary. A folder of your own that happens to hold a `.pst`, `Documents`
-included, is still yours to remove, as any other folder of your own content is: the refusal is for
-the file a size picture singles out and for Outlook's own folders, not for everything above them.
-Hovering any of these says what it is, and *Compact Now* is the supported way to make one smaller.
+`Outlook Files backup` — is ordinary. A folder of your own that holds a `.pst`, `Documents` included,
+is not refused, because a folder is not a store — but the store inside it still stays. Moving the
+folder to the Recycle Bin is refused, naming the store, because Windows moves a folder whole.
+Removing it permanently takes everything else, leaves the store and the folders holding it, and
+checks afterwards that the store is still there. Hovering any of these says what it is, and
+*Compact Now* is the supported way to make one smaller.
 
-**The type rule is Explore's, not the Storage page's.** No provider asks a file's type before it
-removes it, so a data file saved inside a location a provider empties goes with that location's other
-contents: the *Temporary files* row takes a closed `.pst` left in a temporary folder past its age
-limit, and a build directory takes one saved inside it. Neither is somewhere Outlook saves a data
-file. Carrying the refusal into the removal every provider shares would change what each of them
-leaves behind, so the rule stops at Explore.
+**The Storage page never removes one either.** A row whose removal Deguffer performs itself steps
+over a store and leaves the folders holding it standing — the *Temporary files* row, a build
+directory, a cache folder — and its figure already leaves the store out. A row whose removal is not
+Deguffer's to steer is withheld while a store is inside its reach:
+
+| Route | With a store inside |
+| --- | --- |
+| A removal Deguffer performs itself | The store and the folders holding it stay, the rest goes, and the figure leaves the store out |
+| A tool's own clean command (§5.1) | The command is not run, and the preview names the store: the tool cannot be told to leave one file |
+| Windows' File History cleanup | Not run while a saved version of a store is on the backup drive, because it can remove the last saved copy of a store you have since deleted |
+| A Recycle Bin | That bin is left exactly as it is. Windows empties a bin whole, and emptying around the store would take the record that lets a deleted folder holding it be restored |
+
+Every store a preview finds is named, and every clean checks that it is still there afterwards, so a
+clean that lost one reports a verification failure. A preview is made minutes before the clean, so
+immediately before a tool's command runs or Windows is asked to empty a bin, Deguffer looks on the
+disk again, and does neither where a store has arrived since. A row holding nothing but stores reads
+*Outlook data kept*, never *Already clear*.
 
 ### Outlook's secure temporary folder — a Tier 1 candidate that needs measuring first
 
