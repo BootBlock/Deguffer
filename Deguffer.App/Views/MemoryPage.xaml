@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
     xmlns:vm="using:Deguffer.App.ViewModels"
+    NavigationCacheMode="Enabled"
     Background="Transparent">
 
     <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*,Auto">
@@ -122,9 +123,12 @@
                           ItemsSource="{x:Bind ViewModel.Rows}">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:MemoryRow">
+                            <!-- The figures column is wide enough for both of them on one line: a
+                                 process states what it holds in memory and what it has committed,
+                                 and wrapped across two lines they read as two rows. -->
                             <Grid ColumnSpacing="12" Padding="0,4"
                                   Background="Transparent"
-                                  ColumnDefinitions="*,120,190"
+                                  ColumnDefinitions="*,120,280"
                                   AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
                                   AutomationProperties.HelpText="{x:Bind Explanation, Mode=OneWay}">
                                 <ToolTipService.ToolTip>
@@ -153,6 +157,8 @@
                                 <TextBlock Grid.Column="2"
                                            Text="{x:Bind Held, Mode=OneWay}"
                                            TextAlignment="Right"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
                             </Grid>
