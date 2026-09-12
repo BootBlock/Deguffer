@@ -19,6 +19,10 @@ namespace Deguffer.Core.Exploring.Acting;
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
 /// twice is one that gets changed once.</para>
 ///
+/// <para>Outlook's mail stores are refused on top of both, and by type rather than by place, because
+/// a <c>.pst</c> is wherever somebody saved it. <see cref="OutlookDataFiles"/> holds that rule and
+/// says why it is §9's.</para>
+///
 /// <para><b>Refusal is about removal, and nothing else.</b> Opening a file, showing it in Explorer
 /// and putting the Windows properties sheet on screen change nothing on disk, and refusing to open
 /// a folder that Explorer will open anyway would be theatre rather than safety. §7.1's rules govern
@@ -131,6 +135,13 @@ public sealed class ExploreActionPolicy
         if (AtAVolumeRoot(target) is { } reserved)
         {
             return reserved;
+        }
+
+        // Before the region table, because the table ends in a permission: a mail store inside the
+        // signed-in profile would otherwise be answered by the profile's own entry and allowed.
+        if (OutlookDataFiles.Refusal(target) is { } mail)
+        {
+            return mail;
         }
 
         foreach (var region in _regions)
@@ -399,5 +410,9 @@ public sealed class ExploreActionPolicy
             "This is your whole profile — your documents, your settings and everything Deguffer "
             + "would otherwise offer to clean. Explore removes things from inside it, never the "
             + "profile itself.");
+
+        // Longer than the profile's permission, so it wins over it by the table's own ordering
+        // rather than by being written as an exception.
+        yield return OutlookDataFiles.Region(environment);
     }
 }

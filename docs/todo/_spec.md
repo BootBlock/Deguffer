@@ -467,3 +467,17 @@ A Tier 2 provider was the alternative, and two rules rule it out:
 
 `InstallCleanup.exe` is not an answer either. Microsoft documents it as a last resort after a repair
 or uninstall has already failed, and warns that it can remove features belonging to other products.
+
+**Outlook's data files are excluded by type, wherever they are saved.** An offline mailbox (`.ost`)
+is routinely the largest single file on a business machine, and advice to delete it is everywhere.
+It is not a cache in §3's sense. Microsoft documents a Sync Issues folder inside it that is never
+copied to the server, and the one sentence permitting its deletion is conditional on an Exchange
+account Deguffer cannot see. Outlook's own route, *Mail to keep offline*, is a shrink that
+deliberately leaves the Outbox alone. A personal data file (`.pst`) is not a copy of anything at all:
+it is where a POP or IMAP account delivers and where an archive goes.
+
+No provider targets either, and absence from every allow-list is not enough on its own, because a
+`.pst` is wherever somebody saved it and a size picture puts it in front of them. So Explore refuses
+both by extension, together with Outlook's own folder under `%LOCALAPPDATA%` and any folder named
+`Outlook Files`, and hovering one says what it is and how Outlook itself makes it smaller.
+`docs/cache-locations.md` records the whole argument, and what would change it.

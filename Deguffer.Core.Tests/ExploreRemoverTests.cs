@@ -224,6 +224,38 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// §9's Outlook data file, picked out of the picture beside something ordinary, by either route.
+    /// The ordinary file goes and the mail store does not: it is still on the disk, the shell was
+    /// never asked about it, and the report quotes why rather than counting it.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public async Task APickedOutlookDataFileStaysOnTheDiskWhileWhatWasPickedBesideItGoes(ExploreRemovalMode mode)
+    {
+        var mailbox = _temp.CreateFile(64, "profile", "Downloads", "archive.pst");
+        var ordinary = _temp.CreateFile(32, "profile", "Downloads", "big.bin");
+        var bin = new FakeRecycleBin();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [
+                new ExploreItem(mailbox, IsDirectory: false, Bytes: 64),
+                new ExploreItem(ordinary, IsDirectory: false, Bytes: 32),
+            ],
+            mode,
+            _policy,
+            bin);
+
+        Assert.True(LongPath.FileExists(mailbox));
+        Assert.False(LongPath.FileExists(ordinary));
+        Assert.DoesNotContain(mailbox, bin.Paths);
+        Assert.Equal(ordinary, Assert.Single(report.Removed).Path);
+        Assert.Equal(mailbox, Assert.Single(report.Refused).Path);
+        Assert.Contains("Outlook", report.Summary, StringComparison.Ordinal);
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// The policy is asked again inside the remover rather than trusted from the caller, so a shell
     /// that never asked cannot get past it. Driven here by handing the remover a refused path
     /// directly, which is what such a shell would do.

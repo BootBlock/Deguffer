@@ -41,5 +41,6 @@ public static class KnownItems
         .. SharedItems.All,
         .. ProfileItems.All,
         .. ToolchainItems.All,
+        .. OutlookItems.All,
     ];
 }
