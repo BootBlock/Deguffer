@@ -5,7 +5,8 @@ namespace Deguffer.Core.Memory;
 
 /// <summary>
 /// Reads the machine-wide figures: <c>GetPerformanceInfo</c>, which Windows documents, and the memory
-/// lists, which it does not and which are therefore checked against it before they are used.
+/// lists, which it does not and which <see cref="MemoryListCheck.Accept"/> therefore decides about
+/// before they are used.
 /// </summary>
 internal sealed partial class SystemMemoryReader
 {
@@ -22,7 +23,12 @@ internal sealed partial class SystemMemoryReader
         var page = (long)info.PageSize;
         var total = (long)info.PhysicalTotal * page;
         var available = (long)info.PhysicalAvailable * page;
-        var (lists, state) = ReadLists(page, available, total);
+
+        var length = _counts.Length * IntPtr.Size;
+        var status = SystemInformation.NtQuerySystemInformation(
+            SystemInformation.MemoryListInformation, SystemInformation.AddressOf(_counts), length, out var returned);
+
+        var (lists, state) = MemoryListCheck.Accept(status == 0 && returned == length, _counts, page, available, total);
 
         return new SystemMemory(
             PhysicalTotal: total,
@@ -34,24 +40,6 @@ internal sealed partial class SystemMemoryReader
             NonPagedPool: (long)info.KernelNonpaged * page,
             Lists: lists,
             ListState: state);
-    }
-
-    private (MemoryLists? Lists, MemoryListState State) ReadLists(long page, long available, long total)
-    {
-        var length = _counts.Length * IntPtr.Size;
-        var status = SystemInformation.NtQuerySystemInformation(
-            SystemInformation.MemoryListInformation, SystemInformation.AddressOf(_counts), length, out var returned);
-
-        if (status != 0 || returned != length)
-        {
-            return (null, MemoryListState.NotReturned);
-        }
-
-        var lists = MemoryLists.FromPageCounts(_counts, page);
-
-        return MemoryListCheck.Agrees(lists, available, total)
-            ? (lists, MemoryListState.Checked)
-            : (null, MemoryListState.Disagrees);
     }
 
     [StructLayout(LayoutKind.Sequential)]

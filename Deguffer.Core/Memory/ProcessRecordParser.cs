@@ -8,8 +8,10 @@ namespace Deguffer.Core.Memory;
 ///
 /// <para>Both forms exist because Deguffer builds for x86 as well as x64 and ARM64, and each process
 /// is handed the form of its own width. The offsets were checked against a 64-bit and a 32-bit process
-/// on Windows 11 before this was written: each one's own record matched its documented counters and
-/// its creation time, and every service host the service list named was in the table.</para>
+/// on one Windows 11 workstation before this was written. Each one's own record held its exact
+/// creation time, its name and its session, and its sizes agreed with its documented counters: exactly
+/// in the 64-bit process, and within 4% in the 32-bit one, whose counters were read a moment later.
+/// Every service host the service list named was in the table.</para>
 ///
 /// <para>The first three offsets are the same in both, and two of them are undocumented, which is
 /// what <see cref="ProcessFigureCheck"/> exists to catch.</para>

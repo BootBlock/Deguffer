@@ -4,8 +4,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The memory lists arrive as twenty-two page counts in an undocumented order. These prove which
-/// counts become which list, and that the check against <c>GetPerformanceInfo</c>'s available memory
-/// refuses lists that do not add up to it.
+/// counts become which list, and that lists which Windows did not return, or which do not add up to
+/// <c>GetPerformanceInfo</c>'s available memory, are never handed on.
 /// </summary>
 public sealed class MemoryListsTests
 {
@@ -61,7 +61,38 @@ public sealed class MemoryListsTests
             agrees,
             MemoryListCheck.Agrees(Lists(standby: (500 + apartMiB) * MiB), available: 1_500 * MiB, physicalTotal: 2_000 * MiB));
 
+    /// <summary>
+    /// Counts too short to be the structure, which reading them would refuse: so the result proves
+    /// they were not read at all.
+    /// </summary>
+    [Fact]
+    public void ListsWindowsDidNotReturnAreNeitherReadNorHandedOn() =>
+        Assert.Equal<(MemoryLists?, MemoryListState)>(
+            (null, MemoryListState.NotReturned),
+            MemoryListCheck.Accept(returned: false, new nuint[3], MiB, available: 6_000 * MiB, physicalTotal: 16_000 * MiB));
+
+    [Fact]
+    public void ListsThatDoNotAddUpAreNotHandedOn() =>
+        Assert.Equal<(MemoryLists?, MemoryListState)>(
+            (null, MemoryListState.Disagrees),
+            MemoryListCheck.Accept(returned: true, CountsInMiB(), MiB, available: 9_000 * MiB, physicalTotal: 16_000 * MiB));
+
+    [Fact]
+    public void ListsThatAddUpAreHandedOn() =>
+        Assert.Equal<(MemoryLists?, MemoryListState)>(
+            (new MemoryLists(Zeroed: 200 * MiB, Free: 800 * MiB, Modified: 90 * MiB, Standby: 5_000 * MiB), MemoryListState.Checked),
+            MemoryListCheck.Accept(returned: true, CountsInMiB(), MiB, available: 6_000 * MiB, physicalTotal: 16_000 * MiB));
+
     /// <summary>A thousand megabytes of zeroed and free pages together, beside the standby given.</summary>
     private static MemoryLists Lists(long standby) =>
         new(Zeroed: 200 * MiB, Free: 800 * MiB, Modified: 90 * MiB, Standby: standby);
+
+    /// <summary>The same lists as page counts, with pages a megabyte each: six thousand available.</summary>
+    private static nuint[] CountsInMiB() =>
+    [
+        200, 800, 90, 0, 0,
+        5_000, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+    ];
 }

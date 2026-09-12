@@ -29,13 +29,21 @@ public enum ProcessFigures
 
     /// <summary>
     /// The private working set read for Deguffer's own process is further from the documented counter
-    /// than two readings a moment apart can drift.
+    /// than the two, read one after the other, can drift apart.
     /// </summary>
     PrivateWorkingSetDisagrees,
 
     /// <summary>
-    /// A 32-bit Deguffer on 64-bit Windows. It is handed the 32-bit form of the table, whose sizes are
-    /// 32 bits wide, so a process holding more than 4 GB cannot be described in it at all.
+    /// A 32-bit Deguffer on 64-bit Windows, which hands such a process the table translated into its
+    /// 32-bit form.
+    ///
+    /// <para>The private working set and the creation time are 64-bit fields in both forms, but nothing
+    /// documents whether the translation carries a figure above 4 GB intact, and the check cannot show
+    /// it either, because Deguffer's own figure is always below 4 GB. Measured on one machine, the two
+    /// forms agreed for its four largest processes, none of which held 4 GB. So both stay off.</para>
+    ///
+    /// <para>The commit charge is a 32-bit field in that form, so it cannot describe more than 4 GB at
+    /// all, and it is off as well.</para>
     /// </summary>
     NotOnThisArchitecture,
 
@@ -53,7 +61,8 @@ public enum ProcessFigures
 /// <param name="Name">The image name. Empty where Windows gives none, as it does for the idle process.</param>
 /// <param name="CommitCharge">
 /// Private bytes the process has committed, whether in memory, compressed or paged out. Documented,
-/// as <c>PagefileUsage</c>.
+/// as <c>PagefileUsage</c>. Null under <see cref="ProcessFigures.NotOnThisArchitecture"/>, where the
+/// table holds it in 32 bits.
 /// </param>
 /// <param name="PrivateWorkingSet">
 /// Bytes in memory that no other process can use, or null where <see cref="ProcessFigures"/> turned
@@ -68,7 +77,7 @@ public sealed record ProcessMemory(
     int ProcessId,
     int ParentProcessId,
     string Name,
-    long CommitCharge,
+    long? CommitCharge,
     long? PrivateWorkingSet,
     long? CreationTime);
 
@@ -86,11 +95,13 @@ public sealed record ProcessMemoryTable(
 {
     /// <summary>
     /// The table as a consumer may see it: the undocumented figures carried through where the check
-    /// passed, and null in every record where it did not.
+    /// passed, and null in every record where it did not, with the commit charge null as well where
+    /// the table's form cannot hold it.
     /// </summary>
     internal static ProcessMemoryTable From(ParsedProcessTable parsed, ProcessFigures figures)
     {
         var usable = figures == ProcessFigures.Checked;
+        var narrow = figures == ProcessFigures.NotOnThisArchitecture;
         var processes = new ProcessMemory[parsed.Records.Count];
 
         for (var i = 0; i < processes.Length; i++)
@@ -101,7 +112,7 @@ public sealed record ProcessMemoryTable(
                 record.ProcessId,
                 record.ParentProcessId,
                 record.Name,
-                record.CommitCharge,
+                narrow ? null : record.CommitCharge,
                 usable ? record.PrivateWorkingSet : null,
                 usable ? record.CreationTime : null);
         }

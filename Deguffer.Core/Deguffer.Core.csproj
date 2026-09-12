@@ -33,10 +33,12 @@
       is a choice rather than a necessity: a rule stated once should be held to once, not
       re-asserted four times through providers whose own subject is something else.
 
-      The memory view's parsers and checks (Memory/ProcessRecordParser, ServiceRecordParser,
-      ProcessFigureCheck, MemoryListCheck) read buffers Windows filled. Their consequence reaches the
-      public MemorySource only through this machine's own process table, which a test cannot shape
-      into a truncated record, a string past the end, or a layout that moved.
+      The memory view's parsers and decisions (in Memory: ProcessRecordParser, ServiceRecordParser,
+      ProcessFigureCheck, MemoryListCheck, OwnPrivateWorkingSet, ServiceListingProgress,
+      MemoryLists.FromPageCounts and ProcessMemoryTable.From) work on what Windows returned. They
+      reach the public MemorySource only through this machine's own process table, memory lists,
+      counters and service list, which a test cannot shape into a truncated record, a string past the
+      end, a layout that moved, or a counter an older Windows leaves unfilled.
 
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.

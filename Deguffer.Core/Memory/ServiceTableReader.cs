@@ -22,8 +22,8 @@ internal sealed partial class ServiceTableReader
     private const int BufferLength = 64_000;
 
     /// <summary>
-    /// Enough calls for several thousand services. Each call returns at least one, so this only ends a
-    /// read that has stopped making progress.
+    /// Enough calls for several thousand services. Each call that goes on returns at least one, so this
+    /// only ends a read that has stopped making progress.
     /// </summary>
     private const int Calls = 64;
 
@@ -61,23 +61,12 @@ internal sealed partial class ServiceTableReader
                 address, _buffer.Length, out _, out var returned, ref resume, null);
 
             var more = !finished && Marshal.GetLastPInvokeError() == ErrorMoreData;
+            var parsed = (finished || more)
+                && ServiceRecordParser.Parse(_buffer, (ulong)(nuint)address, returned, IntPtr.Size, services);
 
-            if ((!finished && !more)
-                || !ServiceRecordParser.Parse(_buffer, (ulong)(nuint)address, returned, IntPtr.Size, services))
+            if (ServiceListingProgress.After(finished, more, parsed, returned) is { } listing)
             {
-                return new ServiceTable(services, ServiceListing.ListedInPart);
-            }
-
-            if (finished)
-            {
-                return new ServiceTable(services, ServiceListing.Listed);
-            }
-
-            // More to come and nothing returned means a single entry larger than the documented
-            // maximum buffer, which the call cannot hand over at all.
-            if (returned == 0)
-            {
-                break;
+                return new ServiceTable(services, listing);
             }
         }
 

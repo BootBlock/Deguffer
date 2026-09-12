@@ -9,23 +9,20 @@ namespace Deguffer.Core.Memory;
 ///
 /// <para><b>The private working set has two documented sources, and the newer is tried first.</b>
 /// <c>PROCESS_MEMORY_COUNTERS_EX2.PrivateWorkingSetSize</c> needs Windows 10 or 11 22H2 with the
-/// September 2023 update, while Deguffer runs on Windows 10 1809. Asked on an older Windows with the
-/// larger structure, the call fills only the fields it knows and leaves the rest as they were passed,
-/// which is zero here, so a zero is read as "not answered" rather than as a figure: a running process
-/// always has private pages in memory.</para>
+/// September 2023 update, while Deguffer runs on Windows 10 1809. What an older Windows does when
+/// handed the larger structure is not documented and was not tried: it may refuse it, or fill only the
+/// fields it knows. Both read as no answer here, a failed call and a zero alike, so either reaches the
+/// fallback. <see cref="OwnPrivateWorkingSet.Choose"/> is that decision.</para>
 ///
 /// <para>The fallback walks this process's own working set with <c>QueryWorkingSet</c>, available on
-/// every supported Windows, and counts the pages Windows does not mark shareable. Measured against
-/// the newer counter it agreed to within a tenth of a percent. It costs a pointer per page of this
-/// process, which is why it is the fallback rather than the first choice.</para>
+/// every supported Windows, and counts the pages Windows does not mark shareable. Measured against the
+/// newer counter on one machine, it agreed to within a tenth of a percent. It costs a pointer per page
+/// of this process, which is why it is the fallback rather than the first choice.</para>
 /// </summary>
 internal static partial class OwnProcessCounters
 {
     private const int ErrorBadLength = 24;
     private const int FallbackAttempts = 4;
-
-    /// <summary><c>PSAPI_WORKING_SET_BLOCK.Shared</c>: the ninth bit of each entry.</summary>
-    private const nuint SharedPage = 0x100;
 
     public static OwnProcessReference Read()
     {
@@ -37,17 +34,13 @@ internal static partial class OwnProcessCounters
             throw new Win32Exception(Marshal.GetLastPInvokeError());
         }
 
-        return new OwnProcessReference(created, CountedPrivateWorkingSet(process) ?? WalkedPrivateWorkingSet(process));
-    }
-
-    private static long? CountedPrivateWorkingSet(nint process)
-    {
         var size = (uint)Marshal.SizeOf<MemoryCounters>();
         var counters = new MemoryCounters { Size = size };
+        var answered = GetProcessMemoryInfo(process, ref counters, size);
 
-        return GetProcessMemoryInfo(process, ref counters, size) && counters.PrivateWorkingSetSize > 0
-            ? (long)counters.PrivateWorkingSetSize
-            : null;
+        return new OwnProcessReference(
+            created,
+            OwnPrivateWorkingSet.Choose(answered, counters.PrivateWorkingSetSize, () => WalkedPrivateWorkingSet(process)));
     }
 
     private static long? WalkedPrivateWorkingSet(nint process)
@@ -61,18 +54,7 @@ internal static partial class OwnProcessCounters
 
             if (QueryWorkingSet(process, information, information.Length * IntPtr.Size))
             {
-                var count = (int)Math.Min(information[0], (nuint)entries);
-                long privatePages = 0;
-
-                for (var i = 1; i <= count; i++)
-                {
-                    if ((information[i] & SharedPage) == 0)
-                    {
-                        privatePages++;
-                    }
-                }
-
-                return privatePages * Environment.SystemPageSize;
+                return OwnPrivateWorkingSet.PrivateBytes(information, Environment.SystemPageSize);
             }
 
             if (Marshal.GetLastPInvokeError() != ErrorBadLength)

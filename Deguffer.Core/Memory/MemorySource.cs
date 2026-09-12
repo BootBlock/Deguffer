@@ -4,8 +4,14 @@ namespace Deguffer.Core.Memory;
 /// Reads this machine's <see cref="MemorySnapshot"/>: the system figures, the process table and the
 /// service hosts, with the undocumented parts of each checked before they are handed on.
 ///
-/// <para>One instance for the process (G5). Its readers keep their buffers between reads, and the
-/// lock is what makes that safe if two callers ever ask at once.</para>
+/// <para>This composes and does nothing else. Each reader only calls Windows, and every decision
+/// about what Windows returned is made in a type a test can reach: the parsers,
+/// <see cref="ProcessFigureCheck"/>, <see cref="MemoryListCheck"/>, <see cref="OwnPrivateWorkingSet"/>
+/// and <see cref="ServiceListingProgress"/>.</para>
+///
+/// <para>One instance for the process (G5). Its readers keep their buffers between reads, and its
+/// check keeps what cannot change, and the lock is what makes both safe if two callers ever ask at
+/// once.</para>
 /// </summary>
 public sealed class MemorySource : IMemorySource
 {
@@ -15,14 +21,9 @@ public sealed class MemorySource : IMemorySource
     private readonly SystemMemoryReader _system = new();
     private readonly ProcessTableReader _processes = new();
     private readonly ServiceTableReader _services = new();
-
-    /// <summary>
-    /// Whether the process table's layout has been found sound once. Kept for the life of the
-    /// process, because a layout belongs to the Windows build, and the build cannot change under a
-    /// running process. A failure is not kept: it may be two readings of a moving figure landing far
-    /// apart, so the next read checks again.
-    /// </summary>
-    private bool _layoutChecked;
+    private readonly ProcessFigureCheck _figures = new(
+        Environment.ProcessId,
+        narrowOnWideWindows: Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess);
 
     private MemorySource()
     {
@@ -37,11 +38,7 @@ public sealed class MemorySource : IMemorySource
 
             ct.ThrowIfCancellationRequested();
             var parsed = _processes.Read();
-            var figures = _layoutChecked
-                ? ProcessFigures.Checked
-                : ProcessFigureCheck.Judge(parsed, Environment.ProcessId, OwnProcessCounters.Read(), NarrowOnWideWindows);
-
-            _layoutChecked = figures == ProcessFigures.Checked;
+            var figures = _figures.Judge(parsed, OwnProcessCounters.Read);
 
             ct.ThrowIfCancellationRequested();
             var services = _services.Read();
@@ -49,6 +46,4 @@ public sealed class MemorySource : IMemorySource
             return new MemorySnapshot(system, ProcessMemoryTable.From(parsed, figures), services);
         }
     }
-
-    private static bool NarrowOnWideWindows => Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess;
 }

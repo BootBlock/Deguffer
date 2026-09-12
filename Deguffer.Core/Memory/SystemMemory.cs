@@ -78,8 +78,9 @@ public sealed record MemoryLists(long Zeroed, long Free, long Modified, long Sta
 /// stand now.
 /// </param>
 /// <param name="SystemCache">
-/// What Windows documents as the standby list plus the system working set. Measured above the standby
-/// list alone on one machine, so it is not treated as containing it exactly.
+/// What Windows documents as the standby list plus the system working set. Measured about 2.5% below
+/// the standby list alone on one machine, so the documented sum is not relied on: no figure is worked
+/// out by subtracting one of these from the other.
 /// </param>
 /// <param name="PagedPool">
 /// Kernel paged pool, in memory or not. The part in memory is inside the system working set.
