@@ -9,7 +9,11 @@ public enum MemoryPart
     /// <summary>Every process that hosts no service, by the tree of processes that started it.</summary>
     Applications,
 
-    /// <summary>Every process that hosts a service, each at the top of this part.</summary>
+    /// <summary>
+    /// Every process that hosts a service, each at the top of this part. Nothing a host started sits
+    /// under it: Windows starts packaged applications and brokers from a service host, and those are
+    /// applications rather than memory a service holds.
+    /// </summary>
     Services,
 
     /// <summary>What Windows itself holds, and the memory no figure attributes.</summary>
@@ -46,9 +50,13 @@ public enum MemoryPart
     NonPagedPool,
 
     /// <summary>
-    /// Physical memory none of the other parts accounts for: shared and shareable pages, the system
-    /// working set, page tables, driver-locked memory and more, which unelevated figures cannot divide
+    /// Physical memory none of the other parts accounts for, which unelevated figures cannot divide
     /// without counting a page twice (§7.2).
+    ///
+    /// <para>What that leaves depends on which parts were drawn. Always: shared and shareable pages,
+    /// page tables, kernel stacks, driver-locked memory and the paged pool. Where the memory lists were
+    /// drawn: the system working set. Where the system cache was drawn instead: the free, zeroed and
+    /// modified pages. Where the per-process figures were off: every process's own memory as well.</para>
     /// </summary>
     Unattributed,
 }

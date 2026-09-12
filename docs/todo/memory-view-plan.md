@@ -37,7 +37,8 @@ not query. No fixture carries a process name or a figure measured on a real mach
 **The memory tree.** A parent link that the creation times do not allow is proven to be refused,
 including an identifier reused by a later process. An orphan is proven to sit at the top of its
 part, and a process with children to draw its own share as a child. Every service host is proven to
-sit in Services, whatever its parent is. The remainder is proven never to be negative: where the
+sit in Services, whatever its parent is, and what a host started to sit in Applications instead. The
+remainder is proven never to be negative: where the
 figures add up to more than physical memory, the tree is proven to state by how much, and to draw a
 remainder of zero rather than one below it. A node is
 proven to keep its identity across two snapshots by process identifier and creation time, and to

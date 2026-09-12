@@ -458,10 +458,13 @@ it is built in.
   not exact. Compressed pages are held by the compression store rather than by their owner, shared
   pages outlive the process, a working set shrinks under pressure, and memory the kernel, drivers or
   the compositor hold on a process's behalf is not in it.
-- **The tree has three parts.** *Applications* follows the process tree. *Services* is grouped by
-  host process and names the services each host holds: memory in a shared host cannot be divided
-  between its services, so the host is the smallest part the picture sizes. *Windows* holds the
-  compression store, the system cache, the kernel pools, and the memory no figure attributes.
+- **The tree has three parts.** *Applications* follows the process tree and holds every process that
+  hosts no service, including one a service host started: Windows starts packaged applications and
+  brokers that way, and they are not memory a service holds. *Services* is grouped by host process and
+  names the services each host holds: memory in a shared host cannot be divided between its services,
+  so the host is the smallest part the picture sizes, and nothing is drawn under a host. *Windows*
+  holds the compression store, the non-paged pool, the free, modified and standby lists where those
+  could be checked or the system cache where they could not, and the memory no figure attributes.
 - **A parent link counts only where the creation times allow it.** Windows reuses process
   identifiers, so a "parent" created after its child is not its parent. A process whose parent has
   exited, or whose parent's identifier now belongs to a later process, sits at the top of its part. A
@@ -473,7 +476,9 @@ it is built in.
   processes hold accounts for part of physical memory, and a reader takes the rest for a leak, though
   most of it is cache that is already available. So the rest is one labelled part of Windows.
 - **No page is drawn twice.** Where one figure already contains part of another, the second is not
-  drawn as a part of its own, and hover text says where its pages are counted instead. Where figures
+  drawn as a part of its own, and hover text says where its pages are counted instead. The kernel's
+  paged pool is one of those: the part of it in memory is inside the system working set, and the figure
+  counts what is paged out as well, so it is not a part of its own. Where figures
   read a moment apart add up to more than physical memory, the view says so, rather than drawing a
   remainder below zero.
 - **An undocumented figure is used only once it has been checked.** A process's private working set

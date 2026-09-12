@@ -20,6 +20,10 @@ public sealed class MemoryTreeBuilderTests
 
         Assert.Equal(16_000 * MiB, tree.SizeOf(tree.RootNode));
         Assert.Equal(0, tree.Overcount);
+
+        // The walk that colours a branch climbs to the root and stops there, so the root has to answer
+        // for itself rather than for a node above it.
+        Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
         Assert.Equal(
             [MemoryPart.Applications, MemoryPart.Services, MemoryPart.Windows],
             PartsUnder(tree, tree.RootNode).Order());
@@ -100,10 +104,12 @@ public sealed class MemoryTreeBuilderTests
 
     /// <summary>
     /// The host's parent is an ordinary older process, and the host still sits at the top of Services,
-    /// with the process it started still under it.
+    /// naming what it holds. What the host started is an application: Windows starts packaged
+    /// applications and brokers from a service host, and drawing those under it would size them as
+    /// memory a service holds.
     /// </summary>
     [Fact]
-    public void AServiceHostSitsAtTheTopOfServicesWhateverItsParent()
+    public void AServiceHostSitsAtTheTopOfServicesAndWhatItStartedIsAnApplication()
     {
         var tree = MemoryTreeBuilder.Build(new MemorySnapshotBuilder()
             .Process(100, 1, "alpha.exe", 300, created: 10)
@@ -115,7 +121,9 @@ public sealed class MemoryTreeBuilderTests
         var host = Node(tree, MemoryPart.Process, 300, 20);
 
         Assert.Equal(Node(tree, MemoryPart.Services), tree.ParentOf(host));
-        Assert.Equal(host, tree.ParentOf(Node(tree, MemoryPart.Process, 400, 30)));
+        Assert.Equal(["ExampleIndexer"], tree.ServicesOf(host).Select(service => service.Name));
+        Assert.Equal(200 * MiB, tree.SizeOf(host));
+        Assert.Equal(Node(tree, MemoryPart.Applications), tree.ParentOf(Node(tree, MemoryPart.Process, 400, 30)));
         Assert.Null(tree.Find(new MemoryNodeKey(MemoryPart.OwnShare, 100, 10)));
     }
 
@@ -248,16 +256,17 @@ public sealed class MemoryTreeBuilderTests
     }
 
     /// <summary>
-    /// The two tied processes have identifiers in the opposite order to their names, so a tie broken
-    /// by anything but the name puts them the other way round.
+    /// The two tied processes have their identifiers, their creation times and their places in the
+    /// snapshot all in the opposite order to their names, so a tie broken by anything but the name puts
+    /// them the other way round.
     /// </summary>
     [Fact]
     public void ChildrenAreLargestFirstWithTiesInNameOrder()
     {
         var tree = MemoryTreeBuilder.Build(new MemorySnapshotBuilder()
-            .Process(200, 1, "beta.exe", 100, created: 30)
+            .Process(200, 1, "beta.exe", 100, created: 20)
             .Process(100, 1, "gamma.exe", 200, created: 10)
-            .Process(300, 1, "alpha.exe", 100, created: 20)
+            .Process(300, 1, "alpha.exe", 100, created: 30)
             .Build());
 
         var applications = Node(tree, MemoryPart.Applications);
@@ -282,6 +291,29 @@ public sealed class MemoryTreeBuilderTests
         Assert.Single(Enumerable.Range(0, tree.NodeCount), node => tree.KeyOf(node) == new MemoryNodeKey(MemoryPart.Process, 100, 10));
         Assert.Single(Enumerable.Range(0, tree.NodeCount), node => tree.KeyOf(node) == new MemoryNodeKey(MemoryPart.Process, 200, 10));
         Assert.Equal(400 * MiB, tree.SizeOf(Node(tree, MemoryPart.Applications)));
+    }
+
+    /// <summary>
+    /// Two processes naming each other, listed after a child of one of them. The cycle is opened at a
+    /// process on it, so the child stays under the parent its own creation time allows rather than
+    /// being lifted to the top because of where Windows happened to list it.
+    /// </summary>
+    [Fact]
+    public void ACycleIsOpenedWithoutMovingWhatHangsBelowIt()
+    {
+        var tree = MemoryTreeBuilder.Build(new MemorySnapshotBuilder()
+            .Process(300, 100, "gamma.exe", 50, created: 20)
+            .Process(100, 200, "alpha.exe", 300, created: 10)
+            .Process(200, 100, "beta.exe", 100, created: 10)
+            .Build());
+
+        Assert.Equal(
+            Node(tree, MemoryPart.Process, 100, 10),
+            tree.ParentOf(Node(tree, MemoryPart.Process, 300, 20)));
+        Assert.Equal(
+            Node(tree, MemoryPart.Applications),
+            tree.ParentOf(Node(tree, MemoryPart.Process, 100, 10)));
+        Assert.Equal(450 * MiB, tree.SizeOf(Node(tree, MemoryPart.Applications)));
     }
 
     [Fact]

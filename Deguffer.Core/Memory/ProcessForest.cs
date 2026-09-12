@@ -9,9 +9,15 @@ namespace Deguffer.Core.Memory;
 /// process whose parent has gone, or whose parent's identifier now belongs to a later process, is a
 /// root (§7.2).</para>
 ///
+/// <para><b>A service host is never in a tree of processes.</b> It is a root whatever started it, and
+/// nothing it starts sits under it. Windows starts packaged applications, brokers and COM servers from
+/// a service host, and drawing them under it would put applications inside Services and add their
+/// memory to services that do not hold it.</para>
+///
 /// <para><b>No process is placed twice, and none is lost.</b> Links that the creation times allow can
-/// still form a cycle where two processes share a creation time, and a cycle has no root to reach it
-/// from. Each process left unreached is made a root, cut from the parent that closed the cycle.</para>
+/// still form a cycle where processes share a creation time, and a cycle has no root to reach it from.
+/// Each cycle is opened at a process on it, which is found by walking up from anything the roots did
+/// not reach, so what hangs below the cycle stays where its own parent put it.</para>
 /// </summary>
 internal sealed class ProcessForest
 {
@@ -31,11 +37,8 @@ internal sealed class ProcessForest
         _children.TryGetValue(process, out var children) ? children : NoChildren;
 
     /// <param name="processes">Every process to place, each with a creation time.</param>
-    /// <param name="alwaysRoots">
-    /// Identifiers placed at a root whatever their parent, which is how every service host comes to sit
-    /// at the top of its part.
-    /// </param>
-    public static ProcessForest Of(IReadOnlyList<ProcessMemory> processes, IReadOnlySet<int> alwaysRoots)
+    /// <param name="hosts">The identifiers of the processes that host a service.</param>
+    public static ProcessForest Of(IReadOnlyList<ProcessMemory> processes, IReadOnlySet<int> hosts)
     {
         var byId = new Dictionary<int, ProcessMemory>(processes.Count);
 
@@ -50,7 +53,7 @@ internal sealed class ProcessForest
 
         foreach (var process in processes)
         {
-            if (ParentOf(process, byId, alwaysRoots) is { } parent)
+            if (ParentOf(process, byId, hosts) is { } parent)
             {
                 parents[process] = parent;
 
@@ -77,21 +80,28 @@ internal sealed class ProcessForest
 
         foreach (var process in processes)
         {
-            if (!reached.Contains(process))
+            if (reached.Contains(process))
             {
-                children[parents[process]].Remove(process);
-                roots.Add(process);
-                Reach(process, children, reached);
+                continue;
             }
+
+            var member = OnTheCycleAbove(process, parents);
+            var siblings = children[parents[member]];
+
+            siblings.RemoveAt(siblings.FindIndex(sibling => ReferenceEquals(sibling, member)));
+            parents.Remove(member);
+            roots.Add(member);
+            Reach(member, children, reached);
         }
 
         return new ProcessForest(roots, children);
     }
 
     private static ProcessMemory? ParentOf(
-        ProcessMemory process, Dictionary<int, ProcessMemory> byId, IReadOnlySet<int> alwaysRoots)
+        ProcessMemory process, Dictionary<int, ProcessMemory> byId, IReadOnlySet<int> hosts)
     {
-        if (alwaysRoots.Contains(process.ProcessId)
+        if (hosts.Contains(process.ProcessId)
+            || hosts.Contains(process.ParentProcessId)
             || !byId.TryGetValue(process.ParentProcessId, out var parent)
             || ReferenceEquals(parent, process))
         {
@@ -99,6 +109,26 @@ internal sealed class ProcessForest
         }
 
         return parent.CreationTime <= process.CreationTime ? parent : null;
+    }
+
+    /// <summary>
+    /// The first process met twice walking up from <paramref name="process"/>, which is a process on
+    /// the cycle.
+    ///
+    /// <para>The walk ends: <paramref name="process"/> was not reached from any root, so nothing above it
+    /// was either, and every process no root reached has a parent.</para>
+    /// </summary>
+    private static ProcessMemory OnTheCycleAbove(ProcessMemory process, Dictionary<ProcessMemory, ProcessMemory> parents)
+    {
+        var seen = new HashSet<ProcessMemory>(ReferenceEqualityComparer.Instance);
+        var current = process;
+
+        while (seen.Add(current))
+        {
+            current = parents[current];
+        }
+
+        return current;
     }
 
     /// <summary>Mark everything under <paramref name="from"/> reached, without recursion.</summary>

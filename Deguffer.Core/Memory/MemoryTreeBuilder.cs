@@ -7,7 +7,9 @@ namespace Deguffer.Core.Memory;
 /// <para><b>No page is drawn twice (§7.2).</b> Every part is one figure that no other drawn part
 /// contains: the private working sets, the compression store's working set, the non-paged pool, and
 /// either the three memory lists or, where those could not be used, the system cache. The system cache
-/// and the standby list are never drawn together, because the one overlaps the other.</para>
+/// and the standby list are never drawn together, because the one overlaps the other. The paged pool is
+/// not drawn at all: the part of it in memory is inside the system working set, and its figure counts
+/// what is paged out as well, so it stays in the remainder.</para>
 ///
 /// <para>Built once per snapshot, and never updated: a refresh builds a new tree.</para>
 /// </summary>
@@ -106,17 +108,19 @@ public static class MemoryTreeBuilder
         {
             var (process, parent) = frame;
             var ownBytes = process.PrivateWorkingSet!.Value;
-            var itsServices = hosted[process.ProcessId].ToArray();
             var children = forest.ChildrenOf(process);
 
             if (children.Count == 0)
             {
-                drafts.Add(process.Name, MemoryPart.Process, parent, ownBytes, process, itsServices);
+                // Only a node with nothing under it can hold services: nothing is placed under a
+                // service host, so a process with children hosts none.
+                drafts.Add(
+                    process.Name, MemoryPart.Process, parent, ownBytes, process, hosted[process.ProcessId].ToArray());
                 continue;
             }
 
-            var node = drafts.Add(process.Name, MemoryPart.Process, parent, bytes: 0, process, itsServices);
-            drafts.Add(process.Name, MemoryPart.OwnShare, node, ownBytes, process, itsServices);
+            var node = drafts.Add(process.Name, MemoryPart.Process, parent, bytes: 0, process);
+            drafts.Add(process.Name, MemoryPart.OwnShare, node, ownBytes, process);
 
             foreach (var child in children)
             {
