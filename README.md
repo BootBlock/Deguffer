@@ -81,7 +81,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Forty-two providers, each holding its own knowledge of one location. A provider reports "not
+Forty-three providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -99,6 +99,7 @@ installed" cleanly on a machine without that toolchain.
 | Poetry package cache | `poetry cache clear` per repository; never its `virtualenvs` |
 | .NET intermediate build output | `obj` directories under your own source trees |
 | Dart analysis server cache | |
+| Roslyn solution index cache | One row per program that hosts Roslyn, dated, so the sets old builds left behind can go; never the rest of Visual Studio's folder |
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
 | Chromium application caches | |

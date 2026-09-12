@@ -1009,6 +1009,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("go", "src")]                                // the user's own code
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
+    [InlineData("roslyn-cache", "something-unrecognised")]
     [InlineData("playwright", ".links")]                     // how Playwright resolves a build
     [InlineData("gpu-shader-cache", "accounts")]             // NVIDIA's, and not a cache
     [InlineData("epic-launcher-webcache", "Config")]         // the launcher settings
@@ -1028,6 +1029,36 @@ public sealed class ExploreActionPolicyTests : IDisposable
         }
 
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
+    }
+
+    /// <summary>
+    /// §5.2 over Roslyn's indexes, where the inner level recognises a program's set by what it holds
+    /// rather than by its name. A directory shaped like a set that holds something else is refused, as the
+    /// plan declines it, so Explore cannot remove what the Storage page calls Tier 4 — and the premise is
+    /// asserted first: the impostor's name alone passes, so only its contents can refuse it.
+    /// </summary>
+    [Fact]
+    public void RoslynsCacheIsRecognisedByWhatASetHoldsAndNothingAboveASetIsRemovable()
+    {
+        var provider = new RoslynCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var cache = provider.CachePath;
+        var roslyn = Path.GetDirectoryName(cache)!;
+
+        var recognised = RoslynCacheFixture.CreateHost(cache, RoslynCacheFixture.Host, RoslynCacheFixture.Solution);
+        var impostor = RoslynCacheFixture.CreateHost(cache, RoslynCacheFixture.OtherHost, RoslynCacheFixture.Solution);
+
+        Assert.True(policy.MayRemove(impostor).IsAllowed);
+        File.WriteAllBytes(Path.Combine(impostor, "notes.txt"), new byte[8]);
+
+        Assert.True(policy.MayRemove(recognised).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(recognised, RoslynCacheFixture.Solution, "sqlite3")).IsAllowed);
+
+        Assert.False(policy.MayRemove(impostor).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(impostor, "notes.txt")).IsAllowed);
+        Assert.False(policy.MayRemove(cache).IsAllowed);
+        Assert.False(policy.MayRemove(roslyn).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(roslyn, "something-unrecognised")).IsAllowed);
     }
 
     /// <summary>
@@ -1113,6 +1144,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new GoCacheProvider(_environment),
         new VsCodeCppToolsCacheProvider(_environment),
         new DartAnalysisServerProvider(_environment),
+        new RoslynCacheProvider(_environment),
         new PlaywrightBrowsersProvider(_environment),
         new GpuShaderCacheProvider(_environment),
         new EpicLauncherWebCacheProvider(_environment),
