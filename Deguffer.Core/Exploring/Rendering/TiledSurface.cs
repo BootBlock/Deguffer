@@ -14,15 +14,14 @@ public sealed class TiledSurface : ExploreSurface
     private readonly TileHitTest _hits;
 
     public TiledSurface(
-        ExploreTree tree,
+        ISizedTree tree,
         int root,
         int width,
         int height,
         LayoutLimits limits,
-        ExploreColouring colouring,
-        DateTime nowUtc,
+        ShapeColours colours,
         IReadOnlyList<ExploreTile> tiles)
-        : base(tree, root, width, height, limits, colouring, nowUtc)
+        : base(tree, root, width, height, limits, colours)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 

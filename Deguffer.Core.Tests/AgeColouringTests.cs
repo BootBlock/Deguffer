@@ -293,6 +293,43 @@ public class AgeColouringTests
         return new TileColour(pixels[offset + 2], pixels[offset + 1], pixels[offset]);
     }
 
+    /// <summary>
+    /// The bands are by the newest write, never by the creation date. Every other fixture here dates a
+    /// file's creation and its last write the same, so only this one tells the two apart: a file made
+    /// long ago and written today, beside one made today and last written long ago.
+    /// </summary>
+    [Fact]
+    public void ShapesAreColouredByWhenTheyWereWrittenRatherThanWhenTheyWereMade()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [
+                new ExploreChild("written-today", IsDirectory: false, IsLink: false, 1000, Written(4000), Written(0)),
+                new ExploreChild("written-long-ago", IsDirectory: false, IsLink: false, 1000, Written(0), Written(4000)),
+            ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        var surface = ExploreSurface.Create(
+            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, ExploreColouring.Age, Now);
+
+        Assert.NotEmpty(surface.Labels);
+
+        foreach (var label in surface.Labels)
+        {
+            // What a label carries is the contrasting text of its band, and neighbouring bands share
+            // one. So the guard is on the contrast rather than on the band, or a later change to these
+            // dates could satisfy it while leaving the two indistinguishable here.
+            Assert.NotEqual(
+                AgePalette.For(tree.CreatedOf(label.Node), Now).ContrastingText,
+                AgePalette.For(tree.ModifiedOf(label.Node), Now).ContrastingText);
+
+            Assert.Equal(AgePalette.For(tree.ModifiedOf(label.Node), Now).ContrastingText, label.Colour);
+        }
+    }
+
     private static ExploreTree TwoChildrenOfDifferentAges() => Tree(daysAgo: 0, otherDaysAgo: 4000);
 
     private static ExploreTree TwoChildrenOfTheSameAge() => Tree(daysAgo: 4000, otherDaysAgo: 4000);

@@ -41,7 +41,7 @@ public static class TreemapLayout
     /// returning a 32-byte struct is not free at that count (G4).</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
-        ExploreTree tree,
+        ISizedTree tree,
         int root,
         float width,
         float height,
@@ -76,7 +76,7 @@ public static class TreemapLayout
                 frame.Node, frame.Depth, tree.SizeOf(frame.Node),
                 frame.X, frame.Y, frame.Width, frame.Height));
 
-            if (frame.Depth >= limits.MaximumDepth || !tree.IsDirectory(frame.Node))
+            if (frame.Depth >= limits.MaximumDepth || !tree.IsContainer(frame.Node))
             {
                 continue;
             }
@@ -109,7 +109,7 @@ public static class TreemapLayout
     /// that settled on a different one.</para>
     /// </summary>
     private static void Place(
-        ExploreTree tree,
+        ISizedTree tree,
         int parent,
         int depth,
         Rectangle area,
@@ -178,7 +178,7 @@ public static class TreemapLayout
     /// and everything after it, to the aggregate where it belongs.</para>
     /// </summary>
     private static (int Count, double Area) TakeRow(
-        ExploreTree tree,
+        ISizedTree tree,
         ReadOnlySpan<int> children,
         int index,
         float side,
@@ -242,7 +242,7 @@ public static class TreemapLayout
     /// ends up visibly the wrong size or short of the edge.</para>
     /// </summary>
     private static void LayRow(
-        ExploreTree tree,
+        ISizedTree tree,
         ReadOnlySpan<int> row,
         double rowArea,
         float thickness,
@@ -285,7 +285,7 @@ public static class TreemapLayout
             : new Rectangle(remaining.X, remaining.Y + thickness, remaining.Width, remaining.Height - thickness);
     }
 
-    private static double SumOf(ExploreTree tree, ReadOnlySpan<int> nodes)
+    private static double SumOf(ISizedTree tree, ReadOnlySpan<int> nodes)
     {
         double sum = 0;
 
@@ -306,7 +306,7 @@ public static class TreemapLayout
     /// to be visible.</para>
     /// </summary>
     private static void Aggregate(
-        ExploreTree tree,
+        ISizedTree tree,
         ReadOnlySpan<int> omitted,
         Rectangle area,
         int depth,

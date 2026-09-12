@@ -12,14 +12,13 @@ public sealed class SunburstSurface : ExploreSurface
     private readonly SectorHitTest _hits;
 
     public SunburstSurface(
-        ExploreTree tree,
+        ISizedTree tree,
         int root,
         int width,
         int height,
         LayoutLimits limits,
-        ExploreColouring colouring,
-        DateTime nowUtc)
-        : base(tree, root, width, height, limits, colouring, nowUtc)
+        ShapeColours colours)
+        : base(tree, root, width, height, limits, colours)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
 
