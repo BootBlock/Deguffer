@@ -28,16 +28,18 @@ Each step lands on its own, in this order, because each depends on the one befor
 parsed with every offset and every string checked against the length Windows returned. The parser
 is proven on synthetic buffers that end early, point past their end, or name a string that runs
 past it. The two undocumented figures, the private working set and the creation time, are proven to
-turn off, rather than to read as zero, when the check against Deguffer's own process fails or has no
-documented figure to compare with. The memory lists are used only where they agree with
+be checked against Deguffer's own process through the documented counter where Windows has it and
+through the documented fallback where it does not, and to turn off together, rather than to read as
+zero, when either check fails. The memory lists are used only where they agree with
 `GetPerformanceInfo`. The snapshot records that the service list may omit services this account may
 not query. No fixture carries a process name or a figure measured on a real machine.
 
 **The memory tree.** A parent link that the creation times do not allow is proven to be refused,
 including an identifier reused by a later process. An orphan is proven to sit at the top of its
 part, and a process with children to draw its own share as a child. Every service host is proven to
-sit in Services, whatever its parent is. The remainder is proven never to be negative, and figures
-that add up to more than physical memory are proven to be reported rather than drawn. A node is
+sit in Services, whatever its parent is. The remainder is proven never to be negative: where the
+figures add up to more than physical memory, the tree is proven to state by how much, and to draw a
+remainder of zero rather than one below it. A node is
 proven to keep its identity across two snapshots by process identifier and creation time, and to
 lose it when the identifier is reused.
 
@@ -51,13 +53,15 @@ It offers no action of any kind.
 ## Phase 2: acting (not started)
 
 [#129](https://github.com/BootBlock/Deguffer/issues/129). Nothing of it is built until §7.2 specifies
-it. Section 7 of [memory-view.md](memory-view.md) states what that specification has to settle: the
+it. Sections 7 and 10 of [memory-view.md](memory-view.md) state what that specification has to
+settle, and item 3 of section 10 lists all of it together: the
 program's own close and nothing stronger, only to the visible top-level windows of a windowed
 application in the user's session that belong to no console host, the target identified by
 identifier and creation time and checked again immediately before anything is sent, every refusal
 in that section's table stated with its reason, commit charge reported before and after, and how
-§5.6 can be honest when processes exit on their own. Services stay out until the question about
-service control in [unreached-locations.md](unreached-locations.md) is decided.
+§5.6 can be honest when processes exit on their own. The memory view never controls a service
+(§2), whatever the open question about service control in
+[unreached-locations.md](unreached-locations.md) comes to decide for disk.
 
 ## Limits that stay open
 

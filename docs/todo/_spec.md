@@ -40,10 +40,12 @@ recommendation.
 Memory is the other thing a Windows machine runs short of, and a user who wants to know what is
 using theirs should not have to leave for a different program to find out. The subject has the same
 trap in another form. Low free memory is Windows working as designed, because it fills memory
-nothing else needs with cache, and the tools that make a free-memory figure rise do it by trimming
-working sets and purging the standby list, whose pages then come back as hard faults. What a user
-feels is commit charge reaching the commit limit, when allocations start to fail. So §7.2 draws where
-physical memory goes, leads with that figure, and acts on none of it.
+nothing else needs with cache. The tools that make a free-memory figure rise do it by trimming
+working sets and purging the standby list, and the pages come back as page faults, read from disk
+again once they have been purged or reused. The failures a user does feel are commit charge reaching
+the commit limit, when allocations start to fail, and sustained hard faulting with the disk load to
+match. §7.2 draws where physical memory goes and leads with commit charge, the one of the two a
+single figure states. In its first phase it acts on none of it.
 [memory-view.md](memory-view.md) records the investigation it rests on.
 
 The evidence below comes from auditing one real workstation (Windows 11, ~330 GB system drive) that
@@ -77,9 +79,10 @@ in a few minutes, without touching a single piece of user data.
 - Not a Windows component cleaner — `WinSxS` and `Windows\Installer` are deliberately out of scope
   (see §9).
 - Not a RAM cleaner, in any form. The memory view never trims a working set, never purges or
-  flushes the standby list or any other memory list, and never offers anything whose effect is to
-  make a memory figure smaller. Windows reclaims those pages when it needs them, and pushing them out
-  early brings them back as hard faults (§7.2).
+  flushes the standby list or any other memory list, and never offers any other way to push pages
+  out of memory while the programs using them go on running. Windows reclaims those pages when it
+  needs them, and pages pushed out early come back as page faults, read from disk again once they
+  have been purged or reused.
 - No service control from the memory view. It never starts, stops, pauses or reconfigures a service.
   It is not where Deguffer decides whether to control services at all: that question is open in
   [unreached-locations.md](unreached-locations.md), for the one disk case that needs it.
@@ -443,9 +446,10 @@ it is built in.
   it would act on are different sets, and in the first phase the second one is empty.
 - **The headline is commit charge against the commit limit, with available memory beside it.** Low
   free memory is normal: Windows fills memory nothing else needs with cache, and standby pages are
-  available the moment something asks for them. The failure a user feels is commit charge reaching
-  the commit limit, when allocations fail. A headline that led with memory "in use" would present a
-  cache as a problem.
+  available the moment something asks for them. Of the two failures a user feels, commit charge
+  reaching the commit limit is the one a single figure states, and the one closing a program
+  measurably relieves. The other, sustained hard faulting, shows in disk activity rather than in any
+  figure here. A headline that led with memory "in use" would present a cache as a problem.
 - **The picture is sized by private working set, and its numbers are lower bounds that say so.** The
   private working set is the closest single figure to what closing a program would return, and it is
   not exact. Compressed pages are held by the compression store rather than by their owner, shared
@@ -471,9 +475,13 @@ it is built in.
   remainder below zero.
 - **An undocumented figure is used only once it has been checked.** A process's private working set
   and its creation time sit in a part of the process table that Windows does not document. Before
-  either is used, it is checked against Deguffer's own process, whose answer a documented call gives.
-  A check that fails, or that has nothing documented to compare with, turns the figure off, and the
-  view says so. It never shows zero in its place, because zero reads as a process holding nothing.
+  either is used, it is checked against Deguffer's own process, whose answer a documented call gives:
+  the creation time exactly, and the private working set against the documented counter, with a
+  documented fallback on a Windows too old to have that counter. The two sit in the same undocumented
+  part of each record, so a check that fails for either turns both off. The view then draws no
+  process at all, because it has no size to draw one by, no parent link it can trust and no identity
+  to keep across a refresh. It says so, and still draws the figures Windows documents. It never shows
+  zero in place of a figure, because zero reads as a process holding nothing.
 - **Unelevated, the picture is incomplete, and it says which way.** The investigation measured
   nothing elevated. The exact breakdown of physical pages probably needs administrator rights, which
   is an inference that was not tested, so the unelevated picture draws what it can separate and puts
@@ -485,9 +493,12 @@ it is built in.
   close, and it never suggests closing anything.
 - **Memory is not a RAM cleaner, in any phase, and never controls a service** (§2).
 - **An action is specified here before any of it is built.** The investigation found one that fits
-  this model: the program's own close, sent only to the visible windows of a windowed application in
-  the user's own session, with everything else refused and its reason stated. Until this section
-  specifies it, Memory has no action at all.
+  this model: the program's own close, sent only to the visible top-level windows of a windowed
+  application in the user's own session that belong to no console host, to a process identified by
+  identifier and creation time and checked again immediately before anything is sent, with
+  everything else refused and its reason stated. Sections 7 and 10 of
+  [memory-view.md](memory-view.md) are where that specification starts. Until this section specifies
+  it, Memory has no action at all.
 
 ---
 
