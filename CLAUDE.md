@@ -1,9 +1,9 @@
 # Deguffer: the working agreement
 
 Deguffer deletes directories on other people's machines, so its failure mode is silent, irreversible
-data loss. [docs/todo/_spec.md](docs/todo/_spec.md) decides *what* to build and wins any disagreement
-with this file, which decides *how*. Read the governing spec section before you change behaviour.
-Every rule here is mandatory. Where one names a *memory note*, open the note before that kind of work.
+data loss. [docs/todo/_spec.md](docs/todo/_spec.md) decides *what* to build and wins over this file
+on that. This file decides *how*. Read the governing spec section before you change behaviour. Every
+rule here is mandatory. Where one names a *memory note*, open the note before that kind of work.
 
 ## Safety rules that are also code rules
 
@@ -11,7 +11,8 @@ A refactor loses these most easily.
 
 - **§5.1** Prefer a tool's own eviction command to deleting paths.
 - **§5.2** Never target a tool's root directory. Recognised children only. Unrecognised is Tier 4.
-- **§5.6** Every execution verifies the negative: the protected paths survived.
+- **§5.6** Every execution verifies the negative: the tool root, unrecognised siblings and anything
+  in Tier 4 survived.
 - **§6.3** Every filesystem path goes through `LongPath`. A `MAX_PATH` truncation is a silent partial
   deletion.
 - **§6.5** The Acrylic backdrop is decoration. The UI must be fully legible without it.
@@ -20,7 +21,7 @@ A refactor loses these most easily.
 
 Several agents work here at once, and a shared checkout loses edits without any error. Before your
 first edit, run `git worktree add ../Deguffer-<topic> -b feature/<topic>` and work only there. The
-primary checkout is for reading and integrating.
+primary checkout is for reading and integrating, and you never switch its branch.
 
 - One worktree, one branch, one task. Never adopt or remove another agent's tree.
 - Edit through absolute paths inside your tree. The Bash tool's working directory drifts.
@@ -31,9 +32,8 @@ primary checkout is for reading and integrating.
 
 A type that needs "and" to describe it is two types. A new cache source is a new `ICleanupProvider`,
 never an edit to a switch. Core depends on `IUserEnvironment`, `IProcessRunner` and
-`IProcessInspector`, never on `Environment.GetFolderPath` or `Process.Start`: that inversion is what
-makes the safety rules testable. Past about 250 lines, look for the seam. A 500-line file needs a
-stated reason.
+`IProcessInspector`, never on `Environment.GetFolderPath` or `Process.Start`: that inversion makes
+the safety rules testable. Past about 250 lines, look for the seam. A 500-line file needs a reason.
 
 ## G2: no god objects
 
@@ -43,18 +43,17 @@ provider holds its own rules and no orchestration.
 
 ## G3: no AI-trope or junior-engineer code
 
-- No comment that restates the code. Explain *why*, ideally with a spec section.
+- No comment that restates the code. Explain *why*, or name the non-obvious constraint.
 - No interface with one implementation and no test seam, factory that only calls `new`, or wrapper
   that forwards every member.
-- No `catch (Exception)`. Catch the specific exceptions you expect, and say why you expect them.
-- No null check on a value that cannot be null, and no re-validation one frame down.
+- No `catch (Exception)` that swallows or rethrows unchanged. Catch what you expect, and say why.
+- No null check on a value that cannot be null, or re-validation of an argument validated one
+  frame up.
 - No knob, extension point or `virtual` for a scenario that does not exist yet.
 - No stringly-typed state where an enum or a record belongs.
 - No `#region`, `Manager`/`Helper`/`Utils` type, or "Part 2" file.
 
 ## G4: performance, caching and object reuse
-
-Per-entry overhead dominates on trees of hundreds of thousands of small files.
 
 - Enumerate with `EnumerateX`, never `GetX`. Never materialise a tree to count it.
 - Bound parallelism with `MaxDegreeOfParallelism`. Never fan out with unbounded `Task.Run`.
@@ -66,7 +65,7 @@ Per-entry overhead dominates on trees of hundreds of thousands of small files.
 
 A stateless collaborator is a singleton (`ProcessRunner.Default`, `UserEnvironment.Current`) injected
 once. A compiled regex, `SearchValues`, comparer or lookup set is `static readonly`. Never re-measure
-what planning already measured.
+what planning measured. A record is a value: never clone one to change what should be mutable state.
 
 ## G7: use sub-agents where they apply
 
@@ -76,33 +75,32 @@ the context they need. Keep the synthesis and the final judgement in the main th
 ## G8: what "verified" means
 
 Verified means observed, not compiled. Run `dotnet build Deguffer.sln` *and*
-`dotnet test Deguffer.sln` every time, and read the output.
+`dotnet test Deguffer.sln` every time, and read the output. Build the App through PowerShell, not
+Bash (memory note: *Build the App through PowerShell, not Bash*), with no Deguffer running (MSB3021).
 
-- A behaviour change needs a test that fails without it. Prove a test written after the code bites
-  by mutating the code. Memory note: *Deguffer verify by mutation*.
+- A behaviour change needs a test that fails without it, for the right reason. Prove a test written
+  after the code bites by mutating the code. Memory note: *Deguffer verify by mutation*.
 - A change to what gets deleted asserts the §5.6 negative. A tier change tests the unrecognised case.
 - A path change asserts the `\\?\` form, not a deep tree. Memory note: *Test Deguffer long-path
   handling by the form of the path*.
 - Test through `FakeUserEnvironment` and the process seams, never the real machine.
-- Drive a runtime surface with the [`verify` skill](.claude/skills/verify/SKILL.md).
-- Never weaken a test to reach green. Report failures and skipped steps as they happened.
-
-## Build and test
-
-Build `Deguffer.App` through PowerShell, not Bash. Memory note: *Build the App through PowerShell,
-not Bash*. A running Deguffer holds `!Distribution\Deguffer.Core.dll` open, so stop it before you
-build (MSB3021).
+- Drive the WinUI shell, the preview flow or a real subprocess with the
+  [`verify` skill](.claude/skills/verify/SKILL.md).
+- Never weaken, widen or delete a test to reach green. If a test is wrong, say so and why.
+- Report failures with their output, and skipped steps with the reason.
 
 ## Do the whole fix, never the cheap one
 
 Take the root-cause fix, never the approach that is quick or touches fewer files. Fix every instance
 at the level the cause lives: if one provider mishandles a path, fix the seam. Update every call
 site, test and document it implies, and delete what it supersedes. Complete is measured against the
-defect, not everything nearby. If the right fix is too large or needs someone else's decision, say so.
+defect, not everything nearby. If the right fix is too large or needs someone else's decision, say
+so and leave the defect documented.
 
 ## Work is not done until it has landed
 
-The session that does the work lands it before it reports done, without being asked.
+The session that does the work lands it before it reports done, without being asked. Make small,
+focused commits with the *why* in the message.
 
 ```
 git status --short                  # every ?? line is work too
@@ -110,7 +108,7 @@ git add -A && git diff --cached     # the secrets self-audit, on what will be co
 git commit -F <message-file>        # multi-line text goes through a file, gh bodies too
 # then from the primary checkout
 git merge --no-ff feature/<topic> && git push origin main
-git worktree remove ../Deguffer-<topic> && git branch -d feature/<topic>
+git worktree remove ../Deguffer-<topic> && git branch -d feature/<topic>   # -d, never -D
 ```
 
 - If `main` moved, merge it into your branch and run both commands there before merging back.
@@ -126,8 +124,12 @@ output, logs, fixtures and screenshots are full of real usernames, machine names
 - Never commit a real path, machine, domain or share name. Write `C:\Users\<user>\...`, or use the
   fakes' invented roots such as `C:\Users\testuser\...`.
 - Redact scan and log output before you paste it anywhere, a commit message or an issue included.
-- Never commit a key, token, password, certificate or connection string, or force-add `*.pfx`.
-- Use `BootBlock@users.noreply.github.com`, `@BootBlock`, `example.com`, `*.test` and `localhost`.
+  Keep ad hoc scan output and logs outside the working tree.
+- Never commit a key, token, password, certificate or connection string, or force-add `*.pfx` or
+  `*.cer`. Write `<YOUR_API_KEY>` for an example.
+- Never commit a real name, private email or phone number. Use `BootBlock@users.noreply.github.com`,
+  `@BootBlock`, `example.com`, `*.test` and `localhost`. Crop or re-capture a screenshot that shows
+  any of these.
 - Read `git diff --cached` before every commit. If in doubt, leave it out and ask.
 - If a secret is committed, stop and report it. It must be revoked and scrubbed from history.
 
@@ -138,19 +140,22 @@ Code, comments, commit messages, branch names and history are world-readable.
 - Stay professional and neutral. No TODO names or blames a person.
 - No internal references: private ticket IDs, internal URLs or hosts, or agent process such as
   worktrees, review mechanics and reasoning. Describe what changed and why.
-- The licence is MIT. Copy no code of unknown or incompatible licence, vet a new NuGet package's
-  licence and maintenance, and keep dependencies few.
-- Add a new kind of generated or local file to `.gitignore` rather than committing it.
+- Keep the MIT licence. Copy no code of unknown or incompatible licence. Vet a new NuGet package's
+  licence, popularity and maintenance, and keep dependencies few.
+- Add a build artefact, a local cache, or a file that could hold real paths to `.gitignore`.
 
 ## Actioning a GitHub issue
 
 A Deguffer issue URL, `#<id>` or "issue <id>" with no other instruction asks you to action it end to
-end, landing and closing it with no pause for approval. A message that only wants discussion gets an
-answer. Memory notes: *Actioning a Deguffer issue end to end*, *Reconcile a Deguffer issue's labels*,
+end, reviewed with `/auto-review high`, then landed and closed with no pause for approval. A message
+that only wants discussion gets an answer. Memory notes: *Actioning a Deguffer issue end to end*,
 *Close a Deguffer issue once its work has landed*.
 
-Every issue or pull-request body or comment you write ends with this, worded `actioned`, `opened` or
-`updated`, with `pull request` for a PR. A commit message carries `Co-Authored-By` instead.
+Whenever you open, action, comment on or close an issue or pull request, reconcile its whole label
+set. Memory note: *Reconcile a Deguffer issue's labels*.
+
+Everything you post or edit on GitHub ends with this, worded `actioned`, `opened` or `updated`, with
+`pull request` for a PR. If in doubt, include it. A commit message carries `Co-Authored-By` instead.
 
 ```markdown
 ---
@@ -160,7 +165,8 @@ This issue was actioned by an agent on behalf of @BootBlock.
 ## Plan docs carry a status
 
 Every `.md` under `docs/todo/` opens with a `> **Status:**` banner, and a finished one moves to
-`docs/todo/done/` in the same change. Memory note: *Deguffer plan docs carry a status banner*.
+`docs/todo/done/` in the same change. Never rewrite a past-tense record to match current practice.
+Memory note: *Deguffer plan docs carry a status banner*.
 
 ## Keep this file small
 
