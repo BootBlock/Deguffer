@@ -42,6 +42,7 @@ public class StepGrainTests
             "node-modules",
             "playwright",
             "python-venv",
+            "roslyn-cache",
             "squirrel-superseded-versions",
             "unity-library",
             "vscode-cpptools",

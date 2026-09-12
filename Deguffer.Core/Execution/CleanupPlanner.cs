@@ -22,7 +22,7 @@ public sealed class CleanupPlanner
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
     /// web caches, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
-    /// server's byte store, the Azure Functions Core Tools releases Visual Studio downloads, what
+    /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output inside the user's own
@@ -91,6 +91,7 @@ public sealed class CleanupPlanner
         new PnpmStoreProvider(),
         new VsCodeCppToolsCacheProvider(),
         new DartAnalysisServerProvider(),
+        new RoslynCacheProvider(),
         new UvCacheProvider(),
         new PipCacheProvider(),
         new PoetryCacheProvider(),

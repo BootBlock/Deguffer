@@ -1884,6 +1884,91 @@ and which Deguffer does not offer for an unrelated reason — see
 
 ---
 
+## Roslyn solution index cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Microsoft\VisualStudio\Roslyn\Cache` |
+| **Method** | Delete a program's whole set of indexes, once everything in it is recognised |
+| **Typical size** | Grows without limit. 538 MB was measured on one workstation across 19 sets, 280 MB of it in five sets not written to since 2024 or earlier |
+
+### What it is
+
+Roslyn is the engine behind C# and Visual Basic in Visual Studio and in the C# extension for VS Code.
+When it opens a solution it builds an index of the code — what is declared where, and what refers to
+it — and saves that in a small SQLite database, so that searching, navigating and finding references
+work straight away the next time.
+
+It keeps those databases per program. Each program's folder is named after the program and a
+checksum of the full path it ran from, and inside it there is one folder per solution:
+
+```
+Cache\<program>-<checksum>\<solution>-<checksum>\sqlite3\v2\
+    storage.ide, storage.ide-wal, storage.ide-shm, db.lock
+```
+
+So a program that runs from a new folder starts a new set. The C# extension for VS Code installs each
+update into a folder named after its version, which makes every update do this, and nothing ever
+removes the set left behind.
+
+Microsoft documents neither this folder nor any way to clear it. The layout above is what was observed
+on disk, and it matches Roslyn's own source code, which is where the folder names are built.
+
+### What Deguffer does
+
+It deletes a program's whole set, one row per set, each dated by the newest entry anywhere inside
+it, folders included.
+A set is deleted only when everything in it is exactly what Roslyn writes: solution folders named the
+way Roslyn names them, each holding `sqlite3\v2`, and in that the database with its three companion
+files. One file or folder that does not fit, anywhere in the set, and Deguffer leaves the whole set
+alone and says so. Explore applies the same test before it removes a set.
+
+There is no eviction command to prefer under §5.1. Neither Visual Studio nor Roslyn offers one.
+
+**Keeping the set in use.** If you have told Deguffer to leave recently changed files alone, it leaves
+each file changed within that time where it is. A set nothing has written to within that time still
+goes whole, and the set in use keeps what it wrote recently. The index of a solution in that set that
+you have not opened within that time still goes, and is rebuilt the next time you open it. Each row's
+date shows which set is which.
+
+Nothing is removed through a link. If `Roslyn` or its `Cache` folder is a junction onto another drive,
+Deguffer removes nothing and tells you why.
+
+### What is protected
+
+`%LOCALAPPDATA%\Microsoft\VisualStudio` is never a target, because it holds far more than this cache:
+
+| Child | Why it stays |
+| --- | --- |
+| The per-installation folders | Each Visual Studio installation's settings and extensions. |
+| `SettingsBackup_*` | Earlier copies of your settings. |
+| `BackupFiles` | Visual Studio's recovery copies of documents you had not saved. Losing them is permanent. |
+| `Roslyn` and `Roslyn\Cache` | The folders the indexes are kept in. Only sets inside `Cache` go. |
+
+After every run Deguffer asserts that `VisualStudio`, `BackupFiles`, `Roslyn` and `Cache` survived,
+along with every set it left alone. Explore refuses the same folders, and every other child of
+`VisualStudio`, because Deguffer does not recognise them.
+
+**Visual Studio may be running.** It holds the databases of any solution it has open, and so does the
+C# extension's language server, so Deguffer warns you when it sees either. An access-denied on a file
+in use is an ordinary outcome here, not a failure: the file is skipped and the rest still goes.
+
+### What it costs you
+
+The next time you open a solution whose index went, Roslyn builds it again from the source. Searching,
+navigating and finding references are slower or incomplete until that finishes, and then everything
+behaves exactly as before. A set left behind by a program that no longer runs from that folder costs
+nothing at all, because nothing will read it again.
+
+### Why Tier 1
+
+Nothing here originated with you. Every index is derived from source code still on your disk, by a
+Roslyn that rebuilds it without being asked.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
