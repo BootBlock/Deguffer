@@ -68,6 +68,13 @@ public enum Withholding
     /// <see cref="CleanupPlan.WithKeepList"/> for why its contents are not asked about.
     /// </summary>
     OnKeepList,
+
+    /// <summary>
+    /// An Outlook mail store the plan's own measurement found inside what it would remove, which
+    /// Deguffer never removes (§9). Protected on its existence, because it is a file. See
+    /// <see cref="MailStorePlan"/>.
+    /// </summary>
+    MailStore,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -270,6 +277,14 @@ public sealed record CleanupPlan
     /// <see cref="Notes"/>, and this is the same fact in the form the shell can act on.</para>
     /// </summary>
     public bool HoldsKeepListItems => ProtectedPaths.Any(p => p.Withheld == Withholding.OnKeepList);
+
+    /// <summary>
+    /// Whether this plan found an Outlook mail store and is leaving it where it is. The same shape as
+    /// <see cref="HoldsKeepListItems"/>, for the same reason: a row whose only content is a store has
+    /// nothing to reclaim, and "Already clear" would be a claim about a location holding a file
+    /// Deguffer will never remove.
+    /// </summary>
+    public bool HoldsMailStores => ProtectedPaths.Any(p => p.Withheld == Withholding.MailStore);
 
     /// <summary>
     /// Every path this plan would destroy, for display and for tests.

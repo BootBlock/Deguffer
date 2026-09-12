@@ -33,6 +33,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.RecentContentHeldBack)]
     [InlineData(FindingStatus.RefusedByWindows)]
     [InlineData(FindingStatus.OnKeepList)]
+    [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.AwaitingSourceFolders)]
     public void DoesNotCallTheCachesClearOverARowThatIsNotClear(FindingStatus unclear)
     {
@@ -49,6 +50,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.RecentContentHeldBack, "not old enough")]
     [InlineData(FindingStatus.RefusedByWindows, "Windows would not let Deguffer remove")]
     [InlineData(FindingStatus.OnKeepList, "on your keep list")]
+    [InlineData(FindingStatus.MailStoresHeldBack, "Outlook data files")]
     [InlineData(FindingStatus.AwaitingSourceFolders, "need a source folder")]
     public void NamesTheCauseWhenOnlyOneKindOfRowIsUnclear(FindingStatus unclear, string expected)
     {

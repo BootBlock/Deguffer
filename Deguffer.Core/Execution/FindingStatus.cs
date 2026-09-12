@@ -64,6 +64,13 @@ public enum FindingStatus
     /// </summary>
     OnKeepList,
 
+    /// <summary>
+    /// A location whose only content is Outlook mail stores, which Deguffer never removes (§9). It
+    /// measures zero and it is not empty, and a tool's own command withheld because of one is the
+    /// same case: the row has something in it and nothing Deguffer will take.
+    /// </summary>
+    MailStoresHeldBack,
+
     /// <summary>Examined, and there is genuinely nothing in it.</summary>
     AlreadyClear,
 
@@ -107,6 +114,7 @@ public static class FindingStatusExtensions
         FindingStatus.RecentContentHeldBack => "Nothing old enough",
         FindingStatus.RefusedByWindows => "Refused by Windows",
         FindingStatus.OnKeepList => "On your keep list",
+        FindingStatus.MailStoresHeldBack => "Outlook data kept",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.

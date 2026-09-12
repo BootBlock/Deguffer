@@ -202,6 +202,7 @@ public sealed partial class FindingViewModel : ObservableObject
                 { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
                 { HasRefusedContent: true } => FindingStatus.RefusedByWindows,
                 { HoldsKeepListItems: true } => FindingStatus.OnKeepList,
+                { HoldsMailStores: true } => FindingStatus.MailStoresHeldBack,
                 _ => FindingStatus.AlreadyClear,
             }
             : CanBeSelected

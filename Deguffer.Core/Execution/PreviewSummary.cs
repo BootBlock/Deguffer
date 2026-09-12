@@ -115,6 +115,8 @@ public static class PreviewSummary
             "Nothing to reclaim, and Windows would not let Deguffer remove what some of these hold.",
         FindingStatus.OnKeepList =>
             "Nothing to reclaim, and some of these hold only items on your keep list.",
+        FindingStatus.MailStoresHeldBack =>
+            "Nothing to reclaim, and some of these hold Outlook data files, which Deguffer never removes.",
         FindingStatus.AwaitingSourceFolders =>
             "Nothing to reclaim, and some of these locations need a source folder before Deguffer "
             + "can look.",

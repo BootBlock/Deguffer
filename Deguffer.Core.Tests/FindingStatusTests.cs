@@ -25,6 +25,7 @@ public sealed class FindingStatusTests
     [InlineData(FindingStatus.RecentContentHeldBack)]
     [InlineData(FindingStatus.RefusedByWindows)]
     [InlineData(FindingStatus.OnKeepList)]
+    [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
     public void OnlyTheClearStateSaysAlreadyClear(FindingStatus status)

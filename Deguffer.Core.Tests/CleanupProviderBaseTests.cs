@@ -82,6 +82,70 @@ public sealed class CleanupProviderBaseTests : IDisposable
     }
 
     /// <summary>
+    /// §9's store becomes a protection on every provider's plan, stamped where the guard is, so the
+    /// run proves it survived. Both halves of §5.6: a clean leaves it and passes, and a store that
+    /// went anyway fails the run — which is what an over-broad removal would look like.
+    /// </summary>
+    [Fact]
+    public async Task EveryPlanProtectsTheStoresItFoundAndARunThatLostOneFailsVerification()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        Directory.CreateDirectory(Path.Combine(caches, "saved"));
+        var archive = Path.Combine(caches, "saved", "archive.pst");
+        File.WriteAllBytes(archive, new byte[4096]);
+        File.WriteAllBytes(Path.Combine(caches, "modules.bin"), new byte[4096]);
+
+        var provider = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var plan = await provider.PlanAsync();
+
+        var protection = Assert.Single(plan.ProtectedPaths, p => p.Withheld == Withholding.MailStore);
+        Assert.Equal(archive, protection.Path);
+        Assert.True(plan.HoldsMailStores);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(archive), "an Outlook data file was deleted");
+        Assert.True(result.Verification!.Passed);
+
+        // The same promise, broken from outside the removal: the check has to see it.
+        File.Delete(archive);
+        var verification = await provider.VerifyAsync(plan);
+
+        Assert.Contains(verification.Failures, f => f.Path.Equals(archive, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A tool's own command cannot be told to leave one file, so a store inside its cache withholds
+    /// it — and no provider has to remember to say so. The stores a plan's measurements met are
+    /// collected here, beside the guard, and given to every command whose reach holds them.
+    /// </summary>
+    [Fact]
+    public async Task AToolsOwnCommandIsWithheldWhenItsCacheHoldsAStore()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        Directory.CreateDirectory(Path.Combine(cache, "_cacache", "content-v2"));
+        File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
+        var archive = Path.Combine(cache, "archive.pst");
+        File.WriteAllBytes(archive, new byte[4096]);
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.Steps, s => s is RunCommandStep);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(archive, StringComparison.OrdinalIgnoreCase)
+            && p.Withheld == Withholding.MailStore);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("archive.pst", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(runner.Invocations, i => i.Arguments.Contains("cache clean", StringComparison.Ordinal));
+        Assert.True(File.Exists(archive));
+    }
+
+    /// <summary>
     /// The guard is stamped onto whatever a provider hands back, rather than by each provider.
     ///
     /// There are fifty places a provider constructs a plan, and a plan that reached the executor

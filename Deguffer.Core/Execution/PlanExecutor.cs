@@ -110,6 +110,21 @@ public sealed class PlanExecutor(
         // reports that axis.
         var before = (step.MeasuredBefore ?? step.Estimated).Reclaimable;
 
+        // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
+        // told to leave one file and a store can arrive between the preview and the clean. See
+        // MailStoreSearch for what the look costs and why it is paid here.
+        if (await StoresInsideAsync(step.MeasuredPaths, ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"Not run: an Outlook data file is inside what this command clears, at {MailStorePlan.Name(stores)}. "
+                + "The tool cannot be told to leave it, and Deguffer never removes one.",
+                MailStores: stores.Count);
+        }
+
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
         // From the disk, never from the volume snapshot. Nothing invalidates that snapshot between
@@ -184,6 +199,21 @@ public sealed class PlanExecutor(
                 BytesReclaimed: 0,
                 Refusals.None,
                 "Nothing was removed: this is not the path of a Recycle Bin on a drive.");
+        }
+
+        // §9, for the reason the guard is refused above: Windows empties the bin whole, and a store
+        // deleted into it since the preview would go with everything else. Looked for on the disk,
+        // because the plan was made before it arrived.
+        if (await StoresInsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"Nothing was removed: this Recycle Bin holds an Outlook data file, at {MailStorePlan.Name(stores)}. "
+                + "Windows empties a bin whole, and Deguffer never removes one.",
+                MailStores: stores.Count);
         }
 
         // The last honest moment to stop: the call itself cannot be cancelled once it starts, and
@@ -425,6 +455,18 @@ public sealed class PlanExecutor(
             message,
             EntriesRemoved: removal.Took ? 1 : 0);
     }
+
+    /// <summary>
+    /// The stores inside <paramref name="paths"/> now, off the calling thread: the folders asked about
+    /// can hold hundreds of thousands of entries, and the caller may be resuming on the UI thread.
+    /// </summary>
+    private static Task<List<string>> StoresInsideAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
+        Task.Run(
+            () => paths
+                .SelectMany(path => MailStoreSearch.Under(path, WindowsFileSystem.Default, ct))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            ct);
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {

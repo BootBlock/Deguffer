@@ -176,6 +176,61 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains("Outlook data file", step.Message!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A plan is made minutes before it runs, and a store can arrive in between — an archive saved
+    /// into a cache folder while the preview sat on screen. A tool's own command cannot leave it, so
+    /// the executor looks on the disk again immediately before it runs one, as it asks the guard
+    /// again before it deletes a file.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunAToolsCommandWhenAStoreArrivedInsideWhatItClearsAfterThePreview()
+    {
+        var cache = _temp.CreateDirectory("npm-cache");
+        _temp.CreateFile(4096, "npm-cache", "_cacache", "blob");
+
+        var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
+        {
+            Estimated = new ScanSize(4096, 4096),
+            MeasuredPaths = [cache],
+        };
+
+        var archive = _temp.CreateFile(8192, "npm-cache", "saved", "archive.pst");
+
+        var runner = new FakeProcessRunner();
+        var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Empty(runner.Invocations);
+        Assert.False(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.Contains(archive, step.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(archive));
+    }
+
+    /// <summary>The same for a Recycle Bin Windows would empty whole: a store deleted into it after the preview.</summary>
+    [Fact]
+    public async Task DoesNotEmptyABinWhenAStoreArrivedInItAfterThePreview()
+    {
+        var volume = _temp.CreateDirectory("volumes", "D");
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+        var store = _temp.CreateFile(8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RA1B2C3.pst");
+
+        var emptier = new FakeRecycleBinEmptier();
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, emptier);
+        var result = await executor.ExecuteAsync(
+            PlanDeleting(new EmptyRecycleBinStep(bin, "A bin")), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Empty(emptier.VolumeRoots);
+        Assert.False(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+        Assert.True(File.Exists(store));
+        Assert.True(Directory.Exists(volume));
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",
