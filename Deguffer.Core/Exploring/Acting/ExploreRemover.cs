@@ -32,7 +32,15 @@ public sealed record ExploreItem(string Path, bool IsDirectory, long Bytes);
 /// What happened, written for the user. On a refusal it is the policy's own sentence, because §7.1
 /// requires a refusal to state its reason rather than to grey something out.
 /// </param>
-public sealed record ExploreItemOutcome(string Path, bool Removed, long Bytes, string Message);
+public sealed record ExploreItemOutcome(string Path, bool Removed, long Bytes, string Message)
+{
+    /// <summary>
+    /// The Outlook mail stores a removal of this item found inside it and left where they were (§9).
+    /// §5.6 asserts each is still there, because a store inside the item is not beside it, and the
+    /// check on what stood beside the item says nothing about it.
+    /// </summary>
+    public IReadOnlyList<string> MailStores { get; init; } = [];
+}
 
 /// <summary>What one Explore removal did, and the §5.6 evidence that it did no more.</summary>
 /// <param name="Cancelled">
@@ -235,6 +243,27 @@ public static class ExploreRemover
     {
         if (mode == ExploreRemovalMode.RecycleBin)
         {
+            // §9 one level up. A folder is not a store, so the policy allows it, and the shell moves a
+            // folder whole: any store inside it would go along, one emptied bin from gone. The policy
+            // is asked about paths and cannot look inside, so the look is taken here, immediately
+            // before the shell is asked, and a refusal names the store. A link is moved as a link and
+            // takes nothing on its far side, so nothing is looked for through one.
+            //
+            // It is not said before the confirmation, and that is a stated boundary rather than an
+            // oversight: knowing it beforehand means a walk of the folder on every change of selection,
+            // and this look is the one that decides.
+            if (item.IsDirectory
+                && !fs.IsReparsePoint(LongPath.Extended(item.Path))
+                && MailStoreSearch.Under(item.Path, fs, ct) is { Count: > 0 } stores)
+            {
+                return new ExploreItemOutcome(
+                    item.Path,
+                    Removed: false,
+                    Bytes: 0,
+                    $"'{Path.GetFileName(item.Path)}' holds an Outlook data file, at {MailStorePlan.Name(stores)}. "
+                    + "Moving the folder to the Recycle Bin would take it along, and Deguffer never removes one.");
+            }
+
             // The display form, normalised: the shell namespace refuses the extended-length prefix
             // §6.3 requires everywhere else. IRecycleBin says why that is a second seam rather than
             // an argument to the first.
@@ -268,14 +297,19 @@ public static class ExploreRemover
         var tree = await DirectoryRemover.RemoveAsync(item.Path, MinimumAge.Off, progress: null, ct, fs).ConfigureAwait(false);
 
         // A folder whose root went held nothing refused, because a refused file or folder keeps every
-        // folder above it standing. So only the partial case has anything to say about what stayed.
+        // folder above it standing. So only the partial case has anything to say about what stayed —
+        // and an Outlook mail store the removal stepped over keeps its folders standing the same way.
         return new ExploreItemOutcome(
             item.Path,
             tree.RootRemoved,
             tree.BytesReclaimed,
             tree.RootRemoved
                 ? "Deleted."
-                : $"Partly deleted{LeftInPlace.Clauses(tree.Refused, tree.RefusedFolders, kept: 0)}, so the folder is still there.");
+                : $"Partly deleted{LeftInPlace.Clauses(tree.Refused, tree.RefusedFolders, kept: 0, mailStores: tree.MailStores.Count)}, "
+                  + "so the folder is still there.")
+        {
+            MailStores = tree.MailStores,
+        };
     }
 
     /// <summary>
@@ -368,6 +402,19 @@ public static class ExploreRemover
                     "NOT ESTABLISHED — this folder would not list its contents, so nothing beside "
                     + "the removed item could be checked.")
                 : SiblingsSurvived(parent, names, removed, fs));
+        }
+
+        // §9's stores, asserted by path. They were inside the item rather than beside it, so neither
+        // check above is about them, and a removal that took one would otherwise pass.
+        foreach (var store in outcomes.SelectMany(o => o.MailStores))
+        {
+            var stayed = LongPath.FileExists(store);
+
+            checks.Add(new VerificationCheck(
+                store,
+                "An Outlook data file inside the removed item must survive.",
+                stayed ? VerificationOutcome.Survived : VerificationOutcome.Failed,
+                stayed ? "Still present." : "MISSING — it was left out of the removal and is gone."));
         }
 
         return new VerificationResult { Checks = checks };

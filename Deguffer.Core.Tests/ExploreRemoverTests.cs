@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -253,6 +254,84 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.Equal(mailbox, Assert.Single(report.Refused).Path);
         Assert.Contains("Outlook", report.Summary, StringComparison.Ordinal);
         Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
+    /// §9 one level up. A folder is not a store, so the policy allows it, and the shell moves a
+    /// folder to the Recycle Bin whole — taking any store inside it, and putting it one emptied bin
+    /// away from gone. So the remover looks inside first, and refuses with the store's name rather
+    /// than asking the shell anything.
+    /// </summary>
+    [Fact]
+    public async Task RefusesToMoveAFolderHoldingAStoreToTheRecycleBinAndSaysWhich()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "old mail");
+        var store = _temp.CreateFile(64, "profile", "Downloads", "old mail", "2014", "archive.pst");
+        _temp.CreateFile(32, "profile", "Downloads", "old mail", "notes.txt");
+        var bin = new FakeRecycleBin();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin);
+
+        Assert.Empty(bin.Paths);
+        Assert.True(LongPath.FileExists(store), "a folder holding a data file was moved to the Recycle Bin");
+        Assert.True(LongPath.DirectoryExists(folder));
+
+        var refused = Assert.Single(report.Refused);
+        Assert.Contains(store, refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
+    /// The permanent route can step over the store, so it does: everything else in the folder goes,
+    /// the store and the folders holding it stay, and §5.6 proves the store is still there — which
+    /// the siblings check alone never would, because the store is inside the item rather than beside
+    /// it.
+    /// </summary>
+    [Fact]
+    public async Task APermanentRemovalOfAFolderLeavesTheStoreInsideItAndProvesItStayed()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "old mail");
+        var store = _temp.CreateFile(64, "profile", "Downloads", "old mail", "2014", "archive.pst");
+        var notes = _temp.CreateFile(32, "profile", "Downloads", "old mail", "notes.txt");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+            ExploreRemovalMode.Permanent,
+            _policy);
+
+        Assert.True(LongPath.FileExists(store), "a data file inside the folder was deleted");
+        Assert.True(LongPath.DirectoryExists(Path.GetDirectoryName(store)!));
+        Assert.False(LongPath.FileExists(notes));
+
+        var outcome = Assert.Single(report.Refused);
+        Assert.Contains("1 Outlook data file(s) left alone", outcome.Message, StringComparison.Ordinal);
+
+        Assert.Contains(report.Verification.Checks, check =>
+            check.Path.Equals(store, StringComparison.OrdinalIgnoreCase)
+            && check.Outcome == VerificationOutcome.Survived);
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>The over-reach direction: a folder holding only a name that resembles a store is recycled as usual.</summary>
+    [Fact]
+    public async Task MovesAFolderHoldingOnlyALookalikeToTheRecycleBin()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "exports");
+        _temp.CreateFile(32, "profile", "Downloads", "exports", "archive.pst.txt");
+        var bin = new FakeRecycleBin();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 32)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin);
+
+        Assert.Equal(folder, Assert.Single(bin.Paths));
+        Assert.Single(report.Removed);
     }
 
     /// <summary>

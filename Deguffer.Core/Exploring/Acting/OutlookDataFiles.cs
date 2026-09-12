@@ -42,17 +42,17 @@ internal static class OutlookDataFiles
     /// <param name="target">A path already through <see cref="LongPath.Configured(string?)"/>.</param>
     public static ExploreVerdict? Refusal(string target)
     {
-        switch (Path.GetExtension(target).ToLowerInvariant())
+        // Which files are stores is MailStore's to say, once for every route. What is said about each
+        // kind is Explore's, because only here is a store refused to somebody's face.
+        if (MailStore.Is(target))
         {
-            case ".ost":
-                return ExploreVerdict.Refuse(
+            return Path.GetExtension(target).Equals(".ost", StringComparison.OrdinalIgnoreCase)
+                ? ExploreVerdict.Refuse(
                     "This is Outlook's offline copy of a mailbox. Most of it is rebuilt from the server, "
                     + "but Outlook keeps the items it could not synchronise only in this file, and "
                     + "Deguffer cannot tell whether any are in it, so it never removes one. Outlook's "
-                    + "'Mail to keep offline' setting is the supported way to make it smaller.");
-
-            case ".pst":
-                return ExploreVerdict.Refuse(
+                    + "'Mail to keep offline' setting is the supported way to make it smaller.")
+                : ExploreVerdict.Refuse(
                     "This is an Outlook data file: an archive, a POP or IMAP account's mail, or items "
                     + "moved off a mail server. It is often the only copy of that mail, so Deguffer "
                     + "never removes one. Outlook's 'Compact Now', in the data file's own settings, is "
