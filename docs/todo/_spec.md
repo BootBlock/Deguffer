@@ -9,7 +9,7 @@
 **Deguffer** is a small Windows utility — **C# 14 / .NET 10 / WinUI 3** — that finds and reclaims
 wasted disk space, with a safety model good enough to trust unattended. It recognises what specific
 locations on a disk actually are, reports what each one costs to lose, and leaves the decision with
-the user.
+the user. It also shows where the machine's memory goes, and acts on none of it (§7.2).
 
 ## The name
 
@@ -37,6 +37,17 @@ their own disk. §7.1 adds a view that ranks by size and says so, kept deliberat
 one that classifies, because the failure this paragraph describes is a size ranking presented as a
 recommendation.
 
+Memory is the other thing a Windows machine runs short of, and a user who wants to know what is
+using theirs should not have to leave for a different program to find out. The subject has the same
+trap in another form. Low free memory is Windows working as designed, because it fills memory
+nothing else needs with cache. The tools that make a free-memory figure rise do it by trimming
+working sets and purging the standby list, and the pages come back as page faults, read from disk
+again once they have been purged or reused. The failures a user does feel are commit charge reaching
+the commit limit, when allocations start to fail, and sustained hard faulting with the disk load to
+match. §7.2 draws where physical memory goes and leads with commit charge, the one of the two a
+single figure states. In its first phase it acts on none of it.
+[memory-view.md](memory-view.md) records the investigation it rests on.
+
 The evidence below comes from auditing one real workstation (Windows 11, ~330 GB system drive) that
 had reached **5.6 GB free**. Targeted cleanup of three package-manager caches recovered **22.9 GB**
 in a few minutes, without touching a single piece of user data.
@@ -54,6 +65,9 @@ in a few minutes, without touching a single piece of user data.
 - Be fast enough to scan a full drive without the user walking away.
 - **Show where the space actually went**, as a picture of the whole drive, without implying that
   any of what it shows is safe to remove. See §7.1.
+- **Show where memory goes**, as a picture of physical memory led by commit charge against the
+  commit limit, without implying that any process, service or part of Windows is safe to close.
+  See §7.2.
 
 **Non-goals**
 
@@ -64,6 +78,14 @@ in a few minutes, without touching a single piece of user data.
 - No automatic/scheduled deletion in v1. Nothing is removed without explicit confirmation.
 - Not a Windows component cleaner — `WinSxS` and `Windows\Installer` are deliberately out of scope
   (see §9).
+- Not a RAM cleaner, in any form. The memory view never trims a working set, never purges or
+  flushes the standby list or any other memory list, and never offers any other way to push pages
+  out of memory while the programs using them go on running. Windows reclaims those pages when it
+  needs them, and pages pushed out early come back as page faults, read from disk again once they
+  have been purged or reused.
+- No service control from the memory view. It never starts, stops, pauses or reconfigures a service.
+  It is not where Deguffer decides whether to control services at all: that question is open in
+  [unreached-locations.md](unreached-locations.md), for the one disk case that needs it.
 
 ---
 
@@ -409,6 +431,77 @@ not the shell asked.
 - **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
   Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
   acceptable where it draws a picture — provided the picture states which it is.
+
+### 7.2 Memory — where the memory goes
+
+Storage answers **"what is safe to remove"**, and Explore answers **"where did the space go"**. Memory
+answers **"where is the memory going"**, for physical memory rather than a drive, and it is a
+destination of its own for the reason Explore is. [memory-view.md](memory-view.md) is the
+investigation behind every rule here, with what was measured and what was not.
+
+As with the rest of this document, what follows is the target. The first phase is a read-only view:
+it closes, stops and terminates nothing. [memory-view-plan.md](memory-view-plan.md) states the order
+it is built in.
+
+- **Memory carries §7.1's discipline.** It never classifies: it reports a name and a number, and
+  never says that a process, a service or a part of Windows is unneeded, idle or safe to close. It
+  never pre-selects anything, and never orders anything by how closable it is. What it shows and what
+  it would act on are different sets, and in the first phase the second one is empty.
+- **The headline is commit charge against the commit limit, with available memory beside it.** Low
+  free memory is normal: Windows fills memory nothing else needs with cache, and standby pages are
+  available the moment something asks for them. Of the two failures a user feels, commit charge
+  reaching the commit limit is the one a single figure states, and the one closing a program
+  measurably relieves. The other, sustained hard faulting, shows in disk activity rather than in any
+  figure here. A headline that led with memory "in use" would present a cache as a problem.
+- **The picture is sized by private working set, and its numbers are lower bounds that say so.** The
+  private working set is the closest single figure to what closing a program would return, and it is
+  not exact. Compressed pages are held by the compression store rather than by their owner, shared
+  pages outlive the process, a working set shrinks under pressure, and memory the kernel, drivers or
+  the compositor hold on a process's behalf is not in it.
+- **The tree has three parts.** *Applications* follows the process tree. *Services* is grouped by
+  host process and names the services each host holds: memory in a shared host cannot be divided
+  between its services, so the host is the smallest part the picture sizes. *Windows* holds the
+  compression store, the system cache, the kernel pools, and the memory no figure attributes.
+- **A parent link counts only where the creation times allow it.** Windows reuses process
+  identifiers, so a "parent" created after its child is not its parent. A process whose parent has
+  exited, or whose parent's identifier now belongs to a later process, sits at the top of its part. A
+  process with children holds memory of its own as well as theirs, so its own share is drawn as a
+  child of its own, as a folder's loose files are.
+- **Services this account may not query may be missing, and the view says so.** Windows leaves them
+  out of the service list without an error, so their hosts are drawn as ordinary processes.
+- **Memory no figure attributes is drawn and labelled, never hidden.** A picture of only what
+  processes hold accounts for part of physical memory, and a reader takes the rest for a leak, though
+  most of it is cache that is already available. So the rest is one labelled part of Windows.
+- **No page is drawn twice.** Where one figure already contains part of another, the second is not
+  drawn as a part of its own, and hover text says where its pages are counted instead. Where figures
+  read a moment apart add up to more than physical memory, the view says so, rather than drawing a
+  remainder below zero.
+- **An undocumented figure is used only once it has been checked.** A process's private working set
+  and its creation time sit in a part of the process table that Windows does not document. Before
+  either is used, it is checked against Deguffer's own process, whose answer a documented call gives:
+  the creation time exactly, and the private working set against the documented counter, with a
+  documented fallback on a Windows too old to have that counter. The two sit in the same undocumented
+  part of each record, so a check that fails for either turns both off. The view then draws no
+  process at all, because it has no size to draw one by, no parent link it can trust and no identity
+  to keep across a refresh. It says so, and still draws the figures Windows documents. It never shows
+  zero in place of a figure, because zero reads as a process holding nothing.
+- **Unelevated, the picture is incomplete, and it says which way.** The investigation measured
+  nothing elevated. The exact breakdown of physical pages probably needs administrator rights, which
+  is an inference that was not tested, so the unelevated picture draws what it can separate and puts
+  the rest in the remainder.
+- **A snapshot is stale as soon as it is read.** The view refreshes on a bounded cadence, never
+  starts a read while one is still running, and keeps what the user is looking at across a refresh by
+  process identifier and creation time, never by name.
+- **Hover text may say what one of Windows' own parts is.** It never says that anything is safe to
+  close, and it never suggests closing anything.
+- **Memory is not a RAM cleaner, in any phase, and never controls a service** (§2).
+- **An action is specified here before any of it is built.** The investigation found one that fits
+  this model: the program's own close, sent only to the visible top-level windows of a windowed
+  application in the user's own session that belong to no console host, to a process identified by
+  identifier and creation time and checked again immediately before anything is sent, with
+  everything else refused and its reason stated. Sections 7 and 10 of
+  [memory-view.md](memory-view.md) are where that specification starts. Until this section specifies
+  it, Memory has no action at all.
 
 ---
 
