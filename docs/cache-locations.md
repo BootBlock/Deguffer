@@ -2932,8 +2932,7 @@ where items moved off a mail server to keep the mailbox small end up. New ones a
 `Documents\Outlook Files` by default, and in `%LOCALAPPDATA%\Microsoft\Outlook` on older versions.
 
 **It is on an explicit exclusion list, not merely absent from an inclusion list.** No provider
-targets one, and on the Storage page that alone would be enough. It is not enough in Explore, which
-draws the whole drive by size. A `.pst` is frequently several gigabytes, which is exactly what puts it
+targets one, and that is not enough in Explore, which draws the whole drive by size. A `.pst` is frequently several gigabytes, which is exactly what puts it
 in front of somebody, and it can be saved anywhere — a data disk, a folder you named, a share — so no
 list of paths can find every one.
 
@@ -2950,6 +2949,13 @@ A name that only resembles one — `archive.pst.txt`, `archive.pstx`, a folder c
 included, is still yours to remove, as any other folder of your own content is: the refusal is for
 the file a size picture singles out and for Outlook's own folders, not for everything above them.
 Hovering any of these says what it is, and *Compact Now* is the supported way to make one smaller.
+
+**The type rule is Explore's, not the Storage page's.** No provider asks a file's type before it
+removes it, so a data file saved inside a location a provider empties goes with that location's other
+contents: the *Temporary files* row takes a closed `.pst` left in a temporary folder past its age
+limit, and a build directory takes one saved inside it. Neither is somewhere Outlook saves a data
+file. Carrying the refusal into the removal every provider shares would change what each of them
+leaves behind, so the rule stops at Explore.
 
 ### Outlook's secure temporary folder — a Tier 1 candidate that needs measuring first
 

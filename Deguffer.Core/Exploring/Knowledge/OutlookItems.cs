@@ -4,7 +4,7 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// Outlook's mail stores, and the folders Outlook keeps them in.
 ///
 /// <para>These have the job <see cref="SharedItems"/>' entries have. §9 excludes them, Explore refuses
-/// them and no provider reaches them, so a reader looking at the largest file on a business machine is
+/// them and no provider targets them, so a reader looking at the largest file on a business machine is
 /// owed what it is and the supported way to make it smaller rather than only a refusal. The
 /// <c>.ost</c> needs that most: advice to delete one is everywhere, and the reason it is wrong is not
 /// visible from the file.</para>

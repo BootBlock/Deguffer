@@ -175,9 +175,9 @@ public sealed class KnownItemsTests : IDisposable
 
     /// <summary>
     /// Outlook's mail stores and the two folders that hold them, which §9 excludes and Explore
-    /// refuses. The Storage page never mentions them, so this is the only place the app says what a
-    /// forty-gigabyte file it will not remove actually is — and it has to say it about an archive on
-    /// a data disk as much as about one in the folder Outlook suggested.
+    /// refuses. No provider targets them and the Storage page never names them, so this is the only
+    /// place the app says what a forty-gigabyte file Explore will not remove actually is — and it has
+    /// to say it about an archive on a data disk as much as about one in the folder Outlook suggested.
     /// </summary>
     [Theory]
     [InlineData(@"D:\Mail\archive.pst")]
