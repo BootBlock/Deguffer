@@ -1,7 +1,8 @@
 namespace Deguffer.Core.Memory;
 
 /// <summary>
-/// Whether a snapshot's two undocumented per-process figures may be used, and where not, why.
+/// Whether a snapshot's two undocumented per-process figures may be used, and where not, why. Under
+/// <see cref="NotOnThisArchitecture"/> the documented commit charge is off as well.
 ///
 /// <para>The private working set and the creation time sit in the part of
 /// <c>SYSTEM_PROCESS_INFORMATION</c> that <c>winternl.h</c> declares only as reserved bytes. A layout
@@ -83,7 +84,10 @@ public sealed record ProcessMemory(
 
 /// <summary>Every process one read of the process table returned.</summary>
 /// <param name="Processes">In the order Windows listed them.</param>
-/// <param name="Figures">Whether the undocumented figures in <paramref name="Processes"/> are on.</param>
+/// <param name="Figures">
+/// Whether the undocumented figures in <paramref name="Processes"/> are on, and whether the commit
+/// charge is off with them.
+/// </param>
 /// <param name="Complete">
 /// False where the walk met a record it could not read inside the buffer Windows returned, and stopped
 /// there. The processes after that point are missing, so every total drawn from this table is short.

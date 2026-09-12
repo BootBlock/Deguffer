@@ -16,7 +16,7 @@ internal static class ServiceRecordParser
 
     /// <summary>
     /// Two pointers and nine <c>DWORD</c>s, padded to the pointer size: 56 bytes in a 64-bit process
-    /// and 44 in a 32-bit one. Checked against both on Windows 11.
+    /// and 44 in a 32-bit one. Checked at both widths on one Windows 11 workstation.
     /// </summary>
     public static int EntrySize(int pointerSize) =>
         pointerSize == 8 ? 56 : (2 * pointerSize) + (9 * sizeof(uint));

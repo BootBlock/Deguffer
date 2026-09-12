@@ -3,8 +3,10 @@ namespace Deguffer.Core.Memory;
 /// <summary>
 /// What one call to <c>EnumServicesStatusEx</c> means for how much of the service list has been read.
 ///
-/// <para>The answer is the one the view states to the reader (§7.2), so it is decided here rather than
-/// inside the loop that calls Windows.</para>
+/// <para>The answer is the one the view states to the reader (§7.2), so what each call means is
+/// decided here rather than inside the loop that calls Windows. The loop keeps one rule of its own: a
+/// read still going on after as many calls as several thousand services need stops there, read in
+/// part.</para>
 /// </summary>
 internal static class ServiceListingProgress
 {

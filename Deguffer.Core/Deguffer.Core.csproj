@@ -22,8 +22,9 @@
 
   <ItemGroup>
     <!--
-      These rules are internal because nothing outside Core has any business calling them, and all
-      of them are pure functions a test is better off asking directly.
+      These rules are internal because nothing outside Core has any business calling them, and each
+      decides from inputs a test can hand it directly, where going through a public type would mean
+      going through this machine.
 
       LiveTreeInspector.Filtered decides which rows of the process table count as evidence. Driving
       it from outside would mean starting a second process at this one's own image path, and a test
