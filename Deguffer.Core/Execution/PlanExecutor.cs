@@ -263,8 +263,12 @@ public sealed class PlanExecutor(
         //
         // An empty folder taken out of a folder the guard kept standing is something achieved too, and
         // it reclaims no bytes.
+        // An Outlook mail store left where it was is something achieved for the same reason: it is the
+        // outcome §9 requires, and a folder holding nothing else would otherwise read as a failure.
+        var stores = removal.MailStores.Count;
+
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0
-            || removal.EntriesRemoved > 0;
+            || removal.EntriesRemoved > 0 || stores > 0;
 
         var message = succeeded switch
         {
@@ -274,11 +278,15 @@ public sealed class PlanExecutor(
             // held back everything this step named. Saying "Removed" here would be a false statement
             // about the user's disk, and the qualifier would not rescue it — the sentence has to be
             // about what stayed, because that is all that happened.
-            _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } =>
+            _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } && stores == 0 =>
                 $"Left alone: {removal.Kept} file(s) changed too recently"
                 + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, kept: 0)}.",
 
-            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept)}.",
+            // The same shape with a store among what stayed, which the guard's sentence would misname.
+            _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } =>
+                $"Nothing was removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, mailStores: stores)}.",
+
+            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, mailStores: stores)}.",
         };
 
         return new StepOutcome(
@@ -289,7 +297,8 @@ public sealed class PlanExecutor(
             message,
             removal.Kept,
             EntriesRemoved: removal.EntriesRemoved,
-            RefusedFolders: removal.RefusedFolders);
+            RefusedFolders: removal.RefusedFolders,
+            MailStores: stores);
     }
 
     /// <summary>
@@ -326,8 +335,10 @@ public sealed class PlanExecutor(
 
         // A folder Windows refused is a refusal as much as a file is. Without it, a clear whose only
         // outcome was a folder a program is working in would pass as a folder that held nothing.
+        var stores = removal.MailStores.Count;
+
         var succeeded = removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
-            || removal.Spared > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty);
+            || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty);
 
         // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
         // bytes, and it was still cleared.
@@ -336,15 +347,15 @@ public sealed class PlanExecutor(
             (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
-            // touch, and entries something is using. "Cleared" would be a false statement about a
-            // folder that is exactly as full as it was.
-            (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 =>
+            // touch, entries something is using, and Outlook mail stores. "Cleared" would be a false
+            // statement about a folder that is exactly as full as it was.
+            (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 || stores > 0 =>
                 "Nothing was cleared"
-                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared)}.",
+                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores)}.",
 
             (true, 0, 0) => "It held nothing to clear.",
 
-            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared)}.",
+            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores)}.",
         };
 
         return new StepOutcome(
@@ -356,7 +367,8 @@ public sealed class PlanExecutor(
             removal.Kept,
             removal.Spared,
             removal.EntriesRemoved,
-            removal.RefusedFolders);
+            removal.RefusedFolders,
+            stores);
     }
 
     private async Task<StepOutcome> DeleteAsync(
@@ -385,6 +397,20 @@ public sealed class PlanExecutor(
                 Refusals.None,
                 "Left alone: it changed too recently.",
                 Kept: 1);
+        }
+
+        // The same success for the same reason: a store is never removed, so leaving it is the step
+        // doing what it must. Nothing asked Windows anything here either, so the record stays as it
+        // was.
+        if (removal.MailStore)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: true,
+                BytesReclaimed: 0,
+                Refusals.None,
+                "Left alone: it is an Outlook data file, and Deguffer never removes one.",
+                MailStores: 1);
         }
 
         refusals.Replace(step.Path, removal.Refused.IsEmpty ? [] : [step.Path]);

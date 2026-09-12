@@ -270,4 +270,39 @@ public sealed class FileRemoverTests : IDisposable
         Assert.True(outcome.Removed);
         Assert.Equal(4096, outcome.BytesReclaimed);
     }
+
+    /// <summary>
+    /// §9 at the one remover that is handed a file by name. Whatever named it — a provider's step, a
+    /// shell that skipped the policy — an Outlook mail store stays, and the outcome says why rather
+    /// than reading as a refusal or as the guard.
+    /// </summary>
+    [Theory]
+    [InlineData("archive.pst")]
+    [InlineData("someone@example.com.OST")]
+    public async Task LeavesAnOutlookDataFileItIsAskedToRemove(string name)
+    {
+        var file = TempDirectory.Age(_temp.CreateFile(4096, "Downloads", name), TimeSpan.FromDays(90));
+
+        var outcome = await FileRemover.RemoveAsync(file);
+
+        Assert.True(File.Exists(file), "an Outlook data file was deleted");
+        Assert.True(outcome.MailStore);
+        Assert.False(outcome.Removed);
+        Assert.False(outcome.Kept);
+        Assert.True(outcome.Refused.IsEmpty);
+        Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    /// <summary>The over-reach direction: a name that only resembles a store is an ordinary file.</summary>
+    [Fact]
+    public async Task RemovesAFileWhoseNameOnlyResemblesOne()
+    {
+        var file = _temp.CreateFile(4096, "Downloads", "archive.pst.txt");
+
+        var outcome = await FileRemover.RemoveAsync(file);
+
+        Assert.False(File.Exists(file));
+        Assert.False(outcome.MailStore);
+        Assert.True(outcome.Removed);
+    }
 }

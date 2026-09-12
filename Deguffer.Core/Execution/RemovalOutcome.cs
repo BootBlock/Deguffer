@@ -55,6 +55,17 @@ public sealed record RemovalOutcome(
     public IReadOnlyList<string> LeftStanding { get; init; } = [];
 
     /// <summary>
+    /// The Outlook mail stores this removal found and left where they were, in display form, because
+    /// Deguffer never removes one (see <see cref="Safety.MailStore"/>). The folders holding them are
+    /// in <see cref="LeftStanding"/> for the reason any folder holding something is.
+    ///
+    /// <para>Paths rather than a count, because what stayed is the evidence a caller checks
+    /// afterwards: Explore asserts each is still on the disk, where it has no plan to name them in
+    /// advance.</para>
+    /// </summary>
+    public IReadOnlyList<string> MailStores { get; init; } = [];
+
+    /// <summary>
     /// The folders in <see cref="LeftStanding"/> that Windows refused for a reason of their own, by
     /// reason. See <see cref="FolderRefusals"/> for why a folder held up by what it holds is not
     /// counted. A link left standing is not counted either, for the reason a refused file link is not:

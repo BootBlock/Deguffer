@@ -20,12 +20,18 @@ namespace Deguffer.Core.Execution;
 /// deletion reached it: <paramref name="Removed"/> is still true then, because the path is gone, and
 /// nothing was taken. See <see cref="RemovalOutcome.EntriesRemoved"/>.
 /// </param>
+/// <param name="MailStore">
+/// Whether it was left alone because it is an Outlook mail store, which Deguffer never removes. A
+/// fourth answer rather than a kind of <paramref name="Kept"/>, because it is neither a setting the
+/// user chose nor Windows refusing, and the sentence that reports it says which.
+/// </param>
 public sealed record FileRemovalOutcome(
     long BytesReclaimed,
     Refusals Refused,
     bool Removed,
     bool Kept = false,
-    bool Took = false);
+    bool Took = false,
+    bool MailStore = false);
 
 /// <summary>
 /// Deletes one named file.
@@ -83,6 +89,14 @@ public static class FileRemover
         if (fs.DirectoryExists(extended))
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false);
+        }
+
+        // §9: an Outlook mail store is never removed, whoever named it. Asked after the link branch,
+        // because a link named like a store is removed as a link and leaves the store it points at,
+        // and before the guard, because the rule is unconditional and the guard is a preference.
+        if (MailStore.Is(extended))
+        {
+            return new FileRemovalOutcome(0, Refusals.None, Removed: false, MailStore: true);
         }
 
         // The guard, on the file this step actually names. Asked after the link and directory
