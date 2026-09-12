@@ -38,7 +38,7 @@ public static class IcicleLayout
     /// indexes what it is given once per rectangle per band of every repaint.</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
-        ExploreTree tree,
+        ISizedTree tree,
         int root,
         float width,
         float height,
@@ -76,7 +76,7 @@ public static class IcicleLayout
                 frame.Width,
                 rowHeight));
 
-            if (frame.Depth >= deepest || !tree.IsDirectory(frame.Node))
+            if (frame.Depth >= deepest || !tree.IsContainer(frame.Node))
             {
                 continue;
             }
@@ -104,7 +104,7 @@ public static class IcicleLayout
     /// ends either short of the edge or over it.</para>
     /// </summary>
     private static void Partition(
-        ExploreTree tree,
+        ISizedTree tree,
         int parent,
         int depth,
         float x,

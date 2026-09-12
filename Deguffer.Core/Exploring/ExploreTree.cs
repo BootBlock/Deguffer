@@ -10,8 +10,11 @@ namespace Deguffer.Core.Exploring;
 /// <para>This holds no knowledge of drawing, of tiers, or of what may be deleted. It answers "what
 /// is under this node, how big is it, and when was it touched", and nothing else — which is what
 /// lets one tree serve a treemap, a sunburst and a list without any of them being privileged.</para>
+///
+/// <para>It is drawn through <see cref="Layout.ISizedTree"/>, which is the part of it a layout reads.
+/// The other tree behind that seam is <see cref="Memory.MemoryTree"/>.</para>
 /// </summary>
-public sealed class ExploreTree
+public sealed class ExploreTree : Layout.ISizedTree
 {
     private readonly string[] _names;
     private readonly int[] _parents;
@@ -100,6 +103,12 @@ public sealed class ExploreTree
     public long SizeOf(int node) => _sizes[node];
 
     public bool IsDirectory(int node) => _isDirectory[node];
+
+    /// <summary>
+    /// What a layout descends into. A directory is one even when it is empty, which is what keeps an
+    /// empty folder from reading as a file.
+    /// </summary>
+    bool Layout.ISizedTree.IsContainer(int node) => IsDirectory(node);
 
     /// <summary>
     /// Whether this node is a junction, a symbolic link or another name surrogate. Its target keeps

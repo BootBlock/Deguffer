@@ -11,6 +11,7 @@ public sealed class SunburstSurface : ExploreSurface
 {
     private readonly SectorHitTest _hits;
 
+    /// <summary>A drawing of a scanned drive, coloured by branch or by age.</summary>
     public SunburstSurface(
         ExploreTree tree,
         int root,
@@ -19,7 +20,19 @@ public sealed class SunburstSurface : ExploreSurface
         LayoutLimits limits,
         ExploreColouring colouring,
         DateTime nowUtc)
-        : base(tree, root, width, height, limits, colouring, nowUtc)
+        : this(tree, root, width, height, limits, ShapeColours.For(tree, colouring, nowUtc))
+    {
+    }
+
+    /// <summary>A drawing of any tree a layout can lay out. See <see cref="ShapeColours"/>.</summary>
+    public SunburstSurface(
+        ISizedTree tree,
+        int root,
+        int width,
+        int height,
+        LayoutLimits limits,
+        ShapeColours colours)
+        : base(tree, root, width, height, limits, colours)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
 

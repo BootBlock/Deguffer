@@ -44,7 +44,7 @@ public static class SunburstLayout
     /// <para>Throws for a tree whose children are not ordered by size, as
     /// <see cref="TreemapLayout"/> does. See <see cref="ExploreChildOrder"/>.</para>
     /// </summary>
-    public static Sunburst Compute(ExploreTree tree, int root, float width, float height, LayoutLimits limits)
+    public static Sunburst Compute(ISizedTree tree, int root, float width, float height, LayoutLimits limits)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.RowHeight);
@@ -98,7 +98,7 @@ public static class SunburstLayout
 
             if (frame.Node == ExploreSector.Aggregated
                 || frame.Depth + 1 >= rings
-                || !tree.IsDirectory(frame.Node))
+                || !tree.IsContainer(frame.Node))
             {
                 continue;
             }
@@ -124,7 +124,7 @@ public static class SunburstLayout
     /// <see cref="LayoutLimits.MinimumTileSize"/> is as much about that as about drawing.</para>
     /// </summary>
     private static void Partition(
-        ExploreTree tree,
+        ISizedTree tree,
         int parent,
         int depth,
         double start,

@@ -13,6 +13,7 @@ public sealed class TiledSurface : ExploreSurface
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
 
+    /// <summary>A drawing of a scanned drive, coloured by branch or by age.</summary>
     public TiledSurface(
         ExploreTree tree,
         int root,
@@ -22,7 +23,20 @@ public sealed class TiledSurface : ExploreSurface
         ExploreColouring colouring,
         DateTime nowUtc,
         IReadOnlyList<ExploreTile> tiles)
-        : base(tree, root, width, height, limits, colouring, nowUtc)
+        : this(tree, root, width, height, limits, ShapeColours.For(tree, colouring, nowUtc), tiles)
+    {
+    }
+
+    /// <summary>A drawing of any tree a layout can lay out. See <see cref="ShapeColours"/>.</summary>
+    public TiledSurface(
+        ISizedTree tree,
+        int root,
+        int width,
+        int height,
+        LayoutLimits limits,
+        ShapeColours colours,
+        IReadOnlyList<ExploreTile> tiles)
+        : base(tree, root, width, height, limits, colours)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 

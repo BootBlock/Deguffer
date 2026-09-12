@@ -73,6 +73,10 @@ public readonly record struct ExploreOutline(int Node, IReadOnlyList<ExplorePoin
 /// drawing rather than four parallel switches in the view (G1). A fifth way of drawing a volume is
 /// then a new subclass, not an edit to any of them.</para>
 ///
+/// <para>Any <see cref="ISizedTree"/> can be drawn, which is how a scanned drive and a picture of
+/// memory share every layout, hit test and rasteriser. What the colours say is the one thing that
+/// depends on the tree, and <see cref="ShapeColours"/> carries it.</para>
+///
 /// <para>In Core rather than in the shell for the usual reason: none of it needs a window, and the
 /// shell has no test project (G8).</para>
 /// </summary>
@@ -98,27 +102,25 @@ public abstract class ExploreSurface
     /// </summary>
     private readonly Dictionary<int, int> _branches = [];
 
-    private readonly ExploreColouring _colouring;
-    private readonly DateTime _nowUtc;
+    private readonly ShapeColours _colours;
 
     protected ExploreSurface(
-        ExploreTree tree,
+        ISizedTree tree,
         int root,
         int width,
         int height,
         LayoutLimits limits,
-        ExploreColouring colouring,
-        DateTime nowUtc)
+        ShapeColours colours)
     {
         ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(colours);
 
         Tree = tree;
         Root = root;
         Width = width;
         Height = height;
         Limits = limits;
-        _colouring = colouring;
-        _nowUtc = nowUtc;
+        _colours = colours;
 
         var children = tree.ChildrenOf(root);
 
@@ -135,7 +137,7 @@ public abstract class ExploreSurface
     /// <summary>Where the text goes, at most <see cref="MaximumLabels"/> of them.</summary>
     public abstract IReadOnlyList<ExploreLabel> Labels { get; }
 
-    protected ExploreTree Tree { get; }
+    protected ISizedTree Tree { get; }
 
     /// <summary>The node being drawn, which is the whole canvas rather than the tree's own root.</summary>
     protected int Root { get; }
@@ -143,16 +145,10 @@ public abstract class ExploreSurface
     protected LayoutLimits Limits { get; }
 
     /// <summary>
-    /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a
-    /// canvas of <paramref name="width"/> by <paramref name="height"/> device pixels at
-    /// <paramref name="scale"/>.
-    ///
-    /// <para>The scale is applied to the thresholds here rather than by the caller, because every
-    /// one of them is stated in device-independent pixels and a layout measured in device pixels
-    /// compared against raw constants draws half-size detail on a high-DPI display.</para>
+    /// Lay <paramref name="root"/> of a scanned <paramref name="tree"/> out for
+    /// <paramref name="view"/>, coloured to say <paramref name="colouring"/>. See the overload taking
+    /// <see cref="ShapeColours"/> for everything else.
     /// </summary>
-    /// <param name="colouring">What the colours are to say: which branch a shape is in, or how long
-    /// ago it was last written.</param>
     /// <param name="nowUtc">
     /// What "now" is, for the age bands. Passed in rather than read, so a drawing coloured by age is
     /// provable without a clock (G8) — the same seam
@@ -170,6 +166,30 @@ public abstract class ExploreSurface
     {
         ArgumentNullException.ThrowIfNull(tree);
 
+        return Create(tree, root, view, width, height, scale, ShapeColours.For(tree, colouring, nowUtc));
+    }
+
+    /// <summary>
+    /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a
+    /// canvas of <paramref name="width"/> by <paramref name="height"/> device pixels at
+    /// <paramref name="scale"/>.
+    ///
+    /// <para>The scale is applied to the thresholds here rather than by the caller, because every
+    /// one of them is stated in device-independent pixels and a layout measured in device pixels
+    /// compared against raw constants draws half-size detail on a high-DPI display.</para>
+    /// </summary>
+    /// <param name="colours">What the colours are to say.</param>
+    public static ExploreSurface Create(
+        ISizedTree tree,
+        int root,
+        ExploreView view,
+        int width,
+        int height,
+        double scale,
+        ShapeColours colours)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
         var limits = LayoutLimits.Default.At(scale);
 
         // A tree still being filled in orders its children by name rather than by size, so that a
@@ -184,16 +204,16 @@ public abstract class ExploreSurface
         return drawn switch
         {
             ExploreView.Sunburst => new SunburstSurface(
-                tree, root, width, height, limits, colouring, nowUtc),
+                tree, root, width, height, limits, colours),
             ExploreView.Icicle => new TiledSurface(
-                tree, root, width, height, limits, colouring, nowUtc,
+                tree, root, width, height, limits, colours,
                 IcicleLayout.Compute(tree, root, width, height, limits)),
 
             // Including List, which draws no map at all. The page hides the map rather than telling
             // it to stop, so this is the drawing it will be showing again when the user switches
             // back, and it is the one they last saw.
             _ => new TiledSurface(
-                tree, root, width, height, limits, colouring, nowUtc,
+                tree, root, width, height, limits, colours,
                 TreemapLayout.Compute(tree, root, width, height, limits)),
         };
     }
@@ -226,7 +246,7 @@ public abstract class ExploreSurface
     /// relative to whatever the user has descended into — the same node is a branch of its own when
     /// opened, and part of a larger one when seen from above.</para>
     /// </summary>
-    protected int BranchOf(int node)
+    internal int BranchOf(int node)
     {
         var current = node;
 
@@ -242,20 +262,16 @@ public abstract class ExploreSurface
     /// What the shape for this node at this depth is painted.
     ///
     /// <para>Every colour decision the drawing makes, in one place. The rasterisers are handed this
-    /// and do no palette work of their own, so a third way of colouring a volume is a case here
-    /// rather than an edit to each of them — and, more to the point, the labels cannot come out
-    /// contrasted against a colour the shape underneath was not painted in.</para>
+    /// and do no palette work of their own, so a third way of colouring is a
+    /// <see cref="ShapeColours"/> rather than an edit to each of them — and, more to the point, the
+    /// labels cannot come out contrasted against a colour the shape underneath was not painted in.</para>
     ///
     /// <para>An aggregate is never coloured by either scheme. It is not a thing on the disk: it
     /// stands for a run of siblings too small to draw, so it belongs to no branch and has no single
     /// date. Giving it a colour that reads as one would invite the user to act on it.</para>
     /// </summary>
-    protected TileColour ColourFor(int node, int depth) => (node, _colouring) switch
-    {
-        (ExploreTile.Aggregated, _) => TilePalette.Aggregate,
-        (_, ExploreColouring.Age) => AgePalette.For(Tree.ModifiedOf(node), _nowUtc),
-        _ => TilePalette.For(BranchOf(node), depth),
-    };
+    protected TileColour ColourFor(int node, int depth) =>
+        node == ExploreTile.Aggregated ? TilePalette.Aggregate : _colours.For(this, node, depth);
 
     /// <summary>The colour text over a shape of this node at this depth has to be drawn in.</summary>
     protected TileColour TextColourFor(int node, int depth) => ColourFor(node, depth).ContrastingText;
