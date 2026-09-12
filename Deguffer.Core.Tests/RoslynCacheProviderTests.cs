@@ -168,11 +168,11 @@ public sealed class RoslynCacheProviderTests : IDisposable
 
     /// <summary>
     /// §7's age column. SQLite writes the database files in place, which moves none of the folders above
-    /// them, so the newest file anywhere in the set is the answer — here a write-ahead log in the second of
-    /// two solutions, under folders that all read as more than a year old.
+    /// them, so the answer has to reach the newest entry however deep it is — here a write-ahead log in the
+    /// second of two solutions, under folders that all read as more than a year old.
     /// </summary>
     [Fact]
-    public async Task DatesEachSetByTheNewestFileInItRatherThanByItsFolders()
+    public async Task DatesEachSetByItsNewestEntryHoweverDeepThatEntryIs()
     {
         var host = CreateHost(Cache, Host, Solution, OtherSolution);
         var longAgo = DateTime.UtcNow.AddDays(-400);
@@ -198,11 +198,47 @@ public sealed class RoslynCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// What makes each set an item worth dating: under the guard on recently changed files, the set in use
-    /// keeps its databases while a set nothing has written to in a year goes.
+    /// The folders count as well, and in the direction that keeps a set: SQLite deletes its write-ahead log
+    /// when it closes a database, which moves the folder's timestamp past every file left in it. Each level
+    /// of the set in turn is the only thing written recently.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(Solution)]
+    [InlineData(Solution + @"\sqlite3")]
+    [InlineData(Solution + @"\sqlite3\v2")]
+    public async Task AFolderNewerThanEveryFileDatesTheSet(string relative)
+    {
+        var host = CreateHost(Cache, Host, Solution);
+        var longAgo = DateTime.UtcNow.AddDays(-400);
+        var recently = DateTime.UtcNow.AddDays(-2);
+
+        foreach (var file in Directory.EnumerateFiles(host, "*", SearchOption.AllDirectories))
+        {
+            File.SetLastWriteTimeUtc(file, longAgo);
+        }
+
+        foreach (var folder in Directory.EnumerateDirectories(host, "*", SearchOption.AllDirectories).Append(host))
+        {
+            Directory.SetLastWriteTimeUtc(folder, longAgo);
+        }
+
+        Directory.SetLastWriteTimeUtc(Path.Combine(host, relative), recently);
+
+        var step = Assert.Single((await CreateProvider().PlanAsync()).Steps.OfType<DeleteDirectoryStep>());
+
+        Assert.NotNull(step.LastWritten);
+        Assert.Equal(recently, step.LastWritten!.Value, TimeSpan.FromSeconds(5));
+    }
+
+    /// <summary>
+    /// The user's guard on recently changed files reaches this provider's measurement as well as its removal:
+    /// the set whose files are recent shows them withheld and keeps them, and a set nothing has written to in
+    /// a year goes whole. The guard works file by file, so what this proves is about files, not about a set in
+    /// use as a whole.
     /// </summary>
     [Fact]
-    public async Task TheGuardOnRecentFilesKeepsTheSetInUseAndLetsAStrandedOneGo()
+    public async Task UnderTheGuardOnRecentFilesRecentFilesStayAndAStaleSetGoesWhole()
     {
         var stranded = CreateHost(Cache, OtherHost, Solution);
 

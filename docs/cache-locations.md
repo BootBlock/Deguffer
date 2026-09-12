@@ -1918,7 +1918,8 @@ on disk, and it matches Roslyn's own source code, which is where the folder name
 
 ### What Deguffer does
 
-It deletes a program's whole set, one row per set, each dated by the newest file anywhere inside it.
+It deletes a program's whole set, one row per set, each dated by the newest entry anywhere inside
+it, folders included.
 A set is deleted only when everything in it is exactly what Roslyn writes: solution folders named the
 way Roslyn names them, each holding `sqlite3\v2`, and in that the database with its three companion
 files. One file or folder that does not fit, anywhere in the set, and Deguffer leaves the whole set
@@ -1926,9 +1927,11 @@ alone and says so. Explore applies the same test before it removes a set.
 
 There is no eviction command to prefer under §5.1. Neither Visual Studio nor Roslyn offers one.
 
-**Keeping the set in use.** If you have told Deguffer to leave recently changed files alone, the set
-Visual Studio is using now keeps its databases, and the sets that older programs left behind still go.
-Each row's date shows which is which.
+**Keeping the set in use.** If you have told Deguffer to leave recently changed files alone, it leaves
+each file changed within that time where it is. A set nothing has written to within that time still
+goes whole, and the set in use keeps what it wrote recently. The index of a solution in that set that
+you have not opened within that time still goes, and is rebuilt the next time you open it. Each row's
+date shows which set is which.
 
 Nothing is removed through a link. If `Roslyn` or its `Cache` folder is a junction onto another drive,
 Deguffer removes nothing and tells you why.
@@ -1945,7 +1948,8 @@ Deguffer removes nothing and tells you why.
 | `Roslyn` and `Roslyn\Cache` | The folders the indexes are kept in. Only sets inside `Cache` go. |
 
 After every run Deguffer asserts that `VisualStudio`, `BackupFiles`, `Roslyn` and `Cache` survived,
-along with every set it left alone.
+along with every set it left alone. Explore refuses the same folders, and every other child of
+`VisualStudio`, because Deguffer does not recognise them.
 
 **Visual Studio may be running.** It holds the databases of any solution it has open, and so does the
 C# extension's language server, so Deguffer warns you when it sees either. An access-denied on a file

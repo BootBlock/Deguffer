@@ -23,9 +23,10 @@ namespace Deguffer.Core.Providers;
 /// It is never a target and is asserted to survive. Only a program's whole set inside <c>Cache</c> goes,
 /// and only once everything in it has been recognised.</para>
 ///
-/// <para><b>Each set is an item with its own age</b>, because the stranded sets are the ones worth removing
-/// and the one in use is the one worth keeping. The user's guard on recently changed files already says
-/// that without anything new here: under it, the current set's databases stay and the stranded sets go.</para>
+/// <para><b>Each set is an item with its own age</b>, because a stranded set is worth removing whole and the
+/// set in use is worth keeping. The user's guard on recently changed files needs nothing new here, and it
+/// works file by file: a set nothing has written to within the window goes whole, and the set in use keeps
+/// what it wrote within the window — though the index of a solution nobody opened in that time still goes.</para>
 /// </summary>
 public sealed class RoslynCacheProvider : CleanupProviderBase
 {
@@ -56,8 +57,8 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
     /// <summary>
-    /// One program's set per item, each dated, so a set an old build left behind can be told from the one
-    /// in use.
+    /// One program's set per item, each dated, so a set left behind when its program moved to another folder
+    /// can be told from the one in use.
     /// </summary>
     public override StepGrain Grain => StepGrain.Items;
 
@@ -76,9 +77,9 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
             + "separate set for each program that runs it, and a program that starts running from a new "
             + "folder, as an update can, starts a new set and never removes the old one.",
         Recommendation = "Everything here is derived from source code still on your disk, and Roslyn "
-            + "rebuilds what it needs the next time a solution is opened. Each row is one program's set "
-            + "with the date it was last written, so a set nothing has used in a year can go while the "
-            + "one in use stays.",
+            + "rebuilds what it needs the next time a solution is opened. Each row is one set of indexes "
+            + "with the date it was last written, so a set nothing has used in a year can be told from "
+            + "the one in use.",
     };
 
     /// <summary>
@@ -92,11 +93,13 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
     public string CachePath => _cache;
 
     /// <summary>
-    /// Two levels, because §5.2's declaration covers one directory's immediate children. <c>Roslyn</c>
-    /// recognises nothing, so <c>Cache</c> itself is refused along with anything beside it, and <c>Cache</c>
-    /// recognises a program's set only by what it holds.
+    /// Three levels, because §5.2's declaration covers one directory's immediate children, and §7.1 has
+    /// Explore refuse every path this provider names as protected. <c>VisualStudio</c> and <c>Roslyn</c>
+    /// recognise nothing, so Explore refuses Visual Studio's own folder, its <c>BackupFiles</c> and every
+    /// other child, <c>Roslyn</c>, and <c>Cache</c> itself. <c>Cache</c> recognises a program's set only by
+    /// what it holds, and Explore asks the innermost root, so a recognised set is still removable there.
     ///
-    /// <para><b>That second test reads the disk</b>, where the other declarations read only a name. A name
+    /// <para><b>The test for <c>Cache</c> reads the disk</b>, where the other declarations read only a name. A name
     /// cannot vouch for anything here, and letting Explore remove on the name alone would allow what the plan
     /// calls Tier 4. It is asked only about a path inside <c>Cache</c>, and it lists a few small directories
     /// per solution.</para>
@@ -113,6 +116,13 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
             _roslyn,
             "This is Roslyn's own folder inside Visual Studio's. Deguffer removes indexes from the 'Cache' "
             + "folder inside it and nothing else.",
+            _ => false),
+
+        new ToolRoot(
+            _visualStudio,
+            "This is Visual Studio's own folder, holding each installation's settings and extensions and the "
+            + "recovery copies of documents that were never saved. Deguffer removes Roslyn's indexes from "
+            + "inside it and nothing else.",
             _ => false),
     ];
 

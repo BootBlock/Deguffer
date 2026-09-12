@@ -1036,6 +1036,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// rather than by its name. A directory shaped like a set that holds something else is refused, as the
     /// plan declines it, so Explore cannot remove what the Storage page calls Tier 4 — and the premise is
     /// asserted first: the impostor's name alone passes, so only its contents can refuse it.
+    ///
+    /// <para>Visual Studio's own folder is refused as well, with its unsaved-document recovery and anything
+    /// else in it, because the plan names them protected and §7.1 refuses every such path. Refusing
+    /// <c>Roslyn</c> is worth nothing while the folder holding it can go.</para>
     /// </summary>
     [Fact]
     public void RoslynsCacheIsRecognisedByWhatASetHoldsAndNothingAboveASetIsRemovable()
@@ -1059,6 +1063,12 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(cache).IsAllowed);
         Assert.False(policy.MayRemove(roslyn).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(roslyn, "something-unrecognised")).IsAllowed);
+
+        var visualStudio = Path.GetDirectoryName(roslyn)!;
+        Assert.False(policy.MayRemove(visualStudio).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(visualStudio, "BackupFiles")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(visualStudio, "BackupFiles", "Unsaved.cs")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(visualStudio, "17.0_testinstance")).IsAllowed);
     }
 
     /// <summary>
