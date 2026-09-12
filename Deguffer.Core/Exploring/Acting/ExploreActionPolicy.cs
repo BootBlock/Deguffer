@@ -20,6 +20,11 @@ namespace Deguffer.Core.Exploring.Acting;
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
 /// twice is one that gets changed once.</para>
 ///
+/// <para>Both passes answer from above, about what contains the path. A path they allow is then
+/// asked about from below: removing a folder removes everything in it, so a folder holding something
+/// either pass refuses is refused as well. <see cref="HeldLocations"/> asks that, and says why it
+/// asks the disk.</para>
+///
 /// <para>Outlook's mail stores are also refused by type, before the table is asked, because a
 /// <c>.pst</c> is wherever somebody saved it. <see cref="OutlookDataFiles"/> holds that rule and
 /// Outlook's folder, and says why both are §9's.</para>
@@ -46,6 +51,7 @@ public sealed class ExploreActionPolicy
 
     private readonly IReadOnlyList<ProtectedRegion> _regions;
     private readonly IReadOnlyList<ToolRoot> _toolRoots;
+    private readonly HeldLocations _held;
 
     /// <param name="regions">
     /// The structural table. Sorted here rather than trusted from the caller, because the
@@ -53,7 +59,14 @@ public sealed class ExploreActionPolicy
     /// resolve by declaration order instead — silently, and differently for each caller.
     /// </param>
     /// <param name="toolRoots">The §5.2 declarations, as the providers wrote them.</param>
-    public ExploreActionPolicy(IEnumerable<ProtectedRegion> regions, IEnumerable<ToolRoot> toolRoots)
+    /// <param name="fileSystem">
+    /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk. Injected so a
+    /// test can see the form of the path it is asked about (§6.3), and what a probe that fails does.
+    /// </param>
+    public ExploreActionPolicy(
+        IEnumerable<ProtectedRegion> regions,
+        IEnumerable<ToolRoot> toolRoots,
+        IFileSystem? fileSystem = null)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
@@ -74,6 +87,19 @@ public sealed class ExploreActionPolicy
         ];
 
         _toolRoots = [.. toolRoots];
+
+        // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
+        // takes it along as surely as one holding a tool's folder does. A permitting entry protects
+        // nothing, and a root that will not resolve names nothing, for the reason given above.
+        _held = new HeldLocations(
+            [
+                .. _regions.Where(r => !r.Verdict.IsAllowed).Select(r => (r.Path, r.Verdict.Reason)),
+                .. _toolRoots
+                    .Select(root => (Path: LongPath.Configured(root.Path), root.Reason))
+                    .Where(root => root.Path is not null)
+                    .Select(root => (root.Path!, root.Reason)),
+            ],
+            fileSystem ?? WindowsFileSystem.Default);
     }
 
     /// <summary>
@@ -145,15 +171,13 @@ public sealed class ExploreActionPolicy
             return mail;
         }
 
-        foreach (var region in _regions)
-        {
-            if (Covers(region, target))
-            {
-                return region.Verdict.IsAllowed ? Below(target) : region.Verdict;
-            }
-        }
+        var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
+            ? refusing.Verdict
+            : Below(target);
 
-        return Below(target);
+        // Last, and only of a path everything above allows, because it is the one question here that
+        // reads the disk.
+        return verdict.IsAllowed ? _held.Refusal(target) ?? verdict : verdict;
     }
 
     /// <summary>
@@ -411,6 +435,38 @@ public sealed class ExploreActionPolicy
             "This is your whole profile — your documents, your settings and everything Deguffer "
             + "would otherwise offer to clean. Explore removes things from inside it, never the "
             + "profile itself.");
+
+        // The folders every program keeps its state in, and the temporary folder, in the profile's
+        // shape: the folder refused, what is inside it ordinary. Providers name %LOCALAPPDATA% and
+        // %TEMP% as paths that must survive a clean, and §7.1 refuses every such path here too.
+        yield return ProtectedRegion.Refusing(
+            environment.LocalAppData,
+            RegionScope.PathOnly,
+            "This is where every program keeps its local data for your account: caches, but also "
+            + "settings, sign-ins and saved work. Explore removes things from inside it, never the "
+            + "folder itself.");
+
+        yield return ProtectedRegion.Refusing(
+            environment.RoamingAppData,
+            RegionScope.PathOnly,
+            "This is where every program keeps the settings that roam with your account. Explore "
+            + "removes things from inside it, never the folder itself.");
+
+        if (environment.LocalLowAppData is { } localLow)
+        {
+            yield return ProtectedRegion.Refusing(
+                localLow,
+                RegionScope.PathOnly,
+                "This is where programs that run with reduced rights, browsers among them, keep their "
+                + "data for your account. Explore removes things from inside it, never the folder "
+                + "itself.");
+        }
+
+        yield return ProtectedRegion.Refusing(
+            environment.TempPath,
+            RegionScope.PathOnly,
+            "This is your temporary folder. Programs expect to find it and Windows does not put it "
+            + "back, so Explore removes things from inside it, never the folder itself.");
 
         // Longer than the profile's permission, so it wins over it by the table's own ordering
         // rather than by being written as an exception.

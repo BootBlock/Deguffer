@@ -64,6 +64,9 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// comes from <c>npm config get cache</c>, and the documented default is a cache folder rather
     /// than one with configuration beside it. What it does have is a loose file, and a file is a root
     /// nothing is ever below — refused by the equality branch, and by nothing else.
+    ///
+    /// <para>The global packages folder is declared too, recognising nothing, because the plan
+    /// names it as a path that must survive and §7.1 has Explore refuse every such path.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
@@ -71,6 +74,12 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             Path.Combine(Environment.UserProfile, ".npmrc"),
             "This is your npm configuration, and it may hold registry authentication tokens. "
             + "Deguffer never removes it.",
+            static _ => false),
+
+        new ToolRoot(
+            Path.Combine(Environment.RoamingAppData, "npm"),
+            "This is where npm keeps the packages you installed globally, and the commands that run "
+            + "them. Deguffer never removes anything here.",
             static _ => false),
     ];
 
