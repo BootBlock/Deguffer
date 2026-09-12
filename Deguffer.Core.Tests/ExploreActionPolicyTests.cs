@@ -505,21 +505,23 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(nameof(IUserEnvironment.TempPath))]
     public void TheApplicationDataFoldersAndTheTemporaryFolderAreRefusedButNotWhatIsInThem(string which)
     {
-        // Inside the profile, where Windows puts it. The fake's default sits beside the profile, which
-        // the table already refuses as another account's, and would prove nothing about this entry.
-        _environment.WithTempPath(Path.Combine(_environment.LocalAppData, "Temp"));
-
+        // The temporary folder moves inside the profile, where Windows puts it, for its own row alone.
+        // The fake's default sits beside the profile, which the table already refuses as another
+        // account's; and moved for every row it would sit inside %LOCALAPPDATA% and refuse that row
+        // by what it holds, whatever that row's own entry said.
         var folder = which switch
         {
             nameof(IUserEnvironment.LocalAppData) => _environment.LocalAppData,
             nameof(IUserEnvironment.RoamingAppData) => _environment.RoamingAppData,
             nameof(IUserEnvironment.LocalLowAppData) => _environment.LocalLowAppData!,
-            _ => _environment.TempPath,
+            _ => _environment.WithTempPath(Path.Combine(_environment.LocalAppData, "Temp")).TempPath,
         };
 
         var policy = Policy();
+        var verdict = policy.MayRemove(folder);
 
-        Assert.False(policy.MayRemove(folder).IsAllowed);
+        Assert.False(verdict.IsAllowed);
+        Assert.DoesNotContain("holds", verdict.Reason, StringComparison.Ordinal);
         Assert.True(policy.MayRemove(Path.Combine(folder, "Some Program")).IsAllowed);
     }
 

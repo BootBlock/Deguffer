@@ -12,7 +12,7 @@ namespace Deguffer.Core.Exploring.Acting;
 /// nothing can test.</para>
 ///
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
-/// The first is a table of regions — the operating system's own directories, the signed-in user's
+/// The first is <see cref="ProtectedRegions"/>, a table of regions — the operating system's own directories, the signed-in user's
 /// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which is
 /// read from the path rather than from a list of drives. Apart from Outlook's folder, all of that is
 /// a fact about Windows and is stated here. The second is
@@ -122,7 +122,7 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(providers);
 
         return new ExploreActionPolicy(
-            Regions(system, environment),
+            ProtectedRegions.For(system, environment),
             providers.SelectMany(p => p.ToolRoots));
     }
 
@@ -265,8 +265,8 @@ public sealed class ExploreActionPolicy
     /// this user's own and names every other one as a path that must survive, and §7.1 refuses every
     /// such path. Refusing the bin alone left another account's deleted files one level down, and
     /// removable wherever Deguffer runs elevated. This user's own is refused too: the Storage page is
-    /// where it is emptied, and removing one of a deleted file's two halves leaves the bin describing
-    /// a file it no longer holds.</para>
+    /// where it is emptied, and a deleted file is two entries there, its contents and the record of
+    /// where it came from, so removing either leaves a file the bin cannot put back.</para>
     ///
     /// <para>By the first segment below the volume root, as <see cref="ReservedByTheFilesystem"/>
     /// asks, so a folder somebody named <c>$Recycle.Bin</c> inside their own documents stays
@@ -404,98 +404,5 @@ public sealed class ExploreActionPolicy
                 $"'{child}' is not something Deguffer recognises inside '{rootPath}'. Configuration "
                 + "and credentials sit beside a cache in a tool's own folder, so anything unrecognised "
                 + "there is left alone.");
-    }
-
-    /// <summary>
-    /// The structural table. Every entry says what it protects and why, because the reason is what
-    /// the user is shown.
-    /// </summary>
-    private static IEnumerable<ProtectedRegion> Regions(
-        ISystemDirectories system,
-        IUserEnvironment environment)
-    {
-        yield return ProtectedRegion.Refusing(
-            system.WindowsDirectory,
-            RegionScope.PathAndBelow,
-            "This is inside the Windows directory. Deguffer never removes anything there from "
-            + "Explore, and §9 of its specification excludes the component store and the installer "
-            + "cache from every route, because a wrong removal there breaks uninstall or leaves the "
-            + "machine unable to roll an update back.");
-
-        foreach (var programs in new[] { system.ProgramFiles, system.ProgramFilesX86 })
-        {
-            yield return ProtectedRegion.Refusing(
-                programs,
-                RegionScope.PathAndBelow,
-                $"This is installed software, under '{programs}'. Removing part of it leaves the "
-                + "program on the machine and broken, and its own uninstaller is what should take it "
-                + "away.");
-        }
-
-        yield return ProtectedRegion.Refusing(
-            system.ProgramData,
-            RegionScope.PathAndBelow,
-            "This is machine-wide application data, shared by every account on this computer. "
-            + "Deguffer has classified none of it, and the caches it does know about in there are "
-            + "offered on the Storage page instead, where a provider knows what they are.");
-
-        // The user's own profile, in three entries that read as one rule. The profile directory is
-        // not a thing to remove and neither is the Users folder, but everything the user keeps
-        // inside their own profile is ordinary — and another account's profile is not.
-        var users = Path.GetDirectoryName(environment.UserProfile);
-
-        if (users is not null)
-        {
-            yield return ProtectedRegion.Refusing(
-                users,
-                RegionScope.PathAndBelow,
-                "This belongs to another account on this computer, or is the folder holding every "
-                + "account's profile. Deguffer acts only inside the profile it is signed in to.");
-        }
-
-        yield return ProtectedRegion.Permitting(environment.UserProfile, RegionScope.PathAndBelow);
-
-        yield return ProtectedRegion.Refusing(
-            environment.UserProfile,
-            RegionScope.PathOnly,
-            "This is your whole profile — your documents, your settings and everything Deguffer "
-            + "would otherwise offer to clean. Explore removes things from inside it, never the "
-            + "profile itself.");
-
-        // The folders every program keeps its state in, and the temporary folder, in the profile's
-        // shape: the folder refused, what is inside it ordinary. Providers name %LOCALAPPDATA% and
-        // %TEMP% as paths that must survive a clean, and §7.1 refuses every such path here too.
-        yield return ProtectedRegion.Refusing(
-            environment.LocalAppData,
-            RegionScope.PathOnly,
-            "This is where every program keeps its local data for your account: caches, but also "
-            + "settings, sign-ins and saved work. Explore removes things from inside it, never the "
-            + "folder itself.");
-
-        yield return ProtectedRegion.Refusing(
-            environment.RoamingAppData,
-            RegionScope.PathOnly,
-            "This is where every program keeps the settings that roam with your account. Explore "
-            + "removes things from inside it, never the folder itself.");
-
-        if (environment.LocalLowAppData is { } localLow)
-        {
-            yield return ProtectedRegion.Refusing(
-                localLow,
-                RegionScope.PathOnly,
-                "This is where programs that run with reduced rights, browsers among them, keep their "
-                + "data for your account. Explore removes things from inside it, never the folder "
-                + "itself.");
-        }
-
-        yield return ProtectedRegion.Refusing(
-            environment.TempPath,
-            RegionScope.PathOnly,
-            "This is your temporary folder. Programs expect to find it and Windows does not put it "
-            + "back, so Explore removes things from inside it, never the folder itself.");
-
-        // Longer than the profile's permission, so it wins over it by the table's own ordering
-        // rather than by being written as an exception.
-        yield return OutlookDataFiles.Region(environment);
     }
 }
