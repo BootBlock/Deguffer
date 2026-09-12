@@ -22,8 +22,8 @@
 
   <ItemGroup>
     <!--
-      Two rules are internal because nothing outside Core has any business calling them, and both
-      are pure functions a test is better off asking directly.
+      These rules are internal because nothing outside Core has any business calling them, and all
+      of them are pure functions a test is better off asking directly.
 
       LiveTreeInspector.Filtered decides which rows of the process table count as evidence. Driving
       it from outside would mean starting a second process at this one's own image path, and a test
@@ -32,6 +32,11 @@
       DirectoryAge is one age rule with four callers. It is reachable through any of them, so this
       is a choice rather than a necessity: a rule stated once should be held to once, not
       re-asserted four times through providers whose own subject is something else.
+
+      The memory view's parsers and checks (Memory/ProcessRecordParser, ServiceRecordParser,
+      ProcessFigureCheck, MemoryListCheck) read buffers Windows filled. Their consequence reaches the
+      public MemorySource only through this machine's own process table, which a test cannot shape
+      into a truncated record, a string past the end, or a layout that moved.
 
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.
