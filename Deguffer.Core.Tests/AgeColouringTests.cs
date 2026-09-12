@@ -319,9 +319,12 @@ public class AgeColouringTests
 
         foreach (var label in surface.Labels)
         {
+            // What a label carries is the contrasting text of its band, and neighbouring bands share
+            // one. So the guard is on the contrast rather than on the band, or a later change to these
+            // dates could satisfy it while leaving the two indistinguishable here.
             Assert.NotEqual(
-                AgePalette.For(tree.CreatedOf(label.Node), Now),
-                AgePalette.For(tree.ModifiedOf(label.Node), Now));
+                AgePalette.For(tree.CreatedOf(label.Node), Now).ContrastingText,
+                AgePalette.For(tree.ModifiedOf(label.Node), Now).ContrastingText);
 
             Assert.Equal(AgePalette.For(tree.ModifiedOf(label.Node), Now).ContrastingText, label.Colour);
         }

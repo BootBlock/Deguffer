@@ -97,7 +97,7 @@ public sealed class ExploreSurfaceTests
         var limits = LayoutLimits.Default;
 
         var surface = new TiledSurface(
-            tree, tree.RootNode, 60, 60, limits, Branch, Now,
+            tree, tree.RootNode, 60, 60, limits, ShapeColours.ByBranch,
             TreemapLayout.Compute(tree, tree.RootNode, 60, 60, limits));
 
         Assert.DoesNotContain(tree.RootNode, surface.Labels.Select(l => l.Node));
@@ -197,14 +197,13 @@ public sealed class ExploreSurfaceTests
         Width,
         Height,
         limits,
-        Branch,
-        Now,
+        ShapeColours.ByBranch,
         TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits));
 
     private static ExploreSurface Sunburst(ExploreTree tree) => Sunburst(tree, LayoutLimits.Default);
 
     private static ExploreSurface Sunburst(ExploreTree tree, LayoutLimits limits) =>
-        new SunburstSurface(tree, tree.RootNode, Width, Height, limits, Branch, Now);
+        new SunburstSurface(tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch);
 
     /// <summary>Equal children of one root, which is the shape that defeats a size threshold.</summary>
     private static ExploreTree FlatTree(int children)

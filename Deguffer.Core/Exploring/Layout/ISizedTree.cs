@@ -1,8 +1,9 @@
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
-/// What a layout reads from a tree to draw it: how big a node is, what it holds, whether it holds
-/// anything, and in what order, with the parent and the root a drawing needs to colour a branch.
+/// What the layouts and the drawings read from a tree: how big a node is, what it holds, whether a
+/// layout should look inside it, and in what order, with the parent and the root a drawing needs to
+/// colour a branch.
 ///
 /// <para>A seam rather than the disk tree itself, because two trees are drawn by the same layouts:
 /// <see cref="ExploreTree"/>, a scanned drive, and <see cref="Memory.MemoryTree"/>, where memory is.
@@ -27,8 +28,12 @@ public interface ISizedTree
     ReadOnlySpan<int> ChildrenOf(int node);
 
     /// <summary>
-    /// Whether the node is the kind of thing that holds others, which is what a layout descends into.
-    /// A folder is one even when empty, so this is not the same question as whether it has children.
+    /// Whether a layout should look inside this node.
+    ///
+    /// <para>Each tree answers in its own terms. A scanned drive answers by kind, so an empty folder is
+    /// still a container: it holds nothing today and is not a file. A memory tree answers by whether
+    /// anything is under it, because a process that started nothing holds only its own memory and has
+    /// nothing to look inside.</para>
     /// </summary>
     bool IsContainer(int node);
 

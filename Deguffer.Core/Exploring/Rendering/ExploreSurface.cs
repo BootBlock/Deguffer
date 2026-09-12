@@ -115,6 +115,8 @@ public abstract class ExploreSurface
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(colours);
 
+        colours.EnsureDescribes(tree);
+
         Tree = tree;
         Root = root;
         Width = width;
@@ -162,12 +164,8 @@ public abstract class ExploreSurface
         int height,
         double scale,
         ExploreColouring colouring,
-        DateTime nowUtc)
-    {
-        ArgumentNullException.ThrowIfNull(tree);
-
-        return Create(tree, root, view, width, height, scale, ShapeColours.For(tree, colouring, nowUtc));
-    }
+        DateTime nowUtc) =>
+        Create(tree, root, view, width, height, scale, ShapeColours.For(tree, colouring, nowUtc));
 
     /// <summary>
     /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a

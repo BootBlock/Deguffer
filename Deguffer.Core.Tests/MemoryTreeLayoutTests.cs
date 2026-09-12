@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
@@ -52,8 +53,11 @@ public sealed class MemoryTreeLayoutTests
     {
         var tiles = IcicleLayout.Compute(Tree, Tree.RootNode, Width, Height, LayoutLimits.Default);
         var total = (double)Tree.SizeOf(Tree.RootNode);
+        var parts = tiles.Where(tile => tile.Depth == 1 && !tile.IsAggregate).ToArray();
 
-        foreach (var tile in tiles.Where(tile => tile.Depth == 1 && !tile.IsAggregate))
+        Assert.Equal(3, parts.Length);
+
+        foreach (var tile in parts)
         {
             Assert.InRange(tile.Width, (Width * tile.Bytes / total) - 0.5, (Width * tile.Bytes / total) + 0.5);
         }
@@ -81,12 +85,32 @@ public sealed class MemoryTreeLayoutTests
     [Fact]
     public void TheTreemapDescendsIntoAProcessWithChildren()
     {
-        var parent = Tree.Find(new MemoryNodeKey(MemoryPart.Process, 100, 10))!.Value;
         var tiles = TreemapLayout.Compute(Tree, Tree.RootNode, Width, Height, LayoutLimits.Default);
 
+        Assert.Contains(tiles, tile => tile.Node == Tree.Find(new MemoryNodeKey(MemoryPart.Process, 100, 10)));
         Assert.Contains(tiles, tile => tile.Node == Tree.Find(new MemoryNodeKey(MemoryPart.OwnShare, 100, 10)));
         Assert.Contains(tiles, tile => tile.Node == Tree.Find(new MemoryNodeKey(MemoryPart.Process, 200, 20)));
-        Assert.Contains(tiles, tile => tile.Node == parent);
+    }
+
+    /// <summary>
+    /// Age bands belong to the tree whose dates they hold. A node number means nothing in any other
+    /// tree, so a picture of memory banded by a drive's dates would read as ages of things that have
+    /// none, which §7.2 forbids. Before the seam that was impossible; now it is refused.
+    /// </summary>
+    [Fact]
+    public void ADrawingRefusesColoursThatHoldAnotherTreesDates()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [new ExploreChild("file", IsDirectory: false, IsLink: false, 1_000)]);
+
+        var drive = builder.Build(ExploreChildOrder.BySize);
+        var dates = ShapeColours.For(drive, ExploreColouring.Age, new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
+
+        Assert.Throws<ArgumentException>(() =>
+            ExploreSurface.Create(Tree, Tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, dates));
     }
 
     /// <summary>
