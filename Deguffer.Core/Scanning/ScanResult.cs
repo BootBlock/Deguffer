@@ -24,6 +24,17 @@ public sealed record ScanResult(
     FallbackReason Fallback,
     bool WithheldRecent = false)
 {
+    /// <summary>
+    /// The Outlook mail stores this measurement met and left out of <see cref="Size"/>, in display
+    /// form. See <see cref="Safety.MailStore"/>.
+    ///
+    /// <para>Left out unconditionally, on every route, because the removal leaves them however it is
+    /// asked: a figure that counted a store would promise bytes no clean will take. Named rather than
+    /// only flagged, because the plan protects each one by its path and proves afterwards that it is
+    /// still there — which it can only do for a path somebody wrote down before the run.</para>
+    /// </summary>
+    public IReadOnlyList<string> MailStores { get; init; } = [];
+
     public static ScanResult Fast(ScanSize size, bool withheldRecent = false) =>
         new(size, ScanStrategy.MasterFileTable, FallbackReason.None, withheldRecent);
 

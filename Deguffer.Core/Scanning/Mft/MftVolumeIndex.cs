@@ -38,9 +38,22 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     public ScanSize? TryMeasure(
         IReadOnlyList<string> relativePath,
         MinimumAge keep,
-        out bool withheldRecent)
+        out bool withheldRecent) =>
+        TryMeasure(relativePath, keep, out withheldRecent, out _);
+
+    /// <inheritdoc cref="TryMeasure(IReadOnlyList{string}, MinimumAge, out bool)"/>
+    /// <param name="mailStores">
+    /// The Outlook mail stores the subtree holds, each as components below the volume root, and none
+    /// of them in the total. See <see cref="MailStore"/>.
+    /// </param>
+    public ScanSize? TryMeasure(
+        IReadOnlyList<string> relativePath,
+        MinimumAge keep,
+        out bool withheldRecent,
+        out IReadOnlyList<IReadOnlyList<string>> mailStores)
     {
         withheldRecent = false;
+        mailStores = [];
 
         if (TryResolve(relativePath) is not { } record)
         {
@@ -49,7 +62,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         if (tree.IsDirectory[record])
         {
-            return SumSubtree(record, keep, out withheldRecent);
+            return SumSubtree(record, keep, out withheldRecent, out mailStores);
         }
 
         if (tree.SizeUnknown[record])
@@ -143,7 +156,11 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // A link, or anything under one. The walk never enters a reparse point, so a path that
             // passes through one is not something the guaranteed route could ever have produced —
             // and the deletion target it names is a pointer, not the thing the user asked about.
-            if (tree.IsReparsePoint[current] || tree.Names[current] is not { } component)
+            //
+            // The name is a directory's, or a mail store's at the leaf: the only file whose path the
+            // table is ever asked to rebuild.
+            if (tree.IsReparsePoint[current]
+                || (tree.Names[current] ?? tree.MailStoreNames.GetValueOrDefault(current)) is not { } component)
             {
                 return null;
             }
@@ -256,8 +273,17 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// it stays, so a file the guard keeps has to mark every folder above it. Recursion would carry
     /// that upward for free; here each folder reached records the position of the folder holding it,
     /// and a kept entry walks that chain.</para>
+    ///
+    /// <para><b>An Outlook mail store is left out on the same terms, and named (§9).</b> It keeps its
+    /// folders standing exactly as a kept file does, and its path is rebuilt so the plan can protect
+    /// it. A store whose path cannot be rebuilt takes the whole subtree to the walk rather than being
+    /// left out unnamed, because a store nobody can name is one nothing can prove survived.</para>
     /// </summary>
-    private ScanSize? SumSubtree(uint root, MinimumAge keep, out bool withheldRecent)
+    private ScanSize? SumSubtree(
+        uint root,
+        MinimumAge keep,
+        out bool withheldRecent,
+        out IReadOnlyList<IReadOnlyList<string>> mailStores)
     {
         long allocated = 0;
         long logical = 0;
@@ -265,6 +291,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         var kept = false;
         var folders = new List<(int Holder, bool Stays)>();
+        var stores = new List<IReadOnlyList<string>>();
+        mailStores = [];
 
         var stack = new Stack<(uint Node, int Holder)>();
         stack.Push((root, -1));
@@ -311,6 +339,20 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 continue;
             }
 
+            // Before the guard, as the removal asks it: the store stays whatever its age.
+            if (tree.IsMailStore[node])
+            {
+                if (TryBuildPath(node) is not { } components)
+                {
+                    withheldRecent = false;
+                    return null;
+                }
+
+                stores.Add(components);
+                Stay(item.Holder);
+                continue;
+            }
+
             if (CountOrKeep(node, item.Holder))
             {
                 allocated += tree.Allocated[node];
@@ -319,6 +361,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         }
 
         withheldRecent = kept;
+        mailStores = stores;
 
         return new ScanSize(allocated, logical, Entries: entries + folders.Count(folder => !folder.Stays));
 
@@ -332,13 +375,18 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             }
 
             kept = true;
+            Stay(holder);
 
+            return false;
+        }
+
+        // Mark the folder holding an entry that stays, and every folder above it.
+        void Stay(int holder)
+        {
             for (var position = holder; position >= 0 && !folders[position].Stays; position = folders[position].Holder)
             {
                 folders[position] = (folders[position].Holder, true);
             }
-
-            return false;
         }
     }
 }

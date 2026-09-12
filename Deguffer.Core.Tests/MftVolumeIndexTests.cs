@@ -657,4 +657,44 @@ public class MftVolumeIndexTests
         Assert.True(withheld, "a full location was reported as holding nothing back");
         Assert.False(withheldFromEmpty, "an empty location claimed the guard held something");
     }
+
+    /// <summary>
+    /// §9 on the fast path. The table names only directories, so a store has to be recognised while
+    /// the table is read or this route cannot leave it out at all — and the route a total takes
+    /// depends on the process token, so it must agree with the walk about the store as about
+    /// everything else. The store's path comes back in full, because the plan protects it by that
+    /// path.
+    /// </summary>
+    [Fact]
+    public void LeavesAnOutlookDataFileOutOfTheTotalAndNamesIt()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "blob.tgz", allocated: 4096, logical: 4096)
+            .AddFile(21, Nested, "archive.pst", allocated: 1_048_576, logical: 1_000_000)
+            .AddFile(22, Nested, "archive.pst.txt", allocated: 512, logical: 512));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"], MinimumAge.Off, out _, out var stores);
+
+        Assert.Equal(4096 + 512, size!.Value.Logical);
+        Assert.Equal(4096 + 512, size.Value.Allocated);
+        Assert.Equal(["Users", "testuser", ".npm-cache", "content-v2", "archive.pst"], Assert.Single(stores));
+
+        // blob.tgz and archive.pst.txt go; content-v2 and .npm-cache stay because the store keeps them.
+        Assert.Equal(2, size.Value.Entries);
+    }
+
+    /// <summary>
+    /// A store's name is kept so its path can be rebuilt, and nothing else changes. Only a directory
+    /// is still a path component, so a store never resolves as a folder to measure into, and a search
+    /// for directories by name never returns one.
+    /// </summary>
+    [Fact]
+    public void AStoresNameNeverMakesItAPathComponentOrADirectory()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "archive.pst", allocated: 4096, logical: 4096));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "archive.pst"]));
+        Assert.Empty(index.FindDirectoriesNamed("archive.pst"));
+    }
 }

@@ -60,7 +60,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         CancellationToken ct = default) =>
         new(Task.Run(
             () => TryMeasureFile(path, keep) is { } file
-                ? ScanResult.Direct(file.Size, file.WithheldRecent)
+                ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
                 : Slow(Measure(path, keep, progress, ct)),
             ct));
 
@@ -90,10 +90,10 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
-    private ScanResult Slow((ScanSize Size, bool WithheldRecent) measured) =>
-        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent);
+    private ScanResult Slow((ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) measured) =>
+        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent) with { MailStores = measured.MailStores };
 
-    private static (ScanSize Size, bool WithheldRecent) Measure(
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -101,7 +101,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return (ScanSize.Zero, false);
+            return (ScanSize.Zero, false, []);
         }
 
         long total = 0;
@@ -112,6 +112,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         var withheld = 0;
 
         var folders = new ConcurrentBag<VisitedFolder>();
+        var stores = new ConcurrentBag<string>();
 
         BoundedFileWalk.Visit<VisitedFolder?>(
             LongPath.Extended(path),
@@ -132,6 +133,14 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     if (entry is DirectoryInfo child)
                     {
                         descend(child, folder);
+                    }
+
+                    // §9, and before the guard for the reason the removal asks it first: the store is
+                    // left whatever its age, so it is out of the total and its folders stay.
+                    else if (entry is FileInfo store && MailStore.Is(store.Name))
+                    {
+                        stores.Add(LongPath.Display(store.FullName));
+                        folder.Stays();
                     }
 
                     // The walk hands over a FileInfo whose attributes and timestamps were populated by
@@ -172,7 +181,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
 
         return (
             new ScanSize(Interlocked.Read(ref total), Interlocked.Read(ref total), Entries: removed),
-            Volatile.Read(ref withheld) == 1);
+            Volatile.Read(ref withheld) == 1,
+            [.. stores.Order(StringComparer.OrdinalIgnoreCase)]);
     }
 
     /// <summary>
@@ -214,7 +224,9 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// scanner did — produces a step nobody can select, because a step with nothing to reclaim is
     /// not offerable.
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent)? TryMeasureFile(string path, MinimumAge keep)
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores)? TryMeasureFile(
+        string path,
+        MinimumAge keep)
     {
         try
         {
@@ -228,13 +240,20 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 return null;
             }
 
+            // §9: zero, and named, whatever its age. The same answer a kept file gets, for the same
+            // reason, with the store's own name on it so the plan can protect it.
+            if (MailStore.Is(file.Name))
+            {
+                return (ScanSize.Zero, false, [LongPath.Display(file.FullName)]);
+            }
+
             // A file the guard keeps is still a file, so this stays an answer rather than becoming
             // a null that would send the caller off to measure it as a directory. Zero is what the
             // removal will reclaim from it, and a step with nothing to reclaim is not offerable —
             // which is the outcome a protected single file should have.
             return keep.Protects(file)
-                ? (ScanSize.Zero, true)
-                : (new ScanSize(file.Length, file.Length, Entries: 1), false);
+                ? (ScanSize.Zero, true, [])
+                : (new ScanSize(file.Length, file.Length, Entries: 1), false, []);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {

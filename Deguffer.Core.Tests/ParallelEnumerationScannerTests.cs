@@ -229,4 +229,42 @@ public class ParallelEnumerationScannerTests
         // And nothing is claimed where no guard was asked for.
         Assert.False((await Scanner.MeasureAsync(recent)).WithheldRecent);
     }
+
+    /// <summary>
+    /// §9 on the walk. The figure is the removal's, and the removal never takes an Outlook mail store,
+    /// so the store is out of the total, out of the entries, and named — and so is every folder it
+    /// keeps standing. A name that only resembles one is counted like any other file.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAnOutlookDataFileOutOfTheTotalAndNamesIt()
+    {
+        using var temp = new TempDirectory();
+        var archive = temp.CreateFile(1_000_000, "cache", "saved", "archive.pst");
+        temp.CreateFile(4096, "cache", "blob.bin");
+        temp.CreateFile(512, "cache", "saved", "archive.pst.txt");
+
+        var result = await ParallelEnumerationScanner.Default.MeasureAsync(Path.Combine(temp.Path, "cache"));
+
+        Assert.Equal(4096 + 512, result.Size.Reclaimable);
+        Assert.Equal([archive], result.MailStores);
+
+        // blob.bin and archive.pst.txt go; saved and cache stay because the store keeps them standing.
+        Assert.Equal(2, result.Size.Entries);
+        Assert.False(result.WithheldRecent);
+    }
+
+    /// <summary>The same for a store named on its own, which the walk answers without walking.</summary>
+    [Fact]
+    public async Task MeasuresASingleOutlookDataFileAsNothingAndNamesIt()
+    {
+        using var temp = new TempDirectory();
+        var archive = temp.CreateFile(8192, "Downloads", "archive.PST");
+
+        var result = await ParallelEnumerationScanner.Default.MeasureAsync(archive);
+
+        Assert.Equal(ScanStrategy.DirectRead, result.Strategy);
+        Assert.Equal(0, result.Size.Reclaimable);
+        Assert.Equal(0, result.Size.Entries);
+        Assert.Equal([archive], result.MailStores);
+    }
 }

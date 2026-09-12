@@ -286,6 +286,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         var sizes = new List<ScanSize>(paths.Count);
         var withheld = new List<bool>(paths.Count);
+        var stores = new List<IReadOnlyList<string>>(paths.Count);
         var fallback = FallbackReason.None;
 
         foreach (var path in paths)
@@ -295,6 +296,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             var measured = await Scanner.MeasureAsync(path, keep, progress: null, ct).ConfigureAwait(false);
             sizes.Add(measured.Size);
             withheld.Add(measured.WithheldRecent);
+            stores.Add(measured.MailStores);
 
             // Paths in one plan can sit on different volumes and so take different routes; the
             // first reason to appear is the one the user is shown.
@@ -304,7 +306,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             }
         }
 
-        return new ScanBatch(sizes, fallback, withheld);
+        return new ScanBatch(sizes, fallback, withheld, stores);
     }
 
     /// <summary>
@@ -342,6 +344,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = measured.WithheldRecent[i],
+                MailStores = measured.MailStores[i],
                 Identity = target.Identity,
                 IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],

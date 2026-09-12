@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Microsoft.Win32.SafeHandles;
@@ -51,12 +52,12 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     {
         if (TryMeasureFile(path, keep) is { } file)
         {
-            return ScanResult.Direct(file.Size, file.WithheldRecent);
+            return ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores };
         }
 
         var walked = Measure(path, keep, progress, ct);
 
-        return ScanResult.ByChoice(walked.Size, walked.WithheldRecent);
+        return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with { MailStores = walked.MailStores };
     }
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
@@ -74,7 +75,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     {
     }
 
-    private static (ScanSize Size, bool WithheldRecent) Measure(
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -82,7 +83,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     {
         if (!LongPath.DirectoryExists(path))
         {
-            return (Approximate(0, 0), false);
+            return (Approximate(0, 0), false, []);
         }
 
         long allocated = 0;
@@ -92,10 +93,20 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
         // threads, and Interlocked has no bool overload.
         var withheld = 0;
 
+        var stores = new ConcurrentBag<string>();
+
         BoundedFileWalk.Visit(
             LongPath.Extended(path),
             file =>
             {
+                // §9, named rather than only left out: a store inside a tool's own folder is what
+                // withholds that tool's command, and the plan can only say which store by its path.
+                if (MailStore.Is(file.Name))
+                {
+                    stores.Add(LongPath.Display(file.FullName));
+                    return;
+                }
+
                 // Asked before the handle is opened, because the guard is the cheaper question and
                 // the answer is the same either way: a file it keeps is one this store's eviction
                 // will not take, so its sole-linked bytes are not reclaimable here.
@@ -118,7 +129,8 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         return (
             Approximate(Interlocked.Read(ref allocated), Interlocked.Read(ref logical)),
-            Volatile.Read(ref withheld) == 1);
+            Volatile.Read(ref withheld) == 1,
+            [.. stores.Order(StringComparer.OrdinalIgnoreCase)]);
     }
 
     /// <summary>
@@ -140,16 +152,23 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     /// mirroring <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate
     /// subject, and answering zero for one would make its step unofferable.
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent)? TryMeasureFile(string path, MinimumAge keep)
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores)? TryMeasureFile(
+        string path,
+        MinimumAge keep)
     {
         if (!LongPath.FileExists(path))
         {
             return null;
         }
 
+        if (MailStore.Is(path))
+        {
+            return (Approximate(0, 0), false, [LongPath.Display(path)]);
+        }
+
         if (keep.ProtectsFile(path))
         {
-            return (Approximate(0, 0), true);
+            return (Approximate(0, 0), true, []);
         }
 
         return (
@@ -158,7 +177,8 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                     info.NumberOfLinks == 1 ? info.AllocationSize : 0,
                     info.NumberOfLinks == 1 ? info.EndOfFile : 0)
                 : Approximate(0, 0),
-            false);
+            false,
+            []);
     }
 
     /// <summary>

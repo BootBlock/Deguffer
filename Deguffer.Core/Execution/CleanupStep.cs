@@ -115,6 +115,17 @@ public abstract record CleanupStep
     /// a different place. See <see cref="RefusalRecord"/> for why only those places are asked.</para>
     /// </summary>
     public Refusals Refused { get; init; }
+
+    /// <summary>
+    /// The Outlook mail stores this step's measurement found inside what it would remove, already
+    /// left out of <see cref="Estimated"/>. See <see cref="MailStore"/>.
+    ///
+    /// <para>Carried for the plan to act on rather than for the removal, which leaves a store without
+    /// being told to. A removal Deguffer performs itself steps over each one, so its step stays and
+    /// does less; a step that cannot — a tool's own command, or Windows emptying a Recycle Bin whole —
+    /// has to be withheld, and only this list says which steps those are before anything runs.</para>
+    /// </summary>
+    public IReadOnlyList<string> MailStores { get; init; } = [];
 }
 
 /// <summary>

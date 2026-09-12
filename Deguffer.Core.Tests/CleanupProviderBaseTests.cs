@@ -59,6 +59,29 @@ public sealed class CleanupProviderBaseTests : IDisposable
     }
 
     /// <summary>
+    /// A step carries the Outlook mail stores its own measurement left out, for every provider, because
+    /// the pairing of a target with what was measured inside it happens once, here, rather than per
+    /// provider. Its figure already excludes them.
+    /// </summary>
+    [Fact]
+    public async Task AStepCarriesTheOutlookDataFilesItsMeasurementLeftOut()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        Directory.CreateDirectory(Path.Combine(caches, "saved"));
+        var archive = Path.Combine(caches, "saved", "archive.pst");
+        File.WriteAllBytes(archive, new byte[1_000_000]);
+        File.WriteAllBytes(Path.Combine(caches, "modules.bin"), new byte[4096]);
+
+        var provider = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<DeleteStep>(), s => s.Path.Equals(caches, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal([archive], step.MailStores);
+        Assert.Equal(4096, step.EstimatedBytes);
+    }
+
+    /// <summary>
     /// The guard is stamped onto whatever a provider hands back, rather than by each provider.
     ///
     /// There are fifty places a provider constructs a plan, and a plan that reached the executor
