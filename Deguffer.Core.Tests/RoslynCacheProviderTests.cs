@@ -137,6 +137,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
     [InlineData("a version folder named in another case")]
     [InlineData("the database directly under sqlite3")]
     [InlineData("a database named in another case")]
+    [InlineData("a companion named in another case")]
     [InlineData("an unrecognised file beside the database")]
     [InlineData("a folder named like a database companion")]
     [InlineData("companions with no database")]
@@ -414,6 +415,13 @@ public sealed class RoslynCacheProviderTests : IDisposable
             case "a database named in another case":
                 File.Delete(Path.Combine(index, "storage.ide"));
                 Put(Path.Combine(index, "Storage.ide"), 64);
+                break;
+
+            // Beside a correctly named database, so the check that a database is present passes and only the
+            // file-name match can refuse it.
+            case "a companion named in another case":
+                File.Delete(Path.Combine(index, "db.lock"));
+                Put(Path.Combine(index, "DB.lock"), 0);
                 break;
 
             case "an unrecognised file beside the database":
