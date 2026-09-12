@@ -119,6 +119,10 @@ public sealed class SpotifySettingsTests : IDisposable
     /// <summary>
     /// Files that are not UTF-8 text. Read leniently, the first would name a path with a replacement
     /// character in it, and the other two would match no key at all and read as "nothing moved".
+    ///
+    /// <para>The UTF-16 content is plain ASCII on purpose. Without a byte order mark it is then valid
+    /// UTF-8 with a NUL after every character, so only the check for a NUL can refuse it. A character
+    /// outside ASCII would be refused by the decoder first, and the NUL check would go untested.</para>
     /// </summary>
     [Theory]
     [InlineData("windows-1252")]
@@ -126,7 +130,7 @@ public sealed class SpotifySettingsTests : IDisposable
     [InlineData("utf-16 without a byte order mark")]
     public void AFileThatIsNotUtf8TextIsUninterpretable(string form)
     {
-        const string content = "storage.location=\"D:\\\\Mus\u00e9e\\\\Spotify\"\n";
+        const string content = "storage.location=\"D:\\\\Music\\\\Spotify\"\n";
 
         byte[] bytes = form switch
         {
