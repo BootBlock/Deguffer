@@ -35,6 +35,9 @@ public sealed class ItemGuide
     /// <summary><see cref="KnownPlace.Anywhere"/>, keyed by name.</summary>
     private readonly Dictionary<string, KnownItem> _byName;
 
+    /// <summary><see cref="KnownPlace.AnywhereByExtension"/>, keyed by extension with its dot.</summary>
+    private readonly Dictionary<string, KnownItem> _byExtension;
+
     /// <param name="entries">The catalogue. Ordinarily <see cref="KnownItems.All"/>.</param>
     /// <param name="anchors">
     /// Where each place is on this machine. A place missing from here, or present with a value that
@@ -50,6 +53,7 @@ public sealed class ItemGuide
         _byPath = new Dictionary<string, KnownItem>(StringComparer.OrdinalIgnoreCase);
         _belowVolumeRoot = new Dictionary<string, KnownItem>(StringComparer.OrdinalIgnoreCase);
         _byName = new Dictionary<string, KnownItem>(StringComparer.OrdinalIgnoreCase);
+        _byExtension = new Dictionary<string, KnownItem>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in entries)
         {
@@ -57,6 +61,10 @@ public sealed class ItemGuide
             {
                 case KnownPlace.Anywhere:
                     _byName[entry.RelativePath] = entry;
+                    break;
+
+                case KnownPlace.AnywhereByExtension:
+                    _byExtension[entry.RelativePath] = entry;
                     break;
 
                 case KnownPlace.VolumeRoot:
@@ -145,9 +153,9 @@ public sealed class ItemGuide
     /// <see cref="LongPath.Configured(string?)"/>.
     ///
     /// <para>Asked in order of how specific the claim is: an address on this machine, then a
-    /// position at the top of any volume, then a name found anywhere. The one written about this
-    /// exact place is the one that was written about this thing, and the bare name is the weakest
-    /// claim of the three.</para>
+    /// position at the top of any volume, then a name found anywhere, then a type of file. The one
+    /// written about this exact place is the one that was written about this thing, and the
+    /// extension is the weakest claim of the four.</para>
     /// </summary>
     private KnownItem? Lookup(string target)
     {
@@ -161,7 +169,14 @@ public sealed class ItemGuide
             return reserved;
         }
 
-        return Path.GetFileName(target) is { Length: > 0 } name ? _byName.GetValueOrDefault(name) : null;
+        if (Path.GetFileName(target) is { Length: > 0 } name && _byName.TryGetValue(name, out var named))
+        {
+            return named;
+        }
+
+        return Path.GetExtension(target) is { Length: > 0 } extension
+            ? _byExtension.GetValueOrDefault(extension)
+            : null;
     }
 
     /// <summary>

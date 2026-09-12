@@ -12,12 +12,17 @@ namespace Deguffer.Core.Exploring.Acting;
 /// nothing can test.</para>
 ///
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
-/// The first is a table of regions — the operating system's own directories and the signed-in
-/// user's profile — plus what Windows reserves at the top of any volume, which is read from the path
-/// rather than from a list of drives. All of that is a fact about Windows and is stated here. The second is
+/// The first is a table of regions — the operating system's own directories, the signed-in user's
+/// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which is
+/// read from the path rather than from a list of drives. Apart from Outlook's folder, all of that is
+/// a fact about Windows and is stated here. The second is
 /// §5.2, which is a fact about a tool and belongs to whichever provider knows the tool: Explore
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
 /// twice is one that gets changed once.</para>
+///
+/// <para>Outlook's mail stores are also refused by type, before the table is asked, because a
+/// <c>.pst</c> is wherever somebody saved it. <see cref="OutlookDataFiles"/> holds that rule and
+/// Outlook's folder, and says why both are §9's.</para>
 ///
 /// <para><b>Refusal is about removal, and nothing else.</b> Opening a file, showing it in Explorer
 /// and putting the Windows properties sheet on screen change nothing on disk, and refusing to open
@@ -72,8 +77,8 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
-    /// The policy for this machine: Windows' own directories, the signed-in user's profile, and
-    /// every §5.2 declaration the providers make. What sits at the top of a volume is decided from
+    /// The policy for this machine: Windows' own directories, the signed-in user's profile, Outlook's
+    /// mail stores, and every §5.2 declaration the providers make. What sits at the top of a volume is decided from
     /// the path instead, so no list of drives has to be kept current.
     ///
     /// <para>Assembled from the two seams rather than from <see cref="Environment"/> directly, so
@@ -131,6 +136,13 @@ public sealed class ExploreActionPolicy
         if (AtAVolumeRoot(target) is { } reserved)
         {
             return reserved;
+        }
+
+        // Before the region table, because the table ends in a permission: a mail store inside the
+        // signed-in profile would otherwise be answered by the profile's own entry and allowed.
+        if (OutlookDataFiles.Refusal(target) is { } mail)
+        {
+            return mail;
         }
 
         foreach (var region in _regions)
@@ -399,5 +411,9 @@ public sealed class ExploreActionPolicy
             "This is your whole profile — your documents, your settings and everything Deguffer "
             + "would otherwise offer to clean. Explore removes things from inside it, never the "
             + "profile itself.");
+
+        // Longer than the profile's permission, so it wins over it by the table's own ordering
+        // rather than by being written as an exception.
+        yield return OutlookDataFiles.Region(environment);
     }
 }

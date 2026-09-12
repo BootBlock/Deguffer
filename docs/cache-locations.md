@@ -2868,3 +2868,138 @@ says what the folder is and which uninstaller owns it.
 the same size. Reporting one number would be actively misleading. This needs the two figures
 reported separately, and the second cannot be measured from the filesystem — it comes from the
 container tool's own accounting. See §5.4.
+
+### Outlook's offline mailbox (`.ost`) — the vendor's own route stops short on purpose
+
+An `.ost` is Outlook's local copy of an Exchange, Microsoft 365 or Outlook.com mailbox, kept in
+`%LOCALAPPDATA%\Microsoft\Outlook` by default. It is routinely the largest single file on a business
+machine: Microsoft's [Cached Exchange Mode planning guide][ost-plan] gives **50 GB** as the default
+maximum, and says local files are *"50 percent to 80 percent larger than the mailbox size reported in
+Exchange Server"*. Advice to delete it is everywhere, because Outlook downloads it again.
+
+Deguffer never offers it, and Explore refuses it. The reasons, in the order that decides it:
+
+**1. §5.2 disposes of it before tiering does.** The `.ost` is not a recognised child of a cache
+directory. It is the tool's primary data file, sitting in the tool's own folder beside `RoamCache`,
+`Offline Address Books` and, on older versions of Outlook, `.pst` files. A rule permitting
+`Outlook\*.ost` has already conceded the shape §5.2 exists to forbid.
+
+**2. The vendor's own eviction is a shrink, and it deliberately stops short.** The route is the
+*Mail to keep offline* setting, renamed *Download email for the past* in later versions. Lowering it
+makes Outlook [*"do a local-only deletion of excess data that's cached in the OST
+files"*][ost-subset], and Microsoft states that the setting does not affect the Calendar, Contacts,
+Tasks, Journal, Notes or **Outbox** folders. Deleting the file is not a larger version of that route.
+It is the operation the vendor declined to build. Deguffer cannot move the setting for you, and it
+will not write `SyncWindowSetting` into your profile: the same line it draws at selecting Disk
+Cleanup's handlers on your behalf — see
+[Why not Disk Cleanup or Storage Sense](#why-not-disk-cleanup-or-storage-sense).
+
+**3. Microsoft documents content inside the `.ost` that exists nowhere else.** Of the Sync Issues
+folder, [the article on retention policies][ost-sync] says *"the folder is a client-side folder
+only"* and *"The contents of the Sync Issues folder aren't copied to your server, and you can't view
+the items in the Sync Issues folder from any other computer."* Of its `Conflicts`, `Local Failures`
+and `Server Failures` subfolders it warns: *"Automatically deleting this content could result in data
+loss."* `Local Failures` is where an item that failed to upload goes.
+
+**4. The one sentence authorising deletion is conditional, and the condition cannot be checked.**
+[Repair Outlook Data Files][ost-repair] says *"If you're using an Exchange email account, you can
+delete the offline Outlook Data File (.ost) and Outlook will recreate the offline Outlook Data File
+(.ost) the next time you open Outlook."* Deguffer cannot establish that the account still exists,
+that the mailbox is reachable, that you have not been offboarded, that the Outbox is empty, or that
+`Local Failures` is. Those are questions for Outlook's own messaging interface, and a disk-cleaning
+tool that opens a mail store to answer them has become something else.
+
+**5. Tier 3 is not an escape hatch.** Tier 3 still shows the row, and a 40 GB row is the most
+attractive thing on the screen. This is the one location investigated where a single confirmation
+could permanently destroy a message you believe you sent, on a machine where you can no longer reach
+the mailbox.
+
+**What would change the answer**, stated so the refusal can be tested against it: a vendor-supported,
+non-interactive command that both evicts and compacts without writing to your profile; an
+authoritative statement that the store is a complete mirror of the server with no client-only
+folders, which the Sync Issues article directly contradicts; or a cheap, read-only way to prove the
+account is live and both folders are empty. None of these is close.
+
+If you want the space back, *Mail to keep offline* makes the copy smaller, and *Compact Now* in the
+data file's own settings gives the freed space back to the disk.
+
+### Outlook data files (`.pst`) — excluded by name, because no path finds them
+
+A `.pst` is not a copy of anything. Microsoft's [introduction to Outlook data files][pst-intro] says
+that for a POP or IMAP account *"all of your Outlook information is stored in an Outlook data file,
+also known as a Personal Storage Table (.pst) file"*. It is also what an archive is written to, and
+where items moved off a mail server to keep the mailbox small end up. New ones are saved in
+`Documents\Outlook Files` by default, and in `%LOCALAPPDATA%\Microsoft\Outlook` on older versions.
+
+**It is on an explicit exclusion list, not merely absent from an inclusion list.** No provider
+targets one, and that is not enough in Explore, which draws the whole drive by size. A `.pst` is frequently several gigabytes, which is exactly what puts it
+in front of somebody, and it can be saved anywhere — a data disk, a folder you named, a share — so no
+list of paths can find every one.
+
+So Explore refuses by type rather than by place:
+
+| Refused | Why |
+| --- | --- |
+| Any file ending in `.pst` or `.ost`, on any drive | The mail store itself, wherever it was saved |
+| `%LOCALAPPDATA%\Microsoft\Outlook`, and everything in it | Outlook's own folder: removing it would take the stores inside with it |
+| Any folder named `Outlook Files`, and everything in it | Outlook's default folder for data files, found by name because OneDrive and folder redirection move Documents |
+
+A name that only resembles one — `archive.pst.txt`, `archive.pstx`, a folder called
+`Outlook Files backup` — is ordinary. A folder of your own that happens to hold a `.pst`, `Documents`
+included, is still yours to remove, as any other folder of your own content is: the refusal is for
+the file a size picture singles out and for Outlook's own folders, not for everything above them.
+Hovering any of these says what it is, and *Compact Now* is the supported way to make one smaller.
+
+**The type rule is Explore's, not the Storage page's.** No provider asks a file's type before it
+removes it, so a data file saved inside a location a provider empties goes with that location's other
+contents: the *Temporary files* row takes a closed `.pst` left in a temporary folder past its age
+limit, and a build directory takes one saved inside it. Neither is somewhere Outlook saves a data
+file. Carrying the refusal into the removal every provider shares would change what each of them
+leaves behind, so the rule stops at Explore.
+
+### Outlook's secure temporary folder — a Tier 1 candidate that needs measuring first
+
+Outlook copies an attachment you open into a folder of its own, `Content.Outlook`, and this is the
+one clean Tier 1 candidate in this area. Two things have to hold before any code:
+
+- **Its path is read, never assumed.** Microsoft's [article on attachments left behind][olk-temp]
+  says Outlook first reads `OutlookSecureTempFolder` under
+  `HKEY_CURRENT_USER\Software\Microsoft\Office\<version>\Outlook\Security` (or the matching policy
+  key), and creates a randomly named subfolder under the Temporary Internet Files directory only when
+  that value is missing or invalid. That article covers Outlook 2003 to 2010, so the value's
+  behaviour on current Outlook is not established from it.
+- **It needs measuring on a real Outlook machine.** The accumulation that made the folder famous —
+  attachments left behind when Outlook exited or crashed while they were open — is, in Microsoft's
+  words, *"resolved in Microsoft Outlook 2010 Service Pack 1 (SP1) and in the Microsoft Office Outlook
+  2007 hotfix package dated June 29, 2010."* Whether it still grows to a size worth a row is unknown.
+
+### Office Document Cache — pending uploads, and a vendor warning against deleting it by hand
+
+The Office Document Cache holds the files Office is uploading to a server, so that it can show how
+each upload is progressing and whether any needs attention. It is not offered.
+
+- **It can hold work that exists nowhere else.** From Version 2512, [Microsoft
+  says][odc-size] Office keeps *"items that have pending changes to upload or items with upload
+  errors for a maximum of 365 days"* by default. Before that version, [a file was
+  removed][odc-settings] *"only when there are no changes pending upload"*.
+- **The documented route moved, and it is interactive.** The Upload Center's *Delete cached files*
+  was the old route, and [Microsoft states][odc-upload] that *"In Microsoft 365 apps, the Office
+  Upload Center has been removed."* The current route is inside an Office application, under
+  *File > Options > Save > Cache Settings > Delete cached files*, which asks separately before it
+  deletes files with pending uploads.
+- **Microsoft warns against exactly what a path-based cleaner would do.** *"Deleting the Office
+  document cache programmatically or by manually navigating to user app data is not recommended.
+  Doing this may lead to Office Client crashes and/or unrecoverable data loss."*
+
+Nothing in this Outlook and Office area could be measured: no `.ost` or `.pst` existed on the machine
+these notes were written against, and no Outlook profile had ever been created on it.
+
+[ost-plan]: https://learn.microsoft.com/en-us/microsoft-365-apps/outlook/configuration/cached-exchange-mode
+[ost-subset]: https://learn.microsoft.com/en-us/troubleshoot/outlook/user-interface/only-subset-items-synchronized
+[ost-sync]: https://learn.microsoft.com/en-us/troubleshoot/exchange/compliance/mrm-not-process-sync-issues-folder
+[ost-repair]: https://support.microsoft.com/en-us/office/repair-outlook-data-files-pst-and-ost-25663bc3-11ec-4412-86c4-60458afc5253
+[pst-intro]: https://support.microsoft.com/en-us/office/introduction-to-outlook-data-files-pst-and-ost-222eaf92-a995-45d9-bde2-f331f60e2790
+[olk-temp]: https://learn.microsoft.com/en-us/previous-versions/troubleshoot/outlook/attachments-issues-outlook
+[odc-size]: https://support.microsoft.com/en-us/topic/managing-office-document-cache-size-ea64af72-b597-408e-8ecf-fd55daa02476
+[odc-settings]: https://support.microsoft.com/en-us/office/office-document-cache-settings-4b497318-ae4f-4a99-be42-b242b2e8b692
+[odc-upload]: https://support.microsoft.com/en-us/office/microsoft-office-upload-center-f08161d9-ab64-4486-af69-7cd30b34df71

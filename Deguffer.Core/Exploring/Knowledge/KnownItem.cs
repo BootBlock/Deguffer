@@ -65,6 +65,17 @@ public enum KnownPlace
     /// under the place that gives it that meaning, or nowhere.</para>
     /// </summary>
     Anywhere,
+
+    /// <summary>
+    /// Any file with this extension, anywhere at all.
+    ///
+    /// <para>For a type of file that means one thing wherever it is saved, and that a user saves
+    /// wherever they like. An Outlook data file is the case it exists for: an archive is as likely to
+    /// sit on a data disk as in the folder Outlook suggests, and an entry anchored to that folder
+    /// would explain the one copy the reader is not looking at. It is the weakest claim the catalogue
+    /// makes, so any entry written about the path itself wins over it.</para>
+    /// </summary>
+    AnywhereByExtension,
 }
 
 /// <summary>
@@ -84,7 +95,8 @@ public enum KnownPlace
 /// <param name="RelativePath">
 /// Where this sits below <paramref name="Place"/>, using <c>\</c> between segments. Empty means the
 /// place itself, which is how <c>C:\Windows</c> and <c>C:\ProgramData</c> are described. For
-/// <see cref="KnownPlace.Anywhere"/> it is a single name and nothing else.
+/// <see cref="KnownPlace.Anywhere"/> it is a single name and nothing else, and for
+/// <see cref="KnownPlace.AnywhereByExtension"/> an extension with its leading dot, such as <c>.pst</c>.
 /// </param>
 /// <param name="Summary">
 /// What the thing is and what it is for, in a few plain sentences. Written for somebody who has just

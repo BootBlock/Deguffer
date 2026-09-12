@@ -106,6 +106,23 @@ public sealed class KnownItemsTests : IDisposable
     }
 
     /// <summary>
+    /// An extension is matched against what <see cref="Path.GetExtension(string)"/> returns, which
+    /// is one dot and what follows the last one. An entry written without its dot, or with two, would
+    /// never be found at all.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Everything))]
+    public void AnExtensionIsOneDotAndAName(KnownItem entry)
+    {
+        if (entry.Place is KnownPlace.AnywhereByExtension)
+        {
+            Assert.Equal(0, entry.RelativePath.LastIndexOf('.'));
+            Assert.True(entry.RelativePath.Length > 1);
+            Assert.DoesNotContain('\\', entry.RelativePath);
+        }
+    }
+
+    /// <summary>
     /// A volume-root entry names something <em>on</em> the volume, so an empty relative path there
     /// would be the drive itself — which is not a thing to explain or to remove.
     /// </summary>
@@ -154,6 +171,29 @@ public sealed class KnownItemsTests : IDisposable
             .Describe(Path.Combine(_system.ProgramData, relativePath));
 
         Assert.NotNull(entry);
+    }
+
+    /// <summary>
+    /// Outlook's mail stores and the two folders that hold them, which §9 excludes and Explore
+    /// refuses. No provider targets them and the Storage page never names them, so this is the only
+    /// place the app says what a forty-gigabyte file Explore will not remove actually is — and it has
+    /// to say it about an archive on a data disk as much as about one in the folder Outlook suggested.
+    /// </summary>
+    [Theory]
+    [InlineData(@"D:\Mail\archive.pst")]
+    [InlineData(@"E:\someone@example.com.ost")]
+    public void OutlooksDataFilesAreExplainedWhereverTheyAre(string path)
+    {
+        Assert.NotNull(ItemGuide.For(_system, _environment).Describe(path));
+    }
+
+    [Theory]
+    [InlineData(KnownPlace.LocalAppData, @"Microsoft\Outlook")]
+    [InlineData(KnownPlace.UserProfile, @"Documents\Outlook Files")]
+    [InlineData(KnownPlace.UserProfile, @"OneDrive\Documents\Outlook Files")]
+    public void OutlooksFoldersAreExplainedEvenThoughNothingOffersThem(KnownPlace place, string relativePath)
+    {
+        Assert.NotNull(ItemGuide.For(_system, _environment).Describe(Path.Combine(Anchor(place), relativePath)));
     }
 
     /// <summary>
@@ -226,6 +266,7 @@ public sealed class KnownItemsTests : IDisposable
     {
         KnownPlace.VolumeRoot => Path.Combine(@"C:\", entry.RelativePath),
         KnownPlace.Anywhere => Path.Combine(@"C:\somewhere\else", entry.RelativePath),
+        KnownPlace.AnywhereByExtension => Path.Combine(@"C:\somewhere\else", "saved" + entry.RelativePath),
         _ => Path.Combine(Anchor(entry.Place), entry.RelativePath),
     };
 

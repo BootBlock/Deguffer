@@ -66,6 +66,87 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// §9's Outlook data files, by their type rather than by where they are. A <c>.pst</c> is
+    /// wherever somebody saved it, so every case here is somewhere no region and no tool root covers:
+    /// a rule that only knew Outlook's own folders would allow all of them.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Documents\archive.pst")]
+    [InlineData(@"Downloads\old mailbox.OST")]
+    [InlineData(@"OneDrive\Mail\2019.Pst")]
+    public void AnOutlookDataFileIsRefusedWhereverItIsSaved(string relative)
+    {
+        var verdict = Policy().MayRemove(Path.Combine(_environment.UserProfile, relative));
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("Outlook", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And on a drive the policy was never told about, at the top of it or anywhere below — the
+    /// archive on a data disk is the ordinary case for a file that is kept because it is the only
+    /// copy.
+    /// </summary>
+    [Theory]
+    [InlineData(@"D:\archive.pst")]
+    [InlineData(@"D:\Mail\2014\archive.pst")]
+    [InlineData(@"E:\Backups\mailbox.ost")]
+    public void AnOutlookDataFileIsRefusedOnAnyDrive(string path)
+    {
+        Assert.False(Policy().MayRemove(path).IsAllowed);
+    }
+
+    /// <summary>
+    /// §5.2's shape, applied to Outlook's own folder: nothing in it is recognised, so the folder and
+    /// everything in it are refused — the address books and caches beside the mailbox as much as
+    /// the mailbox, and a name nobody here has heard of most of all.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("RoamCache")]
+    [InlineData(@"Offline Address Books\udetails.oab")]
+    [InlineData("something-unrecognised.dat")]
+    public void OutlooksOwnFolderIsRefusedWithEverythingInIt(string relative)
+    {
+        var verdict = Policy().MayRemove(
+            Path.Combine(_environment.LocalAppData, "Microsoft", "Outlook", relative));
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("Outlook", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The folder Outlook saves new data files in, wherever the Documents folder holding it has
+    /// been moved to. Removing the folder is removing every file in it, so refusing only the files
+    /// would leave the same deletion one level up.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Documents\Outlook Files")]
+    [InlineData(@"OneDrive\Documents\Outlook Files")]
+    [InlineData(@"OneDrive\Documents\Outlook Files\readme.txt")]
+    public void TheFolderOutlookSavesDataFilesInIsRefusedWhereverItIs(string relative)
+    {
+        Assert.False(Policy().MayRemove(Path.Combine(_environment.UserProfile, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The over-reach direction. Each of these only resembles an Outlook data file or one of its
+    /// folders, and a refusal matched on text rather than on the name would take away a removal
+    /// the user is entitled to without protecting any mail.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Documents\archive.pst.txt")]
+    [InlineData(@"Documents\archive.pstx")]
+    [InlineData(@"Documents\pst")]
+    [InlineData(@"Documents\Outlook Files backup")]
+    [InlineData(@"AppData\Local\Microsoft\OutlookBackup")]
+    [InlineData(@"AppData\Local\Microsoft\Edge")]
+    public void ANameThatOnlyResemblesOutlooksIsNotRefusedForIt(string relative)
+    {
+        Assert.True(Policy().MayRemove(Path.Combine(_environment.UserProfile, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// Both program directories. A rule that knew only the 64-bit one would allow half the
     /// installed software on the machine, which is the shape of hole nobody notices.
     /// </summary>
