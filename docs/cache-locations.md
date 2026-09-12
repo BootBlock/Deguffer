@@ -1449,7 +1449,7 @@ change.
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\Spotify\Data` for the edition Spotify's own installer puts in place, and `LocalCache\Spotify\Data` inside the Microsoft Store edition's package folder |
 | **Method** | Delete the named cache folder, never the folder around it |
-| **Typical size** | Not measured: Spotify was not installed on the machine this was researched on. It is widely reported at several gigabytes on a machine used daily |
+| **Typical size** | Not measured: Spotify was not installed on the machine this was researched on |
 
 ### What it is
 
@@ -1464,7 +1464,7 @@ Those are two stores in two folders, and only the first is a cache:
 
 **Spotify documents neither path.** Its article names no folder on Windows at all. The locations here
 are what Spotify's community moderators, its volunteer experts and other tools report, so they are
-observed rather than Spotify's word.
+observed rather than Spotify's word. The sources are listed at the end of this section.
 
 The Microsoft Store edition lays the same things out differently. Its cache is under
 `LocalCache\Spotify` inside `%LOCALAPPDATA%\Packages\SpotifyAB.SpotifyMusic_zpdnekdrzrea0`, and its
@@ -1486,13 +1486,15 @@ the two stores moves is not something anyone can say for certain: Spotify's help
 stores "your cache somewhere else", the app labels it offline storage, and Spotify's moderators say
 the cache cannot be moved at all. So Deguffer assumes neither:
 
-- A folder the settings move storage to is **never looked inside**. Deguffer says it was neither
-  cleared nor ruled out, checks afterwards that it is still there, and refuses it on the Explore page
-  unless it is a whole drive, which Explore would otherwise lose entirely.
+- **Nothing in a folder the settings move storage to is measured or removed.** Deguffer says it was
+  neither cleared nor ruled out, checks afterwards that it is still there, and refuses it on the
+  Explore page unless it is a whole drive, which Explore would otherwise lose entirely. A folder
+  above Spotify's own is refused whole, with everything else in it.
 - If that folder **is** a cache folder, sits inside one or holds one, that cache is **not offered**,
   because your downloads may be in it.
 - If the settings file **cannot be read**, or names a location Deguffer cannot place, **no Spotify
-  cache is offered**, for the same reason.
+  cache is offered**, for the same reason. A file that is not plain UTF-8 text counts as one Deguffer
+  cannot place, and any location beside the one it cannot place is still protected.
 
 Spotify's documented way to clear the cache is a button inside the running app: **Settings**,
 **Storage**, **Clear cache**. Nothing does the same from outside the app, so this is the path-based
@@ -1534,6 +1536,23 @@ Everything in the cache is a copy of something Spotify's servers still have, and
 again on the next play. Spotify's own instruction for clearing it carries no warning about what
 clearing removes, which is the vendor's own assessment of the cost. The downloads beside it are the
 opposite case, which is why they are kept out entirely rather than offered at a higher tier.
+
+### Sources
+
+- Spotify's storage article, for what the cache and the downloads are and how the app clears the
+  cache: <https://support.spotify.com/us/article/storage-information/>
+- Spotify Community threads in which Spotify's moderators say the desktop app's cache location
+  cannot be changed, and that the storage setting moves offline storage:
+  <https://community.spotify.com/t5/Desktop-Windows/Changing-the-Cache-location/td-p/4758102> and
+  <https://community.spotify.com/t5/Desktop-Windows/Data-on-quot-C-quot-drive-still-grows-even-when-I-select-offline/td-p/4807400>
+- A Spotify Community thread on the Microsoft Store edition's `LocalCache` and `LocalState` folders:
+  <https://community.spotify.com/t5/Desktop-Windows/localState-folder-and-localCache-folder/td-p/5153299>
+- Winapp2, which lists `Storage` for both editions, in a section of its own named for downloaded
+  songs: <https://github.com/MoscaDotTo/Winapp2>
+- spicetify, which reads `offline.bnk` from `%LOCALAPPDATA%\Spotify`: <https://github.com/spicetify/cli>
+- A comment in a proposed BleachBit cleaner rule, which records that the storage location is saved
+  in `%APPDATA%\Spotify\prefs` and shows the format of the `storage.location` line:
+  <https://github.com/bleachbit/cleanerml/blob/f28fbdaec0e8264c38e00c6c6463d39c081cadf6/pending/spotify.xml>
 
 ---
 

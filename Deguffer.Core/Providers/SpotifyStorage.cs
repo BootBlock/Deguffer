@@ -17,8 +17,8 @@ public sealed record SpotifyInstall(SpotifyEdition Edition, SpotifySettings Sett
 /// <para><b>Spotify's Settings page moves its storage, and nobody can say which store moves.</b>
 /// Spotify's help calls what moves its cache. The client labels it offline storage, and Spotify's
 /// moderators say the cache cannot be moved at all. So a moved location is treated as though it
-/// could be either. It is never looked inside, and a cache it overlaps is never offered, because
-/// downloaded music may be in there.</para>
+/// could be either. Nothing in it is ever measured or removed, and a cache it overlaps is never
+/// offered, because downloaded music may be in there.</para>
 ///
 /// <para><b>One edition's settings can withhold the other edition's cache.</b> A location is a
 /// path, and nothing stops the installer's edition from being pointed inside the Store edition's
@@ -45,15 +45,14 @@ public sealed record SpotifyStorage(IReadOnlyList<SpotifyInstall> Installs)
     public SpotifySettings? Unsettled => Installs.Select(i => i.Settings).FirstOrDefault(s => !s.IsSettled);
 
     /// <summary>
-    /// The locations that are not where an edition keeps downloads by default and overlap no cache.
-    /// These are the ones owed a sentence of their own. A location that overlaps a cache is covered
-    /// by the sentence about that cache.
+    /// The locations that are not where an edition keeps downloads by default. Each one is owed a
+    /// sentence, a survival check and a refusal in Explore, whether or not it overlaps a cache and
+    /// whether or not that cache is on disk.
     /// </summary>
-    public IReadOnlyList<string> Elsewhere =>
+    public IReadOnlyList<string> Moved =>
     [
-        .. Locations.Where(location => !Installs.Any(i =>
-            location.Equals(i.Edition.OfflineStore, StringComparison.OrdinalIgnoreCase)
-            || Overlaps(location, i.Edition.Cache))),
+        .. Locations.Where(location => !Installs.Any(
+            i => location.Equals(i.Edition.OfflineStore, StringComparison.OrdinalIgnoreCase))),
     ];
 
     /// <summary>The locations that are the cache, sit inside it, or hold it.</summary>

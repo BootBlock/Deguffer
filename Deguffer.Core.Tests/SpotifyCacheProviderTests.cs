@@ -9,10 +9,10 @@ namespace Deguffer.Core.Tests;
 /// The first provider whose cache sits beside something that cannot be fetched again for free.
 ///
 /// <para>Two things have to hold. Nothing but <c>Data</c> is ever reachable, and the downloads, their
-/// index and the settings are asserted to survive rather than merely left out. And where Spotify's
-/// settings have moved its storage, or cannot be read, no cache the downloads may be in is offered —
-/// which is asserted by running the plan, because a plan with no step removes nothing whether or not
-/// the rule held.</para>
+/// index and the settings are asserted to survive a run rather than merely left out. And where
+/// Spotify's settings have moved its storage, or cannot be read, no cache the downloads may be in is
+/// offered. That is asserted on the plan and on the declaration, which are what a deletion is built
+/// from. A plan with no step removes nothing, so running one would add no evidence.</para>
 /// </summary>
 public sealed class SpotifyCacheProviderTests : IDisposable
 {
@@ -34,8 +34,8 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
     private string StoreSettingsFolder => Path.Combine(Package, "LocalState", "Spotify");
 
-    private SpotifyCacheProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+    private SpotifyCacheProvider CreateProvider(FakeDirectoryScanner? scanner = null) =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
 
     /// <summary>A directory with a file in it, so it measures above zero and is selectable.</summary>
     private static string Populate(string path)
@@ -56,6 +56,13 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
     /// <summary>A path written as Spotify writes a string value, with every backslash doubled.</summary>
     private static string Quoted(string path) => "\"" + path.Replace(@"\", @"\\") + "\"";
+
+    private static void AssertNothingIsOffered(SpotifyCacheProvider provider, CleanupPlan plan)
+    {
+        Assert.Empty(plan.TargetedPaths);
+        Assert.All(provider.Roots, root => Assert.Empty(root.Locations));
+        Assert.True(plan.WasNotExamined);
+    }
 
     [Fact]
     public async Task ReportsNotPresentOnAMachineWithNoSpotify()
@@ -176,20 +183,28 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
     /// <summary>
     /// Spotify's settings have moved its storage somewhere of the user's choosing. The cache in the
-    /// usual place is still offered, and the moved location is named, asserted and never entered.
+    /// usual place is still offered. The moved location is named and asserted to survive, and nothing
+    /// in it is measured: its size would be a figure about downloads Deguffer is not going to touch.
     /// </summary>
     [Fact]
-    public async Task AMovedStorageIsNeverLookedInsideAndSurvives()
+    public async Task AMovedStorageIsNeverMeasuredAndSurvives()
     {
         var cache = Populate(Path.Combine(LocalFolder, "Data"));
         var moved = Populate(Path.Combine(_temp.Path, "music", "Spotify"));
-        var inside = Populate(Path.Combine(moved, "0a"));
+        Populate(Path.Combine(moved, "0a"));
         WriteSettings(RoamingFolder, $"storage.location={Quoted(moved)}");
 
-        var provider = CreateProvider();
+        var scanner = new FakeDirectoryScanner();
+        var provider = CreateProvider(scanner);
         var plan = await provider.PlanAsync();
 
         Assert.Equal(cache, Assert.Single(plan.TargetedPaths));
+
+        // The premise: the scanner records measurements, so its silence about the moved location
+        // below is evidence rather than a scanner that saw nothing at all.
+        Assert.Contains(cache, scanner.Measured, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(scanner.Measured, path => LongPath.Contains(moved, path));
+
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("move its storage to", StringComparison.Ordinal)
             && n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase));
@@ -199,13 +214,12 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.True(Directory.Exists(inside), $"{inside} was removed");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
     /// A moved storage that is the cache, sits inside it or holds it. Downloaded music may be in the
-    /// cache folder, so the cache is not offered, not declared, and still there after a run.
+    /// cache folder, so the cache is neither offered nor declared, and the note says why.
     /// </summary>
     [Theory]
     [InlineData(SpotifySettings.LocationKey, "Data")]
@@ -223,19 +237,53 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
+        // The installer edition's root only. The Store edition's cache overlaps nothing here, so it is
+        // still declared, and nothing of it is on disk to target.
         Assert.Empty(plan.TargetedPaths);
         Assert.Empty(provider.Roots[0].Locations);
         Assert.True(plan.WasNotExamined);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("overlaps its cache", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(cache, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("left the cache alone", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
 
-        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
-        Assert.True(File.Exists(Path.Combine(cache, "data.bin")), "the withheld cache was emptied");
+        // One sentence for the location. The one about the cache already names it, and a second
+        // saying it was moved would read as two different folders.
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("move its storage to", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A moved storage that holds where a cache would be, with no cache there. Nothing is withheld,
+    /// so no sentence about a cache applies, and the location still has to be named: the row must
+    /// read neither "Not installed" nor "Already clear" about a folder nobody examined.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AMovedStorageHoldingAMissingCacheIsStillPresentAndNamed(bool aboveSpotify)
+    {
+        var location = aboveSpotify ? _environment.LocalAppData : LocalFolder;
+        Directory.CreateDirectory(LocalFolder);
+        WriteSettings(RoamingFolder, $"storage.location={Quoted(location)}");
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("move its storage to", StringComparison.Ordinal)
+            && n.Message.Contains(location, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(location, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
     }
 
     [Fact]
     public async Task ALockedSettingsFileWithholdsTheCache()
     {
-        var cache = Populate(Path.Combine(LocalFolder, "Data"));
+        Populate(Path.Combine(LocalFolder, "Data"));
         var settings = WriteSettings(RoamingFolder, "app.autostart-mode=\"off\"");
 
         var provider = CreateProvider();
@@ -247,14 +295,10 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             plan = await provider.PlanAsync();
         }
 
-        Assert.Empty(plan.TargetedPaths);
-        Assert.True(plan.WasNotExamined);
+        AssertNothingIsOffered(provider, plan);
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("could not read Spotify's settings", StringComparison.Ordinal)
             && n.Message.Contains("left Spotify's streaming cache alone", StringComparison.Ordinal));
-
-        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
-        Assert.True(File.Exists(Path.Combine(cache, "data.bin")), "the withheld cache was emptied");
     }
 
     [Fact]
@@ -264,35 +308,78 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Directory.CreateDirectory(RoamingFolder);
         File.WriteAllBytes(Path.Combine(RoamingFolder, "prefs"), new byte[(1024 * 1024) + 1]);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
-        Assert.Empty(plan.TargetedPaths);
+        AssertNothingIsOffered(provider, plan);
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not read Spotify's settings", StringComparison.Ordinal));
     }
 
     /// <summary>
     /// A location Deguffer cannot place is not skipped. Skipping it would read as "nothing moved",
-    /// and the cache the downloads may have moved into would be offered.
+    /// and the cache the downloads may have moved into would be offered. The last case is a file that
+    /// is not UTF-8 text at all.
     /// </summary>
     [Theory]
     [InlineData("storage.location=\"relative\\\\folder\"")]
     [InlineData("storage.location=C:\\\\unquoted")]
     [InlineData("storage.location=\"C:\\\\music\\q\"")]
     [InlineData("storage.location=\"C:\\\\mu\"sic\"")]
+    [InlineData("storage.location=\"C:\\\\Mus\u00e9e\"")]
     public async Task ASettingDegufferCannotPlaceWithholdsTheCache(string line)
     {
-        var cache = Populate(Path.Combine(LocalFolder, "Data"));
-        WriteSettings(RoamingFolder, line);
+        Populate(Path.Combine(LocalFolder, "Data"));
+        Directory.CreateDirectory(RoamingFolder);
+
+        // Written in Windows-1252, where 'é' is one byte that is not UTF-8. Every other line is plain
+        // ASCII and reads the same in either encoding.
+        File.WriteAllBytes(
+            Path.Combine(RoamingFolder, "prefs"),
+            System.Text.Encoding.Latin1.GetBytes(line + "\n"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        Assert.Empty(plan.TargetedPaths);
-        Assert.True(plan.WasNotExamined);
+        AssertNothingIsOffered(provider, plan);
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not make sense of", StringComparison.Ordinal));
+    }
 
-        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
-        Assert.True(File.Exists(Path.Combine(cache, "data.bin")), "the withheld cache was emptied");
+    /// <summary>
+    /// One edition's settings that cannot be read withhold the other edition's cache too, because a
+    /// location is a path and the unread one could name either.
+    /// </summary>
+    [Fact]
+    public async Task OneEditionsUnplaceableSettingWithholdsTheOtherEditionsCache()
+    {
+        Populate(Path.Combine(LocalFolder, "Data"));
+        WriteSettings(StoreSettingsFolder, "storage.location=\"relative\"");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        AssertNothingIsOffered(provider, plan);
+    }
+
+    /// <summary>
+    /// A location that can be placed, beside one that cannot. The caches are withheld for the second,
+    /// and the first is still protected: it names where downloads may be whatever the other line says.
+    /// </summary>
+    [Fact]
+    public async Task ALocationBesideOneThatCannotBePlacedIsStillProtected()
+    {
+        Populate(Path.Combine(LocalFolder, "Data"));
+        var moved = Populate(Path.Combine(_temp.Path, "music", "Spotify"));
+        WriteSettings(
+            RoamingFolder,
+            "storage.location=\"relative\"",
+            $"storage.last-location={Quoted(moved)}");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        AssertNothingIsOffered(provider, plan);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
     }
 
     /// <summary>The downloads' usual place, written out, is not a move and owes no sentence.</summary>
@@ -310,7 +397,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
     /// <summary>
     /// A location is a path, so one edition can be pointed inside the other's cache. The cache it
-    /// overlaps is withheld and survives, and the other edition's cache is still offered.
+    /// overlaps is withheld and survives a run that removes the other edition's cache.
     /// </summary>
     [Fact]
     public async Task OneEditionsSettingsCanWithholdTheOtherEditionsCache()
@@ -325,13 +412,14 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.Equal(classic, Assert.Single(plan.TargetedPaths));
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.False(Directory.Exists(classic), $"{classic} was not removed");
         Assert.True(File.Exists(Path.Combine(store, "data.bin")), "the withheld cache was emptied");
     }
 
     /// <summary>
     /// Spotify is installed with its storage moved and no cache in the usual place. The row must not
     /// read "Not installed", and it must not read "Already clear" either: the moved location was never
-    /// looked at.
+    /// examined.
     /// </summary>
     [Fact]
     public async Task AMovedStorageWithNoCacheIsPresentAndUnexamined()
@@ -350,7 +438,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A cache moved onto another drive with a link. Deguffer removes nothing through it and says so,
+    /// A cache moved onto another drive with a link. Deguffer offers nothing through it and says so,
     /// rather than deleting the far side of a redirection nobody classified.
     /// </summary>
     [Fact]
@@ -366,9 +454,6 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
-
-        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
-        Assert.True(File.Exists(Path.Combine(outside, "data.bin")), $"{outside} was emptied through the link");
     }
 
     /// <summary>

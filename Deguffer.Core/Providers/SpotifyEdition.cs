@@ -8,7 +8,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Spotify documents none of these paths.</b> Its storage article names no folder on
 /// Windows at all, so every path here was observed and reported by others rather than stated by the
-/// vendor. <c>docs/cache-locations.md</c> carries the sources.</para>
+/// vendor. The Spotify section of <c>docs/cache-locations.md</c> lists the sources.</para>
 ///
 /// <para><b>The two editions differ only in where things are, which is data.</b> The installer's
 /// edition keeps the cache and the downloads side by side under <c>%LOCALAPPDATA%\Spotify</c>, and

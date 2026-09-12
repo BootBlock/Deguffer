@@ -12,14 +12,14 @@ namespace Deguffer.Core.Providers;
 /// <c>Data</c> is the streaming cache. <c>Storage</c> is the music and podcasts the user downloaded
 /// to play offline, which is a Premium feature: getting them back needs an active subscription, and
 /// Deguffer cannot see whether there is one. A user whose Premium has lapsed would lose offline
-/// listening for good, so the downloads are never offered at any tier. Two general-purpose cleaners
-/// were found deleting <c>Storage</c> as "cache", which is §3's mistake made on purpose.</para>
+/// listening for good, so the downloads are never offered at any tier. At least two general-purpose
+/// cleaners treat <c>Storage</c> as cache, which is the kind of misclassification §3 describes.</para>
 ///
 /// <para><b>Where the downloads are is read, never assumed.</b> Spotify's Settings page moves its
 /// storage and records the move in its settings file, and it is not possible to tell which store
-/// moved. <see cref="SpotifyStorage"/> carries that argument. Here it means a moved location is
-/// never looked inside and is asserted to survive, and a cache is not offered at all where its
-/// downloads may be in it.</para>
+/// moved. <see cref="SpotifyStorage"/> carries that argument. Here it means nothing in a moved
+/// location is measured or removed, the location is asserted to survive, and a cache is not offered
+/// at all where its downloads may be in it.</para>
 ///
 /// <para><b>§5.1 has a route, and Deguffer cannot take it.</b> Spotify documents clearing the cache
 /// from inside the running app, under Settings, Storage, Clear cache, and ships nothing that does the
@@ -51,8 +51,8 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         "This is where Spotify keeps its settings and who is signed in. Deguffer removes nothing here.";
 
     private const string LocationReason =
-        "Where Spotify's settings say it keeps its storage. Deguffer never looks inside it, because "
-        + "the music and podcasts you downloaded may be there.";
+        "Where Spotify's settings say it keeps its storage. Deguffer never measures or removes "
+        + "anything in it, because the music and podcasts you downloaded may be there.";
 
     private IReadOnlyList<DeclaredRoot>? _roots;
     private IReadOnlyList<ToolRoot>? _toolRoots;
@@ -112,6 +112,11 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     ///
     /// <para>A withheld cache is refused here too. Otherwise Explore would allow the one directory
     /// the Storage page has just declined, for the reason it declined it.</para>
+    ///
+    /// <para>A moved location is refused wherever it is, including a folder above Spotify's own, so
+    /// everything in it that no deeper declaration recognises is refused as well. That is the
+    /// direction §5.2 requires, and the price falls only on a machine whose storage was pointed at a
+    /// folder that general.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= DeclareToolRoots();
 
@@ -133,8 +138,8 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     /// Presence is a cache folder on disk, or a sentence owed about where Spotify's storage is.
     ///
     /// <para>The second half is there because the planner never asks an absent provider for a plan.
-    /// A settings file that could not be read, or a location nobody looked inside, would otherwise
-    /// leave the row reading "Not installed" about a Spotify that is installed.</para>
+    /// A settings file that could not be read, or a moved location, would otherwise leave the row
+    /// reading "Not installed" about a Spotify that is installed.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
@@ -143,7 +148,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         return Task.FromResult(
             storage.Installs.Any(install => LongPath.DirectoryExists(install.Edition.Cache))
             || storage.Unsettled is not null
-            || storage.Elsewhere.Count > 0);
+            || storage.Moved.Count > 0);
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -154,7 +159,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             .Where(install => !storage.MayOffer(install.Edition) && LongPath.DirectoryExists(install.Edition.Cache))
             .ToList();
 
-        var owesASentence = withheld.Count > 0 || storage.Unsettled is not null || storage.Elsewhere.Count > 0;
+        var owesASentence = withheld.Count > 0 || storage.Unsettled is not null || storage.Moved.Count > 0;
 
         if (scan.FoundNothing && !owesASentence)
         {
@@ -163,6 +168,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>(scan.Notes);
         var survivors = new List<(string Path, string Reason)>(scan.Protected);
+        var explained = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         if (storage.Unsettled is { } unsettled)
         {
@@ -171,18 +177,26 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
 
         foreach (var install in withheld)
         {
-            survivors.Add((install.Edition.Cache, WithheldCacheReason));
-            notes.AddRange(storage.Overlapping(install.Edition).Select(
-                location => Information(
-                    $"Spotify's settings keep its storage in '{location}', which overlaps its cache in "
-                    + $"'{install.Edition.Cache}'. The music and podcasts you downloaded may be in there, "
-                    + "so Deguffer left the cache alone.")));
+            var cache = install.Edition.Cache;
+            survivors.Add((cache, WithheldCacheReason));
+
+            foreach (var location in storage.Overlapping(install.Edition))
+            {
+                explained.Add(location);
+                notes.Add(Information(
+                    (location.Equals(cache, StringComparison.OrdinalIgnoreCase)
+                        ? $"Spotify's settings keep its storage in its cache folder, '{cache}'."
+                        : $"Spotify's settings keep its storage in '{location}', which overlaps its cache in '{cache}'.")
+                    + " The music and podcasts you downloaded may be in there, so Deguffer left the cache alone."));
+            }
         }
 
-        notes.AddRange(storage.Elsewhere.Select(location => Information(
+        // Every other moved location, including one that holds a cache folder not on disk, is named
+        // in a sentence of its own. Nothing else would tell the user it was never examined.
+        notes.AddRange(storage.Moved.Where(location => !explained.Contains(location)).Select(location => Information(
             $"Spotify's settings move its storage to '{location}'. Spotify keeps the music and podcasts "
             + "you download there, and its own help calls that folder its cache, so Deguffer did not "
-            + "look inside it. Whatever is there was neither cleared nor ruled out.")));
+            + "measure or remove anything in it. Whatever is there was neither cleared nor ruled out.")));
 
         survivors.AddRange(storage.Locations.Select(location => (location, LocationReason)));
 
@@ -216,8 +230,8 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
 
-            // A withheld cache and a location nobody looked inside count here for the reason a
-            // declined link does: something was never examined, so the row must not read clear.
+            // A withheld cache and a moved location count here for the reason a declined link does:
+            // something was never examined, so the row must not read clear.
             WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || owesASentence),
         };
     }
@@ -317,7 +331,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         // A volume root is left out. Refusing every child of a drive would take the whole drive away
         // from Explore for one Spotify setting, and a volume root is never itself removable there.
         roots.AddRange(
-            from location in storage.Elsewhere
+            from location in storage.Moved
             where VolumeRoot.Below(location) is not null
             select ToolRoot.Of(location, LocationReason, new DisposableChildSet([])));
 

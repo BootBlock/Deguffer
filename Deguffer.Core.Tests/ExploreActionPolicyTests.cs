@@ -770,10 +770,14 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
     /// <summary>
     /// A cache the Storage page withholds is refused here too, or Explore would offer the one
-    /// directory the plan has just declined, for the reason it declined it.
+    /// directory the plan has just declined, for the reason it declined it. Withheld because the
+    /// storage was moved inside it, and withheld because the settings name a location nobody can
+    /// place.
     /// </summary>
-    [Fact]
-    public void ASpotifyCacheTheSettingsOverlapIsRefused()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ASpotifyCacheTheStoragePageWithholdsIsRefused(bool movedInside)
     {
         var cache = Path.Combine(_environment.LocalAppData, "Spotify", "Data");
         var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
@@ -782,10 +786,44 @@ public sealed class ExploreActionPolicyTests : IDisposable
         // cache is allowed.
         Assert.True(policy.MayRemove(cache).IsAllowed);
 
-        WriteSpotifySettings($"storage.location=\"{Path.Combine(cache, "offline").Replace(@"\", @"\\")}\"");
+        WriteSpotifySettings(movedInside
+            ? $"storage.location=\"{Path.Combine(cache, "offline").Replace(@"\", @"\\")}\""
+            : "storage.location=\"relative\"");
         policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
 
         Assert.False(policy.MayRemove(cache).IsAllowed);
+    }
+
+    /// <summary>
+    /// Storage moved to a folder above Spotify's own. It holds the cache folder, so the Storage page
+    /// withholds the cache, and the folder itself is refused here as well: what the storage put in
+    /// it is not distinguishable from anything else there.
+    /// </summary>
+    [Fact]
+    public void AMovedSpotifyStorageAboveSpotifysOwnFolderIsRefused()
+    {
+        WriteSpotifySettings($"storage.location=\"{_environment.LocalAppData.Replace(@"\", @"\\")}\"");
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        Assert.False(policy.MayRemove(_environment.LocalAppData).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_environment.LocalAppData, "0a")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A location that can be placed, beside one that cannot, is still refused. The file as a whole
+    /// cannot say where the storage is, and that does not make the location it does name any less
+    /// likely to hold downloads.
+    /// </summary>
+    [Fact]
+    public void AMovedSpotifyStorageBesideAnUnplaceableOneIsStillRefused()
+    {
+        var moved = _temp.CreateDirectory("music", "Spotify");
+        WriteSpotifySettings(
+            "storage.location=\"relative\"",
+            $"storage.last-location=\"{moved.Replace(@"\", @"\\")}\"");
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        Assert.False(policy.MayRemove(moved).IsAllowed);
     }
 
     private void WriteSpotifySettings(params string[] lines) => File.WriteAllText(
