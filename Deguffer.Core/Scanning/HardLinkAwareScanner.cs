@@ -122,6 +122,15 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                     Interlocked.Add(ref logical, sole.EndOfFile);
                 }
             },
+            // A file carrying a reparse point holds none of this tree's sole-linked bytes, and one named
+            // like a store is still named: the removal does not read which kind of mark a file carries.
+            marked =>
+            {
+                if (MailStore.Is(marked.Name))
+                {
+                    stores.Add(LongPath.Display(marked.FullName));
+                }
+            },
             // §5.5: stream partial results. One report per breadth-first level, not per file.
             () => progress?.Report(Approximate(
                 Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),

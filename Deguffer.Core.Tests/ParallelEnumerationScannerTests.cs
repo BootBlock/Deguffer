@@ -267,4 +267,44 @@ public class ParallelEnumerationScannerTests
         Assert.Equal(0, result.Size.Entries);
         Assert.Equal([archive], result.MailStores);
     }
+
+    /// <summary>
+    /// A file named like a store is named even where it carries a link's mark, because the removal
+    /// leaves it whatever the mark means — so it is out of the entries, and the folders holding it
+    /// stay, exactly as for any other store.
+    /// </summary>
+    [Fact]
+    public async Task NamesAFileNamedLikeAStoreThatCarriesTheMarkOfALink()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(4096, "cache", "blob.bin");
+        var target = temp.CreateFile(1_000_000, "elsewhere", "archive.pst");
+        var link = Path.Combine(temp.CreateDirectory("cache", "saved"), "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        var result = await ParallelEnumerationScanner.Default.MeasureAsync(Path.Combine(temp.Path, "cache"));
+
+        Assert.Equal([link], result.MailStores);
+        Assert.Equal(4096, result.Size.Reclaimable);
+
+        // blob.bin goes; saved and cache stay because the store keeps them standing.
+        Assert.Equal(1, result.Size.Entries);
+    }
+
+    /// <summary>The same for a single named file, which this scanner answers without walking.</summary>
+    [Fact]
+    public async Task MeasuresASingleFileNamedLikeAStoreThatCarriesTheMarkOfALinkAsNothingAndNamesIt()
+    {
+        using var temp = new TempDirectory();
+        var target = temp.CreateFile(8192, "elsewhere", "archive.pst");
+        var link = Path.Combine(temp.CreateDirectory("Downloads"), "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        var result = await ParallelEnumerationScanner.Default.MeasureAsync(link);
+
+        Assert.Equal(0, result.Size.Reclaimable);
+        Assert.Equal([link], result.MailStores);
+    }
 }

@@ -265,39 +265,21 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             notes.Add(scanNote);
         }
 
-        // §9 in a bin. A deleted Outlook data file is still one, and the bin is the last place it can be
-        // restored from. Neither route can leave it behind: Windows empties a bin whole, and the direct
-        // route would step over the file but take the record Windows keeps beside a deleted item — so
-        // a store inside a deleted folder would stay on the disk with nothing able to restore it. The
-        // unit here is the bin, so a bin holding a store is left exactly as it is.
-        var holding = planned.Where(step => step.MailStores.Count > 0).OfType<DeleteStep>().ToList();
-
-        foreach (var bin in holding)
-        {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving the Recycle Bin at {bin.Path} as it is: it holds an Outlook data file, at "
-                + $"{MailStorePlan.Name(bin.MailStores)}, and Deguffer never removes one. Restore the file, or "
-                + "delete it from the Recycle Bin yourself, and preview again."));
-        }
-
         return new CleanupPlan
         {
             ProviderId = Id,
             ProviderName = Name,
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
-            Steps = [.. planned.Where(step => step.MailStores.Count == 0)],
-            ProtectedPaths =
-            [
-                .. Protect(
-                [
-                    .. survivors,
-                    .. declined,
-                    .. holding.Select(bin => (bin.Path, "A Recycle Bin holding an Outlook data file, which Deguffer leaves as it is.")),
-                ]),
-                .. MailStorePlan.ProtectionsFor(holding.SelectMany(bin => bin.MailStores)),
-            ],
+
+            // §9 in a bin. A deleted Outlook data file is still one, and the bin is the last place it can
+            // be restored from. Neither route can leave it behind: Windows empties a bin whole, and the
+            // direct route would step over the file but take the record Windows keeps beside a deleted
+            // item — so a store inside a deleted folder would stay on the disk with nothing able to
+            // restore it. So the direct route's steps go whole or not at all, and the plan withholds a bin
+            // holding a store on either route. See DeleteDirectoryStep.IsIndivisible and MailStorePlan.
+            Steps = [.. planned.Select(step => step is DeleteDirectoryStep direct ? direct with { IsIndivisible = true } : step)],
+            ProtectedPaths = Protect([.. survivors, .. declined]),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

@@ -279,6 +279,21 @@ public sealed class PlanExecutor(
         IProgress<double>? progress,
         CancellationToken ct)
     {
+        // §9, for a directory that goes whole or not at all: the walk below would step over a store that
+        // arrived since the preview and take what belongs with it. Looked for on the disk, as it is before
+        // Windows empties a bin. See DeleteDirectoryStep.IsIndivisible.
+        if (step.IsIndivisible && await StoresInsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } arrived)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"Nothing was removed: this holds an Outlook data file, at {MailStorePlan.Name(arrived)}. "
+                + "What is inside it goes whole or not at all, and Deguffer never removes one.",
+                MailStores: arrived.Count);
+        }
+
         var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
         refusals.Replace(step.Path, removal.RefusedAt);

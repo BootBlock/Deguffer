@@ -464,7 +464,9 @@ public sealed class RecycleBinProviderTests : IDisposable
         var provider = CreateProvider(AppPreferences.Default with { EmptyRecycleBinsDirectly = true });
         var plan = await provider.PlanAsync();
 
-        Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps));
+        // A bin removed file by file goes whole or not at all: a deleted item's content and its
+        // record belong together. See DeleteStep.IsIndivisible.
+        Assert.True(Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps)).IsIndivisible);
 
         var result = await provider.ExecuteAsync(plan);
 

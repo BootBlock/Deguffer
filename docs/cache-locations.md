@@ -3053,7 +3053,10 @@ targets one, and that is not enough. A `.pst` is frequently several gigabytes, w
 puts it in front of somebody in a size picture, and it can be saved anywhere — a data disk, a folder
 you named, a share, a temporary folder an archive was opened from — so no list of paths can find
 every one. Deguffer therefore asks one question of every file, by every route it removes anything
-by: is it an `.ost` or a `.pst`? If it is, it stays.
+by: is it an `.ost` or a `.pst`? If it is, it stays. The question is asked of the name whatever else
+the file is: a OneDrive placeholder or a deduplicated file carries the same mark Windows puts on a
+link, and removing one removes its content, so a store carrying that mark stays too — and so does a
+real link named like one, which costs nothing.
 
 In Explore that is a refusal by type rather than by place:
 
@@ -3083,10 +3086,11 @@ Deguffer's to steer is withheld while a store is inside its reach:
 | Windows' File History cleanup | Not run while a saved version of a store is on the backup drive, because it can remove the last saved copy of a store you have since deleted |
 | A Recycle Bin | That bin is left exactly as it is. Windows empties a bin whole, and emptying around the store would take the record that lets a deleted folder holding it be restored |
 
-Every store a preview finds is named, and every clean checks that it is still there afterwards, so a
-clean that lost one reports a verification failure. A preview is made minutes before the clean, so
-immediately before a tool's command runs or Windows is asked to empty a bin, Deguffer looks on the
-disk again, and does neither where a store has arrived since. A row holding nothing but stores reads
+Every store a preview finds is named in its notes, and every clean checks that it is still there
+afterwards — on the rows the clean does not run as well as on the rows it does — so a clean that lost
+one reports a verification failure. A preview is made minutes before the clean, so immediately before
+a tool's command runs or a Recycle Bin is emptied, by either route, Deguffer looks on the disk again,
+and does none of these where a store has arrived since. A row holding nothing but stores reads
 *Outlook data kept*, never *Already clear*.
 
 ### Outlook's secure temporary folder — a Tier 1 candidate that needs measuring first

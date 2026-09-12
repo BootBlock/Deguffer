@@ -34,12 +34,6 @@ public sealed record ScanBatch(
 {
     public ScanSize Total => Sizes.Aggregate(ScanSize.Zero, (sum, size) => sum + size);
 
-    /// <summary>
-    /// Every mail store across every path measured, for a step that reports against all of them at
-    /// once — a tool's own command, whose probe is the whole batch.
-    /// </summary>
-    public IReadOnlyList<string> AllMailStores => [.. MailStores.SelectMany(stores => stores)];
-
     /// <summary>The scan-route note, or null when the fast path served every path.</summary>
     public PlanNote? Note => FallbackReasonText.Describe(Fallback) is { } text
         ? new PlanNote(PlanNoteSeverity.Information, text)

@@ -697,4 +697,25 @@ public class MftVolumeIndexTests
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "archive.pst"]));
         Assert.Empty(index.FindDirectoriesNamed("archive.pst"));
     }
+
+    /// <summary>
+    /// A file named like a store is named even where the table marks it a link, because the removal
+    /// leaves it whatever it is — so the two routes and the removal agree about it, and its folders
+    /// stay.
+    /// </summary>
+    [Fact]
+    public void NamesAFileNamedLikeAStoreThatTheTableMarksALink()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "blob.tgz", allocated: 4096, logical: 4096)
+            .AddFileLink(21, Nested, "archive.pst", logical: 1_000_000));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"], MinimumAge.Off, out _, out var stores);
+
+        Assert.Equal(["Users", "testuser", ".npm-cache", "content-v2", "archive.pst"], Assert.Single(stores));
+        Assert.Equal(4096, size!.Value.Logical);
+
+        // blob.tgz goes; content-v2 and .npm-cache stay because the store keeps them.
+        Assert.Equal(1, size.Value.Entries);
+    }
 }

@@ -25,7 +25,7 @@ public static class PreviewSummary
 {
     /// <summary>
     /// What a new state gets until somebody gives it words of its own, and what a mixture of causes
-    /// gets in any case. Naming two of six causes would be less true than naming none.
+    /// gets in any case. Naming two of seven causes would be less true than naming none.
     /// </summary>
     private const string MixedCauses =
         "Nothing to reclaim, and not every location here is clear. Check what each row reports.";
@@ -77,7 +77,7 @@ public static class PreviewSummary
         }
 
         // Every row measures zero from here on, which is not the same as every row being clear.
-        // Six states measure zero for a reason of their own and say so in their own words; what is
+        // Seven states measure zero for a reason of their own and say so in their own words; what is
         // left after removing the two that are genuinely nothing to act on is the reason the bar
         // has to agree with.
         present.Remove(FindingStatus.AlreadyClear);

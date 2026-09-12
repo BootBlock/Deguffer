@@ -431,16 +431,18 @@ public sealed record CleanupPlan
     }
 
     /// <summary>
-    /// This plan reduced to what a run owes its keep list: nothing to do, and the kept items to prove.
+    /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves
+    /// standing whatever anyone chooses to prove — its kept items and its Outlook data files.
     ///
-    /// <para>For a row the user did not tick. Nothing in it runs, and its kept items still have to be
-    /// shown standing once the run is over, because an over-broad rule somewhere else in that run is
-    /// exactly what could take one. Its other protections are left out: they guard against this
-    /// plan's own deletion, and there is none.</para>
+    /// <para>For a row the user did not tick, or whose confirmation was declined. Nothing in it runs,
+    /// and those files still have to be shown standing once the run is over, because an over-broad rule
+    /// somewhere else in that run is exactly what could take one. Its other protections are left out:
+    /// they guard against this plan's own deletion, and there is none. See
+    /// <see cref="StandingProof"/>.</para>
     /// </summary>
-    public CleanupPlan KeepListItemsOnly() => this with
+    public CleanupPlan ProofOnly() => this with
     {
         Steps = [],
-        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld == Withholding.OnKeepList)],
+        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld is Withholding.OnKeepList or Withholding.MailStore)],
     };
 }

@@ -44,7 +44,7 @@ public sealed record FileRemovalOutcome(
 /// §6.3: the path goes through the extended-length prefix, and §5.3: a file Windows will not
 /// release is left rather than escalated. A link is removed as a link and never followed, which here
 /// means the target is never touched — the same rule <see cref="DirectoryRemover"/> applies to its
-/// own root.
+/// own root. An Outlook mail store is never removed, whatever mark it carries (§9).
 /// </summary>
 public static class FileRemover
 {
@@ -69,6 +69,17 @@ public static class FileRemover
     {
         var extended = LongPath.Extended(path);
 
+        // §9: an Outlook mail store is never removed, whoever named it. Asked before the link branch,
+        // because the mark Windows puts on a link is also on files that are not links — a OneDrive
+        // placeholder, a deduplicated file — and deleting one of those deletes its content, so a file
+        // named like a store is left whatever it carries. Asked before the guard, because the rule is
+        // unconditional and the guard is a preference. A folder that has taken the name is not a store,
+        // and the branches below answer it.
+        if (MailStore.Is(extended) && !fs.DirectoryExists(extended))
+        {
+            return new FileRemovalOutcome(0, Refusals.None, Removed: false, MailStore: true);
+        }
+
         // A link is removed as a link, and nothing on the far side counts as reclaimed.
         //
         // This changes no outcome on Windows today, which is worth saying rather than implying:
@@ -89,14 +100,6 @@ public static class FileRemover
         if (fs.DirectoryExists(extended))
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false);
-        }
-
-        // §9: an Outlook mail store is never removed, whoever named it. Asked after the link branch,
-        // because a link named like a store is removed as a link and leaves the store it points at,
-        // and before the guard, because the rule is unconditional and the guard is a preference.
-        if (MailStore.Is(extended))
-        {
-            return new FileRemovalOutcome(0, Refusals.None, Removed: false, MailStore: true);
         }
 
         // The guard, on the file this step actually names. Asked after the link and directory

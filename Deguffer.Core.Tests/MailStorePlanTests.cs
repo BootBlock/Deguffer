@@ -62,6 +62,31 @@ public sealed class MailStorePlanTests
         Assert.True(applied.HoldsMailStores);
         Assert.True(applied.HasSomethingToProve);
         Assert.Contains(applied.Notes, n => n.Message.Contains("Outlook data file", StringComparison.Ordinal));
+
+        // Named, so the reader can find which file and where before anything runs.
+        Assert.Contains(applied.Notes, n => n.Message.Contains(Archive, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A removal whose subject goes whole or not at all cannot step over a store, so it is withheld
+    /// like a bin Windows empties — and the subject it would have removed is protected as well as the
+    /// store, so §5.6 sees an over-broad rule elsewhere in the run empty it.
+    /// </summary>
+    [Fact]
+    public void AnIndivisibleRemovalHoldingAStoreIsWithheldAndItsSubjectProtected()
+    {
+        const string bin = @"D:\$Recycle.Bin\S-1-5-21-1111111111-2222222222-3333333333-1001";
+        var store = bin + @"\$RDEF456\mail\archive.pst";
+
+        var whole = new DeleteDirectoryStep(bin, "A bin") { IsIndivisible = true, MailStores = [store] };
+
+        var applied = MailStorePlan.Apply(Planning(whole));
+
+        Assert.Empty(applied.Steps);
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == store && p.Withheld == Withholding.MailStore);
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == bin);
+        Assert.Contains(applied.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(store, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -105,8 +130,8 @@ public sealed class MailStorePlanTests
     }
 
     /// <summary>
-    /// Windows empties a Recycle Bin whole, so a bin holding a store cannot be handed to it. The
-    /// provider that plans bins withholds such a bin itself; this is the plan's own refusal behind it.
+    /// Windows empties a Recycle Bin whole, so a bin holding a store cannot be handed to it. The bin is
+    /// protected on its contents beside the store, for the reason an indivisible removal's subject is.
     /// </summary>
     [Fact]
     public void ARecycleBinWindowsWouldEmptyWholeIsWithheldWhenItHoldsAStore()
@@ -119,7 +144,9 @@ public sealed class MailStorePlanTests
         var applied = MailStorePlan.Apply(Planning(empty));
 
         Assert.Empty(applied.Steps);
-        Assert.Equal(store, Assert.Single(applied.ProtectedPaths).Path);
+        Assert.Equal(2, applied.ProtectedPaths.Count);
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == store && p.Withheld == Withholding.MailStore);
+        Assert.Contains(applied.ProtectedPaths, p => p is { Path: bin, HeldContentBefore: true, Withheld: Withholding.None });
     }
 
     /// <summary>One store named by two steps, in two spellings, is one file and one protection.</summary>

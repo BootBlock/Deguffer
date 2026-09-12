@@ -172,6 +172,19 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                         Interlocked.Increment(ref entries);
                     }
                 }
+
+                // A file carrying a reparse point is counted by nothing here, as the walk never has
+                // counted one. One named like a store is still named and keeps its folders, because the
+                // removal leaves it whatever its mark means: a OneDrive placeholder and a deduplicated
+                // file carry the mark too.
+                foreach (var marked in contents.ReparseFiles)
+                {
+                    if (MailStore.Is(marked.Name))
+                    {
+                        stores.Add(LongPath.Display(marked.FullName));
+                        folder.Stays();
+                    }
+                }
             },
             // §5.5: stream partial results. One report per breadth-first level, not per file.
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
@@ -232,19 +245,25 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         {
             var file = new FileInfo(LongPath.Extended(path));
 
-            // A link's length is its own, not its target's, and following one would count a tree
-            // this scanner never looked inside — the same rule BoundedFileWalk applies to every
-            // entry it enumerates.
-            if (!file.Exists || file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if (!file.Exists)
             {
                 return null;
             }
 
-            // §9: zero, and named, whatever its age. The same answer a kept file gets, for the same
-            // reason, with the store's own name on it so the plan can protect it.
+            // §9: zero, and named, whatever its age and whatever mark it carries, because the removal
+            // leaves it either way. The same answer a kept file gets, for the same reason, with the
+            // store's own name on it so the plan can protect it.
             if (MailStore.Is(file.Name))
             {
                 return (ScanSize.Zero, false, [LongPath.Display(file.FullName)]);
+            }
+
+            // A link's length is its own, not its target's, and following one would count a tree
+            // this scanner never looked inside — the same rule BoundedFileWalk applies to every
+            // entry it enumerates.
+            if (file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                return null;
             }
 
             // A file the guard keeps is still a file, so this stays an answer rather than becoming

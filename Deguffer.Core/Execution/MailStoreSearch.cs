@@ -4,24 +4,25 @@ namespace Deguffer.Core.Execution;
 
 /// <summary>
 /// The Outlook mail stores inside a folder, looked for on the disk immediately before a removal that
-/// cannot leave one behind: a tool's own command, Windows emptying a Recycle Bin, and Explore moving a
-/// folder to the Recycle Bin (§9).
+/// cannot leave one behind: a tool's own command, a Recycle Bin emptied by Windows or removed whole by
+/// Deguffer, and Explore moving a folder to the Recycle Bin (§9).
 ///
 /// <para><b>Asked again rather than trusted from the plan</b>, for the reason the guard on recently
 /// changed files is asked again inside <see cref="FileRemover"/>: a plan is made minutes before it
 /// runs, and a store saved into a cache folder while the preview sat on screen is exactly what those
-/// minutes can bring. A removal Deguffer performs itself needs no such look, because its own walk
-/// meets every store as it goes.</para>
+/// minutes can bring. A removal Deguffer performs file by file needs no such look, because its own walk
+/// meets every store as it goes and steps over it. A removal whose subject goes whole cannot step over
+/// one, which is why it is on the list above (see <see cref="DeleteDirectoryStep.IsIndivisible"/>).</para>
 ///
-/// <para><b>What it costs is a walk of the folder, and it is paid only where it has to be.</b> A tool's
-/// command, and Windows emptying a bin, are the two removals whose reach nothing else looks inside at
-/// the moment they run. The walk stops at nothing it does not need: it reads names alone, and it never
-/// opens a file.</para>
+/// <para><b>What it costs is a walk of the folder, and it is paid only where it has to be.</b> The
+/// removals above are the ones whose reach nothing else looks inside at the moment they run. The walk
+/// stops at nothing it does not need: it reads names alone, and it never opens a file.</para>
 ///
 /// <para>The folder asked about is listed as it stands, link or not, because that is what the removal
-/// it stands in front of will act on. Nothing below it is followed through a link, for the reason the
-/// removal walk gives: what is on the far side belongs to wherever the link points. A folder Windows
-/// will not list is skipped (§5.3), which is what the measurement that made the plan did too.</para>
+/// it stands in front of will act on. No folder below it is followed through a link, for the reason the
+/// removal walk gives: what is on the far side belongs to wherever the link points. A file is asked
+/// about whatever mark it carries, as the removal walk asks it. A folder Windows will not list is
+/// skipped (§5.3), which is what the measurement that made the plan did too.</para>
 /// </summary>
 public static class MailStoreSearch
 {
@@ -56,15 +57,16 @@ public static class MailStoreSearch
 
             foreach (var entry in entries)
             {
-                if (entry.IsReparsePoint)
-                {
-                    continue;
-                }
-
                 if (entry.IsDirectory)
                 {
-                    pending.Push(entry.FullName);
+                    if (!entry.IsReparsePoint)
+                    {
+                        pending.Push(entry.FullName);
+                    }
                 }
+
+                // Whatever mark it carries: a OneDrive placeholder and a deduplicated file carry the mark
+                // Windows puts on a link, and every removal this look stands in front of would take one.
                 else if (MailStore.Is(entry.FullName))
                 {
                     found.Add(LongPath.Display(entry.FullName));

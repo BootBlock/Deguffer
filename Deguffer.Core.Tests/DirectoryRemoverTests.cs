@@ -607,25 +607,29 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// The rule is asked of files, never of a link. Removing a link named like a store removes the
-    /// link, and the store it points at stays exactly where it is — which is also what a link to any
-    /// other file does here.
+    /// The store question is asked before the link question, because the mark Windows puts on a link
+    /// is also on files that are not links: a OneDrive placeholder and a deduplicated file carry it,
+    /// and deleting either deletes its content. Nothing here reads which kind of mark a file carries,
+    /// so a file named like a store is left whatever it turns out to be. A real link to a store is left
+    /// too, which costs nothing — and it is the real link this test can make on any machine.
     /// </summary>
     [Fact]
-    public async Task RemovesALinkNamedLikeAStoreAndLeavesWhatItPointsAt()
+    public async Task LeavesAFileNamedLikeAStoreEvenWhereItCarriesTheMarkOfALink()
     {
         var root = _temp.CreateDirectory("scratch");
         var target = _temp.CreateFile(4096, "elsewhere", "archive.pst");
+        var abandoned = _temp.CreateFile(1024, "scratch", "abandoned.tmp");
         var link = Path.Combine(root, "shortcut.pst");
 
         File.CreateSymbolicLink(link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
-        Assert.False(File.Exists(link), "a link was treated as the store it points at");
-        Assert.True(File.Exists(target), "the store a link pointed at was removed");
-        Assert.Empty(outcome.MailStores);
-        Assert.True(outcome.RootRemoved);
+        Assert.True(LongPath.IsReparsePoint(link), "a file carrying a link's mark and named like a store was removed");
+        Assert.True(File.Exists(target));
+        Assert.False(File.Exists(abandoned));
+        Assert.Equal([link], outcome.MailStores);
+        Assert.False(outcome.RootRemoved);
     }
 
     /// <summary>

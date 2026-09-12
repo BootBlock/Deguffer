@@ -6,7 +6,7 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// The sentence the Storage page states above the rows, which has to agree with them.
 ///
-/// The defect this covers (issue #38) is a bar that read the byte totals instead of the rows. Six
+/// The defect this covers (issue #38) is a bar that read the byte totals instead of the rows. Seven
 /// states measure zero without being clear, so a test on the totals cannot tell a clean machine
 /// from one whose caches Deguffer was not allowed to read — and the bar announced "already clear"
 /// directly above a row saying otherwise. Every case below is one of those disagreements.
@@ -24,7 +24,7 @@ public sealed class PreviewSummaryTests
         PreviewSummary.For(statuses, Selectable, Selected, Elevate);
 
     /// <summary>
-    /// The six states that measure zero and are not clear. None of them may draw the claim that
+    /// The seven states that measure zero and are not clear. None of them may draw the claim that
     /// the caches are already clear, whatever the totals say.
     /// </summary>
     [Theory]
@@ -43,7 +43,7 @@ public sealed class PreviewSummaryTests
         Assert.StartsWith("Nothing to reclaim", summary, StringComparison.Ordinal);
     }
 
-    /// <summary>Each of the six gets words naming its own cause when it is the only one present.</summary>
+    /// <summary>Each of the seven gets words naming its own cause when it is the only one present.</summary>
     [Theory]
     [InlineData(FindingStatus.UnreadableRoot, "would not let Deguffer read")]
     [InlineData(FindingStatus.NotExamined, "were not examined")]
@@ -58,7 +58,7 @@ public sealed class PreviewSummaryTests
     }
 
     /// <summary>
-    /// Naming two causes of six would be less true than naming none, so a mixture sends the reader
+    /// Naming two causes of seven would be less true than naming none, so a mixture sends the reader
     /// to the rows, which each state their own.
     /// </summary>
     [Fact]

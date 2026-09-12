@@ -231,6 +231,34 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(Directory.Exists(volume));
     }
 
+    /// <summary>
+    /// A Recycle Bin removed file by file goes whole or not at all: a deleted folder and the record
+    /// that restores it are two entries. Stepping over a store that arrived in one after the preview
+    /// would keep the store and take its record, so an indivisible step is looked at again on the disk
+    /// and refused whole.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRemoveAnIndivisibleFolderWhenAStoreArrivedInItAfterThePreview()
+    {
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+        var step = new DeleteDirectoryStep(bin, "A bin") { IsIndivisible = true };
+
+        var store = _temp.CreateFile(
+            8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456", "mail", "archive.pst");
+        var record = _temp.CreateFile(544, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$IDEF456");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
+
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.True(File.Exists(store), "a store was removed");
+        Assert.True(File.Exists(record), "the record that restores the folder holding a store was removed");
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(1, outcome.MailStores);
+        Assert.Contains(store, outcome.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

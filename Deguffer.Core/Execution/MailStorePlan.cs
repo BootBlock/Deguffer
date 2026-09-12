@@ -6,16 +6,18 @@ namespace Deguffer.Core.Execution;
 /// §9 applied to a finished plan: an Outlook mail store the plan's measurements found is protected by
 /// its path, and a step that cannot leave one behind is withheld.
 ///
-/// <para><b>Two kinds of step, and the difference is who performs the removal.</b> A removal Deguffer
-/// performs itself steps over a store (see <see cref="RemovalWalk"/>), so its step stays and does less,
-/// and its figure already excludes the store. A step whose removal is somebody else's cannot be told to
-/// leave one file: a tool's own command decides what it removes (§5.1), and Windows empties a Recycle
-/// Bin whole. Such a step is withheld while a store is inside its reach, and so is a step whose whole
-/// subject is one store.</para>
+/// <para><b>Two kinds of step, and the difference is whether the removal can step over one file.</b> A
+/// removal Deguffer performs file by file steps over a store (see <see cref="RemovalWalk"/>), so its step
+/// stays and does less, and its figure already excludes the store. A step that cannot leave one file is
+/// withheld while a store is inside its reach: a tool's own command decides what it removes (§5.1),
+/// Windows empties a Recycle Bin whole, and a removal whose subject goes whole or not at all
+/// (<see cref="DeleteDirectoryStep.IsIndivisible"/>) would keep the store and take what belongs with it.
+/// So is a step whose whole subject is one store.</para>
 ///
 /// <para><b>Every store becomes a protection, whichever kind of step found it.</b> §5.6 then proves
 /// each one survived, and a run that lost one fails its verification — which is what an over-broad
-/// removal looks like from here.</para>
+/// removal looks like from here. A subject withheld whole is protected too, on its contents, so a rule
+/// elsewhere in the run that emptied it is caught as well.</para>
 ///
 /// <para>Separate from <see cref="Providers.CleanupProviderBase"/>, which applies it to every plan a
 /// provider returns, because the rule is the plan's and the base class is the place that must not be
@@ -25,6 +27,9 @@ public static class MailStorePlan
 {
     /// <summary>The reason every store's protection gives, in the verification report.</summary>
     private const string Reason = "An Outlook data file, which Deguffer never removes.";
+
+    /// <summary>The reason a subject withheld whole gives, in the verification report.</summary>
+    private const string WholeReason = "Holds an Outlook data file, so Deguffer leaves it exactly as it is.";
 
     /// <param name="plan">The plan a provider built.</param>
     /// <param name="measured">
@@ -51,64 +56,53 @@ public static class MailStorePlan
 
         var notes = new List<PlanNote>(plan.Notes);
         var kept = new List<CleanupStep>(steps.Count);
+        var leftWhole = new List<ProtectedPath>();
 
         foreach (var step in steps)
         {
-            if (WhyWithheld(plan, step) is { } why)
-            {
-                notes.Add(new PlanNote(PlanNoteSeverity.Warning, why));
-            }
-            else
+            if (WhyWithheld(plan, step) is not { } why)
             {
                 kept.Add(step);
+                continue;
+            }
+
+            notes.Add(new PlanNote(PlanNoteSeverity.Warning, why));
+
+            if (step is DeleteStep whole and (EmptyRecycleBinStep or DeleteDirectoryStep { IsIndivisible: true }))
+            {
+                leftWhole.Add(new ProtectedPath(
+                    LongPath.Display(whole.Path),
+                    WholeReason,
+                    // Measured during planning, and a store was found inside it, so it was there and held
+                    // something when the plan was made. Its figure cannot say so, because the store is left
+                    // out of every figure.
+                    ExistedBefore: true,
+                    HeldContentBefore: true));
             }
         }
 
-        var leftByRemovals = kept.SelectMany(step => step.MailStores).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var leftByRemovals = kept.SelectMany(step => step.MailStores).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-        if (leftByRemovals > 0)
+        if (leftByRemovals.Count > 0)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                leftByRemovals == 1
-                    ? "One Outlook data file inside what this removes is left where it is, because Deguffer "
-                      + "never removes one. The sizes here already exclude it, and every clean checks that it "
-                      + "is still there."
-                    : $"{leftByRemovals} Outlook data files inside what this removes are left where they are, "
-                      + "because Deguffer never removes one. The sizes here already exclude them, and every "
-                      + "clean checks that they are still there."));
+                leftByRemovals.Count == 1
+                    ? $"The Outlook data file at {leftByRemovals[0]} is inside what this removes, and is left "
+                      + "where it is, because Deguffer never removes one. The sizes here already exclude it, and "
+                      + "every clean checks that it is still there."
+                    : $"{leftByRemovals.Count} Outlook data files are inside what this removes, at "
+                      + $"{Name(leftByRemovals)}, and are left where they are, because Deguffer never removes "
+                      + "one. The sizes here already exclude them, and every clean checks that they are still "
+                      + "there."));
         }
 
         return plan with
         {
             Steps = kept,
-            ProtectedPaths = [.. plan.ProtectedPaths, .. ProtectionsFor(stores)],
+            ProtectedPaths = [.. plan.ProtectedPaths, .. ProtectionsFor(stores), .. leftWhole],
             Notes = notes,
         };
-    }
-
-    /// <summary>
-    /// One protection per store, each on its existence alone. A store is a file, so there is no
-    /// content to ask about, and a spelling that differs only in case is the same file.
-    /// </summary>
-    public static IReadOnlyList<ProtectedPath> ProtectionsFor(IEnumerable<string> stores)
-    {
-        ArgumentNullException.ThrowIfNull(stores);
-
-        return
-        [
-            .. stores
-                .Select(LongPath.Display)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(store => new ProtectedPath(
-                    store,
-                    Reason,
-                    // Measured during planning, so it was there when the plan was made — the claim
-                    // CleanupPlan.NarrowedTo makes, for the reason it gives.
-                    ExistedBefore: true,
-                    HeldContentBefore: false,
-                    Withheld: Withholding.MailStore)),
-        ];
     }
 
     /// <summary>
@@ -128,8 +122,25 @@ public static class MailStorePlan
     }
 
     /// <summary>
-    /// Why this step cannot run while it holds a store, or null where it can. Only a step whose
-    /// removal Deguffer does not perform itself, or whose whole subject is a store, is withheld.
+    /// One protection per store, each on its existence alone. A store is a file, so there is no
+    /// content to ask about, and a spelling that differs only in case is the same file.
+    /// </summary>
+    private static IEnumerable<ProtectedPath> ProtectionsFor(IEnumerable<string> stores) =>
+        stores
+            .Select(LongPath.Display)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(store => new ProtectedPath(
+                store,
+                Reason,
+                // Measured during planning, so it was there when the plan was made — the claim
+                // CleanupPlan.NarrowedTo makes, for the reason it gives.
+                ExistedBefore: true,
+                HeldContentBefore: false,
+                Withheld: Withholding.MailStore));
+
+    /// <summary>
+    /// Why this step cannot run while it holds a store, or null where it can. Only a step that cannot
+    /// leave one file behind, or whose whole subject is a store, is withheld.
     /// </summary>
     private static string? WhyWithheld(CleanupPlan plan, CleanupStep step) => step switch
     {
@@ -144,7 +155,13 @@ public static class MailStorePlan
 
         EmptyRecycleBinStep bin =>
             $"Leaving the Recycle Bin at {LongPath.Display(bin.Path)} as it is: it holds an Outlook data "
-            + $"file, at {Name(bin.MailStores)}. Windows empties a bin whole, and Deguffer never removes one.",
+            + $"file, at {Name(bin.MailStores)}. Windows empties a bin whole, and Deguffer never removes one. "
+            + "Restore the file, or delete it from the Recycle Bin yourself, and preview again.",
+
+        DeleteDirectoryStep { IsIndivisible: true } whole =>
+            $"Leaving {LongPath.Display(whole.Path)} as it is: it holds an Outlook data file, at "
+            + $"{Name(whole.MailStores)}. What is inside it goes whole or not at all, and Deguffer never "
+            + "removes one. Move the file out, or delete it yourself, and preview again.",
 
         DeleteFileStep file =>
             $"Leaving {LongPath.Display(file.Path)} alone: it is an Outlook data file, and Deguffer never "

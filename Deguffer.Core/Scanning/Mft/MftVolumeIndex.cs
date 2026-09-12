@@ -158,8 +158,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // and the deletion target it names is a pointer, not the thing the user asked about.
             //
             // The name is a directory's, or a mail store's at the leaf: the only file whose path the
-            // table is ever asked to rebuild.
-            if (tree.IsReparsePoint[current]
+            // table is ever asked to rebuild. A store at the leaf is the one entry allowed to carry a
+            // reparse point, because it is a file no path passes through, and the removal leaves it
+            // whatever mark it carries.
+            if ((tree.IsReparsePoint[current] && !(depth == 0 && tree.IsMailStore[current]))
                 || (tree.Names[current] ?? tree.MailStoreNames.GetValueOrDefault(current)) is not { } component)
             {
                 return null;
@@ -301,6 +303,22 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         {
             var node = item.Node;
 
+            // Before everything else, as the removal asks it: the store stays whatever its age and
+            // whatever reparse point it carries. The removal does not read which kind of mark a file
+            // has, so a store the table calls a link is still left, and is named here to agree.
+            if (tree.IsMailStore[node])
+            {
+                if (TryBuildPath(node) is not { } components)
+                {
+                    withheldRecent = false;
+                    return null;
+                }
+
+                stores.Add(components);
+                Stay(item.Holder);
+                continue;
+            }
+
             // A link holds nothing and contributes no bytes: whatever it points at keeps its own
             // place in the table, and the walk does not enter one either. A link to a folder is still
             // an entry, removed as a link, and the walk counts it by its own timestamp; a link to a
@@ -336,20 +354,6 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                     stack.Push((links.Children[i], position));
                 }
 
-                continue;
-            }
-
-            // Before the guard, as the removal asks it: the store stays whatever its age.
-            if (tree.IsMailStore[node])
-            {
-                if (TryBuildPath(node) is not { } components)
-                {
-                    withheldRecent = false;
-                    return null;
-                }
-
-                stores.Add(components);
-                Stay(item.Holder);
                 continue;
             }
 

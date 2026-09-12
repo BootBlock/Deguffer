@@ -263,4 +263,20 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         Assert.Equal(0, result.Size.Reclaimable);
         Assert.Equal([archive], result.MailStores);
     }
+
+    /// <summary>The same for a file carrying a link's mark, which this route's walk otherwise never hands on.</summary>
+    [Fact]
+    public async Task NamesAFileNamedLikeAStoreThatCarriesTheMarkOfALink()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(4096, "store", "v3", "blob.bin");
+        var target = temp.CreateFile(8192, "elsewhere", "archive.pst");
+        var link = Path.Combine(temp.CreateDirectory("store", "saved"), "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        var result = await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(temp.Path, "store"));
+
+        Assert.Equal([link], result.MailStores);
+    }
 }

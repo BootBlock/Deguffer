@@ -97,7 +97,7 @@ public sealed class KeepListPlanTests : IDisposable
         Assert.True(plan.HasSomethingToProve);
 
         var planner = new CleanupPlanner([provider]);
-        var proving = new Finding(provider, IsPresent: true, plan.KeepListItemsOnly());
+        var proving = new Finding(provider, IsPresent: true, plan.ProofOnly());
 
         var result = Assert.Single(await planner.ExecuteAsync([proving]));
 
@@ -262,7 +262,7 @@ public sealed class KeepListPlanTests : IDisposable
 
             Assert.Equal([OfferedPath, AnonymousPath], kept.TargetedPaths);
             Assert.DoesNotContain(KeptPath, kept.NarrowedTo(plan.Steps).TargetedPaths);
-            Assert.Empty(kept.KeepListItemsOnly().Steps);
+            Assert.Empty(kept.ProofOnly().Steps);
         }
     }
 }

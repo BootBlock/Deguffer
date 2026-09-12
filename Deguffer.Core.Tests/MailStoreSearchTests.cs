@@ -58,6 +58,23 @@ public sealed class MailStoreSearchTests : IDisposable
         Assert.Empty(MailStoreSearch.Under(root, WindowsFileSystem.Default, default));
     }
 
+    /// <summary>
+    /// A folder link is never followed, but a file carrying a link's mark and named like a store is
+    /// found: a OneDrive placeholder and a deduplicated file carry that mark too, and the removal this
+    /// look stands in front of would delete their content.
+    /// </summary>
+    [Fact]
+    public void FindsAFileNamedLikeAStoreThatCarriesTheMarkOfALink()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var target = _temp.CreateFile(16, "elsewhere", "archive.pst");
+        var link = Path.Combine(root, "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        Assert.Equal([link], MailStoreSearch.Under(root, WindowsFileSystem.Default, default));
+    }
+
     /// <summary>§6.3: every path it hands the filesystem is in extended-length form.</summary>
     [Fact]
     public void HandsTheFilesystemExtendedPaths()

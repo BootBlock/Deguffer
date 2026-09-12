@@ -481,11 +481,14 @@ No provider targets either, and absence from every allow-list is not enough on i
 picture puts it in front of them. So the rule is a type rather than a place, and every route asks it:
 
 - A removal Deguffer performs itself steps over a store and leaves the folders holding it, and the
-  measurement that forecasts it leaves the store out.
+  measurement that forecasts it leaves the store out. A file named like a store is left even where it
+  carries the mark of a link, because a OneDrive placeholder and a deduplicated file carry it too.
 - A step whose removal is not Deguffer's to steer is withheld while a store is inside its reach: a
-  tool's own command (§5.1), File History's cleanup, and a Recycle Bin Windows would empty whole.
-  Immediately before a command runs or a bin is emptied, the disk is looked at again.
-- Every store a plan finds is protected by its path, so §5.6 fails a run that lost one.
+  tool's own command (§5.1), File History's cleanup, and a Recycle Bin on either route, since a bin's
+  deleted items and the records that restore them go together. Immediately before a command runs or a
+  bin is emptied, the disk is looked at again.
+- Every store a plan finds is protected by its path, so §5.6 fails a run that lost one, whether or not
+  the store's own row ran.
 - Explore refuses a store by extension, together with Outlook's own folder under `%LOCALAPPDATA%` and
   any folder named `Outlook Files`, and refuses to move a folder holding one to the Recycle Bin.
   Hovering a store says what it is and how Outlook itself makes it smaller.

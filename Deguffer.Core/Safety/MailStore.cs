@@ -12,8 +12,13 @@ namespace Deguffer.Core.Safety;
 /// meet, and there is one place to change the answer.</para>
 ///
 /// <para>The name is matched on its extension and nothing else, so <c>archive.pst.txt</c> and
-/// <c>archive.pstx</c> are ordinary files. The question is asked of files and never of a link: a link
-/// is removed as a link, and removing one leaves what it points at exactly where it was.</para>
+/// <c>archive.pstx</c> are ordinary files. A folder is never a store, whatever it is called.</para>
+///
+/// <para><b>It is asked of every file, including one that carries the mark Windows puts on a
+/// link.</b> A OneDrive placeholder and a deduplicated file carry that mark too, and deleting either
+/// deletes its content. Nothing that asks this question reads which kind of mark a file carries, so a
+/// file named like a store is left whatever it is. A real link named like one is left as well, which
+/// costs nothing.</para>
 /// </summary>
 public static class MailStore
 {

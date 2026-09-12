@@ -305,4 +305,24 @@ public sealed class FileRemoverTests : IDisposable
         Assert.False(outcome.MailStore);
         Assert.True(outcome.Removed);
     }
+
+    /// <summary>
+    /// A file named like a store is left even where it carries the mark Windows puts on a link, because
+    /// a OneDrive placeholder and a deduplicated file carry that mark too, and deleting either deletes
+    /// its content. See <see cref="DirectoryRemoverTests.LeavesAFileNamedLikeAStoreEvenWhereItCarriesTheMarkOfALink"/>.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFileNamedLikeAStoreEvenWhereItCarriesTheMarkOfALink()
+    {
+        var target = _temp.CreateFile(4096, "elsewhere", "archive.pst");
+        var link = Path.Combine(_temp.CreateDirectory("Downloads"), "shortcut.pst");
+
+        File.CreateSymbolicLink(link, target);
+
+        var outcome = await FileRemover.RemoveAsync(link);
+
+        Assert.True(LongPath.IsReparsePoint(link), "a file carrying a link's mark and named like a store was removed");
+        Assert.True(outcome.MailStore);
+        Assert.False(outcome.Removed);
+    }
 }
