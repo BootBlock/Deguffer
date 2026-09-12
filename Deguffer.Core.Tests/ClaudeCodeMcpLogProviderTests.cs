@@ -145,7 +145,11 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
 
         Assert.True(policy.MayRemove(log).IsAllowed);
 
-        foreach (var refused in new[] { Cache, Project(), errors })
+        var toolFolder = Path.GetDirectoryName(Cache)!;
+        var besideTheCache = Path.Combine(toolFolder, "config");
+        Directory.CreateDirectory(besideTheCache);
+
+        foreach (var refused in new[] { toolFolder, besideTheCache, Cache, Project(), errors })
         {
             Assert.False(policy.MayRemove(refused).IsAllowed, $"Explore would remove {refused}");
         }

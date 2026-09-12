@@ -205,6 +205,8 @@ public sealed class FileRemoverTests : IDisposable
         public void ClearAttributes(string path) => inner.ClearAttributes(path);
 
         public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
+
+        public bool MayExist(string path) => inner.MayExist(path);
     }
 
     /// <summary>

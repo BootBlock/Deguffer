@@ -223,6 +223,34 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Everything inside a volume's Recycle Bin, where each account keeps a folder of what it deleted.
+    /// The Recycle Bin provider names every other account's folder as a path that must survive, so
+    /// refusing the bin alone left them one level down.
+    /// </summary>
+    [Theory]
+    [InlineData(@"$Recycle.Bin\S-1-5-21-1000-1000-1000-1001")]
+    [InlineData(@"$Recycle.Bin\S-1-5-21-1000-1000-1000-1002\$RQ4ZKJX.txt")]
+    [InlineData(@"$RECYCLE.BIN\S-1-5-21-1000-1000-1000-1002\$IQ4ZKJX.txt")]
+    public void EverythingInsideARecycleBinIsRefused(string relative)
+    {
+        var verdict = Policy().MayRemove(Path.Combine(@"Q:\", relative));
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("Recycle Bin", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The over-reach direction: the rule is about the bin at the top of a volume, not about the name.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Stuff\$Recycle.Bin\S-1-5-21-1000-1000-1000-1001")]
+    [InlineData(@"$Recycle.Bin.old\notes.txt")]
+    public void ARecycleBinNameElsewhereIsOrdinary(string relative)
+    {
+        Assert.True(Policy().MayRemove(Path.Combine(@"Q:\", relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same names one level down are ordinary. A folder somebody called
     /// <c>System Volume Information</c> inside their own Documents is theirs, and the rule is about
     /// the reserved place rather than the word.
@@ -382,6 +410,166 @@ public sealed class ExploreActionPolicyTests : IDisposable
     {
         Assert.True(LongPath.Contains(_environment.UserProfile, GradleRoot));
         Assert.False(Policy(Gradle()).MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// Removing a folder removes everything in it, so a folder holding a tool's root is refused as the
+    /// root is, and says which root. What else it holds stays ordinary: the rule is about what a folder
+    /// holds, not about sitting near a tool.
+    /// </summary>
+    [Fact]
+    public void AFolderHoldingAToolRootIsRefusedAndSaysWhichRoot()
+    {
+        var vendor = Path.Combine(_environment.LocalAppData, "Vendor");
+        var root = _temp.CreateDirectory("profile", "AppData", "Local", "Vendor", "Tool");
+        var policy = Policy(VendorTool(root));
+
+        var verdict = policy.MayRemove(vendor);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains(root, verdict.Reason, StringComparison.Ordinal);
+        Assert.True(policy.MayRemove(Path.Combine(vendor, "Other")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same folder with no root in it, which is what a tool leaves behind once it is uninstalled.
+    /// Nothing protected would go with it, so a refusal would name a folder that is not there and take
+    /// away a removal the user is entitled to. The root is then created, so the refusal is shown to
+    /// follow the disk rather than the declaration.
+    /// </summary>
+    [Fact]
+    public void AFolderIsNotRefusedForARootThatIsNotOnDisk()
+    {
+        var vendor = _temp.CreateDirectory("profile", "AppData", "Local", "Vendor");
+        _temp.CreateFile(64, "profile", "AppData", "Local", "Vendor", "leftover.log");
+        var policy = Policy(VendorTool(Path.Combine(vendor, "Tool")));
+
+        Assert.True(policy.MayRemove(vendor).IsAllowed);
+
+        Directory.CreateDirectory(Path.Combine(vendor, "Tool"));
+
+        Assert.False(policy.MayRemove(vendor).IsAllowed);
+    }
+
+    /// <summary>A root can be a file, and a folder holding one takes it along the same way.</summary>
+    [Fact]
+    public void AFolderHoldingAFileDeclaredAsARootIsRefused()
+    {
+        var file = _temp.CreateFile(8, "profile", "AppData", "Roaming", "Vendor", "vendor.config");
+
+        Assert.False(Policy(VendorTool(file)).MayRemove(Path.GetDirectoryName(file)!).IsAllowed);
+    }
+
+    /// <summary>
+    /// A root inside a child its parent root recognises. The child is on offer by §5.2, and removing it
+    /// would still take the deeper root along, so what the child holds decides as well.
+    /// </summary>
+    [Fact]
+    public void ARecognisedChildHoldingADeeperRootIsRefused()
+    {
+        var deeper = _temp.CreateDirectory("profile", ".gradle", "caches", "kept");
+        var policy = Policy(Gradle(), VendorTool(deeper));
+
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "wrapper")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A folder holding something the region table refuses: Outlook's own folder, whose offline mailbox
+    /// and address books go with <c>Microsoft</c> as surely as with the folder itself. The premise comes
+    /// first, that the same folder without Outlook's in it is ordinary.
+    /// </summary>
+    [Fact]
+    public void AFolderHoldingARefusedRegionIsRefused()
+    {
+        var microsoft = _temp.CreateDirectory("profile", "AppData", "Local", "Microsoft");
+
+        Assert.True(Policy().MayRemove(microsoft).IsAllowed);
+
+        Directory.CreateDirectory(Path.Combine(microsoft, "Outlook"));
+        var verdict = Policy().MayRemove(microsoft);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("Outlook", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §7.1 refuses every path a provider names as protected, and providers name %LOCALAPPDATA% and
+    /// %TEMP% as paths that must survive a clean. Each is refused as a folder and ordinary inside, in
+    /// the profile's own shape, and so are the other two application-data folders beside them.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(IUserEnvironment.LocalAppData))]
+    [InlineData(nameof(IUserEnvironment.RoamingAppData))]
+    [InlineData(nameof(IUserEnvironment.LocalLowAppData))]
+    [InlineData(nameof(IUserEnvironment.TempPath))]
+    public void TheApplicationDataFoldersAndTheTemporaryFolderAreRefusedButNotWhatIsInThem(string which)
+    {
+        // The temporary folder moves inside the profile, where Windows puts it, for its own row alone.
+        // The fake's default sits beside the profile, which the table already refuses as another
+        // account's; and moved for every row it would sit inside %LOCALAPPDATA% and refuse that row
+        // by what it holds, whatever that row's own entry said.
+        var folder = which switch
+        {
+            nameof(IUserEnvironment.LocalAppData) => _environment.LocalAppData,
+            nameof(IUserEnvironment.RoamingAppData) => _environment.RoamingAppData,
+            nameof(IUserEnvironment.LocalLowAppData) => _environment.LocalLowAppData!,
+            _ => _environment.WithTempPath(Path.Combine(_environment.LocalAppData, "Temp")).TempPath,
+        };
+
+        var policy = Policy();
+        var verdict = policy.MayRemove(folder);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.DoesNotContain("holds", verdict.Reason, StringComparison.Ordinal);
+        Assert.True(policy.MayRemove(Path.Combine(folder, "Some Program")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The folder above the application-data folders, which no table names. It holds them, so it is
+    /// refused for what it holds.
+    /// </summary>
+    [Fact]
+    public void TheAppDataFolderIsRefusedForTheFoldersInIt()
+    {
+        var verdict = Policy().MayRemove(Path.GetDirectoryName(_environment.LocalAppData)!);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains(_environment.LocalAppData, verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §6.3 for the one question the policy asks the disk. Its answer is a boolean, so a deep tree
+    /// would prove nothing; the form of the path handed to the filesystem is what discriminates.
+    /// </summary>
+    [Fact]
+    public void AsksTheDiskAboutAHeldLocationInExtendedLengthForm()
+    {
+        var root = _temp.CreateDirectory("profile", "AppData", "Local", "Vendor", "Tool");
+        var recording = new RecordingFileSystem(WindowsFileSystem.Default);
+        var policy = new ExploreActionPolicy([], [VendorTool(root)], recording);
+
+        Assert.False(policy.MayRemove(Path.GetDirectoryName(root)!).IsAllowed);
+        Assert.NotEmpty(recording.Paths);
+        Assert.All(recording.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The probe fails closed. Only Windows saying nothing is there reads as absent: a name the
+    /// filesystem will not even look up is not an answer, and it reads as present, which refuses the
+    /// folder holding it rather than removing it.
+    /// </summary>
+    [Fact]
+    public void AnEntryThatCannotBeAskedAboutMayExist()
+    {
+        var folder = _temp.CreateDirectory("probe");
+        var file = _temp.CreateFile(8, "probe", "present.txt");
+
+        Assert.True(WindowsFileSystem.Default.MayExist(LongPath.Extended(folder)));
+        Assert.True(WindowsFileSystem.Default.MayExist(LongPath.Extended(file)));
+        Assert.False(WindowsFileSystem.Default.MayExist(LongPath.Extended(Path.Combine(folder, "absent"))));
+        Assert.False(WindowsFileSystem.Default.MayExist(LongPath.Extended(Path.Combine(folder, "absent", "deeper"))));
+        Assert.True(WindowsFileSystem.Default.MayExist(LongPath.Extended(folder) + @"\not<a>name"));
     }
 
     /// <summary>
@@ -1188,6 +1376,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
     private ToolRoot Gradle() =>
         ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
+
+    private static ToolRoot VendorTool(string path) => new(path, "A vendor tool's own folder.", static _ => false);
 
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
         ExploreActionPolicy.For(_system, _environment, [new StubProvider(toolRoots)]);

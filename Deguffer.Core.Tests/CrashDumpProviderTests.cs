@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -37,6 +38,26 @@ public sealed class CrashDumpProviderTests : IDisposable
 
     private CrashDumpProvider CreateProvider() =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system);
+
+    /// <summary>
+    /// The plan names <c>%LOCALAPPDATA%</c> as the root its user dumps are declared under, and §7.1
+    /// refuses every path a provider names as protected — so Explore refuses it, while the dump folder
+    /// inside it stays removable there.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheLocalApplicationDataThePlanProtects()
+    {
+        var dumps = Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
+        var provider = CreateProvider();
+
+        var plan = await provider.PlanAsync();
+        var policy = ExploreActionPolicy.For(_system, _environment, [provider]);
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.False(policy.MayRemove(_environment.LocalAppData).IsAllowed);
+        Assert.True(policy.MayRemove(dumps).IsAllowed);
+    }
 
     /// <summary>A directory with one file in it, so it measures above zero and is selectable.</summary>
     private static string Populate(string directory, int bytes = 4096, string name = "dump.dmp")

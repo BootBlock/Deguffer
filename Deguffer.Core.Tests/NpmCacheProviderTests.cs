@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
@@ -85,6 +86,22 @@ public sealed class NpmCacheProviderTests : IDisposable
             p.Path.Equals(npmrc, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.EndsWith(Path.Combine("Roaming", "npm"), StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+    }
+
+    /// <summary>
+    /// §7.1 refuses every path a provider names as protected, so both are refused in Explore too, and
+    /// so is what the global packages folder holds.
+    /// </summary>
+    [Fact]
+    public void ExploreRefusesWhatThePlanProtects()
+    {
+        var provider = new NpmCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var global = Path.Combine(_environment.RoamingAppData, "npm");
+
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, ".npmrc")).IsAllowed);
+        Assert.False(policy.MayRemove(global).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(global, "node_modules")).IsAllowed);
     }
 
     [Fact]

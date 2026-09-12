@@ -137,6 +137,9 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     ///
     /// <para>Empty until a target has been located, which costs one configuration read and a few
     /// existence checks rather than a walk, and is held for the pass.</para>
+    ///
+    /// <para>The settings folder is declared with the target, recognising nothing, because the plan
+    /// names it as a path that must survive and §7.1 has Explore refuse every such path.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         _discovery.Locate().Target is { } target
@@ -150,6 +153,12 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     "This is your File History backup, and it holds every saved version of your own "
                     + "files as well as anyone else's who backs up to this drive. Deguffer never "
                     + "removes anything here itself.",
+                    static _ => false),
+
+                new ToolRoot(
+                    _discovery.ConfigurationDirectory,
+                    "This is where Windows keeps your File History settings: what is backed up, and "
+                    + "to which drive. Deguffer never removes anything here.",
                     static _ => false),
             ]
             : [];

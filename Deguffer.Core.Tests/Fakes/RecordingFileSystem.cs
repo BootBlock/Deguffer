@@ -84,4 +84,10 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         _paths.Enqueue(path);
         return inner.TryGetAttributes(path);
     }
+
+    public bool MayExist(string path)
+    {
+        _paths.Enqueue(path);
+        return inner.MayExist(path);
+    }
 }

@@ -12,13 +12,18 @@ namespace Deguffer.Core.Exploring.Acting;
 /// nothing can test.</para>
 ///
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
-/// The first is a table of regions — the operating system's own directories, the signed-in user's
+/// The first is <see cref="ProtectedRegions"/>, a table of regions — the operating system's own directories, the signed-in user's
 /// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which is
 /// read from the path rather than from a list of drives. Apart from Outlook's folder, all of that is
 /// a fact about Windows and is stated here. The second is
 /// §5.2, which is a fact about a tool and belongs to whichever provider knows the tool: Explore
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
 /// twice is one that gets changed once.</para>
+///
+/// <para>Both passes answer from above, about what contains the path. A path they allow is then
+/// asked about from below: removing a folder removes everything in it, so a folder holding something
+/// either pass refuses is refused as well. <see cref="HeldLocations"/> asks that, and says why it
+/// asks the disk.</para>
 ///
 /// <para>Outlook's mail stores are also refused by type, before the table is asked, because a
 /// <c>.pst</c> is wherever somebody saved it. <see cref="OutlookDataFiles"/> holds that rule and
@@ -46,6 +51,7 @@ public sealed class ExploreActionPolicy
 
     private readonly IReadOnlyList<ProtectedRegion> _regions;
     private readonly IReadOnlyList<ToolRoot> _toolRoots;
+    private readonly HeldLocations _held;
 
     /// <param name="regions">
     /// The structural table. Sorted here rather than trusted from the caller, because the
@@ -53,7 +59,14 @@ public sealed class ExploreActionPolicy
     /// resolve by declaration order instead — silently, and differently for each caller.
     /// </param>
     /// <param name="toolRoots">The §5.2 declarations, as the providers wrote them.</param>
-    public ExploreActionPolicy(IEnumerable<ProtectedRegion> regions, IEnumerable<ToolRoot> toolRoots)
+    /// <param name="fileSystem">
+    /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk. Injected so a
+    /// test can see the form of the path it is asked about (§6.3), and what a probe that fails does.
+    /// </param>
+    public ExploreActionPolicy(
+        IEnumerable<ProtectedRegion> regions,
+        IEnumerable<ToolRoot> toolRoots,
+        IFileSystem? fileSystem = null)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
@@ -74,6 +87,19 @@ public sealed class ExploreActionPolicy
         ];
 
         _toolRoots = [.. toolRoots];
+
+        // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
+        // takes it along as surely as one holding a tool's folder does. A permitting entry protects
+        // nothing, and a root that will not resolve names nothing, for the reason given above.
+        _held = new HeldLocations(
+            [
+                .. _regions.Where(r => !r.Verdict.IsAllowed).Select(r => (r.Path, r.Verdict.Reason)),
+                .. _toolRoots
+                    .Select(root => (Path: LongPath.Configured(root.Path), root.Reason))
+                    .Where(root => root.Path is not null)
+                    .Select(root => (root.Path!, root.Reason)),
+            ],
+            fileSystem ?? WindowsFileSystem.Default);
     }
 
     /// <summary>
@@ -96,7 +122,7 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(providers);
 
         return new ExploreActionPolicy(
-            Regions(system, environment),
+            ProtectedRegions.For(system, environment),
             providers.SelectMany(p => p.ToolRoots));
     }
 
@@ -133,6 +159,11 @@ public sealed class ExploreActionPolicy
             return filesystem;
         }
 
+        if (InARecycleBin(target) is { } bin)
+        {
+            return bin;
+        }
+
         if (AtAVolumeRoot(target) is { } reserved)
         {
             return reserved;
@@ -145,15 +176,13 @@ public sealed class ExploreActionPolicy
             return mail;
         }
 
-        foreach (var region in _regions)
-        {
-            if (Covers(region, target))
-            {
-                return region.Verdict.IsAllowed ? Below(target) : region.Verdict;
-            }
-        }
+        var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
+            ? refusing.Verdict
+            : Below(target);
 
-        return Below(target);
+        // Last, and only of a path everything above allows, because it is the one question here that
+        // reads the disk.
+        return verdict.IsAllowed ? _held.Refusal(target) ?? verdict : verdict;
     }
 
     /// <summary>
@@ -184,10 +213,6 @@ public sealed class ExploreActionPolicy
             "system volume information" => ExploreVerdict.Refuse(
                 "Windows keeps this drive's restore points, indexing data and change journal here. "
                 + "It belongs to the operating system, and Windows is what should reclaim it."),
-
-            "$recycle.bin" => ExploreVerdict.Refuse(
-                "This is the drive's Recycle Bin. Emptying it is offered on the Storage page, where "
-                + "Deguffer can tell your own deleted files from another account's."),
 
             "pagefile.sys" => Managed("the paging file"),
             "swapfile.sys" => Managed("the swap file"),
@@ -230,6 +255,31 @@ public sealed class ExploreActionPolicy
                 $"'{first}' is part of NTFS itself rather than something stored on the drive — it is "
                 + "how the filesystem records where every other file is. Windows does not let it be "
                 + "deleted, and the space it holds is not recoverable while the drive is in use.")
+            : null;
+
+    /// <summary>
+    /// A volume's Recycle Bin and everything in it.
+    ///
+    /// <para>Everything in it, not only the folder, because the bin holds a folder for each account
+    /// that has deleted something on the drive. <see cref="Providers.RecycleBinProvider"/> empties
+    /// this user's own and names every other one as a path that must survive, and §7.1 refuses every
+    /// such path. Refusing the bin alone left another account's deleted files one level down, and
+    /// removable wherever Deguffer runs elevated. This user's own is refused too: the Storage page is
+    /// where it is emptied, and a deleted file is two entries there, its contents and the record of
+    /// where it came from, so removing either leaves a file the bin cannot put back.</para>
+    ///
+    /// <para>By the first segment below the volume root, as <see cref="ReservedByTheFilesystem"/>
+    /// asks, so a folder somebody named <c>$Recycle.Bin</c> inside their own documents stays
+    /// theirs.</para>
+    /// </summary>
+    private static ExploreVerdict? InARecycleBin(string target) =>
+        VolumeRoot.Below(target) is { } below
+        && below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
+        && first.Equals("$Recycle.Bin", StringComparison.OrdinalIgnoreCase)
+            ? ExploreVerdict.Refuse(
+                "This is the drive's Recycle Bin, where each account on this computer keeps what it "
+                + "deleted. Emptying yours is offered on the Storage page, where Deguffer can tell your "
+                + "own deleted files from another account's.")
             : null;
 
     private static ExploreVerdict Managed(string what) => ExploreVerdict.Refuse(
@@ -354,66 +404,5 @@ public sealed class ExploreActionPolicy
                 $"'{child}' is not something Deguffer recognises inside '{rootPath}'. Configuration "
                 + "and credentials sit beside a cache in a tool's own folder, so anything unrecognised "
                 + "there is left alone.");
-    }
-
-    /// <summary>
-    /// The structural table. Every entry says what it protects and why, because the reason is what
-    /// the user is shown.
-    /// </summary>
-    private static IEnumerable<ProtectedRegion> Regions(
-        ISystemDirectories system,
-        IUserEnvironment environment)
-    {
-        yield return ProtectedRegion.Refusing(
-            system.WindowsDirectory,
-            RegionScope.PathAndBelow,
-            "This is inside the Windows directory. Deguffer never removes anything there from "
-            + "Explore, and §9 of its specification excludes the component store and the installer "
-            + "cache from every route, because a wrong removal there breaks uninstall or leaves the "
-            + "machine unable to roll an update back.");
-
-        foreach (var programs in new[] { system.ProgramFiles, system.ProgramFilesX86 })
-        {
-            yield return ProtectedRegion.Refusing(
-                programs,
-                RegionScope.PathAndBelow,
-                $"This is installed software, under '{programs}'. Removing part of it leaves the "
-                + "program on the machine and broken, and its own uninstaller is what should take it "
-                + "away.");
-        }
-
-        yield return ProtectedRegion.Refusing(
-            system.ProgramData,
-            RegionScope.PathAndBelow,
-            "This is machine-wide application data, shared by every account on this computer. "
-            + "Deguffer has classified none of it, and the caches it does know about in there are "
-            + "offered on the Storage page instead, where a provider knows what they are.");
-
-        // The user's own profile, in three entries that read as one rule. The profile directory is
-        // not a thing to remove and neither is the Users folder, but everything the user keeps
-        // inside their own profile is ordinary — and another account's profile is not.
-        var users = Path.GetDirectoryName(environment.UserProfile);
-
-        if (users is not null)
-        {
-            yield return ProtectedRegion.Refusing(
-                users,
-                RegionScope.PathAndBelow,
-                "This belongs to another account on this computer, or is the folder holding every "
-                + "account's profile. Deguffer acts only inside the profile it is signed in to.");
-        }
-
-        yield return ProtectedRegion.Permitting(environment.UserProfile, RegionScope.PathAndBelow);
-
-        yield return ProtectedRegion.Refusing(
-            environment.UserProfile,
-            RegionScope.PathOnly,
-            "This is your whole profile — your documents, your settings and everything Deguffer "
-            + "would otherwise offer to clean. Explore removes things from inside it, never the "
-            + "profile itself.");
-
-        // Longer than the profile's permission, so it wins over it by the table's own ordering
-        // rather than by being written as an exception.
-        yield return OutlookDataFiles.Region(environment);
     }
 }

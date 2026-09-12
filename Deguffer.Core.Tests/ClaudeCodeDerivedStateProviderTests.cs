@@ -402,6 +402,8 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         {
             _claude.Home, _claude.Projects, _claude.Project(), memory, transcript, liveLock, registry, credentials,
             _claude.Ide, _claude.Sessions,
+            Path.Combine(_environment.UserProfile, ".claude.json"),
+            Path.Combine(_environment.UserProfile, ".claude-swap-backup"),
         })
         {
             Assert.False(policy.MayRemove(refused).IsAllowed, $"Explore would remove {refused}");

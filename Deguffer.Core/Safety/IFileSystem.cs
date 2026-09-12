@@ -120,6 +120,16 @@ public interface IFileSystem
     /// discriminates nothing and the attributes themselves are the only honest answer.
     /// </summary>
     FileAttributes? TryGetAttributes(string path);
+
+    /// <summary>
+    /// Whether anything — a file, a directory or a link — may be at <paramref name="path"/>.
+    ///
+    /// <para>False only where Windows says nothing is there. A path that could not be asked about
+    /// answers true, which is where this differs from <see cref="TryGetAttributes"/>: the caller is
+    /// <see cref="Exploring.Acting.ExploreActionPolicy"/>, asking whether a folder holds something
+    /// it refuses to remove, and "I cannot tell" has to read as the answer that stops the removal.</para>
+    /// </summary>
+    bool MayExist(string path);
 }
 
 /// <summary>The real filesystem. Stateless, so a single instance serves the process (G5).</summary>
@@ -188,6 +198,24 @@ public sealed class WindowsFileSystem : IFileSystem
         {
             // Gone, or unreadable. Either way there is nothing here to decide about.
             return null;
+        }
+    }
+
+    public bool MayExist(string path)
+    {
+        try
+        {
+            _ = File.GetAttributes(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
+        {
+            // Not an answer, and read as present for the reason LongPath.IsReparsePoint gives.
+            return true;
         }
     }
 }
