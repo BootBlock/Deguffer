@@ -367,7 +367,7 @@ public sealed class CleanupPlannerTests
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "uv", "pip",
                 "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
-                "epic-launcher-content-cache", "steam", "squirrel-staging",
+                "epic-launcher-content-cache", "steam", "spotify", "squirrel-staging",
                 "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
                 "claude-code-leftovers", "recycle-bin", "file-history", "temp-directories", "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs",

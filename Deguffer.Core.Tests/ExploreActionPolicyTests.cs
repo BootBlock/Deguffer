@@ -698,6 +698,101 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Spotify's folder in the profile, where the music and podcasts the user downloaded sit beside
+    /// the streaming cache.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                // Spotify's own folder
+    [InlineData("Data", true)]             // the streaming cache
+    [InlineData(@"Data\0a", true)]         // and everything under it
+    [InlineData("Storage", false)]         // the downloads, which need Premium to get back
+    [InlineData(@"Storage\0a", false)]
+    [InlineData("offline.bnk", false)]     // the record of what was downloaded
+    [InlineData("Browser", false)]         // unrecognised, so left alone
+    public void SpotifysFolderOffersOnlyTheStreamingCache(string relative, bool allowed)
+    {
+        var root = Path.Combine(_environment.LocalAppData, "Spotify");
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The installer edition's settings folder, and the Store edition's package folder. A
+    /// <see cref="ToolRoot"/> classifies immediate children, so the Store edition's cache is allowed
+    /// only because the folder holding it is declared as well, and everything else in the package is
+    /// refused.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "", false)]                                // the installer edition's settings
+    [InlineData(false, "Users", false)]
+    [InlineData(false, "prefs", false)]
+    [InlineData(true, "", false)]                                 // the Store edition's package
+    [InlineData(true, "LocalState", false)]
+    [InlineData(true, @"LocalCache\Spotify", false)]
+    [InlineData(true, @"LocalCache\Spotify\Data", true)]          // the Store edition's cache
+    [InlineData(true, @"LocalCache\Spotify\Browser", false)]
+    [InlineData(true, @"LocalState\Spotify\Storage", false)]      // its downloads
+    [InlineData(true, @"LocalState\Spotify\Users", false)]
+    public void SpotifysOtherFoldersOfferOnlyTheStoreEditionsCache(bool store, string relative, bool allowed)
+    {
+        var root = store
+            ? Path.Combine(_environment.LocalAppData, "Packages", SpotifyEdition.StorePackageFamily)
+            : Path.Combine(_environment.RoamingAppData, "Spotify");
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// Storage Spotify's settings moved somewhere else is refused whole, because it may be the
+    /// downloads. A drive is the exception, and it is asserted as one: refusing every child of a drive
+    /// would take the drive away from Explore for one setting.
+    /// </summary>
+    [Fact]
+    public void AMovedSpotifyStorageIsRefusedExceptWhereItIsAWholeDrive()
+    {
+        var moved = _temp.CreateDirectory("music", "Spotify");
+        WriteSpotifySettings(
+            $"storage.location=\"{moved.Replace(@"\", @"\\")}\"",
+            @"storage.last-location=""Q:\\""");
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        Assert.False(policy.MayRemove(moved).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(moved, "0a")).IsAllowed);
+
+        Assert.True(policy.MayRemove(@"Q:\Holiday photos").IsAllowed);
+    }
+
+    /// <summary>
+    /// A cache the Storage page withholds is refused here too, or Explore would offer the one
+    /// directory the plan has just declined, for the reason it declined it.
+    /// </summary>
+    [Fact]
+    public void ASpotifyCacheTheSettingsOverlapIsRefused()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "Spotify", "Data");
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        // The premise, without which the refusal below proves nothing: with no settings file, the
+        // cache is allowed.
+        Assert.True(policy.MayRemove(cache).IsAllowed);
+
+        WriteSpotifySettings($"storage.location=\"{Path.Combine(cache, "offline").Replace(@"\", @"\\")}\"");
+        policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+
+        Assert.False(policy.MayRemove(cache).IsAllowed);
+    }
+
+    private void WriteSpotifySettings(params string[] lines) => File.WriteAllText(
+        _temp.CreateFile(0, "profile", "AppData", "Roaming", "Spotify", "prefs"),
+        string.Join('\n', lines) + "\n");
+
+    /// <summary>
     /// A Squirrel application's own folder, which nothing else in §7.1 refuses: it sits under
     /// <c>%LOCALAPPDATA%</c> like any other application's data, and until a provider says whose it
     /// is, Explore treats it as an ordinary directory somebody may delete.
@@ -800,6 +895,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("epic-launcher-webcache", "Config")]         // the launcher settings
     [InlineData("epic-launcher-logs", "UserVaultSettings")]
     [InlineData("steam", "cefdata")]                         // the embedded browser's working data
+    [InlineData("spotify", "Storage")]                       // the downloads, which need Premium to get back
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
@@ -907,6 +1003,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         // which is Steam's folder in the profile and is declared from a constant; the install root
         // and the container under it have their own theory above, where the register is set up.
         new SteamCacheProvider(_environment),
+        new SpotifyCacheProvider(_environment),
     ];
 
     /// <summary>

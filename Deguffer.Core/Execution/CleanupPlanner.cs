@@ -21,7 +21,7 @@ public sealed class CleanupPlanner
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
-    /// web caches, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// web caches, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, the Azure Functions Core Tools releases Visual Studio downloads, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
@@ -106,6 +106,7 @@ public sealed class CleanupPlanner
         new EpicLauncherWebCacheProvider(),
         new EpicLauncherContentCacheProvider(),
         new SteamCacheProvider(),
+        new SpotifyCacheProvider(),
         new SquirrelStagingProvider(discovery: squirrel, liveTrees: liveTrees),
         new PlatformIoCacheProvider(),
         new PlaywrightBrowsersProvider(),
