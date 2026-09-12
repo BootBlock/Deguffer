@@ -247,13 +247,17 @@ public sealed class MemoryTreeBuilderTests
             node => tree.ProcessOf(node)?.ProcessId == 0);
     }
 
+    /// <summary>
+    /// The two tied processes have identifiers in the opposite order to their names, so a tie broken
+    /// by anything but the name puts them the other way round.
+    /// </summary>
     [Fact]
     public void ChildrenAreLargestFirstWithTiesInNameOrder()
     {
         var tree = MemoryTreeBuilder.Build(new MemorySnapshotBuilder()
-            .Process(300, 1, "beta.exe", 100, created: 30)
+            .Process(200, 1, "beta.exe", 100, created: 30)
             .Process(100, 1, "gamma.exe", 200, created: 10)
-            .Process(200, 1, "alpha.exe", 100, created: 20)
+            .Process(300, 1, "alpha.exe", 100, created: 20)
             .Build());
 
         var applications = Node(tree, MemoryPart.Applications);

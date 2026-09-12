@@ -31,7 +31,11 @@ internal sealed class MemorySnapshotBuilder
         return this;
     }
 
-    /// <summary>Turn the undocumented figures off the way <see cref="ProcessMemoryTable"/> does for this verdict.</summary>
+    /// <summary>
+    /// Set the verdict on the undocumented figures, and leave the figures themselves in place.
+    /// <see cref="ProcessMemoryTable.From"/> would take them away as well, and a test built on that
+    /// could not tell a tree that obeys the verdict from one that merely found nothing to draw.
+    /// </summary>
     public MemorySnapshotBuilder Figures(ProcessFigures figures)
     {
         _figures = figures;
@@ -52,12 +56,6 @@ internal sealed class MemorySnapshotBuilder
 
     public MemorySnapshot Build()
     {
-        var on = _figures == ProcessFigures.Checked;
-
-        var processes = _processes
-            .Select(process => on ? process : process with { PrivateWorkingSet = null, CreationTime = null })
-            .ToArray();
-
         var system = new SystemMemory(
             PhysicalTotal: _physical,
             Available: _physical / 3,
@@ -71,7 +69,7 @@ internal sealed class MemorySnapshotBuilder
 
         return new MemorySnapshot(
             system,
-            new ProcessMemoryTable(processes, _figures, Complete: true),
+            new ProcessMemoryTable([.. _processes], _figures, Complete: true),
             new ServiceTable([.. _services], ServiceListing.Listed));
     }
 }
