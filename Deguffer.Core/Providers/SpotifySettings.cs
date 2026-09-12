@@ -120,9 +120,11 @@ public sealed record SpotifySettings(
         var locations = new List<string>();
         var placedEvery = true;
 
-        // Split on the line feed alone, and trim: Spotify writes LF, and a file edited by hand on
-        // Windows may have gained a carriage return on every line.
-        foreach (var raw in text.Split('\n'))
+        // Split on both line endings. Spotify writes LF, and a file edited by hand may have gained CR
+        // LF or CR alone. Split on LF only, a file ending its lines with CR alone would be one line,
+        // and every key after the first would fail to match without a word. The empty entries a
+        // CR LF pair leaves hold no '=' and are skipped.
+        foreach (var raw in text.Split(['\r', '\n']))
         {
             var line = raw.Trim();
             var split = line.IndexOf('=');

@@ -58,6 +58,21 @@ public sealed class SpotifySettingsTests : IDisposable
         Assert.Equal(new[] { @"D:\Music\Spotify", @"\\server\share\Spotify" }, settings.Locations);
     }
 
+    /// <summary>
+    /// A file whose lines end with a carriage return alone. Split on line feeds only, it is one line,
+    /// the key that matches is the first line's, and a location on any later line reads as "nothing
+    /// moved". So the location here is not on the first line.
+    /// </summary>
+    [Fact]
+    public void ReadsAFileWhoseLinesEndWithACarriageReturnAlone()
+    {
+        var settings = SpotifySettings.Read(WriteSettings(
+            "app.autostart-mode=\"off\"\rstorage.location=\"D:\\\\Spotify\"\r"));
+
+        Assert.Equal(SpotifySettingsReading.Read, settings.Reading);
+        Assert.Equal(new[] { @"D:\Spotify" }, settings.Locations);
+    }
+
     [Fact]
     public void TheSameLocationUnderBothKeysIsNamedOnce()
     {

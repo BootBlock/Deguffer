@@ -1489,7 +1489,8 @@ the cache cannot be moved at all. So Deguffer assumes neither:
 - **Nothing in a folder the settings move storage to is measured or removed.** Deguffer says it was
   neither cleared nor ruled out, checks afterwards that it is still there, and refuses it on the
   Explore page unless it is a whole drive, which Explore would otherwise lose entirely. A folder
-  above Spotify's own is refused whole, with everything else in it.
+  above Spotify's own is refused along with everything else in it, except what another row
+  recognises in a folder of its own further down.
 - If that folder **is** a cache folder, sits inside one or holds one, that cache is **not offered**,
   because your downloads may be in it.
 - If the settings file **cannot be read**, or names a location Deguffer cannot place, **no Spotify

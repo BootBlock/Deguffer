@@ -183,10 +183,13 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             foreach (var location in storage.Overlapping(install.Edition))
             {
                 explained.Add(location);
+                // "Keeps, or kept": a location comes from either key, and storage.last-location is
+                // where the storage was before, so neither tense alone is true of both.
                 notes.Add(Information(
                     (location.Equals(cache, StringComparison.OrdinalIgnoreCase)
-                        ? $"Spotify's settings keep its storage in its cache folder, '{cache}'."
-                        : $"Spotify's settings keep its storage in '{location}', which overlaps its cache in '{cache}'.")
+                        ? $"Spotify's settings name its cache folder, '{cache}', as where it keeps, or kept, its storage."
+                        : $"Spotify's settings name '{location}' as where it keeps, or kept, its storage, and that "
+                            + $"overlaps its cache in '{cache}'.")
                     + " The music and podcasts you downloaded may be in there, so Deguffer left the cache alone."));
             }
         }
@@ -194,9 +197,10 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         // Every other moved location, including one that holds a cache folder not on disk, is named
         // in a sentence of its own. Nothing else would tell the user it was never examined.
         notes.AddRange(storage.Moved.Where(location => !explained.Contains(location)).Select(location => Information(
-            $"Spotify's settings move its storage to '{location}'. Spotify keeps the music and podcasts "
-            + "you download there, and its own help calls that folder its cache, so Deguffer did not "
-            + "measure or remove anything in it. Whatever is there was neither cleared nor ruled out.")));
+            $"Spotify's settings name '{location}' as where it keeps, or kept, its storage. The music and "
+            + "podcasts you downloaded may be there, and Spotify's own help calls that folder its cache, so "
+            + "Deguffer did not measure or remove anything in it. Whatever is there was neither cleared nor "
+            + "ruled out.")));
 
         survivors.AddRange(storage.Locations.Select(location => (location, LocationReason)));
 
@@ -241,8 +245,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     private static string UnsettledSentence(SpotifySettings settings, bool withheldACache) =>
         (settings.Reading == SpotifySettingsReading.Unreadable
             ? $"Deguffer could not read Spotify's settings in '{settings.File}'"
-            : $"Spotify's settings in '{settings.File}' name a storage location Deguffer could not make "
-                + "sense of")
+            : $"Deguffer could not make sense of Spotify's settings in '{settings.File}'")
         + ", so it cannot tell where Spotify keeps the music and podcasts you downloaded."
         + (withheldACache
             ? " Deguffer left Spotify's streaming cache alone in case they are in it."

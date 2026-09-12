@@ -206,7 +206,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.DoesNotContain(scanner.Measured, path => LongPath.Contains(moved, path));
 
         Assert.Contains(plan.Notes, n =>
-            n.Message.Contains("move its storage to", StringComparison.Ordinal)
+            n.Message.Contains("did not measure or remove", StringComparison.Ordinal)
             && n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
@@ -247,9 +247,17 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             && n.Message.Contains("left the cache alone", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
 
+        // A location that is the cache folder names that folder once. Saying it "overlaps" itself
+        // would name the same path twice as though it were two folders.
+        var isTheCache = location.Equals(cache, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(
+            isTheCache ? "name its cache folder" : "overlaps its cache", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(
+            isTheCache ? "overlaps its cache" : "name its cache folder", StringComparison.Ordinal));
+
         // One sentence for the location. The one about the cache already names it, and a second
         // saying it was moved would read as two different folders.
-        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("move its storage to", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not measure or remove", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -274,7 +282,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n =>
-            n.Message.Contains("move its storage to", StringComparison.Ordinal)
+            n.Message.Contains("did not measure or remove", StringComparison.Ordinal)
             && n.Message.Contains(location, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(location, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
