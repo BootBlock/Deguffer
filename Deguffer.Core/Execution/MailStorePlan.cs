@@ -91,10 +91,9 @@ public static class MailStorePlan
                     ? $"The Outlook data file at {leftByRemovals[0]} is inside what this removes, and is left "
                       + "where it is, because Deguffer never removes one. The sizes here already exclude it, and "
                       + "every clean checks that it is still there."
-                    : $"{leftByRemovals.Count} Outlook data files are inside what this removes, at "
-                      + $"{Name(leftByRemovals)}, and are left where they are, because Deguffer never removes "
-                      + "one. The sizes here already exclude them, and every clean checks that they are still "
-                      + "there."));
+                    : $"What this removes holds {Every(leftByRemovals)}. They are left where they are, because "
+                      + "Deguffer never removes one. The sizes here already exclude them, and every clean checks "
+                      + "that they are still there."));
         }
 
         return plan with
@@ -106,8 +105,9 @@ public static class MailStorePlan
     }
 
     /// <summary>
-    /// The first store by its path, and how many more there are, for a sentence that has to say which
-    /// file stopped something without listing a folder's worth of them.
+    /// The first store by its path, and how many more there are, for a sentence reporting what a run or
+    /// an action refused, which has to say which file stopped it without listing a folder's worth of
+    /// them. A preview note names every store instead; see <see cref="Every"/>.
     /// </summary>
     public static string Name(IReadOnlyList<string> stores)
     {
@@ -120,6 +120,18 @@ public static class MailStorePlan
             _ => $"{stores[0]} and {stores.Count - 1} more",
         };
     }
+
+    /// <summary>
+    /// Every store by its full path, for a preview note. The preview is the one place a reader learns
+    /// which of their files Deguffer leaves or refuses around, and nothing else on screen lists the paths
+    /// a plan protects, so none of them is left out. Separated by semicolons, because a path may hold a
+    /// comma.
+    /// </summary>
+    private static string Every(IReadOnlyList<string> stores) => stores.Count switch
+    {
+        1 => $"an Outlook data file, at {stores[0]}",
+        _ => $"{stores.Count} Outlook data files, at {string.Join("; ", stores.SkipLast(1))} and {stores[^1]}",
+    };
 
     /// <summary>
     /// One protection per store, each on its existence alone. A store is a file, so there is no
@@ -148,20 +160,19 @@ public static class MailStorePlan
 
         RunCommandStep command =>
             $"Not running {plan.ProviderName}'s own command ({Path.GetFileName(command.FileName)} "
-            + $"{command.Arguments}): an Outlook data file is inside what it clears, at "
-            + $"{Name(command.MailStores)}. The tool decides for itself what it removes and cannot be "
-            + "told to leave one file, and Deguffer never removes one. Move it somewhere else and "
-            + "preview again.",
+            + $"{command.Arguments}): what it clears holds {Every(command.MailStores)}. The tool decides "
+            + "for itself what it removes and cannot be told to leave one file, and Deguffer never removes "
+            + "one. Move what is named here somewhere else, and preview again.",
 
         EmptyRecycleBinStep bin =>
-            $"Leaving the Recycle Bin at {LongPath.Display(bin.Path)} as it is: it holds an Outlook data "
-            + $"file, at {Name(bin.MailStores)}. Windows empties a bin whole, and Deguffer never removes one. "
-            + "Restore the file, or delete it from the Recycle Bin yourself, and preview again.",
+            $"Leaving the Recycle Bin at {LongPath.Display(bin.Path)} as it is: it holds "
+            + $"{Every(bin.MailStores)}. Windows empties a bin whole, and Deguffer never removes one. "
+            + "Restore what is named here, or delete it from the Recycle Bin yourself, and preview again.",
 
         DeleteDirectoryStep { IsIndivisible: true } whole =>
-            $"Leaving {LongPath.Display(whole.Path)} as it is: it holds an Outlook data file, at "
-            + $"{Name(whole.MailStores)}. What is inside it goes whole or not at all, and Deguffer never "
-            + "removes one. Move the file out, or delete it yourself, and preview again.",
+            $"Leaving {LongPath.Display(whole.Path)} as it is: it holds {Every(whole.MailStores)}. What is "
+            + "inside it goes whole or not at all, and Deguffer never removes one. Move what is named here "
+            + "out, or delete it yourself, and preview again.",
 
         DeleteFileStep file =>
             $"Leaving {LongPath.Display(file.Path)} alone: it is an Outlook data file, and Deguffer never "

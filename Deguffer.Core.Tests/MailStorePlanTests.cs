@@ -149,6 +149,39 @@ public sealed class MailStorePlanTests
         Assert.Contains(applied.ProtectedPaths, p => p is { Path: bin, HeldContentBefore: true, Withheld: Withholding.None });
     }
 
+    /// <summary>
+    /// The preview is where a reader finds out which of their files Deguffer is leaving or refusing
+    /// around, and nothing else on screen lists protected paths, so every store is named in full, not
+    /// the first one and a count.
+    /// </summary>
+    [Fact]
+    public void EveryStoreIsNamedInTheNotesNotOnlyTheFirst()
+    {
+        const string second = @"C:\Users\testuser\AppData\Local\Temp\old mail\backup.pst";
+        const string secondMailbox = @"C:\Users\testuser\AppData\Local\npm-cache\_cacache\someone.ost";
+
+        var clear = new ClearDirectoryStep(@"C:\Users\testuser\AppData\Local\Temp", "Temporary files")
+        {
+            MailStores = [Archive, second],
+        };
+
+        var npm = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
+        {
+            MeasuredPaths = [@"C:\Users\testuser\AppData\Local\npm-cache"],
+            MailStores = [Mailbox, secondMailbox],
+        };
+
+        var applied = MailStorePlan.Apply(Planning(clear, npm));
+
+        var kept = Assert.Single(applied.Notes, n => n.Severity == PlanNoteSeverity.Information);
+        Assert.Contains(Archive, kept.Message, StringComparison.Ordinal);
+        Assert.Contains(second, kept.Message, StringComparison.Ordinal);
+
+        var withheld = Assert.Single(applied.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+        Assert.Contains(Mailbox, withheld.Message, StringComparison.Ordinal);
+        Assert.Contains(secondMailbox, withheld.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>One store named by two steps, in two spellings, is one file and one protection.</summary>
     [Fact]
     public void AStoreNamedTwiceIsProtectedOnce()
