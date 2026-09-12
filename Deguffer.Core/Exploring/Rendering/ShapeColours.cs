@@ -23,9 +23,14 @@ public abstract class ShapeColours
     /// <summary>A hue per top-level branch, shaded by depth. What every tree can be coloured by.</summary>
     public static ShapeColours ByBranch { get; } = new BranchColours();
 
-    /// <summary>The colours <paramref name="colouring"/> asks for, for a drawing of <paramref name="tree"/>.</summary>
+    /// <summary>
+    /// The colours <paramref name="colouring"/> asks for, for a drawing of <paramref name="tree"/>.
+    ///
+    /// <para>Asked for again at every repaint rather than held, because the age bands are relative to
+    /// the moment they are drawn: a map left open overnight would otherwise keep yesterday's answer.</para>
+    /// </summary>
     /// <param name="nowUtc">What "now" is, for the age bands.</param>
-    internal static ShapeColours For(ExploreTree tree, ExploreColouring colouring, DateTime nowUtc) =>
+    public static ShapeColours For(ExploreTree tree, ExploreColouring colouring, DateTime nowUtc) =>
         colouring == ExploreColouring.Age ? new AgeColours(tree, nowUtc) : ByBranch;
 
     internal abstract TileColour For(ExploreSurface surface, int node, int depth);

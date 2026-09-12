@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Scanning;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -71,10 +73,29 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private readonly HashSet<int> _under = [];
 
-    private ExploreTree? _tree;
+    private ISizedTree? _tree;
     private int _node;
     private ExploreView _view = ExploreView.Treemap;
-    private ExploreColouring _colouring = ExploreColouring.Branch;
+
+    /// <summary>
+    /// What the colours are to say, asked for at each repaint rather than held. See
+    /// <see cref="ShapeColours.For"/>: an age band is relative to the moment it is drawn.
+    /// </summary>
+    private Func<DateTime, ShapeColours> _colours = _ => ShapeColours.ByBranch;
+
+    /// <summary>
+    /// What to write on a shape. The tree knows its own names, and what a name means differs between
+    /// a drive and a picture of memory, so the page that owns the tree says it.
+    /// </summary>
+    private Func<int, string> _labelText = _ => string.Empty;
+
+    /// <summary>
+    /// Where the pointer was last seen, in this control's coordinates, or null while it is elsewhere.
+    /// Kept so a redraw can say what is under it again: a page that refreshes on its own would
+    /// otherwise drop the outline and the readout under a pointer that never moved.
+    /// </summary>
+    private Point? _pointer;
+
     private ExploreSurface? _drawing;
     private WriteableBitmap? _bitmap;
     private byte[]? _pixels;
@@ -197,15 +218,36 @@ public sealed class ExploreMap : UserControl
     public event EventHandler<(int? Node, long? AggregateBytes)>? Hovered;
 
     /// <summary>
-    /// Draw <paramref name="node"/> of <paramref name="tree"/> in <paramref name="view"/>, with the
-    /// shapes coloured to say <paramref name="colouring"/>.
+    /// Draw <paramref name="node"/> of a scanned <paramref name="tree"/> in <paramref name="view"/>,
+    /// with the shapes coloured to say <paramref name="colouring"/> and labelled with a name and a
+    /// size.
     /// </summary>
-    public void Show(ExploreTree? tree, int node, ExploreView view, ExploreColouring colouring)
+    public void Show(ExploreTree? tree, int node, ExploreView view, ExploreColouring colouring) =>
+        Show(
+            tree,
+            node,
+            view,
+            tree is null ? _ => ShapeColours.ByBranch : now => ShapeColours.For(tree, colouring, now),
+            tree is null
+                ? _ => string.Empty
+                : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}");
+
+    /// <summary>
+    /// Draw <paramref name="node"/> of any tree a layout can lay out.
+    /// </summary>
+    /// <param name="colours">What the colours are to say, asked at each repaint.</param>
+    /// <param name="labelText">What to write on a shape this drawing chose to label.</param>
+    public void Show(
+        ISizedTree? tree, int node, ExploreView view, Func<DateTime, ShapeColours> colours, Func<int, string> labelText)
     {
+        ArgumentNullException.ThrowIfNull(colours);
+        ArgumentNullException.ThrowIfNull(labelText);
+
         _tree = tree;
         _node = node;
         _view = view;
-        _colouring = colouring;
+        _colours = colours;
+        _labelText = labelText;
 
         Redraw();
     }
@@ -315,8 +357,6 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _hovered = null;
-
         _scale = XamlRoot?.RasterizationScale ?? 1;
 
         var width = DevicePixels(ActualWidth);
@@ -330,6 +370,7 @@ public sealed class ExploreMap : UserControl
             _bitmap = null;
             _pixels = null;
             _drawing = null;
+            _hovered = null;
             _labels.Clear();
             _highlight.Clear();
             return;
@@ -339,7 +380,7 @@ public sealed class ExploreMap : UserControl
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
         var drawing = ExploreSurface.Create(
-            tree, _node, _view, width, height, _scale, _colouring, DateTime.UtcNow);
+            tree, _node, _view, width, height, _scale, _colours(DateTime.UtcNow));
         _drawing = drawing;
 
         // Both reused while the size holds. A scan redraws this every three quarters of a second,
@@ -359,15 +400,38 @@ public sealed class ExploreMap : UserControl
         _pixels!.CopyTo(0, bitmap.PixelBuffer, 0, _pixels!.Length);
         bitmap.Invalidate();
 
-        _labels.Show(tree, drawing, _scale);
+        _labels.Show(drawing, _scale, _labelText);
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
-        // now. The hovered outline goes rather than moves, because `_hovered` was cleared above:
-        // the pointer has not been told the picture changed under it, and OnPointerMoved reports
-        // again the moment it does move.
+        // now, and so is whatever the pointer is over.
         StretchHighlight();
         ShowPicked();
+        ReportWhatThePointerIsOver(drawing);
+    }
+
+    /// <summary>
+    /// Say what is under the pointer in the drawing that has just replaced the last one, and mark it.
+    ///
+    /// <para>Asked again rather than dropped, because a page that redraws on its own leaves the pointer
+    /// where it was: a scan publishing a snapshot, or a memory view refreshing every couple of seconds.
+    /// Dropping it took the outline and the readout away from a reader who had not moved, until they
+    /// moved. Nothing is raised while the answer has not changed, so a redraw that leaves the same shape
+    /// under the pointer costs nothing.</para>
+    /// </summary>
+    private void ReportWhatThePointerIsOver(ExploreSurface drawing)
+    {
+        var hit = _pointer is { } pointer ? At(drawing, pointer) : null;
+
+        if (hit == _hovered)
+        {
+            ShowHovered();
+            return;
+        }
+
+        _hovered = hit;
+
         ShowHovered();
+        Report(hit);
     }
 
     /// <summary>
@@ -446,12 +510,14 @@ public sealed class ExploreMap : UserControl
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        _pointer = e.GetCurrentPoint(this).Position;
+
         if (_drawing is not { } drawing)
         {
             return;
         }
 
-        var hit = At(drawing, e.GetCurrentPoint(this).Position);
+        var hit = At(drawing, _pointer.Value);
 
         // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
         // shape for most of that, so reporting every move would rebuild the same string sixty times
@@ -464,14 +530,17 @@ public sealed class ExploreMap : UserControl
         _hovered = hit;
 
         ShowHovered();
+        Report(hit);
+    }
 
+    /// <summary>Say what the pointer found, in the shape a page wants it.</summary>
+    private void Report(ExploreHit? hit) =>
         Hovered?.Invoke(this, hit switch
         {
             { IsAggregate: true } aggregate => (null, aggregate.Bytes),
             { } node => (node.Node, null),
             _ => (null, null),
         });
-    }
 
     /// <summary>
     /// Redraw only when the scale actually moved. The root raises this for several reasons — the
@@ -488,11 +557,11 @@ public sealed class ExploreMap : UserControl
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
+        _pointer = null;
         _hovered = null;
 
         ShowHovered();
-
-        Hovered?.Invoke(this, (null, null));
+        Report(null);
     }
 
     private void OnTapped(object sender, TappedRoutedEventArgs e) => Pick(e.GetPosition(this));
