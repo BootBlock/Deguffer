@@ -14,6 +14,7 @@ public sealed class ServiceListingProgressTests
     [InlineData(false, true, true, 12, null)]
     [InlineData(false, true, true, 0, ServiceListing.ListedInPart)]
     [InlineData(false, false, false, 0, ServiceListing.ListedInPart)]
+    [InlineData(false, false, true, 12, ServiceListing.ListedInPart)]
     [InlineData(true, false, false, 12, ServiceListing.ListedInPart)]
     [InlineData(false, true, false, 12, ServiceListing.ListedInPart)]
     public void EachWayACallEndsSaysHowMuchWasRead(

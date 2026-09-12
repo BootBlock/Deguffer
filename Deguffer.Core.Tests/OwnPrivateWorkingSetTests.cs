@@ -35,8 +35,9 @@ public sealed class OwnPrivateWorkingSetTests
         Assert.Null(OwnPrivateWorkingSet.Choose(counterAnswered: false, 0, () => null));
 
     /// <summary>
-    /// Four entries, two of them shareable, with protection bits set on both kinds, and a fifth entry
-    /// past the count that must not be counted.
+    /// Four entries, two of them shareable, and a fifth past the count that must not be counted. The
+    /// protection bits are on one private entry and on neither shareable one, so a mask on any other
+    /// bit counts a different number of pages rather than the same number by coincidence.
     /// </summary>
     [Fact]
     public void OnlyPagesWindowsDoesNotMarkShareableArePrivate()
@@ -47,7 +48,7 @@ public sealed class OwnPrivateWorkingSetTests
             0x1000_0000 | Shared,
             0x2000_0000,
             0x3000_0000 | Protection,
-            0x4000_0000 | Shared | Protection,
+            0x4000_0000 | Shared,
             0x5000_0000,
         ];
 
