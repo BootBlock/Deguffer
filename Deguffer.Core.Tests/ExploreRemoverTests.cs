@@ -335,6 +335,33 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A link is moved to the Recycle Bin as a link and takes nothing behind it, so a store on the far
+    /// side does not stop it — and looking for one there would walk a tree nobody picked. The bin here
+    /// only records, so the fixture cannot touch the far side whatever the shell would do.
+    /// </summary>
+    [Fact]
+    public async Task MovesALinkToAFolderHoldingAStoreToTheRecycleBinAsTheLinkItIs()
+    {
+        var target = _temp.CreateDirectory("elsewhere", "mail");
+        var store = _temp.CreateFile(64, "elsewhere", "mail", "archive.pst");
+        var link = Path.Combine(_temp.CreateDirectory("profile", "Downloads"), "mail shortcut");
+
+        Directory.CreateSymbolicLink(link, target);
+
+        var bin = new FakeRecycleBin(_ => new RecycleOutcome(Removed: true));
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(link, IsDirectory: true, Bytes: 0)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin);
+
+        Assert.Equal(link, Assert.Single(bin.Paths));
+        Assert.Single(report.Removed);
+        Assert.True(LongPath.FileExists(store));
+    }
+
+    /// <summary>
     /// The policy is asked again inside the remover rather than trusted from the caller, so a shell
     /// that never asked cannot get past it. Driven here by handing the remover a refused path
     /// directly, which is what such a shell would do.
