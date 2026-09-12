@@ -223,6 +223,34 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Everything inside a volume's Recycle Bin, where each account keeps a folder of what it deleted.
+    /// The Recycle Bin provider names every other account's folder as a path that must survive, so
+    /// refusing the bin alone left them one level down.
+    /// </summary>
+    [Theory]
+    [InlineData(@"$Recycle.Bin\S-1-5-21-1000-1000-1000-1001")]
+    [InlineData(@"$Recycle.Bin\S-1-5-21-1000-1000-1000-1002\$RQ4ZKJX.txt")]
+    [InlineData(@"$RECYCLE.BIN\S-1-5-21-1000-1000-1000-1002\$IQ4ZKJX.txt")]
+    public void EverythingInsideARecycleBinIsRefused(string relative)
+    {
+        var verdict = Policy().MayRemove(Path.Combine(@"Q:\", relative));
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("Recycle Bin", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The over-reach direction: the rule is about the bin at the top of a volume, not about the name.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Stuff\$Recycle.Bin\S-1-5-21-1000-1000-1000-1001")]
+    [InlineData(@"$Recycle.Bin.old\notes.txt")]
+    public void ARecycleBinNameElsewhereIsOrdinary(string relative)
+    {
+        Assert.True(Policy().MayRemove(Path.Combine(@"Q:\", relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same names one level down are ordinary. A folder somebody called
     /// <c>System Volume Information</c> inside their own Documents is theirs, and the rule is about
     /// the reserved place rather than the word.

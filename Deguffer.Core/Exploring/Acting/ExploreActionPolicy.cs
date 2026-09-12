@@ -159,6 +159,11 @@ public sealed class ExploreActionPolicy
             return filesystem;
         }
 
+        if (InARecycleBin(target) is { } bin)
+        {
+            return bin;
+        }
+
         if (AtAVolumeRoot(target) is { } reserved)
         {
             return reserved;
@@ -209,10 +214,6 @@ public sealed class ExploreActionPolicy
                 "Windows keeps this drive's restore points, indexing data and change journal here. "
                 + "It belongs to the operating system, and Windows is what should reclaim it."),
 
-            "$recycle.bin" => ExploreVerdict.Refuse(
-                "This is the drive's Recycle Bin. Emptying it is offered on the Storage page, where "
-                + "Deguffer can tell your own deleted files from another account's."),
-
             "pagefile.sys" => Managed("the paging file"),
             "swapfile.sys" => Managed("the swap file"),
             "hiberfil.sys" => Managed("the hibernation file"),
@@ -254,6 +255,31 @@ public sealed class ExploreActionPolicy
                 $"'{first}' is part of NTFS itself rather than something stored on the drive — it is "
                 + "how the filesystem records where every other file is. Windows does not let it be "
                 + "deleted, and the space it holds is not recoverable while the drive is in use.")
+            : null;
+
+    /// <summary>
+    /// A volume's Recycle Bin and everything in it.
+    ///
+    /// <para>Everything in it, not only the folder, because the bin holds a folder for each account
+    /// that has deleted something on the drive. <see cref="Providers.RecycleBinProvider"/> empties
+    /// this user's own and names every other one as a path that must survive, and §7.1 refuses every
+    /// such path. Refusing the bin alone left another account's deleted files one level down, and
+    /// removable wherever Deguffer runs elevated. This user's own is refused too: the Storage page is
+    /// where it is emptied, and removing one of a deleted file's two halves leaves the bin describing
+    /// a file it no longer holds.</para>
+    ///
+    /// <para>By the first segment below the volume root, as <see cref="ReservedByTheFilesystem"/>
+    /// asks, so a folder somebody named <c>$Recycle.Bin</c> inside their own documents stays
+    /// theirs.</para>
+    /// </summary>
+    private static ExploreVerdict? InARecycleBin(string target) =>
+        VolumeRoot.Below(target) is { } below
+        && below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
+        && first.Equals("$Recycle.Bin", StringComparison.OrdinalIgnoreCase)
+            ? ExploreVerdict.Refuse(
+                "This is the drive's Recycle Bin, where each account on this computer keeps what it "
+                + "deleted. Emptying yours is offered on the Storage page, where Deguffer can tell your "
+                + "own deleted files from another account's.")
             : null;
 
     private static ExploreVerdict Managed(string what) => ExploreVerdict.Refuse(
