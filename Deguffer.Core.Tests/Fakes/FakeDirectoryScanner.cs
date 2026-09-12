@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -16,21 +17,35 @@ namespace Deguffer.Core.Tests.Fakes;
 /// </summary>
 public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) : IDirectoryScanner
 {
+    private readonly ConcurrentQueue<string> _measured = new();
+
     /// <summary>How many times discovery asked the index. Zero proves a test drove the walk.</summary>
     public int FindCalls { get; private set; }
 
     public int InvalidateCount { get; private set; }
 
+    /// <summary>
+    /// Every path measured, by either route. What proves a provider never measured a path it
+    /// promises to leave alone, which a size or a survival check cannot show.
+    /// </summary>
+    public IReadOnlyCollection<string> Measured => _measured;
+
     public ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
-        CancellationToken ct = default) =>
-        ParallelEnumerationScanner.Default.MeasureAsync(path, keep, progress, ct);
+        CancellationToken ct = default)
+    {
+        _measured.Enqueue(path);
+        return ParallelEnumerationScanner.Default.MeasureAsync(path, keep, progress, ct);
+    }
 
     /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
-        ParallelEnumerationScanner.Default.MeasureAsync(path, MinimumAge.Off, progress: null, ct);
+    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default)
+    {
+        _measured.Enqueue(path);
+        return ParallelEnumerationScanner.Default.MeasureAsync(path, MinimumAge.Off, progress: null, ct);
+    }
 
     /// <summary>
     /// Null when this fake has no index, matching the contract the real scanner uses to tell the

@@ -81,7 +81,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Forty-one providers, each holding its own knowledge of one location. A provider reports "not
+Forty-two providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -104,6 +104,7 @@ installed" cleanly on a machine without that toolchain.
 | Chromium application caches | |
 | Firefox caches | |
 | Steam web cache | |
+| Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | GPU shader caches | |
