@@ -31,9 +31,9 @@
         </Border>
 
         <!--
-            A rail with permanent labels rather than a collapsible pane: there are four
+            A rail with permanent labels rather than a collapsible pane: there are five
             destinations and they will not grow much, so nothing has to be opened to find out what
-            is here. The pane toggle is hidden for the same reason — collapsing four items saves no
+            is here. The pane toggle is hidden for the same reason — collapsing five items saves no
             meaningful width and costs the user the labels.
         -->
         <NavigationView x:Name="Navigation"
@@ -62,6 +62,14 @@
                 <NavigationViewItem x:Name="ExploreItem" Content="Explore" Tag="Explore">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <!-- Memory answers "where is the memory going", which §7.2 makes a question of its
+                     own. It shows and explains, and acts on nothing. -->
+                <NavigationViewItem x:Name="MemoryItem" Content="Memory" Tag="Memory">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE964;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

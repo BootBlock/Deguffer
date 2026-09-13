@@ -108,6 +108,7 @@ public sealed partial class MainWindow : Window
             "Settings" => typeof(SettingsPage),
             "About" => typeof(AboutPage),
             "Explore" => typeof(ExplorePage),
+            "Memory" => typeof(MemoryPage),
             _ => typeof(CleanPage),
         };
 

@@ -1,6 +1,4 @@
-using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Rendering;
-using Deguffer.Core.Scanning;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -31,18 +29,22 @@ internal sealed class ExploreLabels : Canvas
         IsHitTestVisible = false;
 
     /// <summary>
-    /// Put a name on each shape <paramref name="drawing"/> chose to label, at
-    /// <paramref name="scale"/> bitmap pixels to the device-independent pixel.
+    /// Put <paramref name="caption"/>'s text on each shape <paramref name="drawing"/> chose to label,
+    /// at <paramref name="scale"/> bitmap pixels to the device-independent pixel.
+    ///
+    /// <para>The caption comes from the page rather than from here, because only it knows what the
+    /// tree's nodes are: a drive's are a file name and a size, and a memory picture's are a process or
+    /// a part of Windows.</para>
     ///
     /// <para>The text blocks are kept and written over rather than rebuilt. A scan repaints this
     /// several times a second, and each rebuild would throw away a few dozen controls and their
     /// brushes and make the framework measure and arrange a fresh set of them, for text that has
     /// usually not changed (G5).</para>
     /// </summary>
-    public void Show(ExploreTree tree, ExploreSurface drawing, double scale)
+    public void Show(ExploreSurface drawing, double scale, Func<int, string> caption)
     {
-        ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(drawing);
+        ArgumentNullException.ThrowIfNull(caption);
 
         Visibility = Visibility.Visible;
 
@@ -61,7 +63,7 @@ internal sealed class ExploreLabels : Canvas
             var label = drawing.Labels[i];
             var text = (TextBlock)Children[i];
 
-            text.Text = $"{tree.NameOf(label.Node)}  {FreeSpace.Format(tree.SizeOf(label.Node))}";
+            text.Text = caption(label.Node);
             text.TextAlignment = label.Centred ? TextAlignment.Center : TextAlignment.Left;
             text.Width = label.Width / scale;
 

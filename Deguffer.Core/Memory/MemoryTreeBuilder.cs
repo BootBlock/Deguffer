@@ -85,9 +85,13 @@ public static class MemoryTreeBuilder
         var hosts = measured.Select(process => process.ProcessId).Where(hosted.Contains).ToHashSet();
         var forest = ProcessForest.Of(measured, hosts);
 
+        // One stack for the whole forest rather than one per root. Each walk drains it, and a memory
+        // view rebuilds this tree every couple of seconds for as long as it is on screen (G5).
+        var pending = new Stack<(ProcessMemory Process, int Parent)>();
+
         foreach (var root in forest.Roots)
         {
-            Place(drafts, forest, hosted, root, hosts.Contains(root.ProcessId) ? services : applications);
+            Place(drafts, forest, hosted, root, hosts.Contains(root.ProcessId) ? services : applications, pending);
         }
 
         return compressionStore;
@@ -98,10 +102,15 @@ public static class MemoryTreeBuilder
     /// holding them and a node for its own share, so its own memory is drawn beside theirs rather than
     /// hidden in the frame round them.
     /// </summary>
+    /// <param name="pending">Drained by the time this returns, so one serves every root.</param>
     private static void Place(
-        TreeDrafts drafts, ProcessForest forest, ILookup<int, RunningService> hosted, ProcessMemory root, int part)
+        TreeDrafts drafts,
+        ProcessForest forest,
+        ILookup<int, RunningService> hosted,
+        ProcessMemory root,
+        int part,
+        Stack<(ProcessMemory Process, int Parent)> pending)
     {
-        var pending = new Stack<(ProcessMemory Process, int Parent)>();
         pending.Push((root, part));
 
         while (pending.TryPop(out var frame))
