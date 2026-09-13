@@ -3,10 +3,12 @@ using Deguffer.Core.Memory;
 
 namespace Deguffer.App.ViewModels;
 
-/// <summary>One line of the memory list: what a part or a process is, and how much it holds.</summary>
+/// <summary>
+/// One line of the memory list: what a part or a process is, and how much it holds.
 ///
 /// <para>The list is the same contents as the picture, for a reader who cannot use a picture. It says
 /// what each thing is and what it holds, and offers nothing to do about it (§7.2).</para>
+/// </summary>
 public sealed partial class MemoryRow : ObservableObject
 {
     public MemoryRow(MemoryTree tree, int node, long partTotal)
@@ -37,11 +39,26 @@ public sealed partial class MemoryRow : ObservableObject
     [ObservableProperty]
     public partial string Explanation { get; set; } = string.Empty;
 
-    /// <summary>What a screen reader announces for the whole row.</summary>
-    public string Description => $"{Name}, {Held}";
+    /// <summary>
+    /// Whether this row holds anything, so the list says which rows open into something.
+    ///
+    /// <para>The list is the route through the tree for a reader who cannot use the picture, where
+    /// nesting is not visible. Both channels carry it: the glyph for a reader looking at the list, and
+    /// <see cref="Description"/> in words for one who is not.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Icon))]
+    [NotifyPropertyChangedFor(nameof(Description))]
+    public partial bool HasChildren { get; set; }
 
-    /// <summary>Whether this row holds anything, so the list can say which have nothing under them.</summary>
-    public bool HasChildren { get; private set; }
+    /// <summary>
+    /// A chevron on a row that opens, and nothing on one that does not. Segoe Fluent Icons, and never
+    /// the only thing carrying the distinction — <see cref="Description"/> says it in words.
+    /// </summary>
+    public string Icon => HasChildren ? "\uE76C" : string.Empty;
+
+    /// <summary>What a screen reader announces for the whole row.</summary>
+    public string Description => HasChildren ? $"{Name}, {Held}, holds more" : $"{Name}, {Held}";
 
     /// <summary>Bring the row up to date from a newer tree, without replacing the row itself.</summary>
     public void Describe(MemoryTree tree, int node, long partTotal)

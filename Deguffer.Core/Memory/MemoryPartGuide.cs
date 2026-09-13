@@ -61,9 +61,13 @@ public static class MemoryPartGuide
             + "of it in memory is inside the system working set, and its figure counts what has been "
             + "written out as well.",
 
-        _ =>
+        // Named rather than caught by a default arm, so that a part added with no sentence of its own
+        // is a build failure here instead of silently inheriting this one.
+        MemoryPart.Unattributed =>
             "Physical memory these figures cannot attribute: shared and shareable pages, page tables, "
             + "kernel stacks, memory drivers have locked, and the paged pool. Separating it needs "
             + "rights Deguffer does not ask for.",
+
+        _ => throw new ArgumentOutOfRangeException(nameof(part)),
     };
 }

@@ -778,9 +778,9 @@ public sealed partial class ExploreViewModel : ObservableObject
         ShowRows(tree, node, continuing && standing?.ChildOrder == tree.ChildOrder);
         BuildTrail(tree, node);
 
-        Hovered = string.Empty;
-        HoveredFigures = string.Empty;
-        HoveredNote = string.Empty;
+        // What the pointer is over is the map's to say, and it says it again for the drawing this
+        // redraw is about to produce. Clearing it here left a reader who had not moved with the
+        // outline still round a shape and nothing under the map naming it.
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 

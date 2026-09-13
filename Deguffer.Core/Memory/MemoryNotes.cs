@@ -30,7 +30,14 @@ public static class MemoryNotes
 
         if (WhyNoProcesses(snapshot.Processes.Figures) is { } figures)
         {
-            notes.Add(figures);
+            // What the reader is looking at, said where they are looking at it. Applications and
+            // Services are still drawn, because the tree has three parts whatever could be measured,
+            // and a part standing at nothing with no reason beside it reads as a machine running
+            // nothing rather than as a figure that was turned off.
+            notes.Add(
+                figures
+                + " Applications and Services show nothing as a result: what those processes hold is "
+                + "inside the part no figure attributes.");
         }
         else if (!snapshot.Processes.Complete)
         {
@@ -47,9 +54,11 @@ public static class MemoryNotes
             ServiceListing.ListedInPart =>
                 "The service list could not be read to its end, so some hosts are drawn as ordinary "
                 + "processes.",
-            _ =>
+            ServiceListing.Listed =>
                 "Windows leaves out the services this account may not query, without saying so, so "
                 + "some hosts are drawn as ordinary processes.",
+
+            _ => throw new ArgumentOutOfRangeException(nameof(tree)),
         });
 
         if (snapshot.System.ListState != MemoryListState.Checked)

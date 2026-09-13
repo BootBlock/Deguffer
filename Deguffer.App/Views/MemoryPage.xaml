@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
     xmlns:vm="using:Deguffer.App.ViewModels"
-    NavigationCacheMode="Enabled"
     Background="Transparent">
 
     <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*,Auto">
@@ -74,9 +73,10 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:MemoryCrumb">
-                        <HyperlinkButton Content="{x:Bind Name}"
+                        <!-- The crumb itself carries which node it means, because the tree renumbers
+                             its nodes on every reading and a number bound here would not. -->
+                        <HyperlinkButton Content="{x:Bind Name, Mode=OneWay}"
                                          Padding="4,2"
-                                         Tag="{x:Bind Node}"
                                          Click="OnCrumbClicked" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -128,7 +128,7 @@
                                  and wrapped across two lines they read as two rows. -->
                             <Grid ColumnSpacing="12" Padding="0,4"
                                   Background="Transparent"
-                                  ColumnDefinitions="*,120,280"
+                                  ColumnDefinitions="*,120,280,16"
                                   AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
                                   AutomationProperties.HelpText="{x:Bind Explanation, Mode=OneWay}">
                                 <ToolTipService.ToolTip>
@@ -161,6 +161,15 @@
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
+
+                                <!-- Which rows open into something. Nesting is plain on the picture
+                                     and invisible in a list, so the list says it too. Raw, because
+                                     Description already says it in words. -->
+                                <FontIcon Grid.Column="3"
+                                          FontSize="12"
+                                          VerticalAlignment="Center"
+                                          Glyph="{x:Bind Icon, Mode=OneWay}"
+                                          AutomationProperties.AccessibilityView="Raw" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

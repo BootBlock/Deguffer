@@ -28,6 +28,10 @@ public abstract class ShapeColours
     ///
     /// <para>Asked for again at every repaint rather than held, because the age bands are relative to
     /// the moment they are drawn: a map left open overnight would otherwise keep yesterday's answer.</para>
+    ///
+    /// <para>Public because the control that repaints decides when "now" is. It draws any
+    /// <see cref="Layout.ISizedTree"/> and is handed a function to call for the colours, and only a
+    /// caller that knows it has an <see cref="ExploreTree"/> can name these.</para>
     /// </summary>
     /// <param name="nowUtc">What "now" is, for the age bands.</param>
     public static ShapeColours For(ExploreTree tree, ExploreColouring colouring, DateTime nowUtc) =>

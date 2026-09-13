@@ -373,6 +373,11 @@ public sealed class ExploreMap : UserControl
             _hovered = null;
             _labels.Clear();
             _highlight.Clear();
+
+            // There is no picture now, so nothing is under the pointer. Said rather than left: a
+            // cancelled scan takes the tree away, and without this the line under the map goes on
+            // naming whatever was last hovered over a blank canvas.
+            Report(null);
             return;
         }
 
@@ -417,6 +422,10 @@ public sealed class ExploreMap : UserControl
     /// Dropping it took the outline and the readout away from a reader who had not moved, until they
     /// moved. Nothing is raised while the answer has not changed, so a redraw that leaves the same shape
     /// under the pointer costs nothing.</para>
+    ///
+    /// <para>That last part holds only because this control is the only thing that writes the readout.
+    /// A page that also cleared it would blank its own line and never hear otherwise, and the outline
+    /// drawn below would then mark a shape nothing named.</para>
     /// </summary>
     private void ReportWhatThePointerIsOver(ExploreSurface drawing)
     {

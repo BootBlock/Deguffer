@@ -17,6 +17,11 @@ public sealed class MemoryWordsTests
     /// <summary>
     /// What a "RAM cleaner" says, and what this must never say. Each is matched without regard to
     /// case, anywhere in the text.
+    ///
+    /// <para>This covers the sentences Core writes, which is why §7.2's words are in Core at all. The
+    /// list cannot be turned on the page's own literals as it stands: the page legitimately says it
+    /// closes and stops nothing, which the substrings here would read as the opposite. What the shell
+    /// itself says is checked by driving it (G8).</para>
     /// </summary>
     private static readonly string[] NeverSaid =
     [
@@ -32,6 +37,11 @@ public sealed class MemoryWordsTests
         Assert.StartsWith(FreeSpace.Format(system.CommitCharge), MemoryHeadline.Commit(system), StringComparison.Ordinal);
         Assert.Contains(FreeSpace.Format(system.CommitLimit), MemoryHeadline.Commit(system), StringComparison.Ordinal);
         Assert.StartsWith(FreeSpace.Format(system.Available), MemoryHeadline.Available(system), StringComparison.Ordinal);
+
+        // Which figure is which, and not only their order. Two sizes side by side say nothing about
+        // what they are, and the headline is the one place §7.2 names a wording for.
+        Assert.Contains("committed", MemoryHeadline.Commit(system), StringComparison.Ordinal);
+        Assert.Contains("available", MemoryHeadline.Available(system), StringComparison.Ordinal);
     }
 
     /// <summary>The bar beside the words: half a limit is half, and nothing is ever past its end.</summary>
@@ -96,12 +106,17 @@ public sealed class MemoryWordsTests
     /// <summary>
     /// Windows leaves services this account may not query out of its list without an error, so even a
     /// list read to its end has to say that some hosts are drawn as ordinary processes.
+    ///
+    /// <para>Each verdict is pinned by a phrase only it uses. All three share the "ordinary process"
+    /// consequence, so asserting that alone would pass with the three answers collapsed into one — and
+    /// telling a reader whose service list Windows refused outright that it was merely incomplete is
+    /// the failure this is here to catch.</para>
     /// </summary>
     [Theory]
-    [InlineData(ServiceListing.Listed)]
-    [InlineData(ServiceListing.ListedInPart)]
-    [InlineData(ServiceListing.NotListed)]
-    public void EveryServiceListingSaysWhatItLeftOut(ServiceListing listing)
+    [InlineData(ServiceListing.Listed, "without saying so")]
+    [InlineData(ServiceListing.ListedInPart, "could not be read to its end")]
+    [InlineData(ServiceListing.NotListed, "would not list its services")]
+    public void EveryServiceListingSaysWhatItLeftOut(ServiceListing listing, string expected)
     {
         var snapshot = Snapshot();
         var notes = MemoryNotes.For(Tree(snapshot with
@@ -109,7 +124,25 @@ public sealed class MemoryWordsTests
             Services = snapshot.Services with { Listing = listing },
         }));
 
-        Assert.Contains(notes, note => note.Contains("ordinary process", StringComparison.Ordinal));
+        Assert.Contains(notes, note => note.Contains("ordinary process", StringComparison.Ordinal)
+            && note.Contains(expected, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// With the per-process figures off, the two parts that hold processes are drawn standing at
+    /// nothing. §7.2 will not have a zero pass for a measurement, so the notes say why those two are
+    /// at nothing and where the memory went instead.
+    /// </summary>
+    [Fact]
+    public void PartsLeftAtNothingSayWhyAndWhereTheMemoryWent()
+    {
+        var notes = MemoryNotes.For(Tree(new MemorySnapshotBuilder()
+            .Process(100, 1, "alpha.exe", 500, created: 10)
+            .Figures(ProcessFigures.CreationTimeDisagrees)
+            .Build()));
+
+        Assert.Contains(notes, note => note.Contains("Applications and Services show nothing", StringComparison.Ordinal)
+            && note.Contains("no figure attributes", StringComparison.Ordinal));
     }
 
     [Fact]
