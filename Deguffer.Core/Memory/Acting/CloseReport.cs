@@ -44,14 +44,16 @@ public sealed record CloseReport
         CloseState state,
         SystemMemory before,
         SystemMemory? after,
-        VerificationResult verification)
+        VerificationResult verification,
+        int moved)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(before);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(windows);
+        ArgumentOutOfRangeException.ThrowIfNegative(moved);
 
-        (Target, Windows, State, Before, After, Verification) =
-            (target, windows, state, before, after, verification);
+        (Target, Windows, State, Before, After, Verification, Moved) =
+            (target, windows, state, before, after, verification, moved);
     }
 
     /// <summary>The process that was asked to close, as the snapshot before the action had it.</summary>
@@ -59,6 +61,14 @@ public sealed record CloseReport
 
     /// <summary>How many of its windows were asked.</summary>
     public int Windows { get; }
+
+    /// <summary>
+    /// How many of the windows the confirmation counted were passed over, because the process that
+    /// owned each of them had changed between the survey and the moment of posting (§7.2.1). Those
+    /// received nothing, and the difference is said rather than smoothed over: the user was told a
+    /// number in the dialog.
+    /// </summary>
+    public int Moved { get; }
 
     public CloseState State { get; }
 
@@ -101,6 +111,15 @@ public sealed record CloseReport
                     + "nothing else, and you can pick it again.",
             };
 
+            if (Moved > 0)
+            {
+                sentence += Moved == 1
+                    ? " One window Deguffer counted had passed to another program by then, and "
+                      + "received nothing."
+                    : $" {Moved} windows Deguffer counted had passed to another program by then, and "
+                      + "received nothing.";
+            }
+
             return Verification.Passed
                 ? sentence
                 : $"{sentence} {Verification.Failures.Count} check(s) on what this close could not "
@@ -128,8 +147,8 @@ public sealed record CloseReport
               + $"{MemoryHeadline.Available(Before)}.";
 
     /// <summary>The close as it stands the moment the last message is posted.</summary>
-    public static CloseReport Watching(ProcessMemory target, int windows, SystemMemory before) =>
-        new(target, windows, CloseState.Watching, before, after: null, new VerificationResult());
+    public static CloseReport Watching(ProcessMemory target, int windows, SystemMemory before, int moved = 0) =>
+        new(target, windows, CloseState.Watching, before, after: null, new VerificationResult(), moved);
 
     /// <summary>The close once the process has exited, which is the only way an after figure exists.</summary>
     public static CloseReport Closed(
@@ -137,12 +156,13 @@ public sealed record CloseReport
         int windows,
         SystemMemory before,
         SystemMemory after,
-        VerificationResult verification)
+        VerificationResult verification,
+        int moved = 0)
     {
         ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(verification);
 
-        return new CloseReport(target, windows, CloseState.Closed, before, after, verification);
+        return new CloseReport(target, windows, CloseState.Closed, before, after, verification, moved);
     }
 
     /// <summary>The close once the watch has ended with the program still running.</summary>
@@ -150,11 +170,13 @@ public sealed record CloseReport
         ProcessMemory target,
         int windows,
         SystemMemory before,
-        VerificationResult verification)
+        VerificationResult verification,
+        int moved = 0)
     {
         ArgumentNullException.ThrowIfNull(verification);
 
-        return new CloseReport(target, windows, CloseState.StillRunning, before, after: null, verification);
+        return new CloseReport(
+            target, windows, CloseState.StillRunning, before, after: null, verification, moved);
     }
 
     /// <summary>

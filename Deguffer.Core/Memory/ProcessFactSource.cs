@@ -35,7 +35,6 @@ public sealed class ProcessFactSource : IProcessFactSource
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(processId);
         ct.ThrowIfCancellationRequested();
 
-        var own = Own();
         var opening = _processes.Open(processId);
 
         if (opening.Process is not { } process)
@@ -46,26 +45,43 @@ public sealed class ProcessFactSource : IProcessFactSource
 
         using (process)
         {
-            if (Present(process, creationTime) is var present && present is not Answer.Yes)
-            {
-                return ProcessFacts.NothingRead(present);
-            }
-
-            ct.ThrowIfCancellationRequested();
-
-            var token = process.Token();
-            var survey = WindowSurveyor.Take(_windows, processId);
-
-            return new ProcessFacts(
-                Answer.Yes,
-                Same(process.SessionId(), own.SessionId),
-                Same(token.User, own.User),
-                IntegrityLevel.Above(token.IntegrityLevel, own.IntegrityLevel),
-                Of(process.IsCritical()),
-                Package(process),
-                survey.OwnsConsoleWindow,
-                survey.Qualifying);
+            return Through(process, processId, creationTime, ct);
         }
+    }
+
+    /// <summary>
+    /// The same facts, read through a handle the caller already holds and goes on holding.
+    ///
+    /// <para><b>For §7.2.1's second decision.</b> <c>ProcessCloser</c> opens the process, decides
+    /// every refusal again and posts, all under one handle, so the identifier cannot pass to another
+    /// process anywhere in the middle of that. Reading the facts through a second open of its own
+    /// would work — nothing can take an identifier Deguffer holds — but it would be a second open
+    /// that can fail on its own, and the decision it feeds is the last one before a message
+    /// leaves.</para>
+    /// </summary>
+    internal ProcessFacts Through(IOpenProcess process, int processId, long creationTime, CancellationToken ct)
+    {
+        var own = Own();
+
+        if (Present(process, creationTime) is var present && present is not Answer.Yes)
+        {
+            return ProcessFacts.NothingRead(present);
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        var token = process.Token();
+        var survey = WindowSurveyor.Take(_windows, processId);
+
+        return new ProcessFacts(
+            Answer.Yes,
+            Same(process.SessionId(), own.SessionId),
+            Same(token.User, own.User),
+            IntegrityLevel.Above(token.IntegrityLevel, own.IntegrityLevel),
+            Of(process.IsCritical()),
+            Package(process),
+            survey.OwnsConsoleWindow,
+            survey.Qualifying);
     }
 
     /// <summary>

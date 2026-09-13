@@ -110,6 +110,32 @@ public static class CloseEvidence
     }
 
     /// <summary>
+    /// One window Deguffer posted to, which is the exact half of §5.6: it belonged to the target at
+    /// the moment of posting, checked through the held handle, and nothing but <c>WM_CLOSE</c> was
+    /// posted to it.
+    ///
+    /// <para><paramref name="taken"/> is what Windows said of the post, and it is recorded rather
+    /// than acted on. Microsoft's own sources disagree about whether a post the integrity filter
+    /// blocks reports failure or reports success and drops the message, which is why §7.2.1 decides
+    /// before posting and never by what the post reports.</para>
+    /// </summary>
+    public static VerificationCheck Posted(ProcessWindow window, ProcessMemory target, bool taken)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(target);
+
+        return new VerificationCheck(
+            $"window 0x{window.Handle:X} ({window.ClassName}) of {target.Named}",
+            "Deguffer posted this window a close, and nothing else anywhere.",
+            VerificationOutcome.Sent,
+            taken
+                ? "WM_CLOSE posted. The window belonged to this process at that moment, asked again "
+                  + "through the handle Deguffer holds."
+                : "WM_CLOSE posted, and Windows reported that it did not take it. The window belonged "
+                  + "to this process at that moment, and nothing further was sent.");
+    }
+
+    /// <summary>
     /// One process the close could not have ended, and what became of it.
     ///
     /// <para>A process the after snapshot could not be asked about is a failure and says why. The
