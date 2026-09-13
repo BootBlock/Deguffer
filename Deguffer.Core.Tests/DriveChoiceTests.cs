@@ -90,4 +90,48 @@ public sealed class DriveChoiceTests
         // No stray separator where there is no label to separate.
         Assert.Equal(@"E:\, size unknown", new DriveChoice(@"E:\", null, null, null).Description);
     }
+
+    /// <summary>
+    /// A cloud mount is listed with a sentence saying it will not be scanned. Listed, because a
+    /// drive the user can see in File Explorer and cannot find here is one they cannot reason about
+    /// — and refused, because walking it downloads what is on it.
+    /// </summary>
+    [Fact]
+    public void ACloudMountIsOfferedAndRefused()
+    {
+        var choice = DriveChoice.From(new LocalVolume(
+            @"V:\", DriveType.Fixed, IsReady: true, Label: "Google Drive",
+            Features: (VolumeFeatures)0x0000_0106));
+
+        Assert.True(choice.IsRefused);
+        Assert.Equal(DriveChoice.RemoteStorageRefusal, choice.Refusal);
+
+        // Still an ordinary entry in every other respect. Its label and its size are true, and
+        // hiding them would make the row harder to recognise as the drive the sentence is about.
+        Assert.Equal("Google Drive", choice.Label);
+    }
+
+    /// <summary>
+    /// The refusal is announced with the row rather than beside it. A reader who hears the mount
+    /// point and the sizes, and then finds Scan unavailable, has been told the two things that do
+    /// not matter and none of the one that does.
+    /// </summary>
+    [Fact]
+    public void ARefusedEntryAnnouncesWhyItCannotBeScanned()
+    {
+        var refused = new DriveChoice(@"V:\", "Google Drive", null, null, DriveChoice.RemoteStorageRefusal);
+
+        Assert.Equal($@"V:\ Google Drive, size unknown. {DriveChoice.RemoteStorageRefusal}", refused.Description);
+    }
+
+    [Fact]
+    public void AnOrdinaryVolumeIsNotRefused()
+    {
+        var choice = DriveChoice.From(new LocalVolume(
+            @"C:\", DriveType.Fixed, IsReady: true, Features: (VolumeFeatures)0x03E7_2EFF));
+
+        Assert.False(choice.IsRefused);
+        Assert.Null(choice.Refusal);
+        Assert.Equal(@"C:\, size unknown", choice.Description);
+    }
 }

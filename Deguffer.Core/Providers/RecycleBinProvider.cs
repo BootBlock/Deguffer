@@ -167,9 +167,16 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// Windows volume has a bin root, and reading that as a hit would report a source on every
     /// machine and then plan nothing on most of them. It is also how an unidentifiable user fails
     /// closed, since <see cref="_children"/> is then empty and there is no path to probe.
+    ///
+    /// <para><b>A refused volume counts as present on its own.</b> <c>CleanupPlanner</c> never asks
+    /// an absent provider for a plan, so the note naming the volume Deguffer would not look at is
+    /// built only if this says yes — and the machine that most needs to hear it is the one whose
+    /// only bin is on the cloud mount, where every other answer here is no. Presence is what puts
+    /// the row on the page, and a refusal the user is never shown is the silence
+    /// <see cref="LocalVolume.StoresContentRemotely"/> exists to break.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RecognisedBinPaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(RemotelyStoredVolumes().Any() || RecognisedBinPaths().Any(LongPath.DirectoryExists));
 
     /// <summary>
     /// The volume list is remembered for the life of a pass, so a drive mounted while the app was
@@ -189,7 +196,11 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             // identity to match, every bin on the machine belongs to someone this provider cannot
             // name. Saying so beats classifying each one as unrecognised, which would be true and
             // would not explain anything.
-            return EmptyPlan(
+            //
+            // Unexamined rather than empty, and reachable for the first time now that a refused
+            // volume alone makes this provider present: nothing here was looked in, and a plan
+            // measuring zero with no flag set is shown as "Already clear".
+            return UnexaminedPlan(
                 "Deguffer could not establish which Windows account it is running as, so it is "
                 + "leaving every Recycle Bin alone rather than guessing which one is yours.");
         }
@@ -207,6 +218,19 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         var kind = keep.IsOn || _preferences.Current.EmptyRecycleBinsDirectly
             ? TargetKind.Directory
             : TargetKind.RecycleBin;
+
+        // Said rather than done silently. The user can see the drive in File Explorer and can see
+        // its bin, and a plan that omits it with no word reads as a plan that found nothing there.
+        var refused = RemotelyStoredVolumes().ToList();
+
+        foreach (var remote in refused)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Leaving {remote.RootPath} alone: it is cloud storage shown as a drive letter, and "
+                + "its Recycle Bin was not looked at. Reading that drive would download the files on "
+                + "it onto this computer."));
+        }
 
         foreach (var bin in CandidateBins())
         {
@@ -242,7 +266,11 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         // may not list — so "no volume holds a bin for this user" would contradict what this same
         // provider established one method earlier. The per-bin notes already name which root
         // refused; what the sentence below would add is the claim that must not be made.
-        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
+        //
+        // A refused volume blocks it for the same reason and one step further out: the sentence
+        // speaks for every volume on the machine, and one of them was never looked at. Falling
+        // through instead returns a plan with no steps that still carries the note saying which.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable && refused.Count == 0)
         {
             return EmptyPlan("No volume on this machine holds a Recycle Bin for this user.");
         }
@@ -283,7 +311,13 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            WasNotExamined = targets.Count == 0 && declined.Count > 0,
+
+            // A refused volume counts alongside a declined child, because the two are the same
+            // claim: somewhere here was not looked in. Without it a plan that only refused a volume
+            // measures zero with every flag clear, and the row reads "Already clear" — the one
+            // sentence FindingStatus says must never stand for a location Deguffer declined to
+            // look at.
+            WasNotExamined = targets.Count == 0 && (declined.Count > 0 || refused.Count > 0),
         };
     }
 
@@ -386,11 +420,28 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// found there belongs to the server's own users. Removable media can be swapped between the
     /// preview and the clean, which would put a plan the user approved against one disc in front of
     /// another. Both under-reclaim, which is the safe direction to be wrong in.
+    ///
+    /// <para>A cloud client mounted as a drive letter is fixed and ready and is excluded too. Its
+    /// contents are not on this machine, so listing a bin on it downloads whatever is inside — see
+    /// <see cref="LocalVolume.StoresContentRemotely"/>. The exclusion is here rather than in the
+    /// plan alone, so presence cannot probe one either.</para>
     /// </summary>
     private IEnumerable<string> CandidateBins() =>
-        _volumes.Volumes
-            .Where(v => v is { Kind: DriveType.Fixed, IsReady: true })
+        FixedVolumes()
+            .Where(v => !v.StoresContentRemotely)
             .Select(v => Path.Combine(v.RootPath, BinDirectoryName));
+
+    /// <summary>
+    /// The volumes this provider would look at if nothing about them refused it. Shared with
+    /// <see cref="RemotelyStoredVolumes"/> so that the set a refusal is taken out of, and the set it
+    /// is reported from, cannot drift apart.
+    /// </summary>
+    private IEnumerable<LocalVolume> FixedVolumes() =>
+        _volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, IsReady: true });
+
+    /// <summary>The fixed volumes left out of <see cref="CandidateBins"/> because they are not local.</summary>
+    private IEnumerable<LocalVolume> RemotelyStoredVolumes() =>
+        FixedVolumes().Where(v => v.StoresContentRemotely);
 
     /// <summary>
     /// Every path this provider could ever target, by declaration rather than by enumeration — so

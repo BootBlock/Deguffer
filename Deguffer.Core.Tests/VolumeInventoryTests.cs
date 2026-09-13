@@ -55,6 +55,28 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// The volume flags are actually read, which is the whole of what this seam can prove about
+    /// them. Nothing here asserts that any particular drive is or is not cloud storage: that is a
+    /// property of the machine, and the rule deciding it is held to measured flag words in
+    /// <see cref="LocalVolumeTests"/>.
+    ///
+    /// <para>What is asserted is that <em>some</em> ready fixed volume reports reparse-point
+    /// support, which every Windows machine's NTFS system disk does. With the reading dropped —
+    /// every volume left at <see cref="VolumeFeatures.None"/> — this fails, and so would a reading
+    /// that came back empty because the call was made wrongly.</para>
+    /// </summary>
+    [Fact]
+    public void ReadsWhatTheVolumesSayTheySupport()
+    {
+        var fixedVolumes = VolumeInventory.Current.Volumes
+            .Where(v => v.IsReady && v.Kind == DriveType.Fixed)
+            .ToList();
+
+        Assert.NotEmpty(fixedVolumes);
+        Assert.Contains(fixedVolumes, v => v.Features.HasFlag(VolumeFeatures.ReparsePoints));
+    }
+
+    /// <summary>
     /// The list is remembered for the life of a pass (G4), so the same instance has to come back
     /// until it is dropped — and a drive mounted while the app was open has to be seen after.
     /// </summary>

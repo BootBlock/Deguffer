@@ -59,6 +59,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private bool _rebuildingDrives;
 
+    /// <summary>
+    /// The refusal <see cref="ExplainRefusal"/> last put on the status line, so it can take that
+    /// sentence back and leave anything written over it alone.
+    /// </summary>
+    private string? _statedRefusal;
+
     public ExploreViewModel(
         ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions, ItemGuide guide)
     {
@@ -138,6 +144,19 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private string? ScanRoot => ScopeFolder ?? SelectedDrive?.RootPath;
 
+    /// <summary>
+    /// Why the page will not scan what it is pointed at, or null where it will.
+    ///
+    /// <para>Asked of the scan's root rather than of the drive box, because the volume decides and
+    /// a folder chosen through the picker can be on one the box is not naming. Scoping to a folder
+    /// on a cloud mount is the same hazard as scanning the whole of it, and it is the route a
+    /// reader takes next when the drive is refused.</para>
+    ///
+    /// <para>A target on a volume the picker does not offer — a share, most often — is not refused
+    /// here. Nothing measured its flags, and refusing on no reading would be a guess.</para>
+    /// </summary>
+    private string? Refusal => ScanRoot is { } root ? Offered(Path.GetPathRoot(root))?.Refusal : null;
+
     public bool IsScopedToFolder => ScopeFolder is not null;
 
     [ObservableProperty]
@@ -177,9 +196,14 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Whether the bar has to be indeterminate. See <see cref="Progress"/>.</summary>
     public bool HasNoProgressFraction => Progress is null;
 
+    /// <summary>
+    /// What the status line says before anything has been measured, and what it goes back to when
+    /// a refusal is taken off it. See <see cref="ExplainRefusal"/>.
+    /// </summary>
+    private const string ScanPrompt = "Choose a drive or a folder and scan it to see what is using the space.";
+
     [ObservableProperty]
-    public partial string Status { get; set; } =
-        "Choose a drive or a folder and scan it to see what is using the space.";
+    public partial string Status { get; set; } = ScanPrompt;
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]
@@ -589,6 +613,8 @@ public sealed partial class ExploreViewModel : ObservableObject
         // raises nothing, so a drive chosen while no folder was scoped would otherwise leave the
         // offer describing somewhere the page is no longer pointed.
         OfferElevation(null);
+
+        ExplainRefusal();
     }
 
     /// <summary>
@@ -599,7 +625,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// at, which is the whole of the defect it was just changed to fix, and how it comes to offer a
     /// rescan of a drive that was never scanned.</para>
     /// </summary>
-    partial void OnScopeFolderChanged(string? value) => OfferElevation(null);
+    partial void OnScopeFolderChanged(string? value)
+    {
+        OfferElevation(null);
+
+        ExplainRefusal();
+    }
 
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
@@ -965,7 +996,14 @@ public sealed partial class ExploreViewModel : ObservableObject
                 Drives.Add(DriveChoice.From(volume));
             }
 
-            SelectedDrive = Offered(chosen) ?? Drives.FirstOrDefault();
+            // A refused volume is listed and is not defaulted onto. It is in the list because the
+            // user can see the drive and needs to be told why it is not scanned, and it is not the
+            // default because opening the page on a drive whose Scan button is dead reads as an app
+            // that failed to start. Where every volume is refused there is nothing better to point
+            // at, and ExplainRefusal below says so.
+            SelectedDrive = Offered(chosen)
+                ?? Drives.FirstOrDefault(listed => !listed.IsRefused)
+                ?? Drives.FirstOrDefault();
         }
         finally
         {
@@ -986,9 +1024,44 @@ public sealed partial class ExploreViewModel : ObservableObject
             // nothing, so the scope's own handler cannot be relied on to have run.
             OfferElevation(null);
         }
+
+        // After the guard, because the rebuild suppressed the selection's own handler. Without it
+        // the page can open pointed at a refused volume, with the button dead and nothing said.
+        ExplainRefusal();
     }
 
-    private bool CanScan() => !IsBusy && ScanRoot is not null;
+    private bool CanScan() => !IsBusy && ScanRoot is not null && Refusal is null;
+
+    /// <summary>
+    /// State why the page will not scan what it is pointed at, and take the sentence back once it
+    /// is pointed somewhere it will.
+    ///
+    /// <para>§7.1 asks a refusal to say what it is, and a greyed-out Scan button says nothing at
+    /// all. The retraction is the other half of that: this line describes what pressing Scan would
+    /// do, so leaving "Deguffer does not scan this drive" up while the button is live and aimed at
+    /// an ordinary volume states the opposite of the truth. Choosing a folder on a local disk after
+    /// looking at a cloud one reaches it in two gestures.</para>
+    ///
+    /// <para>It takes back its own sentence and nobody else's. A scan's result and a selection's
+    /// report write this same line, and neither is made untrue by a change of target, so clearing
+    /// unconditionally would throw away whichever of them was there.</para>
+    /// </summary>
+    private void ExplainRefusal()
+    {
+        if (Refusal is { } refused)
+        {
+            Status = refused;
+            _statedRefusal = refused;
+            return;
+        }
+
+        if (_statedRefusal is not null && Status == _statedRefusal)
+        {
+            Status = ScanPrompt;
+        }
+
+        _statedRefusal = null;
+    }
 
     private bool CanRun() => !IsBusy;
 
