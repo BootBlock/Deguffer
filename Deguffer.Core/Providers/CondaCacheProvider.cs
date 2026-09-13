@@ -83,11 +83,11 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     protected override IReadOnlyList<string> ConflictingProcessNames => ["conda", "mamba"];
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside. Conda declares no directory: its installation
+    /// §5.2 as §7.1 needs it read from outside. Conda declares no directory here: its installation
     /// prefix, its environment directories and its package caches all come from
     /// <c>conda info --json</c>, and a declaration Explore consults on every path has to be readable
     /// without running a subprocess. What is cheap is the configuration file, and a file is a root
-    /// nothing is ever below.
+    /// nothing is ever below. <see cref="DiscoverToolRootsAsync"/> names the three directories.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
@@ -97,6 +97,52 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             + "tokens. Deguffer never removes it.",
             static _ => false),
     ];
+
+    /// <summary>
+    /// Everything <c>conda info --json</c> reports, which is the whole of what this provider
+    /// protects. None of the three recognises a child, because none of them is ever removed by
+    /// path: <c>conda clean</c> works inside a package cache and leaves the directory, the
+    /// environments hard-link back into that cache, and the prefix holds the base environment.
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(
+        CancellationToken ct = default)
+    {
+        if (FindConda() is not { } conda
+            || await ResolveInstallationAsync(conda, ct).ConfigureAwait(false) is not { } installation)
+        {
+            return [];
+        }
+
+        var roots = new List<ToolRoot>();
+
+        if (installation.RootPrefix is { } prefix)
+        {
+            roots.Add(new ToolRoot(
+                prefix,
+                "This is your conda installation, including its base environment. Deguffer clears "
+                + "the package cache inside it with conda's own command and removes nothing here by "
+                + "hand.",
+                static _ => false));
+        }
+
+        roots.AddRange(
+            installation.EnvironmentDirs.Select(directory => new ToolRoot(
+                directory,
+                "This holds your conda environments. Each one is a full install rather than a cache, "
+                + "and the packages in it are hard links into the cache, so Deguffer never removes "
+                + "any of them.",
+                static _ => false)));
+
+        roots.AddRange(
+            installation.PackageCacheDirs.Select(directory => new ToolRoot(
+                directory,
+                "This is a conda package cache. Deguffer clears it with conda's own command, which "
+                + "keeps every package an existing environment still links, so the folder itself is "
+                + "never removed.",
+                static _ => false)));
+
+        return roots;
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(FindConda() is not null);

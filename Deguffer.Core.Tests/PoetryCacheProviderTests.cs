@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -591,5 +592,33 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.True(plan.IsEmpty);
         Assert.False(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("has cached nothing yet", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §7.1 over the two directories Poetry reports, moved apart as <c>virtualenvs.path</c> allows.
+    /// The environments are full dependency installs the plan never removes, and here they sit
+    /// outside every documented default, so only the probed declaration reaches them.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheCacheAndTheEnvironmentsPoetryReports()
+    {
+        var cache = Path.Combine(_environment.UserProfile, "poetry-cache");
+        var environments = Path.Combine(_environment.UserProfile, "poetry-environments");
+        var (artifacts, _, _) = CreateCache(cache);
+        Directory.CreateDirectory(Path.Combine(environments, "myproject-py3.12"));
+
+        var provider = CreateProvider(Poetry(cache, environments));
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.NotEqual(provider.DefaultCacheRoot, cache);
+
+        Assert.False(policy.MayRemove(cache).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(cache, "virtualenvs")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(cache, "something-unrecognised")).IsAllowed);
+        Assert.True(policy.MayRemove(artifacts).IsAllowed);
+
+        Assert.False(policy.MayRemove(environments).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(environments, "myproject-py3.12")).IsAllowed);
     }
 }

@@ -47,7 +47,16 @@ public sealed class CleanupPlanner
     /// provider reads it at plan time, which is what makes a change on the Settings page take
     /// effect from the next preview.
     /// </param>
-    public static CleanupPlanner CreateDefault(ICurrentPreferences? preferences = null)
+    /// <param name="liveTrees">
+    /// What the providers ask about programs that are running. The shared inspector by default,
+    /// whose snapshot of the process table a planning pass clears at its start. Explore passes a
+    /// fresh one for each policy it builds, because that build is a look at the machine of its own:
+    /// clearing the shared snapshot would change what a Storage pass already under way sees, and
+    /// reusing it would answer with the process table as it was at the last Storage pass.
+    /// </param>
+    public static CleanupPlanner CreateDefault(
+        ICurrentPreferences? preferences = null,
+        ILiveTreeInspector? liveTrees = null)
     {
         var roots = new SourceRootStore(UserEnvironment.Current);
 
@@ -56,7 +65,7 @@ public sealed class CleanupPlanner
         // passes would each walk the developer's whole disk on an unelevated run, and the names each
         // provider registers on the way in are what make the one pass answer for all of them.
         var sourceTrees = new SourceDirectoryDiscovery(DirectoryScanner.Default);
-        var liveTrees = LiveTreeInspector.Default;
+        liveTrees ??= LiveTreeInspector.Default;
 
         // One sweep of %LOCALAPPDATA% for both Squirrel providers, on the reasoning above: they ask
         // the same question of the same directory, and two unshared discoveries would list a folder

@@ -122,6 +122,53 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         }),
     ];
 
+    /// <summary>
+    /// The superseded builds of an application that is running, each as a root recognising no child.
+    ///
+    /// <para><b>Declared one level down, at the build rather than at the installation, because the
+    /// declarations above are permissive where they overlap.</b> The policy asks every root at the
+    /// innermost depth and allows a child any one of them recognises, so a second root over
+    /// <see cref="SquirrelInstallation.Root"/> would sit beside the one above and be outvoted by it.
+    /// A root at the version directory itself is deeper, so it is the one asked.</para>
+    ///
+    /// <para>Why they are refused at all: the plan holds every build of a running application back,
+    /// because the process is running from the build that superseded them and may still be reading
+    /// the folder beside it while an update finishes. It lists them as survivors under §5.6, and
+    /// §7.1 refuses every path a provider names as protected.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        var installations = _discovery.Look(ct).Installations
+            .Where(i => i.Superseded.Count > 0)
+            .ToList();
+
+        // One query per installation, as the plan asks it: the process holding an application open
+        // runs from the build that superseded these, so asking about a superseded directory would
+        // answer no every time.
+        var live = LiveTreeVeto.Apply(
+            _liveTrees,
+            [.. installations.Select(i => new RecognisedBuildDirectory(i.Root, i.Root))],
+            lockFiles: [],
+            ct);
+
+        var held = new HashSet<string>(
+            live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. from installation in installations
+               where held.Contains(installation.Root)
+               from version in installation.Superseded
+               where !version.IsLink
+               select new ToolRoot(
+                   version.Path,
+                   $"{installation.Name} is running, so Deguffer is leaving the build it replaced "
+                   + "alone: an application that has just updated may still be reading the folder "
+                   + "beside the one it started from. Close it and this can go.",
+                   static _ => false),
+        ]);
+    }
+
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();

@@ -159,6 +159,55 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
+    /// <summary>
+    /// Each staging directory an application is installing or updating through right now, as a root
+    /// that recognises no child.
+    ///
+    /// <para><b>The name-shaped declaration above is not enough on its own, and this is the case it
+    /// misses.</b> <see cref="Declare"/> recognises anything matching the staging pattern, so
+    /// Explore offered a directory the plan refuses — the collision Squirrel's maintainer named as
+    /// the reason the library leaves this folder alone, arriving through the second deletion route.
+    /// A plan lists a vetoed directory as a survivor under §5.6, which makes it a path this provider
+    /// names as protected, and §7.1 refuses every such path.</para>
+    ///
+    /// <para>It is read again whenever Explore rebuilds its policy, because what is running changes
+    /// and an answer kept for the life of the process would say an install finished an hour ago is
+    /// still going on.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        if (_discovery.StagingRoot is not { } root
+            || !LongPath.DirectoryExists(root)
+            || LongPath.IsReparsePoint(root))
+        {
+            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+        }
+
+        var scan = ChildDirectories.Under(root);
+
+        // Identified exactly as the plan identifies them, including the link rule: a link is not a
+        // staging directory to either route, and asking the process table about the far side would
+        // answer about a directory this provider never targets.
+        var candidates = scan.Directories
+            .Where(child => StagingDirectory().IsMatch(child.Name))
+            .Select(child => new RecognisedBuildDirectory(LongPath.Display(child.FullName), root))
+            .ToList();
+
+        var live = LiveTreeVeto.Apply(_liveTrees, candidates, lockFiles: [], ct);
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. live.Vetoed.Select(vetoed => new ToolRoot(
+                vetoed.Directory,
+                "An application is installing or updating through this right now"
+                + (vetoed.Holders.Count > 0 ? $" ({string.Join(", ", vetoed.Holders)})" : string.Empty)
+                + ". Every application on this machine that uses the Squirrel updater shares this "
+                + "folder, so removing it now breaks somebody else's update. It can go once that has "
+                + "finished.",
+                static _ => false)),
+        ]);
+    }
+
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();

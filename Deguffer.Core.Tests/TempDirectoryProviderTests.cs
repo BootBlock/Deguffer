@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -1014,5 +1015,35 @@ public sealed class TempDirectoryProviderTests : IDisposable
         }
 
         Assert.Equal(2048, (await provider.PlanAsync()).EstimatedBytes);
+    }
+
+    /// <summary>
+    /// §7.1 over an entry a running program is working in, which is §5.3's case exactly. This
+    /// provider declares no root, and everything inside a scratch folder is ordinary to Explore, so
+    /// only a declaration that asks what is running keeps the live entry from being offered.
+    ///
+    /// <para>The scratch folder is inside the profile here, where it is on a real machine. The
+    /// fixture's default sits beside the profile, where the region table refuses everything as
+    /// another account's, and this test would pass with no declaration at all.</para>
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnEntryARunningProgramIsUsing()
+    {
+        _environment.WithTempPath(Path.Combine(_environment.LocalAppData, "Temp"));
+
+        var busy = Path.Combine(UserTemp, "live-session");
+        var idle = Path.Combine(UserTemp, "abandoned");
+        Abandoned(8192, "profile", "AppData", "Local", "Temp", "live-session", "working.txt");
+        Abandoned(1024, "profile", "AppData", "Local", "Temp", "abandoned", "old.tmp");
+
+        var provider = CreateProvider(new FakeLiveTreeInspector(busy));
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(policy.MayRemove(busy).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(busy, "working.txt")).IsAllowed);
+        Assert.True(policy.MayRemove(idle).IsAllowed);
     }
 }

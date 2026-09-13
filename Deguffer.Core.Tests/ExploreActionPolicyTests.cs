@@ -1356,20 +1356,67 @@ public sealed class ExploreActionPolicyTests : IDisposable
     ];
 
     /// <summary>
-    /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.For"/> reads §5.2
-    /// out of the providers rather than restating it, so a provider's own declaration is what
+    /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.ForAsync"/> reads
+    /// §5.2 out of the providers rather than restating it, so a provider's own declaration is what
     /// Explore enforces.
     /// </summary>
     [Fact]
-    public void ThePolicyReadsSection52OutOfTheProvidersThemselves()
+    public async Task ThePolicyReadsSection52OutOfTheProvidersThemselves()
     {
         var provider = new GradleCacheProvider(_environment);
-        var policy = ExploreActionPolicy.For(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
 
         Assert.Equal(GradleRoot, provider.RootPath);
         Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(provider.RootPath, "gradle.properties")).IsAllowed);
         Assert.True(policy.MayRemove(Path.Combine(provider.RootPath, "caches")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The other half of that wiring, and the whole of issue #130: a root a provider can only name once it
+    /// has asked the machine is enforced exactly as a declared one is.
+    ///
+    /// <para>The declared root allows <c>archive</c> and the discovered one does not know about it,
+    /// so the two are told apart by more than their presence: a policy that merged the wrong way, or
+    /// dropped either list, fails on one of the four assertions.</para>
+    /// </summary>
+    [Fact]
+    public async Task ThePolicyEnforcesADiscoveredRootBesideADeclaredOne()
+    {
+        var declared = ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
+
+        // Inside the profile, where the region table allows everything. Beside it, the table refuses
+        // the folder as another account's, and the assertions below would pass with no declaration.
+        var moved = Path.Combine(_environment.UserProfile, "moved-cache");
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            [new StubProvider([declared], [VendorTool(moved)])]);
+
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+
+        Assert.False(policy.MayRemove(moved).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(moved, "anything")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A discovered root at the top of a volume is dropped rather than honoured. A tool reporting
+    /// <c>D:\</c> is an answer Deguffer cannot make sense of, and a root there recognises a named set
+    /// and refuses the rest — so honouring it would refuse every top-level folder on the drive.
+    /// </summary>
+    [Fact]
+    public async Task AVolumeRootIsNotADeclarationThePolicyHonours()
+    {
+        var volume = Path.GetPathRoot(_temp.Path)!;
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            [new StubProvider([], [VendorTool(volume)])]);
+
+        Assert.True(policy.MayRemove(Path.Combine(volume, "some-ordinary-folder")).IsAllowed);
     }
 
     private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");
@@ -1379,10 +1426,18 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
     private static ToolRoot VendorTool(string path) => new(path, "A vendor tool's own folder.", static _ => false);
 
+    /// <summary>
+    /// The region table this machine's fakes produce, with the roots handed straight to the
+    /// constructor. <see cref="ExploreActionPolicy.ForAsync"/> is the wiring and is asserted on its
+    /// own below; every rule here is about what the table and the declarations say, and routing each
+    /// of them through a provider would make forty tests asynchronous to establish nothing.
+    /// </summary>
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
-        ExploreActionPolicy.For(_system, _environment, [new StubProvider(toolRoots)]);
+        new(ProtectedRegions.For(_system, _environment), toolRoots);
 
-    private sealed class StubProvider(IReadOnlyList<ToolRoot> roots) : ICleanupProvider
+    private sealed class StubProvider(
+        IReadOnlyList<ToolRoot> roots,
+        IReadOnlyList<ToolRoot>? discovered = null) : ICleanupProvider
     {
         public string Id => "stub";
 
@@ -1405,6 +1460,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
         public bool IsAwaitingSourceFolders => false;
 
         public IReadOnlyList<ToolRoot> ToolRoots => roots;
+
+        public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ToolRoot>>(discovered ?? []);
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
 

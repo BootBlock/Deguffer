@@ -51,7 +51,16 @@ public sealed partial class ExploreSelection : ObservableObject
     private string _figures = string.Empty;
     private string? _note;
 
-    public ExploreSelection(ExploreActions actions) => _actions = actions;
+    public ExploreSelection(ExploreActions actions)
+    {
+        _actions = actions;
+
+        // Started here rather than on the first selection, because §5.2's probed half takes a moment
+        // and the page has nothing else to do while it opens. Until it lands every path is refused
+        // with a sentence saying why, and this is what makes that window short enough to go unseen.
+        _actions.Ready += (_, _) => Restate();
+        _actions.Prepare();
+    }
 
     /// <summary>
     /// Whether the page is free to act. Set by the owner while a scan runs, because a removal and a
@@ -174,6 +183,13 @@ public sealed partial class ExploreSelection : ObservableObject
     }
 
     /// <summary>
+    /// Ask what may be removed again, because part of the answer is about this minute: a folder an
+    /// installer had open when the page opened, an entry a program has started working in since.
+    /// Called at the start of a scan, which is when everything else on the page is re-measured too.
+    /// </summary>
+    public void Reconsider() => _actions.Reconsider();
+
+    /// <summary>
     /// Point at a tree and select nothing. Called on every navigation, because a selection made in
     /// one folder is not a selection in the next one.
     /// </summary>
@@ -244,9 +260,7 @@ public sealed partial class ExploreSelection : ObservableObject
             var many => ($"Selected: {many.Count} items", FreeSpace.Format(many.Sum(i => i.Bytes))),
         };
 
-        _note = items is [var first, ..]
-            ? items.Count == 1 ? Refusal(first) : Refusals(items)
-            : null;
+        _note = NoteFor(items);
 
         OnPropertyChanged(nameof(Nodes));
         OnPropertyChanged(nameof(Label));
@@ -354,6 +368,27 @@ public sealed partial class ExploreSelection : ObservableObject
         _tree is not { } tree
             ? []
             : [.. _nodes.Select(n => new ExploreItem(tree.PathOf(n), tree.IsDirectory(n), tree.SizeOf(n)))];
+
+    /// <summary>
+    /// Ask the policy about the current selection again, and say so if the answer changed.
+    ///
+    /// <para>The note is the one thing on this page whose answer arrives late. Everything else is
+    /// derived from the tree, which is on screen before anything is selected; the refusal waits on
+    /// the providers, and on a rebuild it waits on them again — so a selection made while
+    /// <see cref="ExploreActions"/> was still asking is told what the answer turned out to be
+    /// rather than left holding "in a moment".</para>
+    /// </summary>
+    private void Restate()
+    {
+        _note = NoteFor(Items());
+
+        OnPropertyChanged(nameof(Note));
+        OnPropertyChanged(nameof(HasNote));
+    }
+
+    private string? NoteFor(IReadOnlyList<ExploreItem> items) => items is [var first, ..]
+        ? items.Count == 1 ? Refusal(first) : Refusals(items)
+        : null;
 
     private string? Refusal(ExploreItem item) =>
         _actions.Verdict(item.Path) is { IsAllowed: false } verdict ? verdict.Reason : null;

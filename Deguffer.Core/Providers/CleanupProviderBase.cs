@@ -107,6 +107,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
     public virtual IReadOnlyList<ToolRoot> ToolRoots => [];
 
     /// <summary>
+    /// Nothing, for the majority whose <see cref="ToolRoots"/> already say everything they own. A
+    /// provider whose location a subprocess reports, or one that holds a path back because
+    /// something is using it, overrides this.
+    /// </summary>
+    public virtual Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+
+    /// <summary>
     /// The plan this provider builds, with the user's guard on recently touched files stamped onto
     /// it and its consequences applied.
     ///

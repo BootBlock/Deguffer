@@ -93,21 +93,52 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// directory's immediate children. Declaring only the workspace would refuse <c>pkg</c>, and
     /// <c>pkg\mod</c> with it, which is the one directory <c>go clean -modcache</c> empties.
     ///
-    /// <para>The locations <c>go env</c> reports are deliberately not declared: they arrive from a
-    /// subprocess, and these are the documented defaults. The build cache is not declared at all,
-    /// because it is the cache itself rather than a folder with configuration beside it.</para>
+    /// <para>These are the documented defaults, which is all this property may cost. The workspace
+    /// <c>go env</c> reports is declared in <see cref="DiscoverToolRootsAsync"/> instead. The build
+    /// cache is not declared at all, because it is the cache itself rather than a folder with
+    /// configuration beside it.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    public override IReadOnlyList<ToolRoot> ToolRoots => Declare(DefaultGoPath);
+
+    /// <summary>
+    /// The workspace this machine actually has, which is <c>GOPATH</c> and moves through the
+    /// environment and through <c>go env -w</c>. Declaring only the default left Explore allowing a
+    /// moved workspace, with the binaries from <c>go install</c> and the user's own source in it —
+    /// the three paths the plan asserts must survive.
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(
+        CancellationToken ct = default)
+    {
+        if (Environment.FindExecutable("go") is not { } go)
+        {
+            return [];
+        }
+
+        var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
+
+        // Emitted whether or not it differs from the default, rather than compared and skipped: the
+        // policy asks every declaration over a path and allows a child one of them recognises, so a
+        // repeat of the default costs a duplicate and a comparison that got the casing or the
+        // trailing separator wrong would cost the protection.
+        return Declare(located.GoPath);
+    }
+
+    /// <summary>
+    /// §5.2 over one Go workspace, one root per level on Cargo's reasoning.
+    /// <see cref="ToolRoots"/> and <see cref="DiscoverToolRootsAsync"/> differ only in which
+    /// workspace they are given, so the rule is written once.
+    /// </summary>
+    private static IReadOnlyList<ToolRoot> Declare(string goPath) =>
     [
         new ToolRoot(
-            DefaultGoPath,
+            goPath,
             "This is your Go workspace. Deguffer clears the module cache inside it and nothing "
             + "else, because the binaries you installed with 'go install' and your own source sit "
             + "beside it.",
             static _ => false),
 
         new ToolRoot(
-            Path.Combine(DefaultGoPath, "pkg"),
+            Path.Combine(goPath, "pkg"),
             "This is inside your Go workspace. Deguffer clears the module cache in there and "
             + "nothing else, and leaves whatever Go keeps beside it alone.",
             static name => name.Equals("mod", StringComparison.OrdinalIgnoreCase)),

@@ -1,4 +1,5 @@
 ﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -436,4 +437,29 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// §7.1 over the directory holding a repository <c>settings.xml</c> moved out of <c>.m2</c>. The
+    /// plan asserts that directory survives and removes only the repository inside it, so Explore
+    /// refuses the directory and anything else in it, and leaves the repository removable.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheFolderHoldingARelocatedRepository()
+    {
+        var container = Path.Combine(_environment.UserProfile, "build-tools");
+        var repository = Populate(Path.Combine(container, "maven-repo"));
+        var neighbour = Populate(Path.Combine(container, "other-tool"));
+        WriteSettings(repository);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(container, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(policy.MayRemove(container).IsAllowed);
+        Assert.False(policy.MayRemove(neighbour).IsAllowed);
+        Assert.True(policy.MayRemove(repository).IsAllowed);
+    }
 }

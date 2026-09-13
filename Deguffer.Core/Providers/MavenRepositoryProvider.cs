@@ -174,7 +174,9 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// <para>The name is fixed rather than read back out of the settings file, so the declaration
     /// stays string work. A repository relocated inside <c>.m2</c> under another name is then refused
     /// here while the Storage page still removes it, which is the direction §5.2 requires an
-    /// uncertain classification to fail in.</para>
+    /// uncertain classification to fail in. Where the settings file has moved the repository out of
+    /// <c>.m2</c> altogether, <see cref="DiscoverToolRootsAsync"/> names the directory holding
+    /// it.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
@@ -185,6 +187,37 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             + "server passwords and your toolchains all sit beside it.",
             static name => name.Equals("repository", StringComparison.OrdinalIgnoreCase)),
     ];
+
+    /// <summary>
+    /// The directory holding the repository this machine's <c>settings.xml</c> actually names, which
+    /// the plan already asserts must survive: only the repository inside it is removed. A moved
+    /// repository is not under <c>.m2</c>, so nothing above reaches its container, and Explore let
+    /// the whole of it go — taking the repository, and whatever else the user keeps beside it.
+    ///
+    /// <para>Not in <see cref="ToolRoots"/>, even though reading the file is not a subprocess,
+    /// because that property is asked about every path Explore draws and this parses an XML document
+    /// off the disk. A container that is a volume root is dropped by the policy, so no answer here
+    /// can refuse a whole drive.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<ToolRoot> declared =
+            ResolveLocalRepository() is { } repository
+            && Path.GetDirectoryName(repository) is { Length: > 0 } container
+                ?
+                [
+                    new ToolRoot(
+                        container,
+                        "This holds the local repository your Maven settings point at. Deguffer "
+                        + "removes the repository inside it and nothing else, because it cannot know "
+                        + "what else you keep in there.",
+                        name => name.Equals(
+                            Path.GetFileName(repository), StringComparison.OrdinalIgnoreCase)),
+                ]
+                : [];
+
+        return Task.FromResult(declared);
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryExists(repository));

@@ -40,6 +40,14 @@ public sealed class ExploreActionPolicy
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
     /// <summary>
+    /// How many providers <see cref="ForAsync"/> asks at once (G4). Not derived from the processor
+    /// count, because what the handful of probing providers wait on is a subprocess or the process
+    /// table rather than this machine's cores — and a user with every toolchain installed should not
+    /// see ten console windows' worth of work start at the same instant.
+    /// </summary>
+    private const int Discovery = 8;
+
+    /// <summary>
     /// The names NTFS reserves in a volume's root directory, from <c>[MS-FSCC]</c>. See
     /// <see cref="ReservedByTheFilesystem"/> for why they are refused and why the set stops here.
     /// </summary>
@@ -86,7 +94,17 @@ public sealed class ExploreActionPolicy
                 .ThenBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1),
         ];
 
-        _toolRoots = [.. toolRoots];
+        // A declaration over a whole volume is dropped rather than honoured, and this is the one
+        // place it can be caught for every provider. A root recognises a named set of children and
+        // refuses the rest, so a root at 'D:\' would refuse every top-level folder on the drive
+        // because a tool reported a location Deguffer cannot make sense of. PnpmStoreProvider
+        // already treats a volume-root answer as no answer at all; the same reading belongs at the
+        // seam, now that a root can arrive from a subprocess rather than from a literal in a file.
+        _toolRoots =
+        [
+            .. toolRoots.Where(root =>
+                LongPath.Configured(root.Path) is not { } path || VolumeRoot.Below(path) is not null),
+        ];
 
         // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
         // takes it along as surely as one holding a tool's folder does. A permitting entry protects
@@ -111,19 +129,41 @@ public sealed class ExploreActionPolicy
     /// the whole of §7.1's refusal set is provable against a synthetic profile — which is what G1's
     /// dependency inversion is for, and the only way these assertions can run on a machine where
     /// nobody may delete anything in <c>C:\Windows</c>.</para>
+    ///
+    /// <para><b>Asynchronous, and there is no synchronous way to build one, because half of §5.2 is
+    /// not knowable without asking the machine.</b> A tool reports a location the documented default
+    /// does not name, and a plan holds a path back because something is using it; both are read
+    /// through <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>. A second factory that skipped
+    /// them would build a policy that looks complete, refuses less, and says nothing about the
+    /// difference — so the cheap declarations and the probed ones arrive together or not at all.</para>
+    ///
+    /// <para>The providers are asked in parallel, bounded, because most of them answer immediately
+    /// and the handful that do not are each waiting on a subprocess or the process table (G4).</para>
     /// </summary>
-    public static ExploreActionPolicy For(
+    public static async Task<ExploreActionPolicy> ForAsync(
         ISystemDirectories system,
         IUserEnvironment environment,
-        IEnumerable<ICleanupProvider> providers)
+        IEnumerable<ICleanupProvider> providers,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(providers);
 
+        IReadOnlyList<ICleanupProvider> asked = [.. providers];
+        var discovered = new IReadOnlyList<ToolRoot>[asked.Count];
+
+        await Parallel.ForAsync(
+            0,
+            asked.Count,
+            new ParallelOptions { MaxDegreeOfParallelism = Discovery, CancellationToken = ct },
+            async (index, token) =>
+                discovered[index] = await asked[index].DiscoverToolRootsAsync(token).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
-            providers.SelectMany(p => p.ToolRoots));
+            [.. asked.SelectMany(p => p.ToolRoots), .. discovered.SelectMany(roots => roots)]);
     }
 
     /// <summary>

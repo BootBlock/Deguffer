@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Tests.Fakes;
 
@@ -251,5 +252,58 @@ public sealed class GoCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+    }
+
+    /// <summary>
+    /// §7.1 over the workspace <c>go env</c> reports, which is the whole point of declaring it: the
+    /// plan asserts the workspace, its <c>bin</c> and its <c>src</c> must survive, and those are the
+    /// user's installed binaries and their own source.
+    ///
+    /// <para>The premise is asserted first. This fixture reports a workspace that is not the
+    /// documented default, so nothing the synchronous declaration says reaches any of these paths —
+    /// which is what made Explore allow all three.</para>
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheWorkspaceGoReportsAndWhatThePlanProtectsInside()
+    {
+        Populate(BuildCache);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.NotEqual(provider.DefaultGoPath, GoPath);
+        Assert.All(
+            new[] { GoPath, Path.Combine(GoPath, "bin"), Path.Combine(GoPath, "src") },
+            path => Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase)));
+
+        Assert.False(policy.MayRemove(GoPath).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GoPath, "bin")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GoPath, "src")).IsAllowed);
+
+        // §5.2's other direction, at the level below: the module cache is what 'go clean -modcache'
+        // empties and stays removable, and anything else Go keeps beside it does not.
+        Assert.True(policy.MayRemove(ModuleCache).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GoPath, "pkg", "sumdb")).IsAllowed);
+    }
+
+    /// <summary>
+    /// No subprocess where Go is not installed. The declaration is read when Explore builds its
+    /// policy, which is a machine-wide question asked of every provider, so a provider that answered
+    /// by running its tool anyway would start one console process per absent toolchain.
+    /// </summary>
+    [Fact]
+    public async Task AsksGoNothingWhenGoIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        var roots = await new GoCacheProvider(
+            new FakeUserEnvironment(_temp.Path), runner, FakeProcessInspector.NothingRunning)
+            .DiscoverToolRootsAsync();
+
+        Assert.Empty(roots);
+        Assert.Empty(runner.Invocations);
     }
 }
