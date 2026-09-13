@@ -49,16 +49,24 @@ public sealed class CleanupPlanner
     /// </param>
     /// <param name="liveTrees">
     /// What the providers ask about programs that are running. The shared inspector by default,
-    /// whose snapshot of the process table a planning pass clears at its start. Explore passes a
-    /// fresh one for each policy it builds, because that build is a look at the machine of its own:
-    /// clearing the shared snapshot would change what a Storage pass already under way sees, and
-    /// reusing it would answer with the process table as it was at the last Storage pass.
+    /// whose snapshot of the process table a planning pass clears at its start. Explore passes its
+    /// own, for the reason <paramref name="environment"/> gives.
+    /// </param>
+    /// <param name="environment">
+    /// The machine the providers read through, which remembers where each command is on <c>PATH</c>
+    /// until a planning pass clears it. <see cref="UserEnvironment.Current"/> by default. Explore
+    /// passes a fresh one, beside a fresh inspector, for each policy it builds, because that build is
+    /// a look at the machine of its own: clearing the shared answers would change what a Storage pass
+    /// already under way sees, and reusing them would say where a command was the first time anything
+    /// looked for it after the last Storage pass.
     /// </param>
     public static CleanupPlanner CreateDefault(
         ICurrentPreferences? preferences = null,
-        ILiveTreeInspector? liveTrees = null)
+        ILiveTreeInspector? liveTrees = null,
+        IUserEnvironment? environment = null)
     {
-        var roots = new SourceRootStore(UserEnvironment.Current);
+        environment ??= UserEnvironment.Current;
+        var roots = new SourceRootStore(environment);
 
         // One discovery for every provider that searches the user's own folders, and one live-tree
         // inspector beside it. Shared deliberately rather than defaulted per provider: six unshared
@@ -70,68 +78,70 @@ public sealed class CleanupPlanner
         // One sweep of %LOCALAPPDATA% for both Squirrel providers, on the reasoning above: they ask
         // the same question of the same directory, and two unshared discoveries would list a folder
         // holding hundreds of children twice per pass.
-        var squirrel = new SquirrelDiscovery(UserEnvironment.Current);
+        var squirrel = new SquirrelDiscovery(environment);
 
         // One reading of Claude Code's list of running sessions for both providers over its folder, on the
         // same reasoning: every entry in it costs a process probe, and two unshared registries would ask
         // about each running process twice per pass.
-        var claudeSessions = new ClaudeCodeSessionRegistry(UserEnvironment.Current, ProcessInspector.Default);
+        var claudeSessions = new ClaudeCodeSessionRegistry(environment, ProcessInspector.Default);
 
         return new CleanupPlanner(
         [
-            new DotNetObjProvider(roots, sourceTrees, liveTrees),
-            new UnityLibraryProvider(roots, sourceTrees, liveTrees),
-            new CargoTargetProvider(roots, sourceTrees, liveTrees),
-            new NodeModulesProvider(roots, sourceTrees, liveTrees),
-            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees),
-            .. CacheProviders(squirrel, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
+            new DotNetObjProvider(roots, sourceTrees, liveTrees, environment),
+            new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment),
+            new CargoTargetProvider(roots, sourceTrees, liveTrees, environment),
+            new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
+            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
+            .. CacheProviders(
+                environment, squirrel, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
+        IUserEnvironment environment,
         SquirrelDiscovery squirrel,
         ClaudeCodeSessionRegistry claudeSessions,
         ILiveTreeInspector liveTrees,
         ICurrentPreferences preferences) =>
     [
-        new NuGetCacheProvider(),
-        new GradleCacheProvider(),
-        new NpmCacheProvider(),
-        new PnpmStoreProvider(),
-        new VsCodeCppToolsCacheProvider(),
-        new DartAnalysisServerProvider(),
-        new RoslynCacheProvider(),
-        new UvCacheProvider(),
-        new PipCacheProvider(),
-        new PoetryCacheProvider(),
-        new CondaCacheProvider(),
-        new CargoCacheProvider(),
-        new GoCacheProvider(),
-        new MavenRepositoryProvider(),
-        new VcpkgCacheProvider(),
-        new GpuShaderCacheProvider(),
-        new ChromiumCacheProvider(),
-        new VsCodeCacheProvider(),
-        new FirefoxCacheProvider(),
-        new EpicLauncherWebCacheProvider(),
-        new EpicLauncherContentCacheProvider(),
-        new SteamCacheProvider(),
-        new SpotifyCacheProvider(),
-        new SquirrelStagingProvider(discovery: squirrel, liveTrees: liveTrees),
-        new PlatformIoCacheProvider(),
-        new PlaywrightBrowsersProvider(),
-        new SquirrelSupersededVersionProvider(discovery: squirrel, liveTrees: liveTrees),
-        new AzureFunctionsToolsProvider(),
-        new ClaudeCodeDerivedStateProvider(sessions: claudeSessions),
-        new RecycleBinProvider(preferences: preferences),
-        new FileHistoryProvider(preferences: preferences),
-        new TempDirectoryProvider(liveTrees: liveTrees, preferences: preferences),
-        new CrashDumpProvider(),
-        new WindowsServicingLogProvider(),
-        new EpicLauncherLogProvider(),
-        new VsCodeLogProvider(),
-        new ClaudeCodeMcpLogProvider(),
-        new ClaudeCodeFileHistoryProvider(sessions: claudeSessions),
+        new NuGetCacheProvider(environment),
+        new GradleCacheProvider(environment),
+        new NpmCacheProvider(environment),
+        new PnpmStoreProvider(environment),
+        new VsCodeCppToolsCacheProvider(environment),
+        new DartAnalysisServerProvider(environment),
+        new RoslynCacheProvider(environment),
+        new UvCacheProvider(environment),
+        new PipCacheProvider(environment),
+        new PoetryCacheProvider(environment),
+        new CondaCacheProvider(environment),
+        new CargoCacheProvider(environment),
+        new GoCacheProvider(environment),
+        new MavenRepositoryProvider(environment),
+        new VcpkgCacheProvider(environment),
+        new GpuShaderCacheProvider(environment),
+        new ChromiumCacheProvider(environment),
+        new VsCodeCacheProvider(environment),
+        new FirefoxCacheProvider(environment),
+        new EpicLauncherWebCacheProvider(environment),
+        new EpicLauncherContentCacheProvider(environment),
+        new SteamCacheProvider(environment),
+        new SpotifyCacheProvider(environment),
+        new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
+        new PlatformIoCacheProvider(environment),
+        new PlaywrightBrowsersProvider(environment),
+        new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
+        new AzureFunctionsToolsProvider(environment),
+        new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
+        new RecycleBinProvider(environment, preferences: preferences),
+        new FileHistoryProvider(environment, preferences: preferences),
+        new TempDirectoryProvider(environment, liveTrees: liveTrees, preferences: preferences),
+        new CrashDumpProvider(environment),
+        new WindowsServicingLogProvider(environment),
+        new EpicLauncherLogProvider(environment),
+        new VsCodeLogProvider(environment),
+        new ClaudeCodeMcpLogProvider(environment),
+        new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions),
     ];
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;

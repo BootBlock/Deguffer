@@ -410,6 +410,38 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// Every default provider reads the machine through the environment the planner is built over.
+    ///
+    /// <para>Explore builds each policy over a fresh environment, so where a command is on
+    /// <c>PATH</c> is looked up at the build rather than remembered by the shared one since the last
+    /// Storage pass (issue #120). A provider constructed without it falls back to
+    /// <see cref="UserEnvironment.Current"/>, and Explore then answers for that one provider from the
+    /// old lookup. Observed through invalidation, because
+    /// <see cref="CleanupProviderBase.InvalidateCaches"/> clears exactly the environment a provider
+    /// resolves commands through, and every default provider derives from it.</para>
+    /// </summary>
+    [Fact]
+    public void EveryDefaultProviderReadsTheMachineThroughTheEnvironmentItIsGiven()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var planner = CleanupPlanner.CreateDefault(
+            liveTrees: FakeLiveTreeInspector.NothingLive,
+            environment: environment);
+
+        foreach (var provider in planner.Providers)
+        {
+            var before = environment.InvalidateCount;
+
+            provider.InvalidateCaches();
+
+            Assert.True(
+                environment.InvalidateCount > before,
+                $"'{provider.Id}' reads the machine through an environment other than the one it was given.");
+        }
+    }
+
+    /// <summary>
     /// The default is §7's strict rule, so a caller that never mentions the preference still gets
     /// the typed phrase demanded of it. Forgetting to pass it has to fail closed, not open.
     /// </summary>

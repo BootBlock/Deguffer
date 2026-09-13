@@ -80,18 +80,22 @@ public sealed class ExploreActions
     ///
     /// <para>Each build looks at the machine afresh. The providers are constructed again, so what
     /// each of them resolved goes with the old ones, and they are given their own
-    /// <see cref="LiveTreeInspector"/>, so what is running is read at the build rather than at the
-    /// last Storage pass. Where commands are on <c>PATH</c> is the one answer shared with the Storage
-    /// page: <see cref="UserEnvironment.Current"/> remembers it until a planning pass clears it, and
-    /// clearing it from here would change what a pass already under way sees.</para>
+    /// <see cref="UserEnvironment"/> and <see cref="LiveTreeInspector"/>, so where each command is on
+    /// <c>PATH</c> and what is running are read at the build rather than kept from an earlier look.
+    /// The shared instances are not cleared instead, because that would change what a Storage pass
+    /// already under way sees.</para>
     /// </summary>
     public static ExploreActions ForThisMachine(Func<IExploreConfirmationPrompt> prompt) =>
         new(
-            ct => ExploreActionPolicy.ForAsync(
-                SystemDirectories.Current,
-                UserEnvironment.Current,
-                CleanupPlanner.CreateDefault(liveTrees: new LiveTreeInspector()).Providers,
-                ct),
+            ct =>
+            {
+                var environment = new UserEnvironment();
+                var providers = CleanupPlanner.CreateDefault(
+                    liveTrees: new LiveTreeInspector(),
+                    environment: environment).Providers;
+
+                return ExploreActionPolicy.ForAsync(SystemDirectories.Current, environment, providers, ct);
+            },
             prompt);
 
     /// <summary>
