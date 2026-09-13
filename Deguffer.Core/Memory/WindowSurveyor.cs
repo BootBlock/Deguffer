@@ -48,7 +48,23 @@ internal static class WindowSurveyor
 
         foreach (var window in windows)
         {
-            if (calls.ProcessOf(window) != processId)
+            var owner = calls.ProcessOf(window);
+
+            if (owner is null)
+            {
+                // Windows answers nothing here for a handle that is no longer a window, which is the
+                // ordinary race. One that is still there and will not say whose it is could be the
+                // console window that refuses the whole process, so it costs both facts.
+                if (calls.Exists(window))
+                {
+                    consoleUnreadable = true;
+                    qualifyingUnreadable = true;
+                }
+
+                continue;
+            }
+
+            if (owner != processId)
             {
                 continue;
             }

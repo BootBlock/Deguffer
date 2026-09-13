@@ -166,6 +166,84 @@ public sealed class WindowSurveyorTests
         Assert.Empty(survey.Qualifying);
     }
 
+    /// <summary>
+    /// §7.2.1 posts in the order Windows enumerates them, and names the count in the confirmation, so
+    /// the set is a sequence rather than a bag.
+    /// </summary>
+    [Fact]
+    public void TheOrderWindowsEnumeratedThemIsKept()
+    {
+        var survey = Take(
+            new FakeWindow { Handle = 12, ProcessId = Picked, ClassName = "TheSecondClass" },
+            new FakeWindow { Handle = 11, ProcessId = Picked, ClassName = "TheFirstClass" });
+
+        Assert.Equal(
+            [new ProcessWindow(12, "TheSecondClass"), new ProcessWindow(11, "TheFirstClass")],
+            survey.Qualifying);
+    }
+
+    /// <summary>
+    /// A console found anywhere among its windows refuses the whole process, whatever another window
+    /// would not say: the refusal is certain, and the unread fact could only refuse as well.
+    /// </summary>
+    [Fact]
+    public void AConsoleClassRefusesEvenWhereAnotherWindowWouldNotBeRead()
+    {
+        var survey = Take(
+            new FakeWindow { Handle = 11, ProcessId = Picked, ClassName = null },
+            new FakeWindow { Handle = 12, ProcessId = Picked, ClassName = "ConsoleWindowClass" });
+
+        Assert.Equal(Answer.Yes, survey.OwnsConsoleWindow);
+        Assert.Null(survey.Qualifying);
+    }
+
+    /// <summary>Two windows failing in different ways cost what each costs, rather than one masking the other.</summary>
+    [Fact]
+    public void TwoWindowsFailingDifferentlyCostBothFacts()
+    {
+        var survey = Take(
+            new FakeWindow { Handle = 11, ProcessId = Picked, ClassName = null },
+            new FakeWindow { Handle = 12, ProcessId = Picked, Cloaked = null });
+
+        Assert.Equal(Answer.Unreadable, survey.OwnsConsoleWindow);
+        Assert.Null(survey.Qualifying);
+    }
+
+    /// <summary>
+    /// A window still on the desktop that will not say whose it is could be the console window that
+    /// refuses the whole process, so it is not quietly taken for another process's.
+    /// </summary>
+    [Fact]
+    public void AWindowThatWillNotSayWhoseItIsCostsBothFacts()
+    {
+        var survey = Take(new FakeWindow { Handle = 11, ProcessId = null });
+
+        Assert.Equal(Answer.Unreadable, survey.OwnsConsoleWindow);
+        Assert.Null(survey.Qualifying);
+    }
+
+    [Fact]
+    public void AWindowThatWentBeforeItWasAskedWhoseItIsIsSkipped()
+    {
+        var survey = Take(
+            new FakeWindow { Handle = 11, ProcessId = null, Exists = false },
+            new FakeWindow { Handle = 12, ProcessId = Picked, ClassName = "AWindowClass" });
+
+        Assert.Equal(Answer.No, survey.OwnsConsoleWindow);
+        Assert.Equal([new ProcessWindow(12, "AWindowClass")], survey.Qualifying);
+    }
+
+    /// <summary>Another process's window is nothing to this survey, whatever it will or will not answer.</summary>
+    [Fact]
+    public void AWindowOfAnotherProcessThatWillNotNameItsClassCostsNothing()
+    {
+        var survey = Take(new FakeWindow { Handle = 11, ProcessId = Picked + 1, ClassName = null });
+
+        Assert.Equal(Answer.No, survey.OwnsConsoleWindow);
+        Assert.NotNull(survey.Qualifying);
+        Assert.Empty(survey.Qualifying);
+    }
+
     private static WindowSurvey Take(params FakeWindow[] windows)
     {
         var calls = new FakeWindowCalls();

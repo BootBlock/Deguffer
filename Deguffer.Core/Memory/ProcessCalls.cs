@@ -30,8 +30,10 @@ internal sealed record ProcessOpening(OpenOutcome Outcome, IOpenProcess? Process
 /// comparison that failed.
 /// </summary>
 /// <param name="User">The account, as its security identifier in string form.</param>
-/// <param name="IntegrityLevel">The last subauthority of the mandatory label.</param>
-internal readonly record struct TokenFacts(string? User, int? IntegrityLevel);
+/// <param name="IntegrityLevel">
+/// The last subauthority of the mandatory label, widened because Windows reports it unsigned.
+/// </param>
+internal readonly record struct TokenFacts(string? User, long? IntegrityLevel);
 
 /// <summary>Whether a process belongs to an application package.</summary>
 internal enum PackageIdentity
@@ -42,7 +44,7 @@ internal enum PackageIdentity
 }
 
 /// <summary>What Deguffer's own process is, for the facts that are comparisons against it.</summary>
-internal readonly record struct OwnProcess(uint? SessionId, string? User, int? IntegrityLevel)
+internal readonly record struct OwnProcess(uint? SessionId, string? User, long? IntegrityLevel)
 {
     /// <summary>Whether every member was read, which is what makes it worth keeping (G5).</summary>
     public bool Complete => SessionId is not null && User is not null && IntegrityLevel is not null;
@@ -136,6 +138,12 @@ internal sealed partial class ProcessCalls : IProcessCalls
         return ProcessOpening.Of(new HeldProcess(handle, processId));
     }
 
+    /// <summary>
+    /// The account comes from the same token as the integrity level rather than from
+    /// <see cref="Safety.IUserEnvironment.UserSecurityIdentifier"/>, which carries it for
+    /// <c>$Recycle.Bin</c>: one token read gives one consistent answer for a comparison that needs
+    /// both, and the session and the integrity level are not on that seam at all.
+    /// </summary>
     public OwnProcess Own()
     {
         // The pseudo-handle for this process, which needs no closing.

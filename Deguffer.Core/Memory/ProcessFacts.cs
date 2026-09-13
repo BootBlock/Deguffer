@@ -50,8 +50,15 @@ public enum PackageAnswer
 public sealed record ProcessWindow(nint Handle, string ClassName);
 
 /// <summary>
-/// What Windows says about one process beyond its memory figures: everything §7.2.1's refusal table
-/// decides from, for the one row a user picked.
+/// What Windows says about one process beyond its memory figures: its session, its account, its
+/// integrity level, its criticality, its package state and its window set, read for the one row a
+/// user picked, which is the list §7.2.1 names.
+///
+/// <para><b>The rest of §7.2.1's refusal table is not here, and is not meant to be.</b> Deguffer's own
+/// process tree, the process owning the shell window, an image named <c>explorer.exe</c> or
+/// <c>dwm.exe</c>, a service host, and a console host are all decided from the §7.2 snapshot the user
+/// picked the row from, which already knows every process's identifier, parent and name. Opening a
+/// process to ask any of them would be the thing §7.2 forbids.</para>
 /// </summary>
 /// <param name="Present">
 /// Whether the process the caller named, by identifier and creation time, is the process that holds

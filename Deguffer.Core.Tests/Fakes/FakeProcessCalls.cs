@@ -17,7 +17,6 @@ internal sealed class FakeProcessCalls : IProcessCalls
     public const uint OtherSession = 2;
 
     public const int Medium = 0x2000;
-    public const int MediumUiAccess = 0x2010;
     public const int High = 0x3000;
 
     private readonly Dictionary<int, FakeProcess> _processes = [];
@@ -40,17 +39,13 @@ internal sealed class FakeProcessCalls : IProcessCalls
     {
         _opened.Add(processId);
 
+        // An identifier no process holds is one nothing was registered for.
         if (!_processes.TryGetValue(processId, out var process))
         {
             return ProcessOpening.NotRunning;
         }
 
-        return process.Outcome switch
-        {
-            OpenOutcome.Opened => ProcessOpening.Of(process),
-            OpenOutcome.NotRunning => ProcessOpening.NotRunning,
-            _ => ProcessOpening.Refused,
-        };
+        return process.OpenRefused ? ProcessOpening.Refused : ProcessOpening.Of(process);
     }
 
     public OwnProcess Own()
@@ -68,7 +63,8 @@ internal sealed class FakeProcess : IOpenProcess
 
     public required int ProcessId { get; init; }
 
-    public OpenOutcome Outcome { get; init; } = OpenOutcome.Opened;
+    /// <summary>True where Windows holds the identifier but will not open it.</summary>
+    public bool OpenRefused { get; init; }
 
     public long? CreatedAt { get; init; } = Created;
 
@@ -78,7 +74,7 @@ internal sealed class FakeProcess : IOpenProcess
 
     public string? User { get; init; } = FakeProcessCalls.OwnUser;
 
-    public int? Integrity { get; init; } = FakeProcessCalls.Medium;
+    public long? Integrity { get; init; } = FakeProcessCalls.Medium;
 
     public bool? Critical { get; init; } = false;
 

@@ -61,9 +61,12 @@ internal static partial class ProcessToken
 
     /// <summary>
     /// The integrity level is the last subauthority of the label's security identifier, which is how
-    /// Microsoft's own sample reads it. <see cref="IntegrityLevel"/> holds what the value means.
+    /// Microsoft's own sample reads it
+    /// (<see href="https://learn.microsoft.com/en-us/previous-versions/dotnet/articles/bb625966(v=msdn.10)">Appendix
+    /// D</see>). The subauthority is unsigned, so it is widened rather than kept in the signed integer
+    /// it is read into: <see cref="IntegrityLevel"/> holds what that costs otherwise.
     /// </summary>
-    private static int? Integrity(nint token)
+    private static long? Integrity(nint token)
     {
         var buffer = Information(token, TokenIntegrityLevel);
 
@@ -79,7 +82,7 @@ internal static partial class ProcessToken
 
             return subauthorities == 0
                 ? null
-                : Marshal.ReadInt32(GetSidSubAuthority(label, (uint)(subauthorities - 1)));
+                : (uint)Marshal.ReadInt32(GetSidSubAuthority(label, (uint)(subauthorities - 1)));
         }
         finally
         {

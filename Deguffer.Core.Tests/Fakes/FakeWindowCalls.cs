@@ -37,13 +37,19 @@ internal sealed class FakeWindowCalls : IWindowCalls
     private FakeWindow Find(nint window) => _windows.Single(candidate => candidate.Handle == window);
 }
 
-/// <summary>One top-level window. Every member defaults to a window that qualifies.</summary>
+/// <summary>
+/// One top-level window. Every member a test does not set describes a window that qualifies, except
+/// the two it must name: which window it is, and whose.
+/// </summary>
 internal sealed class FakeWindow
 {
     public required nint Handle { get; init; }
 
-    /// <summary>Null where the window has gone, which is what Windows answers for a handle that is no longer one.</summary>
-    public int? ProcessId { get; init; }
+    /// <summary>
+    /// Whose window it is. Null where Windows would not say, which it does for a handle that is no
+    /// longer a window.
+    /// </summary>
+    public required int? ProcessId { get; init; }
 
     public string? ClassName { get; init; } = "AnApplicationWindow";
 

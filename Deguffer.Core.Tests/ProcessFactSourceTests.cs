@@ -76,7 +76,7 @@ public sealed class ProcessFactSourceTests
         var facts = Read(new FakeProcessCalls().With(new FakeProcess
         {
             ProcessId = Picked,
-            Outcome = OpenOutcome.Refused,
+            OpenRefused = true,
         }));
 
         Assert.Equal(ProcessFacts.NothingRead(Answer.Unreadable), facts);

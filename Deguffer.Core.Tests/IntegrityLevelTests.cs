@@ -18,13 +18,20 @@ public sealed class IntegrityLevelTests
     private const int High = 0x3000;
     private const int System = 0x4000;
 
+    /// <summary>
+    /// Past what a signed integer holds. Windows reports the subauthority unsigned, and a level read
+    /// as a negative number would compare below Deguffer's own, which is the permissive direction.
+    /// </summary>
+    private const long PastTheSignedRange = 0x8000_0000;
+
     [Theory]
     [InlineData(High, Medium)]
     [InlineData(System, High)]
     [InlineData(MediumUiAccess, Medium)]
     [InlineData(MediumHigh, Medium)]
     [InlineData(Low, Untrusted)]
-    public void ALevelAboveDegufferIsRefused(int target, int own) =>
+    [InlineData(PastTheSignedRange, System)]
+    public void ALevelAboveDegufferIsRefused(long target, long own) =>
         Assert.Equal(Answer.Yes, IntegrityLevel.Above(target, own));
 
     [Theory]
@@ -33,7 +40,7 @@ public sealed class IntegrityLevelTests
     [InlineData(Untrusted, Medium)]
     [InlineData(Medium, MediumUiAccess)]
     [InlineData(High, System)]
-    public void ALevelAtOrBelowDegufferIsNot(int target, int own) =>
+    public void ALevelAtOrBelowDegufferIsNot(long target, long own) =>
         Assert.Equal(Answer.No, IntegrityLevel.Above(target, own));
 
     /// <summary>

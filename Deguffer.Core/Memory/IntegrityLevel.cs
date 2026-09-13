@@ -13,11 +13,15 @@ namespace Deguffer.Core.Memory;
 /// to a window the filter blocks. Comparing the values ranks a level between two named ones correctly,
 /// which is what §7.2.1 asks of this, and refuses wherever a band comparison would.</para>
 ///
-/// <para>The levels themselves are the last subauthority of the token's mandatory label, which
-/// Microsoft's own sample reads the same way
+/// <para>The named values are the well-known RIDs
 /// (<see href="https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids">Well-known
 /// SIDs</see>): untrusted 0x0, low 0x1000, medium 0x2000, medium high 0x2100, high 0x3000, system
-/// 0x4000, protected 0x5000.</para>
+/// 0x4000, protected 0x5000. A level is not one of those values, though: it is whatever the label
+/// carries, which is why nothing here compares against the names.</para>
+///
+/// <para>A level is carried as a <see cref="long"/> because the subauthority Windows reports is
+/// unsigned. Read as a signed integer, a value above <c>0x7FFF_FFFF</c> would come out negative and
+/// compare <em>below</em> Deguffer's own, which is the permissive direction.</para>
 /// </summary>
 internal static class IntegrityLevel
 {
@@ -26,7 +30,7 @@ internal static class IntegrityLevel
     /// <see cref="Answer.Unreadable"/> where either would not be read: a level Windows would not say is
     /// a level Deguffer cannot post below.
     /// </summary>
-    public static Answer Above(int? target, int? own) =>
+    public static Answer Above(long? target, long? own) =>
         target is not { } level || own is not { } ours ? Answer.Unreadable
         : level > ours ? Answer.Yes
         : Answer.No;
