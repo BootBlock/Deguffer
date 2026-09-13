@@ -342,7 +342,6 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         var provider = CreateProvider();
 
-        Assert.False(await provider.IsPresentAsync());
         Assert.Empty(provider.BinRoots);
 
         var plan = await provider.PlanAsync();
@@ -354,6 +353,50 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
         Assert.True(Directory.Exists(bin));
+    }
+
+    /// <summary>
+    /// The refusal has to survive the two gates between a provider and the page, or it is a
+    /// sentence nobody reads.
+    ///
+    /// <para><b>Presence.</b> <c>CleanupPlanner</c> never asks an absent provider for a plan, and
+    /// on the machine this was written for — the user's only bin is on the cloud mount — every
+    /// other reason to be present is false. Answering no there discards the note before it is
+    /// built.</para>
+    ///
+    /// <para><b>The status.</b> A plan measuring zero with no flag set is shown as "Already clear",
+    /// which <c>FindingStatus</c> says must never stand for a location Deguffer declined to look
+    /// at. The row is also hidden by the default filter, so the volume would vanish twice over.</para>
+    /// </summary>
+    [Fact]
+    public async Task ARefusedVolumeAloneIsStillReportedRatherThanLookingLikeAnEmptyMachine()
+    {
+        var volume = CreateVolume("V", features: VolumeFeatures.RemoteStorage);
+        CreateBin(volume, Sid);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(volume, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Presence still means something. A machine with no cloud mount and no bin for this user
+    /// reports absent, as it did before the refusal existed — otherwise the row would appear on
+    /// every machine, which is what <see cref="RecycleBinProvider.IsPresentAsync"/> exists to
+    /// prevent.
+    /// </summary>
+    [Fact]
+    public async Task AnOrdinaryMachineWithNoBinForThisUserIsStillAbsent()
+    {
+        CreateVolume("C");
+
+        Assert.False(await CreateProvider().IsPresentAsync());
     }
 
     /// <summary>

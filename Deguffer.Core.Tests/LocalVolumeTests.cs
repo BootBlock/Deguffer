@@ -6,16 +6,17 @@ namespace Deguffer.Core.Tests;
 /// The one rule <see cref="LocalVolume"/> states: whether a volume's contents are somewhere else,
 /// so that enumerating it downloads the user's files rather than measuring them.
 ///
-/// <para>Asserted against the flag words a real machine reported, rather than against named bits
-/// assembled here. The reading is the evidence, and a test that composed its own input would prove
-/// the expression and not the discrimination.</para>
+/// <para>The two cases the rule exists to tell apart are asserted against the flag words a real
+/// machine reported, because the reading is the evidence: a discrimination between two invented
+/// inputs would prove the expression and not the discrimination. The cases either side of those
+/// two have no measurement to stand on and name their bits directly.</para>
 /// </summary>
 public sealed class LocalVolumeTests
 {
     /// <summary>
-    /// A Google Drive mount, measured: <c>DRIVE_FIXED</c>, ready, FAT32, 100 GB, and indisposable
-    /// from a disk by every per-entry test — its top-level entries carry ordinary hidden, system and
-    /// normal attributes and no reparse point.
+    /// A Google Drive mount, measured: <c>DRIVE_FIXED</c>, ready, FAT32, 100 GB, and
+    /// indistinguishable from a disk by every per-entry test — its top-level entries carry ordinary
+    /// hidden, system and normal attributes and no reparse point.
     /// </summary>
     private const VolumeFeatures GoogleDriveMount = (VolumeFeatures)0x0000_0106;
 
@@ -62,8 +63,13 @@ public sealed class LocalVolumeTests
 
     /// <summary>
     /// A volume that would not answer is walked, which is what every volume did before this reading
-    /// existed. Refusing on no reading would take drives away from the user on a guess, and the
-    /// hazard being defended against announces itself.
+    /// existed.
+    ///
+    /// <para><b>This fails open, and the risk is real rather than notional.</b> The mount
+    /// announces itself in the flag word and nowhere else — that is the whole premise of the rule —
+    /// so a volume whose flag word did not come back is a cloud mount Deguffer cannot recognise.
+    /// The alternative is worse: one failing call would refuse every volume on the machine, which
+    /// is the tool's whole function traded against a hazard that call gave no evidence of.</para>
     /// </summary>
     [Fact]
     public void AVolumeThatSaidNothingIsNotRefused()

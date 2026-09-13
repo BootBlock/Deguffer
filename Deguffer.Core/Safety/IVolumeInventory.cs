@@ -69,12 +69,17 @@ public readonly record struct LocalVolume(
     /// Whether this volume's contents are somewhere else, so that enumerating it downloads the
     /// user's files instead of measuring them.
     ///
-    /// <para>A cloud client that mounts its storage through its own driver — Google Drive and
-    /// pCloud both do — is a <see cref="DriveType.Fixed"/>, ready volume that no per-entry test can
-    /// tell from a disk. Its top-level entries were measured carrying nothing but ordinary hidden,
+    /// <para>A cloud client that mounts its storage through its own driver is a
+    /// <see cref="DriveType.Fixed"/>, ready volume that no per-entry test can tell from a disk. A
+    /// Google Drive mount's top-level entries were measured carrying nothing but ordinary hidden,
     /// system and normal attributes: no <c>FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS</c>, no
     /// <c>FILE_ATTRIBUTE_OFFLINE</c>, no reparse point. A walker cannot defend itself entry by
     /// entry there, so the location is what has to be refused.</para>
+    ///
+    /// <para><b>This recognises a mount that advertises the flag, not every cloud client.</b>
+    /// Advertising remote storage is a third-party driver's own choice, and nothing in Win32
+    /// obliges one to. A mount that does not say so is walked, as every volume was before this
+    /// reading existed. Google Drive is the one product whose flag word was measured.</para>
     ///
     /// <para><b>Why these two bits and not the format.</b> The mount advertises remote storage and
     /// supports neither reparse points nor sparse files, and the Cloud Files API builds a

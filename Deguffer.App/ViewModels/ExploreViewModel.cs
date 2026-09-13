@@ -59,6 +59,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private bool _rebuildingDrives;
 
+    /// <summary>
+    /// The refusal <see cref="ExplainRefusal"/> last put on the status line, so it can take that
+    /// sentence back and leave anything written over it alone.
+    /// </summary>
+    private string? _statedRefusal;
+
     public ExploreViewModel(
         ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions, ItemGuide guide)
     {
@@ -190,9 +196,14 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Whether the bar has to be indeterminate. See <see cref="Progress"/>.</summary>
     public bool HasNoProgressFraction => Progress is null;
 
+    /// <summary>
+    /// What the status line says before anything has been measured, and what it goes back to when
+    /// a refusal is taken off it. See <see cref="ExplainRefusal"/>.
+    /// </summary>
+    private const string ScanPrompt = "Choose a drive or a folder and scan it to see what is using the space.";
+
     [ObservableProperty]
-    public partial string Status { get; set; } =
-        "Choose a drive or a folder and scan it to see what is using the space.";
+    public partial string Status { get; set; } = ScanPrompt;
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]
@@ -1022,18 +1033,34 @@ public sealed partial class ExploreViewModel : ObservableObject
     private bool CanScan() => !IsBusy && ScanRoot is not null && Refusal is null;
 
     /// <summary>
-    /// State why the page will not scan what it is pointed at, where it will not.
+    /// State why the page will not scan what it is pointed at, and take the sentence back once it
+    /// is pointed somewhere it will.
     ///
     /// <para>§7.1 asks a refusal to say what it is, and a greyed-out Scan button says nothing at
-    /// all. Silent where there is nothing to refuse: a target that can be scanned must not overwrite
-    /// the result of the scan already on screen.</para>
+    /// all. The retraction is the other half of that: this line describes what pressing Scan would
+    /// do, so leaving "Deguffer does not scan this drive" up while the button is live and aimed at
+    /// an ordinary volume states the opposite of the truth. Choosing a folder on a local disk after
+    /// looking at a cloud one reaches it in two gestures.</para>
+    ///
+    /// <para>It takes back its own sentence and nobody else's. A scan's result and a selection's
+    /// report write this same line, and neither is made untrue by a change of target, so clearing
+    /// unconditionally would throw away whichever of them was there.</para>
     /// </summary>
     private void ExplainRefusal()
     {
         if (Refusal is { } refused)
         {
             Status = refused;
+            _statedRefusal = refused;
+            return;
         }
+
+        if (_statedRefusal is not null && Status == _statedRefusal)
+        {
+            Status = ScanPrompt;
+        }
+
+        _statedRefusal = null;
     }
 
     private bool CanRun() => !IsBusy;

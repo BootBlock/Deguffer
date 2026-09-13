@@ -167,9 +167,16 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// Windows volume has a bin root, and reading that as a hit would report a source on every
     /// machine and then plan nothing on most of them. It is also how an unidentifiable user fails
     /// closed, since <see cref="_children"/> is then empty and there is no path to probe.
+    ///
+    /// <para><b>A refused volume counts as present on its own.</b> <c>CleanupPlanner</c> never asks
+    /// an absent provider for a plan, so the note naming the volume Deguffer would not look at is
+    /// built only if this says yes — and the machine that most needs to hear it is the one whose
+    /// only bin is on the cloud mount, where every other answer here is no. Presence is what puts
+    /// the row on the page, and a refusal the user is never shown is the silence
+    /// <see cref="LocalVolume.StoresContentRemotely"/> exists to break.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RecognisedBinPaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(RemotelyStoredVolumes().Any() || RecognisedBinPaths().Any(LongPath.DirectoryExists));
 
     /// <summary>
     /// The volume list is remembered for the life of a pass, so a drive mounted while the app was
@@ -189,7 +196,11 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             // identity to match, every bin on the machine belongs to someone this provider cannot
             // name. Saying so beats classifying each one as unrecognised, which would be true and
             // would not explain anything.
-            return EmptyPlan(
+            //
+            // Unexamined rather than empty, and reachable for the first time now that a refused
+            // volume alone makes this provider present: nothing here was looked in, and a plan
+            // measuring zero with no flag set is shown as "Already clear".
+            return UnexaminedPlan(
                 "Deguffer could not establish which Windows account it is running as, so it is "
                 + "leaving every Recycle Bin alone rather than guessing which one is yours.");
         }
@@ -300,7 +311,13 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            WasNotExamined = targets.Count == 0 && declined.Count > 0,
+
+            // A refused volume counts alongside a declined child, because the two are the same
+            // claim: somewhere here was not looked in. Without it a plan that only refused a volume
+            // measures zero with every flag clear, and the row reads "Already clear" — the one
+            // sentence FindingStatus says must never stand for a location Deguffer declined to
+            // look at.
+            WasNotExamined = targets.Count == 0 && (declined.Count > 0 || refused.Count > 0),
         };
     }
 
