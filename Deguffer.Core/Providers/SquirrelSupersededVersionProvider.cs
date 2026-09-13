@@ -125,11 +125,10 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     /// <summary>
     /// The superseded builds of an application that is running, each as a root recognising no child.
     ///
-    /// <para><b>Declared one level down, at the build rather than at the installation, because the
-    /// declarations above are permissive where they overlap.</b> The policy asks every root at the
-    /// innermost depth and allows a child any one of them recognises, so a second root over
-    /// <see cref="SquirrelInstallation.Root"/> would sit beside the one above and be outvoted by it.
-    /// A root at the version directory itself is deeper, so it is the one asked.</para>
+    /// <para><b>Declared at each build, which is what the plan holds back.</b> Everything else in the
+    /// installation is already refused by the declaration in <see cref="ToolRoots"/>, so a root at
+    /// the build is the whole of what this adds, and its refusal can name the application that is
+    /// running.</para>
     ///
     /// <para>Why they are refused at all: the plan holds every build of a running application back,
     /// because the process is running from the build that superseded them and may still be reading

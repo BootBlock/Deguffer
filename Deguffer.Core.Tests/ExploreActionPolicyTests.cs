@@ -1483,6 +1483,54 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.True(policy.MayRemove(Path.Combine(container, "other-tool")).IsAllowed);
     }
 
+    /// <summary>
+    /// Probed roots are not pooled with each other either. Two can land on one folder, as a vcpkg
+    /// clone and a binary cache a variable put inside it both declare the clone, and the one that
+    /// recognises every child must not lift the other's refusal.
+    /// </summary>
+    [Fact]
+    public void AProbedRootCannotOpenWhatAnotherProbedRootRefuses()
+    {
+        var clone = Path.Combine(_environment.UserProfile, "vcpkg");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots:
+            [
+                new ToolRoot(
+                    clone,
+                    "The clone.",
+                    static name => name.Equals("buildtrees", StringComparison.OrdinalIgnoreCase)),
+                new ToolRoot(clone, "The folder holding a cache.", static _ => true),
+            ]);
+
+        Assert.False(policy.MayRemove(Path.Combine(clone, "installed")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(clone, "buildtrees")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same rule one level down: a probed root inside a folder another probed root refuses
+    /// outright does not answer for what is below it.
+    /// </summary>
+    [Fact]
+    public void AProbedRootInsideAnotherCannotOpenWhatTheOuterRefuses()
+    {
+        var live = Path.Combine(_environment.UserProfile, "live-session");
+        var inside = Path.Combine(live, "cache-holder");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots:
+            [
+                new ToolRoot(live, "Something is using this.", static _ => false),
+                new ToolRoot(inside, "A folder holding a cache.", static _ => true),
+            ]);
+
+        Assert.False(policy.MayRemove(Path.Combine(inside, "anything")).IsAllowed);
+    }
+
     private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");
 
     private ToolRoot Gradle() =>

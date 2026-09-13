@@ -417,8 +417,8 @@ not the shell asked.
   refused there. So are the §9 exclusions, `C:\Windows`, `Program Files`, and every path a provider
   names as protected. That includes what a provider can only name once it has asked the machine: a
   location a tool reports in place of its documented default, and a path a plan holds back because a
-  program is using it. What is running is read when the page opens and again when a scan starts, so
-  between scans Explore answers from what was running then.
+  program is using it. What is running is read when Explore is first opened and again whenever a scan
+  starts, so between scans Explore answers from what was running at the last of those.
   `%LOCALAPPDATA%`, `%APPDATA%`, `LocalLow` and `%TEMP%` are refused as folders
   and are ordinary inside, as the profile is. **A folder holding any refused path is refused too**,
   because removing a folder removes what is in it — but only while that path is on disk, so the

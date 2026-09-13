@@ -70,12 +70,13 @@ public sealed class ExploreActions
     public event EventHandler? Ready;
 
     /// <summary>
-    /// The policy for this machine, built the first time something asks.
+    /// Actions over a policy for this machine, which is built in the background when the page is
+    /// constructed and again at each scan.
     ///
-    /// <para>Deferred because building it constructs every provider and asks the ones that probe,
-    /// and Explore is a page a user may open and never delete anything from. Deferred rather than
-    /// skipped because §5.2 is read out of those providers: a policy assembled without them would
-    /// refuse the operating system's directories and let a tool's credentials through.</para>
+    /// <para>In the background because building it constructs every provider and runs their probes,
+    /// which would otherwise hold up the page. Never skipped, because §5.2 is read out of those
+    /// providers: a policy assembled without them would refuse the operating system's directories
+    /// and let a tool's credentials through.</para>
     ///
     /// <para>Each build looks at the machine afresh. The providers are constructed again, so what
     /// each of them resolved goes with the old ones, and they are given their own
@@ -94,8 +95,10 @@ public sealed class ExploreActions
             prompt);
 
     /// <summary>
-    /// Start building the policy, unless one is built or on its way. Called when the page opens, so
-    /// the first selection has an answer waiting rather than a refusal that has to be taken back.
+    /// Start building the policy, unless one is built or on its way. Called once, when the page is
+    /// constructed, so the first selection has an answer waiting rather than a refusal that has to be
+    /// taken back. The page is kept while the app runs, so a return visit keeps the policy it had, and
+    /// a scan builds a new one.
     /// </summary>
     public void Prepare()
     {
@@ -225,6 +228,14 @@ public sealed class ExploreActions
     private async Task AnnounceAsync(Task<ExploreActionPolicy> building)
     {
         await Task.WhenAny(building).ConfigureAwait(true);
+
+        // Recorded here because the page cannot show it: the refusal says a build failed, and the
+        // log says which provider's probe failed and how. Reading the exception observes it, so it is
+        // not reported a second time when the task is collected.
+        if (building.Exception is { } failure)
+        {
+            App.Faults.Record("Building Explore's removal policy", failure);
+        }
 
         if (ReferenceEquals(building, _policy))
         {

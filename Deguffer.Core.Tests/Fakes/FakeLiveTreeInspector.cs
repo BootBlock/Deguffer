@@ -104,8 +104,9 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     }
 
     /// <summary>
-    /// The declared live directories that are an <em>immediate</em> child of one of
-    /// <paramref name="directories"/>.
+    /// The immediate children of <paramref name="directories"/> that are declared live, or that hold
+    /// a place a program added with <see cref="WithProgram"/> runs from or works in, which is how the
+    /// real inspector builds this answer.
     ///
     /// <para>Immediate, and never the root itself, because that is the contract
     /// <see cref="ILiveTreeInspector.FindLiveChildren"/> keeps: it names the child a plan can spare,
@@ -117,10 +118,33 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         IReadOnlyList<string> directories,
         CancellationToken ct = default) =>
         new(
-            [.. _live
-                .Where(child => directories.Any(root => IsImmediateChild(root, child)))
-                .Select(child => new LiveTree(child, ["a test says something is using it"]))],
+            [
+                .. _live
+                    .Where(child => directories.Any(root => IsImmediateChild(root, child)))
+                    .Select(child => new LiveTree(child, ["a test says something is using it"])),
+                .. FindOccupiedDirectories(ct).Live
+                    .SelectMany(place => directories
+                        .Select(root => ChildHolding(root, place.Directory))
+                        .OfType<string>()
+                        .Select(child => new LiveTree(child, place.Holders))),
+            ],
             _complete);
+
+    /// <summary>The immediate child of <paramref name="root"/> holding <paramref name="place"/>, or null where it is not below.</summary>
+    private static string? ChildHolding(string root, string place)
+    {
+        var parent = Path.TrimEndingDirectorySeparator(root);
+
+        if (place.Length <= parent.Length + 1 || !LongPath.Contains(parent, place))
+        {
+            return null;
+        }
+
+        var below = place[(parent.Length + 1)..];
+        var separator = below.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
+
+        return Path.Combine(parent, separator < 0 ? below : below[..separator]);
+    }
 
     private static bool IsImmediateChild(string root, string child) =>
         Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(child)) is { } parent

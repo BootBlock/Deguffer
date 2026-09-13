@@ -60,10 +60,10 @@ public sealed partial class ExplorePage : Page
             ExploreActions.ForThisMachine(
                 () => new ContentDialogExploreConfirmation(XamlRoot, ActualTheme)),
 
-            // Built here rather than lazily, unlike the policy above: that one constructs every
-            // provider, and this one reads four environment variables. It is asked about every row
-            // of every directory the page opens, so it has to exist before the first scan
-            // finishes.
+            // Built synchronously, where the policy above is built in the background: that one
+            // constructs every provider and runs their probes, and this one reads four environment
+            // variables. It is asked about every row of every directory the page opens, so it has to
+            // exist before the first scan finishes.
             ItemGuide.ForThisMachine());
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();

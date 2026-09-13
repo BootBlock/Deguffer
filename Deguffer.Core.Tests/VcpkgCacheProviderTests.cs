@@ -671,4 +671,27 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Assert.True(policy.MayRemove(downloads).IsAllowed);
         Assert.True(policy.MayRemove(Populate(Path.Combine(holder, "unrelated"))).IsAllowed);
     }
+
+    /// <summary>
+    /// A binary cache a variable puts directly inside the clone makes the clone its container as
+    /// well. Explore must go on refusing what the clone protects: <c>installed</c> is what every
+    /// project on the machine links against.
+    /// </summary>
+    [Fact]
+    public async Task ACacheInsideTheCloneLeavesTheClonesProtectionsStanding()
+    {
+        var root = CreateClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
+        var binaryCache = Populate(Path.Combine(root, "archives"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, binaryCache);
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+
+        Assert.False(policy.MayRemove(Path.Combine(root, "installed")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(root, "ports")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(root, "buildtrees")).IsAllowed);
+    }
 }

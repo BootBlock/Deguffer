@@ -223,10 +223,9 @@ public sealed class ExploreActionPolicy
 
         // A probed declaration is asked only about what everything above allows, so it can add a
         // refusal and never lift one. Its roots come from what a tool reports and what a setting
-        // names, and roots at one depth are pooled, a child allowed when any of them recognises it:
-        // pooled with the declared roots, a Maven setting naming 'settings-security.xml' makes a
-        // root beside Maven's own that recognises the master-password file, and allows it.
-        if (verdict.IsAllowed && Below(_probedRoots, target) is { IsAllowed: false } probed)
+        // names, and pooled with the declared roots a Maven setting naming 'settings-security.xml'
+        // made a root beside Maven's own that recognised the master-password file, and allowed it.
+        if (verdict.IsAllowed && ProbedRefusal(target) is { } probed)
         {
             verdict = probed;
         }
@@ -409,6 +408,39 @@ public sealed class ExploreActionPolicy
         // Null where no declaration covers this path, which is the ordinary case: most of a drive
         // belongs to no tool root at all.
         return refusal ?? ExploreVerdict.Unclassified;
+    }
+
+    /// <summary>
+    /// The refusal of the deepest probed root that contains <paramref name="target"/> and refuses
+    /// it, or null where none does.
+    ///
+    /// <para><b>Each probed root answers on its own</b>, never pooled with the others as the declared
+    /// roots are in <see cref="Below"/>. Declared roots pool because several providers own one folder
+    /// with disjoint lists of what may go, and none of them is complete alone. A probed root needs no
+    /// other's permission, and two can land on one folder by accident: a vcpkg clone, and a binary
+    /// cache a variable put inside it, both declare the clone. Pooled, the root that recognises every
+    /// child lifted the clone's refusal of <c>installed</c>, and a root deeper inside a folder in use
+    /// answered for everything below it.</para>
+    /// </summary>
+    private ExploreVerdict? ProbedRefusal(string target)
+    {
+        ExploreVerdict? refusal = null;
+        var depth = -1;
+
+        foreach (var root in _probedRoots)
+        {
+            if (LongPath.Configured(root.Path) is not { } path
+                || path.Length <= depth
+                || !LongPath.Contains(path, target)
+                || Refusal(root, target) is not { } refused)
+            {
+                continue;
+            }
+
+            (refusal, depth) = (refused, path.Length);
+        }
+
+        return refusal;
     }
 
     private static bool Covers(ProtectedRegion region, string target) =>

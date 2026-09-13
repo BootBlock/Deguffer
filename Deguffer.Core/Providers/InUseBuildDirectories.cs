@@ -73,7 +73,9 @@ internal static class InUseBuildDirectories
 
             // Existence is asked here because discovery only ever returns what is on disk, and a
             // recogniser that reads siblings alone would otherwise accept a directory that is not
-            // there. A link is refused by the recogniser itself, as it is for the plan.
+            // there. The recogniser refuses a link at the directory or at its project, as it does for
+            // the plan. A link further up is followed here where the plan's walk stops at it, which
+            // refuses a directory the plan never reaches rather than allowing one it holds back.
             if (LongPath.DirectoryExists(candidate) && recognise(candidate) is { } project)
             {
                 recognised.Add(new RecognisedBuildDirectory(candidate, project));

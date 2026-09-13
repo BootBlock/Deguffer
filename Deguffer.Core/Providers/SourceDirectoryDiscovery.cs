@@ -184,8 +184,8 @@ public sealed class SourceDirectoryDiscovery
     /// pass would never have offered. The whole name set is asked rather than the caller's own
     /// names, for the reason <see cref="Include"/> gives: a directory below any candidate belongs to
     /// that candidate. Each candidate must already be known to sit below <paramref name="root"/>, as
-    /// <see cref="SourceTreeBoundary.IsInsideTheSearch"/> requires, and the walk's rule about links
-    /// is left to the recogniser, as it is for the index.</para>
+    /// <see cref="SourceTreeBoundary.IsInsideTheSearch"/> requires. Links are not judged here: a
+    /// recogniser refuses one at a candidate or its project, and one higher up is not detected.</para>
     /// </summary>
     public IReadOnlyList<string> WithinTheSearch(IReadOnlyList<string> candidates, string root)
     {

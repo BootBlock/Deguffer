@@ -391,7 +391,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             return null;
         }
 
-        if (Path.GetDirectoryName(path) is not { Length: > 0 } container || IsToolsOwn(path, located))
+        if (ContainerOf(path, located) is not { } container)
         {
             refused?.Add(path);
 
@@ -415,9 +415,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// §7.1's reading of what <see cref="Containing"/> gives §5.6: the directory holding a cache
-    /// must survive. Its guard is the same one, and for the same reasons — a cache at a volume root
-    /// has no container to name, and one pointed at the clone or at something the plan protects is
-    /// not a cache at all.
+    /// must survive. Both find it through <see cref="ContainerOf"/>, so the plan and Explore cannot
+    /// disagree about which directory that is.
+    ///
+    /// <para>It may be the clone itself, where a variable puts a cache directly inside it. That
+    /// cannot lift what the clone's own declaration refuses, because each probed root answers on its
+    /// own.</para>
     ///
     /// <para>It recognises every child, so it refuses the directory itself and leaves what is in it
     /// ordinary. The plan protects the directory and nothing else inside it, and a variable may name
@@ -426,9 +429,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// </summary>
     private ToolRoot? Holding(string? path, VcpkgLocations located)
     {
-        if (path is null
-            || Path.GetDirectoryName(path) is not { Length: > 0 } container
-            || IsToolsOwn(path, located))
+        if (path is null || ContainerOf(path, located) is not { } container)
         {
             return null;
         }
@@ -440,6 +441,16 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             + "inside it, never the folder itself.",
             static _ => true);
     }
+
+    /// <summary>
+    /// The directory holding a configured cache, or null where there is none to name or the path is
+    /// not a cache at all: a cache at a volume root has no container, and one pointed at the clone or
+    /// at something the plan protects is vcpkg's own.
+    /// </summary>
+    private string? ContainerOf(string path, VcpkgLocations located) =>
+        Path.GetDirectoryName(path) is { Length: > 0 } container && !IsToolsOwn(path, located)
+            ? container
+            : null;
 
     /// <summary>
     /// Whether a configured cache path is really part of vcpkg rather than a cache of it.
