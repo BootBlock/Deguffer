@@ -287,6 +287,60 @@ public sealed class GoCacheProviderTests : IDisposable
         // empties and stays removable, and anything else Go keeps beside it does not.
         Assert.True(policy.MayRemove(ModuleCache).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(GoPath, "pkg", "sumdb")).IsAllowed);
+
+        // The plan protects those three and nothing else in the workspace.
+        Assert.True(policy.MayRemove(Path.Combine(GoPath, "notes")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A <c>GOPATH</c> that lists two workspaces protects both, on both routes, and the module
+    /// cache defaults to the first. <c>go env</c> prints the list as it was set, and read as one path
+    /// it names no directory at all.
+    /// </summary>
+    [Fact]
+    public async Task ProtectsEveryWorkspaceAGoPathListNames()
+    {
+        var first = Path.Combine(_environment.UserProfile, "go-first");
+        var second = Path.Combine(_environment.UserProfile, "go-second");
+        var firstModules = Populate(Path.Combine(first, "pkg", "mod"));
+        Populate(BuildCache);
+
+        // No GOMODCACHE, so the provider has to work out where the list puts it.
+        var provider = CreateProvider(Reporting(BuildCache, string.Empty, $"{first}{Path.PathSeparator}{second}"));
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(firstModules));
+
+        foreach (var workspace in new[] { first, second })
+        {
+            foreach (var path in new[] { workspace, Path.Combine(workspace, "bin"), Path.Combine(workspace, "src") })
+            {
+                Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+                Assert.False(policy.MayRemove(path).IsAllowed, path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>GOPATH</c> set to the profile itself makes the profile a workspace. Explore refuses the
+    /// paths the plan protects there, and the rest of the profile stays ordinary.
+    /// </summary>
+    [Fact]
+    public async Task AWorkspaceThatIsTheProfileLeavesTheRestOfTheProfileOrdinary()
+    {
+        var profile = _environment.UserProfile;
+        var documents = Populate(Path.Combine(profile, "Documents"));
+        Populate(BuildCache);
+
+        var provider = CreateProvider(Reporting(BuildCache, ModuleCache, profile));
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.True(policy.MayRemove(documents).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(profile, "bin")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(profile, "src")).IsAllowed);
     }
 
     /// <summary>

@@ -34,6 +34,17 @@ public sealed class ExploreActions
         "Deguffer is still working out what it has to protect on this machine. This will say what it "
         + "is in a moment.");
 
+    /// <summary>
+    /// What Explore says about every path once a build has failed, until one succeeds.
+    ///
+    /// <para>A refusal for the reason <see cref="Working"/> is one: without the probed half there is
+    /// no knowing what else would have been refused. It says what happened rather than "in a moment",
+    /// because nothing is on its way until the next scan asks again.</para>
+    /// </summary>
+    private static readonly ExploreVerdict Failed = ExploreVerdict.Refuse(
+        "Deguffer could not work out what it has to protect on this machine, so Explore removes "
+        + "nothing for now. Scanning again tries once more.");
+
     private readonly Func<CancellationToken, Task<ExploreActionPolicy>> _build;
     private readonly Func<IExploreConfirmationPrompt> _prompt;
 
@@ -52,7 +63,10 @@ public sealed class ExploreActions
         _prompt = prompt;
     }
 
-    /// <summary>Raised once the policy is built, so a page showing <see cref="Working"/> can ask again.</summary>
+    /// <summary>
+    /// Raised on the thread that started a build once that build has finished, whether it succeeded
+    /// or failed, so a page that stated <see cref="Working"/> can ask again.
+    /// </summary>
     public event EventHandler? Ready;
 
     /// <summary>
@@ -63,37 +77,36 @@ public sealed class ExploreActions
     /// skipped because §5.2 is read out of those providers: a policy assembled without them would
     /// refuse the operating system's directories and let a tool's credentials through.</para>
     ///
-    /// <para>Each build looks at the machine afresh, and two caches outlive a build unless it says
-    /// otherwise. The providers are constructed again, so what each of them resolved goes with the old
-    /// ones; they are given their own <see cref="LiveTreeInspector"/>, so what is running is read now
-    /// rather than at the last Storage pass; and the executable lookups are cleared, so a toolchain
-    /// installed since the page opened is found. That cache holds nothing but where commands are on
-    /// <c>PATH</c>, so clearing it while a Storage pass runs costs that pass a repeated lookup with
-    /// the same answer.</para>
+    /// <para>Each build looks at the machine afresh. The providers are constructed again, so what
+    /// each of them resolved goes with the old ones, and they are given their own
+    /// <see cref="LiveTreeInspector"/>, so what is running is read at the build rather than at the
+    /// last Storage pass. Where commands are on <c>PATH</c> is the one answer shared with the Storage
+    /// page: <see cref="UserEnvironment.Current"/> remembers it until a planning pass clears it, and
+    /// clearing it from here would change what a pass already under way sees.</para>
     /// </summary>
     public static ExploreActions ForThisMachine(Func<IExploreConfirmationPrompt> prompt) =>
         new(
-            ct =>
-            {
-                UserEnvironment.Current.Invalidate();
-
-                return ExploreActionPolicy.ForAsync(
-                    SystemDirectories.Current,
-                    UserEnvironment.Current,
-                    CleanupPlanner.CreateDefault(liveTrees: new LiveTreeInspector()).Providers,
-                    ct);
-            },
+            ct => ExploreActionPolicy.ForAsync(
+                SystemDirectories.Current,
+                UserEnvironment.Current,
+                CleanupPlanner.CreateDefault(liveTrees: new LiveTreeInspector()).Providers,
+                ct),
             prompt);
 
     /// <summary>
-    /// Start building the policy, or keep the one already built. Called when the page opens and
-    /// whenever a scan starts, so the first selection has an answer waiting rather than a refusal
-    /// that has to be taken back.
+    /// Start building the policy, unless one is built or on its way. Called when the page opens, so
+    /// the first selection has an answer waiting rather than a refusal that has to be taken back.
     /// </summary>
-    public void Prepare() => Build();
+    public void Prepare()
+    {
+        if (_policy is null or { IsFaulted: true } or { IsCanceled: true })
+        {
+            Start();
+        }
+    }
 
     /// <summary>
-    /// Throw the built policy away, so the next question rebuilds it.
+    /// Build the policy again, replacing the one there is.
     ///
     /// <para>What is running changes, and a policy holds the answer it was given: a staging folder
     /// an installer had open when the page opened stays refused after the install finishes, and an
@@ -102,18 +115,23 @@ public sealed class ExploreActions
     /// page is being re-measured, and it takes long enough that the probes cost nothing beside
     /// it.</para>
     /// </summary>
-    public void Reconsider()
-    {
-        _policy = null;
-        Build();
-    }
+    public void Reconsider() => Start();
 
     /// <summary>
-    /// Whether Explore will remove this, and what to say either way (§7.1). <see cref="Working"/>
-    /// until the policy is built, which the shell is told about through <see cref="Ready"/>.
+    /// Whether Explore will remove this, and what to say either way (§7.1): <see cref="Working"/>
+    /// while the policy is being built, and <see cref="Failed"/> once a build has failed. The shell
+    /// is told through <see cref="Ready"/> when that changes.
+    ///
+    /// <para>It starts nothing. The page opening, a scan and a removal each start a build, and a
+    /// question that restarted a failed one would run every provider's probes again each time the
+    /// selection changed.</para>
     /// </summary>
-    public ExploreVerdict Verdict(string path) =>
-        Build() is { IsCompletedSuccessfully: true } built ? built.Result.MayRemove(path) : Working;
+    public ExploreVerdict Verdict(string path) => _policy switch
+    {
+        { IsCompletedSuccessfully: true } built => built.Result.MayRemove(path),
+        { IsFaulted: true } or { IsCanceled: true } => Failed,
+        _ => Working,
+    };
 
     /// <summary>
     /// Ask, then remove. Null when the user declined, which is a decision rather than a failure.
@@ -123,9 +141,9 @@ public sealed class ExploreActions
     /// wants the reason stated instead — so a wholly refused selection goes straight to a report
     /// carrying the reasons.</para>
     ///
-    /// <para>It awaits the policy rather than reading whatever is ready, because this is the path
+    /// <para>It waits for the policy rather than reading whatever is ready, because this is the path
     /// that deletes. A removal decided against a half-built policy is the one thing the deferral
-    /// above must never buy.</para>
+    /// above must never buy, and one whose build failed refuses everything it was given.</para>
     /// </summary>
     public async Task<ExploreRemovalReport?> RemoveAsync(
         IReadOnlyList<ExploreItem> items,
@@ -139,7 +157,21 @@ public sealed class ExploreActions
             return null;
         }
 
-        var policy = await Build().ConfigureAwait(true);
+        var building = _policy is { IsFaulted: false, IsCanceled: false } current ? current : Start();
+
+        // Waited for rather than awaited, so a build that fails reaches the user as a refusal of
+        // what they picked rather than as an exception out of the command that deletes.
+        await Task.WhenAny(building).ConfigureAwait(true);
+
+        if (!building.IsCompletedSuccessfully)
+        {
+            return new ExploreRemovalReport(
+                mode,
+                [.. items.Select(item => new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, Failed.Reason))],
+                new VerificationResult());
+        }
+
+        var policy = building.Result;
         var (allowed, _) = ExploreRemover.Partition(items, policy);
 
         if (allowed.Count > 0 &&
@@ -155,39 +187,47 @@ public sealed class ExploreActions
     }
 
     /// <summary>
-    /// The build in flight, started if there is not one.
+    /// Build a new policy and keep it, in place of any other.
     ///
     /// <para>No cancellation is passed. The policy belongs to the page rather than to the scan that
-    /// happened to start it, and a build cancelled with the scan would leave every later question
-    /// answered by a faulted task.</para>
-    ///
-    /// <para>A build that failed is dropped rather than kept, so the next question starts a new one.
-    /// A cached failure would answer every removal for the rest of the session with the same stale
-    /// exception, and the condition behind it — a tool the probe could not reach — is usually gone by
-    /// the next scan.</para>
+    /// happened to start it, and a build cancelled with the scan would answer every later question
+    /// with <see cref="Failed"/>.</para>
     /// </summary>
-    private Task<ExploreActionPolicy> Build()
+    private Task<ExploreActionPolicy> Start()
     {
-        if (_policy is { IsFaulted: true } or { IsCanceled: true })
-        {
-            _policy = null;
-        }
+        var building = BuildAsync();
 
-        return _policy ??= Announce();
+        _policy = building;
+        _ = AnnounceAsync(building);
+
+        return building;
     }
 
-    private async Task<ExploreActionPolicy> Announce()
+    /// <summary>
+    /// The factory's task, with a factory that throws before it returns one turned into a failed
+    /// build. What it does before its first await, constructing every provider, would otherwise
+    /// throw out of whichever caller started it, the page's own constructor among them.
+    /// </summary>
+    private async Task<ExploreActionPolicy> BuildAsync() =>
+        await _build(CancellationToken.None).ConfigureAwait(false);
+
+    /// <summary>
+    /// Raise <see cref="Ready"/> once <paramref name="building"/> has finished, on the thread that
+    /// started it.
+    ///
+    /// <para>After the build's task has completed, never from inside the build. A handler raised
+    /// before completion asks <see cref="Verdict"/> about a task that has not finished, is told
+    /// <see cref="Working"/> again, and is never told otherwise.</para>
+    ///
+    /// <para>Only for the build still kept. One replaced while it ran has nothing to tell a page that
+    /// is now waiting on its successor.</para>
+    /// </summary>
+    private async Task AnnounceAsync(Task<ExploreActionPolicy> building)
     {
-        try
+        await Task.WhenAny(building).ConfigureAwait(true);
+
+        if (ReferenceEquals(building, _policy))
         {
-            return await _build(CancellationToken.None).ConfigureAwait(true);
-        }
-        finally
-        {
-            // After the await and before the caller resumes, so a shell that asked while this was
-            // running is told to ask again. Raised on a failure too: the exception surfaces at
-            // whoever awaited the removal, and a page left saying "still working it out" for the
-            // rest of the session would be the quieter and worse outcome.
             Ready?.Invoke(this, EventArgs.Empty);
         }
     }

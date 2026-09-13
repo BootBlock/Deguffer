@@ -638,6 +638,9 @@ public sealed class VcpkgCacheProviderTests : IDisposable
 
         Assert.False(policy.MayRemove(holder).IsAllowed);
         Assert.True(policy.MayRemove(binaryCache).IsAllowed);
+
+        // The plan protects the folder holding the cache and nothing else in it.
+        Assert.True(policy.MayRemove(Populate(Path.Combine(holder, "unrelated"))).IsAllowed);
     }
 
     /// <summary>
@@ -666,5 +669,6 @@ public sealed class VcpkgCacheProviderTests : IDisposable
 
         Assert.False(policy.MayRemove(holder).IsAllowed);
         Assert.True(policy.MayRemove(downloads).IsAllowed);
+        Assert.True(policy.MayRemove(Populate(Path.Combine(holder, "unrelated"))).IsAllowed);
     }
 }

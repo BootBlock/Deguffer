@@ -101,10 +101,18 @@ public sealed class GoCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => Declare(DefaultGoPath);
 
     /// <summary>
-    /// The workspace this machine actually has, which is <c>GOPATH</c> and moves through the
-    /// environment and through <c>go env -w</c>. Declaring only the default left Explore allowing a
-    /// moved workspace, with the binaries from <c>go install</c> and the user's own source in it —
-    /// the three paths the plan asserts must survive.
+    /// The workspaces this machine actually has, which <c>GOPATH</c> lists and which move through the
+    /// environment and through <c>go env -w</c>. For each, the three paths the plan asserts must
+    /// survive: the workspace, the programs <c>go install</c> put in its <c>bin</c>, and the user's
+    /// own source in its <c>src</c>.
+    ///
+    /// <para><b>Not <see cref="Declare"/>, which refuses everything in the workspace.</b> That shape
+    /// suits the default, a folder named for Go. A reported workspace can be any folder, the profile
+    /// itself included, and a root refusing its unrecognised children would then refuse the whole
+    /// profile. So a reported workspace recognises every child and refuses only itself,
+    /// <c>bin</c> and <c>src</c> refuse everything in them, and <c>pkg</c> keeps the default's rule.
+    /// Where the workspace is the default, <see cref="ToolRoots"/> still refuses the rest, because a
+    /// probed declaration only ever narrows what Explore allows.</para>
     /// </summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(
         CancellationToken ct = default)
@@ -116,18 +124,10 @@ public sealed class GoCacheProvider : CleanupProviderBase
 
         var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
 
-        // Emitted whether or not it differs from the default, rather than compared and skipped: the
-        // policy asks every declaration over a path and allows a child one of them recognises, so a
-        // repeat of the default costs a duplicate and a comparison that got the casing or the
-        // trailing separator wrong would cost the protection.
-        return Declare(located.GoPath);
+        return [.. located.GoPaths.SelectMany(DeclareReported)];
     }
 
-    /// <summary>
-    /// §5.2 over one Go workspace, one root per level on Cargo's reasoning.
-    /// <see cref="ToolRoots"/> and <see cref="DiscoverToolRootsAsync"/> differ only in which
-    /// workspace they are given, so the rule is written once.
-    /// </summary>
+    /// <summary>§5.2 over the default Go workspace, one root per level on Cargo's reasoning.</summary>
     private static IReadOnlyList<ToolRoot> Declare(string goPath) =>
     [
         new ToolRoot(
@@ -137,12 +137,37 @@ public sealed class GoCacheProvider : CleanupProviderBase
             + "beside it.",
             static _ => false),
 
-        new ToolRoot(
-            Path.Combine(goPath, "pkg"),
-            "This is inside your Go workspace. Deguffer clears the module cache in there and "
-            + "nothing else, and leaves whatever Go keeps beside it alone.",
-            static name => name.Equals("mod", StringComparison.OrdinalIgnoreCase)),
+        PackageRoot(goPath),
     ];
+
+    /// <summary>The paths a reported workspace's plan protects. See <see cref="DiscoverToolRootsAsync"/>.</summary>
+    private static IEnumerable<ToolRoot> DeclareReported(string workspace) =>
+    [
+        new ToolRoot(
+            workspace,
+            "This is a Go workspace, holding the programs you installed with 'go install' and your own "
+            + "source. Explore removes things from inside it, never the workspace itself.",
+            static _ => true),
+
+        new ToolRoot(
+            Path.Combine(workspace, "bin"),
+            "These are the programs you installed with 'go install', which are usually on your PATH. "
+            + "Deguffer never removes them.",
+            static _ => false),
+
+        new ToolRoot(
+            Path.Combine(workspace, "src"),
+            "This is source kept in your Go workspace, which is your own code. Deguffer never removes it.",
+            static _ => false),
+
+        PackageRoot(workspace),
+    ];
+
+    private static ToolRoot PackageRoot(string workspace) => new(
+        Path.Combine(workspace, "pkg"),
+        "This is inside your Go workspace. Deguffer clears the module cache in there and "
+        + "nothing else, and leaves whatever Go keeps beside it alone.",
+        static name => name.Equals("mod", StringComparison.OrdinalIgnoreCase));
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("go") is not null);
@@ -235,7 +260,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(located.GoPath),
+            ProtectedPaths = BuildProtectedPaths(located.GoPaths),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -245,12 +270,18 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// §5.6. The module cache is <c>pkg\mod</c> inside the Go workspace by default, so what
     /// <c>go clean -modcache</c> empties has the user's installed binaries and their own source
     /// tree as siblings. Those are the paths a command reaching one directory too far would take,
-    /// and they are what the run has to prove it left standing.
+    /// and they are what the run has to prove it left standing, in every workspace <c>GOPATH</c>
+    /// lists.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(string goPath) => Protect(
-        (goPath, "The Go workspace itself must survive — only the caches inside it are cleared."),
-        (Path.Combine(goPath, "bin"), "Binaries installed with 'go install', which are normally on PATH."),
-        (Path.Combine(goPath, "src"), "Source Go keeps in the workspace, which is the user's own code."));
+    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(IReadOnlyList<string> workspaces) => Protect(
+    [
+        .. workspaces.SelectMany(workspace => new[]
+        {
+            (workspace, "The Go workspace itself must survive — only the caches inside it are cleared."),
+            (Path.Combine(workspace, "bin"), "Binaries installed with 'go install', which are normally on PATH."),
+            (Path.Combine(workspace, "src"), "Source Go keeps in the workspace, which is the user's own code."),
+        }),
+    ]);
 
     /// <summary>
     /// Ask Go where it keeps things. <c>go env</c> given several names prints one value per line in
@@ -275,13 +306,41 @@ public sealed class GoCacheProvider : CleanupProviderBase
 
         var buildCache = Reported(reported, 0);
         var moduleCache = Reported(reported, 1);
-        var goPath = Reported(reported, 2) ?? DefaultGoPath;
+        var workspaces = Workspaces(reported);
 
         return _locations = new GoLocations(
             buildCache ?? DefaultBuildCache,
-            moduleCache ?? Path.Combine(goPath, "pkg", "mod"),
-            goPath,
+
+            // Go's own default for a list: the module cache is pkg\mod in the first workspace.
+            moduleCache ?? Path.Combine(workspaces[0], "pkg", "mod"),
+            workspaces,
             Answered: buildCache is not null && moduleCache is not null);
+    }
+
+    /// <summary>
+    /// The workspaces <c>GOPATH</c> names, in Go's order.
+    ///
+    /// <para><b>A list, not a path.</b> On Windows <c>GOPATH</c> is separated by semicolons, and
+    /// <c>go env</c> prints it as it was set, so a machine with two workspaces answers with one line
+    /// that names no directory. Read whole, that line gave the plan a <c>bin</c> and a <c>src</c>
+    /// that do not exist to assert, and gave Explore a workspace to refuse that matches nothing, so
+    /// neither route protected either workspace.</para>
+    ///
+    /// <para>An entry that is not a rooted path is no answer, as a whole line is for the other two
+    /// variables, and a list with no usable entry falls back to the documented default.</para>
+    /// </summary>
+    private string[] Workspaces(string[] lines)
+    {
+        string[] listed = lines.Length > 2
+            ?
+            [
+                .. lines[2]
+                    .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(Path.IsPathRooted),
+            ]
+            : [];
+
+        return listed.Length > 0 ? listed : [DefaultGoPath];
     }
 
     /// <summary>Where Go keeps things, and whether Go itself is what said so.</summary>
@@ -292,7 +351,12 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// subprocess that may never have spoken — and if it did not, X is a guess that a machine with a
     /// moved cache will not match.
     /// </param>
-    private sealed record GoLocations(string BuildCache, string ModuleCache, string GoPath, bool Answered);
+    /// <param name="GoPaths">Every workspace <c>GOPATH</c> lists, in Go's order. Never empty.</param>
+    private sealed record GoLocations(
+        string BuildCache,
+        string ModuleCache,
+        IReadOnlyList<string> GoPaths,
+        bool Answered);
 
     private static string? Reported(string[] lines, int index) =>
         index < lines.Length && Path.IsPathRooted(lines[index]) ? lines[index] : null;

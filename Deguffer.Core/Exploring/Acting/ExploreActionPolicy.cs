@@ -59,6 +59,7 @@ public sealed class ExploreActionPolicy
 
     private readonly IReadOnlyList<ProtectedRegion> _regions;
     private readonly IReadOnlyList<ToolRoot> _toolRoots;
+    private readonly IReadOnlyList<ToolRoot> _probedRoots;
     private readonly HeldLocations _held;
 
     /// <param name="regions">
@@ -71,10 +72,17 @@ public sealed class ExploreActionPolicy
     /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk. Injected so a
     /// test can see the form of the path it is asked about (§6.3), and what a probe that fails does.
     /// </param>
+    /// <param name="probedRoots">
+    /// What the providers declared once they had asked the machine, through
+    /// <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>. Kept apart from
+    /// <paramref name="toolRoots"/> because it is asked separately and can only narrow what the rest
+    /// allows. <see cref="MayRemove"/> says why.
+    /// </param>
     public ExploreActionPolicy(
         IEnumerable<ProtectedRegion> regions,
         IEnumerable<ToolRoot> toolRoots,
-        IFileSystem? fileSystem = null)
+        IFileSystem? fileSystem = null,
+        IEnumerable<ToolRoot>? probedRoots = null)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
@@ -94,17 +102,8 @@ public sealed class ExploreActionPolicy
                 .ThenBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1),
         ];
 
-        // A declaration over a whole volume is dropped rather than honoured, and this is the one
-        // place it can be caught for every provider. A root recognises a named set of children and
-        // refuses the rest, so a root at 'D:\' would refuse every top-level folder on the drive
-        // because a tool reported a location Deguffer cannot make sense of. PnpmStoreProvider
-        // already treats a volume-root answer as no answer at all; the same reading belongs at the
-        // seam, now that a root can arrive from a subprocess rather than from a literal in a file.
-        _toolRoots =
-        [
-            .. toolRoots.Where(root =>
-                LongPath.Configured(root.Path) is not { } path || VolumeRoot.Below(path) is not null),
-        ];
+        _toolRoots = [.. toolRoots];
+        _probedRoots = [.. probedRoots ?? []];
 
         // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
         // takes it along as surely as one holding a tool's folder does. A permitting entry protects
@@ -113,6 +112,7 @@ public sealed class ExploreActionPolicy
             [
                 .. _regions.Where(r => !r.Verdict.IsAllowed).Select(r => (r.Path, r.Verdict.Reason)),
                 .. _toolRoots
+                    .Concat(_probedRoots)
                     .Select(root => (Path: LongPath.Configured(root.Path), root.Reason))
                     .Where(root => root.Path is not null)
                     .Select(root => (root.Path!, root.Reason)),
@@ -130,12 +130,12 @@ public sealed class ExploreActionPolicy
     /// dependency inversion is for, and the only way these assertions can run on a machine where
     /// nobody may delete anything in <c>C:\Windows</c>.</para>
     ///
-    /// <para><b>Asynchronous, and there is no synchronous way to build one, because half of §5.2 is
-    /// not knowable without asking the machine.</b> A tool reports a location the documented default
-    /// does not name, and a plan holds a path back because something is using it; both are read
-    /// through <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>. A second factory that skipped
-    /// them would build a policy that looks complete, refuses less, and says nothing about the
-    /// difference — so the cheap declarations and the probed ones arrive together or not at all.</para>
+    /// <para><b>Asynchronous, and the only factory over providers, because half of §5.2 is not
+    /// knowable without asking the machine.</b> A tool reports a location the documented default does
+    /// not name, and a plan holds a path back because something is using it; both are read through
+    /// <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>. A second factory that skipped them would
+    /// build a policy that looks complete, refuses less, and says nothing about the difference. The
+    /// constructor still takes declarations directly, for a caller that already holds them.</para>
     ///
     /// <para>The providers are asked in parallel, bounded, because most of them answer immediately
     /// and the handful that do not are each waiting on a subprocess or the process table (G4).</para>
@@ -163,7 +163,8 @@ public sealed class ExploreActionPolicy
 
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
-            [.. asked.SelectMany(p => p.ToolRoots), .. discovered.SelectMany(roots => roots)]);
+            [.. asked.SelectMany(p => p.ToolRoots)],
+            probedRoots: [.. discovered.SelectMany(roots => roots)]);
     }
 
     /// <summary>
@@ -218,7 +219,17 @@ public sealed class ExploreActionPolicy
 
         var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
-            : Below(target);
+            : Below(_toolRoots, target);
+
+        // A probed declaration is asked only about what everything above allows, so it can add a
+        // refusal and never lift one. Its roots come from what a tool reports and what a setting
+        // names, and roots at one depth are pooled, a child allowed when any of them recognises it:
+        // pooled with the declared roots, a Maven setting naming 'settings-security.xml' makes a
+        // root beside Maven's own that recognises the master-password file, and allows it.
+        if (verdict.IsAllowed && Below(_probedRoots, target) is { IsAllowed: false } probed)
+        {
+            verdict = probed;
+        }
 
         // Last, and only of a path everything above allows, because it is the one question here that
         // reads the disk.
@@ -353,12 +364,12 @@ public sealed class ExploreActionPolicy
     /// declaration at that depth is asked, and a child one of them recognises is allowed: each
     /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
-    private ExploreVerdict Below(string target)
+    private static ExploreVerdict Below(IReadOnlyList<ToolRoot> roots, string target)
     {
         List<ToolRoot> innermost = [];
         var depth = -1;
 
-        foreach (var root in _toolRoots)
+        foreach (var root in roots)
         {
             if (LongPath.Configured(root.Path) is not { } path
                 || !LongPath.Contains(path, target)

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -54,6 +55,17 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         ("scripts", "vcpkg's own build scripts."),
         ("vcpkg.exe", "The vcpkg executable itself, which the bootstrap built into this directory."),
     ];
+
+    /// <summary>
+    /// The clone's children its plan targets, for the clone's declaration to Explore. Two sets
+    /// rather than one built per call, because which applies turns on one fact: whether
+    /// <c>VCPKG_DOWNLOADS</c> has moved the downloads out of the clone.
+    /// </summary>
+    private static readonly FrozenSet<string> CloneScratch =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "buildtrees", "packages", "downloads");
+
+    private static readonly FrozenSet<string> CloneScratchWithoutDownloads =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "buildtrees", "packages");
 
     /// <summary>
     /// What the user's vcpkg directory holds beside the binary cache. Both are small, and both are
@@ -182,16 +194,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             // What the clone's own plan targets, and nothing else. 'downloads' drops out of the set
             // when VCPKG_DOWNLOADS has moved it, exactly as it drops out of the plan's locations:
             // the folder left behind under that name is then no longer vcpkg's to refill.
-            HashSet<string> disposable = new(StringComparer.OrdinalIgnoreCase)
-            {
-                "buildtrees",
-                "packages",
-            };
-
-            if (located.RelocatedDownloads is null)
-            {
-                disposable.Add("downloads");
-            }
+            var disposable = located.RelocatedDownloads is null ? CloneScratch : CloneScratchWithoutDownloads;
 
             roots.Add(new ToolRoot(
                 root,
@@ -412,9 +415,14 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// §7.1's reading of what <see cref="Containing"/> gives §5.6: the directory holding a cache
-    /// must survive, and only the cache inside it goes. Its guard is the same one, and for the same
-    /// reasons — a cache at a volume root has no container to name, and one pointed at the clone or
-    /// at something the plan protects is not a cache at all.
+    /// must survive. Its guard is the same one, and for the same reasons — a cache at a volume root
+    /// has no container to name, and one pointed at the clone or at something the plan protects is
+    /// not a cache at all.
+    ///
+    /// <para>It recognises every child, so it refuses the directory itself and leaves what is in it
+    /// ordinary. The plan protects the directory and nothing else inside it, and a variable may name
+    /// a cache directly inside the profile or Downloads, where refusing the container's other
+    /// children would refuse everything the user keeps there.</para>
     /// </summary>
     private ToolRoot? Holding(string? path, VcpkgLocations located)
     {
@@ -425,14 +433,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             return null;
         }
 
-        var cache = Path.GetFileName(path);
-
         return new ToolRoot(
             container,
-            "This holds a vcpkg cache that one of your vcpkg environment variables points at. "
-            + "Deguffer removes the cache inside it and nothing else, because it cannot know what "
-            + "else you keep in there.",
-            name => name.Equals(cache, StringComparison.OrdinalIgnoreCase));
+            "This holds a vcpkg cache that one of your vcpkg environment variables points at, and "
+            + "removing it would take the cache with everything else in it. Explore removes things from "
+            + "inside it, never the folder itself.",
+            static _ => true);
     }
 
     /// <summary>

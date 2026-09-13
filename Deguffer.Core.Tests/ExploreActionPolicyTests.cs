@@ -1402,21 +1402,85 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// A discovered root at the top of a volume is dropped rather than honoured. A tool reporting
-    /// <c>D:\</c> is an answer Deguffer cannot make sense of, and a root there recognises a named set
-    /// and refuses the rest — so honouring it would refuse every top-level folder on the drive.
+    /// A tool's home at the top of a drive keeps its §5.2 protection. <c>CARGO_HOME</c> may name a
+    /// drive root, and Cargo's registry tokens then sit directly under it, so the declaration there
+    /// still refuses every child it does not recognise.
     /// </summary>
     [Fact]
-    public async Task AVolumeRootIsNotADeclarationThePolicyHonours()
+    public void ADeclaredRootAtTheTopOfAVolumeStillRefusesItsUnrecognisedChildren()
     {
         var volume = Path.GetPathRoot(_temp.Path)!;
+        var home = new ToolRoot(
+            volume,
+            "A tool's own folder, at the top of the drive.",
+            static name => name.Equals("registry", StringComparison.OrdinalIgnoreCase));
 
-        var policy = await ExploreActionPolicy.ForAsync(
-            _system,
-            _environment,
-            [new StubProvider([], [VendorTool(volume)])]);
+        var policy = Policy(home);
 
-        Assert.True(policy.MayRemove(Path.Combine(volume, "some-ordinary-folder")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(volume, "credentials.toml")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(volume, "registry")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A probed declaration only narrows. A root a setting produces, over the folder another
+    /// declaration names and recognising a child that declaration refuses, must not open it:
+    /// roots at one depth are pooled, and a setting can name anything, including the file that
+    /// holds a tool's credentials.
+    /// </summary>
+    [Fact]
+    public void AProbedRootCannotOpenWhatADeclaredRootRefuses()
+    {
+        var probed = new ToolRoot(
+            GradleRoot,
+            "A setting that names the file.",
+            static name => name.Equals("gradle.properties", StringComparison.OrdinalIgnoreCase));
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment), [Gradle()], probedRoots: [probed]);
+
+        // The premise: on its own, the probed root allows the file, so the refusal below is the
+        // declared root's and the probed root could not lift it.
+        var alone = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment), [], probedRoots: [probed]);
+
+        Assert.True(alone.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same rule one level down. The innermost roots decide, so a probed root inside a child the
+    /// declared root refuses would otherwise answer for everything below it.
+    /// </summary>
+    [Fact]
+    public void AProbedRootInsideARefusedChildCannotOpenIt()
+    {
+        var inside = Path.Combine(GradleRoot, "init.d");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [Gradle()],
+            probedRoots: [new ToolRoot(inside, "A folder a setting names.", static _ => true)]);
+
+        Assert.False(policy.MayRemove(Path.Combine(inside, "init.gradle")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A probed root that recognises every child refuses its own path and nothing inside it. That is
+    /// how a provider declares a folder its plan protects, such as the one holding a relocated
+    /// cache, without refusing what else the user keeps there.
+    /// </summary>
+    [Fact]
+    public void AProbedRootRecognisingEveryChildRefusesOnlyItsOwnPath()
+    {
+        var container = Path.Combine(_environment.UserProfile, "build-tools");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots: [new ToolRoot(container, "A folder a plan protects.", static _ => true)]);
+
+        Assert.False(policy.MayRemove(container).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(container, "other-tool")).IsAllowed);
     }
 
     private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");
