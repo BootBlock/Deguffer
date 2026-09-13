@@ -122,9 +122,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// it.</para>
     ///
     /// <para>Built from <see cref="CoreRoot"/> rather than from the directory PlatformIO reports,
-    /// because Explore consults this on every path it draws and it has to answer without starting a
-    /// subprocess. The relocated core directory is declared in
-    /// <see cref="DiscoverToolRootsAsync"/>.</para>
+    /// because the report comes from a subprocess and this property is synchronous. The reported
+    /// core directory is declared in <see cref="DiscoverToolRootsAsync"/>.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => Declare(CoreRoot);
 

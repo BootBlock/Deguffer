@@ -85,9 +85,9 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Conda declares no directory here: its installation
     /// prefix, its environment directories and its package caches all come from
-    /// <c>conda info --json</c>, and a declaration Explore consults on every path has to be readable
-    /// without running a subprocess. What is cheap is the configuration file, and a file is a root
-    /// nothing is ever below. <see cref="DiscoverToolRootsAsync"/> names the three directories.
+    /// <c>conda info --json</c>, and this property is synchronous. What it can name is the
+    /// configuration file, and a file is a root nothing is ever below.
+    /// <see cref="DiscoverToolRootsAsync"/> names the three directories.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [

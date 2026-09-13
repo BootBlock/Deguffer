@@ -120,10 +120,10 @@ public interface ICleanupProvider
     /// beside <c>.gradle\caches</c> is Tier 4 there exactly as it is here. So the rule is declared
     /// where something outside the provider can read it, rather than restated by Explore.</para>
     ///
-    /// <para>Read outside a planning pass, so it must be cheap: a path this provider already knows,
-    /// or resolves from an environment variable. A provider that would have to run a subprocess,
-    /// walk the disk or read the process table answers in
-    /// <see cref="DiscoverToolRootsAsync"/> instead.</para>
+    /// <para>Read synchronously, and a provider may keep the answer until
+    /// <see cref="InvalidateCaches"/>. A declaration that needs a subprocess cannot be made here, and
+    /// belongs in <see cref="DiscoverToolRootsAsync"/>, which is asked again each time Explore builds
+    /// its policy.</para>
     /// </summary>
     IReadOnlyList<ToolRoot> ToolRoots { get; }
 
@@ -133,10 +133,10 @@ public interface ICleanupProvider
     ///
     /// <para><b>It exists because §7.1's refusal set was smaller than §5.2's.</b> A tool's location
     /// moves — <c>go env</c>, <c>pio system info</c>, <c>pnpm store path</c>, <c>conda info</c> and
-    /// Maven's <c>settings.xml</c> each report one that is not the documented default — and
-    /// <see cref="ToolRoots"/> cannot say so without paying a subprocess on every path Explore is
-    /// asked about. Declaring only the default left Explore allowing the moved directory and
-    /// everything a plan protects inside it, while the Storage page refused both.</para>
+    /// Maven's <c>settings.xml</c> each report one that is not the documented default — and a
+    /// synchronous property cannot run the command that says so. Declaring only the default left
+    /// Explore allowing the moved directory and everything a plan protects inside it, while the
+    /// Storage page refused both.</para>
     ///
     /// <para><b>A path something is using right now is declared here too</b>, as a root that
     /// recognises no child, because that is what "nothing in here may go" is in this vocabulary. A

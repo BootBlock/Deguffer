@@ -194,10 +194,11 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// repository is not under <c>.m2</c>, so nothing above reaches its container, and Explore let
     /// the whole of it go — taking the repository, and whatever else the user keeps beside it.
     ///
-    /// <para>Not in <see cref="ToolRoots"/>, even though reading the file is not a subprocess,
-    /// because that property is asked about every path Explore draws and this parses an XML document
-    /// off the disk. A container that is a volume root is dropped by the policy, so no answer here
-    /// can refuse a whole drive.</para>
+    /// <para>Here rather than in <see cref="ToolRoots"/>, which names only the default. The settings
+    /// file is edited by hand and by every IDE, and this is asked again each time Explore builds its
+    /// policy rather than kept with a declaration the provider may hold for a whole pass. A container
+    /// that is a volume root is dropped by the policy, so no answer here can refuse a whole
+    /// drive.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {

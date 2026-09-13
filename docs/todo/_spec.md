@@ -414,7 +414,10 @@ not the shell asked.
   that is. §5.2 is unconditional and is not scoped to a page: an unrecognised child of a tool's root
   *is* Tier 4, so `gradle.properties` beside `.gradle\caches` is refused here exactly as it is
   refused there. So are the §9 exclusions, `C:\Windows`, `Program Files`, and every path a provider
-  names as protected. `%LOCALAPPDATA%`, `%APPDATA%`, `LocalLow` and `%TEMP%` are refused as folders
+  names as protected. That includes what a provider can only name once it has asked the machine: a
+  location a tool reports in place of its documented default, and a path a plan holds back because a
+  program is using it, which Explore refuses while it is in use and asks about again at each scan.
+  `%LOCALAPPDATA%`, `%APPDATA%`, `LocalLow` and `%TEMP%` are refused as folders
   and are ordinary inside, as the profile is. **A folder holding any refused path is refused too**,
   because removing a folder removes what is in it — but only while that path is on disk, so the
   folder a tool leaves behind once its protected contents are gone stays removable.

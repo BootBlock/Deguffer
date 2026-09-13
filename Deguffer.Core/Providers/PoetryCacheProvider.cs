@@ -127,8 +127,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     public string LocalRoot => Path.Combine(Environment.LocalAppData, "pypoetry");
 
     /// <summary>
-    /// Where Poetry keeps its cache when it has not been asked. It is what the §5.2 declaration below
-    /// is written against, because a declaration Explore consults on every path cannot run a
+    /// Where Poetry keeps its cache when it has not been asked. It is what the synchronous §5.2
+    /// declaration below is written against, because Poetry reports its real cache directory from a
     /// subprocess, and it is the fallback handed to <see cref="PoetryDiscovery"/>.
     /// </summary>
     public string DefaultCacheRoot => Path.Combine(LocalRoot, "Cache");

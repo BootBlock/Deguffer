@@ -148,8 +148,9 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// beside it.
     ///
     /// <para>The clone is deliberately absent. Finding it reads three environment variables, probes
-    /// for a marker file and searches <c>PATH</c>, and a declaration Explore consults on every path
-    /// has to be readable without any of that. <see cref="DiscoverToolRootsAsync"/> names it.</para>
+    /// for a marker file and searches <c>PATH</c>, and each of those can change between one look at
+    /// the machine and the next. <see cref="DiscoverToolRootsAsync"/> names it, and is asked again
+    /// each time Explore builds its policy.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
