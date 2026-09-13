@@ -1,8 +1,8 @@
 # A memory view beside Explore — plan
 
-> **Status:** 🟢 ACTIVE — phase 1, a read-only view, is being built, and is tracked in
-> [#123](https://github.com/BootBlock/Deguffer/issues/123). Phase 2, the close action, is not started,
-> and is specified in [_spec.md](_spec.md) §7.2 before any of it is built.
+> **Status:** 🟢 ACTIVE — phase 1, a read-only view, landed on 2026-09-13, and every step of it is
+> closed under [#123](https://github.com/BootBlock/Deguffer/issues/123). Phase 2, the close action, is
+> not started, and is specified in [_spec.md](_spec.md) §7.2 before any of it is built.
 
 On 2026-09-12 the maintainer decided to widen Deguffer's scope to show where memory goes, on the
 strength of [memory-view.md](memory-view.md). That document is the record of the investigation and
