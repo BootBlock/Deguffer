@@ -13,6 +13,8 @@ public sealed partial class MemoryRow : ObservableObject
 {
     public MemoryRow(MemoryTree tree, int node, long partTotal)
     {
+        ArgumentNullException.ThrowIfNull(tree);
+
         Node = node;
         Key = tree.KeyOf(node);
 

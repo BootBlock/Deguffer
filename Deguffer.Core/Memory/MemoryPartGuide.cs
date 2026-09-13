@@ -61,8 +61,9 @@ public static class MemoryPartGuide
             + "of it in memory is inside the system working set, and its figure counts what has been "
             + "written out as well.",
 
-        // Named rather than caught by a default arm, so that a part added with no sentence of its own
-        // is a build failure here instead of silently inheriting this one.
+        // Named rather than left to the arm below, so that a part added with no sentence of its own
+        // fails the test that every part says what it is, instead of silently inheriting this one.
+        // The compiler will not catch it: an enum switch needs a default arm whatever it covers.
         MemoryPart.Unattributed =>
             "Physical memory these figures cannot attribute: shared and shareable pages, page tables, "
             + "kernel stacks, memory drivers have locked, and the paged pool. Separating it needs "
