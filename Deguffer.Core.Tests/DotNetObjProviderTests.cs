@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -32,6 +33,22 @@ public sealed class DotNetObjProviderTests : IDisposable
         _roots.Save([root]);
         return root;
     }
+
+    /// <summary>
+    /// An approved root inside the profile, for the tests that ask Explore. The scratch tree's
+    /// default sits beside the profile, where the region table refuses everything as another
+    /// account's, so a refusal asserted there holds with no declaration at all.
+    /// </summary>
+    private string ApproveRootInProfile()
+    {
+        var root = Path.Combine(_environment.UserProfile, "source");
+        Directory.CreateDirectory(root);
+        _roots.Save([root]);
+        return root;
+    }
+
+    private Task<ExploreActionPolicy> ExplorePolicy(ICleanupProvider provider) =>
+        ExploreActionPolicy.ForAsync(new FakeSystemDirectories(_temp.Path), _environment, [provider]);
 
     private DotNetObjProvider CreateProvider(
         IDirectoryScanner? scanner = null,
@@ -645,6 +662,111 @@ public sealed class DotNetObjProviderTests : IDisposable
 
         Assert.Equal([reachable], (await provider.PlanAsync()).TargetedPaths);
         Assert.True(LongPath.DirectoryExists(below));
+    }
+
+    // ---- §7.1: Explore refuses what the veto holds back ----------------------------------------
+
+    /// <summary>
+    /// §7.1 over an <c>obj</c> the plan holds back because a program is working in its project — a
+    /// build in flight, or an editor with the project open. The plan protects it, so Explore refuses
+    /// it and the project directory holding it, while an idle project beside it stays Explore's to
+    /// offer.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnObjAProgramIsWorkingInTheProjectOf()
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Building");
+        var busy = ProjectFixture.CreateProject(project, "Building");
+        var properties = Directory.CreateDirectory(Path.Combine(project, "Properties")).FullName;
+        var idleProject = Path.Combine(root, "Dormant");
+        var idle = ProjectFixture.CreateProject(idleProject, "Dormant");
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("dotnet", workingDirectory: properties));
+
+        var plan = await provider.PlanAsync();
+        var policy = await ExplorePolicy(provider);
+
+        // The premise: this is the directory the plan holds back, and the other is one it offers.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal([idle], plan.TargetedPaths);
+
+        // What stays allowed first, so a declaration reaching wider than the directory in use is
+        // reported as that, rather than as a refusal worded for something else.
+        Assert.True(policy.MayRemove(idle).IsAllowed);
+        Assert.True(policy.MayRemove(idleProject).IsAllowed);
+
+        var refusal = policy.MayRemove(busy);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("dotnet is working in Building", refusal.Reason, StringComparison.Ordinal);
+        Assert.False(policy.MayRemove(Path.Combine(busy, "Debug")).IsAllowed);
+        Assert.False(policy.MayRemove(project).IsAllowed);
+    }
+
+    /// <summary>
+    /// Consent bounds this route as it bounds the plan: an <c>obj</c> a program is using outside
+    /// every approved root was never looked at, so Explore is not told about it. The project is
+    /// inside the profile, where only a declaration could refuse it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreDeclaresNoObjOutsideEveryApprovedRoot()
+    {
+        ApproveRootInProfile();
+        var project = Path.Combine(_environment.UserProfile, "elsewhere", "Unapproved");
+        var outside = ProjectFixture.CreateProject(project, "Unapproved");
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("dotnet", workingDirectory: project));
+
+        Assert.True((await ExplorePolicy(provider)).MayRemove(outside).IsAllowed);
+    }
+
+    /// <summary>
+    /// §5.2 on this route. The art-asset <c>obj</c> is not build output, so the plan declines it
+    /// rather than holding it back as in use, and a program working beside it declares nothing.
+    /// </summary>
+    [Fact]
+    public async Task ExploreDeclaresNothingForAnObjThatIsNotBuildOutput()
+    {
+        var root = ApproveRootInProfile();
+        var pack = Path.Combine(root, "AssetPack");
+        var art = ProjectFixture.CreateArtAssets(pack);
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("modeller", workingDirectory: pack));
+
+        Assert.Empty((await provider.PlanAsync()).TargetedPaths);
+        Assert.True((await ExplorePolicy(provider)).MayRemove(art).IsAllowed);
+    }
+
+    /// <summary>
+    /// This route stops where discovery stops. An <c>obj</c> below a directory named like another
+    /// provider's candidate is one the plan never reaches (see
+    /// <see cref="DoesNotReachAnObjBelowADirectoryNamedLikeAnotherProvidersCandidate"/>), so a program
+    /// working in its project does not make it a path the plan protects.
+    /// </summary>
+    [Fact]
+    public async Task ExploreDeclaresNoObjBelowWhereDiscoveryStops()
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "target", "Tooling");
+        var below = ProjectFixture.CreateProject(project, "Tooling");
+
+        var provider = new DotNetObjProvider(
+            _roots,
+            Discovery(["obj", "target"]),
+            new FakeLiveTreeInspector().WithProgram("dotnet", workingDirectory: project),
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            new FakeDirectoryScanner());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(below, StringComparison.OrdinalIgnoreCase));
+        Assert.True((await ExplorePolicy(provider)).MayRemove(below).IsAllowed);
     }
 
     private static SourceDirectoryDiscovery Discovery(IReadOnlyList<string> names)

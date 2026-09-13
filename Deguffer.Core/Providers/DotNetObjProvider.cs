@@ -127,6 +127,27 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// </summary>
     public override bool IsAwaitingSourceFolders => ApprovedRoots.Count == 0;
 
+    /// <summary>
+    /// Every <c>obj</c> the plan holds back because something is using it, so that Explore refuses
+    /// it and the project directory holding it (§7.1). <see cref="InUseBuildDirectories"/> says how
+    /// they are found without walking the approved roots.
+    ///
+    /// <para>Git's second opinion is not asked. It can only take a directory off the plan's targets,
+    /// and one it would take off is still one something is using, so refusing it is as true here as
+    /// for any other; asking would put a subprocess per repository into every Explore rebuild.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult(InUseBuildDirectories.Declare(
+            _liveTrees,
+            _discovery,
+            ApprovedRoots,
+            DirectoryNames,
+            candidate => DotNetIntermediateSignature.TryRecognise(candidate, ct) is { } project
+                ? Path.GetDirectoryName(project.ProjectFilePath)
+                : null,
+            lockFiles: [],
+            ct));
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (ApprovedRoots.Count == 0)

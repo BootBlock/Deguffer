@@ -66,6 +66,37 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         return new LiveTreeFindings(live, complete);
     }
 
+    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
+    {
+        var table = Snapshot(ct);
+
+        // Keyed by the directory, because one program is several processes and a browser leaves
+        // four of them in one folder. Four rows naming the same folder would be read as four folders.
+        var holders = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var process in table.Processes)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // The executable's own folder rather than the executable, so that both signals ask the
+            // same question of the same kind of path: which directory is this program in? Without
+            // it a caller would need different rules for the boundary case, and the one that reads
+            // a working directory would be the one that got it wrong.
+            Record(
+                holders,
+                process.ImagePath is { } image ? Path.GetDirectoryName(image) : null,
+                $"{process.Name} is running from inside it");
+
+            Record(holders, process.CurrentDirectory, $"{process.Name} is working in it");
+        }
+
+        return Findings(holders, table.CurrentDirectoriesReadable);
+    }
+
+    /// <summary>
+    /// <see cref="FindOccupiedDirectories"/> narrowed to the immediate children of
+    /// <paramref name="directories"/>, so the two can never disagree about where a program is.
+    /// </summary>
     public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(directories);
@@ -75,50 +106,52 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
-        var table = Snapshot(ct);
+        var occupied = FindOccupiedDirectories(ct);
 
-        // Keyed by the child path, because one program is several processes and a browser leaves
-        // four of them inside one scratch directory. Four rows naming the same folder would be read
-        // as four folders.
+        // Keyed by the child, because programs in two folders below one scratch entry are both
+        // using that entry, and two rows naming it would be read as two entries.
         var holders = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var process in table.Processes)
+        foreach (var place in occupied.Live)
         {
-            ct.ThrowIfCancellationRequested();
+            if (ChildHolding(directories, place.Directory) is not { } child)
+            {
+                continue;
+            }
 
-            // The executable's own folder rather than the executable, so that both signals ask the
-            // same question of the same kind of path: which directory is this program in? Without
-            // it the two would need different rules for the boundary case, and the one that reads
-            // a working directory would be the one that got it wrong.
-            Record(
-                process.ImagePath is { } image ? Path.GetDirectoryName(image) : null,
-                $"{process.Name} is running from inside it");
-
-            Record(process.CurrentDirectory, $"{process.Name} is working in it");
+            foreach (var holder in place.Holders)
+            {
+                Record(holders, child, holder);
+            }
         }
 
-        return new LiveTreeFindings(
-            [.. holders.Select(entry => new LiveTree(entry.Key, entry.Value))],
-            table.CurrentDirectoriesReadable);
-
-        void Record(string? directory, string holder)
-        {
-            if (directory is null || ChildHolding(directories, directory) is not { } child)
-            {
-                return;
-            }
-
-            if (!holders.TryGetValue(child, out var found))
-            {
-                holders[child] = found = [];
-            }
-
-            if (!found.Contains(holder, StringComparer.Ordinal))
-            {
-                found.Add(holder);
-            }
-        }
+        return Findings(holders, occupied.Complete);
     }
+
+    /// <summary>
+    /// Adds <paramref name="holder"/> under <paramref name="directory"/>, compared without a
+    /// trailing separator: a working directory is read with one and an executable's folder without,
+    /// and the same folder must not become two entries.
+    /// </summary>
+    private static void Record(Dictionary<string, List<string>> holders, string? directory, string holder)
+    {
+        if (directory is null)
+        {
+            return;
+        }
+
+        var key = Path.TrimEndingDirectorySeparator(directory);
+
+        if (!holders.TryGetValue(key, out var found))
+        {
+            holders[key] = found = [];
+        }
+
+        Add(found, holder);
+    }
+
+    private static LiveTreeFindings Findings(Dictionary<string, List<string>> holders, bool complete) =>
+        new([.. holders.Select(entry => new LiveTree(entry.Key, entry.Value))], complete);
 
     /// <summary>
     /// The immediate child of one of <paramref name="directories"/> that <paramref name="inside"/>

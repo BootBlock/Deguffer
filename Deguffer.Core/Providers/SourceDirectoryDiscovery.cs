@@ -177,6 +177,26 @@ public sealed class SourceDirectoryDiscovery
     }
 
     /// <summary>
+    /// The <paramref name="candidates"/> a pass over <paramref name="root"/> searches as far as, by
+    /// the boundary a pass applies with every name this discovery has been given.
+    ///
+    /// <para>For a caller that reached a directory some other way, and must not answer for one a
+    /// pass would never have offered. The whole name set is asked rather than the caller's own
+    /// names, for the reason <see cref="Include"/> gives: a directory below any candidate belongs to
+    /// that candidate. Each candidate must already be known to sit below <paramref name="root"/>, as
+    /// <see cref="SourceTreeBoundary.IsInsideTheSearch"/> requires, and the walk's rule about links
+    /// is left to the recogniser, as it is for the index.</para>
+    /// </summary>
+    public IReadOnlyList<string> WithinTheSearch(IReadOnlyList<string> candidates, string root)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        var names = Names();
+
+        return [.. candidates.Where(candidate => SourceTreeBoundary.IsInsideTheSearch(candidate, root, names))];
+    }
+
+    /// <summary>
     /// Forget the last pass, so a source root added in Settings is picked up on the next preview.
     /// Reached through each provider's own <c>InvalidateCaches</c>.
     /// </summary>
