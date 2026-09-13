@@ -80,7 +80,15 @@ public sealed record ProcessMemory(
     string Name,
     long? CommitCharge,
     long? PrivateWorkingSet,
-    long? CreationTime);
+    long? CreationTime)
+{
+    /// <summary>
+    /// The process as words name it: its image name with its identifier. §7.2.1's confirmation, its
+    /// report and its §5.6 evidence all name a process this way, because a machine runs several
+    /// copies of one program and only the identifier tells them apart.
+    /// </summary>
+    public string Named => $"{Name} (process {ProcessId})";
+}
 
 /// <summary>Every process one read of the process table returned.</summary>
 /// <param name="Processes">In the order Windows listed them.</param>

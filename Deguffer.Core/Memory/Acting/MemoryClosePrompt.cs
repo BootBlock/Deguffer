@@ -47,7 +47,7 @@ public sealed record MemoryClosePrompt(string Title, string Consequence, string 
               + "button does. A program with several documents open asks about each in its own words.";
 
         return new MemoryClosePrompt(
-            $"Ask {target.Name} (process {target.ProcessId}) to close?",
+            $"Ask {target.Named} to close?",
 
             $"{asking} {target.Name} may ask you about unsaved work, and it may refuse to close at "
             + "all. Deguffer sends nothing else, waits, and does nothing further whatever it decides. "

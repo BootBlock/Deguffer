@@ -83,7 +83,7 @@ public static class CloseEvidence
             if (!standing.Contains(Identity(process)))
             {
                 checks.Add(new VerificationCheck(
-                    Name(process), DescendantReason, VerificationOutcome.ExpectedExit, "Exited with it."));
+                    process.Named, DescendantReason, VerificationOutcome.ExpectedExit, "Exited with it."));
             }
         }
 
@@ -100,7 +100,7 @@ public static class CloseEvidence
             if (!named.Contains(Identity(process)) && !standing.Contains(Identity(process)))
             {
                 checks.Add(new VerificationCheck(
-                    Name(process),
+                    process.Named,
                     OtherExitReason,
                     VerificationOutcome.UnclaimedExit,
                     "Exited while the close was watched. Processes exit on their own, and Deguffer "
@@ -121,17 +121,17 @@ public static class CloseEvidence
     private static VerificationCheck Survivor(ProcessMemory process, HashSet<(int, long)>? standing) => standing switch
     {
         null => new VerificationCheck(
-            Name(process),
+            process.Named,
             DesktopReason,
             VerificationOutcome.Failed,
             "NOT ESTABLISHED — the read taken when the watch ended could not say which processes "
             + "were still running, so nothing was checked."),
 
         _ when standing.Contains(Identity(process)) => new VerificationCheck(
-            Name(process), DesktopReason, VerificationOutcome.Survived, "Still running."),
+            process.Named, DesktopReason, VerificationOutcome.Survived, "Still running."),
 
         _ => new VerificationCheck(
-            Name(process),
+            process.Named,
             DesktopReason,
             VerificationOutcome.Failed,
             "MISSING — it was running when the close was posted, and asking a program to close "
@@ -206,6 +206,4 @@ public static class CloseEvidence
 
     private static (int, long) Identity(ProcessMemory process) =>
         (process.ProcessId, process.CreationTime ?? 0);
-
-    private static string Name(ProcessMemory process) => $"{process.Name} (process {process.ProcessId})";
 }
