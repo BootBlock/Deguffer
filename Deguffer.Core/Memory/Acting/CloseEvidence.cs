@@ -39,9 +39,6 @@ public static class CloseEvidence
     private const string DescendantReason = "A child of the program that was asked to close goes with it.";
     private const string OtherExitReason = "Deguffer posted nothing to this process.";
 
-    /// <summary>The idle process, which is not a process anything here is about.</summary>
-    private const int IdleProcessId = 0;
-
     /// <param name="before">The machine as the first message was posted.</param>
     /// <param name="after">The machine as the watch ended.</param>
     /// <param name="target">The process the user asked to close, as <paramref name="before"/> had it.</param>
@@ -76,28 +73,29 @@ public static class CloseEvidence
             return checks;
         }
 
-        var descendants = DescendantsOf(before, target);
+        var descendants = ProcessTree.Under(before, target);
 
         foreach (var process in descendants)
         {
-            if (!standing.Contains(Identity(process)))
+            if (!standing.Contains(ProcessTree.Identity(process)))
             {
                 checks.Add(new VerificationCheck(
                     process.Named, DescendantReason, VerificationOutcome.ExpectedExit, "Exited with it."));
             }
         }
 
-        var named = descendants.Select(Identity).ToHashSet();
-        named.Add(Identity(target));
+        var named = descendants.Select(ProcessTree.Identity).ToHashSet();
+        named.Add(ProcessTree.Identity(target));
 
         foreach (var process in desktop)
         {
-            named.Add(Identity(process));
+            named.Add(ProcessTree.Identity(process));
         }
 
-        foreach (var process in Measured(before))
+        foreach (var process in ProcessTree.Measured(before))
         {
-            if (!named.Contains(Identity(process)) && !standing.Contains(Identity(process)))
+            if (!named.Contains(ProcessTree.Identity(process))
+                && !standing.Contains(ProcessTree.Identity(process)))
             {
                 checks.Add(new VerificationCheck(
                     process.Named,
@@ -127,7 +125,7 @@ public static class CloseEvidence
             "NOT ESTABLISHED — the read taken when the watch ended could not say which processes "
             + "were still running, so nothing was checked."),
 
-        _ when standing.Contains(Identity(process)) => new VerificationCheck(
+        _ when standing.Contains(ProcessTree.Identity(process)) => new VerificationCheck(
             process.Named, DesktopReason, VerificationOutcome.Survived, "Still running."),
 
         _ => new VerificationCheck(
@@ -148,62 +146,8 @@ public static class CloseEvidence
     /// not an exit.</para>
     /// </summary>
     private static HashSet<(int, long)>? StillRunning(MemorySnapshot after) =>
-        after.Processes is { Figures: ProcessFigures.Checked, Complete: true } table
-            ? [.. Measured(table.Processes).Select(Identity)]
+        after.Processes is { Figures: ProcessFigures.Checked, Complete: true }
+            ? [.. ProcessTree.Measured(after).Select(ProcessTree.Identity)]
             : null;
 
-    /// <summary>
-    /// Everything under <paramref name="target"/> in the snapshot before the action, by the parent
-    /// links §7.2 allows.
-    ///
-    /// <para><see cref="ProcessForest"/> is asked rather than the recorded parent identifiers,
-    /// because Windows reuses identifiers and a "parent" created after its child is not its parent.
-    /// It also puts nothing under a service host, which is what keeps a broker or a packaged
-    /// application Windows started from a host out of some other program's expected exits.</para>
-    /// </summary>
-    private static IReadOnlyList<ProcessMemory> DescendantsOf(MemorySnapshot before, ProcessMemory target)
-    {
-        var measured = Measured(before);
-        var hosted = before.Services.Services.Select(service => service.ProcessId).ToHashSet();
-        var hosts = measured.Select(process => process.ProcessId).Where(hosted.Contains).ToHashSet();
-        var forest = ProcessForest.Of(measured, hosts);
-
-        // By identity rather than by reference: the target arrived from the snapshot the user picked
-        // from, which is this one, but a caller holding an equal record from anywhere else must get
-        // the same answer.
-        var root = measured.FirstOrDefault(process => Identity(process) == Identity(target));
-
-        if (root is null)
-        {
-            return [];
-        }
-
-        var descendants = new List<ProcessMemory>();
-        var pending = new Stack<ProcessMemory>();
-        pending.Push(root);
-
-        while (pending.TryPop(out var process))
-        {
-            foreach (var child in forest.ChildrenOf(process))
-            {
-                descendants.Add(child);
-                pending.Push(child);
-            }
-        }
-
-        return descendants;
-    }
-
-    /// <summary>
-    /// The processes of one snapshot that can be identified at all: the idle process is not one, and
-    /// neither is a record whose creation time the figure check turned off.
-    /// </summary>
-    private static IReadOnlyList<ProcessMemory> Measured(MemorySnapshot snapshot) =>
-        Measured(snapshot.Processes.Processes);
-
-    private static IReadOnlyList<ProcessMemory> Measured(IReadOnlyList<ProcessMemory> processes) =>
-        [.. processes.Where(p => p.ProcessId != IdleProcessId && p.CreationTime is not null)];
-
-    private static (int, long) Identity(ProcessMemory process) =>
-        (process.ProcessId, process.CreationTime ?? 0);
 }
