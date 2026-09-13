@@ -10,8 +10,8 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Thirty-five sources across the four tiers, a file-table-backed Explore
-> view of the whole drive, and a read-only Memory view of where physical memory goes. See
+> **Status:** Version 0.70.0. Forty-three sources across the tiers, a file-table-backed Explore view
+> of the whole drive, and a read-only Memory view of where physical memory goes. See
 > [Roadmap](#roadmap).
 
 ## Why
@@ -171,8 +171,8 @@ present a cache as a problem.
 
 The picture has three parts. **Applications** follows the process tree, and a parent link counts
 only where the creation times allow it, because Windows reuses process identifiers. **Services** is
-grouped by host process and names the services each host holds, because memory in a shared host
-cannot be divided between them. **Windows** holds the compression store, the non-paged pool, the
+grouped by host process, and a host carries the name of its service where it holds one and a count
+where it holds several, because memory in a shared host cannot be divided between them. **Windows** holds the compression store, the non-paged pool, the
 memory lists, and the memory no figure attributes — drawn and labelled rather than hidden, because
 a reader takes a missing remainder for a leak. Nothing is drawn twice: the paged pool sits inside
 the system working set, so it is not a part of its own, and the page says where its pages are
