@@ -310,7 +310,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(declined, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(declined, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -326,7 +326,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(VisualStudio, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(VisualStudio, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

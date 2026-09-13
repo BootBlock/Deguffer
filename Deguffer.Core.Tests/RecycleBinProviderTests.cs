@@ -380,7 +380,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(root, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(root, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -619,13 +619,13 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.False(result.Verification!.Passed);
         Assert.Contains(
             result.Verification.Checks,
-            c => c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase)
+            c => c.Subject.Equals(theirs, StringComparison.OrdinalIgnoreCase)
                 && c.Outcome == VerificationOutcome.Emptied);
 
         // The one-line summary has to account for it too. A run that reports "did not pass" over a
         // sentence saying every path survived tells the reader two different things at once.
         Assert.Contains(result.Verification.Failures, c =>
-            c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase));
+            c.Subject.Equals(theirs, StringComparison.OrdinalIgnoreCase));
         Assert.Contains("did not survive", result.Verification.Summary, StringComparison.Ordinal);
     }
 
@@ -662,7 +662,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.False(result.Verification!.Passed);
         Assert.Contains(
             result.Verification.Checks,
-            v => v.Path.Equals(declined, StringComparison.OrdinalIgnoreCase)
+            v => v.Subject.Equals(declined, StringComparison.OrdinalIgnoreCase)
                 && v.Outcome == VerificationOutcome.Emptied);
     }
 

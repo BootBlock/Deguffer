@@ -190,7 +190,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(Store, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(global, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(global, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

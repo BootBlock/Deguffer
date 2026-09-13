@@ -91,9 +91,10 @@ proven: a process with no window that qualifies is refused rather than attempted
 is proven to bite, by a creation time that differs between selection and action and by a window whose
 owning process changed between the survey and the post. `WM_CLOSE` is proven to be the only message
 that can leave the type. The §5.6 evidence is proven on all four counts: the record of what was
-posted and where; the shell's owner or Deguffer's own tree missing afterwards failing the run and
-naming itself; descendants named as expected; and every other exit, a service host included,
-reported as one Deguffer did not cause rather than failing the run.
+posted and where; the shell's owner or this session's compositor missing afterwards failing the run
+and naming itself; descendants named as expected; and every other exit — a service host, an
+`explorer.exe` that is not the shell, and a process Deguffer started included — reported as one
+Deguffer sent nothing to rather than failing the run.
 
 **The page.** It is driven, not only built: a refusal sentence for each of several refused kinds, a
 confirmation naming the program and how many windows will be asked, a cancel that leaves the process

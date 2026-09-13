@@ -82,12 +82,17 @@ public sealed record CleanupResult
 }
 
 /// <summary>
-/// What one §5.6 check established about one protected path.
+/// What one §5.6 check established about one subject: a path a clean had to leave standing, or a
+/// process a close had to leave running (§7.2.1).
 ///
 /// An enum rather than a bool, because "it is gone" and "this run is why it is gone" are two
 /// different findings and only one of them is an alarm. A plan is made when the user previews and
 /// carried out when they clean, so a path can disappear in between for reasons that have nothing to
 /// do with Deguffer — and a single pass/fail flag had no way to say which had happened.
+///
+/// <para>The last three belong to a subject that acts on its own. A disk does not delete itself
+/// while Deguffer looks away, and processes exit constantly, so §7.2.1 separates what a close can
+/// assert from what it can only list, and the outcome is where that difference is recorded.</para>
 /// </summary>
 public enum VerificationOutcome
 {
@@ -125,11 +130,37 @@ public enum VerificationOutcome
     /// leave. See <see cref="RunResidue"/>.
     /// </summary>
     Entered,
+
+    /// <summary>
+    /// Deguffer sent this subject something, and the check is the record of what and where (§7.2.1).
+    /// It asserts nothing about survival: it is the half of §5.6 that states what the action did,
+    /// which for a close is the one thing that is exact.
+    /// </summary>
+    Sent,
+
+    /// <summary>
+    /// It exited, and the action expected it to. A child of a program that was asked to close goes
+    /// with it, so §7.2.1 names it rather than counting it as a failure.
+    /// </summary>
+    ExpectedExit,
+
+    /// <summary>
+    /// It exited while the action was watched, and Deguffer sent it nothing. Reported with no claim
+    /// about why: processes exit on their own, and a service host can exit because the program that
+    /// was its last client closed (§7.2.1). Failing a run over one would put a false alarm on the one
+    /// surface §5.6 exists to make trustworthy.
+    /// </summary>
+    UnclaimedExit,
 }
 
 /// <summary>One assertion about something that should have survived, and how it came out.</summary>
+/// <param name="Subject">
+/// What the check is about, in the form the reader identifies it by. A path for a clean or a removal,
+/// and for a close the program's name with its identifier, because a process has no path to key it
+/// by (§7.2.1).
+/// </param>
 public sealed record VerificationCheck(
-    string Path,
+    string Subject,
     string Reason,
     VerificationOutcome Outcome,
     string Detail);
@@ -143,7 +174,7 @@ public sealed record VerificationResult
     public IReadOnlyList<VerificationCheck> Checks { get; init; } = [];
 
     /// <summary>
-    /// The paths this run has to answer for. Not cached in a backing field — this is a record, and
+    /// The subjects this run has to answer for. Not cached in a backing field — this is a record, and
     /// <c>with</c> copies backing fields, so a cache would outlive a change to
     /// <see cref="Checks"/>.
     ///
@@ -158,7 +189,8 @@ public sealed record VerificationResult
             is VerificationOutcome.Failed or VerificationOutcome.Emptied or VerificationOutcome.Entered)];
 
     /// <summary>
-    /// The paths something else took while the preview sat on screen. Kept apart from
+    /// The paths something else took while the preview sat on screen. A close produces none of these,
+    /// because it takes its "before" as it posts and has no preview to sit on screen. Kept apart from
     /// <see cref="Failures"/> rather than folded into it: one asks the user to report a fault, and
     /// the other asks them to preview again.
     /// </summary>
@@ -166,29 +198,56 @@ public sealed record VerificationResult
         [.. Checks.Where(c => c.Outcome == VerificationOutcome.RemovedFromOutside)];
 
     /// <summary>
-    /// Whether every protected path is accounted for as still standing. An outside removal is not a
-    /// pass: nobody verified that path, and saying otherwise is the overstatement §5.6 exists to
-    /// stop.
+    /// The checks that assert something survived, which is what <see cref="Summary"/> counts.
+    ///
+    /// <para>A close also records what it sent and which processes exited beside its target
+    /// (§7.2.1). Those state what happened rather than assert that anything survived, so counting
+    /// them would put a denominator in the sentence below that nothing was ever checked against.</para>
+    ///
+    /// <para>A list of what belongs here rather than of what does not, so an outcome added later has
+    /// to be placed deliberately instead of joining the count by default.</para>
     /// </summary>
-    public bool Passed => Checks.All(
-        c => c.Outcome is VerificationOutcome.NotPresentBefore or VerificationOutcome.Survived);
+    private IReadOnlyList<VerificationCheck> Asserted =>
+        [.. Checks.Where(c => c.Outcome
+            is VerificationOutcome.NotPresentBefore or VerificationOutcome.Survived
+            or VerificationOutcome.Failed or VerificationOutcome.RemovedFromOutside
+            or VerificationOutcome.Emptied or VerificationOutcome.Entered)];
 
     /// <summary>
-    /// One sentence for the whole result, which has to account for every path it could not verify.
+    /// Whether every protected subject is accounted for as still standing. An outside removal is not
+    /// a pass: nobody verified that path, and saying otherwise is the overstatement §5.6 exists to
+    /// stop.
+    ///
+    /// <para>§7.2.1's three outcomes pass, because none of them is a claim that could fail. Two are
+    /// exits the action expected or does not account for, and the third is the record of what
+    /// Deguffer sent. An allow-list rather than a list of the failures, so an outcome added later
+    /// cannot pass by default.</para>
+    /// </summary>
+    public bool Passed => Checks.All(
+        c => c.Outcome is VerificationOutcome.NotPresentBefore or VerificationOutcome.Survived
+            or VerificationOutcome.Sent or VerificationOutcome.ExpectedExit
+            or VerificationOutcome.UnclaimedExit);
+
+    /// <summary>
+    /// One sentence for the whole result, which has to account for every subject it could not verify.
     ///
     /// The mixed case gets both counts rather than only the alarming one. Naming the failures alone
     /// would say "1 of 7 did not survive" about a run where six went unverified, and a §5.6 report
     /// that states less than it established is the overstatement's mirror image.
+    ///
+    /// <para>"Item" rather than "path", because a close's subject is a process. A close writes its
+    /// own sentence, as <see cref="Exploring.Acting.ExploreRemovalReport.Summary"/> does, and this one
+    /// still has to be true of whatever it is handed.</para>
     /// </summary>
-    public string Summary => (Checks.Count, Failures.Count, RemovedFromOutside.Count) switch
+    public string Summary => (Asserted.Count, Failures.Count, RemovedFromOutside.Count) switch
     {
         (0, _, _) => "Nothing to verify.",
-        (var total, 0, 0) => $"All {total} protected path(s) survived.",
+        (var total, 0, 0) => $"All {total} protected item(s) survived.",
         (var total, 0, var outside) =>
-            $"{outside} of {total} protected path(s) were removed from outside this run.",
-        (var total, var failed, 0) => $"{failed} of {total} protected path(s) did not survive.",
+            $"{outside} of {total} protected item(s) were removed from outside this run.",
+        (var total, var failed, 0) => $"{failed} of {total} protected item(s) did not survive.",
         (var total, var failed, var outside) =>
-            $"{failed} of {total} protected path(s) did not survive, and {outside} more were "
+            $"{failed} of {total} protected item(s) did not survive, and {outside} more were "
             + "removed from outside this run.",
     };
 }

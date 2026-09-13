@@ -686,20 +686,34 @@ and the result says which of the four each line belongs to rather than smoothing
    each of which belonged to the target at the moment of posting, checked through the held handle.
    Nothing was posted anywhere else, and nothing but `WM_CLOSE` was posted at all. That much is
    exact, and it is the assertion a test makes bite.
-2. **That what this close could not have ended survived.** Deguffer's own process and its tree, the
-   process owning the shell window, and every process named `explorer.exe` or `dwm.exe` in the
-   snapshot taken before the action are looked for again when the watch ends, by identifier and
-   creation time. Asking an ordinary program to close cannot end any of those, so this negative is
-   exact, and a run that lost one fails and names it. The set is deliberately the one the *before*
-   snapshot already knows, because §7.2.1 does not open five hundred processes to build a survivor
-   list either. A critical process needs no line of its own here: ending one stops the machine, so
-   Deguffer would not be running to report it.
+2. **That what this close could not have ended survived.** The process owning the shell window, and
+   the compositor of Deguffer's own session, are looked for again when the watch ends, by identifier
+   and creation time. Asking an ordinary program to close cannot end the desktop, and neither of
+   those exits by itself while a user is signed in, so this negative is exact, and a run that lost
+   one fails and names it. Both are taken from the snapshot before the action, because §7.2.1 does
+   not open five hundred processes to build a survivor list either. The compositor is every process
+   named `dwm.exe` in that snapshot whose session is Deguffer's own, which is one or two more
+   processes asked about at the moment of the action, and one whose session will not answer is kept
+   rather than dropped, because a fact nobody established is not a pass.
+
+   **The set is narrower than the refusal table above, and deliberately.** The table refuses
+   Deguffer's own process tree and every `explorer.exe` because closing one of those would take the
+   desktop or the report with it. Neither belongs in a *survivor* set, because both exit on their own
+   in ordinary use: Deguffer starts `explorer.exe` itself to show a folder, a provider runs a tool in
+   a process of its own, and a folder window runs in an `explorer.exe` of its own wherever the user
+   has asked Windows for that. The watch has no deadline, so a save prompt left overnight would fail
+   a run in which nothing went wrong, and a §5.6 alarm that cries wolf is worth less than no alarm.
+   They are listed under item 4 instead, and what stands behind them is item 1: every window is
+   checked against the held handle immediately before its own message. Deguffer's own process needs
+   no line for the same reason a critical process needs none: had this close ended either, Deguffer
+   would not be running to report it.
 3. **What was expected to go.** The target's descendants, taken from the creation-time-checked parent
    links (§7.2) in the snapshot before the action. A child of a closed program exiting is the program
    closing properly, so they are named as expected rather than counted as failures.
 4. **What Deguffer does not claim.** Every other process in the before snapshot and not in the after
-   one is listed as an exit Deguffer did not cause, beside the sentence that processes exit on their
-   own. **A service host is one of those, and is deliberately not in item 2.** A demand-started
+   one is listed as an exit Deguffer sent nothing to, beside the sentence that processes exit on
+   their own. **A service host is one of those**, as are Deguffer's own tree and an `explorer.exe`
+   that is not the shell. A demand-started
    service stops when whatever started it ends, and a shared host exits when its last service stops,
    so closing a program that was a service's only client can end a host without Deguffer having sent
    it anything. Listing that is honest. Failing the run over it would put a false alarm on the one
@@ -707,9 +721,12 @@ and the result says which of the four each line belongs to rather than smoothing
    it cannot know that.
 
 A close's evidence is shown on the §5.6 surface Storage already has, never on a second surface for
-the same thing. `VerificationCheck` is keyed by a path and has no outcome for an expected exit or for
-an exit Deguffer did not cause, so building the closer includes deciding how that shape carries a
-process and those two outcomes.
+the same thing. `VerificationCheck` was keyed by a path and had no outcome for what an action sent,
+for an expected exit, or for an exit Deguffer sent nothing to. It is keyed by a *subject* instead —
+a path for a clean, and a program's name with its identifier for a close — and carries an outcome for
+each of those three. None of the three can fail a run, because none is a claim that could: a result
+passes on them and counts only what was asserted, so a close cannot report "all forty survived" about
+a watch in which it checked two things.
 
 **What this section does not authorise**
 

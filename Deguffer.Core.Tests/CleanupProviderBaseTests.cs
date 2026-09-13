@@ -111,7 +111,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
         File.Delete(archive);
         var verification = await provider.VerifyAsync(plan);
 
-        Assert.Contains(verification.Failures, f => f.Path.Equals(archive, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, f => f.Subject.Equals(archive, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

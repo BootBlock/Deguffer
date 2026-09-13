@@ -168,7 +168,7 @@ public sealed class UvCacheProviderTests : IDisposable
 
         Assert.False(verification.Passed);
         Assert.Contains(verification.Failures, c =>
-            c.Path.Equals(provider.StateRoot, StringComparison.OrdinalIgnoreCase));
+            c.Subject.Equals(provider.StateRoot, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

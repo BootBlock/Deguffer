@@ -78,7 +78,7 @@ public sealed class KeepListPlanTests : IDisposable
         Assert.True(File.Exists(Path.Combine(kept, "payload.bin")), "a kept build was deleted or emptied");
         Assert.True(File.Exists(Path.Combine(root, ".links", "marker")), "Playwright's registry did not survive");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
-        Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification.Checks, c => c.Path == kept).Outcome);
+        Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification.Checks, c => c.Subject == kept).Outcome);
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ public sealed class KeepListPlanTests : IDisposable
 
         Assert.Equal(
             new[] { Path.Combine(root, Chromium), Path.Combine(root, Firefox) }.Order(StringComparer.OrdinalIgnoreCase),
-            result.Verification!.Checks.Select(c => c.Path).Order(StringComparer.OrdinalIgnoreCase));
+            result.Verification!.Checks.Select(c => c.Subject).Order(StringComparer.OrdinalIgnoreCase));
         Assert.True(result.Verification.Passed, result.Verification.Summary);
         Assert.True(File.Exists(Path.Combine(root, Chromium, "payload.bin")), "a kept build was touched");
         Assert.True(File.Exists(Path.Combine(root, Firefox, "payload.bin")), "a kept build was touched");
@@ -113,7 +113,7 @@ public sealed class KeepListPlanTests : IDisposable
 
         var afterLoss = Assert.Single(await planner.ExecuteAsync([proving]));
 
-        Assert.Equal(Path.Combine(root, Chromium), Assert.Single(afterLoss.Verification!.Failures).Path);
+        Assert.Equal(Path.Combine(root, Chromium), Assert.Single(afterLoss.Verification!.Failures).Subject);
     }
 
     /// <summary>
@@ -134,7 +134,7 @@ public sealed class KeepListPlanTests : IDisposable
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification!.Checks, c => c.Path == kept).Outcome);
+        Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification!.Checks, c => c.Subject == kept).Outcome);
         Assert.True(result.Verification.Passed, result.Verification.Summary);
         Assert.False(Directory.Exists(Path.Combine(root, Firefox)));
         Assert.True(Directory.Exists(kept), "a kept build was deleted");
