@@ -155,7 +155,7 @@ Whenever you open, action, comment on or close an issue or pull request, reconci
 set. Memory note: *Reconcile a Deguffer issue's labels*.
 
 Everything you post or edit on GitHub ends with this, worded `actioned`, `opened` or `updated`, with
-`pull request` for a PR. If in doubt, include it. A commit message carries `Co-Authored-By` instead.
+`pull request` for a PR. If in doubt, include it. A commit message carries no attribution at all.
 
 ```markdown
 ---
