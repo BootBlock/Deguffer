@@ -119,6 +119,19 @@ watched, and the page with the backdrop switched off (§6.5).
   unelevated enumeration of top-level windows on one workstation found an invisible
   `ConsoleWindowClass` window reported against a program that is not a console program. That is the
   whole of the measurement: one machine, one window, nothing closed.
+- **The suspension route was measured, and the per-process one was taken.** §7.2.1 required this
+  before either route was relied on. Unelevated on one workstation on 2026-09-13, a process snapshot
+  that captures nothing (`PssCaptureSnapshot` with `PSS_CAPTURE_NONE`, then
+  `PSS_PROCESS_FLAGS_FROZEN`) answered for all 285 processes a
+  `PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE` handle could be had for, 30 of them packaged.
+  `IPackageDebugSettings::GetPackageExecutionState` also answered unelevated for all 30, but it
+  describes a *package* rather than a process: it reported `PES_UNKNOWN` for 14 of the 30, one of
+  which the snapshot reported frozen, and it reported one package suspended while one of that
+  package's two processes was not frozen. It also needs an interface whose other methods suspend and
+  terminate applications, and §7.2.1 has one verb. So the per-process route is what a packaged
+  process's state is read with, and the per-package one is not declared at all. The documentation
+  states no access right for capturing nothing, so what an unelevated Deguffer may ask rests on that
+  measurement rather than on a documented contract.
 - **Whether a message posted to an elevated program is dropped was not measured.** Microsoft
   documents that the filter blocks it and that the call may report success anyway, so §7.2.1 refuses
   by the integrity level rather than by what the post reports.
