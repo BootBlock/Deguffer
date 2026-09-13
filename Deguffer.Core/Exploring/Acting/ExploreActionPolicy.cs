@@ -421,6 +421,12 @@ public sealed class ExploreActionPolicy
     /// cache a variable put inside it, both declare the clone. Pooled, the root that recognises every
     /// child lifted the clone's refusal of <c>installed</c>, and a root deeper inside a folder in use
     /// answered for everything below it.</para>
+    ///
+    /// <para><b>What is inside is refused with the root's own reason.</b> A probed root's reason is
+    /// written about the whole folder — a program is using it, it holds the programs
+    /// <c>go install</c> put there — while the sentence <see cref="Refusal"/> gives an unrecognised
+    /// child speaks of configuration beside a cache. Said of a file in a folder a program is working
+    /// in, that sentence is untrue, and the user reading it is deciding whether to wait.</para>
     /// </summary>
     private ExploreVerdict? ProbedRefusal(string target)
     {
@@ -437,7 +443,12 @@ public sealed class ExploreActionPolicy
                 continue;
             }
 
-            (refusal, depth) = (refused, path.Length);
+            refusal = target.Length == path.Length
+                ? refused
+                : ExploreVerdict.Refuse(
+                    $"'{Path.GetFileName(target)}' is inside '{path}', and Explore refuses what is in there "
+                    + $"as well as '{Path.GetFileName(path)}' itself: {root.Reason}");
+            depth = path.Length;
         }
 
         return refusal;

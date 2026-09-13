@@ -1531,6 +1531,30 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(inside, "anything")).IsAllowed);
     }
 
+    /// <summary>
+    /// What is inside a probed root that refuses it is refused with that root's own reason. The
+    /// sentence for an unrecognised child of a tool's folder speaks of configuration beside a cache,
+    /// which is untrue of a folder a program is using, and the user reading it is deciding whether to
+    /// wait.
+    /// </summary>
+    [Fact]
+    public void WhatIsInsideAProbedRootIsRefusedWithThatRootsReason()
+    {
+        var live = Path.Combine(_environment.UserProfile, "live-session");
+        const string reason = "A running program is using this right now.";
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots: [new ToolRoot(live, reason, static _ => false)]);
+
+        var inside = policy.MayRemove(Path.Combine(live, "working.txt"));
+
+        Assert.False(inside.IsAllowed);
+        Assert.Contains(reason, inside.Reason, StringComparison.Ordinal);
+        Assert.Equal(reason, policy.MayRemove(live).Reason);
+    }
+
     private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");
 
     private ToolRoot Gradle() =>
