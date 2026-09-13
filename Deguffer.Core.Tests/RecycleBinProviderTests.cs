@@ -55,10 +55,14 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>A volume root under the scratch tree, registered as fixed and ready.</summary>
-    private string CreateVolume(string name, DriveType kind = DriveType.Fixed, bool isReady = true)
+    private string CreateVolume(
+        string name,
+        DriveType kind = DriveType.Fixed,
+        bool isReady = true,
+        VolumeFeatures features = VolumeFeatures.ReparsePoints)
     {
         var root = _temp.CreateDirectory("volumes", name);
-        _volumes.With(root, kind, isReady);
+        _volumes.With(root, kind, isReady, features);
         return root;
     }
 
@@ -318,6 +322,71 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
         Assert.True(Directory.Exists(bin));
+    }
+
+    /// <summary>
+    /// A cloud client mounted as a drive letter is fixed and ready and is not looked at, because
+    /// listing anything on it downloads what is inside. The refusal is at the volume, not at the
+    /// entry: the mount's contents carry no attribute, and no reparse point, that a walker could
+    /// defend itself with.
+    ///
+    /// <para>Its bin root must never even reach <see cref="RecycleBinProvider.BinRoots"/>. Presence
+    /// is decided by probing a full path under each of those, so a candidate that survived here
+    /// would reach the mount before any plan existed to refuse.</para>
+    /// </summary>
+    [Fact]
+    public async Task ACloudMountPresentedAsADriveLetterIsNotLookedAt()
+    {
+        var volume = CreateVolume("V", features: VolumeFeatures.RemoteStorage);
+        var bin = CreateBin(volume, Sid);
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.Empty(provider.BinRoots);
+
+        var plan = await provider.PlanAsync();
+        Assert.Empty(plan.TargetedPaths);
+
+        // Said rather than omitted in silence. The drive and its bin are both visible in File
+        // Explorer, so a plan that passed over them without a word reads as one that found nothing.
+        Assert.Contains(plan.Notes, n => n.Message.Contains(volume, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+        Assert.True(Directory.Exists(bin));
+    }
+
+    /// <summary>
+    /// A machine can have both, and the local volume must still be cleaned. A refusal that stopped
+    /// the pass rather than the one volume would cost the user every bin on the machine.
+    /// </summary>
+    [Fact]
+    public async Task ACloudMountDoesNotStopTheLocalVolumesBeingCleaned()
+    {
+        var cloud = CreateVolume("V", features: VolumeFeatures.RemoteStorage);
+        var cloudBin = CreateBin(cloud, Sid);
+
+        var local = CreateVolume("D");
+        var localBin = CreateBin(local, Sid);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(localBin, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(plan.TargetedPaths, p => p.StartsWith(cloud, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+
+        // The volume roots handed to the shell, rather than what is left on disk: the cloud mount
+        // is refused before anything is planned about it, so the only record that it was never
+        // reached is the call that was never made. §5.6's negative, at the volume.
+        Assert.Equal([local], _emptier.VolumeRoots);
+
+        Assert.Empty(Directory.EnumerateFiles(localBin));
+        Assert.NotEmpty(Directory.EnumerateFiles(cloudBin));
     }
 
     /// <summary>

@@ -17,7 +17,18 @@
             DriveEntryTemplates for how the two are told apart.
         -->
         <DataTemplate x:Key="DriveChosen" x:DataType="exploring:DriveChoice">
-            <TextBlock Text="{x:Bind RootPath}" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <!-- Collapsed on every ordinary volume, so it costs the toolbar nothing until
+                     there is something to warn about. The sentence itself is on the status line,
+                     where there is room for it. -->
+                <FontIcon Glyph="&#xE7BA;"
+                          FontSize="14"
+                          VerticalAlignment="Center"
+                          Visibility="{x:Bind IsRefused}"
+                          AutomationProperties.AccessibilityView="Raw" />
+
+                <TextBlock Text="{x:Bind RootPath}" />
+            </StackPanel>
         </DataTemplate>
 
         <!--
@@ -28,18 +39,31 @@
             parts in layout order with nothing between them.
         -->
         <DataTemplate x:Key="DriveListed" x:DataType="exploring:DriveChoice">
-            <Grid ColumnSpacing="8" ColumnDefinitions="Auto,116,Auto"
+            <Grid ColumnSpacing="8" RowSpacing="2"
+                  ColumnDefinitions="Auto,116,Auto" RowDefinitions="Auto,Auto"
                   AutomationProperties.Name="{x:Bind Description}">
-                <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Bind RootPath}" />
 
-                <TextBlock Grid.Column="1"
+                <TextBlock Grid.Row="0" Grid.Column="1"
                            Text="{x:Bind LabelText}"
                            TextTrimming="CharacterEllipsis"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                <TextBlock Grid.Column="2"
+                <TextBlock Grid.Row="0" Grid.Column="2"
                            Text="{x:Bind Sizes}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                <!-- A refused volume is listed with the rest and says here why choosing it will
+                     not scan anything, rather than disappearing from a list the user can check
+                     against File Explorer (§7.1). Raw to the screen reader because Description
+                     above already carries the same sentence for the row as a whole. -->
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
+                           Text="{x:Bind Refusal}"
+                           Visibility="{x:Bind IsRefused}"
+                           TextWrapping="Wrap"
+                           MaxWidth="380"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AccessibilityView="Raw" />
             </Grid>
         </DataTemplate>
 
