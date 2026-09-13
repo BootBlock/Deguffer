@@ -55,23 +55,26 @@ public sealed class UserEnvironmentTests : IDisposable
     }
 
     /// <summary>
-    /// The composition against the real registry, which no fake can stand in for. Reading the two
-    /// environment keys unexpanded means this class resolves <c>%SystemRoot%</c> itself, and that
-    /// variable is in neither key — it is a logon-time one, reached only through the fallback to the
-    /// process. Get any of that wrong and every provider reports its tool absent, so Storage offers
-    /// nothing and Explore refuses nothing: a failure that looks like a clean machine.
+    /// That the two environment keys are actually read, and that what comes back is a <c>PATH</c> a
+    /// command resolves on. No fake stands in for this one: it is the only assertion here that fails
+    /// if the registry read is broken. Break it and every provider reports its tool absent, so
+    /// Storage offers nothing and Explore refuses nothing — a failure that reads as a clean machine.
     ///
-    /// <para><c>cmd</c> is the subject because the machine <c>PATH</c> names its directory as
-    /// <c>%SystemRoot%\system32</c> on every Windows install, so the assertion exercises the read,
-    /// the expansion and the search at once without depending on a toolchain being present.</para>
+    /// <para><c>cmd</c> is the subject because <c>system32</c> is on the machine <c>PATH</c> of
+    /// every Windows install, so nothing here depends on a toolchain being present.</para>
+    ///
+    /// <para><b>It does not prove the expansion.</b> Whether the machine key writes that directory
+    /// as <c>%SystemRoot%\system32</c> or in full varies by install, so on a machine that writes it
+    /// in full this passes with expansion removed entirely. <c>SystemRoot</c> is supplied for the
+    /// installs that do write it as a variable; the expansion rules themselves are pinned in
+    /// <see cref="EnvironmentBlockTests"/>, where the input can be stated rather than found.</para>
     /// </summary>
     [Fact]
     public void TheRealEnvironmentStillResolvesACommandOnTheMachinePath()
     {
-        // The start-up block is cut down to the one logon variable the machine key's PATH is
-        // written in terms of, and supplies no PATH at all. The only route left to cmd is the real
-        // registry read and the expansion performed on what it returned, so neither can be broken
-        // while this passes.
+        // The start-up block supplies no PATH at all, so the only route left to cmd is the real
+        // registry read. It carries SystemRoot because that is the one name a machine PATH is
+        // written in terms of, and it lives in neither key.
         var logon = Values(("SystemRoot", Environment.GetEnvironmentVariable("SystemRoot")!));
 
         var environment = new UserEnvironment(
