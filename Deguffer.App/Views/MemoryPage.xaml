@@ -88,7 +88,7 @@
              they never resize the card while it is being read. -->
         <ItemsControl Grid.Row="2"
                       ItemsSource="{x:Bind ViewModel.Notes}"
-                      AutomationProperties.Name="What this reading could not measure">
+                      AutomationProperties.Name="What these figures are, and what this reading could not measure">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
                     <TextBlock Text="{x:Bind}" TextWrapping="Wrap" Style="{StaticResource SecondaryText}" />
@@ -116,6 +116,7 @@
                     that does not exist. A click opens what holds other things.
                 -->
                 <ListView x:Name="RowsList"
+                          AutomationProperties.Name="Where memory is, as a list"
                           Visibility="Collapsed"
                           SelectionMode="None"
                           IsItemClickEnabled="True"
