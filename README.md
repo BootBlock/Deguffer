@@ -38,9 +38,10 @@ crash dumps are real space, and they are still yours to decide about.
 Memory is the other thing a Windows machine runs short of, and finding out where yours went should
 not mean leaving for a second program. The subject holds the same trap in a different form. Low free
 memory is Windows working as designed: it fills memory nothing else needs with cache, and hands
-those pages back the moment something asks for them. The failure you actually feel is commit charge
-reaching the commit limit, when allocations start to fail. So Deguffer draws where physical memory
-goes, leads with that figure, and frees nothing.
+those pages back the moment something asks for them. The two failures you do feel are commit charge
+reaching the commit limit, when allocations start to fail, and sustained hard faulting, which shows
+in disk activity rather than in any memory figure. So Deguffer draws where physical memory goes,
+leads with the one of the two that a single figure states, and frees nothing.
 
 ## The idea: safety tiers
 
@@ -88,7 +89,8 @@ class of error is invisible until it is irreversible.
 - **Not a RAM cleaner, in any form.** The Memory view never trims a working set, and never purges or
   flushes the standby list or any other memory list. Those are the tricks that make a free-memory
   figure rise, and the pages they push out come back as page faults, read from the disk a second
-  time. It never says that a process, a service or a part of Windows is idle or safe to close.
+  time. It never says that a process, a service or a part of Windows is idle or safe to close, and
+  it never starts, stops, pauses or reconfigures a service.
 - **Long paths are mandatory.** NuGet and Node trees routinely exceed `MAX_PATH`, and truncating
   there is the likeliest cause of a silent partial deletion.
 
@@ -170,9 +172,11 @@ present a cache as a problem.
 The picture has three parts. **Applications** follows the process tree, and a parent link counts
 only where the creation times allow it, because Windows reuses process identifiers. **Services** is
 grouped by host process and names the services each host holds, because memory in a shared host
-cannot be divided between them. **Windows** holds the compression store, the pools and the lists,
-and the memory no figure attributes — drawn and labelled rather than hidden, because a reader takes
-a missing remainder for a leak.
+cannot be divided between them. **Windows** holds the compression store, the non-paged pool, the
+memory lists, and the memory no figure attributes — drawn and labelled rather than hidden, because
+a reader takes a missing remainder for a leak. Nothing is drawn twice: the paged pool sits inside
+the system working set, so it is not a part of its own, and the page says where its pages are
+counted.
 
 Every size is a lower bound, and the page says so in its own words. The private working set is the
 closest single figure to what closing a program would return, and compressed pages, shared pages and
