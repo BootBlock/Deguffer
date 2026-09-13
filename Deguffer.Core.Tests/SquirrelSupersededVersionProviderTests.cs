@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -401,5 +402,33 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         provider.InvalidateCaches();
 
         Assert.Equal(older, Assert.Single((await provider.PlanAsync()).TargetedPaths));
+    }
+
+    /// <summary>
+    /// §7.1 over the builds a running application superseded. The name-shaped declaration recognises
+    /// them and the plan holds every one back while the application runs, so Explore refuses them by
+    /// what is running: at the build, where the declaration over the installation cannot outvote it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheOlderBuildsOfAnApplicationThatIsRunning()
+    {
+        var running = CreateApplication("Chatterbox", "3.6.3", "3.6.4");
+        var idle = CreateApplication("Notepad", "1.0", "1.1");
+        var superseded = Path.Combine(running, "app-3.6.3");
+
+        var provider = CreateProvider(new FakeLiveTreeInspector(running));
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.Contains(provider.ToolRoots, r =>
+            r.Path.Equals(running, StringComparison.OrdinalIgnoreCase) && r.Recognises("app-3.6.3"));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == superseded);
+
+        var refusal = policy.MayRemove(superseded);
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("Chatterbox is running", refusal.Reason, StringComparison.Ordinal);
+
+        Assert.True(policy.MayRemove(Path.Combine(idle, "app-1.0")).IsAllowed);
     }
 }

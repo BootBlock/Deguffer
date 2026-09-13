@@ -1,5 +1,6 @@
 ﻿using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -536,6 +537,168 @@ public sealed class BuildDirectoryProviderTests : IDisposable
             && n.Message.Contains("Close any editor or build", StringComparison.Ordinal));
     }
 
+    // ---- §7.1: Explore refuses what the veto holds back ----------------------------------------
+
+    /// <summary>
+    /// The toolchains whose build directories are held back while in use, for the tests that ask
+    /// each of them the same question. Named rather than passed as a provider, because a theory's
+    /// data has to be something the runner can print.
+    /// </summary>
+    public enum Toolchain
+    {
+        Unity,
+        Cargo,
+        Node,
+        Python,
+    }
+
+    /// <summary>
+    /// §7.1 over a build directory the plan holds back because a program is working in its project.
+    /// The plan protects it under §5.6, which makes it a path Explore refuses, and the folder
+    /// holding it is refused with it while it is on disk. No tool root covers a source folder, so
+    /// only a declaration that asks what is running keeps Explore from offering both.
+    ///
+    /// <para>The approved root is inside the profile, where a developer's source folders are. The
+    /// scratch tree's default sits beside the profile, where the region table refuses everything as
+    /// another account's, and this test would pass with no declaration at all.</para>
+    ///
+    /// <para>The program works in a subfolder rather than at the top of the project, because an
+    /// editor or a shell is as often in <c>docs</c> or <c>src</c> as in the project itself.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    public async Task ExploreRefusesABuildDirectoryAProgramIsWorkingInTheProjectOf(Toolchain toolchain)
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Busy");
+        var busy = CreateRecognised(toolchain, project);
+        var notes = Directory.CreateDirectory(Path.Combine(project, "docs", "notes")).FullName;
+        var idleProject = Path.Combine(root, "Idle");
+        var idle = CreateRecognised(toolchain, idleProject);
+
+        var provider = ProviderFor(
+            toolchain,
+            new FakeLiveTreeInspector().WithProgram("editor", Path.Combine(_temp.Path, "tools", "editor.exe"), notes));
+
+        var plan = await provider.PlanAsync();
+        var policy = await ExplorePolicy(provider);
+
+        // The premise: this is the directory the plan holds back, and the other is one it offers.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal([idle], plan.TargetedPaths);
+
+        // What stays allowed first, so a declaration reaching wider than the directory in use is
+        // reported as that, rather than as a refusal worded for something else.
+        Assert.True(policy.MayRemove(idle).IsAllowed);
+        Assert.True(policy.MayRemove(idleProject).IsAllowed);
+
+        var refusal = policy.MayRemove(busy);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("editor is working in Busy", refusal.Reason, StringComparison.Ordinal);
+        Assert.False(policy.MayRemove(Directory.EnumerateFileSystemEntries(busy).First()).IsAllowed);
+        Assert.False(policy.MayRemove(project).IsAllowed);
+    }
+
+    /// <summary>
+    /// The veto's other evidence: a program started from inside the build directory, working
+    /// somewhere else entirely — a binary run out of <c>target\debug</c>, or an environment's own
+    /// interpreter. Walking up from where the program is reaches the project, and the build
+    /// directory in it.
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    public async Task ExploreRefusesABuildDirectoryAProgramIsRunningFromInside(Toolchain toolchain)
+    {
+        var root = ApproveRootInProfile();
+        var busy = CreateRecognised(toolchain, Path.Combine(root, "Running"));
+        var executable = Path.Combine(Directory.EnumerateDirectories(busy).First(), "app.exe");
+
+        var provider = ProviderFor(toolchain, new FakeLiveTreeInspector().WithProgram("app", executable, _temp.Path));
+        var refusal = (await ExplorePolicy(provider)).MayRemove(busy);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("app is running from inside it", refusal.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Being below a project is not using it. A program started from the project's own
+    /// <c>tools</c> folder and working elsewhere uses neither the project nor its build output, and
+    /// the plan offers that build output. The walk up from the program reaches the build directory
+    /// all the same, so it is the veto's verdict that keeps Explore from refusing what the Storage
+    /// page allows.
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    public async Task ExploreAllowsABuildDirectoryAProgramIsOnlyBelowTheProjectOf(Toolchain toolchain)
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Tooling");
+        var build = CreateRecognised(toolchain, project);
+        var helper = Path.Combine(Directory.CreateDirectory(Path.Combine(project, "tools")).FullName, "helper.exe");
+
+        var provider = ProviderFor(toolchain, new FakeLiveTreeInspector().WithProgram("helper", helper, _temp.Path));
+        var plan = await provider.PlanAsync();
+        var policy = await ExplorePolicy(provider);
+
+        Assert.Equal([build], plan.TargetedPaths);
+        Assert.True(policy.MayRemove(build).IsAllowed);
+    }
+
+    /// <summary>
+    /// Consent bounds this route as it bounds the plan. A program working in a project outside every
+    /// approved root makes that project's build directory live by the veto's rule, but the plan
+    /// never looked there, so Explore is not told about it. The project is inside the profile, where
+    /// the region table allows it and only a declaration could refuse it.
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    public async Task ExploreDeclaresNothingOutsideEveryApprovedRoot(Toolchain toolchain)
+    {
+        ApproveRootInProfile();
+        var project = Path.Combine(_environment.UserProfile, "elsewhere", "Unapproved");
+        var outside = CreateRecognised(toolchain, project);
+
+        var provider = ProviderFor(toolchain, new FakeLiveTreeInspector().WithProgram("editor", workingDirectory: project));
+
+        Assert.True((await ExplorePolicy(provider)).MayRemove(outside).IsAllowed);
+    }
+
+    /// <summary>
+    /// §5.2 on this route. A directory of the right name that the recogniser rejects is not build
+    /// output, so the plan declines it rather than holding it back as in use, and nothing is declared
+    /// about it however busy its project is.
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    public async Task ExploreDeclaresNothingTheRecogniserRejects(Toolchain toolchain)
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Lookalike");
+        var lookalike = CreateUnrecognised(toolchain, project);
+
+        var provider = ProviderFor(toolchain, new FakeLiveTreeInspector().WithProgram("editor", workingDirectory: project));
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True((await ExplorePolicy(provider)).MayRemove(lookalike).IsAllowed);
+    }
+
     // ---- §6.3, §7 and discovery ----------------------------------------------------------------
 
     /// <summary>
@@ -712,6 +875,54 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         _roots.Save([root]);
         return root;
     }
+
+    /// <summary>
+    /// An approved root inside the profile, for the tests that ask Explore. See
+    /// <see cref="ExploreRefusesABuildDirectoryAProgramIsWorkingInTheProjectOf"/> for why the
+    /// scratch tree's default will not do.
+    /// </summary>
+    private string ApproveRootInProfile()
+    {
+        var root = Path.Combine(_environment.UserProfile, "source");
+        Directory.CreateDirectory(root);
+        _roots.Save([root]);
+        return root;
+    }
+
+    private Task<ExploreActionPolicy> ExplorePolicy(ICleanupProvider provider) =>
+        ExploreActionPolicy.ForAsync(new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+    private BuildDirectoryProvider ProviderFor(Toolchain toolchain, ILiveTreeInspector live) => toolchain switch
+    {
+        Toolchain.Unity => Unity(live: live),
+        Toolchain.Cargo => Cargo(live: live),
+        Toolchain.Node => Node(live: live),
+        Toolchain.Python => Python(live: live),
+        _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
+    };
+
+    /// <summary>A project this toolchain's recogniser accepts, returning its build directory.</summary>
+    private static string CreateRecognised(Toolchain toolchain, string project) => toolchain switch
+    {
+        Toolchain.Unity => BuildDirectoryFixture.CreateUnityProject(project),
+        Toolchain.Cargo => BuildDirectoryFixture.CreateCargoProject(project),
+        Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project),
+        Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project),
+        _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
+    };
+
+    /// <summary>
+    /// A project whose build directory has the right name and lacks one piece of the evidence, so
+    /// the recogniser rejects it. Returns that directory.
+    /// </summary>
+    private static string CreateUnrecognised(Toolchain toolchain, string project) => toolchain switch
+    {
+        Toolchain.Unity => BuildDirectoryFixture.CreateUnityProject(project, writePackages: false),
+        Toolchain.Cargo => BuildDirectoryFixture.CreateCargoProject(project, writeCacheTag: false),
+        Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project, lockFile: null),
+        Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project, writeConfig: false),
+        _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
+    };
 
     private Task<CleanupPlan> PlanWith(
         Func<IDirectoryScanner?, ILiveTreeInspector?, BuildDirectoryProvider> create,

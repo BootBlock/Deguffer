@@ -1,4 +1,5 @@
 ﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -459,5 +460,46 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
         Assert.Equal(4096 + 8192, step.MeasuredBefore?.Reclaimable);
+    }
+
+    /// <summary>
+    /// §7.1 over everything <c>conda info --json</c> reports: the installation prefix, the
+    /// environment directories and the package cache. The plan asserts each survives and clears the
+    /// cache with conda's own command, so none is removable by hand, and an environment directory
+    /// outside the prefix is refused as surely as the one inside it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesThePrefixTheEnvironmentsAndThePackageCacheCondaReports()
+    {
+        var elsewhere = Path.Combine(_environment.UserProfile, "conda-envs");
+
+        // A second package cache outside the prefix, because the prefix's own root already refuses
+        // everything in pkgs. Only a cache it does not contain shows the cache declarations biting.
+        var outsideCache = Path.Combine(_environment.UserProfile, "conda-pkgs");
+
+        // A cache with something in it, or the plan has nothing to protect a survivor for.
+        Populate(Path.Combine(PackageCache, "numpy-1.26.4-py312"));
+        Populate(Path.Combine(outsideCache, "scipy-1.13.0-py312"));
+
+        var info = "{ \"root_prefix\": " + Quote(RootPrefix)
+            + ", \"pkgs_dirs\": [" + Quote(PackageCache) + ", " + Quote(outsideCache) + "]"
+            + ", \"envs_dirs\": [" + Quote(Environments) + ", " + Quote(elsewhere) + "] }";
+
+        var provider = CreateProvider(Reporting(info: info));
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(elsewhere, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(outsideCache, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(policy.MayRemove(RootPrefix).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(RootPrefix, "Lib")).IsAllowed);
+        Assert.False(policy.MayRemove(PackageCache).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(PackageCache, "numpy-1.26.4-py312")).IsAllowed);
+        Assert.False(policy.MayRemove(outsideCache).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(outsideCache, "scipy-1.13.0-py312")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(Environments, "science")).IsAllowed);
+        Assert.False(policy.MayRemove(elsewhere).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(elsewhere, "science")).IsAllowed);
     }
 }

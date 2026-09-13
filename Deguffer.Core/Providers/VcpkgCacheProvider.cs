@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -54,6 +55,17 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         ("scripts", "vcpkg's own build scripts."),
         ("vcpkg.exe", "The vcpkg executable itself, which the bootstrap built into this directory."),
     ];
+
+    /// <summary>
+    /// The clone's children its plan targets, for the clone's declaration to Explore. Two sets
+    /// rather than one built per call, because which applies turns on one fact: whether
+    /// <c>VCPKG_DOWNLOADS</c> has moved the downloads out of the clone.
+    /// </summary>
+    private static readonly FrozenSet<string> CloneScratch =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "buildtrees", "packages", "downloads");
+
+    private static readonly FrozenSet<string> CloneScratchWithoutDownloads =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "buildtrees", "packages");
 
     /// <summary>
     /// What the user's vcpkg directory holds beside the binary cache. Both are small, and both are
@@ -148,9 +160,9 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// beside it.
     ///
     /// <para>The clone is deliberately absent. Finding it reads three environment variables, probes
-    /// for a marker file and searches <c>PATH</c>, and a declaration Explore consults on every path
-    /// has to be readable without any of that. Nothing under a clone is refused here as a result,
-    /// which is why this provider still names <c>installed</c> a survivor in its own plan.</para>
+    /// for a marker file and searches <c>PATH</c>, and each of those can change between one look at
+    /// the machine and the next. <see cref="DiscoverToolRootsAsync"/> names it, and is asked again
+    /// each time Explore builds its policy.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
@@ -161,6 +173,49 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             + "a manifest resolves versions against both sit beside that cache.",
             static name => name.Equals("archives", StringComparison.OrdinalIgnoreCase))),
     ];
+
+    /// <summary>
+    /// The clone, and the directory holding any cache a variable has moved out of the profile. These
+    /// are the paths <see cref="Declare"/> gives §5.6 and <see cref="ToolRoots"/> cannot: finding
+    /// them reads <c>VCPKG_ROOT</c>, <c>VCPKG_DEFAULT_BINARY_CACHE</c> and <c>VCPKG_DOWNLOADS</c>,
+    /// probes for the clone's marker file and searches <c>PATH</c>.
+    ///
+    /// <para>The clone matters most of the four. <c>installed</c> is what every project on the
+    /// machine links against and is usually the largest thing in there, so a size picture offers it
+    /// first — and the plan already refuses to touch it.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        var located = Locate();
+        var roots = new List<ToolRoot>(3);
+
+        if (located.Root is { } root)
+        {
+            // What the clone's own plan targets, and nothing else. 'downloads' drops out of the set
+            // when VCPKG_DOWNLOADS has moved it, exactly as it drops out of the plan's locations:
+            // the folder left behind under that name is then no longer vcpkg's to refill.
+            var disposable = located.RelocatedDownloads is null ? CloneScratch : CloneScratchWithoutDownloads;
+
+            roots.Add(new ToolRoot(
+                root,
+                "This is the vcpkg clone itself. Deguffer removes the build output inside it and "
+                + "nothing else, because the libraries you have installed, the port and triplet "
+                + "definitions and the version database are what a rebuild cannot bring back.",
+                disposable.Contains));
+        }
+
+        if (Holding(located.BinaryCache, located) is { } binaryCache)
+        {
+            roots.Add(binaryCache);
+        }
+
+        if (Holding(located.RelocatedDownloads, located) is { } downloads)
+        {
+            roots.Add(downloads);
+        }
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryExists));
@@ -336,7 +391,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             return null;
         }
 
-        if (Path.GetDirectoryName(path) is not { Length: > 0 } container || IsToolsOwn(path, located))
+        if (ContainerOf(path, located) is not { } container)
         {
             refused?.Add(path);
 
@@ -357,6 +412,45 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             [new DeclaredLocation(Path.GetFileName(path), reason)],
             inProfile ? ProtectedInProfile : []);
     }
+
+    /// <summary>
+    /// §7.1's reading of what <see cref="Containing"/> gives §5.6: the directory holding a cache
+    /// must survive. Both find it through <see cref="ContainerOf"/>, so the plan and Explore cannot
+    /// disagree about which directory that is.
+    ///
+    /// <para>It may be the clone itself, where a variable puts a cache directly inside it. That
+    /// cannot lift what the clone's own declaration refuses, because each probed root answers on its
+    /// own.</para>
+    ///
+    /// <para>It recognises every child, so it refuses the directory itself and leaves what is in it
+    /// ordinary. The plan protects the directory and nothing else inside it, and a variable may name
+    /// a cache directly inside the profile or Downloads, where refusing the container's other
+    /// children would refuse everything the user keeps there.</para>
+    /// </summary>
+    private ToolRoot? Holding(string? path, VcpkgLocations located)
+    {
+        if (path is null || ContainerOf(path, located) is not { } container)
+        {
+            return null;
+        }
+
+        return new ToolRoot(
+            container,
+            "This holds a vcpkg cache that one of your vcpkg environment variables points at, and "
+            + "removing it would take the cache with everything else in it. Explore removes things from "
+            + "inside it, never the folder itself.",
+            static _ => true);
+    }
+
+    /// <summary>
+    /// The directory holding a configured cache, or null where there is none to name or the path is
+    /// not a cache at all: a cache at a volume root has no container, and one pointed at the clone or
+    /// at something the plan protects is vcpkg's own.
+    /// </summary>
+    private string? ContainerOf(string path, VcpkgLocations located) =>
+        Path.GetDirectoryName(path) is { Length: > 0 } container && !IsToolsOwn(path, located)
+            ? container
+            : null;
 
     /// <summary>
     /// Whether a configured cache path is really part of vcpkg rather than a cache of it.

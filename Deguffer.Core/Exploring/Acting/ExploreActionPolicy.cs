@@ -40,6 +40,14 @@ public sealed class ExploreActionPolicy
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
     /// <summary>
+    /// How many providers <see cref="ForAsync"/> asks at once (G4). Not derived from the processor
+    /// count, because what the handful of probing providers wait on is a subprocess or the process
+    /// table rather than this machine's cores — and a user with every toolchain installed should not
+    /// see ten console windows' worth of work start at the same instant.
+    /// </summary>
+    private const int Discovery = 8;
+
+    /// <summary>
     /// The names NTFS reserves in a volume's root directory, from <c>[MS-FSCC]</c>. See
     /// <see cref="ReservedByTheFilesystem"/> for why they are refused and why the set stops here.
     /// </summary>
@@ -51,6 +59,7 @@ public sealed class ExploreActionPolicy
 
     private readonly IReadOnlyList<ProtectedRegion> _regions;
     private readonly IReadOnlyList<ToolRoot> _toolRoots;
+    private readonly IReadOnlyList<ToolRoot> _probedRoots;
     private readonly HeldLocations _held;
 
     /// <param name="regions">
@@ -63,10 +72,17 @@ public sealed class ExploreActionPolicy
     /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk. Injected so a
     /// test can see the form of the path it is asked about (§6.3), and what a probe that fails does.
     /// </param>
+    /// <param name="probedRoots">
+    /// What the providers declared once they had asked the machine, through
+    /// <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>. Kept apart from
+    /// <paramref name="toolRoots"/> because it is asked separately and can only narrow what the rest
+    /// allows. <see cref="MayRemove"/> says why.
+    /// </param>
     public ExploreActionPolicy(
         IEnumerable<ProtectedRegion> regions,
         IEnumerable<ToolRoot> toolRoots,
-        IFileSystem? fileSystem = null)
+        IFileSystem? fileSystem = null,
+        IEnumerable<ToolRoot>? probedRoots = null)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
@@ -87,6 +103,7 @@ public sealed class ExploreActionPolicy
         ];
 
         _toolRoots = [.. toolRoots];
+        _probedRoots = [.. probedRoots ?? []];
 
         // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
         // takes it along as surely as one holding a tool's folder does. A permitting entry protects
@@ -95,6 +112,7 @@ public sealed class ExploreActionPolicy
             [
                 .. _regions.Where(r => !r.Verdict.IsAllowed).Select(r => (r.Path, r.Verdict.Reason)),
                 .. _toolRoots
+                    .Concat(_probedRoots)
                     .Select(root => (Path: LongPath.Configured(root.Path), root.Reason))
                     .Where(root => root.Path is not null)
                     .Select(root => (root.Path!, root.Reason)),
@@ -111,19 +129,42 @@ public sealed class ExploreActionPolicy
     /// the whole of §7.1's refusal set is provable against a synthetic profile — which is what G1's
     /// dependency inversion is for, and the only way these assertions can run on a machine where
     /// nobody may delete anything in <c>C:\Windows</c>.</para>
+    ///
+    /// <para><b>Asynchronous, and the only factory over providers, because half of §5.2 is not
+    /// knowable without asking the machine.</b> A tool reports a location the documented default does
+    /// not name, and a plan holds a path back because something is using it; both are read through
+    /// <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>. A second factory that skipped them would
+    /// build a policy that looks complete, refuses less, and says nothing about the difference. The
+    /// constructor still takes declarations directly, for a caller that already holds them.</para>
+    ///
+    /// <para>The providers are asked in parallel, bounded, because most of them answer immediately
+    /// and the handful that do not are each waiting on a subprocess or the process table (G4).</para>
     /// </summary>
-    public static ExploreActionPolicy For(
+    public static async Task<ExploreActionPolicy> ForAsync(
         ISystemDirectories system,
         IUserEnvironment environment,
-        IEnumerable<ICleanupProvider> providers)
+        IEnumerable<ICleanupProvider> providers,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(providers);
 
+        IReadOnlyList<ICleanupProvider> asked = [.. providers];
+        var discovered = new IReadOnlyList<ToolRoot>[asked.Count];
+
+        await Parallel.ForAsync(
+            0,
+            asked.Count,
+            new ParallelOptions { MaxDegreeOfParallelism = Discovery, CancellationToken = ct },
+            async (index, token) =>
+                discovered[index] = await asked[index].DiscoverToolRootsAsync(token).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
-            providers.SelectMany(p => p.ToolRoots));
+            [.. asked.SelectMany(p => p.ToolRoots)],
+            probedRoots: [.. discovered.SelectMany(roots => roots)]);
     }
 
     /// <summary>
@@ -178,7 +219,16 @@ public sealed class ExploreActionPolicy
 
         var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
-            : Below(target);
+            : Below(_toolRoots, target);
+
+        // A probed declaration is asked only about what everything above allows, so it can add a
+        // refusal and never lift one. Its roots come from what a tool reports and what a setting
+        // names, and pooled with the declared roots a Maven setting naming 'settings-security.xml'
+        // made a root beside Maven's own that recognised the master-password file, and allowed it.
+        if (verdict.IsAllowed && ProbedRefusal(target) is { } probed)
+        {
+            verdict = probed;
+        }
 
         // Last, and only of a path everything above allows, because it is the one question here that
         // reads the disk.
@@ -313,12 +363,12 @@ public sealed class ExploreActionPolicy
     /// declaration at that depth is asked, and a child one of them recognises is allowed: each
     /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
-    private ExploreVerdict Below(string target)
+    private static ExploreVerdict Below(IReadOnlyList<ToolRoot> roots, string target)
     {
         List<ToolRoot> innermost = [];
         var depth = -1;
 
-        foreach (var root in _toolRoots)
+        foreach (var root in roots)
         {
             if (LongPath.Configured(root.Path) is not { } path
                 || !LongPath.Contains(path, target)
@@ -358,6 +408,50 @@ public sealed class ExploreActionPolicy
         // Null where no declaration covers this path, which is the ordinary case: most of a drive
         // belongs to no tool root at all.
         return refusal ?? ExploreVerdict.Unclassified;
+    }
+
+    /// <summary>
+    /// The refusal of the deepest probed root that contains <paramref name="target"/> and refuses
+    /// it, or null where none does.
+    ///
+    /// <para><b>Each probed root answers on its own</b>, never pooled with the others as the declared
+    /// roots are in <see cref="Below"/>. Declared roots pool because several providers own one folder
+    /// with disjoint lists of what may go, and none of them is complete alone. A probed root needs no
+    /// other's permission, and two can land on one folder by accident: a vcpkg clone, and a binary
+    /// cache a variable put inside it, both declare the clone. Pooled, the root that recognises every
+    /// child lifted the clone's refusal of <c>installed</c>, and a root deeper inside a folder in use
+    /// answered for everything below it.</para>
+    ///
+    /// <para><b>What is inside is refused with the root's own reason.</b> A probed root's reason is
+    /// written about the whole folder — a program is using it, it holds the programs
+    /// <c>go install</c> put there — while the sentence <see cref="Refusal"/> gives an unrecognised
+    /// child speaks of configuration beside a cache. Said of a file in a folder a program is working
+    /// in, that sentence is untrue, and the user reading it is deciding whether to wait.</para>
+    /// </summary>
+    private ExploreVerdict? ProbedRefusal(string target)
+    {
+        ExploreVerdict? refusal = null;
+        var depth = -1;
+
+        foreach (var root in _probedRoots)
+        {
+            if (LongPath.Configured(root.Path) is not { } path
+                || path.Length <= depth
+                || !LongPath.Contains(path, target)
+                || Refusal(root, target) is not { } refused)
+            {
+                continue;
+            }
+
+            refusal = target.Length == path.Length
+                ? refused
+                : ExploreVerdict.Refuse(
+                    $"'{Path.GetFileName(target)}' is inside '{path}', and Explore refuses what is in there "
+                    + $"as well as '{Path.GetFileName(path)}' itself: {root.Reason}");
+            depth = path.Length;
+        }
+
+        return refusal;
     }
 
     private static bool Covers(ProtectedRegion region, string target) =>

@@ -1,4 +1,5 @@
 ﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -436,4 +437,66 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// §7.1 over the directory holding a repository <c>settings.xml</c> moved out of <c>.m2</c>. The
+    /// plan asserts that directory survives and nothing else in it, so Explore refuses the
+    /// directory itself and leaves what is inside it ordinary, the repository included.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheFolderHoldingARelocatedRepository()
+    {
+        var container = Path.Combine(_environment.UserProfile, "build-tools");
+        var repository = Populate(Path.Combine(container, "maven-repo"));
+        var neighbour = Populate(Path.Combine(container, "other-tool"));
+        WriteSettings(repository);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(container, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(policy.MayRemove(container).IsAllowed);
+        Assert.True(policy.MayRemove(neighbour).IsAllowed);
+        Assert.True(policy.MayRemove(repository).IsAllowed);
+    }
+
+    /// <summary>
+    /// A repository directly in the profile makes the profile its container. Explore refuses the
+    /// profile anyway, and must not refuse the rest of what is in it because Maven's repository sits
+    /// there too.
+    /// </summary>
+    [Fact]
+    public async Task ARepositoryInTheProfileLeavesTheRestOfTheProfileOrdinary()
+    {
+        var repository = Populate(Path.Combine(_environment.UserProfile, "maven-repo"));
+        var documents = Populate(Path.Combine(_environment.UserProfile, "Documents"));
+        WriteSettings(repository);
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+
+        Assert.True(policy.MayRemove(documents).IsAllowed);
+        Assert.True(policy.MayRemove(repository).IsAllowed);
+    }
+
+    /// <summary>
+    /// A setting the plan leaves unexamined declares nothing, because the plan protects nothing
+    /// there. Among these is the setting that names the file holding the master password.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("settings-security.xml")]
+    [InlineData("wrapper")]
+    public async Task DeclaresNothingForARepositoryThePlanLeavesAlone(string named)
+    {
+        WriteSettings(Path.Combine(Home, named));
+
+        var provider = CreateProvider();
+
+        Assert.Empty((await provider.PlanAsync()).TargetedPaths);
+        Assert.Empty(await provider.DiscoverToolRootsAsync());
+    }
 }

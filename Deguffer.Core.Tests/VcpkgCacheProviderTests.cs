@@ -1,4 +1,5 @@
 ﻿using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -607,4 +608,90 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// §7.1 over the clone <c>VCPKG_ROOT</c> names and the folder holding a binary cache
+    /// <c>VCPKG_DEFAULT_BINARY_CACHE</c> moved. <c>installed</c> is what every project on the
+    /// machine links against and usually the largest thing in a clone, and the plan never touches it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheCloneAndTheFolderHoldingAMovedBinaryCache()
+    {
+        var root = CreateClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
+        var holder = Path.Combine(_environment.UserProfile, "caches");
+        var binaryCache = Populate(Path.Combine(holder, "vcpkg-archives"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, binaryCache);
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+
+        Assert.False(policy.MayRemove(root).IsAllowed);
+        Assert.All(
+            new[] { "installed", "ports", "triplets", "versions", "scripts", VcpkgDiscovery.RootMarker },
+            child => Assert.False(policy.MayRemove(Path.Combine(root, child)).IsAllowed, child));
+        Assert.All(
+            new[] { "buildtrees", "downloads", "packages" },
+            child => Assert.True(policy.MayRemove(Path.Combine(root, child)).IsAllowed, child));
+
+        Assert.False(policy.MayRemove(holder).IsAllowed);
+        Assert.True(policy.MayRemove(binaryCache).IsAllowed);
+
+        // The plan protects the folder holding the cache and nothing else in it.
+        Assert.True(policy.MayRemove(Populate(Path.Combine(holder, "unrelated"))).IsAllowed);
+    }
+
+    /// <summary>
+    /// The clone's <c>downloads</c> leaves what Explore offers exactly when it leaves the plan: once
+    /// <c>VCPKG_DOWNLOADS</c> has moved the downloads, the folder of that name in the clone is no
+    /// longer vcpkg's to refill, and the directory holding the moved one must survive.
+    /// </summary>
+    [Fact]
+    public async Task ExploreStopsOfferingTheClonesDownloadsOnceAVariableHasMovedThem()
+    {
+        var root = CreateClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
+        var holder = Path.Combine(_environment.UserProfile, "downloads-elsewhere");
+        var downloads = Populate(Path.Combine(holder, "vcpkg-downloads"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, downloads);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.DoesNotContain(Path.Combine(root, "downloads"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.False(policy.MayRemove(Path.Combine(root, "downloads")).IsAllowed);
+
+        Assert.False(policy.MayRemove(holder).IsAllowed);
+        Assert.True(policy.MayRemove(downloads).IsAllowed);
+        Assert.True(policy.MayRemove(Populate(Path.Combine(holder, "unrelated"))).IsAllowed);
+    }
+
+    /// <summary>
+    /// A binary cache a variable puts directly inside the clone makes the clone its container as
+    /// well. Explore must go on refusing what the clone protects: <c>installed</c> is what every
+    /// project on the machine links against.
+    /// </summary>
+    [Fact]
+    public async Task ACacheInsideTheCloneLeavesTheClonesProtectionsStanding()
+    {
+        var root = CreateClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
+        var binaryCache = Populate(Path.Combine(root, "archives"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, binaryCache);
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+
+        Assert.False(policy.MayRemove(Path.Combine(root, "installed")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(root, "ports")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(root, "buildtrees")).IsAllowed);
+    }
 }

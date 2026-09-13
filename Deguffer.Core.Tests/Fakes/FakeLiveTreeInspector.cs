@@ -15,6 +15,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 {
     private readonly HashSet<string> _live;
     private readonly bool _complete;
+    private readonly List<RunningProgram> _programs = [];
 
     public FakeLiveTreeInspector(bool complete, params string[] live)
     {
@@ -34,19 +35,78 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// <summary>What the provider asked about, so a test can assert the project folder was passed.</summary>
     public IReadOnlyList<LiveTreeQuery> Asked { get; private set; } = [];
 
+    /// <summary>
+    /// Pretend a program is running from <paramref name="executable"/>, working in
+    /// <paramref name="workingDirectory"/>, or both.
+    ///
+    /// <para>Declared as a program rather than as a live directory, and answered on both sides by
+    /// the real inspector's containment rule: <see cref="FindOccupiedDirectories"/> reports where it
+    /// is, and <see cref="FindLive"/> counts it against a candidate whose directory holds the
+    /// executable or whose project holds the working directory. A provider that finds candidates
+    /// from the first and confirms them with the second is then tested on the pair, which is the
+    /// only thing that tells a program in a project's build directory from one merely below the
+    /// project.</para>
+    /// </summary>
+    public FakeLiveTreeInspector WithProgram(string name, string? executable = null, string? workingDirectory = null)
+    {
+        _programs.Add(new RunningProgram(name, executable, workingDirectory));
+        return this;
+    }
+
     public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
     {
         Asked = candidates;
 
         return new LiveTreeFindings(
-            [.. candidates.Where(c => _live.Contains(c.Directory))
-                .Select(c => new LiveTree(c.Directory, ["a test says something is using it"]))],
+            [.. candidates
+                .Select(c => new LiveTree(c.Directory, HoldersOf(c)))
+                .Where(tree => tree.Holders.Count > 0)],
             _complete);
     }
 
+    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
+        new(
+            [.. _programs
+                .SelectMany(program => new (string? Directory, string Holder)[]
+                {
+                    (program.Executable is { } executable ? Path.GetDirectoryName(executable) : null,
+                        $"{program.Name} is running from inside it"),
+                    (program.WorkingDirectory, $"{program.Name} is working in it"),
+                })
+                .Where(place => place.Directory is not null)
+                .GroupBy(place => place.Directory!, StringComparer.OrdinalIgnoreCase)
+                .Select(group => new LiveTree(group.Key, [.. group.Select(place => place.Holder)]))],
+            _complete);
+
+    private List<string> HoldersOf(LiveTreeQuery candidate)
+    {
+        var holders = new List<string>();
+
+        if (_live.Contains(candidate.Directory))
+        {
+            holders.Add("a test says something is using it");
+        }
+
+        foreach (var program in _programs)
+        {
+            if (program.Executable is { } executable && LongPath.Contains(candidate.Directory, executable))
+            {
+                holders.Add($"{program.Name} is running from inside it");
+            }
+
+            if (program.WorkingDirectory is { } working && LongPath.Contains(candidate.Project, working))
+            {
+                holders.Add($"{program.Name} is working in {Path.GetFileName(candidate.Project)}");
+            }
+        }
+
+        return holders;
+    }
+
     /// <summary>
-    /// The declared live directories that are an <em>immediate</em> child of one of
-    /// <paramref name="directories"/>.
+    /// The immediate children of <paramref name="directories"/> that are declared live, or that hold
+    /// a place a program added with <see cref="WithProgram"/> runs from or works in, which is how the
+    /// real inspector builds this answer.
     ///
     /// <para>Immediate, and never the root itself, because that is the contract
     /// <see cref="ILiveTreeInspector.FindLiveChildren"/> keeps: it names the child a plan can spare,
@@ -58,10 +118,33 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         IReadOnlyList<string> directories,
         CancellationToken ct = default) =>
         new(
-            [.. _live
-                .Where(child => directories.Any(root => IsImmediateChild(root, child)))
-                .Select(child => new LiveTree(child, ["a test says something is using it"]))],
+            [
+                .. _live
+                    .Where(child => directories.Any(root => IsImmediateChild(root, child)))
+                    .Select(child => new LiveTree(child, ["a test says something is using it"])),
+                .. FindOccupiedDirectories(ct).Live
+                    .SelectMany(place => directories
+                        .Select(root => ChildHolding(root, place.Directory))
+                        .OfType<string>()
+                        .Select(child => new LiveTree(child, place.Holders))),
+            ],
             _complete);
+
+    /// <summary>The immediate child of <paramref name="root"/> holding <paramref name="place"/>, or null where it is not below.</summary>
+    private static string? ChildHolding(string root, string place)
+    {
+        var parent = Path.TrimEndingDirectorySeparator(root);
+
+        if (place.Length <= parent.Length + 1 || !LongPath.Contains(parent, place))
+        {
+            return null;
+        }
+
+        var below = place[(parent.Length + 1)..];
+        var separator = below.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
+
+        return Path.Combine(parent, separator < 0 ? below : below[..separator]);
+    }
 
     private static bool IsImmediateChild(string root, string child) =>
         Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(child)) is { } parent
@@ -69,4 +152,6 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
 
     public void Invalidate() => InvalidateCount++;
+
+    private sealed record RunningProgram(string Name, string? Executable, string? WorkingDirectory);
 }

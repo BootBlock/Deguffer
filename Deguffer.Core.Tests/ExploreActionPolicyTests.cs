@@ -1356,20 +1356,203 @@ public sealed class ExploreActionPolicyTests : IDisposable
     ];
 
     /// <summary>
-    /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.For"/> reads §5.2
-    /// out of the providers rather than restating it, so a provider's own declaration is what
+    /// The wiring, once, through a real provider: <see cref="ExploreActionPolicy.ForAsync"/> reads
+    /// §5.2 out of the providers rather than restating it, so a provider's own declaration is what
     /// Explore enforces.
     /// </summary>
     [Fact]
-    public void ThePolicyReadsSection52OutOfTheProvidersThemselves()
+    public async Task ThePolicyReadsSection52OutOfTheProvidersThemselves()
     {
         var provider = new GradleCacheProvider(_environment);
-        var policy = ExploreActionPolicy.For(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
 
         Assert.Equal(GradleRoot, provider.RootPath);
         Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(provider.RootPath, "gradle.properties")).IsAllowed);
         Assert.True(policy.MayRemove(Path.Combine(provider.RootPath, "caches")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The other half of that wiring, and the whole of issue #130: a root a provider can only name once it
+    /// has asked the machine is enforced exactly as a declared one is.
+    ///
+    /// <para>The declared root allows <c>archive</c> and the discovered one does not know about it,
+    /// so the two are told apart by more than their presence: a policy that merged the wrong way, or
+    /// dropped either list, fails on one of the four assertions.</para>
+    /// </summary>
+    [Fact]
+    public async Task ThePolicyEnforcesADiscoveredRootBesideADeclaredOne()
+    {
+        var declared = ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
+
+        // Inside the profile, where the region table allows everything. Beside it, the table refuses
+        // the folder as another account's, and the assertions below would pass with no declaration.
+        var moved = Path.Combine(_environment.UserProfile, "moved-cache");
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            [new StubProvider([declared], [VendorTool(moved)])]);
+
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+
+        Assert.False(policy.MayRemove(moved).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(moved, "anything")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A tool's home at the top of a drive keeps its §5.2 protection. <c>CARGO_HOME</c> may name a
+    /// drive root, and Cargo's registry tokens then sit directly under it, so the declaration there
+    /// still refuses every child it does not recognise.
+    /// </summary>
+    [Fact]
+    public void ADeclaredRootAtTheTopOfAVolumeStillRefusesItsUnrecognisedChildren()
+    {
+        var volume = Path.GetPathRoot(_temp.Path)!;
+        var home = new ToolRoot(
+            volume,
+            "A tool's own folder, at the top of the drive.",
+            static name => name.Equals("registry", StringComparison.OrdinalIgnoreCase));
+
+        var policy = Policy(home);
+
+        Assert.False(policy.MayRemove(Path.Combine(volume, "credentials.toml")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(volume, "registry")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A probed declaration only narrows. A root a setting produces, over the folder another
+    /// declaration names and recognising a child that declaration refuses, must not open it:
+    /// roots at one depth are pooled, and a setting can name anything, including the file that
+    /// holds a tool's credentials.
+    /// </summary>
+    [Fact]
+    public void AProbedRootCannotOpenWhatADeclaredRootRefuses()
+    {
+        var probed = new ToolRoot(
+            GradleRoot,
+            "A setting that names the file.",
+            static name => name.Equals("gradle.properties", StringComparison.OrdinalIgnoreCase));
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment), [Gradle()], probedRoots: [probed]);
+
+        // The premise: on its own, the probed root allows the file, so the refusal below is the
+        // declared root's and the probed root could not lift it.
+        var alone = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment), [], probedRoots: [probed]);
+
+        Assert.True(alone.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same rule one level down. The innermost roots decide, so a probed root inside a child the
+    /// declared root refuses would otherwise answer for everything below it.
+    /// </summary>
+    [Fact]
+    public void AProbedRootInsideARefusedChildCannotOpenIt()
+    {
+        var inside = Path.Combine(GradleRoot, "init.d");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [Gradle()],
+            probedRoots: [new ToolRoot(inside, "A folder a setting names.", static _ => true)]);
+
+        Assert.False(policy.MayRemove(Path.Combine(inside, "init.gradle")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A probed root that recognises every child refuses its own path and nothing inside it. That is
+    /// how a provider declares a folder its plan protects, such as the one holding a relocated
+    /// cache, without refusing what else the user keeps there.
+    /// </summary>
+    [Fact]
+    public void AProbedRootRecognisingEveryChildRefusesOnlyItsOwnPath()
+    {
+        var container = Path.Combine(_environment.UserProfile, "build-tools");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots: [new ToolRoot(container, "A folder a plan protects.", static _ => true)]);
+
+        Assert.False(policy.MayRemove(container).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(container, "other-tool")).IsAllowed);
+    }
+
+    /// <summary>
+    /// Probed roots are not pooled with each other either. Two can land on one folder, as a vcpkg
+    /// clone and a binary cache a variable put inside it both declare the clone, and the one that
+    /// recognises every child must not lift the other's refusal.
+    /// </summary>
+    [Fact]
+    public void AProbedRootCannotOpenWhatAnotherProbedRootRefuses()
+    {
+        var clone = Path.Combine(_environment.UserProfile, "vcpkg");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots:
+            [
+                new ToolRoot(
+                    clone,
+                    "The clone.",
+                    static name => name.Equals("buildtrees", StringComparison.OrdinalIgnoreCase)),
+                new ToolRoot(clone, "The folder holding a cache.", static _ => true),
+            ]);
+
+        Assert.False(policy.MayRemove(Path.Combine(clone, "installed")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(clone, "buildtrees")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same rule one level down: a probed root inside a folder another probed root refuses
+    /// outright does not answer for what is below it.
+    /// </summary>
+    [Fact]
+    public void AProbedRootInsideAnotherCannotOpenWhatTheOuterRefuses()
+    {
+        var live = Path.Combine(_environment.UserProfile, "live-session");
+        var inside = Path.Combine(live, "cache-holder");
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots:
+            [
+                new ToolRoot(live, "Something is using this.", static _ => false),
+                new ToolRoot(inside, "A folder holding a cache.", static _ => true),
+            ]);
+
+        Assert.False(policy.MayRemove(Path.Combine(inside, "anything")).IsAllowed);
+    }
+
+    /// <summary>
+    /// What is inside a probed root that refuses it is refused with that root's own reason. The
+    /// sentence for an unrecognised child of a tool's folder speaks of configuration beside a cache,
+    /// which is untrue of a folder a program is using, and the user reading it is deciding whether to
+    /// wait.
+    /// </summary>
+    [Fact]
+    public void WhatIsInsideAProbedRootIsRefusedWithThatRootsReason()
+    {
+        var live = Path.Combine(_environment.UserProfile, "live-session");
+        const string reason = "A running program is using this right now.";
+
+        var policy = new ExploreActionPolicy(
+            ProtectedRegions.For(_system, _environment),
+            [],
+            probedRoots: [new ToolRoot(live, reason, static _ => false)]);
+
+        var inside = policy.MayRemove(Path.Combine(live, "working.txt"));
+
+        Assert.False(inside.IsAllowed);
+        Assert.Contains(reason, inside.Reason, StringComparison.Ordinal);
+        Assert.Equal(reason, policy.MayRemove(live).Reason);
     }
 
     private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");
@@ -1379,10 +1562,18 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
     private static ToolRoot VendorTool(string path) => new(path, "A vendor tool's own folder.", static _ => false);
 
+    /// <summary>
+    /// The region table this machine's fakes produce, with the roots handed straight to the
+    /// constructor. <see cref="ExploreActionPolicy.ForAsync"/> is the wiring and is asserted on its
+    /// own below; every rule here is about what the table and the declarations say, and routing each
+    /// of them through a provider would make forty tests asynchronous to establish nothing.
+    /// </summary>
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
-        ExploreActionPolicy.For(_system, _environment, [new StubProvider(toolRoots)]);
+        new(ProtectedRegions.For(_system, _environment), toolRoots);
 
-    private sealed class StubProvider(IReadOnlyList<ToolRoot> roots) : ICleanupProvider
+    private sealed class StubProvider(
+        IReadOnlyList<ToolRoot> roots,
+        IReadOnlyList<ToolRoot>? discovered = null) : ICleanupProvider
     {
         public string Id => "stub";
 
@@ -1405,6 +1596,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
         public bool IsAwaitingSourceFolders => false;
 
         public IReadOnlyList<ToolRoot> ToolRoots => roots;
+
+        public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ToolRoot>>(discovered ?? []);
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
 

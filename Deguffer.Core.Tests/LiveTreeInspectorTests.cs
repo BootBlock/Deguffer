@@ -277,6 +277,38 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// Both places a program is, asked without naming either: the folder its executable was started
+    /// from, and the directory it is working in. The program runs from one folder and works in
+    /// another, so neither answer can stand in for the other.
+    ///
+    /// <para>The working directory is compared as the folder the test created, which has no
+    /// trailing separator. Windows keeps one on a process's working directory, and the same folder
+    /// reported both ways would be two places.</para>
+    /// </summary>
+    [Fact]
+    public void NamesTheFolderAProgramRunsFromAndTheDirectoryItIsWorkingIn()
+    {
+        var installed = _temp.CreateDirectory("installed");
+        var working = _temp.CreateDirectory("working");
+        var copied = Path.Combine(installed, "waiter.exe");
+        File.Copy(WaitingProgram, copied);
+
+        // Waited on through the working directory alone, which is the half a process has to finish
+        // starting before it can report.
+        using var running = StartWaiting(working, new LiveTreeQuery(working, working), copied);
+
+        var findings = new LiveTreeInspector().FindOccupiedDirectories();
+
+        Assert.True(findings.Complete);
+        Assert.Contains(findings.Live, place =>
+            place.Directory.Equals(installed, StringComparison.OrdinalIgnoreCase)
+            && place.Holders.Any(h => h.EndsWith(" is running from inside it", StringComparison.Ordinal)));
+        Assert.Contains(findings.Live, place =>
+            place.Directory.Equals(working, StringComparison.OrdinalIgnoreCase)
+            && place.Holders.Any(h => h.EndsWith(" is working in it", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
     /// The same evidence asked from the other end, for a scratch folder whose children nobody can
     /// name in advance: which entry of this folder is something working in?
     ///

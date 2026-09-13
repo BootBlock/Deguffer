@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -612,5 +613,44 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
         Assert.True(plan.EstimatedBytes > 0, "A cache past MAX_PATH was measured as empty.");
+    }
+
+    /// <summary>
+    /// §7.1 over the core directory PlatformIO reports and a packages directory it reports apart
+    /// from that. Neither is the documented default here, so the synchronous declaration reaches
+    /// neither, and <c>packages</c> is the largest thing a size picture offers first.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheCoreAndPackagesDirectoriesPlatformIoReports()
+    {
+        _environment.WithExecutable("pio");
+
+        // Inside the profile, where the region table allows everything, so only a declaration can
+        // refuse these. Beside the profile the table refuses the lot as another account's.
+        var core = Path.Combine(_environment.UserProfile, "embedded", ".platformio");
+        var packages = Path.Combine(_environment.UserProfile, "toolchains");
+
+        var report = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["core_dir"] = core,
+            ["packages_dir"] = packages,
+        });
+
+        var provider = CreateProvider(new FakeProcessRunner().Responding("system info", report));
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.NotEqual(provider.CoreRoot, core);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(packages, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(policy.MayRemove(core).IsAllowed);
+        Assert.All(
+            new[] { "platforms", "penv", "python3", "lib" },
+            child => Assert.False(policy.MayRemove(Path.Combine(core, child)).IsAllowed, child));
+        Assert.True(policy.MayRemove(Path.Combine(core, ".cache")).IsAllowed);
+
+        Assert.False(policy.MayRemove(packages).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(packages, "toolchain-xtensa-esp32")).IsAllowed);
     }
 }

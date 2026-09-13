@@ -96,6 +96,41 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             static _ => false),
     ];
 
+    /// <summary>
+    /// The store <c>pnpm store path</c> reports, which is inside <see cref="HomeDirectory"/> only on a
+    /// default install and moves with <c>store-dir</c>. It recognises no child for the same reason
+    /// the home does: <c>pnpm store prune</c> works inside the store and never removes it.
+    ///
+    /// <para>One store, the same one the plan prunes. pnpm can keep a further store on another drive
+    /// so that its links there can be hard links, and neither route reaches one: the command answers
+    /// for a single location.</para>
+    ///
+    /// <para>The folder holding a relocated store is not declared here. §7.1 refuses a folder that
+    /// holds a refused path, so declaring the store covers it without this provider having to
+    /// name a directory it knows nothing else about.</para>
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(
+        CancellationToken ct = default)
+    {
+        if (Environment.FindExecutable("pnpm") is not { } pnpm)
+        {
+            return [];
+        }
+
+        return await ResolveStoreAsync(pnpm, ct).ConfigureAwait(false) is not { } store
+            ? []
+            :
+            [
+                new ToolRoot(
+                    store,
+                    "This is pnpm's store, where it keeps one copy of each package version that "
+                    + "every project on this machine links into. Removing it by hand breaks those "
+                    + "links. Pruning it is offered on the Storage page, where pnpm's own command "
+                    + "decides what no project still uses.",
+                    static _ => false),
+            ];
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("pnpm") is not null);
 

@@ -68,9 +68,10 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
     /// <c>NuGet.Config</c> sits in <c>.nuget</c> beside the packages folder, and the
     /// credential-provider plugins sit under <c>%LOCALAPPDATA%\NuGet</c> beside the two HTTP caches.
     ///
-    /// <para>The locations <c>dotnet nuget locals --list</c> reports are deliberately absent. They
-    /// arrive from a subprocess, and a declaration Explore consults on every path has to be readable
-    /// without running one. These are the documented defaults, and a declaration can only ever
+    /// <para>The locations <c>dotnet nuget locals --list</c> reports are deliberately absent, here
+    /// and from <see cref="DiscoverToolRootsAsync"/>. Each is a cache the plan clears, and the plan
+    /// protects nothing it derives from them, so a declaration over one could only refuse what the
+    /// Storage page offers. These are the documented defaults, and a declaration can only ever
     /// refuse — so naming them costs nothing and covers the ordinary machine.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>

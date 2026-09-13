@@ -127,8 +127,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     public string LocalRoot => Path.Combine(Environment.LocalAppData, "pypoetry");
 
     /// <summary>
-    /// Where Poetry keeps its cache when it has not been asked. It is what the §5.2 declaration below
-    /// is written against, because a declaration Explore consults on every path cannot run a
+    /// Where Poetry keeps its cache when it has not been asked. It is what the synchronous §5.2
+    /// declaration below is written against, because Poetry reports its real cache directory from a
     /// subprocess, and it is the fallback handed to <see cref="PoetryDiscovery"/>.
     /// </summary>
     public string DefaultCacheRoot => Path.Combine(LocalRoot, "Cache");
@@ -146,8 +146,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// has none, so Explore refuses the directory that holds the environments as a unit; and the
     /// roaming folder is a root with nothing inside it that may ever go.
     ///
-    /// <para>The cache directory Poetry reports is deliberately not declared. It arrives from a
-    /// subprocess, and this is the documented default of the folder holding it.</para>
+    /// <para>These are the documented defaults. What Poetry reports arrives from a subprocess, so it
+    /// is declared in <see cref="DiscoverToolRootsAsync"/> instead.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
@@ -169,6 +169,45 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             + "repositories. Deguffer never removes it.",
             static _ => false),
     ];
+
+    /// <summary>
+    /// The two directories Poetry reports. <c>cache-dir</c> and <c>virtualenvs.path</c> are both
+    /// configuration, and the second is the one that has to be said separately: it defaults to a
+    /// child of the cache directory and can be pointed anywhere, so on a machine that moved it the
+    /// environments are outside every declaration above.
+    ///
+    /// <para>The folder <em>holding</em> a relocated cache is deliberately not declared, though
+    /// <see cref="LocalRoot"/> is above. A relocated cache may sit anywhere — its parent can be the
+    /// root of a drive — and a root recognising no child there would refuse everything on it. What
+    /// covers that folder is §7.1's rule that a folder holding a refused path is refused too.</para>
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(
+        CancellationToken ct = default)
+    {
+        if (Environment.FindExecutable("poetry") is not { } poetry)
+        {
+            return [];
+        }
+
+        var (cacheRoot, environments) =
+            await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
+
+        return
+        [
+            ToolRoot.Of(
+                cacheRoot,
+                "This is Poetry's cache folder. Deguffer clears the caches inside it and nothing "
+                + "else, because every virtual environment Poetry has created sits in here beside them.",
+                DisposableChildren),
+
+            new ToolRoot(
+                environments,
+                "This holds every virtual environment Poetry has created, for every project on this "
+                + "machine. Each one is a full dependency install rather than a cache, so Deguffer "
+                + "never removes any of them.",
+                static _ => false),
+        ];
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("poetry") is not null);

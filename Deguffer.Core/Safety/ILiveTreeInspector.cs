@@ -94,6 +94,30 @@ public interface ILiveTreeInspector
     LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default);
 
     /// <summary>
+    /// Every directory a running program is in: the folder its executable was started from, and
+    /// its working directory. <see cref="LiveTree.Holders"/> names each program in one.
+    ///
+    /// <para><b>The same evidence as <see cref="FindLive"/>, asked from the other end, and the
+    /// reason is that the other end is a disk walk.</b> Explore refuses a build directory a plan
+    /// holds back as in use (§7.1), and that method can only judge a directory somebody has named.
+    /// Naming a source tree's build directories is discovery — a walk of every approved source root,
+    /// each time Explore rebuilds its policy, with every path refused until it finished. The process
+    /// table already holds the few places a live build directory can be reached from, and this is
+    /// one pass over it.</para>
+    ///
+    /// <para><b>A place, not a verdict.</b> A program in a project's own <c>tools</c> folder is
+    /// using neither the project nor its build output, so a caller that wants the plan's answer
+    /// asks <see cref="FindLive"/> about what it finds from here. Declared lock files are no part of
+    /// this answer, because a file held open is not a place a program is.</para>
+    ///
+    /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories could not be
+    /// read, and the list then holds executables' folders alone. The same limits apply as to
+    /// <see cref="FindLive"/>: every entry is positive evidence, and an elevated program or one
+    /// belonging to another account cannot be inspected at all.</para>
+    /// </summary>
+    LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default);
+
+    /// <summary>
     /// Which immediate children of <paramref name="directories"/> something is running from or
     /// working in, asked without naming the children.
     ///

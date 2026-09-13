@@ -691,6 +691,9 @@ public sealed class CleanupPlannerTests
 
         public IReadOnlyList<ToolRoot> ToolRoots => [];
 
+        public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+
         public bool WasExecuted { get; private set; }
 
         /// <summary>What the planner said the whole run may destroy, for §5.6's negative.</summary>

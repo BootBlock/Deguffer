@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -598,5 +599,32 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         Assert.True(
             File.Exists(Path.Combine(packages, "Other-1.0.0-full.nupkg")),
             "a package was removed from a folder that is not a Squirrel application");
+    }
+
+    /// <summary>
+    /// §7.1 over a staging directory an application is installing through. Its name matches the
+    /// staging pattern, so the name-shaped declaration recognises it while the plan refuses it, and
+    /// only a declaration that asks what is running keeps Explore from offering it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAStagingDirectorySomethingIsInstallingThrough()
+    {
+        var busy = Populate(Path.Combine(StagingRoot, "tempa"));
+        var idle = Populate(Path.Combine(StagingRoot, "tempb"));
+
+        var provider = CreateProvider(new FakeLiveTreeInspector(busy));
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.Contains(provider.ToolRoots, r => r.Recognises("tempa"));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
+
+        var refusal = policy.MayRemove(busy);
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("installing or updating", refusal.Reason, StringComparison.Ordinal);
+        Assert.False(policy.MayRemove(Path.Combine(busy, "data.bin")).IsAllowed);
+
+        Assert.True(policy.MayRemove(idle).IsAllowed);
     }
 }

@@ -145,7 +145,8 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
             p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
 
         // §7.1 refuses every path a provider names as protected, on the second route as on the first.
-        var policy = ExploreActionPolicy.For(new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
         Assert.False(policy.MayRemove(_environment.LocalAppData).IsAllowed);
     }
 

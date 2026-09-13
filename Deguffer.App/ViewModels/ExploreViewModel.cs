@@ -441,6 +441,11 @@ public sealed partial class ExploreViewModel : ObservableObject
         Progress = null;
         RouteNote = null;
 
+        // Started with the scan and never awaited here. Part of §7.1's refusal set says what is
+        // running right now, so it goes stale while the page is open, and a scan is the moment the
+        // rest of the page is being re-measured anyway. It finishes long before a scan does.
+        Selection.Reconsider();
+
         // Back to what is known before anything is measured. The previous scan's fallback reason is
         // about to be replaced, and a cancelled or failed scan never reaches the offer below.
         OfferElevation(null);

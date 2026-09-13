@@ -122,15 +122,52 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// it.</para>
     ///
     /// <para>Built from <see cref="CoreRoot"/> rather than from the directory PlatformIO reports,
-    /// because Explore consults this on every path it draws and it has to answer without starting a
-    /// subprocess. A relocated core directory is therefore not covered here — the same trade-off
-    /// <see cref="CondaCacheProvider"/> states, and it fails safe, because a directory no provider
-    /// recognises is Tier 4.</para>
+    /// because the report comes from a subprocess and this property is synchronous. The reported
+    /// core directory is declared in <see cref="DiscoverToolRootsAsync"/>.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    public override IReadOnlyList<ToolRoot> ToolRoots => Declare(CoreRoot);
+
+    /// <summary>
+    /// The core directory PlatformIO reports, which is the one that matters here: <c>packages</c>
+    /// holds the installed toolchains and is the largest thing in there, so a size picture offers it
+    /// first. <c>PLATFORMIO_CORE_DIR</c> moves the folder, and a <c>.platformio</c> at the root of
+    /// the profile's drive wins over the default on Windows, so the default is often not where it is.
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(
+        CancellationToken ct = default)
+    {
+        if (Environment.FindExecutable("pio") is not { } pio)
+        {
+            return [];
+        }
+
+        var located = await ResolveLocationsAsync(pio, ct).ConfigureAwait(false);
+
+        return
+        [
+            .. Declare(located.CoreDirectory),
+
+            // packages_dir is reported independently of core_dir — 6.1.19 reports the core and
+            // neither of the other two — so a machine that moved it has the toolchains outside the
+            // root above, where nothing refuses them. It recognises no child at all because it is
+            // never a target, which is the same rule the core root's predicate states.
+            new ToolRoot(
+                located.PackagesDirectory,
+                "These are the toolchains, frameworks and platforms PlatformIO installed. Deguffer "
+                + "removes one only where PlatformIO itself reports that no project needs it, "
+                + "because nothing about the folder says which of your boards still builds.",
+                static _ => false),
+        ];
+    }
+
+    /// <summary>
+    /// §5.2 over one core directory. <see cref="ToolRoots"/> and
+    /// <see cref="DiscoverToolRootsAsync"/> differ only in which directory they are given.
+    /// </summary>
+    private static IReadOnlyList<ToolRoot> Declare(string core) =>
     [
         new ToolRoot(
-            CoreRoot,
+            core,
             "This is PlatformIO's own folder. Deguffer clears the download cache inside it, and "
             + "removes an installed package only where PlatformIO itself reports that nothing needs "
             + "it, because the toolchains, the Python that PlatformIO runs on and your global "

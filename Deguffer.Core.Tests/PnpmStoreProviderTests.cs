@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Tests.Fakes;
 
@@ -268,4 +269,26 @@ public sealed class PnpmStoreProviderTests : IDisposable
 
     [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool CreateHardLink(string fileName, string existingFileName, nint securityAttributes);
+
+    /// <summary>
+    /// §7.1 over a store outside pnpm's home, which is where one <c>store-dir</c> moved, or one on a
+    /// second drive, sits. Every project on the machine links into it, and removing the folder that
+    /// holds it removes the store too, so both are refused.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAStoreOutsidePnpmsHomeAndTheFolderHoldingIt()
+    {
+        var holder = Path.Combine(_environment.UserProfile, ".pnpm-store");
+        var store = Populate(Path.Combine(holder, "v10"));
+
+        var provider = CreateProvider(Reporting(store));
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.False(store.StartsWith(provider.HomeDirectory, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(policy.MayRemove(store).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(store, "files")).IsAllowed);
+        Assert.False(policy.MayRemove(holder).IsAllowed);
+    }
 }

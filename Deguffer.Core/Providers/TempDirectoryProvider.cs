@@ -219,6 +219,45 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryExists));
 
+    /// <summary>
+    /// Every entry in a scratch folder that a running program is working in or running from, as a
+    /// root recognising no child.
+    ///
+    /// <para><b>This provider declares no <see cref="ToolRoots"/> at all, and that left the §5.3
+    /// exclusion with no effect on Explore.</b> The scratch folder itself is refused there as a
+    /// folder, and everything inside it is ordinary — so the 344 MB of a live session's working
+    /// files that §5.3 was written about was drawn as a large directory and offered for removal. The
+    /// plan lists each such entry as a survivor under §5.6, and §7.1 refuses every path a provider
+    /// names as protected.</para>
+    ///
+    /// <para>One pass over the process table however large the folder, which is what
+    /// <see cref="ILiveTreeInspector.FindLiveChildren"/> exists for: the measured machine held
+    /// 18,056 immediate entries, and naming them to ask about each would be a walk per entry.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        var folders = DeclaredPaths().Where(LongPath.DirectoryExists).ToList();
+
+        if (folders.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+        }
+
+        var live = _liveTrees.FindLiveChildren(folders, ct);
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. live.Live.Select(held => new ToolRoot(
+                held.Directory,
+                (held.Holders.Count > 0
+                    ? $"A running program is working in this right now ({string.Join(", ", held.Holders)})"
+                    : "A running program is working in this right now")
+                + ". A temporary folder holds live working files among abandoned ones, and Deguffer "
+                + "leaves anything in use alone however old it looks.",
+                static _ => false)),
+        ]);
+    }
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var days = ConfiguredDays;

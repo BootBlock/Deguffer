@@ -24,7 +24,10 @@ public sealed class ExploreRemoverTests : IDisposable
         _system = new FakeSystemDirectories(_temp.Path);
         _environment = new FakeUserEnvironment(_temp.Path);
 
-        _policy = ExploreActionPolicy.For(_system, _environment, []);
+        // The region table alone: these tests are about what the remover does with a verdict, and no
+        // provider takes part in any of them. ExploreActionPolicy.ForAsync is asserted where §5.2's
+        // declarations are, and it cannot be awaited in a constructor.
+        _policy = new ExploreActionPolicy(ProtectedRegions.For(_system, _environment), []);
     }
 
     public void Dispose() => _temp.Dispose();

@@ -120,10 +120,41 @@ public interface ICleanupProvider
     /// beside <c>.gradle\caches</c> is Tier 4 there exactly as it is here. So the rule is declared
     /// where something outside the provider can read it, rather than restated by Explore.</para>
     ///
-    /// <para>Read outside a planning pass, so it must be cheap: a path this provider already knows,
-    /// or resolves from an environment variable. A provider that would have to run a subprocess or
-    /// walk the disk to answer declares nothing, which is correct — it has no root whose siblings
-    /// need protecting, or it finds its roots rather than knowing them.</para>
+    /// <para>Read synchronously, and a provider may keep the answer until
+    /// <see cref="InvalidateCaches"/>. A declaration that needs a subprocess cannot be made here, and
+    /// belongs in <see cref="DiscoverToolRootsAsync"/>, which is asked again each time Explore builds
+    /// its policy.</para>
     /// </summary>
     IReadOnlyList<ToolRoot> ToolRoots { get; }
+
+    /// <summary>
+    /// The same declaration for what this provider can only protect once it has asked the machine.
+    /// Empty for a provider whose <see cref="ToolRoots"/> are the whole of what it owns.
+    ///
+    /// <para><b>It exists because §7.1's refusal set was smaller than §5.2's.</b> A tool's location
+    /// moves — <c>go env</c>, <c>pio system info</c>, <c>pnpm store path</c>, <c>conda info</c> and
+    /// Maven's <c>settings.xml</c> each report one that is not the documented default — and a
+    /// synchronous property cannot run the command that says so. Declaring only the default left
+    /// Explore allowing the moved directory and everything a plan protects inside it, while the
+    /// Storage page refused both.</para>
+    ///
+    /// <para><b>A path something is using right now is declared here too</b>, as a root that
+    /// recognises no child, because that is what "nothing in here may go" is in this vocabulary. A
+    /// plan holds those back and asserts them under §5.6, which makes them paths a provider names
+    /// as protected, and §7.1 refuses every such path. They are the one kind of declaration that
+    /// ages: what is running changes, so the answer is read again whenever Explore rebuilds its
+    /// policy rather than kept for the life of the process.</para>
+    ///
+    /// <para><b>A declaration made here only ever narrows what Explore allows.</b> It can refuse a
+    /// path, and it never allows one that <see cref="ToolRoots"/> or the operating system's own
+    /// regions refuse, so a location a tool reports cannot open a folder a provider protects by
+    /// name. A root that recognises every child therefore refuses its own path and nothing inside
+    /// it, which is how a provider declares a folder its plan protects without claiming the rest of
+    /// what is in there.</para>
+    ///
+    /// <para>Asked once each time Explore builds its policy, off the UI thread and never per path.
+    /// Explore builds a new set of providers for each policy, so the probes behind it run again
+    /// then, separately from any planning pass.</para>
+    /// </summary>
+    Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default);
 }

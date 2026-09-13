@@ -174,7 +174,9 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// <para>The name is fixed rather than read back out of the settings file, so the declaration
     /// stays string work. A repository relocated inside <c>.m2</c> under another name is then refused
     /// here while the Storage page still removes it, which is the direction §5.2 requires an
-    /// uncertain classification to fail in.</para>
+    /// uncertain classification to fail in. Where the settings file has moved the repository out of
+    /// <c>.m2</c> altogether, <see cref="DiscoverToolRootsAsync"/> names the directory holding
+    /// it.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
@@ -185,6 +187,45 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             + "server passwords and your toolchains all sit beside it.",
             static name => name.Equals("repository", StringComparison.OrdinalIgnoreCase)),
     ];
+
+    /// <summary>
+    /// The directory holding the repository this machine's <c>settings.xml</c> actually names, which
+    /// the plan asserts must survive. A moved repository is not under <c>.m2</c>, so nothing above
+    /// reaches its container.
+    ///
+    /// <para><b>The directory itself, and nothing inside it.</b> It recognises every child, so it
+    /// refuses only its own path and, while it is on disk, a folder holding it. The plan protects
+    /// the container and no other thing in it, and what else the user keeps there is theirs rather
+    /// than Maven's: a repository at <c>${user.home}/maven-repo</c> has the whole profile as its
+    /// container, and refusing the container's other children would refuse the profile.</para>
+    ///
+    /// <para>Nothing is declared for a setting the plan leaves unexamined, because the plan protects
+    /// nothing there. A probed declaration only narrows what Explore allows, so this could not open
+    /// a path <see cref="ToolRoots"/> refuses whatever it named.</para>
+    ///
+    /// <para>Here rather than in <see cref="ToolRoots"/>, which names only the default. The settings
+    /// file is edited by hand and by every IDE, and this is asked again each time Explore builds its
+    /// policy rather than kept with a declaration the provider may hold for a whole pass.</para>
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<ToolRoot> declared =
+            ResolveLocalRepository() is { } repository
+            && WhyLeftAlone(repository) is null
+            && Path.GetDirectoryName(repository) is { Length: > 0 } container
+                ?
+                [
+                    new ToolRoot(
+                        container,
+                        "This holds the local repository your Maven settings point at, and removing it "
+                        + "would take the repository with everything else in it. Explore removes things "
+                        + "from inside it, never the folder itself.",
+                        static _ => true),
+                ]
+                : [];
+
+        return Task.FromResult(declared);
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryExists(repository));
@@ -198,29 +239,9 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
                 + "tell which directory it means and is leaving it alone.");
         }
 
-        // §5.2, and the reason this check is here rather than trusted to the declaration. A
-        // configured value naming the Maven home, or anything above it, would make the tool root the
-        // target: the same plan would delete .m2 while asserting that the settings.xml inside it
-        // survives. '${user.home}/.m2' is a plausible typo for the correct
-        // '${user.home}/.m2/repository', and a settings file arrives from a dotfiles repository as
-        // often as it is typed, so this is refused rather than trusted.
-        if (LongPath.Contains(repository, Home))
+        if (WhyLeftAlone(repository) is { } reason)
         {
-            return UnexaminedPlan(
-                $"Your Maven settings.xml points the local repository at {repository}, which holds "
-                + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.");
-        }
-
-        // The same refusal, one level in. A value naming one of the things this provider promises to
-        // leave standing would otherwise be targeted and asserted to survive by the same plan, which
-        // is the contradiction the check above exists to stop.
-        if (ProtectedNames.FirstOrDefault(n => LongPath.Contains(Path.Combine(Home, n.RelativePath), repository))
-            is { RelativePath.Length: > 0 } named)
-        {
-            return UnexaminedPlan(
-                $"Your Maven settings.xml points the local repository at {repository}, which is "
-                + $"'{named.RelativePath}' in your Maven home. Deguffer never removes that, so it is "
-                + "leaving it alone.");
+            return UnexaminedPlan(reason);
         }
 
         if (Declare(repository) is not { } roots)
@@ -263,6 +284,36 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
         };
+    }
+
+    /// <summary>
+    /// Why the plan leaves a configured repository unexamined, or null where it may go on to look.
+    /// Read by the plan and by <see cref="DiscoverToolRootsAsync"/> alike, because a setting the plan
+    /// declines protects nothing, and so leaves nothing for Explore to refuse.
+    /// </summary>
+    private string? WhyLeftAlone(string repository)
+    {
+        // §5.2, and the reason this check is here rather than trusted to the declaration. A
+        // configured value naming the Maven home, or anything above it, would make the tool root the
+        // target: the same plan would delete .m2 while asserting that the settings.xml inside it
+        // survives. '${user.home}/.m2' is a plausible typo for the correct
+        // '${user.home}/.m2/repository', and a settings file arrives from a dotfiles repository as
+        // often as it is typed, so this is refused rather than trusted.
+        if (LongPath.Contains(repository, Home))
+        {
+            return $"Your Maven settings.xml points the local repository at {repository}, which holds "
+                + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.";
+        }
+
+        // The same refusal, one level in. A value naming one of the things this provider promises to
+        // leave standing would otherwise be targeted and asserted to survive by the same plan, which
+        // is the contradiction the check above exists to stop.
+        return ProtectedNames.FirstOrDefault(n => LongPath.Contains(Path.Combine(Home, n.RelativePath), repository))
+            is { RelativePath.Length: > 0 } named
+                ? $"Your Maven settings.xml points the local repository at {repository}, which is "
+                  + $"'{named.RelativePath}' in your Maven home. Deguffer never removes that, so it is "
+                  + "leaving it alone."
+                : null;
     }
 
     /// <summary>
