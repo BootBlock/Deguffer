@@ -9,7 +9,8 @@
 **Deguffer** is a small Windows utility — **C# 14 / .NET 10 / WinUI 3** — that finds and reclaims
 wasted disk space, with a safety model good enough to trust unattended. It recognises what specific
 locations on a disk actually are, reports what each one costs to lose, and leaves the decision with
-the user. It also shows where the machine's memory goes, and acts on none of it (§7.2).
+the user. It also shows where the machine's memory goes, and its one action there is to ask a program
+to close itself (§7.2).
 
 ## The name
 
@@ -500,13 +501,219 @@ it is built in.
 - **Hover text may say what one of Windows' own parts is.** It never says that anything is safe to
   close, and it never suggests closing anything.
 - **Memory is not a RAM cleaner, in any phase, and never controls a service** (§2).
-- **An action is specified here before any of it is built.** The investigation found one that fits
-  this model: the program's own close, sent only to the visible top-level windows of a windowed
-  application in the user's own session that belong to no console host, to a process identified by
-  identifier and creation time and checked again immediately before anything is sent, with
-  everything else refused and its reason stated. Sections 7 and 10 of
-  [memory-view.md](memory-view.md) are where that specification starts. Until this section specifies
-  it, Memory has no action at all.
+- **Memory has one action, and §7.2.1 below specifies it.** The investigation found exactly one
+  that fits this model: the program's own close, and nothing stronger.
+
+#### 7.2.1 Closing a program
+
+Memory's one action, and the one §7.2 says is specified here before any of it is built. Sections 6
+and 7 of [memory-view.md](memory-view.md) are the investigation behind every rule below, and its
+refusal table is restated here rather than pointed at, because a refusal that lives only in a
+finished investigation is a refusal a refactor drops.
+
+Deguffer exists because a cleaner that removes the wrong thing loses data that cannot be recovered.
+Closing a program can lose exactly as much — an unsaved document, a build half-way through, a
+download — and unlike a deletion it has no Recycle Bin behind it. So Memory asks a program to close
+itself, the way the close button on its own window does, and it does nothing the program cannot
+refuse. **There is one verb here, and it does not grow a second.**
+
+**What is sent**
+
+- **The action is `WM_CLOSE`, and nothing else.** Windows documents it as the signal "that a window
+  or an application should terminate", whose default handling destroys the window, and which an
+  application "can prompt the user for confirmation" about first
+  ([WM_CLOSE](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-close)). Unsaved work is
+  therefore the program's own question, asked in its own words, in its own dialog. This is §5.1 for
+  a subject that is not a file: the program's own close beats anything Deguffer could do to it from
+  outside.
+- **It is posted, never sent.** `SendMessage` "does not return until the window procedure has
+  processed the message"
+  ([SendMessage](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage)),
+  so a program already busy behind a modal dialog would hold Deguffer there with it. Posting
+  "returns without waiting"
+  ([PostMessage](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-postmessagew)),
+  which is also what makes the watch below honest: the program has been asked, and what it does next
+  is its own.
+- **It goes to every window that qualifies, in the order Windows enumerates them.** Closing one
+  window of a program that has several does not close the program, and a program with three
+  documents open asks about each in its own words. The count is named in the confirmation, so three
+  dialogs are not a surprise.
+- **Nothing is sent twice, and nothing is chased.** One pass, no retry, no escalation, and no
+  attention paid to a window the program opens afterwards. A program still running when the watch
+  ends is reported as still running, and the user may pick it again.
+
+**Which windows qualify**
+
+A window qualifies only where all of these hold, and a process with no window that qualifies is
+refused rather than attempted.
+
+- **It is top-level and unowned.** `EnumWindows` enumerates top-level windows, and from Windows 8
+  only those of desktop applications
+  ([EnumWindows](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows)).
+  Dialog boxes and message boxes "are owned windows by default"
+  ([Owned Windows](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features)), and
+  closing a dialog is not closing the program.
+- **It is visible, and it is not cloaked.** A cloaked window has "all the trappings of visibility,
+  without actually being presented to the user"
+  ([The Old New Thing](https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507)), which is
+  how the shell holds a window on another virtual desktop. Windows documents the three cloaking
+  values but never which cause produces which
+  ([DWMWINDOWATTRIBUTE](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute)),
+  so Deguffer reads any cloak as "not on screen" and attaches no meaning to the value. A user whose
+  program sits on another desktop is told that, rather than left with a close that appears to do
+  nothing.
+- **It is not a console host's window.** Closing a console sends `CTRL_CLOSE_EVENT` to every process
+  attached to it, and the system ends a process that handles the event when its handler returns or
+  after five seconds
+  ([HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)). The console
+  host makes one *attached* process the reported owner of its window, so a search for a program's
+  own windows finds the console window too, and posting there would end every attached program
+  without any of them asking about unsaved work. A graphical program can own a console window too:
+  on a workstation checked on 2026-09-13, one program that is not a console program owned an
+  invisible `ConsoleWindowClass` window. The visibility rule above would have excluded that window,
+  and that is why the refusal below is of the whole process rather than of one window: whether a
+  console's window is visible says nothing about which programs share the console.
+
+**A console window is recognised by its class, and that is not a documented contract.** Microsoft
+uses the name `ConsoleWindowClass` in a sample without ever documenting it as the console's class
+([client-side UI Automation provider](https://learn.microsoft.com/en-us/dotnet/framework/ui-automation/create-a-client-side-ui-automation-provider)),
+and the terminal's own source is where both it and `PseudoConsoleWindow` are defined
+([window.cpp](https://github.com/microsoft/terminal/blob/main/src/interactivity/win32/window.cpp),
+[InteractivityFactory.cpp](https://github.com/microsoft/terminal/blob/main/src/interactivity/base/InteractivityFactory.cpp)).
+No documented call asks whether a window belongs to a console. So the refusal is of the whole process
+rather than of the one window, and the residual risk is stated rather than designed away: were a
+class name to change, Deguffer would stop recognising that console. The pseudoconsole's window is
+caught twice over, because it is owned and never shown, and the alternative to the class check —
+attaching to another program's console to ask — is worse than the risk.
+
+**What the target is**
+
+- **A held handle, not a number.** When the user confirms, Deguffer opens the process with
+  `PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE`, the pair `ProcessProbe` already established as
+  the one an unelevated Deguffer is granted for most processes, and reads the creation time back
+  through it. If that time differs from the one in the snapshot the user picked from, the process
+  they picked has gone and the number now belongs to another: the action is refused and says so.
+- **The handle is held until the action finishes**, and that removes the reuse race rather than
+  narrowing it. A process identifier "is valid from the time the process is created until all
+  handles to the process are closed and the process object is freed; at this point, the identifier
+  may be reused"
+  ([PROCESS_INFORMATION](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-process_information)),
+  so while Deguffer holds one, nothing else can take the number it is about to post to.
+- **Every window is checked against that handle immediately before its own message.** A window
+  handle is recycled too, so the process behind each one is asked again at the moment of posting,
+  and a window that has moved to another process receives nothing.
+- **Exit is asked by waiting, never by an exit code.** A process may exit with `STILL_ACTIVE`'s own
+  value, which both `ProcessProbe` and Windows record
+  ([GetExitCodeProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getexitcodeprocess)).
+
+**What is refused, and why**
+
+Every row here is a rule rather than the consequence of an access check failing, because unelevated
+the investigation could open none of the twelve system processes it named. Where more than one row
+applies, the first in this order is the reason shown, so the same process always gives the same
+answer.
+
+| Refused | Why |
+| --- | --- |
+| Terminating anything, however it is asked for | `TerminateProcess` ends every thread "immediately with no chance to run additional code" ([Terminating a Process](https://learn.microsoft.com/en-us/windows/win32/procthread/terminating-a-process)), so nothing the program holds is written. Memory has no stronger verb, and no preference adds one. |
+| A process in another session, or running as another user | A window in another session cannot be reached from this one, and another user's program is not this user's to close. `ProcessIdToSessionId` answers the first and documents the access right it needs ([ProcessIdToSessionId](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-processidtosessionid)), the token's user answers the second, and a process whose session or user will not be read is refused with the rest. |
+| Deguffer itself, and anything in its own process tree | Deguffer closing itself leaves the action unwatched, the result unwritten and §5.6 unrun. |
+| The process owning the shell window, and any process whose image is `explorer.exe` or `dwm.exe` | Closing the shell or the compositor takes the desktop with it. `GetShellWindow` names one of them exactly ([GetShellWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getshellwindow)), and the shell is only "usually explorer.exe" ([The Old New Thing](https://devblogs.microsoft.com/oldnewthing/20190425-00/?p=102443)), so the names catch the rest. The compositor is expected to be refused by its account as well, and is named outright because the desktop is not a thing to stake on an expectation. |
+| A critical process, and a process whose criticality will not be read | Ending a critical process stops the machine with `CRITICAL_PROCESS_DIED` ([0xEF](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died)). `IsProcessCritical` needs only `PROCESS_QUERY_LIMITED_INFORMATION` ([IsProcessCritical](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocesscritical)), so a process that will not answer it is refusing for a reason. |
+| A process at a higher integrity level than Deguffer's own, or whose level will not be read | "The thread of a process can post messages only to message queues of threads in processes of lesser or equal integrity level" ([PostMessage](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-postmessagew)), and Microsoft publishes no list of what passes the filter, only that write-type messages do not ([UIPI](https://learn.microsoft.com/en-us/previous-versions/dotnet/articles/bb625963(v=msdn.10))). The current `PostMessage` page says a blocked post sets the last error to 5, while the archived design note says a blocked call "return[s] success but silently drop[s] the window message". Two Microsoft sources disagree about what the post reports, so Deguffer decides before posting and never by what the post reports. Deguffer therefore reads the level from the token's mandatory label ([TOKEN_MANDATORY_LABEL](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_mandatory_label)) and compares the ranges the well-known RIDs define ([Well-known SIDs](https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids)), never equality, so a level between two named ones classifies correctly. |
+| A process hosting any service | §2. Memory never controls a service, and a host's window is every service in it. **This is the one row that cannot be made a rule**, and saying so is better than implying a coverage it has not got: Windows leaves services this account may not query out of the list without an error, so §7.2 already draws a host it did not name as an ordinary process, and this row does not reach that one. Where the service list came back short, the confirmation says so in the same words §7.2's note uses. What stands between the user and such a host is the rest of the table, which refuses another session, another account and a process with no window that qualifies. Memory takes no view on the open question about service control in [unreached-locations.md](unreached-locations.md), which is about disk. |
+| A process owning a console window, and any console host | Above. It has no close of its own to send, and the window it appears to own is not its. |
+| A packaged application that is not running | Windows keeps a suspended packaged application in memory only while nothing else needs the pages, and reclaims it when something does, so closing one buys nothing a user waited for. `GetPackageFullName` names a packaged process with `PROCESS_QUERY_LIMITED_INFORMATION` ([GetPackageFullName](https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getpackagefullname)); `IPackageDebugSettings::GetPackageExecutionState`, a method documented for debuggers, reports a package's state as one of `PACKAGE_EXECUTION_STATE`'s values, `PES_SUSPENDED` among them, and documents no access it needs ([GetPackageExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ipackagedebugsettings-getpackageexecutionstate), [PACKAGE_EXECUTION_STATE](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/ne-shobjidl_core-package_execution_state)) and `PSS_PROCESS_FLAGS_FROZEN` reports the same for one process ([PSS_PROCESS_FLAGS](https://learn.microsoft.com/en-us/windows/win32/api/processsnapshot/ne-processsnapshot-pss_process_flags)). Which of the two an unelevated Deguffer may ask is measured before either is relied on, and a packaged process whose state will not be read is refused. |
+| A process with no window that qualifies | §5.2's reasoning, for a subject that is not a path: what has no recognised route is not offered, and a route Deguffer had to guess at is not a recognised one. A packaged application whose window belongs to the frame host rather than to itself falls here, which is why there is no rule about frame hosts: `EnumWindows` finds it no window of its own, and Deguffer does not go looking by any other route. |
+
+**Every refusal is decided twice.** `MemoryActionPolicy` decides when the user selects a row, so the
+reason is on screen before they try anything, and `ProcessCloser` decides again through the handle it
+holds, immediately before the first message. This is §7.1's `ExploreActionPolicy` and
+`ExploreRemover` for a subject that changes far faster than a disk does.
+
+**Nothing is asked of Windows for a row nobody selected.** Session, account, integrity, criticality,
+package state and window set are read for the one process the user picked, once, and again before the
+action. A picture of five hundred processes redrawn every two seconds must not open five hundred
+processes to decide what it would refuse, and a verdict nobody asked for is a verdict nobody reads.
+
+**A refusal is a sentence on the row, never a disabled button.** §7.1's rule, unchanged, and the
+reason every line of the table above carries a *why*.
+
+**The confirmation is not a preference.** Tier 3's typed phrase is a preference because the preview
+and Tier 3 never being pre-selected still stand behind it (§7). Nothing stands behind this one: a posted message
+cannot be recalled, and what is at risk is another program's unsaved state. So a close is confirmed
+every time, by a dialog that names the program, its identifier, how many windows will be asked, that
+the program may ask the user about unsaved work, and that Deguffer will do nothing further whatever
+the program decides. The words live in Core as `ExploreRemovalPrompt`'s do, because a sentence that
+exists only inside a dialog is a sentence nothing can hold Deguffer to.
+
+**The watch, and what the result says**
+
+- **There is no deadline.** A save prompt waits for a person, so a timer would report "still running"
+  about a program doing exactly what it was asked. Deguffer watches the handle it holds and reports
+  the moment the process exits. The watch ends when the process exits, when the user dismisses the
+  result, or when the user leaves the page: three ends, every one of them an event rather than a
+  duration.
+- **One close at a time.** While a watch is open, no second close is offered. That keeps one report
+  about one action, and it is §7.1's "one selection at a time" for a subject that takes time to
+  answer.
+- **The result reports commit charge before and after, with available memory beside it**, as Storage
+  reports free space (§7) and as §7.2's headline reads the machine. The before figure is taken as the
+  first message is posted, and the after figure when the process exits, so a result that is still
+  watching shows no after figure at all rather than a difference that means nothing yet. The result
+  says in words that the machine went on allocating and freeing throughout, so the difference is what
+  happened rather than what this close returned.
+- **A program that is still running is reported, not escalated.** It asked, it refused, or it has
+  work Deguffer cannot see. The result says so and offers nothing stronger, because there is nothing
+  stronger to offer.
+- **The report outlives the next reading.** The page redraws every two seconds and clears its reading
+  notes each time. §5.6 exists to leave the user evidence, and evidence that disappears inside one
+  cadence is not evidence, so a close's report is a surface of its own that the user dismisses.
+
+**§5.6, for a subject that exits on its own**
+
+A disk does not delete itself while Deguffer looks away. Processes exit constantly, and a closed
+program's own children are expected to go with it, so "nothing else stopped" is not a claim this
+action can make. §5.6 is met here by two assertions that are exact and two lists that assert nothing,
+and the result says which of the four each line belongs to rather than smoothing the difference over.
+
+1. **What Deguffer sent.** The action records every process it opened and every window it posted to,
+   each of which belonged to the target at the moment of posting, checked through the held handle.
+   Nothing was posted anywhere else, and nothing but `WM_CLOSE` was posted at all. That much is
+   exact, and it is the assertion a test makes bite.
+2. **That what this close could not have ended survived.** Deguffer's own process and its tree, the
+   process owning the shell window, and every process named `explorer.exe` or `dwm.exe` in the
+   snapshot taken before the action are looked for again when the watch ends, by identifier and
+   creation time. Asking an ordinary program to close cannot end any of those, so this negative is
+   exact, and a run that lost one fails and names it. The set is deliberately the one the *before*
+   snapshot already knows, because §7.2.1 does not open five hundred processes to build a survivor
+   list either. A critical process needs no line of its own here: ending one stops the machine, so
+   Deguffer would not be running to report it.
+3. **What was expected to go.** The target's descendants, taken from the creation-time-checked parent
+   links (§7.2) in the snapshot before the action. A child of a closed program exiting is the program
+   closing properly, so they are named as expected rather than counted as failures.
+4. **What Deguffer does not claim.** Every other process in the before snapshot and not in the after
+   one is listed as an exit Deguffer did not cause, beside the sentence that processes exit on their
+   own. **A service host is one of those, and is deliberately not in item 2.** A demand-started
+   service stops when whatever started it ends, and a shared host exits when its last service stops,
+   so closing a program that was a service's only client can end a host without Deguffer having sent
+   it anything. Listing that is honest. Failing the run over it would put a false alarm on the one
+   surface §5.6 exists to make trustworthy. Memory never reports that nothing else stopped, because
+   it cannot know that.
+
+A close's evidence is shown on the §5.6 surface Storage already has, never on a second surface for
+the same thing. `VerificationCheck` is keyed by a path and has no outcome for an expected exit or for
+an exit Deguffer did not cause, so building the closer includes deciding how that shape carries a
+process and those two outcomes.
+
+**What this section does not authorise**
+
+- No termination, in any form, at any tier, under any preference.
+- No service control (§2), which includes closing a host's window to reach the services inside it.
+- No working-set trim, no standby-list purge, and no memory list touched at all (§2).
+- No elevation asked for in order to close something an unelevated Deguffer may not. A refusal here
+  is an answer, not an obstacle.
+- No bulk close, no pre-selection, and no ordering of anything by how closable it is (§7.2).
 
 ---
 

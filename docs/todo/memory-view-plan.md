@@ -2,12 +2,13 @@
 
 > **Status:** 🟢 ACTIVE — phase 1, a read-only view, landed on 2026-09-13, and every step of it is
 > closed under [#123](https://github.com/BootBlock/Deguffer/issues/123). Phase 2, the close action, is
-> not started, and is specified in [_spec.md](_spec.md) §7.2 before any of it is built.
+> specified in [_spec.md](_spec.md) §7.2.1, which landed on 2026-09-13 before any of its code, and is
+> built under [#129](https://github.com/BootBlock/Deguffer/issues/129).
 
 On 2026-09-12 the maintainer decided to widen Deguffer's scope to show where memory goes, on the
 strength of [memory-view.md](memory-view.md). That document is the record of the investigation and
-stays as it was written. [_spec.md](_spec.md) §1, §2 and §7.2 state what the view is and what it
-will never do. This one states the order it is built in, and what each step has to prove before it
+stays as it was written. [_spec.md](_spec.md) §1, §2, §7.2 and §7.2.1 state what the view is and what
+it will never do. This one states the order it is built in, and what each step has to prove before it
 lands.
 
 ## Phase 1: a read-only view
@@ -51,18 +52,53 @@ lay out through the same treemap, icicle and sunburst.
 a refresh that keeps the user where they were, and the page with the backdrop switched off (§6.5).
 It offers no action of any kind.
 
-## Phase 2: acting (not started)
+## Phase 2: the close action
 
-[#129](https://github.com/BootBlock/Deguffer/issues/129). Nothing of it is built until §7.2 specifies
-it. Sections 7 and 10 of [memory-view.md](memory-view.md) state what that specification has to
-settle, and item 3 of section 10 lists all of it together: the
-program's own close and nothing stronger, only to the visible top-level windows of a windowed
-application in the user's session that belong to no console host, the target identified by
-identifier and creation time and checked again immediately before anything is sent, every refusal
-in that section's table stated with its reason, commit charge reported before and after, and how
-§5.6 can be honest when processes exit on their own. The memory view never controls a service
-(§2), whatever the open question about service control in
+[#129](https://github.com/BootBlock/Deguffer/issues/129) tracks it. [_spec.md](_spec.md) §7.2.1
+specifies it, and that specification landed before any of the code, as the issue required: the
+program's own close and nothing stronger, posted only to the visible, unowned, uncloaked top-level
+windows of a program in the user's own session that owns no console window, to a process held open by
+a handle and checked again immediately before each message, with every refusal stated with its
+reason, commit charge reported before and after, and §5.6 met by separating what can be asserted
+exactly from what can only be listed, rather than by a claim that nothing else stopped. Memory never
+controls a service (§2),
+whatever the open question about service control in
 [unreached-locations.md](unreached-locations.md) comes to decide for disk.
+
+Each step lands on its own, in this order, because each depends on the one before it.
+
+| Step | Issue | What lands |
+| --- | --- | --- |
+| 1 | [#129](https://github.com/BootBlock/Deguffer/issues/129) | §7.2.1 of the specification, and this section. No code. |
+| 2 | [#131](https://github.com/BootBlock/Deguffer/issues/131) | A seam over what Windows says about **one** process beyond its memory figures: its session, its account, its integrity level, its criticality, its package state, and its top-level windows with their classes. |
+| 3 | [#132](https://github.com/BootBlock/Deguffer/issues/132) | `MemoryActionPolicy`, `ProcessCloser`, the confirmation's words and the close's report, with §7.2.1's §5.6 evidence. |
+| 4 | [#133](https://github.com/BootBlock/Deguffer/issues/133) | The Memory page acts: a selection, a refusal stated on it, a confirmation, and a report the next reading does not wipe. |
+
+### What each step has to prove
+
+**The process facts.** Every answer is proven to have three values rather than two — yes, no, and
+could not be read — and the third is proven to reach the policy as a value of its own rather than as
+a false, because §7.2.1 refuses on it exactly as it refuses on the first. The seam is proven to open
+one process for one row, so a picture of five hundred opens none. The window survey is proven to keep
+only top-level, unowned, visible, uncloaked windows, to refuse the whole process on a console class
+rather than dropping the one window, and to answer with an empty set rather than a null. Which
+suspension route an unelevated Deguffer may ask is measured before either is relied on. No fixture
+carries a real process name, account or machine name.
+
+**The policy and the closer.** Every row of §7.2.1's refusal table is proven refused, with the reason
+that row states, and in the table's order where more than one applies. The unrecognised case is
+proven: a process with no window that qualifies is refused rather than attempted. The second decision
+is proven to bite, by a creation time that differs between selection and action and by a window whose
+owning process changed between the survey and the post. `WM_CLOSE` is proven to be the only message
+that can leave the type. The §5.6 evidence is proven on all four counts: the record of what was
+posted and where; the shell's owner or Deguffer's own tree missing afterwards failing the run and
+naming itself; descendants named as expected; and every other exit, a service host included,
+reported as one Deguffer did not cause rather than failing the run.
+
+**The page.** It is driven, not only built: a refusal sentence for each of several refused kinds, a
+confirmation naming the program and how many windows will be asked, a cancel that leaves the process
+untouched, a report still on screen after several readings, no second close offered while one is
+watched, and the page with the backdrop switched off (§6.5).
 
 ## Limits that stay open
 
@@ -74,7 +110,21 @@ in that section's table stated with its reason, commit charge reported before an
   structure, and it is newer than Deguffer's minimum Windows version. Phase 1 identifies a process by
   identifier and creation time.
 - **A snapshot is stale as soon as it is read.** Phase 1 acts on nothing, so staleness costs only an
-  out-of-date picture, which the page refreshes. Phase 2 must check again before it acts.
+  out-of-date picture, which the page refreshes. Phase 2 holds the target open by a handle and checks
+  again before it acts.
+- **A console window is recognised by a class name Microsoft does not document.** Both names come
+  from the terminal's own source. §7.2.1 states the residual risk and why the alternative is worse.
+- **The console refusal rests on one observation outside the investigation.** On 2026-09-13, an
+  unelevated enumeration of top-level windows on one workstation found an invisible
+  `ConsoleWindowClass` window reported against a program that is not a console program. That is the
+  whole of the measurement: one machine, one window, nothing closed.
+- **Whether a message posted to an elevated program is dropped was not measured.** Microsoft
+  documents that the filter blocks it and that the call may report success anyway, so §7.2.1 refuses
+  by the integrity level rather than by what the post reports.
+- **The service refusal is not a complete rule, and §7.2.1 says so.** Windows leaves services this
+  account may not query out of the list without an error, so a host it did not name is drawn as an
+  ordinary process and the service row does not reach it. What refuses such a host is the rest of the
+  table rather than that row.
 
 ## When it is finished
 
