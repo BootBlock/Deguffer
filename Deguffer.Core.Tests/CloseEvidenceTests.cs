@@ -59,8 +59,16 @@ public sealed class CloseEvidenceTests
     private static ProcessMemory Process(MemorySnapshot snapshot, int id) =>
         snapshot.Processes.Processes.Single(p => p.ProcessId == id);
 
-    private static IReadOnlyList<ProcessMemory> Desktop(MemorySnapshot before) =>
-        [Process(before, Shell), Process(before, Compositor)];
+    private static DesktopSet Desktop(MemorySnapshot before) =>
+        new([Process(before, Shell), Process(before, Compositor)], []);
+
+    private static IReadOnlyList<VerificationCheck> Evidence(
+        MemorySnapshot before, MemorySnapshot? after, DesktopSet? desktop = null) =>
+        CloseEvidence.Of(
+            ProcessTree.Of(before),
+            after is null ? null : ProcessTree.Of(after),
+            Process(before, Target),
+            desktop ?? Desktop(before));
 
     private static VerificationCheck For(IReadOnlyList<VerificationCheck> checks, string name) =>
         checks.Single(c => c.Subject.StartsWith(name, StringComparison.Ordinal));
@@ -75,7 +83,7 @@ public sealed class CloseEvidenceTests
     {
         var before = Before();
 
-        var checks = CloseEvidence.Of(before, After(Shell, Compositor, Stranger), Process(before, Target), Desktop(before));
+        var checks = Evidence(before, After(Shell, Compositor, Stranger));
 
         Assert.Equal(VerificationOutcome.Survived, For(checks, "explorer.exe").Outcome);
         Assert.Equal(VerificationOutcome.Survived, For(checks, "dwm.exe").Outcome);
@@ -100,7 +108,7 @@ public sealed class CloseEvidenceTests
     {
         var before = Before();
 
-        var checks = CloseEvidence.Of(before, After(Compositor, Stranger), Process(before, Target), Desktop(before));
+        var checks = Evidence(before, After(Compositor, Stranger));
 
         var failure = Assert.Single(new VerificationResult { Checks = checks }.Failures);
 
@@ -122,7 +130,7 @@ public sealed class CloseEvidenceTests
             .Process(Compositor, 1, "dwm.exe", 150, created: 1)
             .Build();
 
-        var checks = CloseEvidence.Of(before, after, Process(before, Target), Desktop(before));
+        var checks = Evidence(before, after);
 
         Assert.Equal(VerificationOutcome.Failed, For(checks, "explorer.exe").Outcome);
     }
@@ -144,7 +152,45 @@ public sealed class CloseEvidenceTests
             ? after with { Processes = after.Processes with { Figures = ProcessFigures.CreationTimeDisagrees } }
             : after with { Processes = after.Processes with { Complete = false } };
 
-        var checks = CloseEvidence.Of(before, after, Process(before, Target), Desktop(before));
+        var checks = Evidence(before, after);
+
+        Assert.Equal(2, checks.Count);
+        Assert.All(checks, c => Assert.Equal(VerificationOutcome.Failed, c.Outcome));
+        Assert.All(checks, c => Assert.Contains("NOT ESTABLISHED", c.Detail, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A process that had to survive and could not be named is the assertion §7.2.1 calls exact,
+    /// missing. Recording it as a failure is what keeps a close that verified nothing from reading
+    /// as a clean run.
+    /// </summary>
+    [Fact]
+    public void SomethingThatHadToSurviveAndCouldNotBeNamedFailsTheRun()
+    {
+        var before = Before();
+        var desktop = new DesktopSet([Process(before, Compositor)], ["the process owning the shell window"]);
+
+        var checks = Evidence(before, After(Shell, Compositor, Stranger), desktop);
+        var result = new VerificationResult { Checks = checks };
+
+        Assert.False(result.Passed);
+
+        var failure = Assert.Single(result.Failures);
+
+        Assert.Equal("the process owning the shell window", failure.Subject);
+        Assert.Contains("NOT ESTABLISHED", failure.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A close cannot be recalled, so a machine that will not describe itself when the watch ends
+    /// leaves a report to write. It says what it could not check, which is everything.
+    /// </summary>
+    [Fact]
+    public void AMachineThatCouldNotBeReadWhenTheWatchEndedEstablishesNothing()
+    {
+        var before = Before();
+
+        var checks = Evidence(before, after: null);
 
         Assert.Equal(2, checks.Count);
         Assert.All(checks, c => Assert.Equal(VerificationOutcome.Failed, c.Outcome));
@@ -173,7 +219,7 @@ public sealed class CloseEvidenceTests
             .Process(Compositor, 1, "dwm.exe", 150, created: 1)
             .Build();
 
-        var checks = CloseEvidence.Of(before, after, Process(before, Target), Desktop(before));
+        var checks = Evidence(before, after);
 
         Assert.Equal(VerificationOutcome.UnclaimedExit, For(checks, "svchost.exe").Outcome);
         Assert.True(new VerificationResult { Checks = checks }.Passed);

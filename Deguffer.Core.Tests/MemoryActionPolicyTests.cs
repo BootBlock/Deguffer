@@ -48,15 +48,15 @@ public sealed class MemoryActionPolicyTests
     private static ProcessMemory Process(MemorySnapshot snapshot, int id) =>
         snapshot.Processes.Processes.Single(p => p.ProcessId == id);
 
-    private static MemoryActionPolicy Policy(ProcessFacts? facts = null, int? shellOwner = Shell) =>
-        new(new FakeProcessFactSource(facts ?? Allowed()), new FakeDesktopFacts(shellOwner), Own);
+    private static MemoryActionPolicy Policy(ProcessFacts? facts = null, ShellOwner? shell = null) =>
+        new(new FakeProcessFactSource(facts ?? Allowed()), new FakeDesktopFacts(shell ?? ShellOwner.Is(Shell)), Own);
 
     private static MemoryVerdict Decide(
-        ProcessFacts facts, int target = TargetId, MemorySnapshot? snapshot = null, int? shellOwner = Shell)
+        ProcessFacts facts, int target = TargetId, MemorySnapshot? snapshot = null, ShellOwner? shell = null)
     {
         var machine = snapshot ?? Snapshot();
 
-        return Policy().Decide(machine, Process(machine, target), facts, shellOwner);
+        return Policy().Decide(machine, Process(machine, target), facts, shell ?? ShellOwner.Is(Shell));
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public sealed class MemoryActionPolicyTests
 
         Assert.Contains(
             "takes the desktop with it",
-            Decide(Allowed(), TargetId, snapshot, shellOwner: null).Reason,
+            Decide(Allowed(), TargetId, snapshot, ShellOwner.None).Reason,
             StringComparison.Ordinal);
 
         Assert.Contains(
@@ -224,30 +224,134 @@ public sealed class MemoryActionPolicyTests
             Decide(Allowed(), 500).Reason,
             StringComparison.Ordinal);
 
+    /// <summary>One row of §7.2.1's table: what makes a process match it, and what it then says.</summary>
+    private sealed record Row(string Says, Func<Subject, Subject> Applies);
+
+    /// <summary>A process as the policy is asked about it: the read it came from, its facts, the desktop.</summary>
+    private sealed record Subject(MemorySnapshot Snapshot, ProcessFacts Facts, ShellOwner Shell, int ProcessId)
+    {
+        /// <summary>The same process, in a machine a test has rebuilt around it.</summary>
+        public Subject In(int parent, string name, bool hostsService)
+        {
+            var snapshot = new MemorySnapshotBuilder()
+                .Process(Shell.ProcessId, 1, "explorer.exe", 200, created: 1)
+                .Process(Own, 1, "Deguffer.exe", 100, created: 2)
+                .Process(ProcessId, parent, name, 300, created: 5);
+
+            if (hostsService)
+            {
+                snapshot.Service("Thing", ProcessId);
+            }
+
+            return this with { Snapshot = snapshot.Build() };
+        }
+    }
+
     /// <summary>
-    /// §7.2.1: where more than one row applies, the first in the table's order is the reason shown,
-    /// so the same process always gives the same answer rather than one that depends on which check
-    /// happened to run first.
+    /// §7.2.1's table, in its order, with what makes a process match each row.
+    ///
+    /// <para>Every row here is true of one process at once: a suspended packaged program with no
+    /// window of its own, hosting a service, owning a console, running as somebody else at a higher
+    /// integrity level in another session, marked critical, named <c>explorer.exe</c>, and started by
+    /// Deguffer. Absurd as a machine, and exactly what the ordering rule is about.</para>
+    /// </summary>
+    private static readonly Row[] Table =
+    [
+        new("another Windows session", s => s with { Facts = s.Facts with { InOwnSession = Answer.No } }),
+        // Alone in hosting no service: §7.2 puts no process under a service host, so a host cannot
+        // also be Deguffer's descendant, and no machine can match both rows at once.
+        new("Deguffer started this program", s => s.In(Own, "explorer.exe", hostsService: false)),
+        new("part of the Windows desktop", s => s.In(1, "explorer.exe", hostsService: true)),
+        new("critical", s => s with { Facts = s.Facts with { Critical = Answer.Yes } }),
+        new("higher integrity level", s => s with { Facts = s.Facts with { AboveOwnIntegrity = Answer.Yes } }),
+        new("hosts a Windows service", s => s.In(1, "editor.exe", hostsService: true)),
+        new("console window", s => s with { Facts = s.Facts with { OwnsConsoleWindow = Answer.Yes } }),
+        new("suspended this app", s => s with { Facts = s.Facts with { Package = PackageAnswer.Suspended } }),
+        new("no window of its own", s => s with { Facts = s.Facts with { Windows = [] } }),
+    ];
+
+    /// <summary>
+    /// §7.2.1: "Where more than one row applies, the first in this order is the reason shown, so the
+    /// same process always gives the same answer."
+    ///
+    /// <para>Each row is asked of a process that matches it and every row below it, so this proves
+    /// the whole order rather than the pairs somebody thought to write down.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(8)]
+    public void EveryRowAnswersBeforeTheRowsBelowIt(int row)
+    {
+        // Bottom-up, because a row that rebuilds the machine states what that row needs and the row
+        // above it must have the last word.
+        var subject = Table.Skip(row).Reverse().Aggregate(
+            new Subject(Snapshot(), Allowed(), ShellOwner.Is(Shell), TargetId).In(1, "editor.exe", hostsService: false),
+            (matching, below) => below.Applies(matching));
+
+        var verdict = Policy().Decide(
+            subject.Snapshot, Process(subject.Snapshot, subject.ProcessId), subject.Facts, subject.Shell);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains(Table[row].Says, verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The row's reason runs both ways. A program Deguffer is running inside — a debugger, or a
+    /// launcher that ends what it started — takes Deguffer with it when it goes, which leaves the
+    /// close unwatched and §5.6 unrun exactly as closing Deguffer itself would.
     /// </summary>
     [Fact]
-    public void TheFirstRowInTheTablesOrderIsTheReasonShown()
+    public void AProgramDegufferIsRunningInsideIsRefused()
     {
-        var facts = Allowed() with
-        {
-            InOwnSession = Answer.No,
-            Critical = Answer.Yes,
-            OwnsConsoleWindow = Answer.Yes,
-            Windows = [],
-        };
+        var snapshot = new MemorySnapshotBuilder()
+            .Process(Shell, 1, "explorer.exe", 200, created: 1)
+            .Process(TargetId, Shell, "debugger.exe", 300, created: 2)
+            .Process(Own, TargetId, "Deguffer.exe", 100, created: 5)
+            .Build();
 
-        Assert.Contains("another Windows session", Decide(facts).Reason, StringComparison.Ordinal);
-
-        // And with the session row satisfied, the next row that applies answers, rather than the
-        // last one to be asked.
         Assert.Contains(
-            "critical",
-            Decide(facts with { InOwnSession = Answer.Yes }).Reason,
+            "Deguffer is running inside this program",
+            Decide(Allowed(), TargetId, snapshot).Reason,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The shell is named by its window, not by an image name, so an owner Windows will not name
+    /// leaves Deguffer unable to tell whether the program in front of it is the desktop. §7.2.1
+    /// refuses on an unreadable fact exactly as it refuses on one that came back wrong.
+    /// </summary>
+    [Fact]
+    public void AShellWindowWindowsWillNotAttributeRefusesTheClose()
+    {
+        var verdict = Decide(Allowed(), shell: ShellOwner.Unreadable);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("which program owns the desktop", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §7.2: "Nothing is asked of Windows for a row nobody selected." The verdict for one row opens
+    /// that row's process, asks the desktop once, and asks about nothing else.
+    /// </summary>
+    [Fact]
+    public void TheVerdictForOneRowAsksAboutThatRowAndNothingElse()
+    {
+        var snapshot = Snapshot();
+        var facts = new FakeProcessFactSource(Allowed());
+        var desktop = new FakeDesktopFacts(Shell);
+
+        var verdict = new MemoryActionPolicy(facts, desktop, Own).For(snapshot, Process(snapshot, TargetId));
+
+        Assert.True(verdict.IsAllowed, verdict.Reason);
+        Assert.Equal([(TargetId, 5L)], facts.Asked);
+        Assert.Equal(1, desktop.Reads);
     }
 
     /// <summary>
@@ -260,7 +364,7 @@ public sealed class MemoryActionPolicyTests
         var snapshot = Snapshot();
         var undated = Process(snapshot, TargetId) with { CreationTime = null };
 
-        var verdict = Policy().Decide(snapshot, undated, Allowed(), Shell);
+        var verdict = Policy().Decide(snapshot, undated, Allowed(), ShellOwner.Is(Shell));
 
         Assert.False(verdict.IsAllowed);
         Assert.Contains("when this process was created", verdict.Reason, StringComparison.Ordinal);

@@ -88,12 +88,20 @@ public sealed class ProcessCloserTests
         return calls;
     }
 
+    private static ProcessCloser Closer(
+        FakeProcessCalls processes,
+        FakeWindowCalls windows,
+        IMemorySource memory,
+        TimeProvider? time,
+        ShellOwner shell) =>
+        new(processes, windows, new FakeDesktopFacts(shell), memory, time ?? TimeProvider.System, Own);
+
     private static FakeWindow Window(nint handle = TargetWindow, IReadOnlyList<int?>? owners = null) =>
         new() { Handle = handle, ProcessId = TargetId, Owners = owners };
 
     private static ProcessCloser Closer(
         FakeProcessCalls processes, FakeWindowCalls windows, IMemorySource memory, TimeProvider? time = null) =>
-        new(processes, windows, memory, time ?? TimeProvider.System, Own);
+        Closer(processes, windows, memory, time, ShellOwner.Is(Shell));
 
     /// <summary>
     /// A running program, asked to close, that exits while Deguffer watches.
@@ -194,7 +202,7 @@ public sealed class ProcessCloserTests
 
         Assert.Equal(1, report.Windows);
         Assert.Equal(1, report.Moved);
-        Assert.Contains("passed to another program", report.Statement, StringComparison.Ordinal);
+        Assert.Contains("no longer reported as this program's", report.Statement, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -211,7 +219,9 @@ public sealed class ProcessCloserTests
             windows,
             new QueuedMemorySource(before, After(Shell, Compositor, Own)));
 
-        var attempt = await closer.CloseAsync(Target(before));
+        // Bounded for the reason the creation-time test is: a close that reached the watch would
+        // hold here for ever, and a hang is not a failure anybody can read.
+        var attempt = await closer.CloseAsync(Target(before)).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Empty(windows.Posted);
         Assert.Null(attempt.Report);
@@ -284,7 +294,7 @@ public sealed class ProcessCloserTests
             new QueuedMemorySource(before, After(Shell, Compositor, Own, TargetId, Child, Host)));
 
         // The user dismisses the result the moment it appears, which is one of §7.2.1's three ends.
-        var attempt = await closer.CloseAsync(Target(before), new StopWhenPosted(stop), stop.Token);
+        var attempt = await closer.CloseAsync(Target(before), new WhenPosted(_ => stop.Cancel()), stop.Token);
 
         var report = Assert.IsType<CloseReport>(attempt.Report);
 
@@ -295,11 +305,12 @@ public sealed class ProcessCloserTests
     }
 
     /// <summary>
-    /// §7.2: nothing is asked of Windows for a row nobody selected. A close opens the target and the
-    /// compositor whose session it has to know, and no other process.
+    /// §7.2: nothing is asked of Windows for a row nobody selected. A close opens the target it acts
+    /// on, the shell whose identity §5.6 has to confirm, and the compositor whose session decides
+    /// whether it is this session's. No other process is opened, however many the machine holds.
     /// </summary>
     [Fact]
-    public async Task OnlyTheTargetAndTheCompositorAreOpened()
+    public async Task OnlyTheTargetAndTheDesktopAreOpened()
     {
         var before = Before();
         var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
@@ -309,12 +320,186 @@ public sealed class ProcessCloserTests
 
         await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
 
-        Assert.Equal([TargetId, Compositor], processes.Opened);
+        Assert.Equal([TargetId, Shell, Compositor], processes.Opened);
     }
 
-    /// <summary>Ends the watch the moment the messages are posted, as a user dismissing the result does.</summary>
-    private sealed class StopWhenPosted(CancellationTokenSource stop) : IProgress<CloseReport>
+    /// <summary>
+    /// §7.2.1: "There is no deadline. A save prompt waits for a person, so a timer would report
+    /// 'still running' about a program doing exactly what it was asked."
+    ///
+    /// <para>Proven by leaving the program to think for two days of the watch's own clock. A deadline
+    /// of any length, and any limit on how many times the handle is asked, would have given up long
+    /// before the program answered.</para>
+    /// </summary>
+    [Fact]
+    public async Task TheWatchWaitsForAsLongAsTheProgramTakes()
     {
-        public void Report(CloseReport value) => stop.Cancel();
+        var before = Before();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var clock = new ManualTimeProvider();
+        var closer = Closer(
+            Processes(target), Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var closing = closer.CloseAsync(Target(before));
+
+        for (var hour = 0; hour < 48; hour++)
+        {
+            await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(TimeSpan.FromHours(1));
+        }
+
+        Assert.False(closing.IsCompleted);
+
+        await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
+        target.Exited = true;
+        clock.Advance(ProcessCloser.WatchCadence);
+
+        Assert.Equal(CloseState.Closed, Assert.IsType<CloseReport>((await closing).Report).State);
+    }
+
+    /// <summary>
+    /// §7.2.1: the handle is held until the action finishes, and that "removes the reuse race rather
+    /// than narrowing it". Every window line in the evidence rests on it, so the moment that matters
+    /// is the one where the messages have gone out and the watch has not yet ended.
+    /// </summary>
+    [Fact]
+    public async Task TheProcessIsHeldOpenAcrossThePostAndTheWatch()
+    {
+        var before = Before();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var clock = new ManualTimeProvider();
+        var closer = Closer(
+            Processes(target), Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var held = false;
+        var closing = closer.CloseAsync(Target(before), new WhenPosted(_ => held = !target.Disposed));
+
+        await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
+        target.Exited = true;
+        clock.Advance(ProcessCloser.WatchCadence);
+        await closing;
+
+        Assert.True(held, "The process was closed before its windows were posted to.");
+        Assert.True(target.Disposed, "The process was left open after the watch ended.");
+    }
+
+    /// <summary>
+    /// §7.2.1 decides Deguffer's own tree and every §5.6 assertion from the read taken as the action
+    /// begins. A read that cannot tell one process from another can answer neither, so the close is
+    /// refused rather than sent on a machine nobody could account for.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AReadThatCannotTellProcessesApartRefusesRatherThanActs(bool figuresOff)
+    {
+        var before = Before();
+        var degraded = figuresOff
+            ? before with { Processes = before.Processes with { Figures = ProcessFigures.CreationTimeDisagrees } }
+            : before with { Processes = before.Processes with { Complete = false } };
+
+        var processes = Processes();
+        var windows = Desktop(Window());
+        var closer = Closer(processes, windows, new QueuedMemorySource(degraded));
+
+        var attempt = await closer.CloseAsync(Target(before)).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(attempt.Verdict.IsAllowed);
+        Assert.Null(attempt.Report);
+        Assert.Empty(windows.Posted);
+        Assert.Empty(processes.Opened);
+        Assert.Contains("tell them apart", attempt.Verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A close cannot be recalled, so the machine refusing to describe itself afterwards must not
+    /// take the report with it. What was posted is still the exact record §7.2.1 asks for, and what
+    /// could not be checked is recorded as unestablished rather than passed.
+    /// </summary>
+    [Fact]
+    public async Task AMachineThatWillNotAnswerWhenTheWatchEndsStillGetsAReport()
+    {
+        var before = Before();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var clock = new ManualTimeProvider();
+        var windows = Desktop(Window());
+        var memory = new QueuedMemorySource(before) { RefusesFrom = 2 };
+        var closer = Closer(Processes(target), windows, memory, clock);
+
+        var closing = closer.CloseAsync(Target(before));
+
+        await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
+        target.Exited = true;
+        clock.Advance(ProcessCloser.WatchCadence);
+
+        var report = Assert.IsType<CloseReport>((await closing).Report);
+
+        Assert.Equal(CloseState.Closed, report.State);
+        Assert.Null(report.After);
+        Assert.Equal(TargetWindow, Assert.Single(windows.Posted));
+        Assert.Contains(
+            report.Verification.Checks,
+            c => c.Outcome == VerificationOutcome.Sent && c.Subject.Contains("0x11", StringComparison.Ordinal));
+        Assert.All(
+            report.Verification.Failures,
+            c => Assert.Contains("NOT ESTABLISHED", c.Detail, StringComparison.Ordinal));
+        Assert.NotEmpty(report.Verification.Failures);
+    }
+
+    /// <summary>
+    /// A window Windows will not attribute is not a window Deguffer may post to. It is skipped for
+    /// the same reason a reassigned one is: the only sound answer is the one asked at the moment of
+    /// posting, and there is none.
+    /// </summary>
+    [Fact]
+    public async Task AWindowWindowsWillNotAttributeReceivesNothing()
+    {
+        var before = Before();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var clock = new ManualTimeProvider();
+        var windows = Desktop(Window(), Window(SecondWindow, owners: [TargetId, null]));
+        var closer = Closer(
+            Processes(target), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
+
+        Assert.Equal(TargetWindow, Assert.Single(windows.Posted));
+        Assert.Equal(1, Assert.IsType<CloseReport>(attempt.Report).Moved);
+    }
+
+    /// <summary>
+    /// §7.2.1 decides before posting and never by what the post reports, because Microsoft's own
+    /// sources disagree about what a blocked post says. What Windows answered is recorded all the
+    /// same, since the evidence is a record of what happened rather than of what was intended.
+    /// </summary>
+    [Fact]
+    public async Task APostWindowsWillNotTakeIsRecordedAsOne()
+    {
+        var before = Before();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var clock = new ManualTimeProvider();
+        var windows = Desktop(Window());
+        windows.PostSucceeds = false;
+
+        var closer = Closer(
+            Processes(target), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
+
+        var posted = Assert.Single(
+            Assert.IsType<CloseReport>(attempt.Report).Verification.Checks,
+            c => c.Subject.Contains("0x11", StringComparison.Ordinal));
+
+        Assert.Equal(VerificationOutcome.Sent, posted.Outcome);
+        Assert.Contains("did not take it", posted.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Runs a test's own check at the one moment nothing else can reach: the messages are posted, the
+    /// handle is still held, and the watch has not begun.
+    /// </summary>
+    private sealed class WhenPosted(Action<CloseReport> check) : IProgress<CloseReport>
+    {
+        public void Report(CloseReport value) => check(value);
     }
 }

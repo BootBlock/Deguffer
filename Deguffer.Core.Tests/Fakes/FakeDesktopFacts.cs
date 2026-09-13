@@ -3,16 +3,23 @@ using Deguffer.Core.Memory;
 namespace Deguffer.Core.Tests.Fakes;
 
 /// <summary>
-/// The shell window's owner, as a test says Windows reports it. This machine's own shell cannot be
-/// made into one Windows will not name.
+/// What a test says Windows reports about the shell window. This machine's own shell cannot be made
+/// into one Windows will not name, and that is the answer §7.2.1 refuses on.
 /// </summary>
-internal sealed class FakeDesktopFacts(int? shellOwner = null) : IDesktopFacts
+internal sealed class FakeDesktopFacts(ShellOwner shell) : IDesktopFacts
 {
+    /// <summary>The ordinary desktop: a shell window, owned by the process a test names.</summary>
+    public FakeDesktopFacts(int shellOwner)
+        : this(ShellOwner.Is(shellOwner))
+    {
+    }
+
+    /// <summary>How many times the shell window's owner was asked for, which §7.2.1 asks once.</summary>
     public int Reads { get; private set; }
 
-    public int? ShellWindowOwner()
+    public ShellOwner ShellWindowOwner()
     {
         Reads++;
-        return shellOwner;
+        return shell;
     }
 }

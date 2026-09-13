@@ -32,9 +32,10 @@ public enum CloseState
 /// every couple of seconds and clears its own notes each time, so this report is a surface of its
 /// own that the user dismisses.</para>
 ///
-/// <para><b>The after figures exist only where the process exited</b>, which the three factories
-/// below make the only way to build one. A result still watching, or one whose program is still
-/// running, shows no after figure at all rather than a difference that means nothing yet.</para>
+/// <para><b>The after figures exist only where the process exited and the machine could be read
+/// then</b>, which the three factories below make the only way to build one. A result still
+/// watching, or one whose program is still running, shows no after figure at all rather than a
+/// difference that means nothing yet.</para>
 /// </summary>
 public sealed record CloseReport
 {
@@ -63,10 +64,12 @@ public sealed record CloseReport
     public int Windows { get; }
 
     /// <summary>
-    /// How many of the windows the confirmation counted were passed over, because the process that
-    /// owned each of them had changed between the survey and the moment of posting (§7.2.1). Those
-    /// received nothing, and the difference is said rather than smoothed over: the user was told a
-    /// number in the dialog.
+    /// How many of the windows Deguffer surveyed under the handle it holds were passed over at the
+    /// moment of posting, because the window had gone or Windows no longer reported it against this
+    /// process (§7.2.1). Those received nothing.
+    ///
+    /// <para>Said rather than smoothed over, because <see cref="Windows"/> counts what was posted to
+    /// and the user was told a number before any of it happened.</para>
     /// </summary>
     public int Moved { get; }
 
@@ -75,7 +78,10 @@ public sealed record CloseReport
     /// <summary>The machine as the first message was posted.</summary>
     public SystemMemory Before { get; }
 
-    /// <summary>The machine as the process exited, or null where it has not.</summary>
+    /// <summary>
+    /// The machine as the process exited, or null where it has not exited or the read taken when the
+    /// watch ended could not be made.
+    /// </summary>
     public SystemMemory? After { get; }
 
     /// <summary>
@@ -114,10 +120,10 @@ public sealed record CloseReport
             if (Moved > 0)
             {
                 sentence += Moved == 1
-                    ? " One window Deguffer counted had passed to another program by then, and "
-                      + "received nothing."
-                    : $" {Moved} windows Deguffer counted had passed to another program by then, and "
-                      + "received nothing.";
+                    ? " One of its windows had gone, or was no longer reported as this program's, by "
+                      + "the moment of posting, and received nothing."
+                    : $" {Moved} of its windows had gone, or were no longer reported as this "
+                      + "program's, by the moment of posting, and received nothing.";
             }
 
             return Verification.Passed
@@ -151,15 +157,19 @@ public sealed record CloseReport
         new(target, windows, CloseState.Watching, before, after: null, new VerificationResult(), moved);
 
     /// <summary>The close once the process has exited, which is the only way an after figure exists.</summary>
+    /// <param name="after">
+    /// The machine as it exited, or null where that read could not be made. A close cannot be
+    /// recalled, so a machine that will not answer afterwards still leaves a report to write — with
+    /// no after figure, and with §5.6 recording what it could not establish.
+    /// </param>
     public static CloseReport Closed(
         ProcessMemory target,
         int windows,
         SystemMemory before,
-        SystemMemory after,
+        SystemMemory? after,
         VerificationResult verification,
         int moved = 0)
     {
-        ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(verification);
 
         return new CloseReport(target, windows, CloseState.Closed, before, after, verification, moved);

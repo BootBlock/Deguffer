@@ -33,37 +33,52 @@ namespace Deguffer.Core.Memory.Acting;
 /// <para>Item 1, the record of what was posted and where, is the closer's: only the closer knows
 /// which window it posted to and which process owned it at that moment.</para>
 /// </summary>
-public static class CloseEvidence
+internal static class CloseEvidence
 {
     private const string DesktopReason = "Asking a program to close cannot end the desktop.";
     private const string DescendantReason = "A child of the program that was asked to close goes with it.";
     private const string OtherExitReason = "Deguffer posted nothing to this process.";
 
     /// <param name="before">The machine as the first message was posted.</param>
-    /// <param name="after">The machine as the watch ended.</param>
+    /// <param name="after">
+    /// The machine as the watch ended, or null where that read could not be taken at all. A close
+    /// cannot be recalled, so a read that failed leaves a report to write and assertions that were
+    /// never made, which is the same answer as a read that cannot say what is running.
+    /// </param>
     /// <param name="target">The process the user asked to close, as <paramref name="before"/> had it.</param>
     /// <param name="desktop">
-    /// What the close could not have ended: the process owning the shell window, and every <c>dwm.exe</c> in
-    /// Deguffer's own session, each as <paramref name="before"/> had it. Resolved by the caller,
+    /// What the close could not have ended, and what could not be named. Resolved by the caller,
     /// because neither the shell window nor a session is anything a snapshot answers.
     /// </param>
     public static IReadOnlyList<VerificationCheck> Of(
-        MemorySnapshot before,
-        MemorySnapshot after,
+        ProcessTree before,
+        ProcessTree? after,
         ProcessMemory target,
-        IReadOnlyList<ProcessMemory> desktop)
+        DesktopSet desktop)
     {
         ArgumentNullException.ThrowIfNull(before);
-        ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(desktop);
 
         var standing = StillRunning(after);
-        var checks = new List<VerificationCheck>(desktop.Count + 1);
+        var checks = new List<VerificationCheck>(desktop.Processes.Count + desktop.Unestablished.Count + 1);
 
-        foreach (var process in desktop)
+        foreach (var process in desktop.Processes)
         {
             checks.Add(Survivor(process, standing));
+        }
+
+        foreach (var subject in desktop.Unestablished)
+        {
+            // The assertion §7.2.1 calls exact, about a process this run could not name. Recorded as
+            // a failure rather than left out, because a check nobody could make must not read as one
+            // that passed.
+            checks.Add(new VerificationCheck(
+                subject,
+                DesktopReason,
+                VerificationOutcome.Failed,
+                "NOT ESTABLISHED — the read taken as the close was sent did not name this process, "
+                + "so nothing could be looked for when the watch ended."));
         }
 
         if (standing is null)
@@ -73,7 +88,7 @@ public static class CloseEvidence
             return checks;
         }
 
-        var descendants = ProcessTree.Under(before, target);
+        var descendants = before.Under(target);
 
         foreach (var process in descendants)
         {
@@ -87,12 +102,12 @@ public static class CloseEvidence
         var named = descendants.Select(ProcessTree.Identity).ToHashSet();
         named.Add(ProcessTree.Identity(target));
 
-        foreach (var process in desktop)
+        foreach (var process in desktop.Processes)
         {
             named.Add(ProcessTree.Identity(process));
         }
 
-        foreach (var process in ProcessTree.Measured(before))
+        foreach (var process in before.Measured)
         {
             if (!named.Contains(ProcessTree.Identity(process))
                 && !standing.Contains(ProcessTree.Identity(process)))
@@ -107,6 +122,26 @@ public static class CloseEvidence
         }
 
         return checks;
+    }
+
+    /// <summary>
+    /// The process this action opened, which is the first half of what §7.2.1's item 1 records: what
+    /// Deguffer opened, as well as what it posted to.
+    ///
+    /// <para>One process is opened to act on, and it is held until the watch ends. That is what makes
+    /// every window line below sound: while the handle is open the identifier cannot pass to another
+    /// process, so a window still reported against it is still this program's.</para>
+    /// </summary>
+    public static VerificationCheck Opened(ProcessMemory target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return new VerificationCheck(
+            target.Named,
+            "Deguffer opened this process, and held it open for the whole action.",
+            VerificationOutcome.Sent,
+            "Opened for PROCESS_QUERY_LIMITED_INFORMATION and SYNCHRONIZE, and closed when the watch "
+            + "ended. Nothing else was opened to act on, and nothing was posted to any other process.");
     }
 
     /// <summary>
@@ -129,8 +164,8 @@ public static class CloseEvidence
             "Deguffer posted this window a close, and nothing else anywhere.",
             VerificationOutcome.Sent,
             taken
-                ? "WM_CLOSE posted. The window belonged to this process at that moment, asked again "
-                  + "through the handle Deguffer holds."
+                ? "WM_CLOSE posted. Windows was asked again at that moment whose window it was, with "
+                  + "the process held open so its identifier could not have moved on."
                 : "WM_CLOSE posted, and Windows reported that it did not take it. The window belonged "
                   + "to this process at that moment, and nothing further was sent.");
     }
@@ -149,7 +184,7 @@ public static class CloseEvidence
             DesktopReason,
             VerificationOutcome.Failed,
             "NOT ESTABLISHED — the read taken when the watch ended could not say which processes "
-            + "were still running, so nothing was checked."),
+            + "were still running, or could not be taken at all, so nothing was checked."),
 
         _ when standing.Contains(ProcessTree.Identity(process)) => new VerificationCheck(
             process.Named, DesktopReason, VerificationOutcome.Survived, "Still running."),
@@ -166,14 +201,14 @@ public static class CloseEvidence
     /// Every process the after snapshot can say is still running, or null where it cannot say that
     /// about any of them.
     ///
-    /// <para>Null on two reads. One whose creation times are off cannot tell a process from a later
-    /// one holding its identifier, which is the whole of identity here. One that stopped part-way
-    /// through the process table is missing whatever came after that point, so an absence in it is
-    /// not an exit.</para>
+    /// <para>Null on three reads. One whose creation times are off cannot tell a process from a
+    /// later one holding its identifier, which is the whole of identity here. One that stopped
+    /// part-way through the process table is missing whatever came after that point, so an absence
+    /// in it is not an exit. And one that could not be taken at all says nothing about anything.</para>
     /// </summary>
-    private static HashSet<(int, long)>? StillRunning(MemorySnapshot after) =>
-        after.Processes is { Figures: ProcessFigures.Checked, Complete: true }
-            ? [.. ProcessTree.Measured(after).Select(ProcessTree.Identity)]
+    private static HashSet<(int, long)>? StillRunning(ProcessTree? after) =>
+        after is { Identifies: true }
+            ? [.. after.Measured.Select(ProcessTree.Identity)]
             : null;
 
 }

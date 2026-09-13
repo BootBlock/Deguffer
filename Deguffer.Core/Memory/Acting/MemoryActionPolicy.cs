@@ -73,14 +73,12 @@ public sealed class MemoryActionPolicy
     /// </param>
     /// <param name="target">The process the user picked, as that snapshot describes it.</param>
     /// <param name="facts">What Windows says about it, read for this decision.</param>
-    /// <param name="shellOwner">
-    /// The process Windows reports as owning the shell window, or null where it would not say.
-    /// </param>
+    /// <param name="shell">What Windows says about the shell window's owner.</param>
     public MemoryVerdict Decide(
         MemorySnapshot snapshot,
         ProcessMemory target,
         ProcessFacts facts,
-        int? shellOwner)
+        ShellOwner shell)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(target);
@@ -104,7 +102,7 @@ public sealed class MemoryActionPolicy
 
         return Elsewhere(facts)
             ?? Degufferself(snapshot, target)
-            ?? Desktop(target, shellOwner)
+            ?? Desktop(target, shell)
             ?? Critical(facts)
             ?? Reachable(facts)
             ?? Hosting(snapshot, target)
@@ -156,7 +154,20 @@ public sealed class MemoryActionPolicy
                 + "and nothing verified.");
         }
 
-        return ProcessTree.Descends(snapshot, target, _own)
+        var tree = ProcessTree.Of(snapshot);
+
+        // Both directions of the tree, because the row's reason runs both ways. Below Deguffer is a
+        // process Deguffer started, which is Deguffer's own work. Above it is a program whose exit
+        // can take Deguffer with it — a debugger holding it, or a launcher that ends what it started
+        // — and that leaves the close unwatched and §5.6 unrun exactly as closing Deguffer would.
+        if (tree.Holds(target, _own))
+        {
+            return MemoryVerdict.Refuse(
+                "Deguffer is running inside this program, so closing it could take Deguffer with it "
+                + "and leave the close unwatched and nothing verified.");
+        }
+
+        return tree.Descends(target, _own)
             ? MemoryVerdict.Refuse(
                 "Deguffer started this program itself, so it is part of Deguffer's own work rather "
                 + "than something to close from here.")
@@ -169,9 +180,18 @@ public sealed class MemoryActionPolicy
     /// by its account as well, and is named outright because the desktop is not a thing to stake on
     /// an expectation.
     /// </summary>
-    private static MemoryVerdict? Desktop(ProcessMemory target, int? shellOwner)
+    private static MemoryVerdict? Desktop(ProcessMemory target, ShellOwner shell)
     {
-        if (target.ProcessId == shellOwner)
+        // An unreadable answer refuses as a wrong one does: there is a shell window, and Deguffer
+        // cannot tell whether this program is the program that owns it.
+        if (shell.Read == Answer.Unreadable)
+        {
+            return MemoryVerdict.Refuse(
+                "Windows would not say which program owns the desktop, so Deguffer cannot tell "
+                + "whether this is it.");
+        }
+
+        if (shell.Read == Answer.Yes && target.ProcessId == shell.ProcessId)
         {
             return MemoryVerdict.Refuse(
                 "This is the Windows shell: the desktop, the taskbar and your folder windows. "

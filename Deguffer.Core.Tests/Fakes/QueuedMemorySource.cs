@@ -13,15 +13,20 @@ internal sealed class QueuedMemorySource(params MemorySnapshot[] reads) : IMemor
 {
     private int _read;
 
-    public int Reads => _read;
+    /// <summary>
+    /// The read from which Windows refuses to describe the machine, counting from one. A close
+    /// cannot be recalled, so what happens to the report when the read after the watch fails is
+    /// something a test has to be able to arrange.
+    /// </summary>
+    public int RefusesFrom { get; init; } = int.MaxValue;
 
     public MemorySnapshot Read(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-
-        var snapshot = reads[Math.Min(_read, reads.Length - 1)];
         _read++;
 
-        return snapshot;
+        return _read >= RefusesFrom
+            ? throw new System.ComponentModel.Win32Exception(5)
+            : reads[Math.Min(_read - 1, reads.Length - 1)];
     }
 }

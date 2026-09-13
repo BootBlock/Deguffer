@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 using Deguffer.Core.Execution;
 
 namespace Deguffer.Core.Memory.Acting;
@@ -46,16 +48,17 @@ public sealed class ProcessCloser
     internal ProcessCloser(
         IProcessCalls processes,
         IWindowCalls windows,
+        IDesktopFacts desktop,
         IMemorySource memory,
         TimeProvider time,
         int? ownProcessId = null)
     {
         _processes = processes;
         _windows = windows;
+        _desktop = desktop;
         _memory = memory;
         _time = time;
         _facts = new ProcessFactSource(processes, windows);
-        _desktop = new DesktopFacts(windows);
         _policy = new MemoryActionPolicy(_facts, _desktop, ownProcessId);
     }
 
@@ -64,7 +67,12 @@ public sealed class ProcessCloser
     {
         ArgumentNullException.ThrowIfNull(memory);
 
-        return new ProcessCloser(ProcessCalls.Instance, WindowCalls.Instance, memory, time ?? TimeProvider.System);
+        return new ProcessCloser(
+            ProcessCalls.Instance,
+            WindowCalls.Instance,
+            DesktopFacts.Default,
+            memory,
+            time ?? TimeProvider.System);
     }
 
     /// <summary>
@@ -92,11 +100,26 @@ public sealed class ProcessCloser
         // The read the action is judged against: the commit charge before, the processes that must
         // survive, and the target's descendants. Taken here rather than reused from the page, because
         // the page's own read is up to two seconds old and this one is about to post.
-        var before = await Task.Run(() => _memory.Read(ct), ct).ConfigureAwait(false);
+        var read = await Task.Run(() => _memory.Read(ct), ct).ConfigureAwait(false);
+        var before = ProcessTree.Of(read);
+
+        // Nothing below can be decided or asserted from a read that cannot tell one process from
+        // another. Section 7.2.1's refusal of Deguffer's own tree is a walk of these records, and
+        // its Section 5.6 assertions compare them against a later read. Refusing costs the user a
+        // second attempt; acting would cost an action nobody could account for.
+        if (!before.Identifies)
+        {
+            return new CloseAttempt(
+                MemoryVerdict.Refuse(
+                    "Deguffer could not read this machine's processes well enough to tell them apart "
+                    + "just now, so it cannot say what would go with this program, or whether it is "
+                    + "one of Deguffer's own. Nothing was sent."),
+                Report: null);
+        }
 
         if (target.CreationTime is not { } created)
         {
-            return new CloseAttempt(_policy.For(before, target, ct), Report: null);
+            return new CloseAttempt(_policy.For(read, target, ct), Report: null);
         }
 
         var opening = _processes.Open(target.ProcessId);
@@ -105,21 +128,21 @@ public sealed class ProcessCloser
         if (opening.Process is not { } open)
         {
             return new CloseAttempt(
-                _policy.Decide(before, target, ProcessFacts.NothingRead(Missing(opening.Outcome)), shellOwner),
+                _policy.Decide(read, target, ProcessFacts.NothingRead(Missing(opening.Outcome)), shellOwner),
                 Report: null);
         }
 
         using (open)
         {
             var verdict = _policy.Decide(
-                before, target, _facts.Through(open, target.ProcessId, created, ct), shellOwner);
+                read, target, _facts.Through(open, target.ProcessId, created, ct), shellOwner);
 
             if (!verdict.IsAllowed)
             {
                 return new CloseAttempt(verdict, Report: null);
             }
 
-            var desktop = DesktopProcesses.Of(before, shellOwner, _facts, ct);
+            var desktop = DesktopProcesses.Of(before, shellOwner, _processes, ct);
             var (sent, moved) = Post(verdict.Windows, target);
 
             if (sent.Count == 0)
@@ -133,29 +156,54 @@ public sealed class ProcessCloser
                     Report: null);
             }
 
-            watching?.Report(CloseReport.Watching(target, sent.Count, before.System, moved));
+            watching?.Report(CloseReport.Watching(target, sent.Count, read.System, moved));
 
             var exited = await WatchAsync(open, ct).ConfigureAwait(false);
-
-            // Not cancellable, and deliberately: this read is what §5.6 is established from, and the
-            // watch ending is exactly when the user is owed the evidence.
-            var after = await Task.Run(() => _memory.Read(CancellationToken.None)).ConfigureAwait(false);
+            var after = await ReadAfterAsync().ConfigureAwait(false);
 
             var verification = new VerificationResult
             {
-                Checks = [.. sent, .. CloseEvidence.Of(before, after, target, desktop)],
+                Checks =
+                [
+                    CloseEvidence.Opened(target),
+                    .. sent,
+                    .. CloseEvidence.Of(before, after is null ? null : ProcessTree.Of(after), target, desktop),
+                ],
             };
 
             return new CloseAttempt(
                 verdict,
                 exited
-                    ? CloseReport.Closed(target, sent.Count, before.System, after.System, verification, moved)
-                    : CloseReport.StillRunning(target, sent.Count, before.System, verification, moved));
+                    ? CloseReport.Closed(target, sent.Count, read.System, after?.System, verification, moved)
+                    : CloseReport.StillRunning(target, sent.Count, read.System, verification, moved));
         }
     }
 
     private static Answer Missing(OpenOutcome outcome) =>
         outcome is OpenOutcome.NotRunning ? Answer.No : Answer.Unreadable;
+
+    /// <summary>
+    /// The machine as the watch ended, or null where Windows would not describe it.
+    ///
+    /// <para>Not cancellable, and deliberately: this read is what §5.6 is established from, and the
+    /// watch ending is exactly when the user is owed the evidence.</para>
+    ///
+    /// <para><b>A read that fails is the one place a close cannot give up.</b> The messages are
+    /// posted and cannot be recalled, so the record of what was sent has to reach the user whatever
+    /// the machine says next. The failure is carried as assertions nobody could make rather than as
+    /// an exception that takes the whole report with it.</para>
+    /// </summary>
+    private async Task<MemorySnapshot?> ReadAfterAsync()
+    {
+        try
+        {
+            return await Task.Run(() => _memory.Read(CancellationToken.None)).ConfigureAwait(false);
+        }
+        catch (Win32Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Post to every window that still belongs to the target, and count the ones that no longer do.
