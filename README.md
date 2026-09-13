@@ -172,11 +172,11 @@ present a cache as a problem.
 The picture has three parts. **Applications** follows the process tree, and a parent link counts
 only where the creation times allow it, because Windows reuses process identifiers. **Services** is
 grouped by host process, and a host carries the name of its service where it holds one and a count
-where it holds several, because memory in a shared host cannot be divided between them. **Windows** holds the compression store, the non-paged pool, the
-memory lists, and the memory no figure attributes — drawn and labelled rather than hidden, because
-a reader takes a missing remainder for a leak. Nothing is drawn twice: the paged pool sits inside
-the system working set, so it is not a part of its own, and the page says where its pages are
-counted.
+where it holds several, because memory in a shared host cannot be divided between them. **Windows**
+holds the compression store, the non-paged pool, the memory lists, and the memory no figure
+attributes — drawn and labelled rather than hidden, because a reader takes a missing remainder for
+a leak. Nothing is drawn twice: the paged pool sits inside the system working set, so it is not a
+part of its own, and the page says where its pages are counted.
 
 Every size is a lower bound, and the page says so in its own words. The private working set is the
 closest single figure to what closing a program would return, and compressed pages, shared pages and
