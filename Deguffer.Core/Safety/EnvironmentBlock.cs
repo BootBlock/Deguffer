@@ -37,10 +37,25 @@ internal sealed class EnvironmentBlock
     private const int ExpansionPasses = 4;
 
     /// <summary>
-    /// The variables Windows joins rather than replaces: the user's value is appended to the
-    /// machine's instead of hiding it, which is why a user <c>PATH</c> extends the system one.
+    /// The variable Windows appends rather than replaces, which is why a user <c>PATH</c> extends
+    /// the system one instead of hiding it.
+    ///
+    /// <para><c>PATHEXT</c> is deliberately <em>not</em> here, though it is a list too: Windows
+    /// appends only <c>Path</c> (and the OS/2 library variables nothing has used in decades), so a
+    /// user <c>PATHEXT</c> replaces the machine's. Appending it as well would have Deguffer search
+    /// extensions the shell would not run, in an order it would not use.</para>
     /// </summary>
-    private static readonly HashSet<string> Joined = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> Appended = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Path",
+    };
+
+    /// <summary>
+    /// The variables that name a search rather than a place, and so are governed by the list rules
+    /// rather than the single-value ones: composed by adding to what the process has, never
+    /// protected as a process override, and written back from the search they describe.
+    /// </summary>
+    private static readonly HashSet<string> Searched = new(StringComparer.OrdinalIgnoreCase)
     {
         "Path",
         "PATHEXT",
@@ -112,10 +127,10 @@ internal sealed class EnvironmentBlock
 
         foreach (var (name, value) in process)
         {
-            // A joined variable is never an override: a refresh adds to what the process has
+            // A searched variable is never an override: a refresh adds to what the process has
             // rather than replacing it, so nothing the launching shell put on PATH is at risk and
             // there is nothing to protect it from.
-            if (Joined.Contains(name))
+            if (Searched.Contains(name))
             {
                 continue;
             }
@@ -139,9 +154,15 @@ internal sealed class EnvironmentBlock
     ///
     /// <para><b>Always called on the start-up block, never on a previous refresh.</b> Each result
     /// is the process's own environment composed with the registry as it is at that moment, so a
-    /// directory an installer added appears and a directory the user has since removed from
-    /// <c>PATH</c> goes again. Chaining refreshes would instead accumulate every state the machine
-    /// had passed through.</para>
+    /// directory an installer added between two passes appears at the first of them and goes again
+    /// once the registry stops naming it. Chaining refreshes would instead accumulate every state
+    /// the machine had passed through.</para>
+    ///
+    /// <para>What a refresh cannot take away is a directory the process already had at start-up.
+    /// Those are kept unconditionally, so removing one from <c>PATH</c> while Deguffer is open has
+    /// no effect until it is restarted. That is the deliberate direction: losing a directory would
+    /// hide a tool, and a tool Deguffer cannot find is a tool whose folders Explore stops
+    /// refusing (§7.1).</para>
     /// </summary>
     public EnvironmentBlock Refresh(
         IReadOnlyDictionary<string, string> machine,
@@ -161,15 +182,34 @@ internal sealed class EnvironmentBlock
             }
         }
 
-        return new EnvironmentBlock(
-            variables,
-            _overridden,
-            // The start-up directories keep their places and their order, because that is the
-            // search this process has been resolving commands against all along. A refresh only
-            // adds, which is also the safe direction for §7.1: a tool Deguffer can find is a tool
-            // whose folders Explore refuses.
-            Extend(PathDirectories, Split(Value(registry, "Path"))),
-            Extend(PathExtensions, Split(Value(registry, "PATHEXT"))));
+        // A name the process took from the registry and the registry has since lost is gone rather
+        // than stale. A restarted Deguffer would not see it, and a provider still told where a cache
+        // is goes on measuring, and offering to empty, a directory its tool has stopped pointing at
+        // (§5.2). A name the registry never held is an override by construction, so it survives
+        // this: the two cases are told apart by the set built at start-up, not guessed at here.
+        foreach (var name in _variables.Keys)
+        {
+            if (!_overridden.Contains(name) && !Searched.Contains(name) && !registry.ContainsKey(name))
+            {
+                variables.Remove(name);
+            }
+        }
+
+        // The start-up directories keep their places and their order, because that is the search
+        // this process has been resolving commands against all along. A refresh only adds, which is
+        // also the safe direction for §7.1: a tool Deguffer can find is a tool whose folders Explore
+        // refuses.
+        var directories = Extend(PathDirectories, Split(Value(registry, "Path")));
+        var extensions = Extend(PathExtensions, Split(Value(registry, "PATHEXT")));
+
+        // A searched variable has one value, not two. The loop above took it from the registry alone,
+        // which is a shorter list than the one actually searched, so it is written back here from
+        // the search itself — otherwise GetEnvironmentVariable("PATH") would name directories that
+        // FindExecutable does not visit, and omit the ones it does.
+        Join(variables, "Path", directories);
+        Join(variables, "PATHEXT", extensions);
+
+        return new EnvironmentBlock(variables, _overridden, directories, extensions);
     }
 
     /// <summary>The value of a variable, or null when nothing names it.</summary>
@@ -199,7 +239,7 @@ internal sealed class EnvironmentBlock
 
         foreach (var (name, value) in user)
         {
-            raw[name] = Joined.Contains(name) && Value(machine, name) is { Length: > 0 } shared
+            raw[name] = Appended.Contains(name) && Value(machine, name) is { Length: > 0 } shared
                 ? $"{shared.TrimEnd(Path.PathSeparator)}{Path.PathSeparator}{value}"
                 : value;
         }
@@ -270,6 +310,19 @@ internal sealed class EnvironmentBlock
         }
 
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// Write a searched list back as the variable it came from, unless there is nothing to write:
+    /// a variable nothing names must keep reading as unset rather than as empty, because a caller
+    /// treats the two differently.
+    /// </summary>
+    private static void Join(Dictionary<string, string> variables, string name, IReadOnlyList<string> entries)
+    {
+        if (entries.Count > 0)
+        {
+            variables[name] = string.Join(Path.PathSeparator, entries);
+        }
     }
 
     private static string? Value(IReadOnlyDictionary<string, string> variables, string name) =>

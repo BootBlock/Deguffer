@@ -74,8 +74,11 @@ public interface IUserEnvironment
     /// <summary>
     /// Resolve an executable on <c>PATH</c>, or null if it is not installed.
     ///
-    /// <para>The <c>PATH</c> searched is the one the machine has now, not the one this process was
-    /// started with. <see cref="Invalidate"/> says how the two come to differ.</para>
+    /// <para>The <c>PATH</c> searched is the one this process started with, extended by the one the
+    /// machine has now. A directory it gained since start-up is searched; a directory it had at
+    /// start-up is searched whether or not the machine still lists it, because taking one away
+    /// would remove a tool rather than add one. <see cref="Invalidate"/> says why the two differ at
+    /// all.</para>
     /// </summary>
     string? FindExecutable(string command);
 
@@ -129,6 +132,25 @@ public interface IUserEnvironment
 /// <inheritdoc />
 public sealed partial class UserEnvironment : IUserEnvironment
 {
+    /// <summary>
+    /// The environment this <em>process</em> started with, composed once for the whole process.
+    ///
+    /// <para><b>Shared rather than worked out per instance, and that is the point.</b> Which
+    /// variables the launching process set differently is decided by comparing its block against
+    /// the registry, and that comparison only means what it says while the registry still holds
+    /// what it held at launch. Explore builds a fresh <see cref="UserEnvironment"/> at every policy
+    /// build, long after start-up: an instance that read the registry for itself would see a
+    /// relocation an installer had since made, read the difference as a deliberate choice by the
+    /// launching shell, and pin the variable to the value that relocation moved away from — this
+    /// class's own defect, reintroduced on the page it most matters to.</para>
+    ///
+    /// <para>Declared above <see cref="Current"/> deliberately. Static initialisers run in textual
+    /// order, so a field below it would still be null while the singleton constructed itself, for
+    /// the reason <see cref="ResolveLocalLow"/> sets out at greater length.</para>
+    /// </summary>
+    private static readonly EnvironmentBlock ProcessStartup =
+        EnvironmentBlock.Startup(ProcessEnvironment(), ReadMachineEnvironment(), ReadUserEnvironment());
+
     public static readonly UserEnvironment Current = new();
 
     private readonly Func<IReadOnlyDictionary<string, string>> _readMachine;
@@ -152,7 +174,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
     private volatile EnvironmentBlock? _block;
 
     public UserEnvironment()
-        : this(ReadMachineEnvironment, ReadUserEnvironment, ProcessEnvironment())
+        : this(ReadMachineEnvironment, ReadUserEnvironment, ProcessStartup)
     {
     }
 
@@ -163,15 +185,19 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// machine (G8).
     /// </param>
     /// <param name="readUser"><c>HKCU\Environment</c>, read the same way.</param>
-    /// <param name="process">This process's own environment block.</param>
+    /// <param name="startup">
+    /// The environment the process started with. Taken as an argument rather than composed here,
+    /// because composing it needs the registry <em>as it was then</em> — see
+    /// <see cref="ProcessStartup"/>.
+    /// </param>
     internal UserEnvironment(
         Func<IReadOnlyDictionary<string, string>> readMachine,
         Func<IReadOnlyDictionary<string, string>> readUser,
-        IReadOnlyDictionary<string, string> process)
+        EnvironmentBlock startup)
     {
         _readMachine = readMachine;
         _readUser = readUser;
-        _startup = EnvironmentBlock.Startup(process, readMachine(), readUser());
+        _startup = startup;
     }
 
     public string UserProfile { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -182,7 +208,24 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string? LocalLowAppData { get; } = ResolveLocalLow();
 
-    public string TempPath { get; } = Path.GetTempPath();
+    /// <summary>
+    /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever
+    /// <see cref="Path.GetTempPath"/> falls back to — from the environment as it now stands.
+    ///
+    /// <para><b>It has to move with the variables, not sit beside them.</b>
+    /// <c>ProtectedRegions</c> refuses this one path as the temporary folder, while
+    /// <c>TempRoots</c> accepts what <c>TMP</c> and <c>TEMP</c> name. Once those two answer from
+    /// the machine and this did not, a folder redirected while Deguffer was open would be a scratch
+    /// root Storage empties and an ordinary removable folder in Explore at the same moment
+    /// (§5.3, §7.1).</para>
+    ///
+    /// <para>A value that is not fully qualified is no answer, so <see cref="LongPath.Configured"/>
+    /// declines it and the next candidate is taken. §5.2 fails towards knowing nothing.</para>
+    /// </summary>
+    public string TempPath =>
+        LongPath.Configured(Block.Value("TMP"))
+        ?? LongPath.Configured(Block.Value("TEMP"))
+        ?? Path.GetTempPath();
 
     // Read once rather than through Invalidate: a process cannot change the account it runs as,
     // and relaunching elevated makes a new process with the same identity.
@@ -278,10 +321,10 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// <summary><c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c>.</summary>
     private const string MachineEnvironmentKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
 
-    private static IReadOnlyDictionary<string, string> ReadMachineEnvironment() =>
+    internal static IReadOnlyDictionary<string, string> ReadMachineEnvironment() =>
         ReadEnvironmentKey(Registry.LocalMachine, MachineEnvironmentKey);
 
-    private static IReadOnlyDictionary<string, string> ReadUserEnvironment() =>
+    internal static IReadOnlyDictionary<string, string> ReadUserEnvironment() =>
         ReadEnvironmentKey(Registry.CurrentUser, "Environment");
 
     /// <summary>

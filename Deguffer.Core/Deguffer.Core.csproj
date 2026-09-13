@@ -41,6 +41,13 @@
       counters and service list, which a test cannot shape into a truncated record, a string past the
       end, a layout that moved, or a counter an older Windows leaves unfilled.
 
+      EnvironmentBlock composes the machine and user environment keys into the environment as it now
+      stands. Its subject is what the two sets of registry values mean together, and the only way to
+      state a case is to hand it both sets: a test that had to change a real machine's environment to
+      reach one is a test nobody may run. UserEnvironment's second constructor is there for the same
+      reason one step out - it takes the two registry reads as delegates, so the whole route from the
+      keys to a resolved command can be driven with the machine changing under it.
+
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.
     -->

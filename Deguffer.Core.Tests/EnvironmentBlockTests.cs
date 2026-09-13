@@ -87,16 +87,93 @@ public sealed class EnvironmentBlockTests
     [Fact]
     public void ADirectoryTakenOffPathAgainDoesNotLinger()
     {
-        var startup = Started(machine: Variables(("Path", System32)));
+        var startup = Started(
+            process: Variables(("Path", System32)),
+            machine: Variables(("Path", System32)));
 
         var added = startup.Refresh(
             Variables(("Path", System32)),
             Variables(("Path", @"C:\Users\testuser\.pixi\bin")));
 
+        // Composed over the start-up block again, exactly as UserEnvironment composes each pass.
+        // Chaining this onto `added` instead is the defect the case is here to catch, and it would
+        // carry the directory forward for the life of the process.
         var removed = startup.Refresh(Variables(("Path", System32)), Variables());
 
         Assert.Contains(@"C:\Users\testuser\.pixi\bin", added.PathDirectories, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(@"C:\Users\testuser\.pixi\bin", removed.PathDirectories, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A user <c>PATHEXT</c> replaces the machine's rather than extending it. Windows appends only
+    /// <c>PATH</c>, so treating <c>PATHEXT</c> the same way would have Deguffer report a tool
+    /// present under an extension the user's own value removed, and the shell would then refuse to
+    /// run the command Deguffer said was there.
+    /// </summary>
+    [Fact]
+    public void AUserPathExtReplacesTheMachineOneRatherThanExtendingIt()
+    {
+        var startup = Started(process: Variables(("PATHEXT", ".COM")));
+
+        var refreshed = startup.Refresh(
+            Variables(("PATHEXT", ".COM;.EXE;.MSC")),
+            Variables(("PATHEXT", ".COM;.EXE")));
+
+        Assert.Equal([".COM", ".EXE"], refreshed.PathExtensions);
+    }
+
+    /// <summary>
+    /// A variable the process took from the registry and the registry has since lost is gone, not
+    /// merely unchanged. A restarted Deguffer would not see it, and a provider still told where a
+    /// relocated cache is goes on measuring, and offering to empty, a directory its tool has
+    /// stopped pointing at (§5.2).
+    /// </summary>
+    [Fact]
+    public void AVariableDeletedFromTheRegistryStopsBeingReported()
+    {
+        const string Configured = @"C:\Users\testuser\AppData\Local\ms-playwright";
+
+        var startup = Started(
+            process: Variables(("PLAYWRIGHT_BROWSERS_PATH", Configured)),
+            user: Variables(("PLAYWRIGHT_BROWSERS_PATH", Configured)));
+
+        var refreshed = startup.Refresh(Variables(), Variables());
+
+        Assert.Null(refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
+    }
+
+    /// <summary>
+    /// The other side of that removal: a variable the registry never held is the launching
+    /// process's own, so an empty registry is not news about it. Dropping every name the registry
+    /// does not currently list would take the shell's choice away on the first refresh.
+    /// </summary>
+    [Fact]
+    public void AVariableTheRegistryNeverHeldSurvivesAnEmptyRegistry()
+    {
+        var startup = Started(process: Variables(("PLAYWRIGHT_BROWSERS_PATH", @"D:\browsers")));
+
+        var refreshed = startup.Refresh(Variables(), Variables());
+
+        Assert.Equal(@"D:\browsers", refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
+    }
+
+    /// <summary>
+    /// <c>PATH</c> read as a variable and <c>PATH</c> as the list of directories searched are one
+    /// fact. Composing the variable from the registry alone would have it name directories
+    /// <see cref="EnvironmentBlock.PathDirectories"/> does not visit and omit the ones it does, so a
+    /// provider reading the variable and the search that resolves its tool would disagree about the
+    /// same machine.
+    /// </summary>
+    [Fact]
+    public void TheVariableAndTheSearchedDirectoriesAgree()
+    {
+        var startup = Started(process: Variables(("Path", @"C:\session\bin")));
+
+        var refreshed = startup.Refresh(Variables(("Path", System32)), Variables());
+
+        Assert.Equal(
+            refreshed.PathDirectories,
+            (refreshed.Value("Path") ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>

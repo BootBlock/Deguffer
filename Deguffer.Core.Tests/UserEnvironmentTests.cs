@@ -68,8 +68,22 @@ public sealed class UserEnvironmentTests : IDisposable
     [Fact]
     public void TheRealEnvironmentStillResolvesACommandOnTheMachinePath()
     {
-        Assert.NotNull(UserEnvironment.Current.FindExecutable("cmd"));
+        // The start-up block is cut down to the one logon variable the machine key's PATH is
+        // written in terms of, and supplies no PATH at all. The only route left to cmd is the real
+        // registry read and the expansion performed on what it returned, so neither can be broken
+        // while this passes.
+        var logon = Values(("SystemRoot", Environment.GetEnvironmentVariable("SystemRoot")!));
+
+        var environment = new UserEnvironment(
+            UserEnvironment.ReadMachineEnvironment,
+            UserEnvironment.ReadUserEnvironment,
+            EnvironmentBlock.Startup(logon, Values(), Values()));
+
+        Assert.NotNull(environment.FindExecutable("cmd"));
     }
+
+    private static Dictionary<string, string> Values(params (string Name, string Value)[] entries) =>
+        entries.ToDictionary(entry => entry.Name, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The whole route, from the two environment keys through composition to a command resolved on
@@ -87,11 +101,11 @@ public sealed class UserEnvironmentTests : IDisposable
         var installed = _temp.CreateDirectory("tool-bin");
         File.WriteAllBytes(Path.Combine(installed, "deguffer-fixture-tool.exe"), new byte[64]);
 
-        var user = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var user = Values();
         var environment = new UserEnvironment(
-            () => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["PATHEXT"] = ".EXE" },
+            () => Values(("PATHEXT", ".EXE")),
             () => user,
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+            EnvironmentBlock.Startup(Values(), Values(), Values()));
 
         Assert.Null(environment.FindExecutable("deguffer-fixture-tool"));
 
@@ -117,22 +131,52 @@ public sealed class UserEnvironmentTests : IDisposable
     [Fact]
     public void ARelocatedCacheVariableIsReadAgainOnTheNextPass()
     {
-        var user = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["PLAYWRIGHT_BROWSERS_PATH"] = @"C:\Users\testuser\AppData\Local\ms-playwright",
-        };
+        const string Configured = @"C:\Users\testuser\AppData\Local\ms-playwright";
 
+        var user = Values(("PLAYWRIGHT_BROWSERS_PATH", Configured));
         var environment = new UserEnvironment(
-            () => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            () => Values(),
             () => user,
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["PLAYWRIGHT_BROWSERS_PATH"] = @"C:\Users\testuser\AppData\Local\ms-playwright",
-            });
+            EnvironmentBlock.Startup(
+                Values(("PLAYWRIGHT_BROWSERS_PATH", Configured)),
+                Values(),
+                Values(("PLAYWRIGHT_BROWSERS_PATH", Configured))));
 
         user["PLAYWRIGHT_BROWSERS_PATH"] = @"D:\ms-playwright";
         environment.Invalidate();
 
         Assert.Equal(@"D:\ms-playwright", environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH"));
+    }
+
+    /// <summary>
+    /// The temporary folder follows the variables that name it.
+    ///
+    /// <para>It has to, because two parts of the app read it by different routes:
+    /// <c>ProtectedRegions</c> refuses <see cref="IUserEnvironment.TempPath"/> as the folder
+    /// Explore may not remove, and <c>TempRoots</c> accepts what <c>TMP</c> and <c>TEMP</c> name as
+    /// a root Storage empties. Leave this one fixed at start-up while those two answer from the
+    /// machine, and a folder redirected while Deguffer is open becomes a scratch root Storage clears
+    /// and an ordinary removable folder in Explore at the same moment (§5.3, §7.1).</para>
+    /// </summary>
+    [Fact]
+    public void TheTemporaryFolderFollowsAMidSessionRedirection()
+    {
+        var redirected = _temp.CreateDirectory("redirected-temp");
+
+        // TMP lives in HKCU\Environment, so the start-up block and the registry agree about it to
+        // begin with. That is what makes the later write a change rather than a deletion.
+        var user = Values(("TMP", _temp.Path));
+
+        var environment = new UserEnvironment(
+            () => Values(),
+            () => user,
+            EnvironmentBlock.Startup(Values(("TMP", _temp.Path)), Values(), Values(("TMP", _temp.Path))));
+
+        Assert.Equal(_temp.Path, environment.TempPath, StringComparer.OrdinalIgnoreCase);
+
+        user["TMP"] = redirected;
+        environment.Invalidate();
+
+        Assert.Equal(redirected, environment.TempPath, StringComparer.OrdinalIgnoreCase);
     }
 }
