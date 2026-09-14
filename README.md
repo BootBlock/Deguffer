@@ -4,13 +4,15 @@
 
 A Windows utility that finds and reclaims wasted disk space, with a safety model good enough to
 trust. It knows what specific locations on your disk actually are, and tells you what each one
-costs to lose, so you decide what goes.
+costs to lose, so you decide what goes. It also shows you where your memory goes, with the same
+refusal to guess on your behalf, and without claiming to free a byte of it.
 
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Thirty-five sources across the four tiers, plus a file-table-backed
-> Explore view of the whole drive. See [Roadmap](#roadmap).
+> **Status:** Version 0.70.0. Forty-three sources across the tiers, a file-table-backed Explore view
+> of the whole drive, and a read-only Memory view of where physical memory goes. See
+> [Roadmap](#roadmap).
 
 ## Why
 
@@ -32,6 +34,14 @@ Previewing that same drive today, version 0.70.0 recognises 34 locations and fin
 present. It offers **10.3 GB** of Tier 1 cache pre-selected and **1.4 GB** of Tier 2 beside it, and
 reports **6.4 GB** of Tier 3 user data separately with nothing pre-selected. The Recycle Bin and the
 crash dumps are real space, and they are still yours to decide about.
+
+Memory is the other thing a Windows machine runs short of, and finding out where yours went should
+not mean leaving for a second program. The subject holds the same trap in a different form. Low free
+memory is Windows working as designed: it fills memory nothing else needs with cache, and hands
+those pages back the moment something asks for them. The two failures you do feel are commit charge
+reaching the commit limit, when allocations start to fail, and sustained hard faulting, which shows
+in disk activity rather than in any memory figure. So Deguffer draws where physical memory goes,
+leads with the one of the two that a single figure states, and frees nothing.
 
 ## The idea: safety tiers
 
@@ -76,6 +86,11 @@ class of error is invisible until it is irreversible.
   stored apart from the remembered selection, because a lost entry only offers something again,
   where a misread tick would pre-select it.
 - **A locked file is the OS protecting live state.** Access-denied is skipped, not escalated.
+- **Not a RAM cleaner, in any form.** The Memory view never trims a working set, and never purges or
+  flushes the standby list or any other memory list. Those are the tricks that make a free-memory
+  figure rise, and the pages they push out come back as page faults, read from the disk a second
+  time. It never says that a process, a service or a part of Windows is idle or safe to close, and
+  it never starts, stops, pauses or reconfigures a service.
 - **Long paths are mandatory.** NuGet and Node trees routinely exceed `MAX_PATH`, and truncating
   there is the likeliest cause of a silent partial deletion.
 
@@ -147,6 +162,28 @@ excluded by construction rather than by enumeration. Outlook's mailbox and data 
 well, because they can be saved anywhere: Deguffer never removes an `.ost` or a `.pst`, by any route,
 wherever it finds one.
 
+## Where the memory goes
+
+The Memory view draws physical memory through the same treemap, icicle and sunburst Explore uses,
+with a plain list beside them. The headline is committed memory against the commit limit, and
+available memory sits next to it rather than above it: a headline led by memory "in use" would
+present a cache as a problem.
+
+The picture has three parts. **Applications** follows the process tree, and a parent link counts
+only where the creation times allow it, because Windows reuses process identifiers. **Services** is
+grouped by host process, and a host carries the name of its service where it holds one and a count
+where it holds several, because memory in a shared host cannot be divided between them. **Windows**
+holds the compression store, the non-paged pool, the memory lists, and the memory no figure
+attributes — drawn and labelled rather than hidden, because a reader takes a missing remainder for
+a leak. Nothing is drawn twice: the paged pool sits inside the system working set, so it is not a
+part of its own, and the page says where its pages are counted.
+
+Every size is a lower bound, and the page says so in its own words. The private working set is the
+closest single figure to what closing a program would return, and compressed pages, shared pages and
+the memory the kernel holds on a process's behalf are not in it. Where a figure cannot be trusted or
+a table cannot be read to its end, the view says which one and what is missing, rather than drawing
+a zero. It acts on nothing.
+
 ## Building
 
 Requires the **.NET 10 SDK**. `Deguffer.App` additionally needs the Windows App SDK workload.
@@ -169,6 +206,7 @@ Deguffer.Core/
   Execution/     plan model, planner, executor, post-run verification
   Providers/     one class per known cache
   Exploring/     whole-drive view: file-table reads, tree building, what each location is
+  Memory/        where memory goes: process and service tables, checked figures, the memory tree
   Configuration/ user preferences
   Diagnostics/   run logging
 Deguffer.Core.Tests/
@@ -182,9 +220,9 @@ knowledge.
 ## Roadmap
 
 File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
-elevated, and walks whatever the table cannot account for. Still to come: VS Code workspace storage
-with per-workspace ages, Docker (reporting reclaim *inside* the VHDX separately from host space),
-and Android SDK.
+elevated, and walks whatever the table cannot account for. The Memory view has landed as well, as a
+read-only picture that acts on nothing. Still to come: VS Code workspace storage with per-workspace
+ages, Docker (reporting reclaim *inside* the VHDX separately from host space), and Android SDK.
 
 Deliberately out of scope: `WinSxS`, `Windows\Installer`, and installer package caches. They are
 large and tempting, but the failure modes are severe and the safe operations are already exposed by

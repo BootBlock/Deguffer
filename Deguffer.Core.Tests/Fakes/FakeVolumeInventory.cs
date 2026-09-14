@@ -22,9 +22,18 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// <see cref="VolumeInventory"/> from a real <c>DriveInfo</c>, and no rule that decides a
     /// deletion consults them, so there is nothing here for a fake to stand in for yet.</para>
     /// </summary>
-    public FakeVolumeInventory With(string rootPath, DriveType kind = DriveType.Fixed, bool isReady = true)
+    /// <param name="features">
+    /// What the volume says it supports. Defaults to the local NTFS reading, because a fake volume
+    /// is a directory on the machine running the suite and that is what it really is — so a test
+    /// naming <see cref="VolumeFeatures.RemoteStorage"/> is visibly testing a cloud mount.
+    /// </param>
+    public FakeVolumeInventory With(
+        string rootPath,
+        DriveType kind = DriveType.Fixed,
+        bool isReady = true,
+        VolumeFeatures features = VolumeFeatures.ReparsePoints)
     {
-        _volumes.Add(new LocalVolume(rootPath, kind, isReady));
+        _volumes.Add(new LocalVolume(rootPath, kind, isReady, Features: features));
         return this;
     }
 

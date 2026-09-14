@@ -418,8 +418,10 @@ not the shell asked.
   names as protected. That includes what a provider can only name once it has asked the machine: a
   location a tool reports in place of its documented default, and a path a plan holds back because a
   program is using it. Explore reads all of that afresh when it is first opened and again whenever a
-  scan starts, including whether each tool can be found on the `PATH` Deguffer started with, so between
-  scans it answers from the machine as it was at the last of those.
+  scan starts, including whether each tool can be found on the `PATH` — which is re-read from the
+  machine and user environment keys at that moment, because Windows never pushes an installer's
+  change into a running process — so between scans it answers from the machine as it was at the last
+  of those.
   `%LOCALAPPDATA%`, `%APPDATA%`, `LocalLow` and `%TEMP%` are refused as folders
   and are ordinary inside, as the profile is. **A folder holding any refused path is refused too**,
   because removing a folder removes what is in it — but only while that path is on disk, so the
