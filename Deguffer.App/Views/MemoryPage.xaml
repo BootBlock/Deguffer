@@ -109,7 +109,31 @@
                 -->
                 <controls:ExploreMap x:Name="Map"
                                      AutomationProperties.Name="Map of where memory is"
-                                     AutomationProperties.HelpText="A picture of where physical memory is. Choose List in the View box for the same contents as a readable list." />
+                                     AutomationProperties.HelpText="A picture of where physical memory is. Choose List in the View box for the same contents as a readable list.">
+                    <!--
+                        What the thing under the pointer is, and why the size it is drawn at is
+                        normal (§7.2). A floating tooltip, where the readout below deliberately is
+                        not, and the difference is what each costs when it changes. The readout is
+                        one line that never wraps, so a new name cannot move anything. This is
+                        several sentences of wrapped text, and under the picture it reflowed the page
+                        on every shape the pointer crossed: the picture lost a line, the shape under
+                        the pointer moved out from under it, and the reader was left chasing it.
+
+                        A reader who cannot use the picture gets the same sentence on the row, where
+                        the list carries it as help text as well as a tooltip.
+                    -->
+                    <ToolTipService.ToolTip>
+                        <ToolTip MaxWidth="420"
+                                 Content="{x:Bind ViewModel.HoveredNote, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.HasHoveredNote, Mode=OneWay}">
+                            <ToolTip.ContentTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </ToolTip.ContentTemplate>
+                        </ToolTip>
+                    </ToolTipService.ToolTip>
+                </controls:ExploreMap>
 
                 <!--
                     The same contents as a list, for a reader who cannot use a picture. One row at a
@@ -192,9 +216,10 @@
         </Border>
 
         <StackPanel Grid.Row="4" Spacing="6">
-            <!-- What the pointer is over. A status line rather than a floating tooltip, for the
-                 reason Explore's is: over hundreds of shapes a popup that follows the pointer never
-                 settles. -->
+            <!-- What the pointer is over: what it is called, and what it holds. Both are one line
+                 that never wraps, so naming a new shape cannot change the height of anything above
+                 it. What the thing under the pointer *is* wraps, so it is the tooltip on the
+                 picture instead. -->
             <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto" MinHeight="20">
                 <TextBlock Grid.Column="0"
                            Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
@@ -207,14 +232,6 @@
                            Style="{StaticResource SecondaryText}"
                            TextWrapping="NoWrap" />
             </Grid>
-
-            <!-- What the thing under the pointer is. It says what a part holds and why it is normal,
-                 and never that anything is safe to close (§7.2). -->
-            <TextBlock Text="{x:Bind ViewModel.HoveredNote, Mode=OneWay}"
-                       Visibility="{x:Bind ViewModel.HasHoveredNote, Mode=OneWay}"
-                       TextWrapping="Wrap"
-                       MinHeight="18"
-                       Style="{StaticResource SecondaryText}" />
 
             <TextBlock Text="{x:Bind ViewModel.Failure, Mode=OneWay}"
                        Visibility="{x:Bind ViewModel.HasFailure, Mode=OneWay}"

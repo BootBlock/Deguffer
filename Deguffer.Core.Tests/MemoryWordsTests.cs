@@ -69,6 +69,35 @@ public sealed class MemoryWordsTests
     public void NoPartTellsTheReaderToActOnIt() =>
         Assert.All(Enum.GetValues<MemoryPart>(), part => AssertSaysNothingToDo(MemoryPartGuide.Describe(part)));
 
+    /// <summary>
+    /// §7.2's rule for Windows' own parts: they say what they hold <em>and</em> why the size they are
+    /// drawn at is normal. A reader meets one of these when it is the largest shape on screen, which
+    /// is the moment a "RAM cleaner" would offer to act on it, so a bare label is the one thing that
+    /// cannot stand here.
+    ///
+    /// <para>Two sentences is the floor this can check mechanically, and not the whole rule: a
+    /// sentence that says what a part holds has no room left for the second half. It fails a sentence
+    /// cut back to a label, which is what <see cref="MemoryPart.Free"/> and
+    /// <see cref="MemoryPart.Modified"/> were.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(MemoryPart.Windows)]
+    [InlineData(MemoryPart.CompressionStore)]
+    [InlineData(MemoryPart.SystemCache)]
+    [InlineData(MemoryPart.Standby)]
+    [InlineData(MemoryPart.Modified)]
+    [InlineData(MemoryPart.Free)]
+    [InlineData(MemoryPart.NonPagedPool)]
+    [InlineData(MemoryPart.Unattributed)]
+    public void EveryPartOfWindowsSaysWhyItsSizeIsNormal(MemoryPart part)
+    {
+        var said = MemoryPartGuide.Describe(part);
+
+        Assert.True(
+            said.Count(character => character == '.') > 1,
+            $"{part} says only \"{said}\", which has room for what it is and none for why its size is normal.");
+    }
+
     [Fact]
     public void TheNotesAlwaysSayTheFiguresAreLowerBounds() =>
         Assert.Contains("lower bound", MemoryNotes.For(Tree(Snapshot()))[0], StringComparison.Ordinal);
