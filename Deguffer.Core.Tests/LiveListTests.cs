@@ -71,6 +71,74 @@ public sealed class LiveListTests
     }
 
     /// <summary>
+    /// The other half of the same defect, and the one that is easier to miss. A pass that walks the
+    /// arriving order and pulls each wanted row up to the front answers one row sinking to the
+    /// bottom by moving every row above it up one each. The list ends in the right order either way,
+    /// so only the count of changes tells the two apart.
+    /// </summary>
+    [Fact]
+    public void ARowThatSinksToTheBottomCostsOneMove()
+    {
+        var rows = Rows("a", "b", "c", "d", "e");
+        var watched = Watch(rows);
+
+        Show(rows, "b", "c", "d", "e", "a");
+
+        Assert.Equal([NotifyCollectionChangedAction.Move], watched);
+        Assert.Equal(["b", "c", "d", "e", "a"], Names(rows));
+    }
+
+    [Fact]
+    public void ARowThatRisesToTheTopCostsOneMove()
+    {
+        var rows = Rows("a", "b", "c", "d", "e");
+        var watched = Watch(rows);
+
+        Show(rows, "e", "a", "b", "c", "d");
+
+        Assert.Equal([NotifyCollectionChangedAction.Move], watched);
+        Assert.Equal(["e", "a", "b", "c", "d"], Names(rows));
+    }
+
+    /// <summary>
+    /// What the Memory page's list of programs actually meets: a process whose working set drops
+    /// falls a long way down a list ordered by size, while everything else keeps its order. The
+    /// reading costs the one row that moved, not the thirty it fell past.
+    /// </summary>
+    [Fact]
+    public void ARowFallingPastThirtyOthersStillCostsOneMove()
+    {
+        var names = Enumerable.Range(0, 40).Select(at => $"p{at}").ToArray();
+        var rows = Rows(names);
+        var watched = Watch(rows);
+
+        var fallen = names.Where(name => name != "p4").ToList();
+
+        fallen.Insert(34, "p4");
+
+        Show(rows, fallen.ToArray());
+
+        Assert.Equal([NotifyCollectionChangedAction.Move], watched);
+        Assert.Equal(fallen, Names(rows));
+    }
+
+    /// <summary>
+    /// Two rows swapping at opposite ends of the list, which no single run leaves in order. Both
+    /// have to move, and nothing between them does.
+    /// </summary>
+    [Fact]
+    public void TwoRowsTradingPlacesCostTwoMovesAndNoMore()
+    {
+        var rows = Rows("a", "b", "c", "d", "e");
+        var watched = Watch(rows);
+
+        Show(rows, "e", "b", "c", "d", "a");
+
+        Assert.Equal([NotifyCollectionChangedAction.Move, NotifyCollectionChangedAction.Move], watched);
+        Assert.Equal(["e", "b", "c", "d", "a"], Names(rows));
+    }
+
+    /// <summary>
     /// A row that stays is the same object, which is what the list's container, its selection and
     /// the keyboard's place inside it all hang on.
     /// </summary>
