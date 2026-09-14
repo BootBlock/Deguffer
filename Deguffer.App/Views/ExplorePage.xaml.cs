@@ -42,13 +42,20 @@ public sealed partial class ExplorePage : Page
     private bool _touchedSinceSettled;
 
     /// <summary>
-    /// Whether a pointer is down on the list right now, which is a gesture in progress rather than a
-    /// list that has settled.
+    /// Whether a pointer is down <em>on a row</em> right now, which is a gesture in progress rather
+    /// than a list that has settled.
     ///
     /// <para>A <c>ListView</c> commits a pointer selection on the <em>release</em>, and this page
     /// rewrites its rows on every snapshot a running scan publishes, so a press held across one
     /// would otherwise have its gesture cleared before the control reported it — and the click would
     /// be refused, the highlight snapping back to whatever was picked before.</para>
+    ///
+    /// <para>A row is the whole of it. The list's background and its scroll chrome are hit-testable
+    /// and commit no selection at all, so a press there has nothing to protect, and suspending the
+    /// guard for the length of a scrollbar drag would admit exactly the write §7.1 forbids. It is
+    /// also the press the list cannot promise an end for: a <c>ListViewItem</c> captures the
+    /// pointer and so guarantees a release or a capture loss, and a press on the background
+    /// released somewhere else raises neither.</para>
     /// </summary>
     private bool _pointerDown;
 
@@ -112,13 +119,18 @@ public sealed partial class ExplorePage : Page
         RowsList.AddHandler(
             PointerPressedEvent, new PointerEventHandler(OnRowsPressed), handledEventsToo: true);
 
-        // Both ends of a press, because the gesture is over either way and only one of them fires
-        // when the pointer is taken away from the list mid-click. See _pointerDown.
+        // Every way a press ends, because the gesture is over whichever way it went and only one of
+        // the three fires when the pointer is taken away from the list mid-click: a capture loss
+        // when something else claims it, and a cancellation when the touch is abandoned. A press
+        // whose end goes unheard leaves _pointerDown standing and the guard suspended.
         RowsList.AddHandler(
             PointerReleasedEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
 
         RowsList.AddHandler(
             PointerCaptureLostEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
+
+        RowsList.AddHandler(
+            PointerCanceledEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
 
         RowsList.PreviewKeyDown += OnRowsTouched;
 
@@ -444,9 +456,14 @@ public sealed partial class ExplorePage : Page
     /// <summary>Note that the user has touched the list. See <see cref="IsUserSelecting"/>.</summary>
     private void OnRowsTouched(object sender, RoutedEventArgs e) => _touchedSinceSettled = true;
 
+    /// <summary>
+    /// A press. Assigned rather than only set true, so that a press landing anywhere else on the
+    /// list answers the question afresh and nothing an earlier press left can outlive it. See
+    /// <see cref="_pointerDown"/>.
+    /// </summary>
     private void OnRowsPressed(object sender, PointerRoutedEventArgs e)
     {
-        _pointerDown = true;
+        _pointerDown = Container(e.OriginalSource) is not null;
 
         OnRowsTouched(sender, e);
     }
