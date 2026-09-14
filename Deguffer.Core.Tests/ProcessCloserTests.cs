@@ -495,6 +495,37 @@ public sealed class ProcessCloserTests
     }
 
     /// <summary>
+    /// §7.2.1: a close cannot be called off. The token ends the watch and nothing else, so a user
+    /// who stops watching at the instant the message goes out is still owed the evidence, and still
+    /// gets it.
+    /// </summary>
+    [Fact]
+    public async Task StoppingTheWatchAsTheMessageGoesOutStillGathersTheEvidence()
+    {
+        var before = Before();
+        using var stop = new CancellationTokenSource();
+        var windows = Desktop(Window());
+        windows.WhenPosted = stop.Cancel;
+
+        var closer = Closer(
+            Processes(),
+            windows,
+            new QueuedMemorySource(before, After(Shell, Compositor, Own, TargetId, Child, Host)));
+
+        var attempt = await closer
+            .CloseAsync(Target(before), watching: null, stop.Token)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        var report = Assert.IsType<CloseReport>(attempt.Report);
+
+        Assert.Equal(CloseState.StillRunning, report.State);
+        Assert.Contains(
+            report.Verification.Checks,
+            c => c.Subject.StartsWith("explorer.exe", StringComparison.Ordinal)
+                && c.Outcome == VerificationOutcome.Survived);
+    }
+
+    /// <summary>
     /// Runs a test's own check at the one moment nothing else can reach: the messages are posted, the
     /// handle is still held, and the watch has not begun.
     /// </summary>

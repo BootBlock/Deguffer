@@ -22,6 +22,12 @@ internal sealed class FakeWindowCalls : IWindowCalls
     public bool PostSucceeds { get; set; } = true;
 
     /// <summary>
+    /// What the machine does at the instant a message goes out. The one moment a close cannot be
+    /// called off from, and nothing else in a test can reach it.
+    /// </summary>
+    public Action? WhenPosted { get; set; }
+
+    /// <summary>
     /// Every window a close was posted to, in order. It is what proves a window whose owner changed
     /// between the survey and the post received nothing.
     /// </summary>
@@ -52,6 +58,8 @@ internal sealed class FakeWindowCalls : IWindowCalls
     public bool PostClose(nint window)
     {
         _posted.Add(window);
+        WhenPosted?.Invoke();
+
         return PostSucceeds;
     }
 

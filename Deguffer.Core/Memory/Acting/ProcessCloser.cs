@@ -142,7 +142,8 @@ public sealed class ProcessCloser
                 return new CloseAttempt(verdict, Report: null);
             }
 
-            var desktop = DesktopProcesses.Of(before, shellOwner, _processes, ct);
+            // Posted the moment the verdict allows it, with nothing in between. Whatever else this
+            // action has to do, none of it belongs between deciding and sending.
             var (sent, moved) = Post(verdict.Windows, target);
 
             if (sent.Count == 0)
@@ -155,6 +156,15 @@ public sealed class ProcessCloser
                         + "sent nothing at all. The picture will show what is there when it next reads."),
                     Report: null);
             }
+
+            // The desktop is named from the read taken before any of this, so finding it afterwards
+            // changes nothing about what is asserted, and it keeps these opens out of the moment
+            // between the decision and the message.
+            //
+            // Not cancellable, for the reason the read below is not: the messages have gone, so
+            // everything from here on is evidence the user is owed, and a cancellation that threw it
+            // away would leave a close nobody can account for.
+            var desktop = DesktopProcesses.Of(before, shellOwner, _processes, CancellationToken.None);
 
             watching?.Report(CloseReport.Watching(target, sent.Count, read.System, moved));
 
