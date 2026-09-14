@@ -201,7 +201,7 @@ public sealed class GoCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(installed, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(installed, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

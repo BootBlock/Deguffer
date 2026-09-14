@@ -402,7 +402,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(root, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(root, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

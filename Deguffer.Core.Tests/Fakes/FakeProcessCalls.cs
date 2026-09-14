@@ -68,7 +68,11 @@ internal sealed class FakeProcess : IOpenProcess
 
     public long? CreatedAt { get; init; } = Created;
 
-    public bool? Exited { get; init; } = false;
+    /// <summary>
+    /// Whether it has gone. Settable, because §7.2.1's watch has no deadline and a test has to be
+    /// able to end the process while the watch is running rather than only before it starts.
+    /// </summary>
+    public bool? Exited { get; set; } = false;
 
     public uint? Session { get; init; } = FakeProcessCalls.OwnSession;
 

@@ -46,20 +46,7 @@ public static class MemoryNotes
                 + "missing and the parts holding them are short.");
         }
 
-        notes.Add(snapshot.Services.Listing switch
-        {
-            ServiceListing.NotListed =>
-                "Windows would not list its services for this account, so every host is drawn as an "
-                + "ordinary process.",
-            ServiceListing.ListedInPart =>
-                "The service list could not be read to its end, so some hosts are drawn as ordinary "
-                + "processes.",
-            ServiceListing.Listed =>
-                "Windows leaves out the services this account may not query, without saying so, so "
-                + "some hosts are drawn as ordinary processes.",
-
-            _ => throw new ArgumentOutOfRangeException(nameof(tree)),
-        });
+        notes.Add(WhichHostsAreMissing(snapshot.Services.Listing));
 
         if (snapshot.System.ListState != MemoryListState.Checked)
         {
@@ -77,6 +64,34 @@ public static class MemoryNotes
 
         return notes;
     }
+
+    /// <summary>
+    /// Which service hosts this read cannot name, in the words the picture uses (§7.2).
+    ///
+    /// <para>Public because §7.2.1's confirmation says the same thing in the same words. The close
+    /// refuses a process hosting a service, and that row is the one rule in the table that cannot be
+    /// complete: a host whose services this account may not query is drawn as an ordinary process,
+    /// and the rule does not reach it. A dialog that said so in words of its own would be a second
+    /// statement of one fact, and the two would drift.</para>
+    ///
+    /// <para>Every listing state has a sentence, <see cref="ServiceListing.Listed"/> included: the
+    /// list Windows returns in full still leaves out what this account may not query, and says
+    /// nothing about having done so.</para>
+    /// </summary>
+    public static string WhichHostsAreMissing(ServiceListing listing) => listing switch
+    {
+        ServiceListing.NotListed =>
+            "Windows would not list its services for this account, so every host is drawn as an "
+            + "ordinary process.",
+        ServiceListing.ListedInPart =>
+            "The service list could not be read to its end, so some hosts are drawn as ordinary "
+            + "processes.",
+        ServiceListing.Listed =>
+            "Windows leaves out the services this account may not query, without saying so, so "
+            + "some hosts are drawn as ordinary processes.",
+
+        _ => throw new ArgumentOutOfRangeException(nameof(listing)),
+    };
 
     /// <summary>
     /// Why no process is drawn, or null where they are. Each answer names what could not be checked,

@@ -530,7 +530,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
 
         Assert.False(verification.Passed);
         Assert.Contains(verification.Failures, c =>
-            c.Path.Equals(packages, StringComparison.OrdinalIgnoreCase));
+            c.Subject.Equals(packages, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

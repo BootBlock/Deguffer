@@ -500,7 +500,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
         Assert.False(verification.Passed);
         Assert.Contains(verification.Failures, c =>
-            c.Path.Equals(environments, StringComparison.OrdinalIgnoreCase));
+            c.Subject.Equals(environments, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

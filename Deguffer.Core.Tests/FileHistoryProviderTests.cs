@@ -401,7 +401,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         Assert.False(result.Verification!.Passed);
         Assert.Contains(
             result.Verification.Failures,
-            c => c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase));
+            c => c.Subject.Equals(theirs, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -433,7 +433,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         Assert.False(result.Verification!.Passed);
         Assert.Contains(
             result.Verification.Failures,
-            c => c.Path.Equals(theirs, StringComparison.OrdinalIgnoreCase)
+            c => c.Subject.Equals(theirs, StringComparison.OrdinalIgnoreCase)
                 && c.Outcome == VerificationOutcome.Emptied);
     }
 

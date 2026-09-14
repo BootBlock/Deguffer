@@ -343,7 +343,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(Windows, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(Windows, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
