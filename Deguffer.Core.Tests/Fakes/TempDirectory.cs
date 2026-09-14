@@ -5,7 +5,11 @@ public sealed class TempDirectory : IDisposable
 {
     public TempDirectory()
     {
-        Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "deguffer-tests", Guid.NewGuid().ToString("N"));
+        // Before this run's first tree, so what an earlier run's forgiven delete left behind goes
+        // now rather than staying for good.
+        ScratchRoot.SweepOnce();
+
+        Path = System.IO.Path.Combine(ScratchRoot.Path, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path);
     }
 
@@ -45,17 +49,10 @@ public sealed class TempDirectory : IDisposable
         return path;
     }
 
-    public void Dispose()
-    {
-        try
-        {
-            // Extended form: tests deliberately build trees past MAX_PATH, and cleanup has to
-            // reach them too.
-            Directory.Delete(Safety.LongPath.Extended(Path), recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
-        {
-            // A leaked scratch directory is not worth failing a test run over.
-        }
-    }
+    /// <summary>
+    /// Remove the tree, waiting out a handle something else still holds, and forgive a delete
+    /// Windows refuses even then: a leaked scratch directory is not worth failing a test run over.
+    /// <see cref="ScratchRoot"/>'s sweep collects the forgiven one on a later run.
+    /// </summary>
+    public void Dispose() => _ = ScratchTree.TryRemove(Path, RemovalAttempts.WithBackoff);
 }
