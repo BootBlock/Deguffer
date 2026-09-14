@@ -19,6 +19,8 @@ public sealed class FakeRecycleBinEmptier : IRecycleBinEmptier
 {
     private readonly Func<string, RecycleBinEmptyOutcome> _behaviour;
 
+    private Func<string, bool> ServesRoot { get; init; } = _ => true;
+
     /// <summary>
     /// Empties the account directories under the volume's bin, which is what Windows' own effect
     /// looks like from here: the contents go, the directory stays, and every other account's is
@@ -135,4 +137,23 @@ public sealed class FakeRecycleBinEmptier : IRecycleBinEmptier
         VolumeRoots.Add(volumeRoot);
         return _behaviour(volumeRoot);
     }
+
+    /// <summary>
+    /// Serves whatever it is given, unless a test says otherwise.
+    ///
+    /// <para>The real route serves a drive root and nothing else, and every volume in every fixture
+    /// here is a directory in a temp tree — so a fake that applied the real test would answer no to
+    /// all of them, and the shell route would never be exercised by any test in the suite. What
+    /// makes the rule itself testable is <see cref="Serving"/> below, which states the answer a
+    /// test wants rather than deriving it.</para>
+    /// </summary>
+    public bool Serves(string volumeRoot) => ServesRoot(volumeRoot);
+
+    /// <summary>
+    /// An emptier that serves only the volume roots named, so a test can present a volume this
+    /// route cannot empty — which on a real machine is one mounted at a folder, and which no
+    /// fixture can build.
+    /// </summary>
+    public static FakeRecycleBinEmptier Serving(params string[] volumeRoots) =>
+        new() { ServesRoot = root => volumeRoots.Contains(root, StringComparer.OrdinalIgnoreCase) };
 }

@@ -211,13 +211,19 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         var survivors = new List<(string Path, string Reason)>();
         var unreadable = false;
 
-        // Decided once for the whole plan rather than per volume, because it is one answer to one
-        // question the user was asked once. The guard wins over the setting: Windows empties a bin
-        // whole, so the only way to leave a recently changed file where it is, is to do the removal
-        // ourselves.
-        var kind = keep.IsOn || _preferences.Current.EmptyRecycleBinsDirectly
-            ? TargetKind.Directory
-            : TargetKind.RecycleBin;
+        // The setting is one answer to one question the user was asked once, and two things
+        // override it, both towards removing the files ourselves.
+        //
+        // The guard, because Windows empties a bin whole, so the only way to leave a recently
+        // changed file where it is, is to do the removal ourselves. That answer is the same for
+        // every volume.
+        //
+        // The volume, because ShellRecycleBinEmptier serves a drive root and nothing else, so a
+        // volume mounted only at a folder would be handed a path that route refuses — a step
+        // measured, offered and never takeable. That answer is per volume, which is why the choice
+        // is made inside the loop below rather than once above it.
+        var direct = keep.IsOn || _preferences.Current.EmptyRecycleBinsDirectly;
+        var forcedByVolume = new List<string>();
 
         // Said rather than done silently. The user can see the drive in File Explorer and can see
         // its bin, and a plan that omits it with no word reads as a plan that found nothing there.
@@ -258,6 +264,18 @@ public sealed class RecycleBinProvider : CleanupProviderBase
                 bin,
                 "The volume's Recycle Bin itself must survive — only this user's own bin inside it is removed."));
 
+            // The root the shell would be handed, derived as EmptyRecycleBinStep derives it, so the
+            // path this choice is made about and the path that route receives cannot differ.
+            var volumeRoot = Path.GetDirectoryName(bin) ?? string.Empty;
+            var servedByTheShell = Emptier.Serves(volumeRoot);
+
+            if (!direct && !servedByTheShell)
+            {
+                forcedByVolume.Add(volumeRoot);
+            }
+
+            var kind = direct || !servedByTheShell ? TargetKind.Directory : TargetKind.RecycleBin;
+
             unreadable |= !CollectFrom(bin, kind, targets, declined, notes, ct);
         }
 
@@ -273,6 +291,17 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         if (targets.Count == 0 && declined.Count == 0 && !unreadable && refused.Count == 0)
         {
             return EmptyPlan("No volume on this machine holds a Recycle Bin for this user.");
+        }
+
+        // Named one by one, because which drive is being emptied by a different route is the part a
+        // reader can act on, and a volume mounted at a folder is rare enough that the list is short.
+        foreach (var volumeRoot in forcedByVolume)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Emptying the Recycle Bin at '{volumeRoot}' by removing its files rather than "
+                + "asking Windows to. That volume is mounted at a folder rather than under a drive "
+                + "letter, and Windows' own empty command takes a drive letter."));
         }
 
         // Only where the setting and the guard actually disagree. Saying it whenever the direct
@@ -430,8 +459,12 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// more than one place has one <c>$RECYCLE.BIN</c> reachable under each of those names, so a
     /// candidate per mount point would target the same directory twice through two paths — a plan
     /// that counted its bytes twice and then deleted the second target after the first had already
-    /// taken it. A volume mounted at a folder is included on the same terms as any other, which is
-    /// what puts its bin in reach at all.</para>
+    /// taken it.</para>
+    ///
+    /// <para>A volume mounted at a folder is a candidate like any other, which is what puts its bin
+    /// in reach at all. What differs is the route that empties it: see
+    /// <see cref="Execution.IRecycleBinEmptier.Serves"/> and the choice in
+    /// <see cref="BuildPlanAsync"/>.</para>
     /// </summary>
     private IEnumerable<string> CandidateBins() =>
         FixedVolumes()

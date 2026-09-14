@@ -71,19 +71,48 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
-    /// A volume with a drive letter is rooted at that letter. Windows returns a volume's mount
-    /// points in no documented order, and the root is what a plan targets and the picker shows, so
-    /// it is chosen by a rule rather than taken from the answer.
+    /// A volume with a drive letter is rooted at that letter, whatever order Windows named its
+    /// mount points in. The root is what a plan targets and what the picker shows, so it is chosen
+    /// by a rule rather than taken from the answer.
+    ///
+    /// <para>Asked of the rule directly. Through <see cref="VolumeInventory.Volumes"/> it could only
+    /// be asked of a volume mounted in more than one place, and a test cannot mount one — so on this
+    /// machine the rule would never run and every ordering would pass. See the grant in
+    /// <c>Deguffer.Core.csproj</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Mount\", @"D:\")]
+    [InlineData(@"D:\", @"C:\Mount\")]
+    public void RootsAVolumeAtItsDriveLetterWhereItHasOne(string first, string second)
+    {
+        Assert.Equal(@"D:\", VolumeInventory.Ordered([first, second])[0]);
+    }
+
+    /// <summary>
+    /// With no letter to prefer, the shortest mount point is the root and the order is settled
+    /// between two of the same length. Two reads of one machine must choose the same root, or the
+    /// picker's selection and a plan's targets move underneath the reader.
     /// </summary>
     [Fact]
-    public void RootsAVolumeAtItsDriveLetterWhereItHasOne()
+    public void RootsALetterlessVolumeAtTheShortestMountPoint()
     {
-        var lettered = VolumeInventory.Current.Volumes
-            .Where(v => v.MountPoints.Any(m => m.Length == 3 && m[1] == ':'))
-            .ToList();
+        Assert.Equal(
+            [@"C:\Mnt\", @"C:\Mount\", @"D:\Mount\"],
+            VolumeInventory.Ordered([@"D:\Mount\", @"C:\Mount\", @"C:\Mnt\"]));
+    }
 
-        Assert.NotEmpty(lettered);
-        Assert.All(lettered, v => Assert.Equal(3, v.RootPath.Length));
+    /// <summary>
+    /// Every mount point survives the ordering. Dropping one would hand the paths below it to the
+    /// volume its mount point sits on, which is the whole defect this rule was written for.
+    /// </summary>
+    [Fact]
+    public void KeepsEveryMountPointItWasGiven()
+    {
+        string[] mountPoints = [@"D:\Mount\", @"C:\Mount\", @"E:\"];
+
+        Assert.Equal(
+            mountPoints.OrderBy(m => m, StringComparer.Ordinal),
+            VolumeInventory.Ordered(mountPoints).OrderBy(m => m, StringComparer.Ordinal));
     }
 
     /// <summary>

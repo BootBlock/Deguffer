@@ -474,6 +474,54 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A volume the shell route cannot empty is emptied by removing its files instead, and the plan
+    /// says which volume and why.
+    ///
+    /// <para>On a real machine that volume is one mounted at a folder: <c>SHEmptyRecycleBin</c> was
+    /// measured over a drive root and its reach over a mount point is stated nowhere, so
+    /// <see cref="IRecycleBinEmptier.Serves"/> answers no for one. Without this the step is
+    /// measured, offered to the user and then refused at execution — a plan that can never be
+    /// carried out, on exactly the volumes this provider was just taught to see.</para>
+    ///
+    /// <para>The fake is told which roots it serves, because every volume in this fixture is a
+    /// directory in a temp tree and the real test would answer no to all of them.</para>
+    /// </summary>
+    [Fact]
+    public async Task AVolumeTheShellRouteCannotEmptyIsEmptiedDirectly()
+    {
+        var served = CreateVolume("D");
+        var servedBin = CreateBin(served, Sid);
+
+        var mounted = CreateVolume("Mount");
+        var mountedBin = CreateBin(mounted, Sid);
+
+        _emptier = FakeRecycleBinEmptier.Serving(served);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        await provider.ExecuteAsync(plan);
+
+        // The shell was asked about the volume it serves and about no other.
+        Assert.Equal([served], _emptier.VolumeRoots);
+
+        // The shell empties this user's directory in place; the direct route removes it, and
+        // Windows re-creates it on the next delete. Either way the files are gone, which is the
+        // point: the volume the shell would not take was still cleaned.
+        Assert.Empty(Directory.EnumerateFiles(servedBin));
+        Assert.False(Directory.Exists(mountedBin));
+
+        // §5.6's negative on the route that changed: the bin root is a shared parent and survives
+        // both ways.
+        Assert.True(Directory.Exists(Path.Combine(mounted, BinName)));
+
+        Assert.Contains(
+            plan.Notes,
+            n => n.Message.Contains(mounted, StringComparison.OrdinalIgnoreCase)
+                && n.Message.Contains("mounted at a folder", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// The tier is the whole product here (§3), and the declaration has to agree with the tier the
     /// provider claims. A plan carries the provider's tier rather than the child's, and
     /// <see cref="SafetyTierExtensions.IsOfferable"/> admits Tier 1, 2 and 3 alike — so a child

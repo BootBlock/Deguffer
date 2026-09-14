@@ -52,6 +52,12 @@
       test assert that decision against a key it wrote itself, which the two real environment keys
       could only be made to answer by writing to them.
 
+      VolumeInventory.Ordered chooses which of a volume's mount points the rest of the app acts on
+      and shows. It only does anything for a volume mounted in more than one place, and a test
+      cannot mount one: SetVolumeMountPoint needs a spare volume and an elevation the suite does not
+      have. Reached through the public Volumes it is satisfied by whatever the machine happens to
+      have, which on a machine with no folder-mounted volume is every ordering at once.
+
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.
     -->

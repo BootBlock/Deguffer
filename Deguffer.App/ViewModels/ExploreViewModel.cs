@@ -555,9 +555,13 @@ public sealed partial class ExploreViewModel : ObservableObject
         // on is the kind of disagreement a reader takes for a bug. A folder on a share, or on a
         // volume the box does not list, has no entry to move to and leaves it as it was.
         //
+        // Asked of the inventory rather than of Path.GetPathRoot, which reduces a path to a drive
+        // letter: a folder on a volume mounted at C:\Mount would otherwise select the disk that
+        // folder sits on, and both are in the list.
+        //
         // Assigned before the folder, because selecting a drive is what drops a folder scope. The
         // other order would clear the scope this is establishing.
-        if (Offered(Path.GetPathRoot(folder)) is { } listed)
+        if (Offered(HostVolume.For(_volumes, folder)?.RootPath) is { } listed)
         {
             SelectedDrive = listed;
         }

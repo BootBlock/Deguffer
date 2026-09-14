@@ -259,7 +259,7 @@ public sealed class VolumeInventory : IVolumeInventory
     /// and a plan's targets with it. Ties go to the earlier path, so the choice is settled even
     /// between two folder mount points of the same length.</para>
     /// </summary>
-    private static IReadOnlyList<string> Ordered(IReadOnlyList<string> mountPoints) =>
+    internal static IReadOnlyList<string> Ordered(IReadOnlyList<string> mountPoints) =>
         mountPoints.Count == 1
             ? mountPoints
             : [.. mountPoints.OrderBy(p => p.Length).ThenBy(p => p, StringComparer.OrdinalIgnoreCase)];

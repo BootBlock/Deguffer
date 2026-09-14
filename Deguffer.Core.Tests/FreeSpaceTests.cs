@@ -52,24 +52,47 @@ public class FreeSpaceTests
     }
 
     /// <summary>
-    /// One reading of one volume. The capacity behind the page's bar and the capacity the drive
-    /// picker shows have to be the same number, and they are because both come from the same call
-    /// against the mount point Windows resolved the path to.
+    /// The figure the native route reads is the figure Windows reports for the same volume.
     ///
-    /// <para>Capacity rather than free space, which moves between two reads on a machine that is
-    /// doing anything at all. On a machine whose volumes all wear drive letters this would also
-    /// have passed before the mount point was resolved — what it holds is the invariant, so that a
-    /// route measuring a different volume cannot be introduced quietly.</para>
+    /// <para><c>DriveInfo</c> is the independent witness here rather than the implementation: it is
+    /// what this class used before the mount point was resolved natively, and it is not on the route
+    /// under test. A rewrite that read the wrong field of <c>GetDiskFreeSpaceEx</c> — the raw free
+    /// space rather than the caller's quota, or the total in place of the free — or that resolved a
+    /// different volume, disagrees here.</para>
+    ///
+    /// <para><b>What this cannot show is the defect the rewrite fixed.</b> Telling the two routes
+    /// apart needs a volume mounted at a folder, and a test cannot mount one. On a machine whose
+    /// volumes all wear drive letters the two agree by construction, which is exactly what is
+    /// asserted.</para>
     /// </summary>
     [Fact]
-    public void AgreesWithTheInventoryAboutTheVolumeHoldingAPath()
+    public void ReportsTheSameFiguresTheVolumeItselfReports()
     {
         using var temp = new TempDirectory();
 
-        var volume = HostVolume.For(VolumeInventory.Current, temp.Path);
+        var drive = new DriveInfo(Path.GetPathRoot(temp.Path)!);
 
-        Assert.NotNull(volume);
-        Assert.Equal(volume.Value.TotalBytes, FreeSpace.TotalForPath(temp.Path));
+        Assert.Equal(drive.TotalSize, FreeSpace.TotalForPath(temp.Path));
+
+        // Free space moves between two reads on a working machine, so this is a bound rather than
+        // an equality: the quota figure can never exceed the volume's capacity, and reading the
+        // total into the free slot would break it on any disk holding anything.
+        Assert.InRange(FreeSpace.ForPath(temp.Path)!.Value, 0, drive.TotalSize - 1);
+    }
+
+    /// <summary>
+    /// §6.3: a path in extended-length form measures the same volume as the same path without the
+    /// prefix. Every path in Core may arrive as <c>\\?\C:\…</c>, and the mount-point lookup is the
+    /// one place in this class that hands a path to Win32.
+    /// </summary>
+    [Fact]
+    public void ReadsThroughTheExtendedLengthPrefix()
+    {
+        using var temp = new TempDirectory();
+
+        Assert.Equal(
+            FreeSpace.TotalForPath(temp.Path),
+            FreeSpace.TotalForPath(LongPath.Extended(temp.Path)));
     }
 
     [Theory]

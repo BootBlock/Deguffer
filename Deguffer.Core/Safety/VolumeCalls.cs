@@ -145,20 +145,33 @@ internal static partial class VolumeCalls
     ///
     /// <para>Answers for a path that does not exist, and for a file as readily as a directory,
     /// which is what separates it from asking the filesystem.</para>
+    ///
+    /// <para>§6.3: the path is normalised and extended before it crosses, and the buffer is sized
+    /// from it rather than fixed at <c>MAX_PATH</c>. A mount point is a prefix of every path it
+    /// holds, so the extended form's own length is always enough — where a fixed 260 would answer
+    /// null for the Node and NuGet trees §6.3 exists for, and a dash would appear where a figure
+    /// belongs. The answer comes back in display form, because that is what the rest of the app
+    /// shows and hands on.</para>
     /// </summary>
     internal static string? MountPointOf(string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        // Configured rather than Extended alone: it resolves a relative path, rejects one Windows
+        // will not accept, and answers null instead of throwing — which is this method's own
+        // contract for a path that names no volume.
+        if (LongPath.Configured(path) is not { } qualified)
         {
             return null;
         }
 
-        var buffer = Marshal.AllocHGlobal(LabelLength * sizeof(char));
+        var extended = LongPath.Extended(qualified);
+        var length = extended.Length + 1;
+        var buffer = Marshal.AllocHGlobal(length * sizeof(char));
 
         try
         {
-            return GetVolumePathName(path, buffer, LabelLength)
-                ? Marshal.PtrToStringUni(buffer)
+            return GetVolumePathName(extended, buffer, (uint)length)
+                && Marshal.PtrToStringUni(buffer) is { Length: > 0 } mountPoint
+                ? LongPath.Display(mountPoint)
                 : null;
         }
         finally

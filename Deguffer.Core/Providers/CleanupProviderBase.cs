@@ -48,11 +48,20 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Inspector = inspector;
         Scanner = scanner;
         _refusals = RefusalRecord.For(environment);
-        _executor = new PlanExecutor(runner, scanner, _refusals, emptier);
+        Emptier = emptier ?? ShellRecycleBinEmptier.Default;
+        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier);
         Runner = runner;
     }
 
     protected IUserEnvironment Environment { get; }
+
+    /// <summary>
+    /// The route a <see cref="EmptyRecycleBinStep"/> takes, resolved here rather than left to the
+    /// executor so that a provider choosing between it and removing the files itself asks the same
+    /// instance the step will be carried out by. Two defaults would let a plan choose a route on
+    /// one object's answer and then be executed by another.
+    /// </summary>
+    protected IRecycleBinEmptier Emptier { get; }
 
     protected IProcessRunner Runner { get; }
 
