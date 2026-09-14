@@ -99,9 +99,17 @@ public sealed class ScratchRegistryTests : IDisposable
     }
 
     /// <summary>
-    /// The age read is the key's own, rather than a constant that happens to sort the right way. A
-    /// reader that answered 1601 would make every key stale, and one that answered now would make
-    /// none of them stale, so the window is asserted from both sides.
+    /// The age read is the key's own, and neither a constant nor the clock.
+    ///
+    /// <para>No sweep test can say so. Moving the cutoff is the only side of the comparison a test
+    /// can move, and a reader that ignored the key and answered "now" would sit on the right side of
+    /// both cutoffs these tests use. It would collect nothing, ever, and every other case here would
+    /// still pass.</para>
+    ///
+    /// <para>The window refuses the constant: 1601, which is what a reader that dropped the file
+    /// time would answer, is an age outside it. Reading the same untouched key twice, either side of
+    /// a tick of the clock, refuses the live one: the key's own time does not move between the two
+    /// reads, and <see cref="DateTime.UtcNow"/> does.</para>
     /// </summary>
     [Fact]
     public void ReadsTheWriteTimeTheRegistryKeeps()
@@ -114,6 +122,10 @@ public sealed class ScratchRegistryTests : IDisposable
 
         Assert.NotNull(written);
         Assert.InRange(written.Value, before - Granularity, after + Granularity);
+
+        WaitForTheClockToMove();
+
+        Assert.Equal(written, ScratchRegistry.LastWriteTimeUtc(_scratch.Key, child));
     }
 
     /// <summary>
@@ -169,6 +181,20 @@ public sealed class ScratchRegistryTests : IDisposable
     [InlineData("")]
     public void RefusesANameNoScratchKeyWouldCarry(string name) =>
         Assert.False(ScratchRegistry.IsScratchKey(name));
+
+    /// <summary>
+    /// Wait until <see cref="DateTime.UtcNow"/> reports a different moment.
+    ///
+    /// <para>It answers the same moment for a tick at a time, so two reads with nothing between them
+    /// can land on one value, and a reader that answered "now" twice would look like a reader that
+    /// answered the key's own unchanged time. This waits out the tick, which is under 16ms.</para>
+    /// </summary>
+    private static void WaitForTheClockToMove()
+    {
+        var mark = DateTime.UtcNow;
+
+        SpinWait.SpinUntil(() => DateTime.UtcNow != mark);
+    }
 
     /// <summary>The last segment of a registry path, which is the name the recogniser is asked about.</summary>
     private static string Name(string path) => path[(path.LastIndexOf('\\') + 1)..];

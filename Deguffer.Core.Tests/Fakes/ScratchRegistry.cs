@@ -125,7 +125,7 @@ internal static class ScratchRegistry
     /// "certainly stale" and delete on it. A negative one is what
     /// <see cref="DateTime.FromFileTimeUtc"/> throws on.</para>
     /// </summary>
-    internal static DateTime? LastWriteTimeUtc(RegistryKey key)
+    private static DateTime? LastWriteTimeUtc(RegistryKey key)
     {
         var status = RegQueryInfoKey(
             key.Handle,
