@@ -469,7 +469,9 @@ view first, and §7.2.1's one action after it.
 - **The tree has three parts.** *Applications* follows the process tree and holds every process that
   hosts no service, including one a service host started: Windows starts packaged applications and
   brokers that way, and they are not memory a service holds. *Services* is grouped by host process and
-  names the services each host holds: memory in a shared host cannot be divided between its services,
+  names what each host holds: a host of one service reads as that service, and a host of several
+  reads as how many and names them all where the reader points at it, because a shape's label is
+  trimmed to the width of the shape. Memory in a shared host cannot be divided between its services,
   so the host is the smallest part the picture sizes, and nothing is drawn under a host. *Windows*
   holds the compression store, the non-paged pool, the free, modified and standby lists where those
   could be checked or the system cache where they could not, and the memory no figure attributes.

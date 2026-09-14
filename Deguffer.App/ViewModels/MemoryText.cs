@@ -7,8 +7,9 @@ namespace Deguffer.App.ViewModels;
 /// What one node of a <see cref="MemoryTree"/> is called on screen, and what its figures read as.
 ///
 /// <para>Here rather than in the tree, because a name is presentation: the tree holds a process's
-/// image name and the services it hosts, and this decides that a host with one service reads as that
-/// service, and that a process's own share reads as the process "itself".</para>
+/// image name and the services it hosts, and this decides that a process's own share reads as the
+/// process "itself". What a service host is called is <see cref="ServiceHostText"/>'s, because §7.2
+/// states that one as a rule and the words that promise it are beside it.</para>
 /// </summary>
 internal static class MemoryText
 {
@@ -20,7 +21,7 @@ internal static class MemoryText
         return tree.PartOf(node) switch
         {
             MemoryPart.OwnShare => $"{name} itself",
-            MemoryPart.Process => WithItsServices(name, tree.ServicesOf(node)),
+            MemoryPart.Process => ServiceHostText.Name(name, tree.ServicesOf(node)),
             _ => name,
         };
     }
@@ -43,15 +44,4 @@ internal static class MemoryText
             ? $"{held} in memory, {FreeSpace.Format(committed)} committed"
             : held;
     }
-
-    /// <summary>
-    /// A host named by the service it holds, which is what a reader recognises: several hosts share
-    /// one image name, and the service is the part they came for.
-    /// </summary>
-    private static string WithItsServices(string name, IReadOnlyList<RunningService> services) => services.Count switch
-    {
-        0 => name,
-        1 => $"{name}: {services[0].DisplayName}",
-        _ => $"{name}: {services.Count} services",
-    };
 }
