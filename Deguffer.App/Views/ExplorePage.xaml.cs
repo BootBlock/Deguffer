@@ -42,6 +42,24 @@ public sealed partial class ExplorePage : Page
     private bool _touchedSinceSettled;
 
     /// <summary>
+    /// Whether a pointer is down <em>on a row</em> right now, which is a gesture in progress rather
+    /// than a list that has settled.
+    ///
+    /// <para>A <c>ListView</c> commits a pointer selection on the <em>release</em>, and this page
+    /// rewrites its rows on every snapshot a running scan publishes, so a press held across one
+    /// would otherwise have its gesture cleared before the control reported it — and the click would
+    /// be refused, the highlight snapping back to whatever was picked before.</para>
+    ///
+    /// <para>A row is the whole of it. The list's background and its scroll chrome are hit-testable
+    /// and commit no selection at all, so a press there has nothing to protect, and suspending the
+    /// guard for the length of a scrollbar drag would admit exactly the write §7.1 forbids. It is
+    /// also the press the list cannot promise an end for: a <c>ListViewItem</c> captures the
+    /// pointer and so guarantees a release or a capture loss, and a press on the background
+    /// released somewhere else raises neither.</para>
+    /// </summary>
+    private bool _pointerDown;
+
+    /// <summary>
     /// Where the list sits before <see cref="OnNotesResized"/> moves its bottom edge. Read once,
     /// because every later read would be of a value this page had already written.
     /// </summary>
@@ -78,7 +96,7 @@ public sealed partial class ExplorePage : Page
 
             // Whatever the list reports from here until the user touches it again is the list's own
             // doing, however long it takes to arrive. See IsUserSelecting.
-            _touchedSinceSettled = false;
+            Settled();
         };
 
         InitializeComponent();
@@ -99,7 +117,20 @@ public sealed partial class ExplorePage : Page
         // an ordinary KeyDown handler would run after the selection had already moved. See
         // IsUserSelecting.
         RowsList.AddHandler(
-            PointerPressedEvent, new PointerEventHandler(OnRowsTouched), handledEventsToo: true);
+            PointerPressedEvent, new PointerEventHandler(OnRowsPressed), handledEventsToo: true);
+
+        // Every way a press ends, because the gesture is over whichever way it went and only one of
+        // the three fires when the pointer is taken away from the list mid-click: a capture loss
+        // when something else claims it, and a cancellation when the touch is abandoned. A press
+        // whose end goes unheard leaves _pointerDown standing and the guard suspended.
+        RowsList.AddHandler(
+            PointerReleasedEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
+
+        RowsList.AddHandler(
+            PointerCaptureLostEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
+
+        RowsList.AddHandler(
+            PointerCanceledEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
 
         RowsList.PreviewKeyDown += OnRowsTouched;
 
@@ -107,7 +138,7 @@ public sealed partial class ExplorePage : Page
         // containers are built again when it comes back into the tree, on a return to a page held
         // by NavigationCacheMode. ShowAs covers the same thing for the map's half of the toggle.
         // See IsUserSelecting.
-        RowsList.Loaded += (_, _) => _touchedSinceSettled = false;
+        RowsList.Loaded += (_, _) => Settled();
 
         // One signal, followed by both screens that show a selection. The list is not on screen
         // while the map is and keeps whatever was highlighted in it until something says otherwise,
@@ -187,7 +218,7 @@ public sealed partial class ExplorePage : Page
             // Back from behind the map, so the list realises its containers again and may settle on
             // one. Nothing here writes the highlight, so no other reset covers it (see
             // IsUserSelecting).
-            _touchedSinceSettled = false;
+            Settled();
         }
 
         ShowCurrentNode();
@@ -269,7 +300,7 @@ public sealed partial class ExplorePage : Page
             _showingSelectedRows = false;
 
             // A write of the page's own is not the user touching the list. See IsUserSelecting.
-            _touchedSinceSettled = false;
+            Settled();
         }
     }
 
@@ -426,6 +457,38 @@ public sealed partial class ExplorePage : Page
     private void OnRowsTouched(object sender, RoutedEventArgs e) => _touchedSinceSettled = true;
 
     /// <summary>
+    /// A press. Assigned rather than only set true, so that a press landing anywhere else on the
+    /// list answers the question afresh and nothing an earlier press left can outlive it. See
+    /// <see cref="_pointerDown"/>.
+    /// </summary>
+    private void OnRowsPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerDown = Container(e.OriginalSource) is not null;
+
+        OnRowsTouched(sender, e);
+    }
+
+    /// <summary>
+    /// The press is over. The gesture is deliberately <em>not</em> cleared here: the
+    /// <c>ListView</c> commits a pointer selection on the release, so the report this page is
+    /// waiting for arrives immediately after this.
+    /// </summary>
+    private void OnRowsReleased(object sender, PointerRoutedEventArgs e) => _pointerDown = false;
+
+    /// <summary>
+    /// The list has settled on rows or containers it was given, so whatever it reports next is its
+    /// own doing — unless a press is still in progress, which is a gesture the user has not finished
+    /// making. See <see cref="_pointerDown"/>.
+    /// </summary>
+    private void Settled()
+    {
+        if (!_pointerDown)
+        {
+            _touchedSinceSettled = false;
+        }
+    }
+
+    /// <summary>
     /// Whether a selection change arriving from the list is the user's doing.
     ///
     /// <para>Two windows are not, and both are this page's own writing. While the view model is
@@ -447,11 +510,16 @@ public sealed partial class ExplorePage : Page
     /// what was measured is the page's response to such a write rather than the control making
     /// one.</para>
     ///
-    /// <para>So the third term is not a window at all. It asks whether the user has touched the
-    /// list since it last settled on rows or containers it was given, which is a question with an
-    /// answer however late the report is. Both gestures that move a selection are marked as they
+    /// <para>So the third term is not one of those windows. It asks whether the user has touched
+    /// the list since it last settled on rows or containers it was given, which is a question with
+    /// an answer however late the report is. Both gestures that move a selection are marked as they
     /// arrive and before the control acts on them, so a genuine click or arrow key counts on the
     /// first press after a navigation rather than the second.</para>
+    ///
+    /// <para>It does hold a window of its own, between a press and its release, and a scan
+    /// publishing a snapshot into one would clear the gesture before the control committed the
+    /// click. <see cref="Settled"/> is what keeps that from happening — see
+    /// <see cref="_pointerDown"/>.</para>
     ///
     /// <para>A row selected straight through UI Automation carries neither, and is refused with the
     /// rest. From in here it cannot be told apart from the control's own write, and §7.1's
