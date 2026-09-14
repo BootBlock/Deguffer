@@ -209,8 +209,8 @@ public sealed class UserEnvironmentTests : IDisposable
     /// seam between this method and the registry, by design: the kind is what a reader of the real
     /// API brings back, so a fake standing in for the API would be asserting its own answer. The
     /// key is this class's registry counterpart of the temporary directory it already writes to —
-    /// named for this run, deleted afterwards, not an environment key, and read by nothing
-    /// else.</para>
+    /// named for this run, deleted afterwards, swept by a later run if this one is killed before it
+    /// can delete it, not an environment key, and read by nothing else.</para>
     /// </summary>
     [Fact]
     public void TheRegistryReadTellsTheTwoValueKindsApart()
@@ -218,36 +218,18 @@ public sealed class UserEnvironmentTests : IDisposable
         // The same text under both kinds, so the kind is the only thing that can distinguish them.
         const string Written = @"%DEGUFFER_TEST_UNSET%\cache";
 
-        // One level under Software, so deleting it afterwards leaves no empty parent behind, and
-        // named for this run so two runs on the same machine cannot collide.
-        //
-        // Nothing sweeps what a killed host leaves, which ScratchRoot does do for a scratch tree.
-        // Telling an abandoned key from the live key of a run happening alongside this one needs the
-        // age ScratchRoot.StaleAfter is measured against, and the managed registry API reports no
-        // write time to measure. It is the same residual ScratchRoot declines for a tree under a
-        // DACL: reachable only by killing the host outright.
-        var path = $@"Software\Deguffer.Tests.{Guid.NewGuid():N}";
+        using var scratch = new ScratchKey();
 
-        try
-        {
-            using (var key = Registry.CurrentUser.CreateSubKey(path))
-            {
-                key.SetValue("Expanded", Written, RegistryValueKind.ExpandString);
-                key.SetValue("Written", Written, RegistryValueKind.String);
+        scratch.Key.SetValue("Expanded", Written, RegistryValueKind.ExpandString);
+        scratch.Key.SetValue("Written", Written, RegistryValueKind.String);
 
-                // Not an environment value at all, and its decimal digits would read as a path.
-                key.SetValue("Number", 1, RegistryValueKind.DWord);
-            }
+        // Not an environment value at all, and its decimal digits would read as a path.
+        scratch.Key.SetValue("Number", 1, RegistryValueKind.DWord);
 
-            var values = UserEnvironment.ReadEnvironmentKey(Registry.CurrentUser, path);
+        var values = UserEnvironment.ReadEnvironmentKey(Registry.CurrentUser, scratch.Path);
 
-            Assert.Equal(new EnvironmentValue(Written, Expandable: true), values["Expanded"]);
-            Assert.Equal(new EnvironmentValue(Written, Expandable: false), values["Written"]);
-            Assert.DoesNotContain("Number", values.Keys, StringComparer.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Registry.CurrentUser.DeleteSubKeyTree(path, throwOnMissingSubKey: false);
-        }
+        Assert.Equal(new EnvironmentValue(Written, Expandable: true), values["Expanded"]);
+        Assert.Equal(new EnvironmentValue(Written, Expandable: false), values["Written"]);
+        Assert.DoesNotContain("Number", values.Keys, StringComparer.OrdinalIgnoreCase);
     }
 }
