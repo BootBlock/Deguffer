@@ -9,7 +9,13 @@ namespace Deguffer.Core.Tests.Fakes;
 /// <para>A refused delete is forgiven on purpose, because a tree a scanner still holds must not turn
 /// a green run red. Nothing collected the forgiven ones until this existed, so each one was
 /// permanent and the root grew for as long as the machine was used. The sweep is the other half of
-/// that bargain: yesterday's leak goes today.</para>
+/// that bargain: a tree the hold has since let go of is taken on the next run.</para>
+///
+/// <para>What it does not collect is a tree the account may no longer delete.
+/// <see cref="DeniedDirectory"/> and <see cref="UndeletableFile"/> put such rules on, and both take
+/// them off again in their own <c>Dispose</c> and on a part-way failure, so this only arises when
+/// the test host is killed outright. A retry count is the wrong instrument for a DACL, and lifting
+/// someone's access rules in TEMP is a larger power than a leak of this size justifies.</para>
 /// </summary>
 internal static class ScratchRoot
 {
@@ -27,6 +33,13 @@ internal static class ScratchRoot
     internal static readonly string Path =
         System.IO.Path.Combine(System.IO.Path.GetTempPath(), "deguffer-tests");
 
+    /// <summary>
+    /// What Windows answers for a creation time it cannot read. .NET returns it rather than
+    /// throwing, and it is older than any cutoff, so a sweep that compared it straight would read
+    /// "I cannot tell" as "certainly stale" and delete on it.
+    /// </summary>
+    private static readonly DateTime Unreadable = DateTime.FromFileTimeUtc(0);
+
     private static readonly Lazy<bool> Swept = new(() =>
     {
         SweepStale(Path, StaleAfter);
@@ -36,8 +49,8 @@ internal static class ScratchRoot
     /// <summary>
     /// Whether this process has swept yet.
     ///
-    /// <para>The suite asserts on it, because nothing else can observe that making the first scratch
-    /// tree of a run is what triggers the sweep.</para>
+    /// <para>The suite asserts on it, because the sweep runs before any test can watch it and
+    /// nothing it leaves behind distinguishes "swept and found nothing" from "never ran".</para>
     /// </summary>
     internal static bool HasSwept => Swept.IsValueCreated;
 
@@ -55,29 +68,58 @@ internal static class ScratchRoot
     /// </summary>
     internal static void SweepStale(string root, TimeSpan olderThan)
     {
-        var extended = LongPath.Extended(root);
-
-        if (!Directory.Exists(extended))
-        {
-            return;
-        }
-
-        var cutoff = DateTime.UtcNow - olderThan;
-
-        // Listed before the first delete: removing entries from a directory while enumerating it can
-        // make the enumeration skip the ones after it, and a skipped tree would wait another run for
-        // no reason. The list is the root's stale children, never a tree.
-        var stale = Directory.EnumerateDirectories(extended)
-            .Where(child => IsScratchTree(System.IO.Path.GetFileName(child)))
-            .Where(child => Directory.GetCreationTimeUtc(child) < cutoff)
-            .ToList();
-
-        foreach (var tree in stale)
+        foreach (var tree in Stale(root, DateTime.UtcNow - olderThan))
         {
             ScratchTree.TryRemove(tree, RemovalAttempts.One);
         }
     }
 
-    /// <summary>Whether <paramref name="name"/> has the shape <see cref="TempDirectory"/> gives a tree.</summary>
-    internal static bool IsScratchTree(string name) => Guid.TryParseExact(name, "N", out _);
+    /// <summary>Whether <paramref name="name"/> is a name <see cref="TempDirectory"/> would write.</summary>
+    /// <remarks>
+    /// The round trip, rather than <see cref="Guid.TryParseExact(string, string, out Guid)"/> alone,
+    /// which trims its input and accepts either case. Leading whitespace and upper-case hex are both
+    /// names this class never writes, and §5.2 turns on recognising only what we made.
+    /// </remarks>
+    internal static bool IsScratchTree(string name) =>
+        Guid.TryParseExact(name, "N", out var id)
+        && id.ToString("N").Equals(name, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether <paramref name="child"/> was created before <paramref name="cutoff"/>.
+    ///
+    /// <para>A time we could not read answers no. This is the predicate guarding a recursive delete,
+    /// and the only safe reading of "I cannot tell" on such a predicate is the one that stops it.
+    /// The entry going between the listing and this call is the ordinary way to reach it.</para>
+    /// </summary>
+    internal static bool IsStale(string child, DateTime cutoff)
+    {
+        var created = Directory.GetCreationTimeUtc(child);
+
+        return created != Unreadable && created < cutoff;
+    }
+
+    /// <summary>
+    /// The stale scratch trees under <paramref name="root"/>, all of them listed before the first
+    /// one is deleted: removing entries from a directory while enumerating it can make the
+    /// enumeration skip the ones after it, and a skipped tree would wait another run for no reason.
+    /// The list holds the root's children, never a tree's contents.
+    /// </summary>
+    private static IReadOnlyList<string> Stale(string root, DateTime cutoff)
+    {
+        try
+        {
+            return Directory.EnumerateDirectories(LongPath.Extended(root))
+                .Where(child => IsScratchTree(System.IO.Path.GetFileName(child)))
+                .Where(child => IsStale(child, cutoff))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Including the root not being there at all, which is every machine's first run.
+            // A sweep that cannot read the root has nothing to say, and must not be the thing that
+            // fails the run: Lazy keeps a faulting factory's exception for the life of the process,
+            // so one throw here would be re-thrown by every TempDirectory the run went on to make.
+            return [];
+        }
+    }
 }

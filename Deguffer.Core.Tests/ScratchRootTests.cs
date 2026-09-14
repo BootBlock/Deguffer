@@ -7,13 +7,19 @@ namespace Deguffer.Core.Tests;
 /// The sweep that clears scratch trees an earlier run could not remove.
 ///
 /// <para>Its whole risk is taking something it should not, so most of these cases are negatives: the
-/// root survives, a tree this run is still using survives, and a child the suite did not write
-/// survives however old it is. That last one is §5.2's "recognised children only" turned on the
-/// suite's own scratch, and TEMP is exactly the kind of shared place the rule exists for.</para>
+/// root survives, a tree this run is still using survives, a child the suite did not write survives
+/// however old it is, and a child whose age cannot be read survives. That third one is §5.2's
+/// "recognised children only" turned on the suite's own scratch, and TEMP is exactly the kind of
+/// shared place the rule exists for.</para>
 /// </summary>
 public sealed class ScratchRootTests : IDisposable
 {
     private static readonly TimeSpan OlderThan = TimeSpan.FromHours(1);
+
+    /// <summary>The lowest and highest names the recogniser accepts, so a test can fix the sweep's order.</summary>
+    private static readonly Guid First = Guid.Parse("00000000-0000-0000-0000-000000000000");
+
+    private static readonly Guid Last = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
     private readonly TempDirectory _temp = new();
 
@@ -55,28 +61,48 @@ public sealed class ScratchRootTests : IDisposable
         Assert.True(Directory.Exists(theirs));
     }
 
+    /// <summary>
+    /// The root goes nowhere, and the age filter is not what saves it. The root swept here carries a
+    /// name the recogniser accepts and a creation time past the cutoff, so it meets both tests a
+    /// child has to meet, and the only thing between it and the delete is that a root is never a
+    /// candidate.
+    ///
+    /// <para>It is a level below this test's own scratch tree for that reason: back-dating a direct
+    /// child of the real root would offer it to a sweep running in a concurrent test process.</para>
+    /// </summary>
     [Fact]
     public void NeverTargetsTheRootItself()
     {
-        Age(Tree(), TimeSpan.FromHours(2));
+        var root = Age(Tree(), TimeSpan.FromHours(2));
+        Age(Tree(root), TimeSpan.FromHours(2));
 
-        ScratchRoot.SweepStale(_temp.Path, OlderThan);
+        Assert.True(ScratchRoot.IsScratchTree(Path.GetFileName(root)));
 
-        Assert.True(Directory.Exists(_temp.Path));
+        ScratchRoot.SweepStale(root, OlderThan);
+
+        Assert.True(Directory.Exists(root));
     }
 
     /// <summary>
-    /// A tree something else still holds open costs the sweep nothing: it is left where it is, the
-    /// sweep does not throw, and the trees after it in the root still go.
+    /// A tree something else holds open does not stop the sweep: it stays, and the trees listed
+    /// after it still go.
+    ///
+    /// <para>The names are chosen rather than random, because the sweep works in the order the root
+    /// lists its children and a random pair would put the held one second about half the time. The
+    /// test asserts that order before it relies on it. It asserts only that the held tree survives,
+    /// not that it is untouched: a recursive delete removes what it can before the refusal, so a
+    /// refused tree may come back part empty, and the sweep promises nothing more than that a
+    /// refusal costs it nothing.</para>
     /// </summary>
     [Fact]
     public void LeavesAHeldTreeAndClearsTheRest()
     {
-        var held = Age(Tree(), TimeSpan.FromHours(2));
-        var free = Age(Tree(), TimeSpan.FromHours(2));
+        var held = Age(Tree(First), TimeSpan.FromHours(2));
+        var free = Age(Tree(Last), TimeSpan.FromHours(2));
 
-        using (new FileStream(
-            HoldableFile(held), FileMode.Create, FileAccess.Write, FileShare.None))
+        Assert.Equal(held, Directory.EnumerateDirectories(_temp.Path).First());
+
+        using (new FileStream(Path.Combine(held, "held.bin"), FileMode.Create, FileAccess.Write, FileShare.None))
         {
             ScratchRoot.SweepStale(_temp.Path, OlderThan);
         }
@@ -95,14 +121,45 @@ public sealed class ScratchRootTests : IDisposable
         ScratchRoot.SweepStale(Path.Combine(_temp.Path, "absent"), OlderThan);
     }
 
-    /// <summary>Making a scratch tree is what triggers the sweep, so a run cleans up after the last.</summary>
+    /// <summary>
+    /// A root the account may not list costs the run nothing either.
+    ///
+    /// <para>Not throwing is again the whole assertion, and it carries further than it looks:
+    /// <see cref="ScratchRoot.SweepOnce"/> runs the sweep inside a <see cref="Lazy{T}"/>, which
+    /// keeps a faulting factory's exception for the life of the process. One throw here would be
+    /// re-thrown by every <see cref="TempDirectory"/> the run went on to make.</para>
+    /// </summary>
     [Fact]
-    public void SweepsWhenAScratchTreeIsMade()
+    public void DoesNotThrowWhenItCannotListTheRoot()
     {
-        using var made = new TempDirectory();
+        var root = _temp.CreateDirectory("unreadable");
+        using var denied = new DeniedDirectory(root);
 
-        Assert.True(ScratchRoot.HasSwept);
+        ScratchRoot.SweepStale(root, OlderThan);
     }
+
+    /// <summary>
+    /// Windows answers a creation time it cannot read with 1601, which is older than any cutoff, so
+    /// a sweep that compared it straight would read "I cannot tell" as "certainly stale". The entry
+    /// going between the listing and the age read is the ordinary way to reach it.
+    /// </summary>
+    [Fact]
+    public void WillNotCallAChildStaleWhenItCannotReadTheAge()
+    {
+        var vanished = Path.Combine(_temp.Path, Guid.NewGuid().ToString("N"));
+
+        Assert.Equal(DateTime.FromFileTimeUtc(0), Directory.GetCreationTimeUtc(vanished));
+        Assert.False(ScratchRoot.IsStale(vanished, DateTime.UtcNow - OlderThan));
+    }
+
+    /// <summary>Sweeping is what a scratch tree's own constructor sets off, so a run clears the last one's leavings.</summary>
+    /// <remarks>
+    /// The trigger is <see cref="_temp"/>, built before this method by xUnit. There is nothing to
+    /// arrange: take the call out of <see cref="TempDirectory"/>'s constructor and nothing in the
+    /// process sets this at all.
+    /// </remarks>
+    [Fact]
+    public void SweepsWhenAScratchTreeIsMade() => Assert.True(ScratchRoot.HasSwept);
 
     /// <summary>The default root and threshold, against the real TEMP the suite actually leaks into.</summary>
     [Fact]
@@ -117,16 +174,46 @@ public sealed class ScratchRootTests : IDisposable
         Assert.False(Directory.Exists(stale));
     }
 
-    /// <summary>A child named the way <see cref="TempDirectory"/> names one, with a file inside it.</summary>
-    private string Tree()
+    /// <summary>
+    /// The recogniser accepts what <see cref="TempDirectory"/> writes, asked of the writer itself
+    /// rather than of a literal, so the two cannot drift apart.
+    /// </summary>
+    [Fact]
+    public void RecognisesWhatAScratchTreeIsActuallyNamed()
     {
-        var tree = _temp.CreateDirectory(Guid.NewGuid().ToString("N"));
+        using var made = new TempDirectory();
+
+        Assert.True(ScratchRoot.IsScratchTree(Path.GetFileName(made.Path)));
+    }
+
+    /// <summary>
+    /// Names the recogniser has to refuse. The first two are what a shape test alone would let
+    /// through: <see cref="Guid.TryParseExact(string, string, out Guid)"/> trims its input and
+    /// accepts either case, and <see cref="TempDirectory"/> writes neither.
+    /// </summary>
+    [Theory]
+    [InlineData(" 0123456789abcdef0123456789abcdef")]
+    [InlineData("0123456789ABCDEF0123456789ABCDEF")]
+    [InlineData("0123456789abcdef0123456789abcde")]
+    [InlineData("01234567-89ab-cdef-0123-456789abcdef")]
+    [InlineData("notes")]
+    [InlineData("")]
+    public void RefusesANameNoScratchTreeWouldCarry(string name) =>
+        Assert.False(ScratchRoot.IsScratchTree(name));
+
+    /// <summary>A child of <paramref name="root"/>, named the way <see cref="TempDirectory"/> names a tree.</summary>
+    private static string Tree(string root, Guid? name = null)
+    {
+        var tree = Directory.CreateDirectory(
+            Path.Combine(root, (name ?? Guid.NewGuid()).ToString("N"))).FullName;
+
         File.WriteAllBytes(Path.Combine(tree, "content.bin"), new byte[8]);
 
         return tree;
     }
 
-    private static string HoldableFile(string tree) => Path.Combine(tree, "held.bin");
+    /// <summary>A child of this test's own scratch tree, on the same terms.</summary>
+    private string Tree(Guid? name = null) => Tree(_temp.Path, name);
 
     /// <summary>
     /// Push <paramref name="directory"/>'s creation time back, which is the only time the sweep
