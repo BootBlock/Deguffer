@@ -2144,8 +2144,8 @@ Deguffer reads the volume's file table and already knows about every `node_modul
 still offers only the ones inside a folder you added. A cheap answer is not permission.
 
 **The one folder Deguffer will not search is one you added on a cloud drive.** A cloud client that
-shows its storage as a drive letter looks exactly like a disk, and reading a folder on it downloads
-every file inside onto this computer — the computer you are clearing space on. What a clean would
+shows its storage as an ordinary drive or folder looks exactly like a disk, and reading a folder on
+it downloads every file inside onto this computer — the computer you are clearing space on. What a clean would
 then free is space in the cloud rather than space here. So Settings warns you when you add such a
 folder, and searches it only if you say to go ahead. A folder added before that warning existed, or
 one you declined, is left alone and the preview says which folder it was. Add it again to change
