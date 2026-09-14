@@ -184,7 +184,7 @@
                     <TextBlock Text="Reading where memory is"
                                HorizontalAlignment="Center"
                                Style="{StaticResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Nothing is changed by looking. This page closes and stops nothing."
+                    <TextBlock Text="Nothing is changed by looking. Deguffer asks a program to close only when you pick it and say so."
                                HorizontalAlignment="Center"
                                Style="{StaticResource SecondaryText}" />
                 </StackPanel>
@@ -227,10 +227,10 @@
             close and nothing stronger: there is no terminate here, at any tier, under any preference.
 
             The button is not disabled on a refusal. §7.2.1 keeps §7.1's rule for a subject that is
-            not a path — a refusal is a sentence, never a greyed-out control — and the refusal table
-            has eleven rows a reader has no way to guess between. It stands down only while a close
-            is being watched, which is the action being in progress rather than a verdict about
-            anything.
+            not a path — a refusal is a sentence, never a greyed-out control — and its refusal table
+            gives a reader no way to guess which of its rows applied. The button stands down only
+            while a close is being watched, which is the action being in progress rather than a
+            verdict about anything.
         -->
         <Grid Grid.Row="5"
               ColumnSpacing="12"

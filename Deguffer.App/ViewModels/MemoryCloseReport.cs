@@ -91,8 +91,8 @@ public sealed partial class MemoryCloseReport : ObservableObject
         ShowChecks([]);
     }
 
-    /// <summary>Take the report down without ending anything. See <see cref="Dismiss"/>.</summary>
-    public void Clear()
+    /// <summary>Take the report down. See <see cref="Dismiss"/>, which is the only way in.</summary>
+    private void Clear()
     {
         Statement = string.Empty;
         Figures = string.Empty;

@@ -16,6 +16,19 @@ namespace Deguffer.Core.Memory.Acting;
 public static class MemoryTarget
 {
     /// <summary>
+    /// What to say about a node that is not a program. Here rather than in the page, for the reason
+    /// every other refusal sentence is in Core (§7.2.1): a sentence that exists only inside a view is
+    /// a sentence nothing can hold Deguffer to.
+    ///
+    /// <para>A <see cref="MemoryVerdict"/> rather than a bare string, so the one refusal this type
+    /// decides reaches a caller in the same shape as the ten
+    /// <see cref="MemoryActionPolicy"/> decides.</para>
+    /// </summary>
+    public static readonly MemoryVerdict NotAProgram = MemoryVerdict.Refuse(
+        "This is a part of the picture rather than a program. Deguffer closes programs, and nothing "
+        + "here is one to ask.");
+
+    /// <summary>
     /// The program <paramref name="node"/> stands for, or null where it stands for something else.
     ///
     /// <para>A process and its own share are the same program: the share is that process's own pages,

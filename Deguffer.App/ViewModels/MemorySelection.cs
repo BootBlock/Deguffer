@@ -31,15 +31,16 @@ public sealed partial class MemorySelection : ObservableObject
     private const string Asking = "Deguffer is asking Windows about this program.";
 
     /// <summary>
-    /// What the page says about a node that is not a program: a part of the picture, a memory list,
-    /// or what no figure attributes.
+    /// What the page says once Windows has refused to answer what §7.2.1 decides from.
     ///
-    /// <para>A sentence rather than an empty selection, for the reason every refusal is one
-    /// (§7.2.1): a reader who picked a shape and found nothing to press learns nothing about why.</para>
+    /// <para>A verdict rather than a bare sentence, for the reason
+    /// <see cref="ExploreActions.Failed"/> is one: it is the selection's answer, so it has to reach
+    /// the button's own path as an answer rather than leave the selection with no verdict at
+    /// all.</para>
     /// </summary>
-    private const string NotAProgram =
-        "This is a part of the picture rather than a program. Deguffer closes programs, and nothing "
-        + "here is one to ask.";
+    private static readonly MemoryVerdict Unanswered = MemoryVerdict.Refuse(
+        "Windows would not answer what Deguffer has to know before it asks a program to close, so it "
+        + "will not ask this one.");
 
     private readonly MemoryActions _actions;
 
@@ -63,6 +64,14 @@ public sealed partial class MemorySelection : ObservableObject
     private int _generation;
 
     private CancellationTokenSource? _asking;
+
+    /// <summary>
+    /// The decision being read for the current selection, so a press that beats Windows' answer can
+    /// wait for it. Explore waits for its policy on the path that deletes for the same reason: an
+    /// action decided against an answer that has not arrived is the one thing deferring it must never
+    /// buy.
+    /// </summary>
+    private Task? _deciding;
 
     /// <summary>Ends the watch, which the user does by dismissing the report and by leaving the page.</summary>
     private CancellationTokenSource? _watching;
@@ -116,8 +125,8 @@ public sealed partial class MemorySelection : ObservableObject
     /// What Deguffer will do about the selection, or why it will not.
     ///
     /// <para>Stated as soon as something is picked rather than after the user tries. §7.2.1: <b>a
-    /// refusal is a sentence on the row, never a disabled button</b>, and the refusal table has
-    /// eleven rows a reader has no way to guess between.</para>
+    /// refusal is a sentence on the row, never a disabled button</b>, and its refusal table gives a
+    /// reader no way to guess which of its rows applied.</para>
     /// </summary>
     public string Note { get; private set; } = string.Empty;
 
@@ -194,6 +203,7 @@ public sealed partial class MemorySelection : ObservableObject
         _verdict = null;
         _target = null;
         _pickedFrom = null;
+        _deciding = null;
 
         if (_tree is { } current && _node is { } chosen)
         {
@@ -201,13 +211,18 @@ public sealed partial class MemorySelection : ObservableObject
             _pickedFrom = current.Snapshot;
         }
 
-        Note = _target is not null ? Asking : _node is null ? string.Empty : NotAProgram;
+        // A sentence rather than an empty selection, for the reason every refusal is one
+        // (§7.2.1): a reader who picked a shape and found nothing to press learns nothing about
+        // why. The words are Core's, as every other refusal's are.
+        _verdict = _target is null && _node is not null ? MemoryTarget.NotAProgram : null;
+
+        Note = _target is not null ? Asking : _verdict?.Reason ?? string.Empty;
 
         Restate();
 
         if (_target is { } about && _pickedFrom is { } from)
         {
-            _ = AskAsync(about, from, _generation);
+            _deciding = AskAsync(about, from, _generation);
         }
     }
 
@@ -228,30 +243,63 @@ public sealed partial class MemorySelection : ObservableObject
     [RelayCommand(CanExecute = nameof(CanClose))]
     private async Task CloseAsync()
     {
-        if (_target is not { } target || _pickedFrom is not { } snapshot)
-        {
-            Report.Say(NotAProgram);
-            return;
-        }
+        var generation = _generation;
 
-        if (_verdict is not { IsAllowed: true } allowed)
+        _closing = true;
+
+        CloseCommand.NotifyCanExecuteChanged();
+
+        try
+        {
+            // Pressed before Windows answered. Waited for rather than answered from what is known so
+            // far, because this is the path that sends the message: a close decided against an
+            // answer that has not arrived is the one thing reading the machine off the window's
+            // thread must never buy. Explore waits for its policy on the path that deletes, for the
+            // same reason.
+            if (_deciding is { IsCompleted: false } deciding)
+            {
+                await deciding;
+            }
+
+            if (generation != _generation)
+            {
+                // Something else was picked while the answer was on its way, so this press is about
+                // a selection that has gone. §7.2 acts on what the user picked and on nothing else.
+                return;
+            }
+
+            await AskAndCloseAsync();
+        }
+        finally
+        {
+            _closing = false;
+
+            CloseCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private async Task AskAndCloseAsync()
+    {
+        // One question — is there a program here, and may it be asked? A verdict is only allowed for
+        // a program picked out of a reading, so the three terms are three spellings of one state
+        // rather than a guard against something that cannot happen.
+        if (_verdict is not { IsAllowed: true } allowed
+            || _target is not { } target
+            || _pickedFrom is not { } snapshot)
         {
             // The reason is already under the selection. Saying it here as well is what answers the
             // press: a button that appears to do nothing teaches nothing at all.
-            Report.Say(_verdict?.Reason ?? Asking);
+            Report.Say(_verdict?.Reason ?? Unanswered.Reason);
             return;
         }
 
-        _closing = true;
         _dismissed = false;
 
         StopWatching();
 
-        _watching = new CancellationTokenSource();
+        var watch = new CancellationTokenSource();
 
-        var token = _watching.Token;
-
-        CloseCommand.NotifyCanExecuteChanged();
+        _watching = watch;
 
         try
         {
@@ -264,7 +312,7 @@ public sealed partial class MemorySelection : ObservableObject
             });
 
             var attempt = await _actions.CloseAsync(
-                target, allowed.Windows.Count, snapshot.Services.Listing, watching, token);
+                target, allowed.Windows.Count, snapshot.Services.Listing, watching, watch.Token);
 
             if (_dismissed)
             {
@@ -304,9 +352,15 @@ public sealed partial class MemorySelection : ObservableObject
         }
         finally
         {
-            _closing = false;
+            // The watch is over either way, so the source it ran on goes now rather than waiting for
+            // the next close to take it down. Only where it is still this close's own: a dismissal
+            // has already replaced it with nothing.
+            if (ReferenceEquals(_watching, watch))
+            {
+                _watching = null;
+            }
 
-            CloseCommand.NotifyCanExecuteChanged();
+            watch.Dispose();
         }
     }
 
@@ -373,10 +427,16 @@ public sealed partial class MemorySelection : ObservableObject
         }
     }
 
+    /// <summary>
+    /// End the watch, and leave the close that started it to take its source down.
+    ///
+    /// <para>Cancelled here and disposed there, because the close is still running: the confirmation
+    /// registers on this token to take a dialog off the screen, and registering on a source that has
+    /// been disposed throws where cancelling one merely runs the callback at once.</para>
+    /// </summary>
     private void StopWatching()
     {
         _watching?.Cancel();
-        _watching?.Dispose();
         _watching = null;
     }
 

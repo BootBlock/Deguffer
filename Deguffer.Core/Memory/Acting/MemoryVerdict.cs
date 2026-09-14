@@ -6,7 +6,7 @@ namespace Deguffer.Core.Memory.Acting;
 /// <para>A record rather than a bare bool for the reason <see cref="Exploring.Acting.ExploreVerdict"/>
 /// is one, and §7.2.1 states it again for this subject: <b>a refusal is a sentence on the row, never
 /// a disabled button.</b> A picture of memory draws every process on the machine, and a user who
-/// picked one and found nothing to press would learn nothing about which of eleven reasons
+/// picked one and found nothing to press would learn nothing about which row of that table
 /// applied.</para>
 ///
 /// <para>It never says a program is safe to close, idle or unneeded, and it never suggests closing
