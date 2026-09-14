@@ -27,6 +27,13 @@ public sealed partial class MemoryCrumb : ObservableObject
     [ObservableProperty]
     public partial string Name { get; set; }
 
+    /// <summary>
+    /// Whether a step comes before this one on the trail, which is where the separator between two
+    /// steps goes. False on the root, which nothing precedes.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool FollowsAnother { get; set; }
+
     /// <summary>Bring the crumb up to date from a newer tree, without replacing the crumb itself.</summary>
     public void Describe(MemoryTree tree)
     {

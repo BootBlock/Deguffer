@@ -221,10 +221,22 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ExploreCrumb">
-                        <HyperlinkButton Content="{x:Bind Name}"
-                                         Padding="4,2"
-                                         Tag="{x:Bind Node}"
-                                         Click="OnCrumbClicked" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- The separator between two steps, so the trail reads as a path down
+                                 into something rather than as a row of links. Raw to a screen
+                                 reader, which is given the steps themselves and their order. -->
+                            <FontIcon Glyph="&#xE76C;"
+                                      FontSize="10"
+                                      Margin="2,0,2,0"
+                                      Visibility="{x:Bind FollowsAnother}"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+
+                            <HyperlinkButton Content="{x:Bind Name}"
+                                             Padding="4,2"
+                                             Tag="{x:Bind Node}"
+                                             Click="OnCrumbClicked" />
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

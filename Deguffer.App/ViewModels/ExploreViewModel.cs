@@ -944,6 +944,13 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         _trail.Reverse();
 
+        // Written once the trail is the right way round, because it is about where a step sits on
+        // the trail rather than about what the step is.
+        for (var at = 1; at < _trail.Count; at++)
+        {
+            _trail[at] = _trail[at] with { FollowsAnother = true };
+        }
+
         LiveList.Show(Trail, _trail, crumb => crumb.Node);
     }
 
