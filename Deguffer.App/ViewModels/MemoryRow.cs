@@ -73,7 +73,7 @@ public sealed partial class MemoryRow : ObservableObject
         Name = MemoryText.Name(tree, node);
         Held = MemoryText.Figures(tree, node);
         Share = partTotal > 0 ? 100.0 * tree.SizeOf(node) / partTotal : 0;
-        Explanation = MemoryPartGuide.Describe(tree.PartOf(node));
+        Explanation = MemoryPartGuide.Describe(tree, node);
         HasChildren = tree.IsContainer(node);
 
         OnPropertyChanged(nameof(Description));

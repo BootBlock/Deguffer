@@ -190,10 +190,98 @@ public sealed class MemoryWordsTests
         }
     }
 
+    [Fact]
+    public void AProcessHostingNoServiceKeepsItsOwnName() =>
+        Assert.Equal("alpha.exe", ServiceHostText.Name("alpha.exe", []));
+
+    [Fact]
+    public void AHostOfOneServiceReadsAsThatService() =>
+        Assert.Equal("svchost.exe: The Alpha Service", ServiceHostText.Name("svchost.exe", Services("Alpha")));
+
+    /// <summary>
+    /// A shape's label is trimmed to the width of the shape, so a host of several answers with how
+    /// many it holds and <see cref="ServiceHostText.Holds"/> names them.
+    /// </summary>
+    [Fact]
+    public void AHostOfSeveralServicesIsNamedByHowManyItHolds() =>
+        Assert.Equal(
+            "svchost.exe: 3 services",
+            ServiceHostText.Name("svchost.exe", Services("Alpha", "Beta", "Gamma")));
+
+    /// <summary>
+    /// Read out to somebody rather than comma-separated throughout, because this is a sentence the
+    /// reader is given rather than a list they scan.
+    /// </summary>
+    [Theory]
+    [InlineData(2, "It holds The Alpha Service and The Beta Service.")]
+    [InlineData(3, "It holds The Alpha Service, The Beta Service and The Gamma Service.")]
+    public void AHostNamesTheServicesItHolds(int count, string expected) =>
+        Assert.Equal(expected, ServiceHostText.Holds(Services("Alpha", "Beta", "Gamma").Take(count).ToArray()));
+
+    /// <summary>The name already says it, and saying it twice reads as a second service.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void AHostWithNoSecondServiceRepeatsNothing(int count) =>
+        Assert.Empty(ServiceHostText.Holds(Services("Alpha").Take(count).ToArray()));
+
+    /// <summary>
+    /// What the <em>Services</em> part promises, kept where the reader asks for it. The part says a
+    /// host is named by what it holds, and a host of several holds names no label can carry — so
+    /// pointing at that host is what has to name them, and this is what fails if it stops.
+    /// </summary>
+    [Fact]
+    public void PointingAtAHostOfSeveralServicesNamesThemAll()
+    {
+        var tree = Tree(new MemorySnapshotBuilder()
+            .Process(300, 1, "svchost.exe", 200, created: 20)
+            .Service("ExampleIndexer", host: 300)
+            .Service("ExampleUpdater", host: 300)
+            .Build());
+
+        var said = MemoryPartGuide.Describe(tree, Host(tree, 300, created: 20));
+
+        Assert.StartsWith(MemoryPartGuide.Describe(MemoryPart.Process), said, StringComparison.Ordinal);
+        Assert.Contains("ExampleIndexer display name", said, StringComparison.Ordinal);
+        Assert.Contains("ExampleUpdater display name", said, StringComparison.Ordinal);
+        AssertSaysNothingToDo(said);
+    }
+
+    /// <summary>
+    /// A host of one is already named by its service, and every process in <em>Applications</em>
+    /// hosts none, so both get the part's own sentence and nothing appended to it.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void PointingAtAnythingElseSaysOnlyWhatItsPartIs(int services)
+    {
+        var built = new MemorySnapshotBuilder().Process(300, 1, "svchost.exe", 200, created: 20);
+
+        if (services == 1)
+        {
+            built.Service("ExampleIndexer", host: 300);
+        }
+
+        var tree = Tree(built.Build());
+
+        Assert.Equal(
+            MemoryPartGuide.Describe(MemoryPart.Process),
+            MemoryPartGuide.Describe(tree, Host(tree, 300, created: 20)));
+    }
+
     private static void AssertSaysNothingToDo(string text) =>
         Assert.DoesNotContain(
             NeverSaid,
             forbidden => text.Contains(forbidden, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Services named the way a reader would recognise them, rather than by their key names.</summary>
+    private static IReadOnlyList<RunningService> Services(params string[] names) =>
+        [.. names.Select(name => new RunningService(name, $"The {name} Service", ProcessId: 300))];
+
+    private static int Host(MemoryTree tree, int processId, long created) =>
+        tree.Find(new MemoryNodeKey(MemoryPart.Process, processId, created))
+            ?? throw new InvalidOperationException($"The tree has no process {processId}.");
 
     private static MemoryTree Tree(MemorySnapshot snapshot) => MemoryTreeBuilder.Build(snapshot);
 

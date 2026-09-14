@@ -13,6 +13,24 @@ namespace Deguffer.Core.Memory;
 /// </summary>
 public static class MemoryPartGuide
 {
+    /// <summary>
+    /// What the node the reader is pointing at is: what its part is, and for a service host which
+    /// services it holds.
+    ///
+    /// <para>The names belong here rather than in the shape's label, which the picture trims to the
+    /// width of the shape. A host of several services is the one case where the label cannot carry
+    /// what <see cref="MemoryPart.Services"/> promises, so this is where that promise is kept.</para>
+    /// </summary>
+    public static string Describe(MemoryTree tree, int node)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        var part = Describe(tree.PartOf(node));
+        var holds = ServiceHostText.Holds(tree.ServicesOf(node));
+
+        return holds.Length == 0 ? part : $"{part} {holds}";
+    }
+
     /// <summary>One sentence or two about <paramref name="part"/>. Never empty.</summary>
     public static string Describe(MemoryPart part) => part switch
     {
@@ -25,8 +43,9 @@ public static class MemoryPartGuide
             + "still records one.",
 
         MemoryPart.Services =>
-            "The processes that host services, each named by the services it holds. Memory in a host "
-            + "shared by several services cannot be divided between them.",
+            "The processes that host services, each named by what it holds. Memory in a host shared "
+            + "by several services cannot be divided between them, and pointing at that host names "
+            + "them all.",
 
         MemoryPart.Windows =>
             "What Windows holds itself, and the memory none of these figures attributes.",

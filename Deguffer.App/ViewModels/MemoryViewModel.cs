@@ -209,7 +209,7 @@ public sealed partial class MemoryViewModel : ObservableObject
             ({ } tree, { } over, _) when over >= 0 && over < tree.NodeCount => (
                 MemoryText.Name(tree, over),
                 MemoryText.Figures(tree, over),
-                MemoryPartGuide.Describe(tree.PartOf(over))),
+                MemoryPartGuide.Describe(tree, over)),
 
             _ => (string.Empty, string.Empty, string.Empty),
         };
