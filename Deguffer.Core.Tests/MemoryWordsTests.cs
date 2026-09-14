@@ -75,28 +75,61 @@ public sealed class MemoryWordsTests
     /// is the moment a "RAM cleaner" would offer to act on it, so a bare label is the one thing that
     /// cannot stand here.
     ///
-    /// <para>Two sentences is the floor this can check mechanically, and not the whole rule: a
-    /// sentence that says what a part holds has no room left for the second half. It fails a sentence
-    /// cut back to a label, which is what <see cref="MemoryPart.Free"/> and
-    /// <see cref="MemoryPart.Modified"/> were.</para>
+    /// <para>A second full stop is the floor this can check mechanically, and not the whole rule: a
+    /// sentence that says what a part holds has no room left for the second half. What it fails is a
+    /// sentence cut back to a label, which <see cref="MemoryPart.Windows"/>,
+    /// <see cref="MemoryPart.Modified"/> and <see cref="MemoryPart.Free"/> each were.</para>
     /// </summary>
-    [Theory]
-    [InlineData(MemoryPart.Windows)]
-    [InlineData(MemoryPart.CompressionStore)]
-    [InlineData(MemoryPart.SystemCache)]
-    [InlineData(MemoryPart.Standby)]
-    [InlineData(MemoryPart.Modified)]
-    [InlineData(MemoryPart.Free)]
-    [InlineData(MemoryPart.NonPagedPool)]
-    [InlineData(MemoryPart.Unattributed)]
-    public void EveryPartOfWindowsSaysWhyItsSizeIsNormal(MemoryPart part)
+    [Fact]
+    public void EveryPartOfWindowsSaysWhyItsSizeIsNormal()
     {
-        var said = MemoryPartGuide.Describe(part);
+        var parts = PartsOfWindows();
 
-        Assert.True(
-            said.Count(character => character == '.') > 1,
-            $"{part} says only \"{said}\", which has room for what it is and none for why its size is normal.");
+        // The union of two reads, so a failure to build either tree cannot quietly leave this
+        // asserting over nothing. These two are the parts only one of them draws.
+        Assert.Contains(MemoryPart.Standby, parts);
+        Assert.Contains(MemoryPart.SystemCache, parts);
+
+        Assert.All(parts, part =>
+        {
+            var said = MemoryPartGuide.Describe(part);
+
+            Assert.True(
+                said.Count(character => character == '.') > 1,
+                $"{part} says only \"{said}\", which has room for what it is and none for why its size is normal.");
+        });
     }
+
+    /// <summary>
+    /// Windows itself and every part the view draws under it, taken from built trees rather than
+    /// from a list written out here. A part added under Windows joins this on its own, where a list
+    /// of names would leave it untested.
+    ///
+    /// <para>Two reads, because <see cref="MemoryTreeBuilder"/> draws the separate page lists where
+    /// it could read them and the system cache where it could not, so no single tree holds every
+    /// part.</para>
+    /// </summary>
+    private static IReadOnlyList<MemoryPart> PartsOfWindows() =>
+    [
+        MemoryPart.Windows,
+        .. PartsUnderWindows(WithPageLists()).Concat(PartsUnderWindows(Snapshot())).Distinct(),
+    ];
+
+    private static IEnumerable<MemoryPart> PartsUnderWindows(MemorySnapshot snapshot)
+    {
+        var tree = Tree(snapshot);
+        var windows = tree.Find(MemoryNodeKey.Of(MemoryPart.Windows))
+            ?? throw new InvalidOperationException("The tree has no Windows part.");
+
+        return tree.ChildrenOf(windows).ToArray().Select(tree.PartOf);
+    }
+
+    /// <summary>A read where Windows returned its page lists, and where the compression store is running.</summary>
+    private static MemorySnapshot WithPageLists() => new MemorySnapshotBuilder()
+        .Process(100, 1, "alpha.exe", 500, created: 10)
+        .Process(200, 1, MemoryTreeBuilder.CompressionStoreName, 300, created: 20)
+        .Lists(zeroedMiB: 300, freeMiB: 500, modifiedMiB: 100, standbyMiB: 4_000)
+        .Build();
 
     [Fact]
     public void TheNotesAlwaysSayTheFiguresAreLowerBounds() =>

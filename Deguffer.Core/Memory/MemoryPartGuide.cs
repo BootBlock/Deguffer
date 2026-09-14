@@ -38,9 +38,12 @@ public static class MemoryPartGuide
     public static string Describe(MemoryPart part) => part switch
     {
         MemoryPart.PhysicalMemory =>
+            // No claim about the parts summing short: the remainder is drawn as "Not attributed"
+            // precisely so that they do not, and where the figures overlap instead, the notes above
+            // the picture say the parts add up to more. What is a lower bound is each measured
+            // figure, not the picture.
             "The physical memory Windows manages. Every figure below it is a lower bound: unelevated, "
-            + "some of what memory holds cannot be separated at all, so the parts add up to less than "
-            + "the whole.",
+            + "some of what memory holds cannot be separated at all.",
 
         MemoryPart.Applications =>
             "Every process that hosts no service, under the process that started it where Windows "
@@ -54,9 +57,9 @@ public static class MemoryPartGuide
 
         MemoryPart.Windows =>
             "What Windows holds itself: its caches, its kernel memory, the lists it keeps of pages no "
-            + "process is using, and the memory none of these figures attributes. This is often the "
-            + "largest of the three parts, because Windows finds a use for memory nothing else wants "
-            + "rather than leaving it unused.",
+            + "process is using, and the memory none of these figures attributes. It is often the "
+            + "largest of the three parts, because it holds both the cache Windows keeps and "
+            + "everything these figures could not separate.",
 
         MemoryPart.Process =>
             "A process, sized by the memory in RAM that no other process can use. What it holds "
@@ -79,17 +82,19 @@ public static class MemoryPartGuide
             + "in case something reads it again, so a large figure here is cache rather than memory a "
             + "program is holding.",
 
+        // "Pages Windows took out of working sets" rather than only file data: the list holds
+        // private, page-file-backed pages as well, and a reader told otherwise would take the
+        // largest shape on screen for something none of their programs had a stake in.
         MemoryPart.Standby =>
-            "Cached pages no process holds: file data and code Windows kept in case something reads "
-            + "them again. This is usually the largest part of the picture on a machine that has been "
-            + "running a while, and it is memory doing its job rather than memory gone astray. "
-            + "Windows counts every page here as available and hands it out the moment something "
-            + "needs it.",
+            "Cached pages no process holds: file data, program code, and pages Windows took out of "
+            + "working sets, all kept in case something needs them again. A large figure here is "
+            + "memory doing its job rather than memory gone astray, because Windows counts every "
+            + "page on this list as available and hands it out the moment something needs it.",
 
         MemoryPart.Modified =>
             "Pages Windows has taken out of use and must write somewhere before it can reuse them. "
-            + "They join the standby list once that write is done, so this part is normally small and "
-            + "always moving.",
+            + "Most move to the standby list as soon as that write is done, so the figure is normally "
+            + "small and always changing, and the rest are the pages with nowhere to be written.",
 
         MemoryPart.Free =>
             "Pages nothing holds, ready to be handed out. A small figure here is normal rather than a "
@@ -97,10 +102,11 @@ public static class MemoryPartGuide
             + "counts as available too.",
 
         MemoryPart.NonPagedPool =>
-            "Kernel memory that is never written out. It holds what the kernel and the drivers have "
-            + "to be able to reach at any moment, so it grows with the hardware on the machine. The "
-            + "paged pool is not drawn beside it: the part of it in memory is inside the system "
-            + "working set, and its figure counts what has been written out as well.",
+            "Kernel memory that is never written out. It holds what the kernel and the drivers must "
+            + "be able to reach at any moment, so what is in it follows the drivers on the machine "
+            + "and how much the machine is doing. The paged pool is not drawn beside it: the part of "
+            + "it in memory is inside the system working set, and its figure counts what has been "
+            + "written out as well.",
 
         // Named rather than left to the arm below, so that a part added with no sentence of its own
         // fails the test that every part says what it is, instead of silently inheriting this one.
