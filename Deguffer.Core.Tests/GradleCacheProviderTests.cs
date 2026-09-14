@@ -220,7 +220,7 @@ public sealed class GradleCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(properties, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(properties, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -228,7 +228,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         Assert.False(verification.Passed);
         Assert.Contains(verification.Failures, c =>
-            c.Path.Equals(busy, StringComparison.OrdinalIgnoreCase)
+            c.Subject.Equals(busy, StringComparison.OrdinalIgnoreCase)
             && c.Outcome == VerificationOutcome.Emptied);
     }
 

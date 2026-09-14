@@ -120,7 +120,7 @@ public sealed class CleanupPlannerTests
         var result = Assert.Single(await planner.ExecuteAsync(findings));
 
         Assert.False(result.Verification!.Passed);
-        Assert.Equal(withheld, Assert.Single(result.Verification.Failures).Path);
+        Assert.Equal(withheld, Assert.Single(result.Verification.Failures).Subject);
     }
 
     /// <summary>
@@ -701,7 +701,7 @@ public sealed class CleanupPlannerTests
 
         var check = Assert.Single(results.Single(r => r.ProviderId == "keep").Verification!.Checks);
 
-        Assert.Equal(kept, check.Path);
+        Assert.Equal(kept, check.Subject);
         Assert.Equal(VerificationOutcome.Entered, check.Outcome);
     }
 

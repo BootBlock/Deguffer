@@ -470,7 +470,7 @@ public sealed class CargoCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(credentials, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(credentials, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

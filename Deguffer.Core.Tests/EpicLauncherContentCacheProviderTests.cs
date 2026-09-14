@@ -217,7 +217,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         Assert.False(verification.Passed);
         Assert.Contains(
             verification.Failures,
-            c => c.Path.Equals(DataFolder, StringComparison.OrdinalIgnoreCase));
+            c => c.Subject.Equals(DataFolder, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

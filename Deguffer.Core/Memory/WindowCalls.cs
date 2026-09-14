@@ -39,6 +39,25 @@ internal interface IWindowCalls
 
     /// <summary>Whether it is still a window at all.</summary>
     bool Exists(nint window);
+
+    /// <summary>
+    /// The shell's own window, or null where Windows reports none. §7.2.1 refuses the process that
+    /// owns it, because the shell is only "usually explorer.exe" and this names it exactly.
+    /// </summary>
+    nint? ShellWindow();
+
+    /// <summary>
+    /// Post <c>WM_CLOSE</c> to <paramref name="window"/>, and report whether Windows took it.
+    ///
+    /// <para><b>This is the only message any part of Deguffer sends a window, and the only member
+    /// here that changes anything.</b> §7.2.1 has one verb: the program's own close, posted rather
+    /// than sent, so a program already busy behind a modal dialog does not hold Deguffer there with
+    /// it. What the return value means is deliberately not relied on for the decision — Microsoft's
+    /// own sources disagree about whether a post the integrity filter blocks reports failure or
+    /// reports success and drops the message — so the policy decides before this is called, and this
+    /// answer only says what to record.</para>
+    /// </summary>
+    bool PostClose(nint window);
 }
 
 /// <inheritdoc />
@@ -48,6 +67,14 @@ internal sealed partial class WindowCalls : IWindowCalls
 
     private const uint Owner = 4;
     private const int Cloaked = 14;
+
+    /// <summary>
+    /// <c>WM_CLOSE</c>, which Windows documents as the signal "that a window or an application should
+    /// terminate", whose default handling destroys the window and which an application "can prompt
+    /// the user for confirmation" about first. It is the whole of what §7.2.1 sends, and unsaved work
+    /// is therefore the program's own question, asked in its own words.
+    /// </summary>
+    private const uint WindowClose = 0x0010;
 
     /// <summary>A window class name is at most 256 characters, and the terminator makes 257.</summary>
     private const int MaximumClassName = 257;
@@ -107,6 +134,14 @@ internal sealed partial class WindowCalls : IWindowCalls
 
     public bool Exists(nint window) => IsWindow(window);
 
+    public nint? ShellWindow() => GetShellWindow() is var shell && shell != 0 ? shell : null;
+
+    /// <summary>
+    /// <c>WM_CLOSE</c> and no parameters, written as constants rather than taken from a caller, so
+    /// there is no message this type can be asked to send.
+    /// </summary>
+    public bool PostClose(nint window) => PostMessage(window, WindowClose, 0, 0);
+
     /// <summary>
     /// Declared with <c>DllImport</c>, unlike the rest of this file: the source generator cannot
     /// marshal a managed callback, and this is the documented way to enumerate top-level windows.
@@ -134,6 +169,17 @@ internal sealed partial class WindowCalls : IWindowCalls
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool IsWindow(nint window);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetShellWindow();
+
+    /// <summary>
+    /// The one call in Deguffer that puts a message in another program's queue. Its message argument
+    /// is <see cref="WindowClose"/> at every call site, and there is exactly one.
+    /// </summary>
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool PostMessage(nint window, uint message, nuint wParam, nint lParam);
 
     [LibraryImport("dwmapi.dll")]
     private static partial int DwmGetWindowAttribute(nint window, int attribute, out int value, int length);

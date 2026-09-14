@@ -314,7 +314,7 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.Contains("1 Outlook data file(s) left alone", outcome.Message, StringComparison.Ordinal);
 
         Assert.Contains(report.Verification.Checks, check =>
-            check.Path.Equals(store, StringComparison.OrdinalIgnoreCase)
+            check.Subject.Equals(store, StringComparison.OrdinalIgnoreCase)
             && check.Outcome == VerificationOutcome.Survived);
         Assert.True(report.Verification.Passed);
     }

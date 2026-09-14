@@ -272,7 +272,7 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(prompts, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(prompts, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

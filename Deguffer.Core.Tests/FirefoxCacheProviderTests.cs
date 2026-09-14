@@ -733,7 +733,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         Assert.False(verification.Passed);
         Assert.Contains(
-            verification.Failures, c => c.Path.Equals(profile.Roaming, StringComparison.OrdinalIgnoreCase));
+            verification.Failures, c => c.Subject.Equals(profile.Roaming, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

@@ -323,7 +323,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(unverifiable, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(unverifiable, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -453,7 +453,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(root, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(root, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

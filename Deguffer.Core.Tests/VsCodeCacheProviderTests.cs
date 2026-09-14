@@ -656,7 +656,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(user, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(user, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

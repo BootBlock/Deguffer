@@ -735,7 +735,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(app, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(app, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

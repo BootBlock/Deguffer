@@ -399,7 +399,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path.Equals(settings, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(settings, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

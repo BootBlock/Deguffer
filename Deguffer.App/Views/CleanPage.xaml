@@ -415,7 +415,7 @@
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="execution:VerificationCheck">
                                         <StackPanel Margin="0,0,0,8">
-                                            <TextBlock Text="{x:Bind Path}"
+                                            <TextBlock Text="{x:Bind Subject}"
                                                        TextWrapping="Wrap"
                                                        FontFamily="{ThemeResource ContentControlThemeFontFamily}"
                                                        FontWeight="SemiBold"

@@ -42,7 +42,7 @@ public sealed class PlanVerifierTests : IDisposable
     private static ProtectedPath Protect(string path) => new(path, "It must survive.", ExistedBefore: true);
 
     private static VerificationOutcome OutcomeFor(CleanupPlan plan, string path, RunReach? reach = null) =>
-        PlanVerifier.Verify(plan, reach).Checks.Single(c => c.Path == path).Outcome;
+        PlanVerifier.Verify(plan, reach).Checks.Single(c => c.Subject == path).Outcome;
 
     /// <summary>
     /// A volume root this machine has not mounted, chosen rather than written down. A literal drive
@@ -99,7 +99,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, vanished));
         Assert.False(verification.Passed);
-        Assert.Contains(verification.Failures, c => c.Path == vanished);
+        Assert.Contains(verification.Failures, c => c.Subject == vanished);
         Assert.Empty(verification.RemovedFromOutside);
     }
 
@@ -122,7 +122,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Assert.Equal(VerificationOutcome.RemovedFromOutside, OutcomeFor(plan, vanished));
         Assert.Empty(verification.Failures);
-        Assert.Contains(verification.RemovedFromOutside, c => c.Path == vanished);
+        Assert.Contains(verification.RemovedFromOutside, c => c.Subject == vanished);
 
         // Not a pass either. Nobody verified that path, and the run's figures describe a machine
         // that moved underneath them.
@@ -438,7 +438,7 @@ public sealed class PlanVerifierTests : IDisposable
         var verification = PlanVerifier.Verify(plan, runReach: null, residue);
 
         Assert.Equal(VerificationOutcome.Entered, Assert.Single(verification.Checks).Outcome);
-        Assert.Equal(live, Assert.Single(verification.Failures).Path);
+        Assert.Equal(live, Assert.Single(verification.Failures).Subject);
         Assert.False(verification.Passed);
     }
 
@@ -484,7 +484,7 @@ public sealed class PlanVerifierTests : IDisposable
         var residue = new RunResidue();
         residue.Record(cache, [entry, cache]);
 
-        var outcomes = PlanVerifier.Verify(plan, runReach: null, residue).Checks.ToDictionary(c => c.Path, c => c.Outcome);
+        var outcomes = PlanVerifier.Verify(plan, runReach: null, residue).Checks.ToDictionary(c => c.Subject, c => c.Outcome);
 
         Assert.Equal(VerificationOutcome.Survived, outcomes[tool]);
         Assert.Equal(VerificationOutcome.Survived, outcomes[cache]);
@@ -585,7 +585,7 @@ public sealed class PlanVerifierTests : IDisposable
         };
 
         Assert.Equal(
-            "1 of 3 protected path(s) did not survive, and 1 more were removed from outside this run.",
+            "1 of 3 protected item(s) did not survive, and 1 more were removed from outside this run.",
             result.Summary);
     }
 
