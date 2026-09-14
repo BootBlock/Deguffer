@@ -34,11 +34,11 @@ internal static class ScratchRoot
         System.IO.Path.Combine(System.IO.Path.GetTempPath(), "deguffer-tests");
 
     /// <summary>
-    /// What Windows answers for a creation time it cannot read. .NET returns it rather than
-    /// throwing, and it is older than any cutoff, so a sweep that compared it straight would read
-    /// "I cannot tell" as "certainly stale" and delete on it.
+    /// What Windows answers for an entry that is not there. .NET returns it rather than throwing,
+    /// and it is older than any cutoff, so a sweep that compared it straight would read "there is
+    /// nothing here to date" as "certainly stale" and delete on it.
     /// </summary>
-    private static readonly DateTime Unreadable = DateTime.FromFileTimeUtc(0);
+    private static readonly DateTime NotFound = DateTime.FromFileTimeUtc(0);
 
     private static readonly Lazy<bool> Swept = new(() =>
     {
@@ -90,12 +90,25 @@ internal static class ScratchRoot
     /// <para>A time we could not read answers no. This is the predicate guarding a recursive delete,
     /// and the only safe reading of "I cannot tell" on such a predicate is the one that stops it.
     /// The entry going between the listing and this call is the ordinary way to reach it.</para>
+    ///
+    /// <para>Windows says so two ways, and only one of them is a value. An entry that is not there
+    /// comes back as <see cref="NotFound"/>, while one the account may not read the attributes of
+    /// throws <see cref="UnauthorizedAccessException"/>. The catch belongs here rather than around
+    /// the listing, so that one child nobody can date leaves the rest of the sweep to get on with
+    /// it instead of cancelling the lot.</para>
     /// </summary>
     internal static bool IsStale(string child, DateTime cutoff)
     {
-        var created = Directory.GetCreationTimeUtc(child);
+        try
+        {
+            var created = Directory.GetCreationTimeUtc(child);
 
-        return created != Unreadable && created < cutoff;
+            return created != NotFound && created < cutoff;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

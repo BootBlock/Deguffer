@@ -74,12 +74,14 @@ public sealed class ScratchRootTests : IDisposable
     public void NeverTargetsTheRootItself()
     {
         var root = Age(Tree(), TimeSpan.FromHours(2));
-        Age(Tree(root), TimeSpan.FromHours(2));
+        var child = Age(Tree(root), TimeSpan.FromHours(2));
 
         Assert.True(ScratchRoot.IsScratchTree(Path.GetFileName(root)));
 
         ScratchRoot.SweepStale(root, OlderThan);
 
+        // The child as well as the root: without it a sweep that did nothing at all would pass.
+        Assert.False(Directory.Exists(child));
         Assert.True(Directory.Exists(root));
     }
 
@@ -139,17 +141,36 @@ public sealed class ScratchRootTests : IDisposable
     }
 
     /// <summary>
-    /// Windows answers a creation time it cannot read with 1601, which is older than any cutoff, so
-    /// a sweep that compared it straight would read "I cannot tell" as "certainly stale". The entry
-    /// going between the listing and the age read is the ordinary way to reach it.
+    /// Windows dates an entry that is not there as 1601, which is older than any cutoff, so a sweep
+    /// that compared it straight would read "there is nothing here to date" as "certainly stale".
+    /// The entry going between the listing and the age read is the ordinary way to reach it.
     /// </summary>
     [Fact]
-    public void WillNotCallAChildStaleWhenItCannotReadTheAge()
+    public void WillNotCallAChildStaleWhenThereIsNoAgeToRead()
     {
         var vanished = Path.Combine(_temp.Path, Guid.NewGuid().ToString("N"));
 
         Assert.Equal(DateTime.FromFileTimeUtc(0), Directory.GetCreationTimeUtc(vanished));
         Assert.False(ScratchRoot.IsStale(vanished, DateTime.UtcNow - OlderThan));
+    }
+
+    /// <summary>
+    /// The other half of the same rule, and the one that is not a value: a child whose attributes
+    /// the account may not read throws rather than answering 1601.
+    ///
+    /// <para>Asked of <see cref="ScratchRoot.IsStale"/> directly rather than through the sweep,
+    /// because making a child's attributes unreadable takes a rule on the directory above it too,
+    /// and that one stops the sweep listing the root at all. There is no fixture that produces the
+    /// refused child without also producing the unreadable root.</para>
+    /// </summary>
+    [Fact]
+    public void WillNotCallAChildStaleWhenTheAgeReadIsRefused()
+    {
+        var child = Age(Tree(), TimeSpan.FromHours(2));
+        using var denied = DeniedDirectory.WithUnreadableAttributes(child);
+
+        Assert.Throws<UnauthorizedAccessException>(() => Directory.GetCreationTimeUtc(child));
+        Assert.False(ScratchRoot.IsStale(child, DateTime.UtcNow - OlderThan));
     }
 
     /// <summary>Sweeping is what a scratch tree's own constructor sets off, so a run clears the last one's leavings.</summary>
@@ -161,17 +182,20 @@ public sealed class ScratchRootTests : IDisposable
     [Fact]
     public void SweepsWhenAScratchTreeIsMade() => Assert.True(ScratchRoot.HasSwept);
 
-    /// <summary>The default root and threshold, against the real TEMP the suite actually leaks into.</summary>
+    /// <summary>
+    /// The root the sweep is pointed at is the root scratch trees are actually made under, asked of
+    /// the two sides rather than of a literal, so they cannot drift apart.
+    ///
+    /// <para>Nothing here back-dates a direct child of the real root, and nothing sweeps it. Doing
+    /// either would put a tree belonging to a test process running beside this one in reach of a
+    /// sweep, and the age margin is the only thing keeping it out.</para>
+    /// </summary>
     [Fact]
-    public void ClearsAnAgedTreeUnderTheRealRoot()
+    public void MakesEveryScratchTreeUnderTheRoot()
     {
-        var stale = Path.Combine(ScratchRoot.Path, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(stale);
-        Age(stale, ScratchRoot.StaleAfter + TimeSpan.FromMinutes(1));
+        using var made = new TempDirectory();
 
-        ScratchRoot.SweepStale(ScratchRoot.Path, ScratchRoot.StaleAfter);
-
-        Assert.False(Directory.Exists(stale));
+        Assert.Equal(ScratchRoot.Path, Path.GetDirectoryName(made.Path));
     }
 
     /// <summary>
