@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Collections;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
@@ -71,7 +71,15 @@ public interface IUserEnvironment
     /// </summary>
     string MachineName { get; }
 
-    /// <summary>Resolve an executable on <c>PATH</c>, or null if it is not installed.</summary>
+    /// <summary>
+    /// Resolve an executable on <c>PATH</c>, or null if it is not installed.
+    ///
+    /// <para>The <c>PATH</c> searched is the one this process started with, extended by the one the
+    /// machine has now. A directory it gained since start-up is searched; a directory it had at
+    /// start-up is searched whether or not the machine still lists it, because taking one away
+    /// would remove a tool rather than add one. <see cref="Invalidate"/> says why the two differ at
+    /// all.</para>
+    /// </summary>
     string? FindExecutable(string command);
 
     /// <summary>
@@ -80,6 +88,11 @@ public interface IUserEnvironment
     /// Exists because several tools relocate their cache through one — <c>PLAYWRIGHT_BROWSERS_PATH</c>
     /// is the first — and §5.2's "never assume a location" applies to the root just as much as to the
     /// children beneath it.
+    ///
+    /// <para>Answered from the machine as it now stands rather than from this process's own block,
+    /// for the reason <see cref="Invalidate"/> gives. A variable the launching process set to
+    /// something of its own keeps that value for the session, because that is a deliberate choice
+    /// about where this run should look.</para>
     /// </summary>
     string? GetEnvironmentVariable(string name);
 
@@ -102,8 +115,16 @@ public interface IUserEnvironment
     string? ReadCurrentUserRegistryValue(string keyPath, string valueName);
 
     /// <summary>
-    /// Discard cached lookups. Called at the start of a planning pass so a toolchain installed
-    /// while the app was open is picked up on the next preview.
+    /// Discard what was read from the machine, so the next look sees the environment as it now
+    /// stands. Called at the start of a planning pass, and implicit in the fresh instance each
+    /// Explore policy build constructs, so a toolchain installed while the app was open is picked
+    /// up by both pages.
+    ///
+    /// <para><b>Windows never pushes an environment change into a running process.</b> An installer
+    /// that adds its directory to <c>PATH</c>, or that relocates a cache through a variable, writes
+    /// the registry and broadcasts <c>WM_SETTINGCHANGE</c>; the block this process was handed at
+    /// start-up does not move. Dropping a cached lookup alone would therefore search the same stale
+    /// <c>PATH</c> again, so this reads the machine and user environment keys afresh as well.</para>
     /// </summary>
     void Invalidate();
 }
@@ -111,21 +132,73 @@ public interface IUserEnvironment
 /// <inheritdoc />
 public sealed partial class UserEnvironment : IUserEnvironment
 {
+    /// <summary>
+    /// The environment this <em>process</em> started with, composed once for the whole process.
+    ///
+    /// <para><b>Shared rather than worked out per instance, and that is the point.</b> Which
+    /// variables the launching process set differently is decided by comparing its block against
+    /// the registry, and that comparison only means what it says while the registry still holds
+    /// what it held at launch. Explore builds a fresh <see cref="UserEnvironment"/> at every policy
+    /// build, long after start-up: an instance that read the registry for itself would see a
+    /// relocation an installer had since made, read the difference as a deliberate choice by the
+    /// launching shell, and pin the variable to the value that relocation moved away from — this
+    /// class's own defect, reintroduced on the page it most matters to.</para>
+    ///
+    /// <para>Declared above <see cref="Current"/> deliberately. Static initialisers run in textual
+    /// order, so a field below it would still be null while the singleton constructed itself, for
+    /// the reason <see cref="ResolveLocalLow"/> sets out at greater length.</para>
+    /// </summary>
+    private static readonly EnvironmentBlock ProcessStartup =
+        EnvironmentBlock.Startup(ProcessEnvironment(), ReadMachineEnvironment(), ReadUserEnvironment());
+
     public static readonly UserEnvironment Current = new();
 
-    private static readonly string[] PathExtensions =
-        (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
-        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    private readonly Func<IReadOnlyDictionary<string, string>> _readMachine;
+    private readonly Func<IReadOnlyDictionary<string, string>> _readUser;
 
-    private static readonly string[] PathDirectories =
-        (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-        .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    /// <summary>
+    /// The environment this process was given, and the one every refresh is composed over. Kept
+    /// because a refresh is the start-up block plus the registry as it is at that moment, never the
+    /// previous refresh plus it.
+    /// </summary>
+    private readonly EnvironmentBlock _startup;
 
-    // Resolving a command probes the filesystem across every PATH directory, and both
-    // IsPresentAsync and PlanAsync ask for the same tools. Memoised for the life of a planning
-    // pass — including negative results, which is why Invalidate exists: without it, a toolchain
-    // installed while the app is open would stay invisible for the rest of the session.
-    private readonly ConcurrentDictionary<string, string?> _resolved = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock _gate = new();
+
+    /// <summary>
+    /// The composed environment, or null when <see cref="Invalidate"/> has dropped it and nothing
+    /// has asked since. Rebuilt lazily rather than inside <see cref="Invalidate"/>, because the
+    /// planner invalidates every provider before any of them plans and they share this instance:
+    /// building on demand collapses that burst of calls into the one registry read the pass needs.
+    /// </summary>
+    private volatile EnvironmentBlock? _block;
+
+    public UserEnvironment()
+        : this(ReadMachineEnvironment, ReadUserEnvironment, ProcessStartup)
+    {
+    }
+
+    /// <param name="readMachine">
+    /// Where <c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c> is read from,
+    /// unexpanded. Injected so a test can change the machine between two passes, which is the whole
+    /// of what this class does that is worth asserting and is not something to do to a real
+    /// machine (G8).
+    /// </param>
+    /// <param name="readUser"><c>HKCU\Environment</c>, read the same way.</param>
+    /// <param name="startup">
+    /// The environment the process started with. Taken as an argument rather than composed here,
+    /// because composing it needs the registry <em>as it was then</em> — see
+    /// <see cref="ProcessStartup"/>.
+    /// </param>
+    internal UserEnvironment(
+        Func<IReadOnlyDictionary<string, string>> readMachine,
+        Func<IReadOnlyDictionary<string, string>> readUser,
+        EnvironmentBlock startup)
+    {
+        _readMachine = readMachine;
+        _readUser = readUser;
+        _startup = startup;
+    }
 
     public string UserProfile { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -135,7 +208,24 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string? LocalLowAppData { get; } = ResolveLocalLow();
 
-    public string TempPath { get; } = Path.GetTempPath();
+    /// <summary>
+    /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever
+    /// <see cref="Path.GetTempPath"/> falls back to — from the environment as it now stands.
+    ///
+    /// <para><b>It has to move with the variables, not sit beside them.</b>
+    /// <c>ProtectedRegions</c> refuses this one path as the temporary folder, while
+    /// <c>TempRoots</c> accepts what <c>TMP</c> and <c>TEMP</c> name. Once those two answer from
+    /// the machine and this did not, a folder redirected while Deguffer was open would be a scratch
+    /// root Storage empties and an ordinary removable folder in Explore at the same moment
+    /// (§5.3, §7.1).</para>
+    ///
+    /// <para>A value that is not fully qualified is no answer, so <see cref="LongPath.Configured"/>
+    /// declines it and the next candidate is taken. §5.2 fails towards knowing nothing.</para>
+    /// </summary>
+    public string TempPath =>
+        LongPath.Configured(Block.Value("TMP"))
+        ?? LongPath.Configured(Block.Value("TEMP"))
+        ?? Path.GetTempPath();
 
     // Read once rather than through Invalidate: a process cannot change the account it runs as,
     // and relaunching elevated makes a new process with the same identity.
@@ -145,21 +235,39 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string MachineName { get; } = Environment.MachineName;
 
-    public void Invalidate() => _resolved.Clear();
+    public void Invalidate() => _block = null;
 
-    // Deliberately not memoised: a process environment read is a dictionary lookup, so caching it
-    // would buy nothing and add a second thing for Invalidate to get wrong.
+    /// <summary>
+    /// The environment as it now stands, composed once and kept until <see cref="Invalidate"/>
+    /// drops it. Everything derived from it — where each command resolved included — goes with it
+    /// in the same reference swap.
+    /// </summary>
+    private EnvironmentBlock Block
+    {
+        get
+        {
+            if (_block is { } composed)
+            {
+                return composed;
+            }
+
+            lock (_gate)
+            {
+                return _block ??= _startup.Refresh(_readMachine(), _readUser());
+            }
+        }
+    }
+
     public string? GetEnvironmentVariable(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        return Environment.GetEnvironmentVariable(name);
+        return Block.Value(name);
     }
 
     /// <summary>
-    /// Not memoised, for the reason <see cref="GetEnvironmentVariable"/> is not: the one caller
-    /// memoises the answer it derives for the life of a planning pass, and a second cache here would
-    /// be a second thing for <see cref="Invalidate"/> to get wrong.
+    /// Not memoised: the one caller memoises the answer it derives for the life of a planning pass,
+    /// and a second cache here would be a second thing for <see cref="Invalidate"/> to get wrong.
     /// </summary>
     public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
     {
@@ -187,21 +295,96 @@ public sealed partial class UserEnvironment : IUserEnvironment
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
 
-        return _resolved.GetOrAdd(command, static name =>
+        var block = Block;
+
+        // Negative results are kept too, which is what makes reading the registry again matter: a
+        // tool that was absent stays absent to this block however often it is asked about.
+        return block.Resolved.GetOrAdd(command, name => Locate(block, name));
+    }
+
+    private static string? Locate(EnvironmentBlock block, string command)
+    {
+        foreach (var directory in block.PathDirectories)
         {
-            foreach (var directory in PathDirectories)
+            foreach (var candidate in Candidates(directory, command, block.PathExtensions))
             {
-                foreach (var candidate in Candidates(directory, name))
+                if (LongPath.FileExists(candidate))
                 {
-                    if (LongPath.FileExists(candidate))
-                    {
-                        return candidate;
-                    }
+                    return candidate;
                 }
             }
+        }
 
-            return null;
-        });
+        return null;
+    }
+
+    /// <summary><c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c>.</summary>
+    private const string MachineEnvironmentKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
+
+    internal static IReadOnlyDictionary<string, string> ReadMachineEnvironment() =>
+        ReadEnvironmentKey(Registry.LocalMachine, MachineEnvironmentKey);
+
+    internal static IReadOnlyDictionary<string, string> ReadUserEnvironment() =>
+        ReadEnvironmentKey(Registry.CurrentUser, "Environment");
+
+    /// <summary>
+    /// Every string value under one of the two environment keys, left exactly as it was written.
+    ///
+    /// <para><c>DoNotExpandEnvironmentNames</c> is the point of reading it here at all: without it
+    /// the framework resolves a <c>REG_EXPAND_SZ</c> value's <c>%NAME%</c> against
+    /// <em>this process's</em> environment, which is the stale block the refresh exists to get away
+    /// from. <see cref="EnvironmentBlock"/> expands them against the composed set instead.</para>
+    ///
+    /// <para>An unreadable key answers with nothing rather than failing. The machine key is
+    /// world-readable on an ordinary Windows install, so this is the locked-down-machine case, and
+    /// answering with nothing leaves the process's own environment standing.</para>
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> ReadEnvironmentKey(RegistryKey hive, string path)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var key = hive.OpenSubKey(path);
+
+            if (key is null)
+            {
+                return values;
+            }
+
+            foreach (var name in key.GetValueNames())
+            {
+                // The key's unnamed default value names no variable, and anything that is not a
+                // string is not an environment value.
+                if (name.Length > 0 &&
+                    key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is string value)
+                {
+                    values[name] = value;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // A hive this account may not read, and a key already marked for deletion — the same
+            // two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same thing.
+        }
+
+        return values;
+    }
+
+    private static IReadOnlyDictionary<string, string> ProcessEnvironment()
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is string name && entry.Value is string value)
+            {
+                values[name] = value;
+            }
+        }
+
+        return values;
     }
 
     /// <summary><c>KF_FLAG_DONT_VERIFY</c>.</summary>
@@ -247,7 +430,10 @@ public sealed partial class UserEnvironment : IUserEnvironment
         IntPtr token,
         out IntPtr path);
 
-    private static IEnumerable<string> Candidates(string directory, string command)
+    private static IEnumerable<string> Candidates(
+        string directory,
+        string command,
+        IReadOnlyList<string> extensions)
     {
         // A malformed PATH entry is normal on a long-lived machine; skip it rather than failing
         // the whole scan.
@@ -267,7 +453,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
             yield break;
         }
 
-        foreach (var extension in PathExtensions)
+        foreach (var extension in extensions)
         {
             yield return baseName + extension;
         }
