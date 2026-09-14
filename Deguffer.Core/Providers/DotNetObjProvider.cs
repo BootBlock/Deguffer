@@ -32,7 +32,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     private readonly ILiveTreeInspector _liveTrees;
     private readonly TrackedFileCheck _tracked;
 
-    private IReadOnlyList<string>? _approved;
+    private IReadOnlyList<SourceRoot>? _approved;
 
     public DotNetObjProvider(
         SourceRootStore roots,
@@ -91,7 +91,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     };
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
-    public IReadOnlyList<string> ApprovedRoots => _approved ??= _roots.Load();
+    public IReadOnlyList<SourceRoot> ApprovedRoots => _approved ??= _roots.Load();
 
     public override void InvalidateCaches()
     {
@@ -255,6 +255,10 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count)),
             Fallback = measured.Fallback,
             HasUnreadableRoot = discovered.UnreadableDirectories.Count > 0,
+
+            // See BuildDirectoryProvider: a row whose only approved folder sits on a refused mount
+            // must not render as "Already clear".
+            WasNotExamined = steps.Count == 0 && discovered.RefusedRoots.Count > 0,
         };
     }
 

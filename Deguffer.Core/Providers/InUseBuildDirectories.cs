@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -31,7 +32,10 @@ namespace Deguffer.Core.Providers;
 internal static class InUseBuildDirectories
 {
     /// <param name="discovery">The provider's own discovery, whose boundary its plan applies.</param>
-    /// <param name="roots">The approved roots. Empty declares nothing, as it plans nothing.</param>
+    /// <param name="roots">
+    /// The approved roots. Empty declares nothing, as it plans nothing, and a root the plan would
+    /// refuse to search declares nothing either — see <see cref="SourceDirectoryDiscovery.Searches"/>.
+    /// </param>
     /// <param name="names">The directory names the provider seeks.</param>
     /// <param name="recognise">
     /// The provider's identification of a candidate, answering with its project folder or null. The
@@ -41,7 +45,7 @@ internal static class InUseBuildDirectories
     public static IReadOnlyList<ToolRoot> Declare(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
-        IReadOnlyList<string> roots,
+        IReadOnlyList<SourceRoot> roots,
         IReadOnlyList<string> names,
         Func<string, string?> recognise,
         IReadOnlyList<string> lockFiles,
@@ -60,9 +64,18 @@ internal static class InUseBuildDirectories
 
         foreach (var root in roots)
         {
+            // A root the plan will not search declares nothing from here either. Explore already
+            // refuses the whole volume, so this takes away no protection — and declaring from a root
+            // the plan refuses would be this route judging a folder by a rule the plan does not.
+            if (!discovery.Searches(root))
+            {
+                continue;
+            }
+
             // Asked of the name and the boundary before the disk, because most places a program is
             // are nowhere near a build directory and a string answers that for free.
-            candidates.UnionWith(discovery.WithinTheSearch(Candidates(root, occupied, names, ct), root));
+            candidates.UnionWith(
+                discovery.WithinTheSearch(Candidates(root.Path, occupied, names, ct), root.Path));
         }
 
         var recognised = new List<RecognisedBuildDirectory>();

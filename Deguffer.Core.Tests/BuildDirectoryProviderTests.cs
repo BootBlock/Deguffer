@@ -79,7 +79,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     {
         var work = _temp.CreateDirectory("work");
         var personal = _temp.CreateDirectory("personal");
-        _roots.Save([work, personal]);
+        _roots.Save([new SourceRoot(work), new SourceRoot(personal)]);
 
         var billing = BuildDirectoryFixture.CreateNodeProject(Path.Combine(work, "billing"));
         var blog = BuildDirectoryFixture.CreateNodeProject(Path.Combine(personal, "blog"));
@@ -106,7 +106,9 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var client = Path.Combine(src, "client");
         Directory.CreateDirectory(client);
 
-        string[] approved = nearerApprovedFirst ? [client, src] : [src, client];
+        SourceRoot[] approved = nearerApprovedFirst
+            ? [new SourceRoot(client), new SourceRoot(src)]
+            : [new SourceRoot(src), new SourceRoot(client)];
         _roots.Save(approved);
 
         var app = BuildDirectoryFixture.CreateNodeProject(Path.Combine(client, "app"));
@@ -867,12 +869,65 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(refused));
     }
 
+    /// <summary>
+    /// An approved folder on a cloud client's mount is left alone, and the plan says so.
+    ///
+    /// <para>The §5.6 negative for this change: the project, its build directory and the source beside
+    /// it all survive a plan that would otherwise have offered the build directory, because nothing in
+    /// the folder was targeted at all. Enumerating the folder is itself the harm here — it downloads
+    /// what is in it — so what has to be proved is that the pass never opened it, and an empty target
+    /// list over a folder holding a recognisable project is what shows that.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnApprovedFolderOnACloudMountIsLeftAloneAndSaidSo()
+    {
+        var root = ApproveRoot();
+        var library = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
+
+        var plan = await Unity(volumes: CloudMountHolding(root)).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root) && n.Message.Contains("cloud"));
+
+        Assert.True(Directory.Exists(library));
+        Assert.True(File.Exists(Path.Combine(root, "Game", "Packages", "manifest.json")));
+    }
+
+    /// <summary>
+    /// The same folder, with the answer the user gave in Settings. Storing the approval is only worth
+    /// anything if the plan honours it, and this is the pair that shows the refusal is the default
+    /// rather than the only behaviour.
+    /// </summary>
+    [Fact]
+    public async Task AnApprovedFolderOnACloudMountIsSearchedWhereTheUserSaidSo()
+    {
+        var root = _temp.CreateDirectory("src");
+        _roots.Save([new SourceRoot(root, RemoteStorageApproved: true)]);
+
+        var library = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
+
+        var plan = await Unity(volumes: CloudMountHolding(root)).PlanAsync();
+
+        Assert.Equal([library], plan.TargetedPaths);
+        Assert.False(plan.WasNotExamined);
+    }
+
     // ---- helpers --------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A machine whose one volume is the one <paramref name="path"/> is on, reporting the flag word
+    /// measured on a Google Drive mount. See <see cref="LocalVolume.StoresContentRemotely"/>.
+    /// </summary>
+    private static FakeVolumeInventory CloudMountHolding(string path) =>
+        new FakeVolumeInventory().With(Path.GetPathRoot(path)!, features: (VolumeFeatures)0x0000_0106);
 
     private string ApproveRoot(string name = "src")
     {
         var root = _temp.CreateDirectory(name);
-        _roots.Save([root]);
+        _roots.Save([new SourceRoot(root)]);
         return root;
     }
 
@@ -885,7 +940,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     {
         var root = Path.Combine(_environment.UserProfile, "source");
         Directory.CreateDirectory(root);
-        _roots.Save([root]);
+        _roots.Save([new SourceRoot(root)]);
         return root;
     }
 
@@ -925,29 +980,57 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     };
 
     private Task<CleanupPlan> PlanWith(
-        Func<IDirectoryScanner?, ILiveTreeInspector?, BuildDirectoryProvider> create,
+        Func<IDirectoryScanner?, ILiveTreeInspector?, IVolumeInventory?, BuildDirectoryProvider> create,
         IDirectoryScanner? scanner = null,
         ILiveTreeInspector? liveTrees = null) =>
-        create(scanner, liveTrees).PlanAsync();
+        create(scanner, liveTrees, null).PlanAsync();
 
-    private BuildDirectoryProvider Unity(IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null) =>
-        new UnityLibraryProvider(
-            _roots, null, live ?? FakeLiveTreeInspector.NothingLive, _environment, new FakeProcessRunner(),
-            FakeProcessInspector.NothingRunning, scanner ?? new FakeDirectoryScanner());
+    private BuildDirectoryProvider Unity(
+        IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null, IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
 
-    private BuildDirectoryProvider Cargo(IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null) =>
-        new CargoTargetProvider(
-            _roots, null, live ?? FakeLiveTreeInspector.NothingLive, _environment, new FakeProcessRunner(),
-            FakeProcessInspector.NothingRunning, scanner ?? new FakeDirectoryScanner());
+        return new UnityLibraryProvider(
+            _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
+            new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    }
 
-    private BuildDirectoryProvider Node(IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null) =>
-        new NodeModulesProvider(
-            _roots, null, live ?? FakeLiveTreeInspector.NothingLive, _environment, new FakeProcessRunner(),
-            FakeProcessInspector.NothingRunning, scanner ?? new FakeDirectoryScanner());
+    private BuildDirectoryProvider Cargo(
+        IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null, IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
 
-    private BuildDirectoryProvider Python(IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null) =>
-        new PythonVirtualEnvironmentProvider(
-            _roots, null, live ?? FakeLiveTreeInspector.NothingLive, _environment, new FakeProcessRunner(),
-            FakeProcessInspector.NothingRunning, scanner ?? new FakeDirectoryScanner());
+        return new CargoTargetProvider(
+            _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
+            new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    }
+
+    private BuildDirectoryProvider Node(
+        IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null, IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
+
+        return new NodeModulesProvider(
+            _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
+            new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    }
+
+    private BuildDirectoryProvider Python(
+        IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null, IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
+
+        return new PythonVirtualEnvironmentProvider(
+            _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
+            new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    }
+
+    /// <summary>
+    /// A discovery over volumes a test states rather than over the developer's own. An inventory
+    /// reporting nothing is "nothing was measured", which is what every test here but one wants: the
+    /// scratch tree is searched whatever the machine running the suite has mounted.
+    /// </summary>
+    private static SourceDirectoryDiscovery OverVolumes(IDirectoryScanner scanner, IVolumeInventory? volumes) =>
+        new(scanner, volumes ?? new FakeVolumeInventory());
 
 }

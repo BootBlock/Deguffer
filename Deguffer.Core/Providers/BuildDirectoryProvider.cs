@@ -27,7 +27,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     private readonly SourceRootStore _roots;
     private readonly SourceDirectoryDiscovery _discovery;
 
-    private IReadOnlyList<string>? _approved;
+    private IReadOnlyList<SourceRoot>? _approved;
 
     /// <param name="kind">
     /// Supplied rather than read from an overridable member, because the discovery this constructor
@@ -86,7 +86,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     private ILiveTreeInspector LiveTrees { get; }
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
-    public IReadOnlyList<string> ApprovedRoots => _approved ??= _roots.Load();
+    public IReadOnlyList<SourceRoot> ApprovedRoots => _approved ??= _roots.Load();
 
     public override void InvalidateCaches()
     {
@@ -187,6 +187,12 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 discovered, Kind.DisplayNames, Subject, declined.Count, live, measured.Note),
             Fallback = measured.Fallback,
             HasUnreadableRoot = discovered.UnreadableDirectories.Count > 0,
+
+            // A row whose only approved folder is on a refused mount would otherwise render as
+            // "Already clear", which is a claim about a folder nothing looked inside. It is
+            // Deguffer's own decision rather than Windows refusing a listing, so it belongs here
+            // rather than on HasUnreadableRoot — CleanupPlan says why the two are separate flags.
+            WasNotExamined = steps.Count == 0 && discovered.RefusedRoots.Count > 0,
         };
     }
 
