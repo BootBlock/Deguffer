@@ -1,4 +1,33 @@
+using System.Runtime.InteropServices;
+
 namespace Deguffer.Core.Safety;
+
+/// <summary>
+/// The parts of a volume's <c>GetVolumeInformation</c> flag word that Deguffer reads.
+///
+/// <para>Deliberately partial. Windows documents around twenty bits there and two of them decide
+/// anything here, so naming the rest would invite a reader to take this for the Win32 constant set
+/// and branch on a bit nothing has ever measured. The word is carried unmasked, so a bit with no
+/// name here is still present in the value.</para>
+/// </summary>
+[Flags]
+public enum VolumeFeatures : uint
+{
+    /// <summary>Nothing, which is also what a volume that would not answer is recorded as.</summary>
+    None = 0,
+
+    /// <summary>
+    /// <c>FILE_SUPPORTS_REPARSE_POINTS</c>. Every local NTFS volume has it, and a volume without it
+    /// cannot hold a link, a junction or a Cloud Files placeholder.
+    /// </summary>
+    ReparsePoints = 0x0000_0080,
+
+    /// <summary>
+    /// <c>FILE_SUPPORTS_REMOTE_STORAGE</c>. The volume can hold data that is not on this machine, so
+    /// reading a file may fetch it from somewhere else first.
+    /// </summary>
+    RemoteStorage = 0x0000_0100,
+}
 
 /// <summary>
 /// One volume the machine has mounted under a drive letter.
@@ -23,13 +52,51 @@ namespace Deguffer.Core.Safety;
 /// than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are read by the same app and
 /// must not disagree.
 /// </param>
+/// <param name="Features">
+/// What the volume says it supports, or <see cref="VolumeFeatures.None"/> where it would not say or
+/// was not asked. Reported rather than filtered, for the reason <paramref name="Kind"/> is.
+/// </param>
 public readonly record struct LocalVolume(
     string RootPath,
     DriveType Kind,
     bool IsReady,
     string? Label = null,
     long? TotalBytes = null,
-    long? FreeBytes = null);
+    long? FreeBytes = null,
+    VolumeFeatures Features = VolumeFeatures.None)
+{
+    /// <summary>
+    /// Whether this volume's contents are somewhere else, so that enumerating it downloads the
+    /// user's files instead of measuring them.
+    ///
+    /// <para>A cloud client that mounts its storage through its own driver is a
+    /// <see cref="DriveType.Fixed"/>, ready volume that no per-entry test can tell from a disk. A
+    /// Google Drive mount's top-level entries were measured carrying nothing but ordinary hidden,
+    /// system and normal attributes: no <c>FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS</c>, no
+    /// <c>FILE_ATTRIBUTE_OFFLINE</c>, no reparse point. A walker cannot defend itself entry by
+    /// entry there, so the location is what has to be refused.</para>
+    ///
+    /// <para><b>This recognises a mount that advertises the flag, not every cloud client.</b>
+    /// Advertising remote storage is a third-party driver's own choice, and nothing in Win32
+    /// obliges one to. A mount that does not say so is walked, as every volume was before this
+    /// reading existed. Google Drive is the one product whose flag word was measured.</para>
+    ///
+    /// <para><b>Why these two bits and not the format.</b> The mount advertises remote storage and
+    /// supports neither reparse points nor sparse files, and the Cloud Files API builds a
+    /// placeholder as a reparse point on a sparse file and supports NTFS alone. So a volume with
+    /// this pair cannot be hosting per-file placeholders that would explain the flag innocently,
+    /// which is what makes the pair structural rather than incidental. Measured as
+    /// <c>0x00000106</c> on a Google Drive mount against <c>0x03E72EFF</c> on seven local NTFS
+    /// volumes of the same machine.</para>
+    ///
+    /// <para><b>The format alone would refuse real disks.</b> A fixed volume that is not NTFS is
+    /// also a FAT32 or exFAT disk, a card reader reporting itself fixed, or a mounted image — all
+    /// of which are ordinary to walk. A refusal that reached them would take away the tool's
+    /// purpose to fix a hazard they do not have.</para>
+    /// </summary>
+    public bool StoresContentRemotely =>
+        Features.HasFlag(VolumeFeatures.RemoteStorage) && !Features.HasFlag(VolumeFeatures.ReparsePoints);
+}
 
 /// <summary>
 /// The machine's volumes, behind an interface so a provider that works per volume is testable
@@ -53,7 +120,7 @@ public interface IVolumeInventory
 }
 
 /// <inheritdoc />
-public sealed class VolumeInventory : IVolumeInventory
+public sealed partial class VolumeInventory : IVolumeInventory
 {
     /// <summary>
     /// The one instance the app runs with (G5). Stateless apart from the list it remembers, and
@@ -130,6 +197,11 @@ public sealed class VolumeInventory : IVolumeInventory
             return new LocalVolume(root, drive.DriveType, ready);
         }
 
+        // Before the label and the space, and kept on both paths below, because this is the one
+        // reading a caller refuses a whole volume on: a drive that declined its label would
+        // otherwise be described as having said nothing about remote storage either, and be walked.
+        var features = FeaturesOf(root);
+
         try
         {
             return new LocalVolume(
@@ -138,14 +210,41 @@ public sealed class VolumeInventory : IVolumeInventory
                 IsReady: true,
                 Label: string.IsNullOrWhiteSpace(drive.VolumeLabel) ? null : drive.VolumeLabel,
                 TotalBytes: drive.TotalSize,
-                FreeBytes: drive.AvailableFreeSpace);
+                FreeBytes: drive.AvailableFreeSpace,
+                Features: features);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // The medium can go away between IsReady and these reads, and a volume can refuse the
             // label query outright. Where it is mounted is still true, and it is the part callers
             // act on, so the volume is reported without the detail rather than dropped.
-            return new LocalVolume(root, drive.DriveType, IsReady: true);
+            return new LocalVolume(root, drive.DriveType, IsReady: true, Features: features);
         }
     }
+
+    /// <summary>
+    /// What <paramref name="root"/> says it supports, or <see cref="VolumeFeatures.None"/> where it
+    /// would not say.
+    ///
+    /// <para><c>DriveInfo</c> exposes the format name and none of the flags, so this is the only
+    /// route to them. Both string buffers are passed as null, which the call documents as
+    /// permitted: nothing here wants the volume's name or its format, and the allocations would be
+    /// spent once per mounted device.</para>
+    /// </summary>
+    private static VolumeFeatures FeaturesOf(string root) =>
+        GetVolumeInformation(root, IntPtr.Zero, 0, out _, out _, out var flags, IntPtr.Zero, 0)
+            ? (VolumeFeatures)flags
+            : VolumeFeatures.None;
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeInformationW", StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetVolumeInformation(
+        string rootPathName,
+        IntPtr volumeNameBuffer,
+        uint volumeNameSize,
+        out uint volumeSerialNumber,
+        out uint maximumComponentLength,
+        out uint fileSystemFlags,
+        IntPtr fileSystemNameBuffer,
+        uint fileSystemNameSize);
 }
