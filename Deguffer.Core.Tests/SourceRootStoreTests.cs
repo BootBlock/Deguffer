@@ -219,18 +219,52 @@ public sealed class SourceRootStoreTests : IDisposable
     }
 
     /// <summary>
-    /// The first entry for a folder wins where the file names it twice. An approval and a refusal of
-    /// the same folder are indistinguishable in the file from the folder written twice, so the rule is
-    /// stated rather than left to whichever entry the deduplication happens to keep.
+    /// A folder named twice with two different answers about its volume carries the narrower one,
+    /// whichever order the file holds them in.
+    ///
+    /// <para>Both orders are asserted, and that is the whole point of the test. An approval and a
+    /// refusal of the same folder are indistinguishable in the file from the folder written twice, so
+    /// keeping whichever came first would let a hand-edited file grant an approval a later line
+    /// withdraws — and the approval is the direction that spends a download of the user's cloud
+    /// storage. A test that pinned only the refusal-then-approval order would pass just as well
+    /// against "first wins", which is the rule this one exists to rule out.</para>
     /// </summary>
-    [Fact]
-    public void KeepsTheFirstEntryWhereAFolderIsNamedTwice()
+    [Theory]
+    [InlineData("false", "true")]
+    [InlineData("true", "false")]
+    public void TakesTheNarrowerAnswerWhereAFolderIsNamedTwice(string first, string second)
     {
         Write(
-            "[{\"path\": \"V:\\\\work\", \"remoteStorageApproved\": false}, "
-            + "{\"path\": \"v:\\\\WORK\", \"remoteStorageApproved\": true}]");
+            $"[{{\"path\": \"V:\\\\work\", \"remoteStorageApproved\": {first}}}, "
+            + $"{{\"path\": \"v:\\\\WORK\", \"remoteStorageApproved\": {second}}}]");
 
         Assert.Equal([new SourceRoot(@"V:\work")], CreateStore().Load());
+    }
+
+    /// <summary>
+    /// The folder is still listed once, under the spelling the file gave it first. Narrowing the
+    /// answer must not also reorder or re-case what the user sees in Settings.
+    /// </summary>
+    [Fact]
+    public void KeepsTheFirstSpellingWhereAFolderIsNamedTwice()
+    {
+        Write("[\"V:\\\\work\", \"v:\\\\WORK\", \"D:\\\\other\"]");
+
+        Assert.Equal([new SourceRoot(@"V:\work"), new SourceRoot(@"D:\other")], CreateStore().Load());
+    }
+
+    /// <summary>
+    /// Two entries that agree the folder is approved leave it approved. Narrowing a disagreement must
+    /// not narrow an agreement, or re-approving a folder by hand would silently stop working.
+    /// </summary>
+    [Fact]
+    public void KeepsTheApprovalWhereBothEntriesForAFolderCarryIt()
+    {
+        Write(
+            "[{\"path\": \"V:\\\\work\", \"remoteStorageApproved\": true}, "
+            + "{\"path\": \"v:\\\\WORK\", \"remoteStorageApproved\": true}]");
+
+        Assert.Equal([new SourceRoot(@"V:\work", RemoteStorageApproved: true)], CreateStore().Load());
     }
 
     private static SourceRoot Root(string path) => new(path);

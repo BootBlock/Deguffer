@@ -88,4 +88,25 @@ public sealed class HostVolumeTests
     {
         Assert.Equal(@"C:\", HostVolume.For(Machine, @"C:\V\work")?.RootPath);
     }
+
+    /// <summary>
+    /// A path on a volume mounted at a directory answers as the volume that directory is on. This is
+    /// the one case that answers <em>wrongly</em> rather than not at all, and it is recorded here
+    /// rather than left for a reader to discover: <c>DriveInfo.GetDrives</c> reports drive letters
+    /// only, so such a volume is never in the inventory to be matched, and the mount point's own
+    /// volume is what the comparison finds.
+    ///
+    /// <para>Asserted rather than fixed because the fix is a change to what
+    /// <see cref="IVolumeInventory"/> enumerates, not to how <see cref="HostVolume"/> reads it. A
+    /// cloud client mounted at a folder is therefore searched, and the doc on
+    /// <see cref="HostVolume.For"/> says so.</para>
+    /// </summary>
+    [Fact]
+    public void AnswersAFolderMountedVolumeAsTheVolumeItsMountPointIsOn()
+    {
+        var mounted = HostVolume.For(Machine, @"C:\Mount\work");
+
+        Assert.Equal(@"C:\", mounted?.RootPath);
+        Assert.False(mounted?.StoresContentRemotely);
+    }
 }

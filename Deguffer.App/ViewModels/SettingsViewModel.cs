@@ -22,19 +22,20 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IVolumeInventory _volumes;
 
     /// <param name="volumes">
-    /// The machine's volumes, so that approving a folder can say what the folder is stored on. The
-    /// shared inventory by default (G5).
+    /// The machine's volumes, so that approving a folder can say what the folder is stored on.
+    /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the App has no
+    /// test project, so an optional seam here would be a parameter nothing ever passes.
     /// </param>
     public SettingsViewModel(
         PreferenceService preferences,
         SourceRootService sourceRoots,
         KeepService keeps,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory volumes)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
         _keeps = keeps;
-        _volumes = volumes ?? VolumeInventory.Current;
+        _volumes = volumes;
 
         SourceRoots = [.. sourceRoots.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];

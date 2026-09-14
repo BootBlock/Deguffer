@@ -24,10 +24,22 @@ public static class HostVolume
     /// does.
     ///
     /// <para><b>Null means nothing was measured, never that the path is safe.</b> A UNC share, a
-    /// volume mounted without a drive letter, and an inventory that could not be read all arrive
-    /// here as null, so a caller that refused on one would be refusing on no reading at all — and a
-    /// caller that treats it as an all-clear is making the same mistake in the other direction. Both
-    /// callers that decide anything read a property of the volume they got back instead.</para>
+    /// volume addressed by its GUID rather than a letter, and an inventory that could not be read
+    /// all arrive here as null, so a caller that refused on one would be refusing on no reading at
+    /// all — and a caller that treats it as an all-clear is making the same mistake in the other
+    /// direction. All three callers that decide anything read a property of the volume they got
+    /// back instead.</para>
+    ///
+    /// <para><b>A volume mounted at a directory is answered as the volume that directory is on, not
+    /// as itself.</b> <see cref="IVolumeInventory"/> is built from <c>DriveInfo.GetDrives</c>, which
+    /// reports drive letters and nothing else, so a volume mounted at <c>C:\Mount</c> is not in the
+    /// list and <c>C:\Mount\work</c> matches <c>C:\</c> — a reading of the wrong volume rather than
+    /// the non-answer above. That is why this is stated here rather than left to be inferred: a
+    /// cloud client mounted that way is reported as the local disk holding its mount point, and is
+    /// searched. Closing it means naming such volumes in the inventory, through
+    /// <c>FindFirstVolume</c> and <c>GetVolumePathNamesForVolumeNameW</c>, which is a change to what
+    /// the inventory is rather than to how it is read. The gap predates this seam: the Explore page
+    /// matched <see cref="Path.GetPathRoot(string)"/> against its own drive list and had it too.</para>
     ///
     /// <para>Compared through <see cref="LongPath.Contains"/>, which is the one comparison that gets
     /// a volume root right: <c>C:\</c> keeps its trailing separator where no other path does, and

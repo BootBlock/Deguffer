@@ -915,6 +915,36 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.False(plan.WasNotExamined);
     }
 
+    /// <summary>
+    /// The declaration Explore reads (§7.1) applies the same refusal the plan does.
+    ///
+    /// <para>It reaches a refused root by the other route: <see cref="InUseBuildDirectories"/> works
+    /// down from the process table rather than from a pass over the folder, so the gate in the plan
+    /// does not cover it. The pair is what proves the gate bites — the same live program under the
+    /// same project declares the directory on an ordinary disk and declares nothing on a cloud
+    /// mount.</para>
+    /// </summary>
+    [Fact]
+    public async Task NothingIsDeclaredFromAnApprovedFolderOnACloudMount()
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Busy");
+        var busy = BuildDirectoryFixture.CreateUnityProject(project);
+        var working = Directory.CreateDirectory(Path.Combine(project, "docs", "notes")).FullName;
+
+        var live = new FakeLiveTreeInspector()
+            .WithProgram("editor", Path.Combine(_temp.Path, "tools", "editor.exe"), working);
+
+        // The premise: this program and this project do produce a declaration when the folder is on
+        // an ordinary disk, so the empty answer below is the refusal rather than a fixture that
+        // declares nothing either way.
+        var declared = await Unity(live: live).DiscoverToolRootsAsync();
+
+        Assert.Equal([busy], [.. declared.Select(root => root.Path)]);
+
+        Assert.Empty(await Unity(live: live, volumes: CloudMountHolding(root)).DiscoverToolRootsAsync());
+    }
+
     // ---- helpers --------------------------------------------------------------------------------
 
     /// <summary>

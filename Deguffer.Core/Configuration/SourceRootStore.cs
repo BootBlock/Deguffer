@@ -107,7 +107,11 @@ public sealed class SourceRootStore
         }
     }
 
-    /// <summary>Persist <paramref name="roots"/> where the caller keeps no copy of its own.</summary>
+    /// <summary>
+    /// Persist <paramref name="roots"/> where the caller keeps no copy of its own. See
+    /// <see cref="Save(IReadOnlyList{SourceRoot}, out IReadOnlyList{SourceRoot})"/> for what reaches
+    /// disk.
+    /// </summary>
     public bool Save(IReadOnlyList<SourceRoot> roots) => Save(roots, out _);
 
     /// <summary>
@@ -118,7 +122,7 @@ public sealed class SourceRootStore
     /// and a read that rewrote the file to bring it forward would lose the user's approvals outright
     /// on the profile where that write is what fails. A string carries no approval, which is the
     /// narrow reading of an answer nobody was asked for — see
-    /// <see cref="SourceRoot.RemoteStorageApproved"/>. The next <see cref="Save"/> writes the new
+    /// <see cref="SourceRoot.RemoteStorageApproved"/>. The next save writes the new
     /// shape for every entry, so the old one disappears the first time the user changes anything.</para>
     ///
     /// <para>Each property is read through its own kind check rather than by deserialising the
@@ -155,11 +159,14 @@ public sealed class SourceRootStore
     /// carrying <c>..</c> would make the two routes disagree, and an elevated run would quietly
     /// return an empty plan where an unelevated one found everything.
     ///
-    /// <para>The first entry for a folder wins where the file names it twice. That is the same
-    /// folder said twice rather than two decisions, and it cannot be read as one: an approval and a
-    /// refusal of the same path are indistinguishable in the file from an approval written twice.
-    /// Taking the first keeps the rule "what reached disk is what is read back" true, because the
-    /// same narrowing runs on the way in.</para>
+    /// <para><b>A folder named twice keeps its first spelling and the narrower of the two answers
+    /// about its volume.</b> An approval and a refusal of the same path are indistinguishable in the
+    /// file from the same decision written twice, so there is no reading that recovers what the user
+    /// meant — and of the two available, only one is safe. Keeping whichever came first would let
+    /// <c>[{V:\work, approved}, {V:\work, not approved}]</c> grant an approval the next line
+    /// withdraws, which is this file's own "every failure narrows scope" rule inverted, and the
+    /// direction that spends a download of everything the user keeps in the cloud. Agreement is left
+    /// alone: two entries that both carry the approval keep it.</para>
     /// </summary>
     private static IReadOnlyList<SourceRoot> Usable(IEnumerable<SourceRoot> roots) =>
     [
@@ -168,7 +175,14 @@ public sealed class SourceRootStore
                 ? root with { Path = path }
                 : null)
             .OfType<SourceRoot>()
-            .DistinctBy(root => root.Path, StringComparer.OrdinalIgnoreCase),
+            .GroupBy(root => root.Path, StringComparer.OrdinalIgnoreCase)
+
+            // GroupBy yields its groups in first-appearance order and each group in file order, so
+            // the folder keeps the place and the spelling the user would recognise in Settings.
+            .Select(named => named.First() with
+            {
+                RemoteStorageApproved = named.All(root => root.RemoteStorageApproved),
+            }),
     ];
 
     /// <summary>

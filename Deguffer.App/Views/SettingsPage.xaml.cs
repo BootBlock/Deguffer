@@ -1,6 +1,7 @@
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
@@ -11,7 +12,8 @@ public sealed partial class SettingsPage : Page
 {
     public SettingsPage()
     {
-        ViewModel = new SettingsViewModel(App.Preferences, App.SourceRoots, App.Keeps);
+        ViewModel = new SettingsViewModel(
+            App.Preferences, App.SourceRoots, App.Keeps, VolumeInventory.Current);
         InitializeComponent();
     }
 
