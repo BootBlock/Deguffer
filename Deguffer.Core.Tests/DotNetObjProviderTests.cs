@@ -30,7 +30,7 @@ public sealed class DotNetObjProviderTests : IDisposable
     private string ApproveRoot(string name = "src")
     {
         var root = _temp.CreateDirectory(name);
-        _roots.Save([root]);
+        _roots.Save([new SourceRoot(root)]);
         return root;
     }
 
@@ -43,7 +43,7 @@ public sealed class DotNetObjProviderTests : IDisposable
     {
         var root = Path.Combine(_environment.UserProfile, "source");
         Directory.CreateDirectory(root);
-        _roots.Save([root]);
+        _roots.Save([new SourceRoot(root)]);
         return root;
     }
 
@@ -53,14 +53,28 @@ public sealed class DotNetObjProviderTests : IDisposable
     private DotNetObjProvider CreateProvider(
         IDirectoryScanner? scanner = null,
         FakeProcessRunner? runner = null,
-        ILiveTreeInspector? liveTrees = null) =>
-        new(_roots,
-            discovery: null,
+        ILiveTreeInspector? liveTrees = null,
+        IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
+
+        return new(
+            _roots,
+            OverVolumes(scanner, volumes),
             liveTrees ?? FakeLiveTreeInspector.NothingLive,
             _environment,
             runner ?? new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
-            scanner ?? new FakeDirectoryScanner());
+            scanner);
+    }
+
+    /// <summary>
+    /// A discovery over volumes a test states rather than over the developer's own. An inventory
+    /// reporting nothing is "nothing was measured", which is what every test here but one wants: the
+    /// scratch tree is searched whatever the machine running the suite has mounted.
+    /// </summary>
+    private static SourceDirectoryDiscovery OverVolumes(IDirectoryScanner scanner, IVolumeInventory? volumes) =>
+        new(scanner, volumes ?? new FakeVolumeInventory());
 
     /// <summary>
     /// The case the source-folder question exists for, and the only provider that shows it.
@@ -563,7 +577,7 @@ public sealed class DotNetObjProviderTests : IDisposable
     {
         var root = ApproveRoot();
         ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
-        _roots.Save([root, Path.Combine(_temp.Path, "not-attached")]);
+        _roots.Save([new SourceRoot(root), new SourceRoot(Path.Combine(_temp.Path, "not-attached"))]);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -771,7 +785,7 @@ public sealed class DotNetObjProviderTests : IDisposable
 
     private static SourceDirectoryDiscovery Discovery(IReadOnlyList<string> names)
     {
-        var discovery = new SourceDirectoryDiscovery(new FakeDirectoryScanner());
+        var discovery = new SourceDirectoryDiscovery(new FakeDirectoryScanner(), new FakeVolumeInventory());
         discovery.Include(names);
         return discovery;
     }

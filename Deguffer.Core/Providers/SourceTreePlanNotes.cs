@@ -36,6 +36,22 @@ internal static class SourceTreePlanNotes
     {
         var notes = new List<PlanNote>(6);
 
+        // First, because it is the largest omission a plan here can carry: not part of a root but the
+        // whole of one, and a folder the user picked out by hand rather than one Deguffer offered.
+        //
+        // Named one by one where the neighbours below collapse past the first. Which folder went
+        // unsearched is the actionable part — the user chose it and can choose again — and the count
+        // is bounded by the folders they have approved on a cloud client's mount, which is not the
+        // hundreds an unreadable directory can run to.
+        foreach (var root in discovered.RefusedRoots)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Leaving '{root}' alone: it is on cloud storage shown as a drive letter, so nothing "
+                + "inside it was searched. Reading it would download every file in it onto this "
+                + "computer. Add the folder again in Settings to search it anyway."));
+        }
+
         // §5.5 requires the fallback to be observable, and this is the discovery half of it — the
         // measurement half is scanNote. On an unelevated run both took the slow route, and saying so
         // twice in two wordings reads as a defect rather than as precision, so the sentence is left

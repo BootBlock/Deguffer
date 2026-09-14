@@ -47,6 +47,10 @@
       reach one is a test nobody may run. UserEnvironment's second constructor is there for the same
       reason one step out - it takes the two registry reads as delegates, so the whole route from the
       keys to a resolved command can be driven with the machine changing under it.
+      UserEnvironment.ReadEnvironmentKey is the delegates' own body, and is here because it is the
+      one place a value's REG_SZ or REG_EXPAND_SZ kind is decided. Taking it by hive and path lets a
+      test assert that decision against a key it wrote itself, which the two real environment keys
+      could only be made to answer by writing to them.
 
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.

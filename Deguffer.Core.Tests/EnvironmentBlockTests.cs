@@ -15,14 +15,34 @@ public sealed class EnvironmentBlockTests
 {
     private const string System32 = @"C:\Windows\system32";
 
+    /// <summary>The environment a process was handed, which Windows expanded before it ran.</summary>
     private static Dictionary<string, string> Variables(params (string Name, string Value)[] entries) =>
         entries.ToDictionary(entry => entry.Name, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Registry values of the kind Windows resolves, <c>REG_EXPAND_SZ</c>.</summary>
+    private static Dictionary<string, EnvironmentValue> Expandable(params (string Name, string Value)[] entries) =>
+        Registry(entries, expandable: true);
+
+    /// <summary>
+    /// Registry values of the other kind, <c>REG_SZ</c>, whose <c>%NAME%</c> is part of the value
+    /// and reaches a program exactly as it was written.
+    /// </summary>
+    private static Dictionary<string, EnvironmentValue> Literal(params (string Name, string Value)[] entries) =>
+        Registry(entries, expandable: false);
+
+    private static Dictionary<string, EnvironmentValue> Registry(
+        (string Name, string Value)[] entries,
+        bool expandable) =>
+        entries.ToDictionary(
+            entry => entry.Name,
+            entry => new EnvironmentValue(entry.Value, expandable),
+            StringComparer.OrdinalIgnoreCase);
+
     private static EnvironmentBlock Started(
         Dictionary<string, string>? process = null,
-        Dictionary<string, string>? machine = null,
-        Dictionary<string, string>? user = null) =>
-        EnvironmentBlock.Startup(process ?? Variables(), machine ?? Variables(), user ?? Variables());
+        Dictionary<string, EnvironmentValue>? machine = null,
+        Dictionary<string, EnvironmentValue>? user = null) =>
+        EnvironmentBlock.Startup(process ?? Variables(), machine ?? Expandable(), user ?? Expandable());
 
     /// <summary>
     /// The bug itself. An installer writes its directory into <c>HKCU\Environment</c> and
@@ -34,11 +54,11 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("Path", System32)),
-            machine: Variables(("Path", System32)));
+            machine: Expandable(("Path", System32)));
 
         var refreshed = startup.Refresh(
-            Variables(("Path", System32)),
-            Variables(("Path", @"C:\Users\testuser\.pixi\bin")));
+            Expandable(("Path", System32)),
+            Expandable(("Path", @"C:\Users\testuser\.pixi\bin")));
 
         Assert.Contains(@"C:\Users\testuser\.pixi\bin", refreshed.PathDirectories, StringComparer.OrdinalIgnoreCase);
     }
@@ -54,9 +74,9 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("Path", $@"C:\workshop\bin;{System32}")),
-            machine: Variables(("Path", System32)));
+            machine: Expandable(("Path", System32)));
 
-        var refreshed = startup.Refresh(Variables(("Path", System32)), Variables());
+        var refreshed = startup.Refresh(Expandable(("Path", System32)), Expandable());
 
         Assert.Equal([@"C:\workshop\bin", System32], refreshed.PathDirectories);
     }
@@ -72,8 +92,8 @@ public sealed class EnvironmentBlockTests
         var startup = Started(process: Variables(("Path", @"C:\session\bin")));
 
         var refreshed = startup.Refresh(
-            Variables(("Path", System32)),
-            Variables(("Path", @"C:\Users\testuser\bin")));
+            Expandable(("Path", System32)),
+            Expandable(("Path", @"C:\Users\testuser\bin")));
 
         Assert.Equal([@"C:\session\bin", System32, @"C:\Users\testuser\bin"], refreshed.PathDirectories);
     }
@@ -89,16 +109,16 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("Path", System32)),
-            machine: Variables(("Path", System32)));
+            machine: Expandable(("Path", System32)));
 
         var added = startup.Refresh(
-            Variables(("Path", System32)),
-            Variables(("Path", @"C:\Users\testuser\.pixi\bin")));
+            Expandable(("Path", System32)),
+            Expandable(("Path", @"C:\Users\testuser\.pixi\bin")));
 
         // Composed over the start-up block again, exactly as UserEnvironment composes each pass.
         // Chaining this onto `added` instead is the defect the case is here to catch, and it would
         // carry the directory forward for the life of the process.
-        var removed = startup.Refresh(Variables(("Path", System32)), Variables());
+        var removed = startup.Refresh(Expandable(("Path", System32)), Expandable());
 
         Assert.Contains(@"C:\Users\testuser\.pixi\bin", added.PathDirectories, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(@"C:\Users\testuser\.pixi\bin", removed.PathDirectories, StringComparer.OrdinalIgnoreCase);
@@ -116,8 +136,8 @@ public sealed class EnvironmentBlockTests
         var startup = Started(process: Variables(("PATHEXT", ".COM")));
 
         var refreshed = startup.Refresh(
-            Variables(("PATHEXT", ".COM;.EXE;.MSC")),
-            Variables(("PATHEXT", ".COM;.EXE")));
+            Expandable(("PATHEXT", ".COM;.EXE;.MSC")),
+            Expandable(("PATHEXT", ".COM;.EXE")));
 
         Assert.Equal([".COM", ".EXE"], refreshed.PathExtensions);
     }
@@ -135,9 +155,9 @@ public sealed class EnvironmentBlockTests
 
         var startup = Started(
             process: Variables(("PLAYWRIGHT_BROWSERS_PATH", Configured)),
-            user: Variables(("PLAYWRIGHT_BROWSERS_PATH", Configured)));
+            user: Expandable(("PLAYWRIGHT_BROWSERS_PATH", Configured)));
 
-        var refreshed = startup.Refresh(Variables(), Variables());
+        var refreshed = startup.Refresh(Expandable(), Expandable());
 
         Assert.Null(refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
     }
@@ -152,7 +172,7 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(process: Variables(("PLAYWRIGHT_BROWSERS_PATH", @"D:\browsers")));
 
-        var refreshed = startup.Refresh(Variables(), Variables());
+        var refreshed = startup.Refresh(Expandable(), Expandable());
 
         Assert.Equal(@"D:\browsers", refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
     }
@@ -169,7 +189,7 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(process: Variables(("Path", @"C:\session\bin")));
 
-        var refreshed = startup.Refresh(Variables(("Path", System32)), Variables());
+        var refreshed = startup.Refresh(Expandable(("Path", System32)), Expandable());
 
         Assert.Equal(
             refreshed.PathDirectories,
@@ -187,11 +207,11 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("PLAYWRIGHT_BROWSERS_PATH", @"D:\browsers")),
-            user: Variables(("PLAYWRIGHT_BROWSERS_PATH", @"C:\Users\testuser\AppData\Local\ms-playwright")));
+            user: Expandable(("PLAYWRIGHT_BROWSERS_PATH", @"C:\Users\testuser\AppData\Local\ms-playwright")));
 
         var refreshed = startup.Refresh(
-            Variables(),
-            Variables(("PLAYWRIGHT_BROWSERS_PATH", @"E:\relocated")));
+            Expandable(),
+            Expandable(("PLAYWRIGHT_BROWSERS_PATH", @"E:\relocated")));
 
         Assert.Equal(@"D:\browsers", refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
     }
@@ -208,11 +228,11 @@ public sealed class EnvironmentBlockTests
 
         var startup = Started(
             process: Variables(("PLAYWRIGHT_BROWSERS_PATH", Original)),
-            user: Variables(("PLAYWRIGHT_BROWSERS_PATH", Original)));
+            user: Expandable(("PLAYWRIGHT_BROWSERS_PATH", Original)));
 
         var refreshed = startup.Refresh(
-            Variables(),
-            Variables(("PLAYWRIGHT_BROWSERS_PATH", @"E:\relocated")));
+            Expandable(),
+            Expandable(("PLAYWRIGHT_BROWSERS_PATH", @"E:\relocated")));
 
         Assert.Equal(@"E:\relocated", refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
     }
@@ -228,7 +248,7 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(process: Variables(("USERPROFILE", @"C:\Users\testuser")));
 
-        var refreshed = startup.Refresh(Variables(), Variables(("Path", @"%USERPROFILE%\.cargo\bin")));
+        var refreshed = startup.Refresh(Expandable(), Expandable(("Path", @"%USERPROFILE%\.cargo\bin")));
 
         Assert.Equal([@"C:\Users\testuser\.cargo\bin"], refreshed.PathDirectories);
     }
@@ -244,11 +264,11 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("ChocolateyInstall", @"C:\ProgramData\chocolatey")),
-            machine: Variables(("ChocolateyInstall", @"C:\ProgramData\chocolatey")));
+            machine: Expandable(("ChocolateyInstall", @"C:\ProgramData\chocolatey")));
 
         var refreshed = startup.Refresh(
-            Variables(("ChocolateyInstall", @"D:\chocolatey")),
-            Variables(("Path", @"%ChocolateyInstall%\bin")));
+            Expandable(("ChocolateyInstall", @"D:\chocolatey")),
+            Expandable(("Path", @"%ChocolateyInstall%\bin")));
 
         Assert.Equal([@"D:\chocolatey\bin"], refreshed.PathDirectories);
     }
@@ -263,11 +283,11 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("CARGO_HOME", @"D:\cargo")),
-            user: Variables(("CARGO_HOME", @"C:\Users\testuser\.cargo")));
+            user: Expandable(("CARGO_HOME", @"C:\Users\testuser\.cargo")));
 
         var refreshed = startup.Refresh(
-            Variables(),
-            Variables(("CARGO_HOME", @"C:\Users\testuser\.cargo"), ("Path", @"%CARGO_HOME%\bin")));
+            Expandable(),
+            Expandable(("CARGO_HOME", @"C:\Users\testuser\.cargo"), ("Path", @"%CARGO_HOME%\bin")));
 
         Assert.Equal(@"D:\cargo", refreshed.Value("CARGO_HOME"));
         Assert.Equal([@"D:\cargo\bin"], refreshed.PathDirectories);
@@ -282,7 +302,7 @@ public sealed class EnvironmentBlockTests
     [Fact]
     public void ANameNothingResolvesIsLeftAsItWasWritten()
     {
-        var refreshed = Started().Refresh(Variables(), Variables(("Path", @"%NOT_SET_ANYWHERE%\bin")));
+        var refreshed = Started().Refresh(Expandable(), Expandable(("Path", @"%NOT_SET_ANYWHERE%\bin")));
 
         Assert.Equal([@"%NOT_SET_ANYWHERE%\bin"], refreshed.PathDirectories);
     }
@@ -295,7 +315,7 @@ public sealed class EnvironmentBlockTests
     [Fact]
     public void AValueThatNamesItselfDoesNotExpandForever()
     {
-        var refreshed = Started().Refresh(Variables(), Variables(("Path", @"%Path%;C:\tools")));
+        var refreshed = Started().Refresh(Expandable(), Expandable(("Path", @"%Path%;C:\tools")));
 
         Assert.Contains(@"C:\tools", refreshed.PathDirectories, StringComparer.OrdinalIgnoreCase);
     }
@@ -310,9 +330,9 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(
             process: Variables(("PATHEXT", ".COM;.EXE;.BAT;.CPL")),
-            machine: Variables(("PATHEXT", ".COM;.EXE;.BAT")));
+            machine: Expandable(("PATHEXT", ".COM;.EXE;.BAT")));
 
-        var refreshed = startup.Refresh(Variables(("PATHEXT", ".COM;.EXE;.BAT")), Variables());
+        var refreshed = startup.Refresh(Expandable(("PATHEXT", ".COM;.EXE;.BAT")), Expandable());
 
         Assert.Contains(".CPL", refreshed.PathExtensions, StringComparer.OrdinalIgnoreCase);
     }
@@ -327,8 +347,137 @@ public sealed class EnvironmentBlockTests
     {
         var startup = Started(process: Variables(("Path", @"C:\tools\")));
 
-        var refreshed = startup.Refresh(Variables(("Path", @"C:\tools")), Variables());
+        var refreshed = startup.Refresh(Expandable(("Path", @"C:\tools")), Expandable());
 
         Assert.Equal([@"C:\tools\"], refreshed.PathDirectories);
+    }
+
+    /// <summary>
+    /// A <c>REG_SZ</c> cache variable reaches its tool with the <c>%NAME%</c> still in it, because
+    /// that is what Windows hands the tool. Resolving it here would have Deguffer measure — and
+    /// offer to empty — a real directory while the tool wrote somewhere else entirely, which is the
+    /// §5.2 divergence the seam exists to prevent.
+    /// </summary>
+    [Fact]
+    public void ALiteralValueKeepsTheNameItWasWrittenWith()
+    {
+        var startup = Started(process: Variables(("LOCALAPPDATA", @"C:\Users\testuser\AppData\Local")));
+
+        var refreshed = startup.Refresh(
+            Expandable(),
+            Literal(("PLAYWRIGHT_BROWSERS_PATH", @"%LOCALAPPDATA%\ms-playwright")));
+
+        Assert.Equal(@"%LOCALAPPDATA%\ms-playwright", refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
+    }
+
+    /// <summary>
+    /// The same value stored as <c>REG_EXPAND_SZ</c>. The pair is the whole of the rule: the text
+    /// is identical and the kind is the only thing that decides the answer.
+    /// </summary>
+    [Fact]
+    public void AnExpandableValueResolvesTheNameItWasWrittenWith()
+    {
+        var startup = Started(process: Variables(("LOCALAPPDATA", @"C:\Users\testuser\AppData\Local")));
+
+        var refreshed = startup.Refresh(
+            Expandable(),
+            Expandable(("PLAYWRIGHT_BROWSERS_PATH", @"%LOCALAPPDATA%\ms-playwright")));
+
+        Assert.Equal(
+            @"C:\Users\testuser\AppData\Local\ms-playwright",
+            refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
+    }
+
+    /// <summary>
+    /// A literal <c>PATH</c> entry is searched as written, so Deguffer looks where the shell looks.
+    /// Expanding it adds a directory no command would resolve from, and a tool found there is a
+    /// tool Deguffer reports installed when it is not.
+    /// </summary>
+    [Fact]
+    public void ALiteralPathEntryIsSearchedExactlyAsItWasWritten()
+    {
+        var startup = Started(process: Variables(("USERPROFILE", @"C:\Users\testuser")));
+
+        var refreshed = startup.Refresh(Expandable(), Literal(("Path", @"%USERPROFILE%\bin")));
+
+        Assert.Equal([@"%USERPROFILE%\bin"], refreshed.PathDirectories);
+    }
+
+    /// <summary>
+    /// The two halves of <c>PATH</c> have their own kinds, and neither kind belongs to either half.
+    /// One Windows 11 install was counted: 16 <c>REG_SZ</c> values to 5 <c>REG_EXPAND_SZ</c> in the
+    /// machine key, and <c>Path</c> itself <c>REG_SZ</c> there while the user key held it as
+    /// <c>REG_EXPAND_SZ</c>. The fixture below takes that arrangement the other way round, because
+    /// both must work and the mirror case is the one no measurement here has seen. Joining the
+    /// written forms and expanding the result gives one half the other half's treatment.
+    /// </summary>
+    [Fact]
+    public void EachHalfOfPathIsExpandedByItsOwnKindBeforeTheyAreJoined()
+    {
+        var startup = Started(
+            process: Variables(("SystemRoot", @"C:\Windows"), ("USERPROFILE", @"C:\Users\testuser")));
+
+        var refreshed = startup.Refresh(
+            Expandable(("Path", @"%SystemRoot%\system32")),
+            Literal(("Path", @"%USERPROFILE%\bin")));
+
+        Assert.Equal([System32, @"%USERPROFILE%\bin"], refreshed.PathDirectories);
+    }
+
+    /// <summary>
+    /// A <c>%NAME%</c> stands for the resolved value of that name, so naming a literal one does not
+    /// resolve it by the back door. The <c>REG_SZ</c> value below reaches its tool with
+    /// <c>%LOCALAPPDATA%</c> still in it, and so must the <c>REG_EXPAND_SZ</c> value written in
+    /// terms of it — otherwise a provider is handed a real directory the tool never writes to, and
+    /// measures and offers to empty it (§5.2).
+    /// </summary>
+    [Fact]
+    public void AnExpandableValueNamingALiteralOneDoesNotResolveWhatTheLiteralHeld()
+    {
+        var startup = Started(process: Variables(("LOCALAPPDATA", @"C:\Users\testuser\AppData\Local")));
+
+        var refreshed = startup.Refresh(
+            Expandable(("PLAYWRIGHT_BROWSERS_PATH", @"%CACHE_ROOT%\ms-playwright")),
+            Literal(("CACHE_ROOT", @"%LOCALAPPDATA%\caches")));
+
+        Assert.Equal(@"%LOCALAPPDATA%\caches\ms-playwright", refreshed.Value("PLAYWRIGHT_BROWSERS_PATH"));
+    }
+
+    /// <summary>
+    /// The other half of that rule: naming an expandable value gives its resolved form, however
+    /// many steps the chain takes. A model that only resolved a value's own text would leave
+    /// <c>%ProgramFiles%</c> in the answer and put a directory no tool uses on the search list.
+    /// </summary>
+    [Fact]
+    public void AChainOfExpandableValuesResolvesWhole()
+    {
+        var startup = Started(process: Variables(("ProgramFiles", @"C:\Program Files")));
+
+        var refreshed = startup.Refresh(
+            Expandable(("CUDA_PATH", @"%ProgramFiles%\NVIDIA"), ("Path", @"%CUDA_PATH%\bin")),
+            Expandable());
+
+        Assert.Equal([@"C:\Program Files\NVIDIA\bin"], refreshed.PathDirectories);
+    }
+
+    /// <summary>
+    /// <c>%Path%</c> written inside another variable stands for the whole composed search, both
+    /// halves of it. Composing the two halves for <c>PATH</c> alone and leaving the lookup holding
+    /// the user's half would silently drop the machine's directories from every variable derived
+    /// from it — and mark that variable a process override for the life of the run, because it
+    /// would no longer match the block Windows built.
+    /// </summary>
+    [Fact]
+    public void AVariableWrittenInTermsOfPathGetsBothHalvesOfIt()
+    {
+        // Nothing in the start-up block: a name the launching process already had would be a
+        // process override, and an override keeps its own value rather than following the registry.
+        var startup = Started();
+
+        var refreshed = startup.Refresh(
+            Expandable(("Path", System32)),
+            Expandable(("Path", @"C:\Users\testuser\bin"), ("TOOLKIT", @"%Path%;D:\extra")));
+
+        Assert.Equal($@"{System32};C:\Users\testuser\bin;D:\extra", refreshed.Value("TOOLKIT"));
     }
 }

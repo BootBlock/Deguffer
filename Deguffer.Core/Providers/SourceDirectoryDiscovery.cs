@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -16,10 +17,17 @@ namespace Deguffer.Core.Providers;
 /// that says nothing about it describes a search it did not perform. Always empty on an indexed
 /// run, which reads the volume table rather than enumerating.
 /// </param>
+/// <param name="RefusedRoots">
+/// Approved roots no pass looked inside at all, because each is on a volume whose contents are not
+/// on this machine and the user has not said to search one anyway. Reported for the reason
+/// <paramref name="UnreadableDirectories"/> is, and with more force: this is Deguffer's own decision
+/// rather than Windows', and the whole of a folder the user chose went unsearched.
+/// </param>
 public sealed record SourceDiscovery(
     IReadOnlyList<string> Candidates,
     bool UsedIndex,
-    IReadOnlyList<string> UnreadableDirectories)
+    IReadOnlyList<string> UnreadableDirectories,
+    IReadOnlyList<string> RefusedRoots)
 {
     /// <summary>The candidates called any of <paramref name="names"/>, for the provider that owns them.</summary>
     public IReadOnlyList<string> Named(IReadOnlyList<string> names) =>
@@ -43,16 +51,23 @@ public sealed record SourceDiscovery(
 public sealed class SourceDirectoryDiscovery
 {
     private readonly IDirectoryScanner _scanner;
+    private readonly IVolumeInventory _volumes;
     private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
-    private (IReadOnlyList<string> Roots, SourceDiscovery Result)? _memo;
+    private (IReadOnlyList<SourceRoot> Roots, SourceDiscovery Result)? _memo;
 
-    public SourceDirectoryDiscovery(IDirectoryScanner scanner)
+    /// <param name="volumes">
+    /// The machine's volumes, so that <see cref="Searches"/> can tell a root on a local disk from one
+    /// on a cloud client's mount. The shared inventory by default, whose list a planning pass drops
+    /// at its start like every other cached view of the machine.
+    /// </param>
+    public SourceDirectoryDiscovery(IDirectoryScanner scanner, IVolumeInventory? volumes = null)
     {
         ArgumentNullException.ThrowIfNull(scanner);
 
         _scanner = scanner;
+        _volumes = volumes ?? VolumeInventory.Current;
     }
 
     /// <summary>
@@ -100,7 +115,7 @@ public sealed class SourceDirectoryDiscovery
     }
 
     /// <summary>Every directory of a sought name inside <paramref name="roots"/>.</summary>
-    public async Task<SourceDiscovery> FindAsync(IReadOnlyList<string> roots, CancellationToken ct = default)
+    public async Task<SourceDiscovery> FindAsync(IReadOnlyList<SourceRoot> roots, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(roots);
 
@@ -120,13 +135,22 @@ public sealed class SourceDirectoryDiscovery
 
         var candidates = new List<string>();
         var unreadable = new List<string>();
+        var refused = new List<string>();
         var usedIndex = true;
 
         foreach (var root in roots)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (!LongPath.DirectoryExists(root))
+            // First, and ahead of the existence check: this is the gate that stops a download, and a
+            // gate behind another check is one an edit to that check can switch off.
+            if (!Searches(root))
+            {
+                refused.Add(root.Path);
+                continue;
+            }
+
+            if (!LongPath.DirectoryExists(root.Path))
             {
                 // An approved root on a drive that is not currently attached. Finding nothing is
                 // the right answer; it is not an error and not a reason to drop the approval.
@@ -137,7 +161,7 @@ public sealed class SourceDirectoryDiscovery
 
             foreach (var name in names)
             {
-                var indexed = await _scanner.TryFindDirectoriesNamedAsync(name, root, ct).ConfigureAwait(false);
+                var indexed = await _scanner.TryFindDirectoriesNamedAsync(name, root.Path, ct).ConfigureAwait(false);
 
                 if (indexed is null)
                 {
@@ -155,12 +179,12 @@ public sealed class SourceDirectoryDiscovery
                 // filter cannot restore is the walk's reach, which is a property of the token —
                 // SourceTreeBoundary says why, and says why that is reach rather than licence.
                 candidates.AddRange(
-                    indexed.Where(path => SourceTreeBoundary.IsInsideTheSearch(path, root, names)));
+                    indexed.Where(path => SourceTreeBoundary.IsInsideTheSearch(path, root.Path, names)));
             }
 
             if (walked)
             {
-                Walk(names, root, candidates, unreadable, ct);
+                Walk(names, root.Path, candidates, unreadable, ct);
             }
         }
 
@@ -169,11 +193,34 @@ public sealed class SourceDirectoryDiscovery
         var result = new SourceDiscovery(
             [.. candidates.Distinct(StringComparer.OrdinalIgnoreCase)],
             usedIndex,
-            [.. unreadable.Distinct(StringComparer.OrdinalIgnoreCase)]);
+            [.. unreadable.Distinct(StringComparer.OrdinalIgnoreCase)],
+            [.. refused.Distinct(StringComparer.OrdinalIgnoreCase)]);
 
         Remember(roots, result);
 
         return result;
+    }
+
+    /// <summary>
+    /// Whether a pass would look inside <paramref name="root"/> at all.
+    ///
+    /// <para>False only for a root on a volume whose contents are not on this machine that the user
+    /// has not approved for it. Enumerating such a volume downloads the user's files instead of
+    /// measuring them, and no per-entry test can tell it from a disk, so the location is what has to
+    /// be refused — <see cref="LocalVolume.StoresContentRemotely"/> says how one is recognised and
+    /// what it does not recognise. A volume the inventory reports nothing about is searched, as every
+    /// volume was before that reading existed: refusing on no reading would be a guess.</para>
+    ///
+    /// <para>Public for a caller that reached a root some other way and has to apply the same
+    /// refusal, on the reasoning <see cref="WithinTheSearch"/> gives — two routes over the same roots
+    /// that disagree about which of them they may read are two different rules.</para>
+    /// </summary>
+    public bool Searches(SourceRoot root)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+
+        return root.RemoteStorageApproved
+            || HostVolume.For(_volumes, root.Path) is not { StoresContentRemotely: true };
     }
 
     /// <summary>
@@ -199,6 +246,12 @@ public sealed class SourceDirectoryDiscovery
     /// <summary>
     /// Forget the last pass, so a source root added in Settings is picked up on the next preview.
     /// Reached through each provider's own <c>InvalidateCaches</c>.
+    ///
+    /// <para>The volume list goes with it. <see cref="Searches"/> reads a snapshot, and a cloud client
+    /// that mounted itself while the app was open would be missing from a stale one — which is the
+    /// direction that ends in a download rather than in a missed folder. Every provider invalidates
+    /// before any of them plans, so the several calls this instance receives cost one read of the
+    /// volume table rather than one each.</para>
     /// </summary>
     public void Invalidate()
     {
@@ -206,6 +259,8 @@ public sealed class SourceDirectoryDiscovery
         {
             _memo = null;
         }
+
+        _volumes.Invalidate();
     }
 
     /// <summary>
@@ -215,12 +270,17 @@ public sealed class SourceDirectoryDiscovery
     /// planning pass, and the answer costs a walk of the developer's whole disk. Keyed on the roots
     /// rather than assumed constant: two callers with different roots must never be handed each
     /// other's answer, and that mistake would show up as a plan targeting a folder nobody approved.
+    ///
+    /// <para>Compared by value, which for a <see cref="SourceRoot"/> is the folder and the answer the
+    /// user gave about its volume together. A comparison that ignored the second would hand a caller
+    /// that has the approval the answer built for one that has not — an empty result where the plan
+    /// should hold every project in the folder, or the reverse.</para>
     /// </summary>
-    private SourceDiscovery? Remembered(IReadOnlyList<string> roots)
+    private SourceDiscovery? Remembered(IReadOnlyList<SourceRoot> roots)
     {
         lock (_gate)
         {
-            return _memo is { } memo && memo.Roots.SequenceEqual(roots, StringComparer.OrdinalIgnoreCase)
+            return _memo is { } memo && memo.Roots.SequenceEqual(roots)
                 ? memo.Result
                 : null;
         }
@@ -234,7 +294,7 @@ public sealed class SourceDirectoryDiscovery
         }
     }
 
-    private void Remember(IReadOnlyList<string> roots, SourceDiscovery result)
+    private void Remember(IReadOnlyList<SourceRoot> roots, SourceDiscovery result)
     {
         lock (_gate)
         {
