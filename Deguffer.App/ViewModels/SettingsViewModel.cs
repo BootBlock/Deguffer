@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
@@ -54,12 +55,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         // An unreadable stored list is already stated on the page, and is not a write that failed.
         SaveFailed = !_keeps.Release(item.ProviderId, item.Item.Key) && !_keeps.StoredListUnreadable;
 
-        KeptItems.Clear();
-
-        foreach (var kept in InDisplayOrder(_keeps.Current))
-        {
-            KeptItems.Add(kept);
-        }
+        // Brought up to date rather than emptied and filled: releasing one item costs the list one
+        // removal, and the reader's place in the rest of it is where they left it.
+        LiveList.Show(
+            KeptItems, [.. InDisplayOrder(_keeps.Current)], kept => (kept.ProviderId, kept.Item.Key));
 
         OnPropertyChanged(nameof(HasNoKeptItems));
     }
@@ -102,12 +101,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         SaveFailed = !change();
 
-        SourceRoots.Clear();
-
-        foreach (var root in _sourceRoots.Current)
-        {
-            SourceRoots.Add(root);
-        }
+        LiveList.Show(SourceRoots, [.. _sourceRoots.Current], root => root);
 
         OnPropertyChanged(nameof(HasNoSourceRoots));
     }

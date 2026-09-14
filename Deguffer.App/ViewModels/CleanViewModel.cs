@@ -6,6 +6,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Deguffer.App.ViewModels;
@@ -741,15 +742,16 @@ public sealed partial class CleanViewModel : ObservableObject
         RunStatement = outcome.Statement;
         RunVerificationFailed = outcome.VerificationFailed;
 
-        RunVerificationNotes.Clear();
-
-        foreach (var check in results
-            .Select(r => r.Verification)
-            .OfType<VerificationResult>()
-            .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside)))
-        {
-            RunVerificationNotes.Add(check);
-        }
+        // Written over rather than emptied and filled, so a second run that meets the same checks
+        // leaves the panel alone instead of taking it down and putting it back up.
+        LiveList.Rewrite(
+            RunVerificationNotes,
+            [
+                .. results
+                    .Select(r => r.Verification)
+                    .OfType<VerificationResult>()
+                    .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside)),
+            ]);
 
         OnPropertyChanged(nameof(HasRunVerificationNotes));
         OnPropertyChanged(nameof(HasRunResult));

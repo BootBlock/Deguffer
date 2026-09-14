@@ -45,6 +45,7 @@ public sealed partial class ExploreRow : ObservableObject
 
         _known = guide.Describe(tree.TryPathOf(node));
 
+        Key = KeyOf(tree, node);
         Node = node;
         Name = tree.NameOf(node);
         IsDirectory = tree.IsDirectory(node);
@@ -56,6 +57,9 @@ public sealed partial class ExploreRow : ObservableObject
         AgeLabel = ExploreRowText.Age(tree, node, now);
         DatesLabel = ExploreRowText.Dates(tree, node);
     }
+
+    /// <summary>What this row stands for, whichever tree of one walk is on screen.</summary>
+    public ExploreRowKey Key { get; }
 
     /// <summary>Which node in the tree this stands for.</summary>
     public int Node { get; }
@@ -142,7 +146,8 @@ public sealed partial class ExploreRow : ObservableObject
         + (IsApproximate ? ", and some of this could not be read" : string.Empty);
 
     /// <summary>
-    /// Whether this row still stands for <paramref name="node"/> of <paramref name="tree"/>.
+    /// What <paramref name="node"/> of <paramref name="tree"/> is, for matching it against the rows
+    /// already on screen.
     ///
     /// <para>The node number alone is not enough. Through the snapshots of one walk it is, because
     /// they come from one builder whose lists only grow — but a rescan numbers its nodes afresh, and
@@ -151,11 +156,12 @@ public sealed partial class ExploreRow : ObservableObject
     /// page would not be standing on it, so a child of that parent with this number and this name is
     /// this entry.</para>
     /// </summary>
-    public bool Is(ExploreTree tree, int node) =>
-        Node == node
-        && IsDirectory == tree.IsDirectory(node)
-        && IsLink == tree.IsLink(node)
-        && string.Equals(Name, tree.NameOf(node), StringComparison.Ordinal);
+    public static ExploreRowKey KeyOf(ExploreTree tree, int node)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return new ExploreRowKey(node, tree.IsDirectory(node), tree.IsLink(node), tree.NameOf(node));
+    }
 
     /// <summary>
     /// Re-read everything a later tree can have changed. See the class summary for why this is not
@@ -175,6 +181,12 @@ public sealed partial class ExploreRow : ObservableObject
     private static double ShareOf(ExploreTree tree, int node, long parentTotal) =>
         parentTotal > 0 ? 100.0 * tree.SizeOf(node) / parentTotal : 0;
 }
+
+/// <summary>
+/// What a row is about, as against what a later tree can change about it. See
+/// <see cref="ExploreRow.KeyOf"/> for why the node number is not this on its own.
+/// </summary>
+public readonly record struct ExploreRowKey(int Node, bool IsDirectory, bool IsLink, string Name);
 
 /// <summary>One step of the path back to the root.</summary>
 public sealed record ExploreCrumb(int Node, string Name);

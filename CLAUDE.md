@@ -57,9 +57,11 @@ provider holds its own rules and no orchestration.
 
 - Enumerate with `EnumerateX`, never `GetX`. Never materialise a tree to count it.
 - Bound parallelism with `MaxDegreeOfParallelism`. Never fan out with unbounded `Task.Run`.
-- Cache anything derived from a subprocess or the filesystem for the life of the operation.
+- Cache anything derived from a subprocess or the filesystem for the operation's life.
 - Pass a `CancellationToken` down every async path.
 - Use `IReadOnlyList<T>` for anything consumed twice.
+- Update a bound list in place, never `Clear` and refill. Memory note: *A live list is updated
+  in place, never rebuilt*.
 
 ## G5: do not recreate objects unnecessarily
 
@@ -69,8 +71,8 @@ what planning measured. A record is a value: never clone one to change what shou
 
 ## G7: use sub-agents where they apply
 
-Send fan-out work (gate audits, sweeps across providers, API research) to parallel sub-agents, with
-the context they need. Keep the synthesis and the final judgement in the main thread.
+Send fan-out work (gate audits, provider sweeps, API research) to parallel sub-agents with the
+context they need. Keep the synthesis and the final judgement in the main thread.
 
 ## G8: what "verified" means
 
@@ -147,15 +149,15 @@ Code, comments, commit messages, branch names and history are world-readable.
 ## Actioning a GitHub issue
 
 A Deguffer issue URL, `#<id>` or "issue <id>" with no other instruction asks you to action it end to
-end, reviewed with `/auto-review high`, then landed and closed with no pause for approval. A message
+end, reviewed with `/auto-review high`, landed and closed with no pause for approval. A message
 that only wants discussion gets an answer. Memory notes: *Actioning a Deguffer issue end to end*,
 *Close a Deguffer issue once its work has landed*.
 
 Whenever you open, action, comment on or close an issue or pull request, reconcile its whole label
 set. Memory note: *Reconcile a Deguffer issue's labels*.
 
-Everything you post or edit on GitHub ends with this, worded `actioned`, `opened` or `updated`, with
-`pull request` for a PR. If in doubt, include it. A commit message carries no attribution at all.
+Everything you post or edit on GitHub ends with this, worded `actioned`, `opened` or `updated`, and
+`pull request` for a PR. If in doubt, include it. A commit message carries none.
 
 ```markdown
 ---
@@ -171,8 +173,8 @@ Memory note: *Deguffer plan docs carry a status banner*.
 ## Keep this file small
 
 This file loads into every session. It holds only rules that apply to every change, each in a few
-lines. Put detail for one kind of change (a recipe, a cause, a table, an incident) in a memory note
-that a short rule names. Shorten or replace a rule before you add one, and never append an
-explanation. [AGENTS.md](AGENTS.md) stays a pointer to this file. `AgentGuideBudgetTests` fails when
-this file passes 10,000 characters, a section passes 1,200, or `AGENTS.md` passes 600. Never raise a
-budget without asking the maintainer.
+lines. Put detail for one kind of change in a memory note that a short rule names. Shorten or
+replace a rule before you add one, and never append an explanation.
+[AGENTS.md](AGENTS.md) stays a pointer to this file. `AgentGuideBudgetTests` fails past 10,000
+characters here, 1,200 in a section, or 600 in `AGENTS.md`. Never raise a budget without asking the
+maintainer.
