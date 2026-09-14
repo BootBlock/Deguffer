@@ -27,16 +27,6 @@ internal sealed class EnvironmentBlock
     private const string DefaultPathExtensions = ".COM;.EXE;.BAT;.CMD";
 
     /// <summary>
-    /// How many times a value is expanded before the result is taken as final.
-    ///
-    /// <para>Windows expands a <c>REG_EXPAND_SZ</c> value exactly once, so one pass resolves every
-    /// ordinary entry. A second and third resolve a variable written in terms of another one —
-    /// <c>%CUDA_PATH%\bin</c> where <c>CUDA_PATH</c> is itself <c>%ProgramFiles%\NVIDIA</c> — and
-    /// the bound is what stops <c>PATH=%PATH%;…</c> from expanding forever.</para>
-    /// </summary>
-    private const int ExpansionPasses = 4;
-
-    /// <summary>
     /// The variable Windows appends rather than replaces, which is why a user <c>PATH</c> extends
     /// the system one instead of hiding it.
     ///
@@ -109,13 +99,14 @@ internal sealed class EnvironmentBlock
     /// </summary>
     /// <param name="process">This process's environment, as Windows built it at start-up.</param>
     /// <param name="machine">
-    /// <c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c>, unexpanded.
+    /// <c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c>, unexpanded and
+    /// with each value's kind.
     /// </param>
-    /// <param name="user"><c>HKCU\Environment</c>, unexpanded.</param>
+    /// <param name="user"><c>HKCU\Environment</c>, read the same way.</param>
     public static EnvironmentBlock Startup(
         IReadOnlyDictionary<string, string> process,
-        IReadOnlyDictionary<string, string> machine,
-        IReadOnlyDictionary<string, string> user)
+        IReadOnlyDictionary<string, EnvironmentValue> machine,
+        IReadOnlyDictionary<string, EnvironmentValue> user)
     {
         ArgumentNullException.ThrowIfNull(process);
         ArgumentNullException.ThrowIfNull(machine);
@@ -165,8 +156,8 @@ internal sealed class EnvironmentBlock
     /// refusing (§7.1).</para>
     /// </summary>
     public EnvironmentBlock Refresh(
-        IReadOnlyDictionary<string, string> machine,
-        IReadOnlyDictionary<string, string> user)
+        IReadOnlyDictionary<string, EnvironmentValue> machine,
+        IReadOnlyDictionary<string, EnvironmentValue> user)
     {
         ArgumentNullException.ThrowIfNull(machine);
         ArgumentNullException.ThrowIfNull(user);
@@ -216,8 +207,7 @@ internal sealed class EnvironmentBlock
     public string? Value(string name) => Value(_variables, name);
 
     /// <summary>
-    /// The machine and user values, joined as Windows joins them and with every <c>%NAME%</c>
-    /// resolved.
+    /// The machine and user values, each resolved by its own kind and joined as Windows joins them.
     /// </summary>
     /// <param name="fallback">
     /// Where a name the registry does not hold is looked up. It holds the logon-time variables —
@@ -230,55 +220,127 @@ internal sealed class EnvironmentBlock
     /// reports rather than diverging from it.
     /// </param>
     private static Dictionary<string, string> Compose(
-        IReadOnlyDictionary<string, string> machine,
-        IReadOnlyDictionary<string, string> user,
+        IReadOnlyDictionary<string, EnvironmentValue> machine,
+        IReadOnlyDictionary<string, EnvironmentValue> user,
         IReadOnlyDictionary<string, string> fallback,
         IReadOnlySet<string> overridden)
     {
-        var raw = new Dictionary<string, string>(machine, StringComparer.OrdinalIgnoreCase);
+        var raw = new Dictionary<string, EnvironmentValue>(machine, StringComparer.OrdinalIgnoreCase);
 
         foreach (var (name, value) in user)
         {
-            raw[name] = Appended.Contains(name) && Value(machine, name) is { Length: > 0 } shared
-                ? $"{shared.TrimEnd(Path.PathSeparator)}{Path.PathSeparator}{value}"
-                : value;
+            raw[name] = value;
         }
 
-        // Expanded against the composed set first, so a PATH entry written as %ChocolateyInstall%\bin
-        // follows a change made to ChocolateyInstall in the same visit rather than the value this
-        // process was started with.
-        return raw.ToDictionary(
-            pair => pair.Key,
-            pair => Expand(pair.Value, raw, fallback, overridden),
-            StringComparer.OrdinalIgnoreCase);
-    }
+        var composed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var resolving = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    private static string Expand(
-        string value,
-        IReadOnlyDictionary<string, string> raw,
-        IReadOnlyDictionary<string, string> fallback,
-        IReadOnlySet<string> overridden)
-    {
-        for (var pass = 0; pass < ExpansionPasses && value.Contains('%'); pass++)
+        // An appended variable is two registry values with two kinds, so each is resolved on its own
+        // before they are joined. Joining the written forms first and resolving the result would
+        // give a literal user PATH the machine value's resolution, which is the one thing the kinds
+        // are carried this far to prevent.
+        //
+        // The joined list goes back into `raw` as a finished value rather than only into `composed`,
+        // because `raw` is what a %Path% written inside some other variable is resolved against: a
+        // list left half-composed there would hand that variable the user's directories alone.
+        foreach (var name in Appended)
         {
-            var expanded = ExpandOnce(value, raw, fallback, overridden);
-
-            if (string.Equals(expanded, value, StringComparison.Ordinal))
+            if (!machine.TryGetValue(name, out var shared) || shared.Text.Length == 0 ||
+                !user.TryGetValue(name, out var personal))
             {
-                return value;
+                continue;
             }
 
-            value = expanded;
+            // Marked in progress across both halves, so a half that names the variable it is half of
+            // terminates on the same rule any other self-reference does.
+            resolving.Add(name);
+
+            var head = Resolve(shared, raw, fallback, overridden, composed, resolving)
+                .TrimEnd(Path.PathSeparator);
+            var tail = Resolve(personal, raw, fallback, overridden, composed, resolving);
+
+            resolving.Remove(name);
+
+            raw[name] = new EnvironmentValue($"{head}{Path.PathSeparator}{tail}", Expandable: false);
         }
 
-        return value;
+        foreach (var name in raw.Keys)
+        {
+            Resolve(name, raw, fallback, overridden, composed, resolving);
+        }
+
+        return composed;
     }
 
-    private static string ExpandOnce(
-        string value,
-        IReadOnlyDictionary<string, string> raw,
+    /// <summary>
+    /// A registry value as a program would receive it: resolved where Windows would resolve it, and
+    /// left exactly as written where Windows would not.
+    /// </summary>
+    private static string Resolve(
+        EnvironmentValue value,
+        IReadOnlyDictionary<string, EnvironmentValue> raw,
         IReadOnlyDictionary<string, string> fallback,
-        IReadOnlySet<string> overridden)
+        IReadOnlySet<string> overridden,
+        Dictionary<string, string> composed,
+        HashSet<string> resolving) =>
+        value.Expandable
+            ? Substitute(value.Text, raw, fallback, overridden, composed, resolving)
+            : value.Text;
+
+    /// <summary>
+    /// One named variable, resolved once and remembered.
+    ///
+    /// <para><b>A <c>%NAME%</c> stands for the <em>resolved</em> value of that name, never its
+    /// written form.</b> That is what Windows substitutes, and it is the whole point of carrying the
+    /// kinds this far: a <c>REG_EXPAND_SZ</c> value written as <c>%CACHE_ROOT%\browsers</c>, where
+    /// <c>CACHE_ROOT</c> is a <c>REG_SZ</c> holding <c>%LOCALAPPDATA%\caches</c>, reaches its tool
+    /// with <c>%LOCALAPPDATA%</c> still in it. Substituting the written form and resolving the
+    /// result again would hand Deguffer a real directory the tool never writes to, then measure and
+    /// offer to empty it (§5.2).</para>
+    ///
+    /// <para>Resolving on demand rather than in registry order is what lets a chain of expandable
+    /// values — <c>%CUDA_PATH%\bin</c> where <c>CUDA_PATH</c> is itself
+    /// <c>%ProgramFiles%\NVIDIA</c> — come out whole however the two are enumerated.</para>
+    /// </summary>
+    /// <param name="composed">What has been resolved so far, and where the answer is kept.</param>
+    /// <param name="resolving">
+    /// The names being resolved further up this chain. A value that names itself, directly or
+    /// through another, stands for its own written form rather than recurring forever —
+    /// <c>PATH=%PATH%;…</c> is a real thing to find in a registry key, written by a script that
+    /// meant it to be resolved at the moment it was set.
+    /// </param>
+    private static string Resolve(
+        string name,
+        IReadOnlyDictionary<string, EnvironmentValue> raw,
+        IReadOnlyDictionary<string, string> fallback,
+        IReadOnlySet<string> overridden,
+        Dictionary<string, string> composed,
+        HashSet<string> resolving)
+    {
+        if (composed.TryGetValue(name, out var already))
+        {
+            return already;
+        }
+
+        if (!resolving.Add(name))
+        {
+            return raw[name].Text;
+        }
+
+        var value = Resolve(raw[name], raw, fallback, overridden, composed, resolving);
+
+        resolving.Remove(name);
+
+        return composed[name] = value;
+    }
+
+    private static string Substitute(
+        string value,
+        IReadOnlyDictionary<string, EnvironmentValue> raw,
+        IReadOnlyDictionary<string, string> fallback,
+        IReadOnlySet<string> overridden,
+        Dictionary<string, string> composed,
+        HashSet<string> resolving)
     {
         var builder = new StringBuilder(value.Length);
         var index = 0;
@@ -297,9 +359,10 @@ internal sealed class EnvironmentBlock
             builder.Append(value, index, open - index);
 
             var name = value[(open + 1)..close];
-            var resolved = name.Length == 0
-                ? null
-                : overridden.Contains(name) ? Value(fallback, name) : Value(raw, name) ?? Value(fallback, name);
+            var resolved = name.Length == 0 ? null
+                : overridden.Contains(name) ? Value(fallback, name)
+                : raw.ContainsKey(name) ? Resolve(name, raw, fallback, overridden, composed, resolving)
+                : Value(fallback, name);
 
             // A name nothing resolves stays exactly as it was written, which is what
             // ExpandEnvironmentStrings does: dropping it would turn an unresolved entry into a

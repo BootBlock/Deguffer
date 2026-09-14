@@ -153,8 +153,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public static readonly UserEnvironment Current = new();
 
-    private readonly Func<IReadOnlyDictionary<string, string>> _readMachine;
-    private readonly Func<IReadOnlyDictionary<string, string>> _readUser;
+    private readonly Func<IReadOnlyDictionary<string, EnvironmentValue>> _readMachine;
+    private readonly Func<IReadOnlyDictionary<string, EnvironmentValue>> _readUser;
 
     /// <summary>
     /// The environment this process was given, and the one every refresh is composed over. Kept
@@ -180,9 +180,9 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     /// <param name="readMachine">
     /// Where <c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c> is read from,
-    /// unexpanded. Injected so a test can change the machine between two passes, which is the whole
-    /// of what this class does that is worth asserting and is not something to do to a real
-    /// machine (G8).
+    /// unexpanded and with each value's kind. Injected so a test can change the machine between two
+    /// passes, which is the whole of what this class does that is worth asserting and is not
+    /// something to do to a real machine (G8).
     /// </param>
     /// <param name="readUser"><c>HKCU\Environment</c>, read the same way.</param>
     /// <param name="startup">
@@ -191,8 +191,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// <see cref="ProcessStartup"/>.
     /// </param>
     internal UserEnvironment(
-        Func<IReadOnlyDictionary<string, string>> readMachine,
-        Func<IReadOnlyDictionary<string, string>> readUser,
+        Func<IReadOnlyDictionary<string, EnvironmentValue>> readMachine,
+        Func<IReadOnlyDictionary<string, EnvironmentValue>> readUser,
         EnvironmentBlock startup)
     {
         _readMachine = readMachine;
@@ -321,27 +321,41 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// <summary><c>HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment</c>.</summary>
     private const string MachineEnvironmentKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
 
-    internal static IReadOnlyDictionary<string, string> ReadMachineEnvironment() =>
+    internal static IReadOnlyDictionary<string, EnvironmentValue> ReadMachineEnvironment() =>
         ReadEnvironmentKey(Registry.LocalMachine, MachineEnvironmentKey);
 
-    internal static IReadOnlyDictionary<string, string> ReadUserEnvironment() =>
+    internal static IReadOnlyDictionary<string, EnvironmentValue> ReadUserEnvironment() =>
         ReadEnvironmentKey(Registry.CurrentUser, "Environment");
 
     /// <summary>
-    /// Every string value under one of the two environment keys, left exactly as it was written.
+    /// Every string value under one of the two environment keys, left exactly as it was written and
+    /// carrying the kind that says whether Windows would expand it.
     ///
     /// <para><c>DoNotExpandEnvironmentNames</c> is the point of reading it here at all: without it
     /// the framework resolves a <c>REG_EXPAND_SZ</c> value's <c>%NAME%</c> against
     /// <em>this process's</em> environment, which is the stale block the refresh exists to get away
     /// from. <see cref="EnvironmentBlock"/> expands them against the composed set instead.</para>
     ///
+    /// <para><b>The kind comes with the value, because that option suppresses the one thing that
+    /// tells the two apart.</b> Windows expands a <c>REG_EXPAND_SZ</c> value and passes a
+    /// <c>REG_SZ</c> one to a program as written, so reading both unexpanded and then expanding
+    /// both puts Deguffer and the tool on different directories. See
+    /// <see cref="EnvironmentValue"/>.</para>
+    ///
     /// <para>An unreadable key answers with nothing rather than failing. The machine key is
     /// world-readable on an ordinary Windows install, so this is the locked-down-machine case, and
     /// answering with nothing leaves the process's own environment standing.</para>
+    ///
+    /// <para>Reachable by the suite, rather than private, because the kind is decided here and
+    /// nowhere else: <see cref="EnvironmentBlock"/> can be handed either kind directly, but that
+    /// a <c>REG_SZ</c> value is <em>read</em> as one is only assertable against a real key, and
+    /// the two keys this names are not keys a suite may write to (G8).</para>
     /// </summary>
-    private static IReadOnlyDictionary<string, string> ReadEnvironmentKey(RegistryKey hive, string path)
+    /// <param name="hive">The root the key is opened under.</param>
+    /// <param name="path">The key's path within that hive.</param>
+    internal static IReadOnlyDictionary<string, EnvironmentValue> ReadEnvironmentKey(RegistryKey hive, string path)
     {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var values = new Dictionary<string, EnvironmentValue>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -356,11 +370,13 @@ public sealed partial class UserEnvironment : IUserEnvironment
             {
                 // The key's unnamed default value names no variable, and anything that is not a
                 // string is not an environment value.
-                if (name.Length > 0 &&
-                    key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is string value)
+                if (name.Length == 0 ||
+                    key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string value)
                 {
-                    values[name] = value;
+                    continue;
                 }
+
+                values[name] = new EnvironmentValue(value, key.GetValueKind(name) is RegistryValueKind.ExpandString);
             }
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
