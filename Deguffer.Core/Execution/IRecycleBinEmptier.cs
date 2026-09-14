@@ -31,6 +31,17 @@ public interface IRecycleBinEmptier
     /// assertion about what crosses it unfalsifiable.
     /// </param>
     RecycleBinEmptyOutcome Empty(string volumeRoot);
+
+    /// <summary>
+    /// Whether this route can empty the bin on <paramref name="volumeRoot"/>, asked before a plan
+    /// commits to it.
+    ///
+    /// <para>Here rather than only inside <see cref="Empty"/> because the answer decides a
+    /// <em>plan</em>: <c>RecycleBinProvider</c> chooses between this route and removing the files
+    /// itself, and a provider that guessed would offer a step measured, shown to the user and then
+    /// refused at execution. The same object answers both questions, so the two cannot disagree.</para>
+    /// </summary>
+    bool Serves(string volumeRoot);
 }
 
 /// <summary>
@@ -78,20 +89,30 @@ public sealed class ShellRecycleBinEmptier : IRecycleBinEmptier
     {
     }
 
+    /// <summary>
+    /// A drive root and nothing else. The scope of <c>SHEmptyRecycleBin</c> over one is what was
+    /// measured, and its scope over a volume mounted at a folder is not stated anywhere, so such a
+    /// volume is served by the direct route instead.
+    ///
+    /// <para>Fully qualified as well as a root, because <c>C:</c> is its own root and is
+    /// drive-<em>relative</em> — it means the current directory on C:, which is a different path on
+    /// every process and not one anybody named. Only the trailing separator distinguishes it from
+    /// the root itself.</para>
+    /// </summary>
+    public bool Serves(string volumeRoot) =>
+        !string.IsNullOrWhiteSpace(volumeRoot)
+        && Path.IsPathFullyQualified(volumeRoot)
+        && string.Equals(Path.GetPathRoot(volumeRoot), volumeRoot, StringComparison.OrdinalIgnoreCase);
+
     public RecycleBinEmptyOutcome Empty(string volumeRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(volumeRoot);
 
-        // Fails closed on anything that is not a volume root, because the scope of
-        // SHEmptyRecycleBin over one is what was measured and the scope over anything else is not
-        // stated anywhere. A caller that has derived the wrong path — a bin that is not laid out
-        // where the derivation assumes, a fixture standing a synthetic volume inside a folder —
-        // gets a refusal it can read, rather than a call whose reach nobody established.
-        // Fully qualified as well as a root, because "C:" is its own root and is drive-*relative* —
-        // it means the current directory on C:, which is a different path on every process and not
-        // one anybody named. Only the trailing separator distinguishes it from the root itself.
-        if (!Path.IsPathFullyQualified(volumeRoot)
-            || !string.Equals(Path.GetPathRoot(volumeRoot), volumeRoot, StringComparison.OrdinalIgnoreCase))
+        // Fails closed on anything this route does not serve. A caller that has derived the wrong
+        // path — a bin that is not laid out where the derivation assumes, a fixture standing a
+        // synthetic volume inside a folder — gets a refusal it can read, rather than a call whose
+        // reach nobody established.
+        if (!Serves(volumeRoot))
         {
             return new RecycleBinEmptyOutcome(
                 Emptied: false,

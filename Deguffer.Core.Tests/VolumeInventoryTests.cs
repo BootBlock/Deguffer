@@ -22,6 +22,100 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// Every mount point is a rooted path ending in a separator, which is the form
+    /// <see cref="HostVolume.For"/> compares against and the form <c>Path.Combine</c> builds a bin
+    /// path from. <see cref="LocalVolume.RootPath"/> is the first of them.
+    ///
+    /// <para>Makes no claim that any volume here has more than one mount point: whether the machine
+    /// running the suite has a folder-mounted volume is not a property of this code. What the rule
+    /// does for a volume that has several is asserted through
+    /// <see cref="Fakes.FakeVolumeInventory"/> instead.</para>
+    /// </summary>
+    [Fact]
+    public void ReportsEveryPathEachVolumeIsMountedAt()
+    {
+        var volumes = VolumeInventory.Current.Volumes;
+
+        Assert.NotEmpty(volumes);
+
+        Assert.All(volumes, v =>
+        {
+            var mountPoints = v.MountPoints.ToList();
+
+            Assert.Equal(v.RootPath, mountPoints[0]);
+
+            Assert.All(mountPoints, mountPoint =>
+            {
+                Assert.True(Path.IsPathRooted(mountPoint), mountPoint);
+                Assert.True(Path.EndsInDirectorySeparator(mountPoint), mountPoint);
+            });
+        });
+    }
+
+    /// <summary>
+    /// One entry per volume. The list is built from the volume enumeration and then topped up with
+    /// the drive letters no volume claimed, so a letter counted twice would put the same volume in
+    /// front of the picker twice and plan its Recycle Bin twice.
+    ///
+    /// <para>This is what the top-up step is held to: every letter on an ordinary machine belongs to
+    /// a volume the enumeration already named, so adding them unconditionally fails here.</para>
+    /// </summary>
+    [Fact]
+    public void ReportsEachVolumeOnce()
+    {
+        var mountPoints = VolumeInventory.Current.Volumes.SelectMany(v => v.MountPoints).ToList();
+
+        Assert.Equal(
+            mountPoints.Count,
+            mountPoints.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    /// <summary>
+    /// A volume with a drive letter is rooted at that letter, whatever order Windows named its
+    /// mount points in. The root is what a plan targets and what the picker shows, so it is chosen
+    /// by a rule rather than taken from the answer.
+    ///
+    /// <para>Asked of the rule directly. Through <see cref="VolumeInventory.Volumes"/> it could only
+    /// be asked of a volume mounted in more than one place, and a test cannot mount one — so on this
+    /// machine the rule would never run and every ordering would pass. See the grant in
+    /// <c>Deguffer.Core.csproj</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Mount\", @"D:\")]
+    [InlineData(@"D:\", @"C:\Mount\")]
+    public void RootsAVolumeAtItsDriveLetterWhereItHasOne(string first, string second)
+    {
+        Assert.Equal(@"D:\", VolumeInventory.Ordered([first, second])[0]);
+    }
+
+    /// <summary>
+    /// With no letter to prefer, the shortest mount point is the root and the order is settled
+    /// between two of the same length. Two reads of one machine must choose the same root, or the
+    /// picker's selection and a plan's targets move underneath the reader.
+    /// </summary>
+    [Fact]
+    public void RootsALetterlessVolumeAtTheShortestMountPoint()
+    {
+        Assert.Equal(
+            [@"C:\Mnt\", @"C:\Mount\", @"D:\Mount\"],
+            VolumeInventory.Ordered([@"D:\Mount\", @"C:\Mount\", @"C:\Mnt\"]));
+    }
+
+    /// <summary>
+    /// Every mount point survives the ordering. Dropping one would hand the paths below it to the
+    /// volume its mount point sits on, which is the whole defect this rule was written for.
+    /// </summary>
+    [Fact]
+    public void KeepsEveryMountPointItWasGiven()
+    {
+        string[] mountPoints = [@"D:\Mount\", @"C:\Mount\", @"E:\"];
+
+        Assert.Equal(
+            mountPoints.OrderBy(m => m, StringComparer.Ordinal),
+            VolumeInventory.Ordered(mountPoints).OrderBy(m => m, StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// The space figures the Explore picker offers a drive by come from the same reading as the
     /// mount point. A ready fixed volume answers both, so a null here means the reading was never
     /// made.

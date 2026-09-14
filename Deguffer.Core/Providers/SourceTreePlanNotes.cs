@@ -47,8 +47,9 @@ internal static class SourceTreePlanNotes
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Leaving '{root}' alone: it is on cloud storage shown as a drive letter, so nothing "
-                + "inside it was searched. Reading it would download every file in it onto this "
+                $"Leaving '{root}' alone: it is on cloud storage that Windows shows as an ordinary "
+                + "drive or folder, so nothing inside it was searched. Reading it would download "
+                + "every file in it onto this "
                 + "computer. Add the folder again in Settings to search it anyway."));
         }
 

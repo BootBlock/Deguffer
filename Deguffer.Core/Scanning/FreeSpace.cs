@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
@@ -12,28 +14,32 @@ public static class FreeSpace
     /// supply the path from <c>IUserEnvironment</c> rather than this class reading the profile
     /// location itself — Core does not touch <c>Environment.GetFolderPath</c>.
     /// </summary>
-    public static long? ForPath(string path) => Measure(path, static drive => drive.AvailableFreeSpace);
+    public static long? ForPath(string path) => Measure(path, static space => space.Free);
 
     /// <summary>
     /// Total size of the volume holding <paramref name="path"/>, or null if unknown. Capacity does
     /// not change while the app is open, so the UI reads it once and keeps it — only the free
     /// figure is re-read after a run.
     /// </summary>
-    public static long? TotalForPath(string path) => Measure(path, static drive => drive.TotalSize);
+    public static long? TotalForPath(string path) => Measure(path, static space => space.Total);
 
-    private static long? Measure(string path, Func<DriveInfo, long> read)
+    /// <summary>
+    /// Asked of the volume the path is really on, which <see cref="Path.GetPathRoot(string)"/> and
+    /// <c>DriveInfo</c> cannot answer: both reduce a path to a drive letter, so a path on a volume
+    /// mounted at a folder would be measured against the disk that folder sits on. Windows resolves
+    /// the mount point itself, for a path that does not exist as readily as one that does.
+    ///
+    /// <para>Null where the volume would not say, which the UI shows as a dash. An unavailable or
+    /// disconnected volume is not an error worth raising.</para>
+    /// </summary>
+    private static long? Measure(string path, Func<(long Total, long Free), long> read)
     {
-        try
+        if (VolumeCalls.MountPointOf(path) is not { } mountPoint)
         {
-            var root = Path.GetPathRoot(Path.GetFullPath(path));
-            return root is null ? null : read(new DriveInfo(root));
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
-        {
-            // An unavailable or disconnected volume is not an error worth surfacing; the UI
-            // shows a dash instead of a number.
             return null;
         }
+
+        return VolumeCalls.SpaceOf(mountPoint) is { } space ? read(space) : null;
     }
 
     /// <summary>

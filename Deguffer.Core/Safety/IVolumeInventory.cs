@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Deguffer.Core.Safety;
 
 /// <summary>
@@ -30,9 +28,17 @@ public enum VolumeFeatures : uint
 }
 
 /// <summary>
-/// One volume the machine has mounted under a drive letter.
+/// One volume the machine has mounted, wherever it is mounted.
 /// </summary>
-/// <param name="RootPath">Where it is mounted, in <c>D:\</c> form.</param>
+/// <param name="RootPath">
+/// The mount point callers act on and show, in <c>D:\</c> or <c>C:\Mount\</c> form.
+///
+/// <para>A volume can be mounted in more than one place at once, and Windows draws no distinction
+/// between a drive letter and a folder mount point. One of them still has to be the one a plan
+/// targets and the drive picker offers, or the same volume would be listed twice and its Recycle
+/// Bin would be planned twice under two names. <see cref="MountPoints"/> is the whole set, for the
+/// one question that needs it: whether a given path is on this volume.</para>
+/// </param>
 /// <param name="Kind">
 /// Fixed, removable, network, and so on. Reported rather than filtered, because which kinds a
 /// provider may act on is a safety decision belonging to that provider — and a seam that filtered
@@ -40,7 +46,7 @@ public enum VolumeFeatures : uint
 /// </param>
 /// <param name="IsReady">
 /// Whether the volume can be read at all. An optical drive with no disc and a card reader with no
-/// card are both mounted and both answer no, and reading anything else about them throws.
+/// card are both mounted and both answer no.
 /// </param>
 /// <param name="Label">
 /// What the volume is called, or null where it has no label, would not say, or was not asked. Null
@@ -49,12 +55,16 @@ public enum VolumeFeatures : uint
 /// <param name="TotalBytes">Capacity, on the same terms.</param>
 /// <param name="FreeBytes">
 /// What is left of that capacity for this user, on the same terms. The figure a quota allows rather
-/// than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are read by the same app and
-/// must not disagree.
+/// than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are read by the same app,
+/// through the same call, and must not disagree.
 /// </param>
 /// <param name="Features">
 /// What the volume says it supports, or <see cref="VolumeFeatures.None"/> where it would not say or
 /// was not asked. Reported rather than filtered, for the reason <paramref name="Kind"/> is.
+/// </param>
+/// <param name="AlsoMountedAt">
+/// Every other path this volume is reachable at, or null where there is none — which is the
+/// ordinary case, since most volumes wear one drive letter and nothing else.
 /// </param>
 public readonly record struct LocalVolume(
     string RootPath,
@@ -63,8 +73,30 @@ public readonly record struct LocalVolume(
     string? Label = null,
     long? TotalBytes = null,
     long? FreeBytes = null,
-    VolumeFeatures Features = VolumeFeatures.None)
+    VolumeFeatures Features = VolumeFeatures.None,
+    IReadOnlyList<string>? AlsoMountedAt = null)
 {
+    /// <summary>
+    /// Every path this volume is reachable at, <see cref="RootPath"/> first.
+    ///
+    /// <para>Read by <see cref="HostVolume.For"/>, which is the one caller that asks about a path
+    /// rather than about the volume: a folder-mounted volume answers for the paths below its mount
+    /// point and nothing else does, so a set that named only the root would hand those paths to the
+    /// volume the mount point sits on.</para>
+    /// </summary>
+    public IEnumerable<string> MountPoints
+    {
+        get
+        {
+            yield return RootPath;
+
+            foreach (var mountPoint in AlsoMountedAt ?? [])
+            {
+                yield return mountPoint;
+            }
+        }
+    }
+
     /// <summary>
     /// Whether this volume's contents are somewhere else, so that enumerating it downloads the
     /// user's files instead of measuring them.
@@ -120,7 +152,7 @@ public interface IVolumeInventory
 }
 
 /// <inheritdoc />
-public sealed partial class VolumeInventory : IVolumeInventory
+public sealed class VolumeInventory : IVolumeInventory
 {
     /// <summary>
     /// The one instance the app runs with (G5). Stateless apart from the list it remembers, and
@@ -133,7 +165,7 @@ public sealed partial class VolumeInventory : IVolumeInventory
     private IReadOnlyList<LocalVolume>? _volumes;
 
     /// <summary>
-    /// Memoised for the life of a planning pass. Enumerating drives probes every mounted device,
+    /// Memoised for the life of a planning pass. Enumerating volumes probes every mounted device,
     /// which for an optical drive means waiting on the hardware, and a provider asks the same
     /// question from both <c>IsPresentAsync</c> and <c>PlanAsync</c> (G4).
     /// </summary>
@@ -156,26 +188,85 @@ public sealed partial class VolumeInventory : IVolumeInventory
         }
     }
 
+    /// <summary>
+    /// The machine's volumes, each with every path it is mounted at.
+    ///
+    /// <para><b>Volumes first, then the letters no volume claimed.</b> <c>FindFirstVolume</c> names
+    /// every volume of this machine and <c>GetVolumePathNamesForVolumeName</c> names every place
+    /// each one is mounted, which is the only route that sees a volume mounted at a folder. It sees
+    /// no mapped network drive and no <c>subst</c>, though: those are letters standing for
+    /// somewhere else rather than volumes, and they were in the list this method used to build from
+    /// <c>DriveInfo.GetDrives</c>. So the letters are read as well, and each one no volume already
+    /// answers for is described in its own right.</para>
+    ///
+    /// <para>That union is also the degradation. Where the volume enumeration answers nothing —
+    /// an API that would not start — every letter is unclaimed and the result is exactly the list
+    /// this built before, rather than an empty one.</para>
+    /// </summary>
     private static IReadOnlyList<LocalVolume> Read()
     {
-        DriveInfo[] drives;
+        var volumes = new List<LocalVolume>();
+        var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in VolumeCalls.Names())
+        {
+            var mountPoints = VolumeCalls.MountPointsOf(name);
+
+            if (mountPoints.Count == 0)
+            {
+                // Mounted nowhere: a recovery partition, or a volume whose letter was removed. No
+                // path names it, so no provider could target it and the picker could not offer it.
+                continue;
+            }
+
+            var ordered = Ordered(mountPoints);
+
+            claimed.UnionWith(ordered);
+            volumes.Add(Describe(ordered));
+        }
+
+        string[] letters;
         try
         {
-            drives = DriveInfo.GetDrives();
+            letters = Environment.GetLogicalDrives();
         }
         catch (IOException)
         {
-            // Nothing rather than a partial view, on the same reasoning as ChildDirectories.Under:
-            // a caller decides what the machine holds from what it is handed.
-            return [];
+            // The volumes above are still whole, and are the part every safety rule reads. Only
+            // network mappings would have been added here, and no rule that decides a deletion
+            // acts on one.
+            return volumes;
         }
 
-        return [.. drives.Select(Describe)];
+        foreach (var letter in letters)
+        {
+            if (claimed.Add(letter))
+            {
+                volumes.Add(Describe([letter]));
+            }
+        }
+
+        return volumes;
     }
 
     /// <summary>
-    /// IsReady is the one member that answers for an empty drive instead of throwing, which is why
-    /// it gates everything else read here.
+    /// The mount points with the one callers act on first: the shortest, which is a drive letter
+    /// wherever the volume has one, since <c>D:\</c> is three characters and no folder mount point
+    /// can be fewer than five.
+    ///
+    /// <para>A rule rather than the order Windows returned, because that order is not documented
+    /// and a volume whose root path moved between two reads would take the drive picker's selection
+    /// and a plan's targets with it. Ties go to the earlier path, so the choice is settled even
+    /// between two folder mount points of the same length.</para>
+    /// </summary>
+    internal static IReadOnlyList<string> Ordered(IReadOnlyList<string> mountPoints) =>
+        mountPoints.Count == 1
+            ? mountPoints
+            : [.. mountPoints.OrderBy(p => p.Length).ThenBy(p => p, StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>
+    /// Whether the mount point can be read at all is the one thing that gates everything else here:
+    /// an empty optical drive is mounted, answers no, and has no label, size or flags to give.
     ///
     /// <para>A network volume is described by its mount point alone. The label and the two space
     /// figures each cost a round trip to the server, <see cref="Volumes"/> is read under a lock and
@@ -183,68 +274,33 @@ public sealed partial class VolumeInventory : IVolumeInventory
     /// outright and <c>RecycleBinProvider</c> takes fixed ones only. This declines a cost, and
     /// filters nothing — which kinds a caller may act on stays that caller's decision.</para>
     /// </summary>
-    private static LocalVolume Describe(DriveInfo drive)
+    private static LocalVolume Describe(IReadOnlyList<string> mountPoints)
     {
-        var root = drive.RootDirectory.FullName;
+        var root = mountPoints[0];
+        var elsewhere = mountPoints.Count > 1 ? mountPoints.Skip(1).ToArray() : null;
+        var kind = VolumeCalls.KindOf(root);
+        var ready = LongPath.DirectoryExists(root);
 
-        // Read once. IsReady probes the volume rather than reading a field, and on a share that
-        // probe is the round trip this method exists to spend as few of as it can. Two reads can
-        // also disagree, which would report a volume as ready with nothing else known about it.
-        var ready = drive.IsReady;
-
-        if (!ready || drive.DriveType == DriveType.Network)
+        if (!ready || kind == DriveType.Network)
         {
-            return new LocalVolume(root, drive.DriveType, ready);
+            return new LocalVolume(root, kind, ready, AlsoMountedAt: elsewhere);
         }
 
-        // Before the label and the space, and kept on both paths below, because this is the one
-        // reading a caller refuses a whole volume on: a drive that declined its label would
-        // otherwise be described as having said nothing about remote storage either, and be walked.
-        var features = FeaturesOf(root);
+        // The label and the flags come from one call, so a volume that refuses cannot be recorded
+        // as having answered one and not the other. Flags of None reach StoresContentRemotely as
+        // "said nothing about remote storage", which is walked — the same answer a volume with no
+        // such driver gives.
+        var (label, features) = VolumeCalls.InformationOf(root);
+        var space = VolumeCalls.SpaceOf(root);
 
-        try
-        {
-            return new LocalVolume(
-                root,
-                drive.DriveType,
-                IsReady: true,
-                Label: string.IsNullOrWhiteSpace(drive.VolumeLabel) ? null : drive.VolumeLabel,
-                TotalBytes: drive.TotalSize,
-                FreeBytes: drive.AvailableFreeSpace,
-                Features: features);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // The medium can go away between IsReady and these reads, and a volume can refuse the
-            // label query outright. Where it is mounted is still true, and it is the part callers
-            // act on, so the volume is reported without the detail rather than dropped.
-            return new LocalVolume(root, drive.DriveType, IsReady: true, Features: features);
-        }
+        return new LocalVolume(
+            root,
+            kind,
+            IsReady: true,
+            Label: label,
+            TotalBytes: space?.Total,
+            FreeBytes: space?.Free,
+            Features: features,
+            AlsoMountedAt: elsewhere);
     }
-
-    /// <summary>
-    /// What <paramref name="root"/> says it supports, or <see cref="VolumeFeatures.None"/> where it
-    /// would not say.
-    ///
-    /// <para><c>DriveInfo</c> exposes the format name and none of the flags, so this is the only
-    /// route to them. Both string buffers are passed as null, which the call documents as
-    /// permitted: nothing here wants the volume's name or its format, and the allocations would be
-    /// spent once per mounted device.</para>
-    /// </summary>
-    private static VolumeFeatures FeaturesOf(string root) =>
-        GetVolumeInformation(root, IntPtr.Zero, 0, out _, out _, out var flags, IntPtr.Zero, 0)
-            ? (VolumeFeatures)flags
-            : VolumeFeatures.None;
-
-    [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeInformationW", StringMarshalling = StringMarshalling.Utf16)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetVolumeInformation(
-        string rootPathName,
-        IntPtr volumeNameBuffer,
-        uint volumeNameSize,
-        out uint volumeSerialNumber,
-        out uint maximumComponentLength,
-        out uint fileSystemFlags,
-        IntPtr fileSystemNameBuffer,
-        uint fileSystemNameSize);
 }

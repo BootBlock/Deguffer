@@ -59,10 +59,11 @@ public sealed class RecycleBinProviderTests : IDisposable
         string name,
         DriveType kind = DriveType.Fixed,
         bool isReady = true,
-        VolumeFeatures features = VolumeFeatures.ReparsePoints)
+        VolumeFeatures features = VolumeFeatures.ReparsePoints,
+        IReadOnlyList<string>? alsoMountedAt = null)
     {
         var root = _temp.CreateDirectory("volumes", name);
-        _volumes.With(root, kind, isReady, features);
+        _volumes.With(root, kind, isReady, features, alsoMountedAt);
         return root;
     }
 
@@ -430,6 +431,94 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         Assert.Empty(Directory.EnumerateFiles(localBin));
         Assert.NotEmpty(Directory.EnumerateFiles(cloudBin));
+    }
+
+    /// <summary>
+    /// A volume mounted in more than one place has one Recycle Bin, and it is planned once. Windows
+    /// draws no distinction between a drive letter and a folder mount point, and a volume can carry
+    /// any number of each, so a candidate per mount point would reach the same directory twice
+    /// under two names.
+    ///
+    /// <para>Two names for one directory is not a tidiness problem. The plan would count the same
+    /// bytes twice and promise the user a reclaim it cannot deliver, and the second target would be
+    /// emptied after the first had already taken it — which is §5.6's negative asserted against a
+    /// path that is no longer what the plan measured.</para>
+    ///
+    /// <para>The second mount point here is a directory of its own, because a test cannot mount a
+    /// volume twice. What it holds to is the rule: the volume is described as reachable at both, and
+    /// only the root is looked in.</para>
+    /// </summary>
+    [Fact]
+    public async Task AVolumeMountedInMoreThanOnePlaceIsPlannedOnce()
+    {
+        var elsewhere = _temp.CreateDirectory("volumes", "Mount");
+        var root = CreateVolume("D", alsoMountedAt: [elsewhere]);
+
+        var bin = CreateBin(root, Sid);
+        var binUnderTheOtherName = CreateBin(elsewhere, Sid);
+
+        var provider = CreateProvider();
+
+        Assert.Equal([Path.Combine(root, BinName)], provider.BinRoots);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([bin], plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.Equal([root], _emptier.VolumeRoots);
+
+        // §5.6's negative: nothing under a mount point the provider did not target was touched.
+        Assert.NotEmpty(Directory.EnumerateFiles(binUnderTheOtherName));
+    }
+
+    /// <summary>
+    /// A volume the shell route cannot empty is emptied by removing its files instead, and the plan
+    /// says which volume and why.
+    ///
+    /// <para>On a real machine that volume is one mounted at a folder: <c>SHEmptyRecycleBin</c> was
+    /// measured over a drive root and its reach over a mount point is stated nowhere, so
+    /// <see cref="IRecycleBinEmptier.Serves"/> answers no for one. Without this the step is
+    /// measured, offered to the user and then refused at execution — a plan that can never be
+    /// carried out, on exactly the volumes this provider was just taught to see.</para>
+    ///
+    /// <para>The fake is told which roots it serves, because every volume in this fixture is a
+    /// directory in a temp tree and the real test would answer no to all of them.</para>
+    /// </summary>
+    [Fact]
+    public async Task AVolumeTheShellRouteCannotEmptyIsEmptiedDirectly()
+    {
+        var served = CreateVolume("D");
+        var servedBin = CreateBin(served, Sid);
+
+        var mounted = CreateVolume("Mount");
+        var mountedBin = CreateBin(mounted, Sid);
+
+        _emptier = FakeRecycleBinEmptier.Serving(served);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        await provider.ExecuteAsync(plan);
+
+        // The shell was asked about the volume it serves and about no other.
+        Assert.Equal([served], _emptier.VolumeRoots);
+
+        // The shell empties this user's directory in place; the direct route removes it, and
+        // Windows re-creates it on the next delete. Either way the files are gone, which is the
+        // point: the volume the shell would not take was still cleaned.
+        Assert.Empty(Directory.EnumerateFiles(servedBin));
+        Assert.False(Directory.Exists(mountedBin));
+
+        // §5.6's negative on the route that changed: the bin root is a shared parent and survives
+        // both ways.
+        Assert.True(Directory.Exists(Path.Combine(mounted, BinName)));
+
+        Assert.Contains(
+            plan.Notes,
+            n => n.Message.Contains(mounted, StringComparison.OrdinalIgnoreCase)
+                && n.Message.Contains("mounted at a folder", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

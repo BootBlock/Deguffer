@@ -134,4 +134,40 @@ public sealed class DriveChoiceTests
         Assert.Null(choice.Refusal);
         Assert.Equal(@"C:\, size unknown", choice.Description);
     }
+
+    /// <summary>
+    /// A volume mounted at a folder is listed and refused. The volume is ordinary and reading it is
+    /// safe; what is withheld is what Explore would then offer to delete on it, because the rules
+    /// that keep a volume's paging file, its NTFS records and its Recycle Bin out of a deletion
+    /// read a path's position from its drive letter and do not recognise one mounted this way.
+    ///
+    /// <para>Listed rather than hidden for the reason a cloud mount is: a drive the user can see in
+    /// File Explorer and cannot find here is one they cannot reason about (§7.1).</para>
+    /// </summary>
+    [Fact]
+    public void AVolumeMountedAtAFolderIsListedAndRefused()
+    {
+        var choice = DriveChoice.From(new LocalVolume(
+            @"C:\Mount\", DriveType.Fixed, IsReady: true, Label: "Archive",
+            Features: (VolumeFeatures)0x03E7_2EFF));
+
+        Assert.True(choice.IsRefused);
+        Assert.Equal(DriveChoice.NoDriveLetterRefusal, choice.Refusal);
+        Assert.Equal(@"C:\Mount\", choice.RootPath);
+        Assert.Equal("Archive", choice.Label);
+    }
+
+    /// <summary>
+    /// Where both apply, the reader is told about the download rather than about the mount point.
+    /// One refusal withholds a picture of a disk and the other prevents every file the user keeps
+    /// in the cloud being fetched onto the disk they are clearing.
+    /// </summary>
+    [Fact]
+    public void ACloudVolumeMountedAtAFolderIsRefusedForTheDownload()
+    {
+        var choice = DriveChoice.From(new LocalVolume(
+            @"C:\Mount\", DriveType.Fixed, IsReady: true, Features: (VolumeFeatures)0x0000_0106));
+
+        Assert.Equal(DriveChoice.RemoteStorageRefusal, choice.Refusal);
+    }
 }
