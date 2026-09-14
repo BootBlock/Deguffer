@@ -5,8 +5,9 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Which volume a path is on. Three callers decide whether to read a location on this answer, so the
-/// cases that matter are the two non-answers: a path on a volume nothing was measured for, and a path
-/// carrying the extended-length prefix §6.3 requires.
+/// cases that matter are the two non-answers — a path on a volume nothing was measured for, and a path
+/// carrying the extended-length prefix §6.3 requires — and the volume mounted at a folder, which is the
+/// one case that used to answer confidently and wrongly.
 /// </summary>
 public sealed class HostVolumeTests
 {
@@ -16,6 +17,24 @@ public sealed class HostVolumeTests
     private static readonly FakeVolumeInventory Machine = new FakeVolumeInventory()
         .With(@"C:\")
         .With(@"V:\", features: CloudMount);
+
+    /// <summary>
+    /// A cloud client mounted at a folder rather than under a letter, inside the local disk that
+    /// holds its mount point — the arrangement both volumes have to be told apart in.
+    /// </summary>
+    private static FakeVolumeInventory FolderMounted(bool mountedFirst = false)
+    {
+        var machine = new FakeVolumeInventory();
+
+        // Both orders, because the inventory's order is Windows' own and a rule that read the first
+        // match rather than the longest would pass in one of them.
+        if (mountedFirst)
+        {
+            return machine.With(@"C:\Mount\", features: CloudMount).With(@"C:\");
+        }
+
+        return machine.With(@"C:\").With(@"C:\Mount\", features: CloudMount);
+    }
 
     [Fact]
     public void FindsTheVolumeAPathIsOn()
@@ -64,9 +83,9 @@ public sealed class HostVolumeTests
 
     /// <summary>
     /// Null is "nothing was measured", and it is the answer for every path the inventory has no volume
-    /// for: a share, a volume mounted without a letter, a drive that is not attached. No caller may
-    /// read it as an all-clear, and none may refuse on it either — refusing on no reading would be a
-    /// guess.
+    /// for: a share, a volume this machine has mounted nowhere, a drive that is not attached. No caller
+    /// may read it as an all-clear, and none may refuse on it either — refusing on no reading would be
+    /// a guess.
     /// </summary>
     [Theory]
     [InlineData(@"\\server\share\work")]
@@ -90,23 +109,66 @@ public sealed class HostVolumeTests
     }
 
     /// <summary>
-    /// A path on a volume mounted at a directory answers as the volume that directory is on. This is
-    /// the one case that answers <em>wrongly</em> rather than not at all, and it is recorded here
-    /// rather than left for a reader to discover: <c>DriveInfo.GetDrives</c> reports drive letters
-    /// only, so such a volume is never in the inventory to be matched, and the mount point's own
-    /// volume is what the comparison finds.
+    /// A path on a volume mounted at a directory answers as that volume, not as the volume its mount
+    /// point sits on. Both hold the path — a folder mount point is inside another volume by
+    /// construction — so the longer of the two is the one the bytes are actually on.
     ///
-    /// <para>Asserted rather than fixed because the fix is a change to what
-    /// <see cref="IVolumeInventory"/> enumerates, not to how <see cref="HostVolume"/> reads it. A
-    /// cloud client mounted at a folder is therefore searched, and the doc on
-    /// <see cref="HostVolume.For"/> says so.</para>
+    /// <para>The case this whole rule exists for: a cloud client mounted this way was reported as the
+    /// local disk holding its mount point, which is a confident reading of the wrong volume rather
+    /// than a non-answer, and every caller that refuses on
+    /// <see cref="LocalVolume.StoresContentRemotely"/> was therefore told it could read it.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnswersAFolderMountedVolumeAsItself(bool mountedFirst)
+    {
+        var mounted = HostVolume.For(FolderMounted(mountedFirst), @"C:\Mount\work");
+
+        Assert.Equal(@"C:\Mount\", mounted?.RootPath);
+        Assert.True(mounted?.StoresContentRemotely);
+    }
+
+    /// <summary>
+    /// The mount point directory itself, named without a trailing separator, which is the form
+    /// <see cref="LongPath.Configured(string?)"/> produces and so the form a stored source root
+    /// arrives in. <c>C:\Mount</c> is not a prefix of <c>C:\Mount\</c>, so a comparison by prefix
+    /// alone hands the root of the mounted volume to the volume underneath it.
     /// </summary>
     [Fact]
-    public void AnswersAFolderMountedVolumeAsTheVolumeItsMountPointIsOn()
+    public void AnswersTheMountPointDirectoryItselfAsTheMountedVolume()
     {
-        var mounted = HostVolume.For(Machine, @"C:\Mount\work");
+        Assert.Equal(@"C:\Mount\", HostVolume.For(FolderMounted(), @"C:\Mount")?.RootPath);
+    }
 
-        Assert.Equal(@"C:\", mounted?.RootPath);
-        Assert.False(mounted?.StoresContentRemotely);
+    /// <summary>
+    /// A path beside the mount point is still on the volume underneath. The longest-match rule must
+    /// not widen a folder-mounted volume's claim past the folder it is mounted at.
+    /// </summary>
+    [Fact]
+    public void LeavesAPathBesideTheMountPointOnTheVolumeUnderneath()
+    {
+        var beside = HostVolume.For(FolderMounted(), @"C:\Mountains\work");
+
+        Assert.Equal(@"C:\", beside?.RootPath);
+        Assert.False(beside?.StoresContentRemotely);
+    }
+
+    /// <summary>
+    /// One volume, mounted both under a letter and at a folder on another volume. Every one of its
+    /// mount points answers for it, and the answer is the same volume — which is what keeps a rule
+    /// reading <see cref="LocalVolume.StoresContentRemotely"/> from depending on which name the user
+    /// happened to type.
+    /// </summary>
+    [Fact]
+    public void AnswersForEveryPathAVolumeIsMountedAt()
+    {
+        var machine = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"D:\", features: CloudMount, alsoMountedAt: [@"C:\Mount\"]);
+
+        Assert.Equal(@"D:\", HostVolume.For(machine, @"D:\work")?.RootPath);
+        Assert.Equal(@"D:\", HostVolume.For(machine, @"C:\Mount\work")?.RootPath);
+        Assert.True(HostVolume.For(machine, @"C:\Mount\work")?.StoresContentRemotely);
     }
 }

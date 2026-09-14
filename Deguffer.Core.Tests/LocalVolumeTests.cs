@@ -76,4 +76,32 @@ public sealed class LocalVolumeTests
     {
         Assert.False(new LocalVolume(@"E:\", DriveType.Fixed, IsReady: true).StoresContentRemotely);
     }
+
+    /// <summary>
+    /// Where a volume is reachable: the root first, then everywhere else it is mounted. The order
+    /// is the assertion, because <see cref="HostVolume.For"/> resolves a tie by the length of the
+    /// mount point and a caller that showed the wrong one would name the volume by a path the user
+    /// does not recognise.
+    /// </summary>
+    [Fact]
+    public void ListsEveryPlaceItIsMountedWithTheRootFirst()
+    {
+        var volume = new LocalVolume(
+            @"D:\",
+            DriveType.Fixed,
+            IsReady: true,
+            AlsoMountedAt: [@"C:\Mount\", @"C:\Second\"]);
+
+        Assert.Equal([@"D:\", @"C:\Mount\", @"C:\Second\"], volume.MountPoints);
+    }
+
+    /// <summary>
+    /// The ordinary volume, which wears one drive letter and nothing else. Null there means "mounted
+    /// nowhere else" rather than "nothing known", so the root still answers for itself.
+    /// </summary>
+    [Fact]
+    public void ListsOnlyItsRootWhereItIsMountedNowhereElse()
+    {
+        Assert.Equal([@"E:\"], new LocalVolume(@"E:\", DriveType.Fixed, IsReady: true).MountPoints);
+    }
 }

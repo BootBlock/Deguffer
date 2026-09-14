@@ -27,13 +27,19 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// is a directory on the machine running the suite and that is what it really is — so a test
     /// naming <see cref="VolumeFeatures.RemoteStorage"/> is visibly testing a cloud mount.
     /// </param>
+    /// <param name="alsoMountedAt">
+    /// Every other path the volume is reachable at, each ending in a separator as Windows reports
+    /// them. A test that names one is testing a volume mounted in more than one place.
+    /// </param>
     public FakeVolumeInventory With(
         string rootPath,
         DriveType kind = DriveType.Fixed,
         bool isReady = true,
-        VolumeFeatures features = VolumeFeatures.ReparsePoints)
+        VolumeFeatures features = VolumeFeatures.ReparsePoints,
+        IReadOnlyList<string>? alsoMountedAt = null)
     {
-        _volumes.Add(new LocalVolume(rootPath, kind, isReady, Features: features));
+        _volumes.Add(new LocalVolume(rootPath, kind, isReady, Features: features, AlsoMountedAt: alsoMountedAt));
+
         return this;
     }
 

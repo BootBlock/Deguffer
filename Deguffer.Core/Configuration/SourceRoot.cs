@@ -51,7 +51,8 @@ public sealed record SourceRootApproval(string Path, string? Warning)
     /// "this may be slow" would leave the reader thinking the cost was their time.</para>
     /// </summary>
     public const string RemoteStorageWarning =
-        "This folder is on cloud storage shown as a drive letter. Searching it downloads every file "
+        "This folder is on cloud storage that Windows shows as an ordinary drive or folder. "
+        + "Searching it downloads every file "
         + "in it onto this computer, and what Deguffer could then remove is space in the cloud rather "
         + "than space on this disk. Add it only if that is what you want.";
 
@@ -59,9 +60,9 @@ public sealed record SourceRootApproval(string Path, string? Warning)
     /// What <paramref name="path"/> needs said about it, given what the machine reports about the
     /// volume holding it.
     ///
-    /// <para>A path on a volume the inventory has nothing for — a share, or a volume mounted without a
-    /// drive letter — is approved in silence. Nothing measured its flags, and warning on no reading
-    /// would be a guess (<see cref="HostVolume.For"/>).</para>
+    /// <para>A path on a volume the inventory has nothing for — a share, or a volume this machine
+    /// has mounted nowhere — is approved in silence. Nothing measured its flags, and warning on no
+    /// reading would be a guess (<see cref="HostVolume.For"/>).</para>
     /// </summary>
     public static SourceRootApproval For(IVolumeInventory volumes, string path) =>
         new(

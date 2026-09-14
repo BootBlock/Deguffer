@@ -15,7 +15,15 @@ namespace Deguffer.Core.Exploring;
 /// can reach Core. <see cref="LocalVolume"/> stays what the machine reported. This is that reading
 /// worded for a reader, which is a second responsibility and so a second type (G1).</para>
 /// </summary>
-/// <param name="RootPath">Where it is mounted, in <c>D:\</c> form. What a scan is pointed at.</param>
+/// <param name="RootPath">
+/// Where it is mounted, in <c>D:\</c> or <c>C:\Mount\</c> form. What a scan is pointed at.
+///
+/// <para>One entry per volume rather than per mount point, taken from
+/// <see cref="LocalVolume.RootPath"/>: a volume mounted at both a letter and a folder is one drive
+/// to the reader, and listing it twice would ask them which of the two to scan when the answer is
+/// the same either way. A volume with no letter at all is offered by its folder mount point, which
+/// is the name the user sees it under in File Explorer.</para>
+/// </param>
 /// <param name="Label">What the volume is called, or null where it has none.</param>
 /// <param name="TotalBytes">Capacity, or null where the volume would not say.</param>
 /// <param name="FreeBytes">What is left of that capacity, or null where the volume would not say.</param>
@@ -37,8 +45,8 @@ public sealed record DriveChoice(
     /// full.</para>
     /// </summary>
     public const string RemoteStorageRefusal =
-        "Deguffer does not scan this drive. It is cloud storage shown as a drive letter, and reading "
-        + "it would download every file on it onto this computer.";
+        "Deguffer does not scan this drive. It is cloud storage that Windows shows as an ordinary "
+        + "drive or folder, and reading it would download every file on it onto this computer.";
 
     /// <summary>What the machine reported about <paramref name="volume"/>, as an entry.</summary>
     public static DriveChoice From(LocalVolume volume) =>

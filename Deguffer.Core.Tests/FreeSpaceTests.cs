@@ -1,3 +1,4 @@
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
@@ -48,6 +49,27 @@ public class FreeSpaceTests
     {
         Assert.Null(FreeSpace.TotalForPath(string.Empty));
         Assert.Null(FreeSpace.ForPath(string.Empty));
+    }
+
+    /// <summary>
+    /// One reading of one volume. The capacity behind the page's bar and the capacity the drive
+    /// picker shows have to be the same number, and they are because both come from the same call
+    /// against the mount point Windows resolved the path to.
+    ///
+    /// <para>Capacity rather than free space, which moves between two reads on a machine that is
+    /// doing anything at all. On a machine whose volumes all wear drive letters this would also
+    /// have passed before the mount point was resolved — what it holds is the invariant, so that a
+    /// route measuring a different volume cannot be introduced quietly.</para>
+    /// </summary>
+    [Fact]
+    public void AgreesWithTheInventoryAboutTheVolumeHoldingAPath()
+    {
+        using var temp = new TempDirectory();
+
+        var volume = HostVolume.For(VolumeInventory.Current, temp.Path);
+
+        Assert.NotNull(volume);
+        Assert.Equal(volume.Value.TotalBytes, FreeSpace.TotalForPath(temp.Path));
     }
 
     [Theory]

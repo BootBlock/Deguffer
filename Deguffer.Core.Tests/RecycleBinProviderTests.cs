@@ -59,10 +59,11 @@ public sealed class RecycleBinProviderTests : IDisposable
         string name,
         DriveType kind = DriveType.Fixed,
         bool isReady = true,
-        VolumeFeatures features = VolumeFeatures.ReparsePoints)
+        VolumeFeatures features = VolumeFeatures.ReparsePoints,
+        IReadOnlyList<string>? alsoMountedAt = null)
     {
         var root = _temp.CreateDirectory("volumes", name);
-        _volumes.With(root, kind, isReady, features);
+        _volumes.With(root, kind, isReady, features, alsoMountedAt);
         return root;
     }
 
@@ -430,6 +431,46 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         Assert.Empty(Directory.EnumerateFiles(localBin));
         Assert.NotEmpty(Directory.EnumerateFiles(cloudBin));
+    }
+
+    /// <summary>
+    /// A volume mounted in more than one place has one Recycle Bin, and it is planned once. Windows
+    /// draws no distinction between a drive letter and a folder mount point, and a volume can carry
+    /// any number of each, so a candidate per mount point would reach the same directory twice
+    /// under two names.
+    ///
+    /// <para>Two names for one directory is not a tidiness problem. The plan would count the same
+    /// bytes twice and promise the user a reclaim it cannot deliver, and the second target would be
+    /// emptied after the first had already taken it — which is §5.6's negative asserted against a
+    /// path that is no longer what the plan measured.</para>
+    ///
+    /// <para>The second mount point here is a directory of its own, because a test cannot mount a
+    /// volume twice. What it holds to is the rule: the volume is described as reachable at both, and
+    /// only the root is looked in.</para>
+    /// </summary>
+    [Fact]
+    public async Task AVolumeMountedInMoreThanOnePlaceIsPlannedOnce()
+    {
+        var elsewhere = _temp.CreateDirectory("volumes", "Mount");
+        var root = CreateVolume("D", alsoMountedAt: [elsewhere]);
+
+        var bin = CreateBin(root, Sid);
+        var binUnderTheOtherName = CreateBin(elsewhere, Sid);
+
+        var provider = CreateProvider();
+
+        Assert.Equal([Path.Combine(root, BinName)], provider.BinRoots);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([bin], plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.Equal([root], _emptier.VolumeRoots);
+
+        // §5.6's negative: nothing under a mount point the provider did not target was touched.
+        Assert.NotEmpty(Directory.EnumerateFiles(binUnderTheOtherName));
     }
 
     /// <summary>

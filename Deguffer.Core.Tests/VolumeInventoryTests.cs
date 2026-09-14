@@ -22,6 +22,71 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// Every mount point is a rooted path ending in a separator, which is the form
+    /// <see cref="HostVolume.For"/> compares against and the form <c>Path.Combine</c> builds a bin
+    /// path from. <see cref="LocalVolume.RootPath"/> is the first of them.
+    ///
+    /// <para>Makes no claim that any volume here has more than one mount point: whether the machine
+    /// running the suite has a folder-mounted volume is not a property of this code. What the rule
+    /// does for a volume that has several is asserted through
+    /// <see cref="Fakes.FakeVolumeInventory"/> instead.</para>
+    /// </summary>
+    [Fact]
+    public void ReportsEveryPathEachVolumeIsMountedAt()
+    {
+        var volumes = VolumeInventory.Current.Volumes;
+
+        Assert.NotEmpty(volumes);
+
+        Assert.All(volumes, v =>
+        {
+            var mountPoints = v.MountPoints.ToList();
+
+            Assert.Equal(v.RootPath, mountPoints[0]);
+
+            Assert.All(mountPoints, mountPoint =>
+            {
+                Assert.True(Path.IsPathRooted(mountPoint), mountPoint);
+                Assert.True(Path.EndsInDirectorySeparator(mountPoint), mountPoint);
+            });
+        });
+    }
+
+    /// <summary>
+    /// One entry per volume. The list is built from the volume enumeration and then topped up with
+    /// the drive letters no volume claimed, so a letter counted twice would put the same volume in
+    /// front of the picker twice and plan its Recycle Bin twice.
+    ///
+    /// <para>This is what the top-up step is held to: every letter on an ordinary machine belongs to
+    /// a volume the enumeration already named, so adding them unconditionally fails here.</para>
+    /// </summary>
+    [Fact]
+    public void ReportsEachVolumeOnce()
+    {
+        var mountPoints = VolumeInventory.Current.Volumes.SelectMany(v => v.MountPoints).ToList();
+
+        Assert.Equal(
+            mountPoints.Count,
+            mountPoints.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    /// <summary>
+    /// A volume with a drive letter is rooted at that letter. Windows returns a volume's mount
+    /// points in no documented order, and the root is what a plan targets and the picker shows, so
+    /// it is chosen by a rule rather than taken from the answer.
+    /// </summary>
+    [Fact]
+    public void RootsAVolumeAtItsDriveLetterWhereItHasOne()
+    {
+        var lettered = VolumeInventory.Current.Volumes
+            .Where(v => v.MountPoints.Any(m => m.Length == 3 && m[1] == ':'))
+            .ToList();
+
+        Assert.NotEmpty(lettered);
+        Assert.All(lettered, v => Assert.Equal(3, v.RootPath.Length));
+    }
+
+    /// <summary>
     /// The space figures the Explore picker offers a drive by come from the same reading as the
     /// mount point. A ready fixed volume answers both, so a null here means the reading was never
     /// made.

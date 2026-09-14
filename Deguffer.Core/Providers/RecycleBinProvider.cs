@@ -227,9 +227,9 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving {remote.RootPath} alone: it is cloud storage shown as a drive letter, and "
-                + "its Recycle Bin was not looked at. Reading that drive would download the files on "
-                + "it onto this computer."));
+                $"Leaving {remote.RootPath} alone: it is cloud storage that Windows shows as an "
+                + "ordinary drive or folder, and its Recycle Bin was not looked at. Reading it "
+                + "would download the files on it onto this computer."));
         }
 
         foreach (var bin in CandidateBins())
@@ -425,6 +425,13 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// contents are not on this machine, so listing a bin on it downloads whatever is inside — see
     /// <see cref="LocalVolume.StoresContentRemotely"/>. The exclusion is here rather than in the
     /// plan alone, so presence cannot probe one either.</para>
+    ///
+    /// <para><b>One bin per volume, at <see cref="LocalVolume.RootPath"/>.</b> A volume mounted in
+    /// more than one place has one <c>$RECYCLE.BIN</c> reachable under each of those names, so a
+    /// candidate per mount point would target the same directory twice through two paths — a plan
+    /// that counted its bytes twice and then deleted the second target after the first had already
+    /// taken it. A volume mounted at a folder is included on the same terms as any other, which is
+    /// what puts its bin in reach at all.</para>
     /// </summary>
     private IEnumerable<string> CandidateBins() =>
         FixedVolumes()
