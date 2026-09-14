@@ -1,5 +1,6 @@
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Tests;
 
@@ -80,13 +81,24 @@ public sealed class UserEnvironmentTests : IDisposable
         var environment = new UserEnvironment(
             UserEnvironment.ReadMachineEnvironment,
             UserEnvironment.ReadUserEnvironment,
-            EnvironmentBlock.Startup(logon, Values(), Values()));
+            EnvironmentBlock.Startup(logon, Expandable(), Expandable()));
 
         Assert.NotNull(environment.FindExecutable("cmd"));
     }
 
     private static Dictionary<string, string> Values(params (string Name, string Value)[] entries) =>
         entries.ToDictionary(entry => entry.Name, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The same, as the two environment keys hand them over. <c>REG_EXPAND_SZ</c> throughout,
+    /// because nothing here turns on the kind: the two are told apart in
+    /// <see cref="EnvironmentBlockTests"/>, where the input can be stated.
+    /// </summary>
+    private static Dictionary<string, EnvironmentValue> Expandable(params (string Name, string Value)[] entries) =>
+        entries.ToDictionary(
+            entry => entry.Name,
+            entry => new EnvironmentValue(entry.Value, Expandable: true),
+            StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The whole route, from the two environment keys through composition to a command resolved on
@@ -104,17 +116,17 @@ public sealed class UserEnvironmentTests : IDisposable
         var installed = _temp.CreateDirectory("tool-bin");
         File.WriteAllBytes(Path.Combine(installed, "deguffer-fixture-tool.exe"), new byte[64]);
 
-        var user = Values();
+        var user = Expandable();
         var environment = new UserEnvironment(
-            () => Values(("PATHEXT", ".EXE")),
+            () => Expandable(("PATHEXT", ".EXE")),
             () => user,
-            EnvironmentBlock.Startup(Values(), Values(), Values()));
+            EnvironmentBlock.Startup(Values(), Expandable(), Expandable()));
 
         Assert.Null(environment.FindExecutable("deguffer-fixture-tool"));
 
         // The installer's write. A running process is told nothing about it, so the answer must not
         // change until something asks the machine again.
-        user["Path"] = installed;
+        user["Path"] = new EnvironmentValue(installed, Expandable: true);
 
         Assert.Null(environment.FindExecutable("deguffer-fixture-tool"));
 
@@ -136,16 +148,16 @@ public sealed class UserEnvironmentTests : IDisposable
     {
         const string Configured = @"C:\Users\testuser\AppData\Local\ms-playwright";
 
-        var user = Values(("PLAYWRIGHT_BROWSERS_PATH", Configured));
+        var user = Expandable(("PLAYWRIGHT_BROWSERS_PATH", Configured));
         var environment = new UserEnvironment(
-            () => Values(),
+            () => Expandable(),
             () => user,
             EnvironmentBlock.Startup(
                 Values(("PLAYWRIGHT_BROWSERS_PATH", Configured)),
-                Values(),
-                Values(("PLAYWRIGHT_BROWSERS_PATH", Configured))));
+                Expandable(),
+                Expandable(("PLAYWRIGHT_BROWSERS_PATH", Configured))));
 
-        user["PLAYWRIGHT_BROWSERS_PATH"] = @"D:\ms-playwright";
+        user["PLAYWRIGHT_BROWSERS_PATH"] = new EnvironmentValue(@"D:\ms-playwright", Expandable: true);
         environment.Invalidate();
 
         Assert.Equal(@"D:\ms-playwright", environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH"));
@@ -168,18 +180,74 @@ public sealed class UserEnvironmentTests : IDisposable
 
         // TMP lives in HKCU\Environment, so the start-up block and the registry agree about it to
         // begin with. That is what makes the later write a change rather than a deletion.
-        var user = Values(("TMP", _temp.Path));
+        var user = Expandable(("TMP", _temp.Path));
 
         var environment = new UserEnvironment(
-            () => Values(),
+            () => Expandable(),
             () => user,
-            EnvironmentBlock.Startup(Values(("TMP", _temp.Path)), Values(), Values(("TMP", _temp.Path))));
+            EnvironmentBlock.Startup(
+                Values(("TMP", _temp.Path)),
+                Expandable(),
+                Expandable(("TMP", _temp.Path))));
 
         Assert.Equal(_temp.Path, environment.TempPath, StringComparer.OrdinalIgnoreCase);
 
-        user["TMP"] = redirected;
+        user["TMP"] = new EnvironmentValue(redirected, Expandable: true);
         environment.Invalidate();
 
         Assert.Equal(redirected, environment.TempPath, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// That the registry read carries each value's kind rather than deciding it. Everything the
+    /// composition rules do with the kind is asserted in <see cref="EnvironmentBlockTests"/> against
+    /// values a test states directly, so nothing there would notice this method answering
+    /// <c>REG_SZ</c> for the whole key — and Deguffer would then leave every relocated cache
+    /// unresolved while believing it had read the machine correctly.
+    ///
+    /// <para><b>It writes a key, which every other test in the suite is spared.</b> There is no
+    /// seam between this method and the registry, by design: the kind is what a reader of the real
+    /// API brings back, so a fake standing in for the API would be asserting its own answer. The
+    /// key is this class's registry counterpart of the temporary directory it already writes to —
+    /// named for this run, deleted afterwards, not an environment key, and read by nothing
+    /// else.</para>
+    /// </summary>
+    [Fact]
+    public void TheRegistryReadTellsTheTwoValueKindsApart()
+    {
+        // The same text under both kinds, so the kind is the only thing that can distinguish them.
+        const string Written = @"%DEGUFFER_TEST_UNSET%\cache";
+
+        // One level under Software, so deleting it afterwards leaves no empty parent behind, and
+        // named for this run so two runs on the same machine cannot collide.
+        //
+        // Nothing sweeps what a killed host leaves, which ScratchRoot does do for a scratch tree.
+        // Telling an abandoned key from the live key of a run happening alongside this one needs the
+        // age ScratchRoot.StaleAfter is measured against, and the managed registry API reports no
+        // write time to measure. It is the same residual ScratchRoot declines for a tree under a
+        // DACL: reachable only by killing the host outright.
+        var path = $@"Software\Deguffer.Tests.{Guid.NewGuid():N}";
+
+        try
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey(path))
+            {
+                key.SetValue("Expanded", Written, RegistryValueKind.ExpandString);
+                key.SetValue("Written", Written, RegistryValueKind.String);
+
+                // Not an environment value at all, and its decimal digits would read as a path.
+                key.SetValue("Number", 1, RegistryValueKind.DWord);
+            }
+
+            var values = UserEnvironment.ReadEnvironmentKey(Registry.CurrentUser, path);
+
+            Assert.Equal(new EnvironmentValue(Written, Expandable: true), values["Expanded"]);
+            Assert.Equal(new EnvironmentValue(Written, Expandable: false), values["Written"]);
+            Assert.DoesNotContain("Number", values.Keys, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(path, throwOnMissingSubKey: false);
+        }
     }
 }
