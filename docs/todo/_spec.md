@@ -507,8 +507,12 @@ view first, and §7.2.1's one action after it.
 - **A snapshot is stale as soon as it is read.** The view refreshes on a bounded cadence, never
   starts a read while one is still running, and keeps what the user is looking at across a refresh by
   process identifier and creation time, never by name.
-- **Hover text may say what one of Windows' own parts is.** It never says that anything is safe to
-  close, and it never suggests closing anything.
+- **Hover text says what one of Windows' own parts is, and why the size it is drawn at is normal.**
+  A reader meets one of these when it is the largest shape on screen, which is where a "RAM cleaner"
+  would offer to act, so a bare label is the one thing it cannot be. It never says that anything is
+  safe to close, and it never suggests closing anything. The sentence is reachable from the thing it
+  is about by whatever the reader is using, as §7.1's is, and it never resizes the picture it is
+  about: text that reflows under the drawing moves the shape out from under the pointer.
 - **Memory is not a RAM cleaner, in any phase, and never controls a service** (§2).
 - **Memory has one action, and §7.2.1 below specifies it.** The investigation found exactly one
   that fits this model: the program's own close, and nothing stronger.

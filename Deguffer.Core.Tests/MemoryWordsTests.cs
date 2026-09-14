@@ -69,6 +69,68 @@ public sealed class MemoryWordsTests
     public void NoPartTellsTheReaderToActOnIt() =>
         Assert.All(Enum.GetValues<MemoryPart>(), part => AssertSaysNothingToDo(MemoryPartGuide.Describe(part)));
 
+    /// <summary>
+    /// §7.2's rule for Windows' own parts: they say what they hold <em>and</em> why the size they are
+    /// drawn at is normal. A reader meets one of these when it is the largest shape on screen, which
+    /// is the moment a "RAM cleaner" would offer to act on it, so a bare label is the one thing that
+    /// cannot stand here.
+    ///
+    /// <para>A second full stop is the floor this can check mechanically, and not the whole rule: a
+    /// sentence that says what a part holds has no room left for the second half. What it fails is a
+    /// sentence cut back to a label, which <see cref="MemoryPart.Windows"/>,
+    /// <see cref="MemoryPart.Modified"/> and <see cref="MemoryPart.Free"/> each were.</para>
+    /// </summary>
+    [Fact]
+    public void EveryPartOfWindowsSaysWhyItsSizeIsNormal()
+    {
+        var parts = PartsOfWindows();
+
+        // The union of two reads, so a failure to build either tree cannot quietly leave this
+        // asserting over nothing. These two are the parts only one of them draws.
+        Assert.Contains(MemoryPart.Standby, parts);
+        Assert.Contains(MemoryPart.SystemCache, parts);
+
+        Assert.All(parts, part =>
+        {
+            var said = MemoryPartGuide.Describe(part);
+
+            Assert.True(
+                said.Count(character => character == '.') > 1,
+                $"{part} says only \"{said}\", which has room for what it is and none for why its size is normal.");
+        });
+    }
+
+    /// <summary>
+    /// Windows itself and every part the view draws under it, taken from built trees rather than
+    /// from a list written out here. A part added under Windows joins this on its own, where a list
+    /// of names would leave it untested.
+    ///
+    /// <para>Two reads, because <see cref="MemoryTreeBuilder"/> draws the separate page lists where
+    /// it could read them and the system cache where it could not, so no single tree holds every
+    /// part.</para>
+    /// </summary>
+    private static IReadOnlyList<MemoryPart> PartsOfWindows() =>
+    [
+        MemoryPart.Windows,
+        .. PartsUnderWindows(WithPageLists()).Concat(PartsUnderWindows(Snapshot())).Distinct(),
+    ];
+
+    private static IEnumerable<MemoryPart> PartsUnderWindows(MemorySnapshot snapshot)
+    {
+        var tree = Tree(snapshot);
+        var windows = tree.Find(MemoryNodeKey.Of(MemoryPart.Windows))
+            ?? throw new InvalidOperationException("The tree has no Windows part.");
+
+        return tree.ChildrenOf(windows).ToArray().Select(tree.PartOf);
+    }
+
+    /// <summary>A read where Windows returned its page lists, and where the compression store is running.</summary>
+    private static MemorySnapshot WithPageLists() => new MemorySnapshotBuilder()
+        .Process(100, 1, "alpha.exe", 500, created: 10)
+        .Process(200, 1, MemoryTreeBuilder.CompressionStoreName, 300, created: 20)
+        .Lists(zeroedMiB: 300, freeMiB: 500, modifiedMiB: 100, standbyMiB: 4_000)
+        .Build();
+
     [Fact]
     public void TheNotesAlwaysSayTheFiguresAreLowerBounds() =>
         Assert.Contains("lower bound", MemoryNotes.For(Tree(Snapshot()))[0], StringComparison.Ordinal);
