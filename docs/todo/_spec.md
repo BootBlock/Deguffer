@@ -447,14 +447,14 @@ answers **"where is the memory going"**, for physical memory rather than a drive
 destination of its own for the reason Explore is. [memory-view.md](memory-view.md) is the
 investigation behind every rule here, with what was measured and what was not.
 
-As with the rest of this document, what follows is the target. The first phase is a read-only view:
-it closes, stops and terminates nothing. [memory-view-plan.md](memory-view-plan.md) states the order
-it is built in.
+As with the rest of this document, what follows is the target.
+[done/memory-view-plan.md](done/memory-view-plan.md) states the order it was built in: a read-only
+view first, and §7.2.1's one action after it.
 
 - **Memory carries §7.1's discipline.** It never classifies: it reports a name and a number, and
   never says that a process, a service or a part of Windows is unneeded, idle or safe to close. It
   never pre-selects anything, and never orders anything by how closable it is. What it shows and what
-  it would act on are different sets, and in the first phase the second one is empty.
+  it would act on are different sets, and the second is far smaller than the first.
 - **The headline is commit charge against the commit limit, with available memory beside it.** Low
   free memory is normal: Windows fills memory nothing else needs with cache, and standby pages are
   available the moment something asks for them. Of the two failures a user feels, commit charge

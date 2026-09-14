@@ -206,7 +206,7 @@
 
             <ItemsControl ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,2,0,0">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
+                    <DataTemplate x:DataType="configuration:SourceRoot">
                         <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
                               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -217,14 +217,26 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="{x:Bind}"
-                                       VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTipService.ToolTip="{x:Bind}" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Path}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind Path}" />
+
+                                <!-- A standing consent nobody can see is one nobody can withdraw. The
+                                     folder was approved for a drive whose contents are downloaded to
+                                     read them, so the row says so, and removing the folder is how the
+                                     answer is taken back. -->
+                                <TextBlock Text="Cloud storage. You chose to let Deguffer search this, so reading it downloads the files in it."
+                                           Style="{StaticResource SecondaryText}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,0"
+                                           Visibility="{x:Bind RemoteStorageApproved}" />
+                            </StackPanel>
 
                             <Button Grid.Column="1"
                                     Content="Remove"
-                                    Tag="{x:Bind}"
+                                    Tag="{x:Bind Path}"
                                     Click="OnRemoveSourceRoot"
                                     AutomationProperties.Name="Remove source folder" />
                         </Grid>

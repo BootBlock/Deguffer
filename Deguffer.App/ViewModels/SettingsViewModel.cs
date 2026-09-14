@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
@@ -19,12 +20,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly PreferenceService _preferences;
     private readonly SourceRootService _sourceRoots;
     private readonly KeepService _keeps;
+    private readonly IVolumeInventory _volumes;
 
-    public SettingsViewModel(PreferenceService preferences, SourceRootService sourceRoots, KeepService keeps)
+    /// <param name="volumes">
+    /// The machine's volumes, so that approving a folder can say what the folder is stored on.
+    /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the App has no
+    /// test project, so an optional seam here would be a parameter nothing ever passes.
+    /// </param>
+    public SettingsViewModel(
+        PreferenceService preferences,
+        SourceRootService sourceRoots,
+        KeepService keeps,
+        IVolumeInventory volumes)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
         _keeps = keeps;
+        _volumes = volumes;
 
         SourceRoots = [.. sourceRoots.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
@@ -73,19 +85,41 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// pair that decides what Deguffer may even look at, which is why the page states where it will
     /// and will not look rather than presenting them as another preference.
     /// </summary>
-    public ObservableCollection<string> SourceRoots { get; }
+    public ObservableCollection<SourceRoot> SourceRoots { get; }
 
     public bool HasNoSourceRoots => SourceRoots.Count == 0;
 
-    /// <summary>Approve a folder. No-op if it was already approved.</summary>
-    public void AddSourceRoot(string root)
+    /// <summary>
+    /// What the user has to be told before <paramref name="folder"/> is approved, if anything. The
+    /// page shows it and asks; nothing is stored by asking.
+    ///
+    /// <para>The remembered volume list is dropped first. It is kept for the life of a planning pass,
+    /// so a cloud client that mounted itself since the last one would be missing from it and the
+    /// folder would be stored with no warning shown. One enumeration of the machine's drives per
+    /// folder the user picks by hand is not a cost worth a stale answer.</para>
+    /// </summary>
+    public SourceRootApproval ApprovalFor(string folder)
     {
-        if (SourceRoots.Contains(root, StringComparer.OrdinalIgnoreCase))
-        {
-            return;
-        }
+        _volumes.Invalidate();
 
-        Apply(() => _sourceRoots.Add(root));
+        return SourceRootApproval.For(_volumes, folder);
+    }
+
+    /// <summary>
+    /// Approve the folder <paramref name="approval"/> names, once the user has read whatever it had to
+    /// say about it.
+    ///
+    /// <para>It takes the approval rather than a path, so that a folder cannot be stored as approved
+    /// for a cloud mount unless the sentence explaining that was built for it — see
+    /// <see cref="SourceRootApproval.Accepted"/>. Re-approving an already-approved folder is passed
+    /// through rather than short-circuited here, because that is how a folder a plan refused comes to
+    /// carry the approval.</para>
+    /// </summary>
+    public void AddSourceRoot(SourceRootApproval approval)
+    {
+        ArgumentNullException.ThrowIfNull(approval);
+
+        Apply(() => _sourceRoots.Add(approval.Accepted()));
     }
 
     public void RemoveSourceRoot(string root) => Apply(() => _sourceRoots.Remove(root));
@@ -101,7 +135,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         SaveFailed = !change();
 
-        LiveList.Show(SourceRoots, [.. _sourceRoots.Current], root => root);
+        LiveList.Show(SourceRoots, [.. _sourceRoots.Current], root => root.Path);
 
         OnPropertyChanged(nameof(HasNoSourceRoots));
     }

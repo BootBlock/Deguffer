@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Providers;
@@ -214,8 +215,8 @@ public class RouteAgreementTests
             new TreeDirectory(".git", new TreeDirectory("obj")),
             new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj")))));
 
-        var walked = await Discovery(Walking()).FindAsync([root]);
-        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+        var walked = await Discovery(Walking()).FindAsync([new SourceRoot(root)]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([new SourceRoot(root)]);
 
         Assert.False(walked.UsedIndex);
         Assert.True(indexed.UsedIndex);
@@ -253,8 +254,8 @@ public class RouteAgreementTests
 
         Assert.True(Path.Combine(root, Deep, Deep, Deep, "obj").Length > 260, "the tree is not long enough to test anything");
 
-        var walked = await Discovery(Walking()).FindAsync([root]);
-        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+        var walked = await Discovery(Walking()).FindAsync([new SourceRoot(root)]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([new SourceRoot(root)]);
 
         Assert.Equal([Path.Combine(root, Deep, Deep, Deep, "obj")], walked.Candidates);
         Assert.Equal(walked.Candidates, indexed.Candidates);
@@ -272,8 +273,8 @@ public class RouteAgreementTests
 
         var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory("obj", new TreeFile("Example.dll", 512)));
 
-        var walked = await Discovery(Walking()).FindAsync([root]);
-        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+        var walked = await Discovery(Walking()).FindAsync([new SourceRoot(root)]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([new SourceRoot(root)]);
 
         Assert.Empty(walked.Candidates);
         Assert.Empty(indexed.Candidates);
@@ -319,8 +320,8 @@ public class RouteAgreementTests
 
         using var denied = new DeniedDirectory(Path.Combine(root, "restricted"));
 
-        var walked = await Discovery(Walking()).FindAsync([root]);
-        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([root]);
+        var walked = await Discovery(Walking()).FindAsync([new SourceRoot(root)]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([new SourceRoot(root)]);
 
         Assert.Empty(walked.Candidates);
         Assert.Equal([candidate], indexed.Candidates);
@@ -449,7 +450,7 @@ public class RouteAgreementTests
     /// </summary>
     private static SourceDirectoryDiscovery Discovery(IDirectoryScanner scanner)
     {
-        var discovery = new SourceDirectoryDiscovery(scanner);
+        var discovery = new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory());
         discovery.Include(["obj"]);
         return discovery;
     }

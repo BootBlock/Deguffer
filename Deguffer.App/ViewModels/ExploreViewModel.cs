@@ -165,10 +165,18 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// on a cloud mount is the same hazard as scanning the whole of it, and it is the route a
     /// reader takes next when the drive is refused.</para>
     ///
-    /// <para>A target on a volume the picker does not offer — a share, most often — is not refused
-    /// here. Nothing measured its flags, and refusing on no reading would be a guess.</para>
+    /// <para>Asked of the machine's volumes through <see cref="HostVolume"/> rather than of
+    /// <see cref="Drives"/>. The picker's list answers only for the volumes this page chose to offer,
+    /// and deriving the refusal from it left the rule where Core could not reach it — which is how an
+    /// approved source folder on a cloud mount came to be searched in full.</para>
+    ///
+    /// <para>A target on a volume the inventory says nothing about — a share, most often — is not
+    /// refused here. Nothing measured its flags, and refusing on no reading would be a guess.</para>
     /// </summary>
-    private string? Refusal => ScanRoot is { } root ? Offered(Path.GetPathRoot(root))?.Refusal : null;
+    private string? Refusal =>
+        ScanRoot is { } root && HostVolume.For(_volumes, root) is { StoresContentRemotely: true }
+            ? DriveChoice.RemoteStorageRefusal
+            : null;
 
     public bool IsScopedToFolder => ScopeFolder is not null;
 

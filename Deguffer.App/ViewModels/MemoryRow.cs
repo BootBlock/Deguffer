@@ -7,7 +7,9 @@ namespace Deguffer.App.ViewModels;
 /// One line of the memory list: what a part or a process is, and how much it holds.
 ///
 /// <para>The list is the same contents as the picture, for a reader who cannot use a picture. It says
-/// what each thing is and what it holds, and offers nothing to do about it (§7.2).</para>
+/// what each thing is and what it holds, and classifies nothing: it never says a row is unneeded,
+/// idle or safe to close, and it is never ordered by how closable anything is (§7.2). A row may be
+/// picked, and <see cref="MemorySelection"/> is what a pick means.</para>
 /// </summary>
 public sealed partial class MemoryRow : ObservableObject
 {

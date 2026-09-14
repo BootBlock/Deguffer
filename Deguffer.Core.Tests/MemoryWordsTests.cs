@@ -18,10 +18,13 @@ public sealed class MemoryWordsTests
     /// What a "RAM cleaner" says, and what this must never say. Each is matched without regard to
     /// case, anywhere in the text.
     ///
-    /// <para>This covers the sentences Core writes, which is why §7.2's words are in Core at all. The
-    /// list cannot be turned on the page's own literals as it stands: the page legitimately says it
-    /// closes and stops nothing, which the substrings here would read as the opposite. What the shell
-    /// itself says is checked by driving it (G8).</para>
+    /// <para>This covers the sentences a memory <em>picture</em> writes, which is why §7.2's words are
+    /// in Core at all. It is not turned on every sentence Core writes, and cannot be: §7.2.1's close
+    /// asks a program to close, so its refusals, its confirmation and its report say "close" in almost
+    /// every line, and the substrings here would read the one action the specification allows as the
+    /// thing it forbids. Those sentences are held to §7.2.1 by
+    /// <see cref="MemoryActionPolicyTests"/> and <see cref="MemoryClosePromptTests"/> instead, row by
+    /// row. What the shell itself says is checked by driving it (G8).</para>
     /// </summary>
     private static readonly string[] NeverSaid =
     [

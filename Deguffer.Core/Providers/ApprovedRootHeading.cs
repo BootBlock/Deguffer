@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -15,8 +16,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal static class ApprovedRootHeading
 {
-    public static string? For(IReadOnlyList<string> approvedRoots, string path) =>
+    public static string? For(IReadOnlyList<SourceRoot> approvedRoots, string path) =>
         approvedRoots
+            .Select(root => root.Path)
             .Where(root => LongPath.Contains(root, path))
             .MaxBy(root => root.Length);
 }
