@@ -9,7 +9,7 @@ public sealed class TempDirectory : IDisposable
         // now rather than staying for good.
         ScratchRoot.SweepOnce();
 
-        Path = System.IO.Path.Combine(ScratchRoot.Path, Guid.NewGuid().ToString("N"));
+        Path = System.IO.Path.Combine(ScratchRoot.Path, Scratch.NewIdentifier());
         Directory.CreateDirectory(Path);
     }
 
