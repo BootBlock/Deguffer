@@ -10,14 +10,29 @@ namespace Deguffer.App.ViewModels;
 /// Drives the Memory page: reads where memory is every couple of seconds, builds the tree from each
 /// read, and keeps the reader on whatever they were looking at.
 ///
-/// <para>It shows and explains, and offers nothing to do (§7.2). There is no command here, no
-/// selection, and nothing that reaches a process.</para>
+/// <para>It shows and explains. What the page <em>does</em> is <see cref="MemorySelection"/>'s, and
+/// there is exactly one of it: asking one program the user picked to close itself (§7.2.1). Nothing
+/// here classifies, pre-selects or orders anything by how closable it is.</para>
 ///
 /// <para>The page is pointed at one node of one tree, as Explore's is, and everything on screen is
 /// rebuilt from that pair: the headline, the rows, the trail and the picture.</para>
 /// </summary>
-public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
+public sealed partial class MemoryViewModel : ObservableObject
 {
+    private readonly MemoryFeed _feed;
+
+    public MemoryViewModel(MemoryFeed feed, MemorySelection selection)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        ArgumentNullException.ThrowIfNull(selection);
+
+        _feed = feed;
+        Selection = selection;
+    }
+
+    /// <summary>The program the user picked out by hand, and the one thing §7.2.1 lets them do with it.</summary>
+    public MemorySelection Selection { get; }
+
     /// <summary>Where memory is, as of the last read, or null before the first one.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTree))]
@@ -79,6 +94,17 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
 
     public bool CanAscend => Tree is { } tree && CurrentNode != tree.RootNode;
 
+    /// <summary>
+    /// Whether the rows are being rewritten from here.
+    ///
+    /// <para>Read by the page, because a bound <c>ListView</c> drops an item from its own selection
+    /// when the collection under it stops holding that item where it was, and reports that back as a
+    /// selection change. Taken for a gesture, it would put a program under §7.2.1's one action that
+    /// nobody picked — and this page rewrites its rows every couple of seconds, so what Explore meets
+    /// on a scan, Memory meets continuously.</para>
+    /// </summary>
+    public bool IsShowingRows { get; private set; }
+
     /// <summary>Raised once the tree, the node or the rows have changed, so the page redraws once.</summary>
     public event EventHandler? ViewChanged;
 
@@ -94,7 +120,7 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
 
         try
         {
-            await foreach (var snapshot in feed.ReadAsync(ct).ConfigureAwait(true))
+            await foreach (var snapshot in _feed.ReadAsync(ct).ConfigureAwait(true))
             {
                 // A read already past its own last check still finishes, so without this a reading
                 // taken for a page the reader has left could be drawn over a newer one.
@@ -131,7 +157,7 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
     {
         if (Tree is { } tree && node >= 0 && node < tree.NodeCount && tree.IsContainer(node))
         {
-            Show(tree, node);
+            Show(tree, node, navigated: true);
         }
     }
 
@@ -139,7 +165,7 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
     {
         if (Tree is { } tree && CurrentNode != tree.RootNode)
         {
-            Show(tree, tree.ParentOf(CurrentNode));
+            Show(tree, tree.ParentOf(CurrentNode), navigated: true);
         }
     }
 
@@ -155,7 +181,7 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
 
         if (Tree is { } tree && tree.Find(crumb.Key) is { } node)
         {
-            Show(tree, node);
+            Show(tree, node, navigated: true);
         }
     }
 
@@ -186,9 +212,16 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
     /// <summary>
     /// Take a new reading: keep the reader where they were, and rebuild everything on screen from it.
     /// </summary>
-    private void Show(MemoryTree tree) => Show(tree, MemoryPlace.Carry(Tree, CurrentNode, tree));
+    private void Show(MemoryTree tree) =>
+        Show(tree, MemoryPlace.Carry(Tree, CurrentNode, tree), navigated: false);
 
-    private void Show(MemoryTree tree, int node)
+    /// <param name="navigated">
+    /// Whether the reader moved, rather than a reading arriving. It decides what happens to the
+    /// selection: a program picked in one part is not picked in the next, and a reading is the same
+    /// subject measured again, so dropping the selection on every one of those would make a program
+    /// impossible to pick at all on a page that reads twice a second.
+    /// </param>
+    private void Show(MemoryTree tree, int node, bool navigated)
     {
         var standing = Tree;
 
@@ -210,6 +243,17 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
         ShowNotes(tree);
         ShowRows(tree, node, sameThing);
         ShowTrail(tree, node);
+
+        // After the rows, because the page puts the list's highlight back on whatever this says is
+        // selected, and before the event, because that is what redraws the picture with its outline.
+        if (navigated)
+        {
+            Selection.Show(tree);
+        }
+        else
+        {
+            Selection.Carry(tree);
+        }
 
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -248,6 +292,20 @@ public sealed partial class MemoryViewModel(MemoryFeed feed) : ObservableObject
     /// away the scroll position and the reader's place twice a second.
     /// </param>
     private void ShowRows(MemoryTree tree, int node, bool sameThing)
+    {
+        IsShowingRows = true;
+
+        try
+        {
+            Rewrite(tree, node, sameThing);
+        }
+        finally
+        {
+            IsShowingRows = false;
+        }
+    }
+
+    private void Rewrite(MemoryTree tree, int node, bool sameThing)
     {
         if (!sameThing)
         {

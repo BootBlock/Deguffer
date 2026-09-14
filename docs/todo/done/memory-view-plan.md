@@ -1,13 +1,16 @@
 # A memory view beside Explore — plan
 
-> **Status:** 🟢 ACTIVE — phase 1, a read-only view, landed on 2026-09-13, and every step of it is
+> **Status:** ✅ COMPLETE — phase 1, a read-only view, landed on 2026-09-13, and every step of it is
 > closed under [#123](https://github.com/BootBlock/Deguffer/issues/123). Phase 2, the close action, is
-> specified in [_spec.md](_spec.md) §7.2.1, which landed on 2026-09-13 before any of its code, and is
-> built under [#129](https://github.com/BootBlock/Deguffer/issues/129).
+> specified in [_spec.md](../_spec.md) §7.2.1, which landed on 2026-09-13 before any of its code;
+> its first three steps landed on 2026-09-13 and the Memory page itself on 2026-09-14, under
+> [#129](https://github.com/BootBlock/Deguffer/issues/129). Both phases are built, so the plan is
+> finished. What §7.2 and §7.2.1 of the specification require of the view is the live record, and
+> "Limits that stay open" below states what was never measured.
 
 On 2026-09-12 the maintainer decided to widen Deguffer's scope to show where memory goes, on the
-strength of [memory-view.md](memory-view.md). That document is the record of the investigation and
-stays as it was written. [_spec.md](_spec.md) §1, §2, §7.2 and §7.2.1 state what the view is and what
+strength of [memory-view.md](../memory-view.md). That document is the record of the investigation and
+stays as it was written. [_spec.md](../_spec.md) §1, §2, §7.2 and §7.2.1 state what the view is and what
 it will never do. This one states the order it is built in, and what each step has to prove before it
 lands.
 
@@ -54,7 +57,7 @@ It offers no action of any kind.
 
 ## Phase 2: the close action
 
-[#129](https://github.com/BootBlock/Deguffer/issues/129) tracks it. [_spec.md](_spec.md) §7.2.1
+[#129](https://github.com/BootBlock/Deguffer/issues/129) tracks it. [_spec.md](../_spec.md) §7.2.1
 specifies it, and that specification landed before any of the code, as the issue required: the
 program's own close and nothing stronger, posted only to the visible, unowned, uncloaked top-level
 windows of a program in the user's own session that owns no console window, to a process held open by
@@ -63,7 +66,7 @@ reason, commit charge reported before and after, and §5.6 met by separating wha
 exactly from what can only be listed, rather than by a claim that nothing else stopped. Memory never
 controls a service (§2),
 whatever the open question about service control in
-[unreached-locations.md](unreached-locations.md) comes to decide for disk.
+[unreached-locations.md](../unreached-locations.md) comes to decide for disk.
 
 Each step lands on its own, in this order, because each depends on the one before it.
 

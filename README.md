@@ -11,8 +11,8 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 purpose. **De-** removes it.
 
 > **Status:** Version 0.70.0. Forty-three sources across the tiers, a file-table-backed Explore view
-> of the whole drive, and a read-only Memory view of where physical memory goes. See
-> [Roadmap](#roadmap).
+> of the whole drive, and a Memory view of where physical memory goes that can ask one program you
+> pick to close itself. See [Roadmap](#roadmap).
 
 ## Why
 
@@ -182,7 +182,17 @@ Every size is a lower bound, and the page says so in its own words. The private 
 closest single figure to what closing a program would return, and compressed pages, shared pages and
 the memory the kernel holds on a process's behalf are not in it. Where a figure cannot be trusted or
 a table cannot be read to its end, the view says which one and what is missing, rather than drawing
-a zero. It acts on nothing.
+a zero.
+
+The view has one action, and it will not grow a second. Pick a program and Deguffer will ask it to
+close, the way its own close button does: it posts one close to each of that program's own windows
+and does nothing else, so unsaved work stays the program's own question, asked in the program's own
+words. It never terminates anything, never closes a service host, never touches a program in another
+session or under another account, and never asks for more rights in order to reach one. Whatever it
+will not do, it says why on the row rather than greying a button out, and it confirms every close
+before sending it, naming the program and how many windows will be asked. Afterwards it reports what
+it sent and where, what it expected to exit, and what exited that it sent nothing to — and it never
+claims that nothing else stopped, because processes exit on their own and it cannot know that.
 
 ## Building
 
@@ -220,8 +230,9 @@ knowledge.
 ## Roadmap
 
 File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
-elevated, and walks whatever the table cannot account for. The Memory view has landed as well, as a
-read-only picture that acts on nothing. Still to come: VS Code workspace storage with per-workspace
+elevated, and walks whatever the table cannot account for. The Memory view has landed as well, with
+the one action it will ever have: asking a program you pick to close itself, and nothing stronger.
+Still to come: VS Code workspace storage with per-workspace
 ages, Docker (reporting reclaim *inside* the VHDX separately from host space), and Android SDK.
 
 Deliberately out of scope: `WinSxS`, `Windows\Installer`, and installer package caches. They are

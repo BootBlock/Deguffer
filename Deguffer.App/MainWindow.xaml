@@ -66,7 +66,8 @@
                 </NavigationViewItem>
 
                 <!-- Memory answers "where is the memory going", which §7.2 makes a question of its
-                     own. It shows and explains, and acts on nothing. -->
+                     own. It shows and explains, and has one action on what it shows: asking a
+                     program the user picked to close itself (§7.2.1). -->
                 <NavigationViewItem x:Name="MemoryItem" Content="Memory" Tag="Memory">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE964;" />

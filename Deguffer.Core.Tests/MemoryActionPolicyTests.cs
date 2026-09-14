@@ -9,7 +9,7 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Every row is proven with the reason that row states, because §7.2.1 makes a refusal a
 /// sentence on the row rather than a disabled button: a user who picked a process out of a picture
-/// of memory and found nothing to press would learn nothing about which of eleven reasons
+/// of memory and found nothing to press would learn nothing about which row of that table
 /// applied.</para>
 ///
 /// <para><see cref="MemoryActionPolicy.Decide"/> takes the facts rather than reading them, so these
