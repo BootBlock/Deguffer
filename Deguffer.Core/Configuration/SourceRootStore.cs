@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Configuration;
@@ -20,6 +21,16 @@ namespace Deguffer.Core.Configuration;
 /// </summary>
 public sealed class SourceRootStore
 {
+    /// <summary>
+    /// The two property names in the file, which are a stored format rather than an implementation
+    /// detail: renaming <see cref="SourceRoot.RemoteStorageApproved"/> must not silently drop every
+    /// approval the user has given. <see cref="StoredRoot"/> holds them to the names, and the read
+    /// below uses the same constants, so the written shape and the read shape cannot drift.
+    /// </summary>
+    private const string PathProperty = "path";
+
+    private const string ApprovedProperty = "remoteStorageApproved";
+
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
     private readonly string _directory;
@@ -41,19 +52,19 @@ public sealed class SourceRootStore
     /// approved. Nothing here checks the directories exist — a root on a disconnected drive is
     /// still approved, and discovery treats it as finding nothing.
     /// </summary>
-    public IReadOnlyList<string> Load()
+    public IReadOnlyList<SourceRoot> Load()
     {
         try
         {
             var json = File.ReadAllText(LongPath.Extended(_file));
-            var stored = JsonSerializer.Deserialize<string[]>(json, SerializerOptions);
+            var stored = JsonSerializer.Deserialize<JsonElement[]>(json, SerializerOptions);
 
             if (stored is null)
             {
                 return [];
             }
 
-            return [.. stored.Select(UsableRoot).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)];
+            return Usable(stored.Select(Entry).OfType<SourceRoot>());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -72,16 +83,20 @@ public sealed class SourceRootStore
     /// dropped. A caller holding its own copy must adopt this rather than its own list, or the
     /// approved roots it shows and the ones Deguffer will search stop being the same set.
     /// </param>
-    public bool Save(IReadOnlyList<string> roots, out IReadOnlyList<string> stored)
+    public bool Save(IReadOnlyList<SourceRoot> roots, out IReadOnlyList<SourceRoot> stored)
     {
         ArgumentNullException.ThrowIfNull(roots);
 
-        stored = [.. roots.Select(UsableRoot).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)];
+        stored = Usable(roots);
 
         try
         {
             Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(stored, SerializerOptions));
+            File.WriteAllText(
+                LongPath.Extended(_file),
+                JsonSerializer.Serialize(
+                    stored.Select(root => new StoredRoot(root.Path, root.RemoteStorageApproved)),
+                    SerializerOptions));
 
             return true;
         }
@@ -92,11 +107,47 @@ public sealed class SourceRootStore
         }
     }
 
-    /// <summary>Persist <paramref name="roots"/> where the caller keeps no copy of its own.</summary>
-    public bool Save(IReadOnlyList<string> roots) => Save(roots, out _);
+    /// <summary>
+    /// Persist <paramref name="roots"/> where the caller keeps no copy of its own. See
+    /// <see cref="Save(IReadOnlyList{SourceRoot}, out IReadOnlyList{SourceRoot})"/> for what reaches
+    /// disk.
+    /// </summary>
+    public bool Save(IReadOnlyList<SourceRoot> roots) => Save(roots, out _);
 
     /// <summary>
-    /// A root in the form the rest of the code may rely on, or null if it is not usable.
+    /// One stored entry, in either form the file may hold it in, or null where it is not usable.
+    ///
+    /// <para><b>A bare string is read as well as an object, rather than the file being migrated on
+    /// load.</b> Every folder approved before Deguffer asked about cloud mounts is stored as a string,
+    /// and a read that rewrote the file to bring it forward would lose the user's approvals outright
+    /// on the profile where that write is what fails. A string carries no approval, which is the
+    /// narrow reading of an answer nobody was asked for — see
+    /// <see cref="SourceRoot.RemoteStorageApproved"/>. The next save writes the new
+    /// shape for every entry, so the old one disappears the first time the user changes anything.</para>
+    ///
+    /// <para>Each property is read through its own kind check rather than by deserialising the
+    /// element, so a hand-edited entry with a number where the path should be costs that entry and
+    /// not the file.</para>
+    /// </summary>
+    private static SourceRoot? Entry(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.String => new SourceRoot(element.GetString()!),
+        JsonValueKind.Object => Text(element, PathProperty) is { } path
+            ? new SourceRoot(path, Flag(element, ApprovedProperty))
+            : null,
+        _ => null,
+    };
+
+    private static string? Text(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static bool Flag(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
+
+    /// <summary>
+    /// The roots the rest of the code may rely on: absolute, resolved, and each folder once.
     ///
     /// A root has to be an absolute path: a relative one would resolve against whatever directory
     /// the process happens to be running in, which is not something the user consented to. It also
@@ -107,6 +158,39 @@ public sealed class SourceRootStore
     /// index narrows by comparing strings — so a hand-edited <c>C:/Users/me/src</c> or a value
     /// carrying <c>..</c> would make the two routes disagree, and an elevated run would quietly
     /// return an empty plan where an unelevated one found everything.
+    ///
+    /// <para><b>A folder named twice keeps its first spelling and the narrower of the two answers
+    /// about its volume.</b> An approval and a refusal of the same path are indistinguishable in the
+    /// file from the same decision written twice, so there is no reading that recovers what the user
+    /// meant — and of the two available, only one is safe. Keeping whichever came first would let
+    /// <c>[{V:\work, approved}, {V:\work, not approved}]</c> grant an approval the next line
+    /// withdraws, which is this file's own "every failure narrows scope" rule inverted, and the
+    /// direction that spends a download of everything the user keeps in the cloud. Agreement is left
+    /// alone: two entries that both carry the approval keep it.</para>
     /// </summary>
-    private static string? UsableRoot(string? root) => LongPath.Configured(root);
+    private static IReadOnlyList<SourceRoot> Usable(IEnumerable<SourceRoot> roots) =>
+    [
+        .. roots
+            .Select(root => LongPath.Configured(root.Path) is { } path
+                ? root with { Path = path }
+                : null)
+            .OfType<SourceRoot>()
+            .GroupBy(root => root.Path, StringComparer.OrdinalIgnoreCase)
+
+            // GroupBy yields its groups in first-appearance order and each group in file order, so
+            // the folder keeps the place and the spelling the user would recognise in Settings.
+            .Select(named => named.First() with
+            {
+                RemoteStorageApproved = named.All(root => root.RemoteStorageApproved),
+            }),
+    ];
+
+    /// <summary>
+    /// One entry as it is written, holding the property names in <see cref="PathProperty"/> and
+    /// <see cref="ApprovedProperty"/> rather than taking whatever <see cref="SourceRoot"/>'s members
+    /// happen to be called.
+    /// </summary>
+    private sealed record StoredRoot(
+        [property: JsonPropertyName(PathProperty)] string Path,
+        [property: JsonPropertyName(ApprovedProperty)] bool RemoteStorageApproved);
 }

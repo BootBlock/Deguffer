@@ -1,5 +1,7 @@
+using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
@@ -10,7 +12,8 @@ public sealed partial class SettingsPage : Page
 {
     public SettingsPage()
     {
-        ViewModel = new SettingsViewModel(App.Preferences, App.SourceRoots, App.Keeps);
+        ViewModel = new SettingsViewModel(
+            App.Preferences, App.SourceRoots, App.Keeps, VolumeInventory.Current);
         InitializeComponent();
     }
 
@@ -38,10 +41,53 @@ public sealed partial class SettingsPage : Page
         WinRT.Interop.InitializeWithWindow.Initialize(
             picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
 
-        if (await picker.PickSingleFolderAsync() is { } folder)
+        if (await picker.PickSingleFolderAsync() is not { } folder)
         {
-            ViewModel.AddSourceRoot(folder.Path);
+            return;
         }
+
+        var approval = ViewModel.ApprovalFor(folder.Path);
+
+        if (approval.NeedsConfirming && !await AcceptsAsync(approval))
+        {
+            return;
+        }
+
+        ViewModel.AddSourceRoot(approval);
+    }
+
+    /// <summary>
+    /// Ask before approving a folder Deguffer has something to warn about, and report whether the user
+    /// said yes.
+    ///
+    /// <para>A dialog rather than a sentence on the row afterwards. The warning is about a cost the
+    /// folder's own contents decide — the user knows what is in it and Deguffer does not — so it has to
+    /// be read before the approval, not discovered after it. Cancel is the default button, on
+    /// <see cref="ContentDialogExploreConfirmation"/>'s reasoning: a reader who presses Enter on a
+    /// dialog they have not read must not consent by reflex.</para>
+    /// </summary>
+    private async Task<bool> AcceptsAsync(SourceRootApproval approval)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+
+            // The popup layer does not inherit the theme applied to the window root, so without this
+            // it renders dark over a light window.
+            RequestedTheme = ActualTheme,
+
+            Title = "Add this folder anyway?",
+            Content = new TextBlock
+            {
+                Text = $"{approval.Path}\n\n{approval.Warning}",
+                TextWrapping = TextWrapping.WrapWholeWords,
+            },
+            PrimaryButtonText = "Add folder",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
     }
 
     private void OnRemoveSourceRoot(object sender, RoutedEventArgs e)
