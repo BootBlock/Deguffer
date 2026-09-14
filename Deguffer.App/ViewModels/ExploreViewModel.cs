@@ -9,6 +9,7 @@ using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
@@ -34,6 +35,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly IVolumeInventory _volumes;
 
     /// <summary>
+    /// What a redraw puts in the list, the trail above it and the drive picker. Filled again per
+    /// redraw and never replaced: a walked scan publishes a snapshot every few hundred milliseconds,
+    /// and building three lists for each of those is work to say what was already said (G5).
+    /// </summary>
+    private readonly List<int> _arriving = [];
+
+    private readonly List<ExploreCrumb> _trail = [];
+
+    private readonly List<DriveChoice> _offered = [];
+
+    /// <summary>
     /// What the app knows about well-known files and folders, resolved against this machine once
     /// and read from here on (G5). Held rather than reached for statically, so a test that hands the
     /// page a synthetic profile gets a page that explains that profile's contents.
@@ -49,15 +61,16 @@ public sealed partial class ExploreViewModel : ObservableObject
     private bool _hasScanned;
 
     /// <summary>
-    /// True while <see cref="RefreshDrives"/> is rebuilding the list.
+    /// True while <see cref="RefreshDrives"/> is bringing the list up to date.
     ///
-    /// <para>Emptying an <c>ItemsSource</c> makes the picker write null back through its two-way
-    /// binding, before this has put the selection back. Taken at face value that is the user
-    /// choosing a different drive, so it drops the folder scope — and the refresh happens as the
-    /// picker opens, which is to say every time somebody looks at the list without touching
-    /// it.</para>
+    /// <para>A picker whose selected entry stops being in the list where it was writes null back
+    /// through its two-way binding, before this has put the selection back. Taken at face value that
+    /// is the user choosing a different drive, so it drops the folder scope — and the refresh happens
+    /// as the picker opens, which is to say every time somebody looks at the list without touching
+    /// it. A refresh that finds the same drives unchanged now says nothing to the picker at all, but
+    /// one that finds a drive gone, or the free space on the chosen one moved, still does.</para>
     /// </summary>
-    private bool _rebuildingDrives;
+    private bool _refreshingDrives;
 
     /// <summary>
     /// The refusal <see cref="ExplainRefusal"/> last put on the status line, so it can take that
@@ -605,12 +618,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
     /// alternative leaves both set, and the page then states one target while scanning another.
     ///
-    /// <para>Only where a person chose it. See <see cref="_rebuildingDrives"/> for the writes that
+    /// <para>Only where a person chose it. See <see cref="_refreshingDrives"/> for the writes that
     /// come from rebuilding the list rather than from the picker.</para>
     /// </summary>
     partial void OnSelectedDriveChanged(DriveChoice? value)
     {
-        if (_rebuildingDrives)
+        if (_refreshingDrives)
         {
             return;
         }
@@ -887,76 +900,37 @@ public sealed partial class ExploreViewModel : ObservableObject
         // land in different days (G5).
         var now = DateTime.UtcNow;
 
-        var at = 0;
+        _arriving.Clear();
 
         foreach (var child in tree.ChildrenOf(node))
         {
-            if (Selection.WasRemoved(child))
+            if (!Selection.WasRemoved(child))
             {
-                continue;
+                _arriving.Add(child);
             }
-
-            if (at < Rows.Count && Rows[at].Is(tree, child))
-            {
-                Rows[at].Describe(tree, total, now);
-            }
-            else if (RowFor(tree, child, at) is { } sits)
-            {
-                Rows.Move(sits, at);
-                Rows[at].Describe(tree, total, now);
-            }
-            else
-            {
-                Rows.Insert(at, new ExploreRow(tree, child, total, now, _guide));
-            }
-
-            at++;
         }
 
-        // Whatever the pass above did not claim: rows for things that have been removed, and the
-        // tail left behind when a directory holds fewer entries than it did.
-        while (Rows.Count > at)
-        {
-            Rows.RemoveAt(Rows.Count - 1);
-        }
+        LiveList.Show(
+            Rows,
+            _arriving,
+            row => row.Key,
+            child => ExploreRow.KeyOf(tree, child),
+            child => new ExploreRow(tree, child, total, now, _guide),
+            (row, _) => row.Describe(tree, total, now));
     }
 
     /// <summary>
-    /// Where the row for <paramref name="child"/> sits at or after <paramref name="from"/>, or null
-    /// where none of them is about it. Everything before <paramref name="from"/> is already settled,
-    /// so the search starts there.
-    ///
-    /// <para>The search starts where the row would be if nothing had moved, so what the pass around
-    /// it costs is how far the rows actually travelled: nothing at all while the sequence is
-    /// unchanged, which is every snapshot of one walk, and one step each after an entry is removed
-    /// from the directory on screen. It is quadratic only where most of the list has moved, and
-    /// <see cref="Show"/> keeps the one case that guarantees that — a finished tree in size order
-    /// replacing snapshots in name order — out of here entirely. What is left is two scans of one
-    /// volume, which agree on the order they are in and disagree only about whatever changed size
-    /// between them (G4).</para>
+    /// The path back to the root, brought up to date rather than rebuilt: a crumb is a button a
+    /// reader can put the keyboard on, and clearing the collection destroys it. A walked scan
+    /// publishes a snapshot every few hundred milliseconds, and every one of those redraws this.
     /// </summary>
-    private int? RowFor(ExploreTree tree, int child, int from)
-    {
-        for (var i = from; i < Rows.Count; i++)
-        {
-            if (Rows[i].Is(tree, child))
-            {
-                return i;
-            }
-        }
-
-        return null;
-    }
-
     private void BuildTrail(ExploreTree tree, int node)
     {
-        Trail.Clear();
-
-        var steps = new List<ExploreCrumb>();
+        _trail.Clear();
 
         for (var current = node; ; current = tree.ParentOf(current))
         {
-            steps.Add(new ExploreCrumb(current, tree.NameOf(current)));
+            _trail.Add(new ExploreCrumb(current, tree.NameOf(current)));
 
             if (current == tree.RootNode)
             {
@@ -964,12 +938,9 @@ public sealed partial class ExploreViewModel : ObservableObject
             }
         }
 
-        steps.Reverse();
+        _trail.Reverse();
 
-        foreach (var step in steps)
-        {
-            Trail.Add(step);
-        }
+        LiveList.Show(Trail, _trail, crumb => crumb.Node);
     }
 
     /// <summary>
@@ -988,21 +959,26 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         var chosen = SelectedDrive?.RootPath;
 
-        _rebuildingDrives = true;
+        _refreshingDrives = true;
 
         try
         {
             _volumes.Invalidate();
 
-            Drives.Clear();
+            _offered.Clear();
 
             // Only volumes that can actually be read. An optical drive with no disc and a card
             // reader with no card are both mounted and both answer no, and offering them is
             // offering a scan that cannot start.
             foreach (var volume in _volumes.Volumes.Where(v => v.IsReady && v.Kind != DriveType.Network))
             {
-                Drives.Add(DriveChoice.From(volume));
+                _offered.Add(DriveChoice.From(volume));
             }
+
+            // By mount point, so a refresh that finds the same drives with the same figures — which
+            // is most of them, most of the time — tells the picker nothing at all. An entry whose
+            // figures moved is replaced where it sits rather than the list being emptied and filled.
+            LiveList.Show(Drives, _offered, listed => listed.RootPath);
 
             // A refused volume is listed and is not defaulted onto. It is in the list because the
             // user can see the drive and needs to be told why it is not scanned, and it is not the
@@ -1015,7 +991,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
         finally
         {
-            _rebuildingDrives = false;
+            _refreshingDrives = false;
         }
 
         // A rebuild that hands the same volume back is not a choice, and the guard above stopped it

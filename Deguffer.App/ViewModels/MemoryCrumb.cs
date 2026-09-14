@@ -37,12 +37,4 @@ public sealed partial class MemoryCrumb : ObservableObject
             Name = MemoryText.Name(tree, node);
         }
     }
-
-    /// <summary>Whether this crumb is about <paramref name="node"/> of <paramref name="tree"/>.</summary>
-    public bool Is(MemoryTree tree, int node)
-    {
-        ArgumentNullException.ThrowIfNull(tree);
-
-        return Key == tree.KeyOf(node);
-    }
 }

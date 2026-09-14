@@ -3,6 +3,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Memory;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
@@ -20,6 +21,15 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class MemoryViewModel : ObservableObject
 {
     private readonly MemoryFeed _feed;
+
+    /// <summary>
+    /// What this reading puts in the list, and the trail it puts above it. Filled again per reading
+    /// and never replaced: a page that reads the machine every couple of seconds would otherwise
+    /// build two lists a second to say what it already said (G5).
+    /// </summary>
+    private readonly List<int> _arriving = [];
+
+    private readonly List<int> _steps = [];
 
     public MemoryViewModel(MemoryFeed feed, MemorySelection selection)
     {
@@ -258,33 +268,7 @@ public sealed partial class MemoryViewModel : ObservableObject
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ShowNotes(MemoryTree tree)
-    {
-        var notes = MemoryNotes.For(tree);
-
-        // Rewritten in place while the sentences have not changed, which is every refresh of a machine
-        // whose figures are all readable: clearing the collection would flicker the panel twice a
-        // second.
-        for (var i = 0; i < notes.Count; i++)
-        {
-            if (i < Notes.Count)
-            {
-                if (Notes[i] != notes[i])
-                {
-                    Notes[i] = notes[i];
-                }
-            }
-            else
-            {
-                Notes.Add(notes[i]);
-            }
-        }
-
-        while (Notes.Count > notes.Count)
-        {
-            Notes.RemoveAt(Notes.Count - 1);
-        }
-    }
+    private void ShowNotes(MemoryTree tree) => LiveList.Rewrite(Notes, MemoryNotes.For(tree));
 
     /// <param name="sameThing">
     /// Whether the rows on screen are about the same node of the same thing, in which case they are
@@ -309,55 +293,28 @@ public sealed partial class MemoryViewModel : ObservableObject
     {
         if (!sameThing)
         {
+            // Another node of another thing. Its rows have nothing to do with these, so one reset
+            // costs the list less than a removal per row, and there is no place worth keeping.
             Rows.Clear();
         }
 
         // What the rows are a share of, so a row's bar answers "how much of this part is that".
         var partTotal = tree.SizeOf(node);
 
-        var at = 0;
+        _arriving.Clear();
 
         foreach (var child in tree.ChildrenOf(node))
         {
-            if (at < Rows.Count && Rows[at].Is(tree, child))
-            {
-                Rows[at].Describe(tree, child, partTotal);
-            }
-            else if (RowFor(tree, child, at) is { } sits)
-            {
-                Rows.Move(sits, at);
-                Rows[at].Describe(tree, child, partTotal);
-            }
-            else
-            {
-                Rows.Insert(at, new MemoryRow(tree, child, partTotal));
-            }
-
-            at++;
+            _arriving.Add(child);
         }
 
-        while (Rows.Count > at)
-        {
-            Rows.RemoveAt(Rows.Count - 1);
-        }
-    }
-
-    /// <summary>
-    /// Where the row for <paramref name="child"/> sits at or after <paramref name="from"/>, or null
-    /// where none of them is about it. What it costs is how far the rows actually moved, which between
-    /// two readings of one machine is nothing at all for most of them.
-    /// </summary>
-    private int? RowFor(MemoryTree tree, int child, int from)
-    {
-        for (var i = from; i < Rows.Count; i++)
-        {
-            if (Rows[i].Is(tree, child))
-            {
-                return i;
-            }
-        }
-
-        return null;
+        LiveList.Show(
+            Rows,
+            _arriving,
+            row => row.Key,
+            child => tree.KeyOf(child),
+            child => new MemoryRow(tree, child, partTotal),
+            (row, child) => row.Describe(tree, child, partTotal));
     }
 
     /// <summary>
@@ -370,11 +327,11 @@ public sealed partial class MemoryViewModel : ObservableObject
     /// </summary>
     private void ShowTrail(MemoryTree tree, int node)
     {
-        var steps = new List<int>();
+        _steps.Clear();
 
         for (var current = node; ; current = tree.ParentOf(current))
         {
-            steps.Add(current);
+            _steps.Add(current);
 
             if (current == tree.RootNode)
             {
@@ -382,29 +339,14 @@ public sealed partial class MemoryViewModel : ObservableObject
             }
         }
 
-        steps.Reverse();
+        _steps.Reverse();
 
-        for (var i = 0; i < steps.Count; i++)
-        {
-            if (i >= Trail.Count)
-            {
-                Trail.Add(new MemoryCrumb(tree, steps[i]));
-            }
-            else if (Trail[i].Is(tree, steps[i]))
-            {
-                Trail[i].Describe(tree);
-            }
-            else
-            {
-                // A different thing at this step, which is a reader who has navigated. The button is
-                // rebuilt, and that is right: it is not the one they were on.
-                Trail[i] = new MemoryCrumb(tree, steps[i]);
-            }
-        }
-
-        while (Trail.Count > steps.Count)
-        {
-            Trail.RemoveAt(Trail.Count - 1);
-        }
+        LiveList.Show(
+            Trail,
+            _steps,
+            crumb => crumb.Key,
+            step => tree.KeyOf(step),
+            step => new MemoryCrumb(tree, step),
+            (crumb, _) => crumb.Describe(tree));
     }
 }
