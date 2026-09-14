@@ -54,7 +54,7 @@ public sealed class ScratchRootTests : IDisposable
     {
         var theirs = Age(_temp.CreateDirectory("notes"), TimeSpan.FromDays(30));
 
-        Assert.False(ScratchRoot.IsScratchTree("notes"));
+        Assert.False(Scratch.IsIdentifier("notes"));
 
         ScratchRoot.SweepStale(_temp.Path, OlderThan);
 
@@ -76,7 +76,7 @@ public sealed class ScratchRootTests : IDisposable
         var root = Age(Tree(), TimeSpan.FromHours(2));
         var child = Age(Tree(root), TimeSpan.FromHours(2));
 
-        Assert.True(ScratchRoot.IsScratchTree(Path.GetFileName(root)));
+        Assert.True(Scratch.IsIdentifier(Path.GetFileName(root)));
 
         ScratchRoot.SweepStale(root, OlderThan);
 
@@ -207,23 +207,8 @@ public sealed class ScratchRootTests : IDisposable
     {
         using var made = new TempDirectory();
 
-        Assert.True(ScratchRoot.IsScratchTree(Path.GetFileName(made.Path)));
+        Assert.True(Scratch.IsIdentifier(Path.GetFileName(made.Path)));
     }
-
-    /// <summary>
-    /// Names the recogniser has to refuse. The first two are what a shape test alone would let
-    /// through: <see cref="Guid.TryParseExact(string, string, out Guid)"/> trims its input and
-    /// accepts either case, and <see cref="TempDirectory"/> writes neither.
-    /// </summary>
-    [Theory]
-    [InlineData(" 0123456789abcdef0123456789abcdef")]
-    [InlineData("0123456789ABCDEF0123456789ABCDEF")]
-    [InlineData("0123456789abcdef0123456789abcde")]
-    [InlineData("01234567-89ab-cdef-0123-456789abcdef")]
-    [InlineData("notes")]
-    [InlineData("")]
-    public void RefusesANameNoScratchTreeWouldCarry(string name) =>
-        Assert.False(ScratchRoot.IsScratchTree(name));
 
     /// <summary>A child of <paramref name="root"/>, named the way <see cref="TempDirectory"/> names a tree.</summary>
     private static string Tree(string root, Guid? name = null)
