@@ -219,10 +219,13 @@ public sealed class UserEnvironmentTests : IDisposable
         const string Written = @"%DEGUFFER_TEST_UNSET%\cache";
 
         // One level under Software, so deleting it afterwards leaves no empty parent behind, and
-        // named for this run so two runs on the same machine cannot collide. A host killed between
-        // the write and the delete strands the key, which nothing sweeps: a sweep by name prefix
-        // cannot tell an abandoned key from the live key of a run happening alongside this one, and
-        // deleting that one would fail a second run rather than tidy after a first.
+        // named for this run so two runs on the same machine cannot collide.
+        //
+        // Nothing sweeps what a killed host leaves, which ScratchRoot does do for a scratch tree.
+        // Telling an abandoned key from the live key of a run happening alongside this one needs the
+        // age ScratchRoot.StaleAfter is measured against, and the managed registry API reports no
+        // write time to measure. It is the same residual ScratchRoot declines for a tree under a
+        // DACL: reachable only by killing the host outright.
         var path = $@"Software\Deguffer.Tests.{Guid.NewGuid():N}";
 
         try
