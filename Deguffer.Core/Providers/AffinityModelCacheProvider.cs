@@ -325,8 +325,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
         // renders that as "Already clear", which is a claim about a folder nobody read.
         if (tree.Unreadable)
         {
-            found.Notes.Add(UnreadableRoot.Note(common));
-            found.Unreadable = true;
+            found.Unread(common);
         }
 
         // A link is a child the user can see, so it is named rather than dropped. It is never
@@ -385,17 +384,13 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             $"Affinity {name}'s shared folder must survive — it holds the asset library, the brushes "
             + "and the licences."));
 
-        List<FileSystemInfo> entries;
-
-        try
+        // FolderEntries rather than an enumeration written here, because it keeps the two answers
+        // apart that a hand-written catch merges: a folder that is gone holds nothing, and a folder
+        // that refused to be listed is not empty. Reporting the first as the second puts a sentence
+        // about permissions against a folder nobody has.
+        if (FolderEntries.Of(version) is not { } entries)
         {
-            entries = [.. new DirectoryInfo(LongPath.Extended(version)).EnumerateFileSystemInfos()];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            found.Notes.Add(UnreadableRoot.Note(version));
-            found.Unreadable = true;
-            found.Declined++;
+            found.Unread(version);
             return;
         }
 
@@ -405,31 +400,38 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            var isCache = string.Equals(entry.Name, ModelCacheName, StringComparison.OrdinalIgnoreCase);
-            var isLink = entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
+            var path = LongPath.Display(entry.FullName);
 
-            if (isCache && isLink)
+            if (!string.Equals(entry.Name, ModelCacheName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Everything else in the folder, asserted by name. The spared and the targeted are
+                // siblings, which is exactly where an over-broad rule takes one with the other — and
+                // what is beside this cache is an asset library and an activation record, not cache.
+                found.Protect.Add((path, Shared.Classify(entry.Name).Reason));
+                continue;
+            }
+
+            if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
                 found.Decline(
                     new PlanNote(
                         PlanNoteSeverity.Information,
                         $"Leaving Affinity {name}'s '{ModelCacheName}' alone: it is a link to "
                         + "somewhere else, and Deguffer does not delete through a link."),
-                    (LongPath.Display(entry.FullName),
-                        "A link rather than a directory, so what it points at was never classified."));
+                    (path, "A link rather than a directory, so what it points at was never classified."));
                 continue;
             }
 
-            if (isCache && entry is DirectoryInfo directory)
+            if (entry is DirectoryInfo directory)
             {
                 cache = directory;
                 continue;
             }
 
-            // Everything else in the folder, asserted by name. The spared and the targeted are
-            // siblings, which is exactly where an over-broad rule takes one with the other — and what
-            // is beside this cache is an asset library and an activation record, not more cache.
-            found.Protect.Add((LongPath.Display(entry.FullName), Shared.Classify(entry.Name).Reason));
+            // Affinity writes a folder here. A file of that name is something else, and the declared
+            // reason for the name would describe it to the user as a download Affinity fetches again
+            // — which is a sentence about the cache, against a path being left alone.
+            found.Protect.Add((path, "A file where Affinity keeps a folder, so Deguffer left it alone."));
         }
 
         if (cache is null)
@@ -489,6 +491,19 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             {
                 Protect.Add(path);
             }
+        }
+
+        /// <summary>
+        /// A folder Windows would not list. It counts among <see cref="Declined"/> for the reason a
+        /// link does: the plan under it is empty because nothing was read, not because there was
+        /// nothing there, and the sentence saying Affinity has downloaded no models must not be said
+        /// about it. Written once so the two levels that can meet a refusal cannot answer differently.
+        /// </summary>
+        public void Unread(string folder)
+        {
+            Notes.Add(UnreadableRoot.Note(folder));
+            Unreadable = true;
+            Declined++;
         }
     }
 }

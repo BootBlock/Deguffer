@@ -466,10 +466,68 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.True(plan.HasUnreadableRoot);
+        Assert.True(plan.WasNotExamined);
         Assert.Contains(
             plan.Notes,
             n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(Common(RoamingRoot)));
         Assert.Empty(plan.TargetedPaths);
+
+        // The warning and this sentence in one plan would have the plan deny what the same pass
+        // found. It is the sentence for an empty machine, and this machine was never read.
+        Assert.DoesNotContain(
+            plan.Notes,
+            n => n.Message.Contains("has not downloaded any machine-learning models", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A version folder relocated by junction. It must never reach the version list: looking inside it
+    /// would classify a tree Deguffer never saw, and every §5.6 assertion named for this root would
+    /// then resolve through the same link and pass.
+    /// </summary>
+    [Fact]
+    public async Task DeclinesAVersionFolderThatIsALink()
+    {
+        Directory.CreateDirectory(Common(RoamingRoot));
+
+        var outside = _temp.CreateDirectory("elsewhere");
+        var stranger = Path.Combine(outside, AffinityModelCacheProvider.ModelCacheName);
+        Directory.CreateDirectory(stranger);
+        File.WriteAllBytes(Path.Combine(stranger, "model.onnx"), new byte[65536]);
+
+        Directory.CreateSymbolicLink(Version(RoamingRoot, "3.0"), outside);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(Directory.Exists(stranger));
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Leaving '3.0' alone", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Version(RoamingRoot, "3.0"));
+    }
+
+    /// <summary>
+    /// Affinity writes a folder called <c>modelcache</c>. A file of that name is not the cache, and
+    /// the reason the child table gives for the name describes a download Affinity fetches again —
+    /// which would be said about a path the plan is leaving alone.
+    /// </summary>
+    [Fact]
+    public async Task AFileWearingTheCachesNameIsLeftAloneWithItsOwnReason()
+    {
+        CreateVersion(RoamingRoot, "3.0", withModels: false);
+        CreateWhatSitsBesideTheModels(RoamingRoot, "3.0");
+
+        var impostor = ModelCache(RoamingRoot, "3.0");
+        File.WriteAllBytes(impostor, new byte[4096]);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+
+        var protectedPath = Assert.Single(plan.ProtectedPaths, p => p.Path == impostor);
+
+        Assert.True(protectedPath.ExistedBefore);
+        Assert.DoesNotContain("downloads them again", protectedPath.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>
