@@ -123,9 +123,11 @@ public sealed class PipCacheProvider : CleanupProviderBase
 
         var cacheDirectory = await ResolveCacheDirectoryAsync(pip, ct).ConfigureAwait(false);
 
-        if (!LongPath.DirectoryExists(cacheDirectory))
+        if (NothingToPlanFor(
+                cacheDirectory,
+                $"pip is installed but its cache directory does not exist yet ({cacheDirectory}).") is { } nothing)
         {
-            return EmptyPlan($"pip is installed but its cache directory does not exist yet ({cacheDirectory}).");
+            return nothing;
         }
 
         var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);

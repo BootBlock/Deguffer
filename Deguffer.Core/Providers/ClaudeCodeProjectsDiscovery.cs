@@ -91,10 +91,16 @@ internal sealed class ClaudeCodeProjectsDiscovery
 
         var root = Path.Combine(home, ClaudeCodeHome.Projects);
 
-        // Not there is a complete answer: Claude Code has written no transcript for this user.
-        if (!LongPath.DirectoryExists(root))
+        switch (LongPath.ProbeDirectory(root))
         {
-            return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: true);
+            // Not there is a complete answer: Claude Code has written no transcript for this user.
+            case PathPresence.Absent:
+                return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: true);
+
+            // Windows would not say whether it is there, which is not an answer at all — so the
+            // walk is incomplete and the folder is named as one nothing was read from.
+            case PathPresence.Refused:
+                return new ClaudeCodeProjects([], NoTranscripts, [root], [], Complete: false);
         }
 
         if (LongPath.IsReparsePoint(root))

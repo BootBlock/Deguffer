@@ -145,7 +145,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// Firefox register forced.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryExists) || InstallUnreached() is not null);
+        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist) || InstallUnreached() is not null);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -192,6 +192,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
             // link does: nothing was removed and something was never looked at, so the shell must
             // not call the row clear.
             WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || unreached is not null),
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

@@ -1,4 +1,6 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -18,6 +20,37 @@ public sealed class DeclaredLocationsTests : IDisposable
 
     private static DeclaredRoot Root(string path, params DeclaredLocation[] locations) =>
         new(path, "The root must survive.", RequiresElevation: false, locations, []);
+
+    /// <summary>
+    /// A declared root Windows will not describe does not read as a machine that has none.
+    ///
+    /// <para><see cref="DeclaredLocationScan.FoundNothing"/> is what eight providers turn into
+    /// "there is nothing here", and a two-state existence check put a refusal on that branch — so
+    /// the sentence denied a location the provider's own presence probe had already found. The
+    /// refusal is neither a target nor a decline: Deguffer did not choose to leave it alone.</para>
+    /// </summary>
+    [Fact]
+    public void ARootWindowsWillNotDescribeIsNotAMachineWithNothingOnIt()
+    {
+        var root = _temp.CreateDirectory("root", "logs");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(Path.Combine(_temp.Path, "root"));
+
+        var scan = DeclaredLocations.Examine(
+            [Root(Path.Combine(_temp.Path, "root"), new DeclaredLocation("logs", "Servicing logs."))]);
+
+        Assert.False(scan.FoundNothing);
+        Assert.True(scan.CouldNotBeReached);
+        Assert.Empty(scan.Targets);
+        Assert.Empty(scan.Declined);
+        Assert.Contains(scan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+
+        // Never a protected path. §5.6 measures a survivor before the run, and one it cannot measure
+        // records itself as "nothing to preserve" and then passes over whatever happened to it.
+        Assert.DoesNotContain(
+            scan.Protected,
+            p => p.Path.Equals(Path.Combine(_temp.Path, "root"), StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// A relative path written with a forward slash. Windows accepts both separators and

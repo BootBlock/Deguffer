@@ -103,12 +103,19 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     public string CacheFolder => Path.Combine(Environment.LocalAppData, "claude-cli-nodejs", "Cache");
 
     /// <summary>
-    /// Presence is a log actually on disk, or a folder that refused to be listed. A project folder
-    /// holding none is what every project Claude Code has opened without an MCP server leaves.
+    /// Presence is a log actually on disk, a folder that refused to be listed, or a cache folder
+    /// Windows would not describe at all. A project folder holding no log is what every project
+    /// Claude Code has opened without an MCP server leaves.
+    ///
+    /// <para>The refused case is asked first and separately, because the survey below cannot carry
+    /// it: nothing under an unreachable folder was examined, so the survey is empty and reads
+    /// exactly like an absent tool. A row that never appears is the one state the plan cannot
+    /// correct.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Look(ct) is { } survey
-            && (survey.Targets.Count > 0 || survey.Declined.Count > 0 || survey.Unreadable));
+        Task.FromResult(LongPath.ProbeDirectory(CacheFolder) is PathPresence.Refused
+            || (Look(ct) is { } survey
+                && (survey.Targets.Count > 0 || survey.Declined.Count > 0 || survey.Unreadable)));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: the tool's folder and the cache folder in it, both
@@ -135,9 +142,9 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     {
         var cache = CacheFolder;
 
-        if (!LongPath.DirectoryExists(cache))
+        if (NothingToPlanFor(cache, "Claude Code has written no MCP server logs for this user.") is { } nothing)
         {
-            return EmptyPlan("Claude Code has written no MCP server logs for this user.");
+            return nothing;
         }
 
         if (LongPath.IsReparsePoint(cache))

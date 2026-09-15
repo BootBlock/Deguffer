@@ -19,6 +19,44 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.Equal(0, outcome.BytesReclaimed);
     }
 
+    /// <summary>
+    /// A root Windows will not describe is not a root this removal took away.
+    ///
+    /// <para>The sibling test above is the case this one used to be indistinguishable from.
+    /// <c>Directory.Exists</c> answers false for a directory that is standing and refusing exactly
+    /// as it does for one that is gone, so a removal that reached nothing at all reported
+    /// <see cref="RemovalOutcome.RootRemoved"/> and <c>PlanExecutor</c> called the step a success.
+    /// Nothing downstream could see it: the directory was never enumerated, so there were no
+    /// refused files to count and no bytes to be short of.</para>
+    ///
+    /// <para>The refusal is arranged behind <see cref="IFileSystem"/> rather than with an access
+    /// rule, because the rule that produces it needs a DACL on the scratch tree's own parent — see
+    /// <see cref="UndescribableDirectoryFileSystem"/>.</para>
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportARootWindowsWillNotDescribeAsRemoved()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(1024, "cache", "a.bin");
+
+        var fs = new UndescribableDirectoryFileSystem(WindowsFileSystem.Default, root);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, fileSystem: fs);
+
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.Equal([LongPath.Display(root)], outcome.LeftStanding);
+        Assert.Equal(1, outcome.RefusedFolders.Denied);
+
+        // Untouched, which is the half a count cannot show: nothing was enumerated, so nothing here
+        // could have been deleted whatever the outcome claimed.
+        Assert.True(File.Exists(Path.Combine(root, "a.bin")));
+
+        // §6.3: the question reached Win32 in extended-length form, which is the only thing about a
+        // path that a removal's outcome cannot demonstrate.
+        Assert.All(fs.Probed, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
+
     /// <summary>A path already gone was not removed by this run, so nothing is counted for it.</summary>
     [Fact]
     public async Task CountsNothingForATreeThatWasAlreadyGone() =>

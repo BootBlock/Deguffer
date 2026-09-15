@@ -127,26 +127,29 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
     ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(LongPath.DirectoryExists(_cache));
+        Task.FromResult(LongPath.DirectoryMayExist(_cache));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(_cache))
-        {
-            return EmptyPlan("Roslyn has kept no solution indexes for this user.");
-        }
-
         // Deguffer never deletes through a link, and a link at either level this provider owns would put
         // every target on the far side of one — with each §5.6 survivor resolving through the same link, so
         // proving nothing about the folder that was reasoned about.
-        foreach (var level in (string[])[_roslyn, _cache])
+        //
+        // Asked before the cache is probed for, not after. Probing for the cache resolves through the
+        // Roslyn folder above it, so where Windows declines to follow a link there the cache reads as
+        // unreachable and the link — which Deguffer can see perfectly well — is never named.
+        if (DerivedPath.FirstObstacleBetween(_visualStudio, _cache) is { } obstacle)
         {
-            if (LongPath.IsReparsePoint(level))
-            {
-                return UnexaminedPlan(
-                    $"Leaving '{level}' alone: it is a link to somewhere else, and Deguffer does not look "
-                    + "through a link.");
-            }
+            return obstacle.IsLink
+                ? UnexaminedPlan(
+                    $"Leaving '{obstacle.Path}' alone: it is a link to somewhere else, and Deguffer does not "
+                    + "look through a link.")
+                : UnreadableRootPlan(obstacle.Path);
+        }
+
+        if (NothingToPlanFor(_cache, "Roslyn has kept no solution indexes for this user.") is { } nothing)
+        {
+            return nothing;
         }
 
         var notes = new List<PlanNote>();

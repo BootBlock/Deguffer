@@ -138,6 +138,11 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
                 + "through a link.");
         }
 
+        if (folder.Unreached)
+        {
+            return UnreadableRootPlan(SavedPath);
+        }
+
         if (!folder.Exists)
         {
             return EmptyPlan("The Epic Games launcher has kept no folder in this user's account.");

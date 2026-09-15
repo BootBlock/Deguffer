@@ -99,13 +99,15 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(LongPath.DirectoryExists(_root));
+        Task.FromResult(LongPath.DirectoryMayExist(_root));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(_root))
+        if (NothingToPlanFor(
+                _root,
+                "The Dart analysis server has no cache directory for this user.") is { } nothing)
         {
-            return EmptyPlan("The Dart analysis server has no cache directory for this user.");
+            return nothing;
         }
 
         // Moving the store onto another drive with a junction is how a developer keeps 3 GB off a

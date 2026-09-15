@@ -108,9 +108,11 @@ public sealed class UvCacheProvider : CleanupProviderBase
 
         var cacheDirectory = await ResolveCacheDirectoryAsync(uv, ct).ConfigureAwait(false);
 
-        if (!LongPath.DirectoryExists(cacheDirectory))
+        if (NothingToPlanFor(
+                cacheDirectory,
+                $"uv is installed but its cache directory does not exist yet ({cacheDirectory}).") is { } nothing)
         {
-            return EmptyPlan($"uv is installed but its cache directory does not exist yet ({cacheDirectory}).");
+            return nothing;
         }
 
         var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);

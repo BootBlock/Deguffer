@@ -427,7 +427,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
             var directory = level.Resolve(editor.UserData.Path);
 
             if (level.Children.DisposableNames.Any(
-                    name => LongPath.DirectoryExists(Path.Combine(directory, name))))
+                    name => LongPath.DirectoryMayExist(Path.Combine(directory, name))))
             {
                 return true;
             }

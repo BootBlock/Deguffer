@@ -342,9 +342,15 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            if (!LongPath.DirectoryExists(profile.LocalPath))
+            switch (LongPath.ProbeDirectory(profile.LocalPath))
             {
-                continue;
+                case PathPresence.Refused:
+                    notes.Add(UnreadableRoot.UnreachedNote(profile.LocalPath));
+                    unreadable = true;
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             survivors.Add((
@@ -493,7 +499,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            if (LongPath.DirectoryExists(Path.Combine(profile.LocalPath, name)))
+            if (LongPath.DirectoryMayExist(Path.Combine(profile.LocalPath, name)))
             {
                 return true;
             }

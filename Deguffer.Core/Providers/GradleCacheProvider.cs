@@ -86,16 +86,18 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(LongPath.DirectoryExists(_root));
+        Task.FromResult(LongPath.DirectoryMayExist(_root));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
 
-        if (!LongPath.DirectoryExists(_root))
+        if (NothingToPlanFor(
+                _root,
+                "Gradle is not installed for this user — no .gradle directory.") is { } nothing)
         {
-            return EmptyPlan("Gradle is not installed for this user — no .gradle directory.");
+            return nothing;
         }
 
         // Moving .gradle onto another drive with a junction is common, and the enumeration below

@@ -72,7 +72,7 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
     public string ConfigurationDirectory =>
         Path.Combine(environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration");
 
-    public bool IsConfigured => LongPath.DirectoryExists(ConfigurationDirectory);
+    public bool IsConfigured => LongPath.DirectoryMayExist(ConfigurationDirectory);
 
     /// <summary>
     /// The target, or why there is not one. Held for the life of a planning pass (G4): the answer

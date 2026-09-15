@@ -282,6 +282,50 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A Cargo home Windows will not describe leaves the row on screen, saying what happened,
+    /// instead of reporting Rust as not installed.
+    ///
+    /// <para>This is the shape reported from a Windows 11 workstation at 26100.9445, where the
+    /// account's own directory symbolic links could be created and read but not followed: Windows
+    /// answered <c>ERROR_UNTRUSTED_MOUNT_POINT</c> for every path through one. Every recognised
+    /// cache path is built by joining names onto the home, so all of them read as absent,
+    /// <c>IsPresentAsync</c> answered false, and Deguffer drew nothing at all about a cache
+    /// documented as "routinely the largest thing this tool would have found".</para>
+    ///
+    /// <para>The refusal here is the access-rule shape of the same condition rather than the link
+    /// shape. Both reach <see cref="LongPath.ProbeDirectory"/> as
+    /// <see cref="PathPresence.Refused"/>, and only one of them can be arranged without setting
+    /// machine-wide symbolic link policy — which a test may not do, and which would make the suite
+    /// depend on the machine it runs on rather than on the code.</para>
+    /// </summary>
+    [Fact]
+    public async Task AHomeWindowsWillNotDescribeIsSaidSoRatherThanReportedAsNoRustAtAll()
+    {
+        CreateFullHome();
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(Home);
+
+        var provider = CreateProvider();
+
+        // Without this the shell never draws the row, and no sentence in the plan can be read.
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(Home));
+        Assert.DoesNotContain(
+            plan.Notes,
+            n => n.Message.Contains("not installed", StringComparison.OrdinalIgnoreCase));
+
+        // §5.6, made explicit because the whole point of the row is that nothing was looked at:
+        // every recognised cache is still on the disk.
+        Assert.True(Directory.Exists(Path.Combine(Home, "registry", "cache")));
+        Assert.True(Directory.Exists(Path.Combine(Home, "git", "checkouts")));
+    }
+
+    /// <summary>
     /// The home is reached by name, so nothing has classified it, and the level walk cannot catch
     /// this on its own: it declines the level it is looking at and returns, while the next level
     /// resolves its own path through the very link that was declined. Everything on the far side

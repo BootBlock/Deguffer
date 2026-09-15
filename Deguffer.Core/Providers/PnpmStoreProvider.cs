@@ -161,9 +161,11 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             return UnexaminedPlan("pnpm did not say where its store is, so nothing is offered rather than guessed.");
         }
 
-        if (!LongPath.DirectoryExists(store))
+        if (NothingToPlanFor(
+                store,
+                $"pnpm is installed but its store does not exist yet ({store}).") is { } nothing)
         {
-            return EmptyPlan($"pnpm is installed but its store does not exist yet ({store}).");
+            return nothing;
         }
 
         var measured = await MeasureAllAsync([store], ct).ConfigureAwait(false);

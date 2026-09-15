@@ -193,7 +193,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// treating that as a hit would report a source the plan then has nothing to say about.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -212,9 +212,20 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             // A null path is a tier the platform would not locate, which only LocalLow can be.
             // §5.2 forbids guessing where it is, so the row contributes nothing rather than a path
             // assembled by hand.
-            if (rootPath is null || !LongPath.DirectoryExists(rootPath))
+            if (rootPath is null)
             {
                 continue;
+            }
+
+            switch (LongPath.ProbeDirectory(rootPath))
+            {
+                case PathPresence.Refused:
+                    notes.Add(UnreadableRoot.UnreachedNote(rootPath));
+                    unreadable = true;
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             // The root is reached by name too, so it needs the same check the Direct3D cache gets.

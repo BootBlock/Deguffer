@@ -248,12 +248,17 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         PlatformIoLocations locations,
         CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(locations.CacheDirectory))
+        if (LongPath.ProbeDirectory(locations.CacheDirectory) is var presence
+            && presence is not PathPresence.Present)
         {
             return new PlanPart(
                 null,
-                [Information(
-                    $"PlatformIO's cache directory does not exist yet ({locations.CacheDirectory}).")],
+                [
+                    presence is PathPresence.Refused
+                        ? UnreadableRoot.UnreachedNote(locations.CacheDirectory)
+                        : Information(
+                            $"PlatformIO's cache directory does not exist yet ({locations.CacheDirectory})."),
+                ],
                 FallbackReason.None);
         }
 

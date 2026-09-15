@@ -154,19 +154,19 @@ public static partial class EpicLauncherSaved
     {
         if (FirstLinkTo(environment) is { } link)
         {
-            return new SavedFolder(link, Exists: true, Unreadable: false, [], []);
+            return new SavedFolder(link, PathPresence.Present, Unreadable: false, [], []);
         }
 
         var saved = PathIn(environment);
 
-        if (!LongPath.DirectoryExists(saved))
+        if (LongPath.ProbeDirectory(saved) is var presence && presence is not PathPresence.Present)
         {
-            return new SavedFolder(null, Exists: false, Unreadable: false, [], []);
+            return new SavedFolder(null, presence, Unreadable: false, [], []);
         }
 
         var scan = ChildDirectories.Under(saved);
 
-        return new SavedFolder(null, Exists: true, scan.Unreadable, scan.Directories, scan.Links);
+        return new SavedFolder(null, PathPresence.Present, scan.Unreadable, scan.Directories, scan.Links);
     }
 
     /// <summary>
@@ -195,9 +195,11 @@ public static partial class EpicLauncherSaved
     /// The first segment of the derived path down to <c>Saved</c> that is a link, or null when none
     /// of them is. Nothing below it was listed when this is set.
     /// </param>
-    /// <param name="Exists">
-    /// Whether the folder is there at all. Distinct from <paramref name="Unreadable"/>, because
-    /// absence is a complete answer — nothing is inside it — and a refusal is not an answer at all.
+    /// <param name="Presence">
+    /// What Windows said about the folder itself. Three answers rather than two, because absence is
+    /// a complete answer — nothing is inside it — and a refusal is not an answer at all. Distinct
+    /// from <paramref name="Unreadable"/>, which is a folder that was reached and would not be
+    /// listed. See <see cref="PathPresence"/>.
     /// </param>
     /// <param name="Unreadable">
     /// The folder refused to be listed, so the two lists below describe nothing rather than
@@ -211,11 +213,20 @@ public static partial class EpicLauncherSaved
     /// </param>
     public readonly record struct SavedFolder(
         string? Link,
-        bool Exists,
+        PathPresence Presence,
         bool Unreadable,
         IReadOnlyList<DirectoryInfo> Children,
         IReadOnlyList<DirectoryInfo> Links)
     {
+        /// <summary>Whether Windows said the folder is there.</summary>
+        public bool Exists => Presence is PathPresence.Present;
+
+        /// <summary>
+        /// Whether Windows would not say the folder is there, so neither "not installed" nor
+        /// anything about its contents may be claimed.
+        /// </summary>
+        public bool Unreached => Presence is PathPresence.Refused;
+
         /// <summary>
         /// Whether this folder is something a row must speak about even though it yields no target.
         ///
@@ -225,7 +236,7 @@ public static partial class EpicLauncherSaved
         /// installed launcher is a stronger untruth than the "Already clear" it would otherwise
         /// be.</para>
         /// </summary>
-        public bool HasSomethingToReport => Link is not null || Unreadable;
+        public bool HasSomethingToReport => Link is not null || Unreadable || Unreached;
 
         /// <summary>The children, link or not, whose names <paramref name="recognises"/> accepts.</summary>
         public IEnumerable<DirectoryInfo> Named(Predicate<string> recognises) =>

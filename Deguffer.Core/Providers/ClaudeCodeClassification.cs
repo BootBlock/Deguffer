@@ -90,9 +90,17 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// </summary>
     public IReadOnlyList<FileSystemInfo>? Open(string folder, string reason)
     {
-        if (!LongPath.DirectoryExists(folder))
+        switch (LongPath.ProbeDirectory(folder))
         {
-            return null;
+            // Windows would not say whether the folder is there. Nothing in it was classified, and
+            // an unqualified null would let the plan present that as a folder holding nothing.
+            case PathPresence.Refused:
+                Keep(folder, reason);
+                Unreached(folder);
+                return null;
+
+            case PathPresence.Absent:
+                return null;
         }
 
         if (LongPath.IsReparsePoint(folder))
@@ -185,6 +193,16 @@ internal sealed class ClaudeCodeClassificationBuilder
         Keep(path, reason);
         _unreadable = true;
         _notes.Add(UnreadableRoot.Note(path));
+    }
+
+    /// <summary>
+    /// Record a folder Windows would not describe at all. <see cref="Unlisted"/>'s sentence would
+    /// assert the folder is there, which nothing here established.
+    /// </summary>
+    private void Unreached(string path)
+    {
+        _unreadable = true;
+        _notes.Add(UnreadableRoot.UnreachedNote(path));
     }
 
     public void Note(PlanNoteSeverity severity, string message) => _notes.Add(new PlanNote(severity, message));

@@ -228,9 +228,11 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         var (cacheRoot, environments) =
             await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
 
-        if (!LongPath.DirectoryExists(cacheRoot))
+        if (NothingToPlanFor(
+                cacheRoot,
+                $"Poetry is installed but its cache directory does not exist yet ({cacheRoot}).") is { } nothing)
         {
-            return EmptyPlan($"Poetry is installed but its cache directory does not exist yet ({cacheRoot}).");
+            return nothing;
         }
 
         // The enumeration below never classifies the directory it is handed. A junctioned cache
@@ -457,9 +459,16 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     {
         var repositories = Path.Combine(cacheRoot, "cache", "repositories");
 
-        if (!LongPath.DirectoryExists(repositories))
+        switch (LongPath.ProbeDirectory(repositories))
         {
-            return ([], NothingMeasured, false);
+            // Declined rather than absent: Windows would not say what is in there, so the row holds
+            // an amount nobody can state and must not read as clear.
+            case PathPresence.Refused:
+                notes.Add(UnreadableRoot.UnreachedNote(repositories));
+                return ([], NothingMeasured, true);
+
+            case PathPresence.Absent:
+                return ([], NothingMeasured, false);
         }
 
         // Poetry's clear never reaches outside its repository cache, so this is the whole of the

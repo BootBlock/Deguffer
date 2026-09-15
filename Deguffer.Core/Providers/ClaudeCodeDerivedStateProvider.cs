@@ -181,7 +181,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// never asked for one.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ClaudeCodeHome.Resolve(Environment) is not { } home || LongPath.DirectoryExists(home));
+        Task.FromResult(ClaudeCodeHome.Resolve(Environment) is not { } home || LongPath.DirectoryMayExist(home));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own
@@ -210,9 +210,11 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                 + "which is not a full path. Deguffer cannot tell which folder that means, so it is leaving it alone.");
         }
 
-        if (!LongPath.DirectoryExists(home))
+        if (NothingToPlanFor(
+                home,
+                $"Claude Code has kept no folder for this user — no {home} directory.") is { } nothing)
         {
-            return EmptyPlan($"Claude Code has kept no folder for this user — no {home} directory.");
+            return nothing;
         }
 
         if (LongPath.IsReparsePoint(home))

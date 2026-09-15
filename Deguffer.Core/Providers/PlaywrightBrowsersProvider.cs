@@ -150,7 +150,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             : [];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ResolveRoot() is { } root && LongPath.DirectoryExists(root));
+        Task.FromResult(ResolveRoot() is { } root && LongPath.DirectoryMayExist(root));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -165,9 +165,11 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
                   "cannot tell which directory that means, so it is leaving it alone.");
         }
 
-        if (!LongPath.DirectoryExists(root))
+        if (NothingToPlanFor(
+                root,
+                $"Playwright has not downloaded any browsers on this machine ({root}).") is { } nothing)
         {
-            return EmptyPlan($"Playwright has not downloaded any browsers on this machine ({root}).");
+            return nothing;
         }
 
         // The root arrives by name, from an environment variable or a default, so nothing has

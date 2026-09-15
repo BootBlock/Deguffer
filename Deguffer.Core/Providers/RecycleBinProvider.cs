@@ -176,7 +176,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// <see cref="LocalVolume.StoresContentRemotely"/> exists to break.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RemotelyStoredVolumes().Any() || RecognisedBinPaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(RemotelyStoredVolumes().Any() || RecognisedBinPaths().Any(LongPath.DirectoryMayExist));
 
     /// <summary>
     /// The volume list is remembered for the life of a pass, so a drive mounted while the app was
@@ -242,9 +242,15 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            if (!LongPath.DirectoryExists(bin))
+            switch (LongPath.ProbeDirectory(bin))
             {
-                continue;
+                case PathPresence.Refused:
+                    notes.Add(UnreadableRoot.UnreachedNote(bin));
+                    unreadable = true;
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             // Reached by name rather than through an enumeration, so it needs the check the

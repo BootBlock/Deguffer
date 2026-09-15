@@ -116,7 +116,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     /// treating a root as a hit would report this source on every machine and then plan nothing.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -160,6 +160,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

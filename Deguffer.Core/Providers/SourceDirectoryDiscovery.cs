@@ -150,11 +150,19 @@ public sealed class SourceDirectoryDiscovery
                 continue;
             }
 
-            if (!LongPath.DirectoryExists(root.Path))
+            switch (LongPath.ProbeDirectory(root.Path))
             {
+                // Windows would not say whether the root is there, so no part of a folder the user
+                // approved was searched. That is what UnreadableDirectories reports, and it is not
+                // the same as a drive that is not attached.
+                case PathPresence.Refused:
+                    unreadable.Add(root.Path);
+                    continue;
+
                 // An approved root on a drive that is not currently attached. Finding nothing is
                 // the right answer; it is not an error and not a reason to drop the approval.
-                continue;
+                case PathPresence.Absent:
+                    continue;
             }
 
             var walked = false;
