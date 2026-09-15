@@ -44,6 +44,17 @@ public interface IFileSystem
     bool DirectoryExists(string path);
 
     /// <summary>
+    /// What Windows says is at <paramref name="path"/>, keeping "nothing is there" apart from
+    /// "Windows would not say". See <see cref="PathPresence"/>.
+    ///
+    /// <para>A removal asks this rather than <see cref="DirectoryExists"/> whenever the answer
+    /// becomes a claim that the directory went. A refused probe answers false there, and
+    /// <see cref="Execution.RemovalOutcome.RootRemoved"/> then reports a directory that is still
+    /// standing as one this run took away.</para>
+    /// </summary>
+    PathPresence ProbeDirectory(string path);
+
+    /// <summary>
     /// Whether <paramref name="path"/> is a junction or symbolic link.
     ///
     /// Asked of the removal root, which is the one entry no enumeration ever classifies: every
@@ -142,6 +153,8 @@ public sealed class WindowsFileSystem : IFileSystem
     }
 
     public bool DirectoryExists(string path) => Directory.Exists(path);
+
+    public PathPresence ProbeDirectory(string path) => LongPath.ProbeDirectory(path);
 
     public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
 

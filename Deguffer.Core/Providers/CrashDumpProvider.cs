@@ -116,7 +116,8 @@ public sealed class CrashDumpProvider : CleanupProviderBase
     /// nothing on a machine that has never crashed.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths().Any(p => p.IsFile ? LongPath.FileExists(p.Path) : LongPath.DirectoryExists(p.Path)));
+        Task.FromResult(DeclaredPaths().Any(p =>
+            p.IsFile ? LongPath.FileMayExist(p.Path) : LongPath.DirectoryMayExist(p.Path)));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -152,6 +153,7 @@ public sealed class CrashDumpProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

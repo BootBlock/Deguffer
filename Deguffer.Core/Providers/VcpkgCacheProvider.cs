@@ -218,7 +218,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryExists));
+        Task.FromResult(DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -281,6 +281,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

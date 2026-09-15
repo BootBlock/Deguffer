@@ -228,9 +228,11 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         var (cacheRoot, environments) =
             await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
 
-        if (!LongPath.DirectoryExists(cacheRoot))
+        if (NothingToPlanFor(
+                cacheRoot,
+                $"Poetry is installed but its cache directory does not exist yet ({cacheRoot}).") is { } nothing)
         {
-            return EmptyPlan($"Poetry is installed but its cache directory does not exist yet ({cacheRoot}).");
+            return nothing;
         }
 
         // The enumeration below never classifies the directory it is handed. A junctioned cache
@@ -265,7 +267,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         var (targets, scan, childDeclined) = CollectTargets(cacheRoot, environments, notes, ct);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
-        var (commands, cleared, commandDeclined) = await PlanRepositoryClearsAsync(
+        var (commands, cleared, commandDeclined, repositoriesUnreachable) = await PlanRepositoryClearsAsync(
             poetry, cacheRoot, environments, notes, ct).ConfigureAwait(false);
 
         // Built rather than returned as an empty plan, so the sentences explaining what was left
@@ -318,7 +320,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             ProtectedPaths = BuildProtectedPaths(cacheRoot, environments),
             Notes = notes,
             Fallback = fallback,
-            HasUnreadableRoot = scan.Unreadable,
+            HasUnreadableRoot = scan.Unreadable || repositoriesUnreachable,
 
             // A cache Deguffer declined is present, measures nothing here, and holds everything.
             // Rendering that as "Already clear" would disagree with the folder the user can see —
@@ -448,7 +450,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// false report rather than a loss. It overrides no safety check of Poetry's: §7's
     /// confirmation has already been given by the time this runs.</para>
     /// </summary>
-    private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured, bool Declined)> PlanRepositoryClearsAsync(
+    private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured, bool Declined, bool Unreachable)>
+        PlanRepositoryClearsAsync(
         string poetry,
         string cacheRoot,
         string environments,
@@ -457,9 +460,18 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     {
         var repositories = Path.Combine(cacheRoot, "cache", "repositories");
 
-        if (!LongPath.DirectoryExists(repositories))
+        switch (LongPath.ProbeDirectory(repositories))
         {
-            return ([], NothingMeasured, false);
+            // Declined rather than absent: Windows would not say what is in there, so the row holds
+            // an amount nobody can state and must not read as clear.
+            // Declined and unreachable both: nothing was offered, and Windows rather than Deguffer
+            // is why — which is the flag the shell reads to pick the sentence.
+            case PathPresence.Refused:
+                notes.Add(UnreadableRoot.UnreachedNote(repositories));
+                return ([], NothingMeasured, true, true);
+
+            case PathPresence.Absent:
+                return ([], NothingMeasured, false, false);
         }
 
         // Poetry's clear never reaches outside its repository cache, so this is the whole of the
@@ -476,7 +488,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 "Poetry keeps its virtual environments in the same tree as its own repository "
                 + "cache, so Deguffer is not running its cache clear command."));
 
-            return ([], NothingMeasured, true);
+            return ([], NothingMeasured, true, false);
         }
 
         var named = await _discovery.ListCachesAsync(poetry, ct).ConfigureAwait(false);
@@ -502,7 +514,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                     + "cache is left alone."));
             }
 
-            return ([], NothingMeasured, populated);
+            return ([], NothingMeasured, populated, false);
         }
 
         var measured = await MeasureAllAsync([.. caches.Select(c => c.Path)], ct).ConfigureAwait(false);
@@ -521,7 +533,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             }),
         ];
 
-        return (steps, measured, false);
+        return (steps, measured, false, false);
     }
 
     /// <summary>

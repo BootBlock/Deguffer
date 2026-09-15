@@ -17,6 +17,14 @@ namespace Deguffer.Core.Providers;
 /// plan collapsed to a bare "nothing found" in the second case would drop the note explaining the
 /// refusal, and quietly disagree with a folder the user can see.
 /// </param>
+/// <param name="Unreachable">
+/// Declared paths Windows would not describe, so nothing here establishes whether they are there.
+///
+/// <para>Separate from <paramref name="Declined"/> because the two send the reader to different
+/// places: a decline is Deguffer's own, and this is Windows'. Separate from
+/// <paramref name="Protected"/> for a harder reason — §5.6 reads a path it cannot measure as
+/// "nothing to preserve", so asserting one here would pass whatever happened to the folder.</para>
+/// </param>
 /// <param name="Notes">What the user is told, including anything left alone and why.</param>
 public sealed record DeclaredLocationScan(
     IReadOnlyList<DeletionTarget> Targets,
@@ -24,8 +32,27 @@ public sealed record DeclaredLocationScan(
     IReadOnlyList<string> Declined,
     IReadOnlyList<PlanNote> Notes)
 {
-    /// <summary>Whether this machine gave the provider anything at all to say.</summary>
-    public bool FoundNothing => Targets.Count == 0 && Declined.Count == 0;
+    /// <summary>
+    /// Declared paths Windows refused to describe. Empty on the ordinary machine, so it is defaulted
+    /// rather than made a positional member: every caller that does not yet know about a refusal
+    /// keeps working, and reads the empty list as the absence of one.
+    /// </summary>
+    public IReadOnlyList<string> Unreachable { get; init; } = [];
+
+    /// <summary>
+    /// Whether the provider owes the user <see cref="CleanupPlan.HasUnreadableRoot"/>, because part
+    /// of what it declares could not be reached at all.
+    /// </summary>
+    public bool CouldNotBeReached => Unreachable.Count > 0;
+
+    /// <summary>
+    /// Whether this machine gave the provider anything at all to say.
+    ///
+    /// <para>A refusal counts as something to say. It is the answer that used to be folded into
+    /// absence, which is how a provider came to report a cache on the disk as a tool that is not
+    /// installed. See <see cref="Safety.PathPresence"/>.</para>
+    /// </summary>
+    public bool FoundNothing => Targets.Count == 0 && Declined.Count == 0 && Unreachable.Count == 0;
 
     /// <summary>
     /// Whether a plan built from this scan would offer nothing while leaving a declared path
@@ -67,15 +94,21 @@ public static class DeclaredLocations
         var targets = new List<DeletionTarget>();
         var protectedPaths = new List<(string Path, string Reason)>();
         var declined = new List<string>();
+        var unreachable = new List<string>();
         var notes = new List<PlanNote>();
 
         foreach (var root in roots)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (!LongPath.DirectoryExists(root.Path))
+            switch (LongPath.ProbeDirectory(root.Path))
             {
-                continue;
+                case PathPresence.Refused:
+                    Unreachable(root.Path, unreachable, notes);
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             // The root arrives by name, so nothing has classified it. A junctioned root hands back
@@ -94,7 +127,7 @@ public static class DeclaredLocations
             foreach (var location in root.Locations)
             {
                 ct.ThrowIfCancellationRequested();
-                Collect(root, location, targets, protectedPaths, declined, notes);
+                Collect(root, location, targets, protectedPaths, declined, unreachable, notes);
             }
         }
 
@@ -110,7 +143,10 @@ public static class DeclaredLocations
                 + "them either way, and can remove them only while it is running as administrator."));
         }
 
-        return new DeclaredLocationScan(targets, Deduplicate(protectedPaths), declined, notes);
+        return new DeclaredLocationScan(targets, Deduplicate(protectedPaths), declined, notes)
+        {
+            Unreachable = unreachable,
+        };
     }
 
     /// <summary>
@@ -127,6 +163,7 @@ public static class DeclaredLocations
         List<DeletionTarget> targets,
         List<(string Path, string Reason)> protectedPaths,
         List<string> declined,
+        List<string> unreachable,
         List<PlanNote> notes)
     {
         // Both separators, because Windows accepts both and the cost of missing one is silent. A
@@ -143,9 +180,14 @@ public static class DeclaredLocations
         {
             current = Path.Combine(current, segments[i]);
 
-            if (!LongPath.DirectoryExists(current))
+            switch (LongPath.ProbeDirectory(current))
             {
-                return;
+                case PathPresence.Refused:
+                    Unreachable(current, unreachable, notes);
+                    return;
+
+                case PathPresence.Absent:
+                    return;
             }
 
             if (LongPath.IsReparsePoint(current))
@@ -162,9 +204,14 @@ public static class DeclaredLocations
         var path = Path.Combine(root.Path, location.RelativePath);
         var isFile = location.Kind == DeclaredLocationKind.File;
 
-        if (!(isFile ? LongPath.FileExists(path) : LongPath.DirectoryExists(path)))
+        switch (isFile ? LongPath.ProbeFile(path) : LongPath.ProbeDirectory(path))
         {
-            return;
+            case PathPresence.Refused:
+                Unreachable(path, unreachable, notes);
+                return;
+
+            case PathPresence.Absent:
+                return;
         }
 
         if (LongPath.IsReparsePoint(path))
@@ -228,6 +275,26 @@ public static class DeclaredLocations
             PlanNoteSeverity.Information,
             $"Leaving '{LongPath.Display(path)}' alone: it is a link to somewhere else, and Deguffer "
             + "does not look through a link."));
+    }
+
+    /// <summary>
+    /// Record that Windows would not describe a declared path, once however many declarations run
+    /// through it — the same rule <see cref="Decline"/> gives, and for the same reason.
+    ///
+    /// <para><b>No protected path.</b> §5.6 measures a survivor before the run, and a path that
+    /// cannot be measured records itself as "nothing to preserve" and then passes over whatever
+    /// happened to it. An assertion nobody can fail is worse than none, because it reads as one
+    /// that held.</para>
+    /// </summary>
+    private static void Unreachable(string path, List<string> unreachable, List<PlanNote> notes)
+    {
+        if (unreachable.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        unreachable.Add(path);
+        notes.Add(UnreadableRoot.UnreachedNote(LongPath.Display(path)));
     }
 
     /// <summary>

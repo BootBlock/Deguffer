@@ -40,7 +40,15 @@ internal sealed record ClaudeCodeProjects(
     IReadOnlySet<string> TranscriptIds,
     IReadOnlyList<string> Unreadable,
     IReadOnlyList<string> Links,
-    bool Complete);
+    bool Complete)
+{
+    /// <summary>
+    /// Folders Windows would not describe, so none of them is known to be there. Apart from
+    /// <see cref="Unreadable"/>, whose sentence says Deguffer could not list the folder and so
+    /// asserts that it exists.
+    /// </summary>
+    public IReadOnlyList<string> Unreached { get; init; } = [];
+}
 
 /// <summary>
 /// One walk over Claude Code's project folders, for everything that has to know which sessions still
@@ -91,10 +99,20 @@ internal sealed class ClaudeCodeProjectsDiscovery
 
         var root = Path.Combine(home, ClaudeCodeHome.Projects);
 
-        // Not there is a complete answer: Claude Code has written no transcript for this user.
-        if (!LongPath.DirectoryExists(root))
+        switch (LongPath.ProbeDirectory(root))
         {
-            return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: true);
+            // Not there is a complete answer: Claude Code has written no transcript for this user.
+            case PathPresence.Absent:
+                return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: true);
+
+            // Windows would not say whether it is there, which is not an answer at all — so the
+            // walk is incomplete and the folder is named as one nothing was read from. Reported
+            // apart from Unreadable, whose sentence asserts that the folder exists.
+            case PathPresence.Refused:
+                return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: false)
+                {
+                    Unreached = [root],
+                };
         }
 
         if (LongPath.IsReparsePoint(root))

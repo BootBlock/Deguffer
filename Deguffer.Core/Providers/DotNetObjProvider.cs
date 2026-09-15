@@ -254,7 +254,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 measured.Note,
                 ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count)),
             Fallback = measured.Fallback,
-            HasUnreadableRoot = discovered.UnreadableDirectories.Count > 0,
+            HasUnreadableRoot =
+                discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0,
 
             // See BuildDirectoryProvider: a row whose only approved folder sits on a refused mount
             // must not render as "Already clear".

@@ -218,7 +218,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     /// the user a row the plan then has nothing to say about.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ResolveHome() is { } home && RecognisedCachePaths(home).Any(LongPath.DirectoryExists));
+        Task.FromResult(ResolveHome() is { } home && RecognisedCachePaths(home).Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -229,9 +229,9 @@ public sealed class CargoCacheProvider : CleanupProviderBase
                 + "a full path. Deguffer cannot tell which directory that means, so it is leaving it alone.");
         }
 
-        if (!LongPath.DirectoryExists(home))
+        if (NothingToPlanFor(home, $"Cargo is not installed for this user — no {home} directory.") is { } nothing)
         {
-            return EmptyPlan($"Cargo is not installed for this user — no {home} directory.");
+            return nothing;
         }
 
         // The home arrives by name, from an environment variable or a default, so nothing has
@@ -320,9 +320,17 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     {
         var directory = level.Resolve(home);
 
-        if (!LongPath.DirectoryExists(directory))
+        switch (LongPath.ProbeDirectory(directory))
         {
-            return true;
+            // Windows would not say whether the level is there, so nothing below it was examined.
+            // Returning true here would let the caller say Cargo has downloaded nothing into a home
+            // whose registry may hold every crate on the machine.
+            case PathPresence.Refused:
+                notes.Add(UnreadableRoot.UnreachedNote(directory));
+                return false;
+
+            case PathPresence.Absent:
+                return true;
         }
 
         // Applied at every level rather than only at the root, which is the one level reached by

@@ -228,7 +228,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryExists(repository));
+        Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryMayExist(repository));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -283,6 +283,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

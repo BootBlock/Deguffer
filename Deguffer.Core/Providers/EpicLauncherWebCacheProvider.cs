@@ -253,6 +253,11 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                 + "through a link.");
         }
 
+        if (look.Folder.UnreachedAt is { } unreached)
+        {
+            return UnreadableRootPlan(unreached);
+        }
+
         if (!look.Folder.Exists)
         {
             return EmptyPlan("The Epic Games launcher has kept no folder in this user's account.");

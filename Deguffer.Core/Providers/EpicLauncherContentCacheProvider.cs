@@ -125,7 +125,7 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
     /// have never opened the store.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -165,6 +165,7 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

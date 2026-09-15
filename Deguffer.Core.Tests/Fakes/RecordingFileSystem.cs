@@ -30,6 +30,12 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         return inner.DirectoryExists(path);
     }
 
+    public PathPresence ProbeDirectory(string path)
+    {
+        _paths.Enqueue(path);
+        return inner.ProbeDirectory(path);
+    }
+
     public bool IsReparsePoint(string path)
     {
         _paths.Enqueue(path);

@@ -121,7 +121,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ClaudeCodeHome.Resolve(Environment) is { } home
-            && LongPath.DirectoryExists(Path.Combine(home, ClaudeCodeHome.FileHistory)));
+            && LongPath.DirectoryMayExist(Path.Combine(home, ClaudeCodeHome.FileHistory)));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own level,
@@ -149,16 +149,28 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
         var folder = Path.Combine(home, ClaudeCodeHome.FileHistory);
 
-        if (!LongPath.DirectoryExists(folder))
+        // The home first, then everything below it down to the snapshot folder, and all of it before
+        // the folder is probed for. Probing for the folder resolves through the home, so a link there
+        // that Windows declines to follow would leave the folder reading as unreachable and the link —
+        // which Deguffer can see perfectly well — never named.
+        if (LongPath.ProbeDirectory(home) is PathPresence.Refused)
         {
-            return EmptyPlan("Claude Code has kept no rewind snapshots for this user.");
+            return UnreadableRootPlan(home);
         }
 
-        if (LongPath.IsReparsePoint(home) || LongPath.IsReparsePoint(folder))
+        if (LongPath.IsReparsePoint(home))
         {
-            return UnexaminedPlan(
-                $"Leaving '{(LongPath.IsReparsePoint(home) ? home : folder)}' alone: it is a link to somewhere else, "
-                + "and Deguffer does not look through a link.");
+            return LinkedAway(home);
+        }
+
+        if (DerivedPath.FirstObstacleBetween(home, folder) is { } obstacle)
+        {
+            return obstacle.IsLink ? LinkedAway(obstacle.Path) : UnreadableRootPlan(obstacle.Path);
+        }
+
+        if (NothingToPlanFor(folder, "Claude Code has kept no rewind snapshots for this user.") is { } nothing)
+        {
+            return nothing;
         }
 
         var survey = Look(ct)!;
@@ -253,6 +265,14 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             new ToolRoot(survey.Folder, FolderReason, name => offered.Contains(Path.Combine(survey.Folder, name))),
         ];
     }
+
+    /// <summary>
+    /// The plan for a folder on the way down to the snapshots that turned out to be a link. Written
+    /// once because the home and the folders below it say the same thing about one.
+    /// </summary>
+    private CleanupPlan LinkedAway(string path) => UnexaminedPlan(
+        $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not look "
+        + "through a link.");
 
     /// <summary>
     /// One look at the snapshot folder and the list of running sessions, memoised for the life of a planning

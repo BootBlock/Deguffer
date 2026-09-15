@@ -109,9 +109,11 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         var notes = new List<PlanNote>();
         var steps = new List<CleanupStep>();
 
-        if (!LongPath.DirectoryExists(cacheDirectory))
+        if (NothingToPlanFor(
+                cacheDirectory,
+                $"npm is installed but its cache directory does not exist yet ({cacheDirectory}).") is { } nothing)
         {
-            return EmptyPlan($"npm is installed but its cache directory does not exist yet ({cacheDirectory}).");
+            return nothing;
         }
 
         var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);

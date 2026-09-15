@@ -56,11 +56,29 @@ public static class DirectoryRemover
     {
         var extended = LongPath.Extended(path);
 
-        if (!fs.DirectoryExists(extended))
+        switch (fs.ProbeDirectory(extended))
         {
-            // A caller keeping the root is asking about a directory that is meant to still be
-            // there, so its absence is not the success it is for a deletion.
-            return new RemovalOutcome(0, Refusals.None, RootRemoved: !bounds.KeepRoot);
+            case PathPresence.Absent:
+                // A caller keeping the root is asking about a directory that is meant to still be
+                // there, so its absence is not the success it is for a deletion.
+                return new RemovalOutcome(0, Refusals.None, RootRemoved: !bounds.KeepRoot);
+
+            // Windows would not say whether the directory is there, which the two-state question
+            // this replaced answered as "gone" — so a removal that reached nothing at all reported
+            // the root as taken, and a step the executor then called successful.
+            //
+            // Recorded as standing only where this removal would have taken it. LeftStanding means
+            // "tried and still here", and a caller keeping the root never tries it — so naming it
+            // would report a refusal of a deletion nobody attempted. No folder refusal is counted
+            // either: PathPresence does not carry the exception, so "Windows would not let Deguffer
+            // remove it" would be a guess between an access rule and a link it will not follow.
+            case PathPresence.Refused:
+                progress?.Report(1.0);
+
+                return new RemovalOutcome(0, Refusals.None, RootRemoved: false)
+                {
+                    LeftStanding = bounds.KeepRoot ? [] : [LongPath.Display(extended)],
+                };
         }
 
         // The root is the one entry no enumeration classified, so it is the one place a link can
@@ -93,7 +111,9 @@ public static class DirectoryRemover
 
             progress?.Report(1.0);
 
-            var linkRemoved = !fs.DirectoryExists(extended);
+            // "Removed" has to mean Windows said it is gone. A refused probe answers false to the
+            // two-state question, which would report a link that is still there as one this run took.
+            var linkRemoved = fs.ProbeDirectory(extended) is PathPresence.Absent;
 
             return new RemovalOutcome(
                 0,
@@ -207,7 +227,7 @@ public static class DirectoryRemover
         return new RemovalOutcome(
             reclaimed,
             refused.Total,
-            RootRemoved: !bounds.KeepRoot && !fs.DirectoryExists(extended),
+            RootRemoved: !bounds.KeepRoot && fs.ProbeDirectory(extended) is PathPresence.Absent,
             inventory.Kept,
             inventory.Spared,
             Interlocked.Read(ref removed))
