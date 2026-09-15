@@ -35,6 +35,7 @@ public class StepGrainTests
     {
         string[] items =
         [
+            "affinity-model-cache",
             "azure-functions-tools",
             "cargo-target",
             "claude-code-file-history",
