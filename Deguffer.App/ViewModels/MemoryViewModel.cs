@@ -31,13 +31,6 @@ public sealed partial class MemoryViewModel : ObservableObject
 
     private readonly List<int> _steps = [];
 
-    /// <summary>
-    /// The rows the tree view still has to be filled in from, drained by the time the fill returns.
-    /// One stack rather than a recursion with a list of its own per row, for the reason
-    /// <see cref="_arriving"/> is one list (G5).
-    /// </summary>
-    private readonly Stack<MemoryRow> _opening = new();
-
     public MemoryViewModel(MemoryFeed feed, MemorySelection selection)
     {
         ArgumentNullException.ThrowIfNull(feed);
@@ -134,7 +127,7 @@ public sealed partial class MemoryViewModel : ObservableObject
     {
         if (value == ExploreView.Tree && Tree is { } tree)
         {
-            ShowRows(tree, CurrentNode, sameThing: true);
+            Writing(() => ShowChildren(tree, Rows));
         }
     }
 
@@ -196,9 +189,19 @@ public sealed partial class MemoryViewModel : ObservableObject
 
         if (Tree is { } tree)
         {
-            ShowChildren(tree, row.Children);
+            Writing(() => ShowChildren(tree, row.Children));
         }
     }
+
+    /// <summary>
+    /// The row the tree is showing for <paramref name="node"/>, or null where the reader has not
+    /// opened down to it.
+    ///
+    /// <para>Only as far as the reader has opened, because a row under a closed one is not on
+    /// screen: the tree holds no container for it, and highlighting something nobody can see says
+    /// nothing.</para>
+    /// </summary>
+    public MemoryRow? Opened(int node) => Shown(Rows).FirstOrDefault(row => row.Node == node);
 
     /// <summary>Show what is inside <paramref name="node"/>, where anything is.</summary>
     public void Descend(int node)
@@ -313,13 +316,26 @@ public sealed partial class MemoryViewModel : ObservableObject
     /// brought up to date in place. Clearing the collection is a reset for the bound list, which throws
     /// away the scroll position and the reader's place twice a second.
     /// </param>
-    private void ShowRows(MemoryTree tree, int node, bool sameThing)
+    private void ShowRows(MemoryTree tree, int node, bool sameThing) =>
+        Writing(() => Rewrite(tree, node, sameThing));
+
+    /// <summary>
+    /// Rewrite what the list and the tree are bound to, with <see cref="IsShowingRows"/> raised for
+    /// as long as it takes.
+    ///
+    /// <para>Every path that changes a bound collection goes through here, the reader opening a row
+    /// in the tree included. A control drops an item from its own selection when the collection
+    /// under it stops holding that item where it was, and reports that back as a selection change,
+    /// so a rewrite that did not raise the flag would have its own doing taken for the reader's
+    /// gesture — and §7.2 says Memory never pre-selects anything.</para>
+    /// </summary>
+    private void Writing(Action rewrite)
     {
         IsShowingRows = true;
 
         try
         {
-            Rewrite(tree, node, sameThing);
+            rewrite();
         }
         finally
         {
@@ -358,23 +374,41 @@ public sealed partial class MemoryViewModel : ObservableObject
     /// </summary>
     private void ShowChildren(MemoryTree tree, IReadOnlyList<MemoryRow> from)
     {
-        foreach (var row in from)
-        {
-            _opening.Push(row);
-        }
-
-        while (_opening.TryPop(out var row))
+        foreach (var row in Shown(from))
         {
             Fill(tree, row.Children, row.Node);
+        }
+    }
+
+    /// <summary>
+    /// Every row the tree view is showing under <paramref name="from"/>, each one before whatever is
+    /// under it.
+    ///
+    /// <para>The one walk both readers of the tree share: the fill above, and <see cref="Opened"/>.
+    /// A row is handed over before its own contents are read, so a caller that fills them as it goes
+    /// is descended into afterwards on what it just filled.</para>
+    /// </summary>
+    private static IEnumerable<MemoryRow> Shown(IReadOnlyList<MemoryRow> from)
+    {
+        var pending = new Stack<MemoryRow>();
+
+        for (var at = from.Count - 1; at >= 0; at--)
+        {
+            pending.Push(from[at]);
+        }
+
+        while (pending.TryPop(out var row))
+        {
+            yield return row;
 
             if (!row.IsExpanded)
             {
                 continue;
             }
 
-            foreach (var child in row.Children)
+            for (var at = row.Children.Count - 1; at >= 0; at--)
             {
-                _opening.Push(child);
+                pending.Push(row.Children[at]);
             }
         }
     }

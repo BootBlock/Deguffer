@@ -223,19 +223,26 @@ public sealed class LiveListTests
     /// <summary>
     /// A list holding one thing twice, which is what a reading gives where the machine will not say
     /// enough to tell two things apart. It ends holding what arrived rather than what it started
-    /// with, in both directions.
+    /// with, in both directions, and the surplus row is the one change it costs: what has gone is
+    /// counted per key rather than matched as a set, so two rows for a key that arrived once leave
+    /// one rather than none.
     /// </summary>
     [Fact]
     public void OneThingHeldTwiceSettlesToWhatArrived()
     {
         var rows = Rows("a", "a", "b");
+        var watched = Watch(rows);
 
         Show(rows, "a", "b");
 
+        Assert.Equal([NotifyCollectionChangedAction.Remove], watched);
         Assert.Equal(["a", "b"], Names(rows));
+
+        watched.Clear();
 
         Show(rows, "a", "a", "b");
 
+        Assert.Equal([NotifyCollectionChangedAction.Add], watched);
         Assert.Equal(["a", "a", "b"], Names(rows));
     }
 
