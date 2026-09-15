@@ -267,10 +267,6 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// One look at the snapshot folder and the list of running sessions, memoised for the life of a planning
-    /// pass (G4). Presence, planning and the declaration all read it.
-    /// </summary>
-    /// <summary>
     /// The plan for a folder on the way down to the snapshots that turned out to be a link. Written
     /// once because the home and the folders below it say the same thing about one.
     /// </summary>
@@ -278,6 +274,10 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not look "
         + "through a link.");
 
+    /// <summary>
+    /// One look at the snapshot folder and the list of running sessions, memoised for the life of a planning
+    /// pass (G4). Presence, planning and the declaration all read it.
+    /// </summary>
     private Survey? Look(CancellationToken ct = default) => _survey ??= Examine(ct);
 
     private Survey? Examine(CancellationToken ct)
