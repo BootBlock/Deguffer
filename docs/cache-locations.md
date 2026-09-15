@@ -1557,6 +1557,101 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 ---
 
+## Affinity machine-learning models
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.affinity\Common\<version>\modelcache` and `%APPDATA%\Affinity\Common\<version>\modelcache` |
+| **Method** | Delete the whole `modelcache` folder inside each version folder, and nothing else in it |
+| **Typical size** | 404 MB for Affinity 2 and 326 MB for Affinity 3 on the measured machine; ~730 MB together |
+
+### What it is
+
+Affinity Photo, Designer and Publisher run machine-learning models for subject selection, object
+selection and the other selection tools that work out what is in a picture. Those models are not in
+the installer. The application downloads them the first time one of the features needs one, and
+keeps them in `modelcache` inside the folder its products share.
+
+The shared folder is per major version, and the location has moved: Affinity 1 kept it under
+`%APPDATA%\Affinity`, Affinity 2 moved it to a hidden `.affinity` folder in your profile, and
+Affinity 3 moved it back. Both roots are live on a machine that has run more than one version, so
+Deguffer reads both and works out the version folders inside them rather than looking for `2.0` or
+`3.0` by name.
+
+**A version you have uninstalled keeps its models.** On the measured machine the whole Affinity 2
+tree had not been written to for eleven months, and 404 MB of it was models nothing would ever load
+again.
+
+### What Deguffer does
+
+Inside `Common`, Deguffer looks in a folder only if its **whole name is two dotted numbers** —
+`1.0`, `2.0`, `3.0`. That is the shape Affinity has always written. `3`, `3.0.1`, `v3` and anything
+you created yourself do not qualify: they stay in Tier 4, Deguffer does not look inside them, and it
+tells you it is leaving them alone.
+
+Inside a version folder, **`modelcache` is the only child Deguffer will ever remove.** Every other
+entry is Tier 4 by construction, whether or not Deguffer has heard of it.
+
+A version folder Deguffer is not allowed to list is left alone entirely, even though the cache
+inside it can still be reached by its full name. Listing a folder and passing through it are
+separate permissions, so a folder that refuses the first would let Deguffer remove the cache while
+never having seen what was standing beside it — and there would then be nothing to check afterwards.
+
+### What is protected
+
+**Everything else in the version folder, by name**, which is the point of this entry rather than a
+footnote to it. `modelcache` sits directly beside:
+
+- **`user`** — your asset library and your raster and vector brushes. On the measured machine
+  `assets.propcol` alone was 903 MB, which is more than every model put together.
+- **`Licences`** and **`Receipts`** — what keeps the product activated.
+- **`Settings`**, **`Plugins`** and **`migrate`** — your settings, your plugins, and what Affinity
+  carried forward from the version before.
+- **`locks`**, **`clipboard`**, **`ipc.dat`**, **`cs.dat`** and **`sp.db`** — live state three
+  applications share while they are running.
+
+Also protected: both profile roots, the `Common` folder, and every version folder. A cleaner that
+removed `Common\<version>` instead of `Common\<version>\modelcache` would take your whole asset
+library with the models, which is why Deguffer names every entry it leaves standing and checks
+afterwards that each one is still there.
+
+The per-product folders beside `Common` — `Photo`, `Designer`, `Publisher`, `Affinity` — are not
+touched at all. `autosave`, `backup` and `temp-critical` in them hold recovery copies of documents
+you have not saved.
+
+### What it costs you
+
+**A download, the next time a selection tool needs a model.** Affinity fetches it again before the
+feature will run: a few hundred megabytes over an internet connection, and on Affinity 3 through the
+account you are signed in with. The application keeps working; it is the machine-learning features
+that wait.
+
+Your documents, brushes, assets, licences and settings are untouched.
+
+### Why Tier 2, not Tier 1
+
+Nothing fetches a model back in the background. The next subject selection is what discovers it has
+gone, and getting it back needs a connection you may not have at that moment.
+
+**Affinity has its own control for this, and it is the one to prefer.** Settings → Machine Learning
+lists the model categories and offers install and uninstall for each, and Affinity's help says the
+models can be uninstalled to reclaim space and reinstalled when the features are next wanted. It is
+a window rather than a command, so Deguffer cannot call it on your behalf, but §5.1's preference
+still stands and the row says so.
+
+**Serif publishes nothing about clearing this folder.** What is written here is direct observation
+of what Affinity writes, and Deguffer says that in the row rather than leaving it out.
+
+Sources:
+
+- Affinity Photo 2 help — machine learning:
+  <https://affinity.help/photo2/en-US.lproj/pages/Extras/machineLearning.html>
+
+---
+
 ## Squirrel updater leftovers
 
 | **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |

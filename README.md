@@ -135,6 +135,7 @@ installed" cleanly on a machine without that toolchain.
 | Conda package cache | |
 | vcpkg build caches | |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
+| Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
 | Node.js project dependencies | `node_modules` under your own source trees |
