@@ -1,4 +1,4 @@
-using Deguffer.Core.Configuration;
+﻿using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;

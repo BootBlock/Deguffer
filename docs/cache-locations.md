@@ -1008,7 +1008,7 @@ It removes each session's folder, one step each, and shows when each was last wr
   against Windows. If the list cannot be read, no session is offered, and the row says so.
 - **Nothing written in the last 7 days is offered**, whatever the list says, and whatever the guard on
   recently changed files is set to. A session can run for days. The same cut-off applies again when you
-  press Clean, so a session you resume after the preview keeps the snapshots it has taken since.
+  press Clean, so a session you resume after the scan keeps the snapshots it has taken since.
 - **Only a folder named for a session is recognised.** Anything else in `file-history` is left alone.
 
 ### What is protected
@@ -2243,7 +2243,7 @@ shows its storage as an ordinary drive or folder looks exactly like a disk, and 
 it downloads every file inside onto this computer — the computer you are clearing space on. What a
 clean would then free is space in the cloud rather than space here. So Settings warns you when you
 add such a folder, and searches it only if you say to go ahead. A folder added before that warning
-existed, or one you declined, is left alone and the preview says which folder it was. Add it again
+existed, or one you declined, is left alone and the scan says which folder it was. Add it again
 to change your mind. The row in Settings says which of your folders carry that permission, and
 removing the folder is how you take it back.
 
@@ -2278,7 +2278,7 @@ the tool itself writes inside it.
 | `node_modules` | `package.json`, **and a lock file** | — |
 | `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
 
-Every condition has to hold. A directory that fails any of them is left alone, and the preview says
+Every condition has to hold. A directory that fails any of them is left alone, and the scan says
 how many were left and why. `obj` carries an extra check of its own: git is asked whether the
 directory holds any tracked file, because intermediate output never should, and one that does is not
 intermediate output whatever the manifest beside it claims.
@@ -2305,7 +2305,7 @@ This is the part with no equivalent anywhere else in this document. Clearing a c
 tool costs a slower next use. Removing a build directory under a live editor or a build in flight
 breaks the work you are doing at that moment, and nothing re-downloads the afternoon.
 
-So before anything reaches the preview, Deguffer asks whether each project is in use, and holds back
+So before anything is offered, Deguffer asks whether each project is in use, and holds back
 the ones that are. It needs no administrator rights to ask. Three signals, each of them positive
 evidence rather than a guess:
 
@@ -2320,7 +2320,7 @@ evidence rather than a guess:
   own folder, which is how a solution you have open is recognised.
 
 A held-back project is listed as something left alone, with what is using it named, so you can close
-it and preview again.
+it and scan again.
 
 **It can miss, and it never fires wrongly.** Three things it does not see, all of them stated here
 because a safeguard whose limits are unwritten gets trusted past them:
@@ -2331,10 +2331,10 @@ because a safeguard whose limits are unwritten gets trusted past them:
   will not let it inspect those at all — so a build started from an elevated terminal is invisible.
 - A project whose path is longer than 260 characters, for the lock-file signal only. Windows'
   Restart Manager refuses a path that long, so Unity's lockfile cannot be asked about there. The
-  other two signals are unaffected, and the preview says the check could not run rather than
+  other two signals are unaffected, and the scan says the check could not run rather than
   reporting the project idle.
 
-Where a check cannot run at all, the preview says so rather than staying quiet — "could not tell"
+Where a check cannot run at all, the scan says so rather than staying quiet — "could not tell"
 and "nothing is using it" are different answers, and only the second is permission. The age column
 beside each row carries the rest of the decision: a project nobody has touched in a year is where the
 space actually is.
@@ -2461,7 +2461,7 @@ clearing out this morning, and the two are indistinguishable by size.
 
 Drives that are not fixed are left out entirely. A network drive has no Recycle Bin — Windows
 deletes across one outright — so a `$RECYCLE.BIN` sitting on a share belongs to the server's users
-rather than to you. Removable media can be swapped between the preview and the clean, which would
+rather than to you. Removable media can be swapped between the scan and the clean, which would
 put a plan you approved for one disk in front of another. A fixed drive that is not ready to be
 read, which is unusual but possible, is skipped as well.
 
@@ -2470,7 +2470,7 @@ command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name.
 rather than deleting the files means Windows knows the bin changed, so a Recycle Bin window you
 already had open, the desktop icon and anything else watching all agree with the disk straight away.
 
-The preview is unaffected. The call takes a *drive*, and Deguffer's plan still names the exact
+The scan is unaffected. The call takes a *drive*, and Deguffer's plan still names the exact
 folder on each drive, how large it is and when you last used it, and still checks afterwards that
 everything it promised to keep is still there. Those are two different paths, and only the second is
 what you are shown.
@@ -2644,7 +2644,7 @@ when every version in them was old enough to go.
 **What it cannot prove.** A cleanup that trimmed another account's old versions the way it trims
 yours would leave that account's newest versions and its catalogue behind. The folder still holds
 files, so the check passes. Only a comparison of sizes could see it, and the size of a folder
-Deguffer does not own changes between a preview and a clean for ordinary reasons.
+Deguffer does not own changes between a scan and a clean for ordinary reasons.
 
 The emptied-in-place half also depends on what your account may read. A folder Deguffer is not
 allowed to open is never recorded as holding anything, so emptying it is never reported. A folder
@@ -2871,15 +2871,15 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
   what the age filter was for. The row says so on a warning whenever 0 is in force.
 - **Nothing a running program is working in.** Before it plans anything, Deguffer reads the process
   table once and asks which entries of each folder something is running from or working inside. Any
-  entry that answers is left alone whatever its age, is named in the preview so you can see what is
+  entry that answers is left alone whatever its age, is named on its row so you can see what is
   holding it, and is checked afterwards to prove it is still there. This catches the case the age
   filter cannot: a program that has been running for a month, working in a scratch directory whose
   files are all older than the cut-off.
 
-The size shown already has both of those taken out of it, so the number in the preview is what the
+The size shown already has both of those taken out of it, so the number the scan reports is what the
 clean will actually take — with the one exception described next.
 
-**A file Windows will not release is left where it is, and the next preview stops offering it.**
+**A file Windows will not release is left where it is, and the next scan stops offering it.**
 Two kinds of refusal reach a temporary folder. A program that still has a file open releases it
 when the program closes. Windows can also refuse for reasons no amount of waiting changes: an access
 rule, or security software guarding a folder. On one workstation, something below the access rules
@@ -2887,16 +2887,16 @@ rule, or security software guarding a folder. On one workstation, something belo
 profiles that automated test runs had left in `%TEMP%`: nearly two thousand folders and 5.9 GB. It
 refused an administrator too.
 
-Deguffer cannot know about a refusal before it has tried, so the first preview offers those files.
+Deguffer cannot know about a refusal before it has tried, so the first scan offers those files.
 The clean then reports what it could not take, with its size and which kind of refusal it was, and
-records where it happened. Every later preview asks Windows again about those places only, leaves
+records where it happened. Every later scan asks Windows again about those places only, leaves
 out whatever is still refused, and says so on the row; a row with nothing else to offer reads
-*Refused by Windows* rather than *Already clear*. If the refusal lifts, the next preview offers the
+*Refused by Windows* rather than *Already clear*. If the refusal lifts, the next scan offers the
 files again, and every clean tries them again.
 
-One refusal stays invisible to a preview: a running program's own files. Windows lets Deguffer
+One refusal stays invisible to a scan: a running program's own files. Windows lets Deguffer
 open a running executable, or a library a running program has loaded, as though it could delete
-it, and refuses only the deletion itself. The clean reports those files as refused, and the preview
+it, and refuses only the deletion itself. The clean reports those files as refused, and the scan
 goes on offering them until the program exits.
 
 This is not specific to temporary folders. Every location Deguffer empties or deletes itself
@@ -2916,7 +2916,7 @@ unticked with that reason on it.
 
 A temporary folder is the one location Deguffer is *told* about rather than knowing, because
 `%TEMP%` is an environment variable anything on the machine may have written. Four settings are
-declined outright, with the reason shown in the preview:
+declined outright, with the reason shown on the row:
 
 - One pointing at the root of a drive or a share, where emptying it would take the whole volume.
 - One that *contains* a directory Windows is built out of — the profile, either program directory,
@@ -3076,7 +3076,7 @@ does not offer it, for three reasons that all point the same way.
 frees any space when it runs. They tell the installer to stop keeping payloads, and the existing ones
 go during the *next* install, modify or repair of the product they belong to. That operation is long,
 needs administrator rights, and is something the user has to want for its own sake. Deguffer's whole
-promise is a preview and then a number, and there is no honest number to show for a step that
+promise is a scan and then a number, and there is no honest number to show for a step that
 reclaims nothing.
 
 **The folder cannot be split into "safe" and "unsafe" children.** The measured machine had 1,249 of
@@ -3271,13 +3271,13 @@ Deguffer's to steer is withheld while a store is inside its reach:
 | Route | With a store inside |
 | --- | --- |
 | A removal Deguffer performs itself | The store and the folders holding it stay, the rest goes, and the figure leaves the store out |
-| A tool's own clean command (§5.1) | The command is not run, and the preview names the store: the tool cannot be told to leave one file |
+| A tool's own clean command (§5.1) | The command is not run, and the scan names the store: the tool cannot be told to leave one file |
 | Windows' File History cleanup | Not run while a saved version of a store is on the backup drive, because it can remove the last saved copy of a store you have since deleted |
 | A Recycle Bin | That bin is left exactly as it is. Windows empties a bin whole, and emptying around the store would take the record that lets a deleted folder holding it be restored |
 
-Every store a preview finds is named in its notes, and every clean checks that it is still there
+Every store a scan finds is named in its notes, and every clean checks that it is still there
 afterwards — on the rows the clean does not run as well as on the rows it does — so a clean that lost
-one reports a verification failure. A preview is made minutes before the clean, so immediately before
+one reports a verification failure. A scan runs minutes before the clean, so immediately before
 a tool's command runs or a Recycle Bin is emptied, by either route, Deguffer looks on the disk again,
 and does none of these where a store has arrived since. A row holding nothing but stores reads
 *Outlook data kept*, never *Already clear*.

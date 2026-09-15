@@ -41,7 +41,7 @@ body:
       multiple: true
       options:
         - Scanning
-        - The preview, or the plan it described
+        - The scan, or the plan it described
         - Executing a cleanup
         - Elevated rescan
         - Settings
