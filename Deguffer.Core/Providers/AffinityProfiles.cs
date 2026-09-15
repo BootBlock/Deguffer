@@ -32,7 +32,15 @@ public sealed record AffinityCommonTree(
     IReadOnlyList<DirectoryInfo> Unrecognised,
     IReadOnlyList<DirectoryInfo> Links,
     bool Unreadable,
-    string? LinkedAway);
+    string? LinkedAway)
+{
+    /// <summary>
+    /// The folder Windows would not describe, or null where it described every one of them. Apart
+    /// from <see cref="Unreadable"/>, which is a folder that was reached and would not be listed:
+    /// that sentence asserts the folder exists, and this one cannot.
+    /// </summary>
+    public string? Unreached { get; init; }
+}
 
 /// <summary>
 /// Finds Affinity's shared per-version folders, under both of the roots the suite has used.
@@ -108,9 +116,19 @@ public static partial class AffinityProfiles
         {
             ct.ThrowIfCancellationRequested();
 
-            if (!LongPath.DirectoryExists(root))
+            switch (LongPath.ProbeDirectory(root))
             {
-                continue;
+                // Windows would not say whether the root is there, so nothing under it was examined
+                // and dropping it would let the plan report Affinity as never run on a machine that
+                // has run it. Unreached rather than Unreadable: that sentence asserts the folder
+                // exists, and nothing here established it.
+                case PathPresence.Refused:
+                    found.Add(new AffinityCommonTree(
+                        root, null, [], [], [], Unreadable: false, LinkedAway: null) { Unreached = root });
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             found.Add(Classify(root, ct));
@@ -133,9 +151,18 @@ public static partial class AffinityProfiles
 
         var common = Path.Combine(root, CommonName);
 
-        if (!LongPath.DirectoryExists(common))
+        switch (LongPath.ProbeDirectory(common))
         {
-            return new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: null);
+            // Common stays null: it is what the caller asserts must survive, and §5.6 cannot
+            // measure a path Windows would not describe.
+            case PathPresence.Refused:
+                return new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: null)
+                {
+                    Unreached = common,
+                };
+
+            case PathPresence.Absent:
+                return new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: null);
         }
 
         if (LongPath.IsReparsePoint(common))

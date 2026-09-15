@@ -146,7 +146,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         var storage = Storage;
 
         return Task.FromResult(
-            storage.Installs.Any(install => LongPath.DirectoryExists(install.Edition.Cache))
+            storage.Installs.Any(install => LongPath.DirectoryMayExist(install.Edition.Cache))
             || storage.Unsettled is not null
             || storage.Moved.Count > 0);
     }
@@ -237,6 +237,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             // A withheld cache and a moved location count here for the reason a declined link does:
             // something was never examined, so the row must not read clear.
             WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || owesASentence),
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

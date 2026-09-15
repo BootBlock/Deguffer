@@ -219,6 +219,44 @@ public abstract class CleanupProviderBase : ICleanupProvider
     protected CleanupPlan UnexaminedPlan(string why) => EmptyPlan(why) with { WasNotExamined = true };
 
     /// <summary>
+    /// A plan with nothing to do because Windows would not say what is at <paramref name="root"/>,
+    /// so the provider could not reach it to look.
+    ///
+    /// <para>A warning rather than information, and <see cref="CleanupPlan.HasUnreadableRoot"/>
+    /// rather than <see cref="CleanupPlan.WasNotExamined"/>: the second of those is Deguffer's own
+    /// decision not to look, and this is not a decision Deguffer made.</para>
+    /// </summary>
+    protected CleanupPlan UnreadableRootPlan(string root) =>
+        // Composed from EmptyPlan rather than repeating its skeleton, as UnexaminedPlan is: a field
+        // added there has to reach every plan with nothing to do. The note is replaced rather than
+        // appended, because EmptyPlan's is Information and this one is a warning.
+        EmptyPlan(UnreadableRoot.WhyItCouldNotBeReached(root)) with
+        {
+            Notes = [UnreadableRoot.UnreachedNote(root)],
+            HasUnreadableRoot = true,
+        };
+
+    /// <summary>
+    /// The plan a provider owes before it has looked at anything, or null where its root is there
+    /// and it should carry on.
+    ///
+    /// <para><b>Written once because getting it wrong is silent.</b> A provider that reaches its
+    /// cache by name has two ways of being told nothing is there, and only one of them means it.
+    /// Collapsing them is how "Gradle is not installed for this user" came to be said about a
+    /// directory holding a cache, and how <see cref="ICleanupProvider.IsPresentAsync"/> came to
+    /// deny the row on the same evidence — so the user was shown nothing at all about the largest
+    /// thing on the disk. See <see cref="Safety.PathPresence"/>.</para>
+    /// </summary>
+    /// <param name="root">The directory the provider reaches by name before it classifies anything.</param>
+    /// <param name="absent">What to tell the user where the root is genuinely not there.</param>
+    protected CleanupPlan? NothingToPlanFor(string root, string absent) => LongPath.ProbeDirectory(root) switch
+    {
+        PathPresence.Absent => EmptyPlan(absent),
+        PathPresence.Refused => UnreadableRootPlan(root),
+        _ => null,
+    };
+
+    /// <summary>
     /// §5.6 — capture what each protected path was before the run, so verification can tell
     /// "survived" from "was never there", and from "is still standing and has been emptied".
     ///

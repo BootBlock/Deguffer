@@ -193,7 +193,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// treating that as a hit would report a source the plan then has nothing to say about.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -212,9 +212,20 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             // A null path is a tier the platform would not locate, which only LocalLow can be.
             // §5.2 forbids guessing where it is, so the row contributes nothing rather than a path
             // assembled by hand.
-            if (rootPath is null || !LongPath.DirectoryExists(rootPath))
+            if (rootPath is null)
             {
                 continue;
+            }
+
+            switch (LongPath.ProbeDirectory(rootPath))
+            {
+                case PathPresence.Refused:
+                    notes.Add(UnreadableRoot.UnreachedNote(rootPath));
+                    unreadable = true;
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             // The root is reached by name too, so it needs the same check the Direct3D cache gets.
@@ -240,14 +251,25 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             unreadable |= !CollectFrom(root, rootPath, targets, declined, notes, ct);
         }
 
-        if (LongPath.DirectoryExists(_direct3DCache))
+        // Reached by name like the vendor roots above, and answered the same way. Without the
+        // refused arm a Direct3D cache Windows would not describe is skipped in silence, and the
+        // sentence below says no driver has written one — about a cache the presence probe has
+        // already reported.
+        var direct3D = LongPath.ProbeDirectory(_direct3DCache, out var direct3DIsALink);
+
+        if (direct3D is PathPresence.Refused)
         {
-            // Reached by name rather than through ChildDirectories.Under, so the reparse check that
-            // protects every other target has to be made here. Redirecting a shader cache to another
-            // volume with a junction is common, and a plan naming this path while deleting whatever
-            // it points at is the §5.2 failure in its worst form: the user approved one tree and
-            // another went.
-            if (LongPath.IsReparsePoint(_direct3DCache))
+            notes.Add(UnreadableRoot.UnreachedNote(_direct3DCache));
+            unreadable = true;
+        }
+        else if (direct3D is PathPresence.Present)
+        {
+            // The reparse check that protects every other target has to be made here, because this
+            // path did not come through ChildDirectories.Under. Redirecting a shader cache to
+            // another volume with a junction is common, and a plan naming this path while deleting
+            // whatever it points at is the §5.2 failure in its worst form: the user approved one
+            // tree and another went.
+            if (direct3DIsALink is true)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

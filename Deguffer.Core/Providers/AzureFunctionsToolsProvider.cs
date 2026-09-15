@@ -148,14 +148,15 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(LongPath.DirectoryExists(_root));
+        Task.FromResult(LongPath.DirectoryMayExist(_root));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(_root))
+        if (NothingToPlanFor(
+                _root,
+                "Visual Studio has not downloaded the Azure Functions Core Tools on this machine.") is { } noTooling)
         {
-            return EmptyPlan(
-                "Visual Studio has not downloaded the Azure Functions Core Tools on this machine.");
+            return noTooling;
         }
 
         // Moving 600 MB of downloaded releases onto another drive with a junction is how a developer
@@ -168,9 +169,11 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             return LinkedAway(_root);
         }
 
-        if (!LongPath.DirectoryExists(_releases))
+        if (NothingToPlanFor(
+                _releases,
+                $"The Azure Functions tooling has downloaded no releases ({_releases}).") is { } noReleases)
         {
-            return EmptyPlan($"The Azure Functions tooling has downloaded no releases ({_releases}).");
+            return noReleases;
         }
 
         if (LongPath.IsReparsePoint(_releases))

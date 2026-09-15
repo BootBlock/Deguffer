@@ -118,12 +118,18 @@ public sealed partial class ClaudeCodeSessionRegistry
 
         var directory = Path.Combine(home, ClaudeCodeHome.Sessions);
 
-        // Not there is an answer: no session has registered. It is also how a version of Claude Code
-        // that predates the list looks, which this cannot tell apart, and that is why no provider
-        // relies on the list alone — each holds back what was written recently as well.
-        if (!LongPath.DirectoryExists(directory))
+        switch (LongPath.ProbeDirectory(directory))
         {
-            return new ClaudeCodeSessionList([], Complete: true);
+            // Not there is an answer: no session has registered. It is also how a version of Claude
+            // Code that predates the list looks, which this cannot tell apart, and that is why no
+            // provider relies on the list alone — each holds back what was written recently as well.
+            case PathPresence.Absent:
+                return new ClaudeCodeSessionList([], Complete: true);
+
+            // Windows would not say, which is not an answer. Treated as an unread list, so a
+            // transcript is never called an orphan on the strength of it.
+            case PathPresence.Refused:
+                return Unreadable;
         }
 
         // Never read through, on the rule every walk in Core keeps: what a link points at was never

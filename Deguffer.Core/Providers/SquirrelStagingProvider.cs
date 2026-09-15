@@ -230,7 +230,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         var sweep = _discovery.Look(ct);
 
         return Task.FromResult(
-            (_discovery.StagingRoot is { } root && LongPath.DirectoryExists(root))
+            (_discovery.StagingRoot is { } root && LongPath.DirectoryMayExist(root))
             || _discovery.ConfiguredStagingRoot is not null
             || sweep.Installations.Count > 0
             || sweep.ApplicationDataUnreadable);
@@ -338,9 +338,17 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             return new Collected([], Unreadable: false, Declined: 1);
         }
 
-        if (!LongPath.DirectoryExists(root))
+        switch (LongPath.ProbeDirectory(root))
         {
-            return new Collected([], Unreadable: false, Declined: 0);
+            // Windows would not say whether the staging folder is there, so nothing under it was
+            // examined and the figures are short by an amount nobody can state — the same thing to
+            // the row as a folder that would not be listed.
+            case PathPresence.Refused:
+                notes.Add(UnreadableRoot.UnreachedNote(root));
+                return new Collected([], Unreadable: true, Declined: 0);
+
+            case PathPresence.Absent:
+                return new Collected([], Unreadable: false, Declined: 0);
         }
 
         // The root arrives by name, from an environment variable or a constant, so nothing has

@@ -25,6 +25,8 @@ public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<st
 
     public bool DirectoryExists(string path) => inner.DirectoryExists(path);
 
+    public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
+
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
     public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) => inner.EnumerateEntries(directory);

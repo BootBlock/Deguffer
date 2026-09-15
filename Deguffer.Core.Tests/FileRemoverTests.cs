@@ -187,6 +187,8 @@ public sealed class FileRemoverTests : IDisposable
     {
         public bool DirectoryExists(string path) => inner.DirectoryExists(path);
 
+        public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
+
         public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
         public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) =>

@@ -123,13 +123,15 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
     ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(LongPath.DirectoryExists(_root));
+        Task.FromResult(LongPath.DirectoryMayExist(_root));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(_root))
+        if (NothingToPlanFor(
+                _root,
+                "The VS Code C/C++ extension has no cache directory for this user.") is { } nothing)
         {
-            return EmptyPlan("The VS Code C/C++ extension has no cache directory for this user.");
+            return nothing;
         }
 
         var notes = new List<PlanNote>();

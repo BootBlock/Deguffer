@@ -186,7 +186,8 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Notes = SourceTreePlanNotes.For(
                 discovered, Kind.DisplayNames, Subject, declined.Count, live, measured.Note),
             Fallback = measured.Fallback,
-            HasUnreadableRoot = discovered.UnreadableDirectories.Count > 0,
+            HasUnreadableRoot =
+                discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0,
 
             // A row whose only approved folder is on a refused mount would otherwise render as
             // "Already clear", which is a claim about a folder nothing looked inside. It is

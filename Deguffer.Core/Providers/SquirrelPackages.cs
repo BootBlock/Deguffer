@@ -201,9 +201,15 @@ internal static partial class SquirrelPackages
                 $"A build of {installation.Name}. This row removes update packages and never a "
                 + "build.")));
 
-            if (!LongPath.DirectoryExists(packages))
+            switch (LongPath.ProbeDirectory(packages))
             {
-                continue;
+                case PathPresence.Refused:
+                    notes.Add(UnreadableRoot.UnreachedNote(packages));
+                    unreadable = true;
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             if (LongPath.IsReparsePoint(packages))

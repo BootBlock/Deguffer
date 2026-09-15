@@ -217,7 +217,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// folder should read as already clear rather than as missing.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryExists));
+        Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist));
 
     /// <summary>
     /// Every entry in a scratch folder that a running program is working in or running from, as a
@@ -357,6 +357,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             Keep = effective,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
+            HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
 

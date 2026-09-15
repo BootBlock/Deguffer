@@ -2,8 +2,9 @@
 
 > **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
 > are done; item 4 records what was deferred and why, and item 5 what is still undecided. Items 6
-> to 8 came later, from watching the fast path actually run, and are open. Flip to ✅ COMPLETE and
-> `git mv` into `done/` when the list is exhausted, or supersede it with a newer plan.
+> to 8 came later, from watching the fast path actually run; item 8 is done and 6 and 7 are open.
+> Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
+> newer plan.
 
 The §5.5 scanner (MFT fast path, observable fallback, cross-run size cache, progressive preview)
 landed on `feature/mft-scanner`. This is what follows, in the order it should be done and with the
@@ -402,41 +403,71 @@ worth thinking about before anyone writes code:
   back more per volume and this may cease to matter on `C:` while still mattering on the five
   volumes with one tiny location each.
 
-## 8. Let a root probe tell "not there" from "I was refused"
+## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 
-**Established while auditing the fast path, and left standing because the fix is a capability rather
-than a correction.** `LongPath.DirectoryExists` returns false for a directory that exists and whose
-attributes the account may not read, because `Directory.Exists` swallows the refusal. Eleven
-providers probe their cache root by name through it before classifying anything, so what the user is
-told is "Gradle is not installed for this user — no .gradle directory" about a directory that is on
-disk with a cache inside it. `IsPresentAsync` denies it on the same evidence, so the row does not
-appear at all.
+**Outcome: the probe answers in three states, and the decision the item was waiting on went the
+other way from the way it was framed.** `LongPath.ProbeDirectory` and `ProbeFile` answer `Absent`,
+`Present` or `Refused` (`PathPresence`), `DirectoryExists` is now the `Present` arm of the same
+query rather than a second call to `Directory.Exists`, and `DirectoryMayExist` is the form a
+presence probe asks in — a refusal reads as "may be there", because a row that never appears is the
+one state nothing downstream can correct. `CleanupProviderBase.NothingToPlanFor` holds the rule for
+the early return that used to say a tool is not installed, and `UnreadableRoot.WhyItCouldNotBeReached`
+is its sentence. It is deliberately not "could not list", which would assert that the directory is
+there.
 
-That is precisely the contradiction `UnreadableRoot.WhyNothingWasPlanned` was written to end one
-refusal over — where a root that will not be *listed* is still reached by a probe that traverses to
-it — and the sentence it produces is the one this case wants.
+**Why the narrower option was refused.** This item weighed a distinct sentence in eleven providers
+against answering only at the presence probe, on the grounds that the condition takes "a
+deliberately hostile pair of access rules". [#147](https://github.com/BootBlock/Deguffer/issues/147)
+established that it does not. A Windows 11 workstation at 26100.9445 declines to follow directory
+symbolic links the account created itself, answering `ERROR_UNTRUSTED_MOUNT_POINT` (448) for every
+path through one while the link's own attributes read normally — so every recognised Cargo cache
+path read as absent and `IsPresentAsync` denied the row. Relocating a cache onto another drive with
+a link is a thing developers do on purpose, which makes it the case a user most wants an answer
+about.
 
-The refusal takes an access rule on **both** the parent (deny `ListDirectory`) and the target (deny
-`ReadAttributes`), because NTFS answers `GetFileAttributes` out of the parent's own index whenever
-the caller may list the parent. Either rule alone leaves the attributes readable, including a deny
-of `FullControl` on the target. `DeniedDirectory.WithUnreadableAttributes` builds it, and
-`GradleCacheProviderTests.ARootWhoseAttributesCannotBeReadIsCalledAbsentRatherThanALink`
-characterises today's answer so this work has something to change.
+Both of the things this item said should be settled with it were:
 
-Two other things fall out of the same gap and should be settled with it:
+- **`DirectoryRemover` no longer reports a directory it cannot describe as removed.** It leaves the
+  root standing, records it in `LeftStanding`, and counts a denied folder refusal, which is what
+  §5.6 reads. `IFileSystem` grew `ProbeDirectory` so the condition is reachable from a test without
+  an access rule on the scratch tree's own parent.
+- **`LongPath.IsReparsePoint`'s fail-closed answer is unreachable by construction rather than by
+  coincidence.** The probe meets the same refusal first and reports it as a refusal, so nothing asks
+  the predicate. The old argument was that the existence gate happened to fail on the same
+  condition, which is a safety property resting on an accident.
 
-- **`DirectoryRemover` reports a directory it cannot see as removed.** `Remove` returns
-  `RootRemoved: true` when `DirectoryExists` is false, and `PlanExecutor` turns that into a
-  successful step. Under this refusal the directory is still there. Pre-existing, and only reachable
-  now that a fixture can produce the condition.
-- **`LongPath.IsReparsePoint` fails closed and no caller renders it as a link**, which is only true
-  *because* the existence gate fails first. Its doc comment says so, and that argument stops holding
-  the moment the gate learns a third answer — so the two have to move together.
+One thing fell out that the item did not anticipate: **a link check placed below a probe for a path
+underneath it can never fire**, because the probe resolves through the link. `RoslynCacheProvider`
+and `ClaudeCodeFileHistoryProvider` now ask about the folders above before probing the leaf, through
+`DerivedPath.FirstObstacleBetween`, which keeps "this is a link" apart from "Windows would not say"
+so that the fail-closed answer is never stated as a fact.
 
-Why it is not in the audit that found it: 55 call sites in Core go through `DirectoryExists` or
-`FileExists`, and each provider's root probe carries its own §5.6 survivor list and its own tests.
-Threading a third state through them is the size of the `ChildDirectoryScan` work, not of a
-correction. It also needs a decision that is not the auditor's: whether a condition that takes a
-deliberately hostile pair of access rules earns a distinct sentence in eleven providers, or whether
-the honest move is narrower — for instance answering only at the presence probe, so the row appears
-and the existing unreadable-root note does the rest.
+**The line drawn, for a provider written later.** A probe that decides whether a location *exists*
+answers "may exist" on a refusal. A probe that decides what a location *is* — a marker file such as
+Chromium's `Local State`, vcpkg's `.vcpkg-root` or Squirrel's `Update.exe` — keeps its two-state
+answer, because a refusal is not evidence for the classification and reading it as one would invent
+an application that is not installed.
+
+**What this did not reach, stated rather than implied.** Every presence probe and every "the tool is
+not installed" early return is converted, which is the defect #147 reported: a row that never
+appears cannot be corrected by anything downstream. A second rank of existence probes sits below
+that, where the row is already drawn from the tool's executable and the wrong sentence is narrower —
+"Conda is installed but has cached nothing yet", "none of its NuGet cache locations exist yet", and
+the like. Those are `CondaCacheProvider`, `NuGetCacheProvider`, `GoCacheProvider`,
+`PoetryCacheProvider`'s named caches, `SpotifyStorage`, `VcpkgDiscovery`'s archive directory,
+`SteamCacheProvider`'s install root, `FileHistoryDiscovery`'s target and `AzureFunctionsToolTags`.
+Several of them have no flag to carry the answer to, so each is a small design decision rather than
+a mechanical edit. The memoised `Examine()` and `DiscoverToolRootsAsync` siblings of six converted
+providers are in the same position: the plan names a refused root and the §5.2 declaration still
+drops it.
+
+Two further defects this work surfaced and did not fix, both needing a decision of their own:
+
+- **`CleanupProviderBase.Protect` folds "refused" into "was never there".** `ProtectedPath.ExistedBefore`
+  is a two-state probe, so a §5.6 survivor Windows will not describe records itself as "nothing to
+  preserve" and `PlanVerifier` then passes over whatever happened to it. Two sites route around it by
+  declining to record such a survivor at all; the seam that manufactures the vacuous assertion is
+  untouched, and closing it needs a `PlanVerifier` outcome for "could not be measured before the run".
+- **Three callers read `LongPath.IsReparsePoint`'s fail-closed answer as a reason to do less.**
+  `RefusalCheck` twice, and `ExploreRemover` once before the §9 mail-store search. All three predate
+  this probe. `LongPath.IsReparsePoint`'s own doc names them.

@@ -132,11 +132,12 @@ public static partial class EpicLauncherSaved
 
     /// <summary>
     /// The path is assembled from <c>%LOCALAPPDATA%</c> and two constants rather than enumerated, so
-    /// every segment of it is checked for a link before anything below it is planned. See
-    /// <see cref="DerivedPath"/> for why the last segment alone is not enough.
+    /// every segment of it is checked before anything below it is planned. See
+    /// <see cref="DerivedPath"/> for why the last segment alone is not enough, and for why the walk
+    /// says which of a link and a refusal it met rather than only the first.
     /// </summary>
-    private static string? FirstLinkTo(IUserEnvironment environment) =>
-        DerivedPath.FirstLinkBetween(environment.LocalAppData, PathIn(environment));
+    private static DerivedPathObstacle? FirstObstacleTo(IUserEnvironment environment) =>
+        DerivedPath.FirstObstacleBetween(environment.LocalAppData, PathIn(environment));
 
     /// <summary>
     /// One look at the <c>Saved</c> folder: whether the path down to it is a link, whether it is
@@ -152,21 +153,28 @@ public static partial class EpicLauncherSaved
     /// </summary>
     public static SavedFolder Look(IUserEnvironment environment)
     {
-        if (FirstLinkTo(environment) is { } link)
-        {
-            return new SavedFolder(link, Exists: true, Unreadable: false, [], []);
-        }
-
         var saved = PathIn(environment);
 
+        if (FirstObstacleTo(environment) is { } obstacle)
+        {
+            return obstacle.IsLink
+                ? new SavedFolder(obstacle.Path, PathPresence.Present, Unreadable: false, [], [])
+                : new SavedFolder(null, PathPresence.Refused, Unreadable: false, [], [])
+                {
+                    UnreachedAt = obstacle.Path,
+                };
+        }
+
+        // Absence is all the walk above leaves: it stops on a link and on a refusal, and the Saved
+        // folder is its last segment.
         if (!LongPath.DirectoryExists(saved))
         {
-            return new SavedFolder(null, Exists: false, Unreadable: false, [], []);
+            return new SavedFolder(null, PathPresence.Absent, Unreadable: false, [], []);
         }
 
         var scan = ChildDirectories.Under(saved);
 
-        return new SavedFolder(null, Exists: true, scan.Unreadable, scan.Directories, scan.Links);
+        return new SavedFolder(null, PathPresence.Present, scan.Unreadable, scan.Directories, scan.Links);
     }
 
     /// <summary>
@@ -195,9 +203,11 @@ public static partial class EpicLauncherSaved
     /// The first segment of the derived path down to <c>Saved</c> that is a link, or null when none
     /// of them is. Nothing below it was listed when this is set.
     /// </param>
-    /// <param name="Exists">
-    /// Whether the folder is there at all. Distinct from <paramref name="Unreadable"/>, because
-    /// absence is a complete answer — nothing is inside it — and a refusal is not an answer at all.
+    /// <param name="Presence">
+    /// What Windows said about the folder itself. Three answers rather than two, because absence is
+    /// a complete answer — nothing is inside it — and a refusal is not an answer at all. Distinct
+    /// from <paramref name="Unreadable"/>, which is a folder that was reached and would not be
+    /// listed. See <see cref="PathPresence"/>.
     /// </param>
     /// <param name="Unreadable">
     /// The folder refused to be listed, so the two lists below describe nothing rather than
@@ -211,11 +221,25 @@ public static partial class EpicLauncherSaved
     /// </param>
     public readonly record struct SavedFolder(
         string? Link,
-        bool Exists,
+        PathPresence Presence,
         bool Unreadable,
         IReadOnlyList<DirectoryInfo> Children,
         IReadOnlyList<DirectoryInfo> Links)
     {
+        /// <summary>
+        /// The segment of the derived path Windows would not describe, or null where it described
+        /// every one of them. Set exactly when <see cref="Presence"/> is
+        /// <see cref="PathPresence.Refused"/>.
+        ///
+        /// <para>The segment rather than the <c>Saved</c> folder, because the walk stops at the
+        /// first one and the plan names what it could not reach. Naming the folder below it would
+        /// be a claim about a path nothing asked Windows about.</para>
+        /// </summary>
+        public string? UnreachedAt { get; init; }
+
+        /// <summary>Whether Windows said the folder is there.</summary>
+        public bool Exists => Presence is PathPresence.Present;
+
         /// <summary>
         /// Whether this folder is something a row must speak about even though it yields no target.
         ///
@@ -225,7 +249,7 @@ public static partial class EpicLauncherSaved
         /// installed launcher is a stronger untruth than the "Already clear" it would otherwise
         /// be.</para>
         /// </summary>
-        public bool HasSomethingToReport => Link is not null || Unreadable;
+        public bool HasSomethingToReport => Link is not null || Unreadable || UnreachedAt is not null;
 
         /// <summary>The children, link or not, whose names <paramref name="recognises"/> accepts.</summary>
         public IEnumerable<DirectoryInfo> Named(Predicate<string> recognises) =>

@@ -90,9 +90,22 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// </summary>
     public IReadOnlyList<FileSystemInfo>? Open(string folder, string reason)
     {
-        if (!LongPath.DirectoryExists(folder))
+        switch (LongPath.ProbeDirectory(folder))
         {
-            return null;
+            // Windows would not say whether the folder is there. Nothing in it was classified, and
+            // an unqualified null would let the plan present that as a folder holding nothing.
+            //
+            // No survivor, unlike Unlisted below. That one was reached, so §5.6 can measure it
+            // before the run and the assertion can fail. This one cannot be measured, so it would
+            // record itself as "nothing to preserve" and pass over whatever happened to the folder —
+            // and an assertion nobody can fail reads as one that held. DeclaredLocations.Unreachable
+            // keeps the same rule.
+            case PathPresence.Refused:
+                Unreached(folder);
+                return null;
+
+            case PathPresence.Absent:
+                return null;
         }
 
         if (LongPath.IsReparsePoint(folder))
@@ -185,6 +198,18 @@ internal sealed class ClaudeCodeClassificationBuilder
         Keep(path, reason);
         _unreadable = true;
         _notes.Add(UnreadableRoot.Note(path));
+    }
+
+    /// <summary>
+    /// Record a folder Windows would not describe at all. <see cref="Unlisted"/>'s sentence would
+    /// assert the folder is there, which nothing here established — and no survivor is recorded, for
+    /// the reason <see cref="Open"/> gives: §5.6 cannot measure the folder, so the assertion could
+    /// not fail.
+    /// </summary>
+    public void Unreached(string path)
+    {
+        _unreadable = true;
+        _notes.Add(UnreadableRoot.UnreachedNote(path));
     }
 
     public void Note(PlanNoteSeverity severity, string message) => _notes.Add(new PlanNote(severity, message));

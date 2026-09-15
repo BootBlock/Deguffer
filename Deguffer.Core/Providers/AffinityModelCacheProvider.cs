@@ -242,7 +242,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(AffinityProfiles.RootsFor(Environment).Any(LongPath.DirectoryExists));
+        Task.FromResult(AffinityProfiles.RootsFor(Environment).Any(LongPath.DirectoryMayExist));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -298,6 +298,19 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
     /// <summary>One profile root: what may go inside it, and what the plan must say about the rest.</summary>
     private static void Examine(AffinityCommonTree tree, PlanUnderConstruction found, CancellationToken ct)
     {
+        if (tree.Unreached is { } unreached)
+        {
+            found.Unreached(unreached);
+
+            // Nothing below describes a root Windows would not describe, and its survival is not
+            // asserted either: §5.6 reads a path it cannot measure as "nothing to preserve" and then
+            // passes over whatever happened to the folder.
+            if (unreached.Equals(tree.Root, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
         found.Protect.Add((
             tree.Root,
             "Affinity's own folder must survive — only downloaded models inside it are removed."));
@@ -502,6 +515,17 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
         public void Unread(string folder)
         {
             Notes.Add(UnreadableRoot.Note(folder));
+            Unreadable = true;
+            Declined++;
+        }
+
+        /// <summary>
+        /// A folder Windows would not describe. Apart from <see cref="Unread"/>, whose sentence says
+        /// Deguffer could not list the folder and so asserts that it is there.
+        /// </summary>
+        public void Unreached(string folder)
+        {
+            Notes.Add(UnreadableRoot.UnreachedNote(folder));
             Unreadable = true;
             Declined++;
         }

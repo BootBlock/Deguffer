@@ -60,9 +60,19 @@ public static class CacheLevelWalk
 
             var directory = level.Resolve(root);
 
-            if (!LongPath.DirectoryExists(directory))
+            switch (LongPath.ProbeDirectory(directory))
             {
-                continue;
+                // Windows would not say whether the level is there, which is the same thing to a
+                // caller as a level it could not list: the figures leave out an amount nobody can
+                // state. It is a different sentence, because "could not list" would assert that the
+                // directory exists — see UnreadableRoot.
+                case PathPresence.Refused:
+                    notes.Add(UnreadableRoot.UnreachedNote(directory));
+                    unreadable = true;
+                    continue;
+
+                case PathPresence.Absent:
+                    continue;
             }
 
             // Applied at every level rather than only at the ones reached by name. A root usually
@@ -153,10 +163,13 @@ public static class CacheLevelWalk
 /// this the user sees it still standing and cannot tell that the cache inside it went.
 /// </param>
 /// <param name="Unreadable">
-/// Whether a level's directory would not be listed. A level is reached by name, and a full path
-/// resolves through a directory the account may not list — so the level can exist, pass the presence
-/// probe, and then hand back no children at all. Without this a caller treats that as "the cache is
-/// empty" and reports as clear a folder nobody read.
+/// Whether Windows kept a level's contents out of this walk, either way it can. A level that would
+/// not be <em>listed</em> is the first: a level is reached by name, and a full path resolves through
+/// a directory the account may not list, so the level can exist, pass the presence probe, and then
+/// hand back no children at all. A level the probe itself was refused is the second, where Windows
+/// would not even say the directory is there. Both leave the figures short by an amount nobody can
+/// state, and without this a caller treats either as "the cache is empty" and reports as clear a
+/// folder nobody read. The <see cref="Notes"/> say which happened.
 /// </param>
 public readonly record struct LevelWalk(
     IReadOnlyList<DeletionTarget> Targets,

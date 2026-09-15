@@ -242,5 +242,5 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
     /// </summary>
     private static bool HasRecord(VsCodeUserData editor) =>
         FolderChildren.DisposableNames.Any(
-            name => LongPath.DirectoryExists(Path.Combine(editor.Path, name)));
+            name => LongPath.DirectoryMayExist(Path.Combine(editor.Path, name)));
 }
