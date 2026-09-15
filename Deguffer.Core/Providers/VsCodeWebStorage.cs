@@ -62,14 +62,19 @@ internal readonly partial record struct VsCodeWebStorage(
     {
         var webStorage = Path.Combine(folder, DirectoryName);
 
-        // Windows would not say whether WebStorage is there, which leaves its partitions unknown
-        // rather than absent — the same thing to the caller as a directory that would not be listed.
-        if (LongPath.ProbeDirectory(webStorage) is PathPresence.Refused)
+        switch (LongPath.ProbeDirectory(webStorage, out var link))
         {
-            return Nothing with { Unreadable = true };
+            // Windows would not say whether WebStorage is there, which leaves its partitions unknown
+            // rather than absent — the same thing to the caller as a directory that would not be
+            // listed.
+            case PathPresence.Refused:
+                return Nothing with { Unreadable = true };
+
+            case PathPresence.Absent:
+                return Nothing;
         }
 
-        if (!LongPath.DirectoryExists(webStorage) || LongPath.IsReparsePoint(webStorage))
+        if (link)
         {
             return Nothing;
         }

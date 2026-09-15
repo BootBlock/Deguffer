@@ -225,6 +225,42 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// The overload that answers the link question from the same attribute read says false for a
+    /// path Windows would not describe, and says so through the return value instead.
+    ///
+    /// <para>That is the opposite of <see cref="LongPath.IsReparsePoint"/>, which fails closed, and
+    /// the pairing is what keeps a caller from having two answers to choose between. A caller
+    /// reading the link answer without settling <see cref="PathPresence.Refused"/> first would take
+    /// false as "proceed", so the ordering is asserted rather than left to the doc comment.</para>
+    /// </summary>
+    [Fact]
+    public void AnswersTheLinkQuestionOnlyWhereWindowsDescribedThePath()
+    {
+        using var temp = new TempDirectory();
+
+        var directory = temp.CreateDirectory("cache");
+        var link = Path.Combine(temp.Path, "link");
+        Directory.CreateSymbolicLink(link, directory);
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeDirectory(link, out var linkIsALink));
+        Assert.True(linkIsALink);
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeDirectory(directory, out var plainIsALink));
+        Assert.False(plainIsALink);
+
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeDirectory(Path.Combine(temp.Path, "nothing"), out var goneIsALink));
+        Assert.False(goneIsALink);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(directory);
+
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(directory, out var refusedIsALink));
+        Assert.False(refusedIsALink);
+
+        // And the fail-closed predicate disagrees, which is why the two may not be read the same way.
+        Assert.True(LongPath.IsReparsePoint(directory));
+    }
+
+    /// <summary>
     /// <see cref="LongPath.DirectoryExists"/> is now the probe's <see cref="PathPresence.Present"/>
     /// arm rather than a second call to <c>Directory.Exists</c>, and a hundred call sites depend on
     /// the two agreeing. The kinds below are where an attribute read and a resolving existence check

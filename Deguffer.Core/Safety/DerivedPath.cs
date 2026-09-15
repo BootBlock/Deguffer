@@ -60,7 +60,10 @@ public static class DerivedPath
         {
             walked = Path.Combine(walked, segment);
 
-            switch (LongPath.ProbeDirectory(walked))
+            // One attribute read answers both questions this walk asks of a segment. The link
+            // answer is read only on the Present arm below, which is the condition LongPath states
+            // for it.
+            switch (LongPath.ProbeDirectory(walked, out var link))
             {
                 case PathPresence.Refused:
                     return new DerivedPathObstacle(walked, IsLink: false);
@@ -69,7 +72,7 @@ public static class DerivedPath
                     return null;
             }
 
-            if (LongPath.IsReparsePoint(walked))
+            if (link)
             {
                 return new DerivedPathObstacle(walked, IsLink: true);
             }

@@ -154,12 +154,28 @@ public static class LongPath
     /// below is right everywhere the question is only "is there something here to walk", because a
     /// refusal there is met again by the walk itself.</para>
     /// </summary>
-    public static PathPresence ProbeDirectory(string path) => Probe(path, expectDirectory: true);
+    public static PathPresence ProbeDirectory(string path) => Probe(path, expectDirectory: true, out _);
+
+    /// <summary>
+    /// The same answer, with whether the path is a link taken from the same attribute read rather
+    /// than a second identical one. For a caller that needs both of a path, which the walk down a
+    /// derived path needs of every segment.
+    ///
+    /// <para><b><paramref name="isLink"/> is an answer only where this returns
+    /// <see cref="PathPresence.Present"/>.</b> Windows described nothing in the other two cases, so
+    /// it is false there — and false is what every link check reads as "proceed". A caller must
+    /// settle <see cref="PathPresence.Refused"/> before it looks at this. That is deliberately the
+    /// opposite of <see cref="IsReparsePoint"/>, which fails closed because it has no way to say
+    /// "I could not tell"; this one says it through the return value instead, and a second
+    /// fail-closed answer beside it would be one too many.</para>
+    /// </summary>
+    public static PathPresence ProbeDirectory(string path, out bool isLink) =>
+        Probe(path, expectDirectory: true, out isLink);
 
     /// <summary>
     /// The same three-state answer for a file. See <see cref="ProbeDirectory"/>.
     /// </summary>
-    public static PathPresence ProbeFile(string path) => Probe(path, expectDirectory: false);
+    public static PathPresence ProbeFile(string path) => Probe(path, expectDirectory: false, out _);
 
     /// <summary>
     /// Whether a directory may be at <paramref name="path"/>: true unless Windows said nothing is.
@@ -193,8 +209,10 @@ public static class LongPath
     /// than present: a file where a directory was expected means there is no directory there, which
     /// is the question that was put.
     /// </param>
-    private static PathPresence Probe(string path, bool expectDirectory)
+    private static PathPresence Probe(string path, bool expectDirectory, out bool isLink)
     {
+        isLink = false;
+
         // Outside the try, exactly where the two-state form has always had it. A path Windows will
         // not accept as one is a caller's mistake, not an answer Windows declined to give, and
         // reporting it as a refusal would put a warning about somebody's disk on a bug in Deguffer.
@@ -202,9 +220,16 @@ public static class LongPath
 
         try
         {
-            return File.GetAttributes(extended).HasFlag(FileAttributes.Directory) == expectDirectory
-                ? PathPresence.Present
-                : PathPresence.Absent;
+            var attributes = File.GetAttributes(extended);
+
+            if (attributes.HasFlag(FileAttributes.Directory) != expectDirectory)
+            {
+                return PathPresence.Absent;
+            }
+
+            isLink = attributes.HasFlag(FileAttributes.ReparsePoint);
+
+            return PathPresence.Present;
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
