@@ -233,6 +233,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             // Two measurements now, and the first reason to appear is the one the user is shown —
             // the same rule ScanBatch already applies within a single measurement.
             Fallback = cache.Fallback != FallbackReason.None ? cache.Fallback : packages.Fallback,
+            HasUnreadableRoot = cache.Unreachable || packages.Unreachable,
         };
     }
 
@@ -259,7 +260,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                         : Information(
                             $"PlatformIO's cache directory does not exist yet ({locations.CacheDirectory})."),
                 ],
-                FallbackReason.None);
+                FallbackReason.None,
+                Unreachable: presence is PathPresence.Refused);
         }
 
         var measured = await MeasureAllAsync([locations.CacheDirectory], ct).ConfigureAwait(false);
@@ -461,8 +463,14 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// packages are independent subjects. A machine with an empty cache can still hold superseded
     /// toolchains, and returning early for the first would silently withhold the larger of the two.
     /// </summary>
+    /// <param name="Unreachable">
+    /// Whether Windows would not describe this half's directory. It travels with the notes because
+    /// the sentence alone does not stop the shell rendering a row with no steps as "Already clear" —
+    /// see <see cref="CleanupPlan.HasUnreadableRoot"/>.
+    /// </param>
     private sealed record PlanPart(
         CleanupStep? Step,
         IReadOnlyList<PlanNote> Notes,
-        FallbackReason Fallback);
+        FallbackReason Fallback,
+        bool Unreachable = false);
 }

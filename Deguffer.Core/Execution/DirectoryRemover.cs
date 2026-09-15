@@ -65,15 +65,19 @@ public static class DirectoryRemover
 
             // Windows would not say whether the directory is there, which the two-state question
             // this replaced answered as "gone" — so a removal that reached nothing at all reported
-            // the root as taken, and a step the executor then called successful. The directory is
-            // very likely still standing, and §5.6 reads that from LeftStanding.
+            // the root as taken, and a step the executor then called successful.
+            //
+            // Recorded as standing only where this removal would have taken it. LeftStanding means
+            // "tried and still here", and a caller keeping the root never tries it — so naming it
+            // would report a refusal of a deletion nobody attempted. No folder refusal is counted
+            // either: PathPresence does not carry the exception, so "Windows would not let Deguffer
+            // remove it" would be a guess between an access rule and a link it will not follow.
             case PathPresence.Refused:
                 progress?.Report(1.0);
 
                 return new RemovalOutcome(0, Refusals.None, RootRemoved: false)
                 {
-                    LeftStanding = [LongPath.Display(extended)],
-                    RefusedFolders = FolderRefusals.One(RefusalReason.Denied),
+                    LeftStanding = bounds.KeepRoot ? [] : [LongPath.Display(extended)],
                 };
         }
 

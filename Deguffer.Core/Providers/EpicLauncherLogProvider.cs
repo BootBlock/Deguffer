@@ -138,9 +138,9 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
                 + "through a link.");
         }
 
-        if (folder.Unreached)
+        if (folder.UnreachedAt is { } unreached)
         {
-            return UnreadableRootPlan(SavedPath);
+            return UnreadableRootPlan(unreached);
         }
 
         if (!folder.Exists)

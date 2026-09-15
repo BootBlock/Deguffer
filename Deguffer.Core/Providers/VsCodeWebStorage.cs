@@ -33,6 +33,13 @@ internal readonly partial record struct VsCodeWebStorage(
     IReadOnlyList<string> Links,
     bool Unreadable)
 {
+    /// <summary>
+    /// Windows would not describe the directory at all, so it is not known to be there. Distinct
+    /// from <see cref="Unreadable"/>, which is a directory that was reached: the sentence for that
+    /// one asserts the folder exists, and nothing here established it.
+    /// </summary>
+    public bool Unreached { get; init; }
+
     /// <summary>The directory the per-webview storage partitions sit in.</summary>
     public const string DirectoryName = "WebStorage";
 
@@ -68,13 +75,13 @@ internal readonly partial record struct VsCodeWebStorage(
             // rather than absent — the same thing to the caller as a directory that would not be
             // listed.
             case PathPresence.Refused:
-                return Nothing with { Unreadable = true };
+                return Nothing with { Unreadable = true, Unreached = true };
 
             case PathPresence.Absent:
                 return Nothing;
         }
 
-        if (link)
+        if (link is true)
         {
             return Nothing;
         }

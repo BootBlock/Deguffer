@@ -202,9 +202,11 @@ internal sealed class ClaudeCodeClassificationBuilder
 
     /// <summary>
     /// Record a folder Windows would not describe at all. <see cref="Unlisted"/>'s sentence would
-    /// assert the folder is there, which nothing here established.
+    /// assert the folder is there, which nothing here established — and no survivor is recorded, for
+    /// the reason <see cref="Open"/> gives: §5.6 cannot measure the folder, so the assertion could
+    /// not fail.
     /// </summary>
-    private void Unreached(string path)
+    public void Unreached(string path)
     {
         _unreadable = true;
         _notes.Add(UnreadableRoot.UnreachedNote(path));

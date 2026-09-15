@@ -79,6 +79,11 @@ internal static class ClaudeCodeSessionFolders
             sorting.Unlisted(refused, ClaudeCodeClassificationBuilder.UnlistedReason);
         }
 
+        foreach (var unreached in projects.Unreached)
+        {
+            sorting.Unreached(unreached);
+        }
+
         var running = 0;
         var conversations = 0;
 

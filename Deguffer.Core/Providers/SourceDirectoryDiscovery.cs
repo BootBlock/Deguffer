@@ -29,6 +29,17 @@ public sealed record SourceDiscovery(
     IReadOnlyList<string> UnreadableDirectories,
     IReadOnlyList<string> RefusedRoots)
 {
+    /// <summary>
+    /// Approved roots Windows would not describe, so no part of them was searched and none of them
+    /// is known to be there.
+    ///
+    /// <para>Apart from <see cref="UnreadableDirectories"/>, which holds directories that were
+    /// reached and would not be listed: that sentence asserts the directory exists, and nothing
+    /// here established it. Apart from <see cref="RefusedRoots"/> too, which is Deguffer's own
+    /// decision rather than Windows'.</para>
+    /// </summary>
+    public IReadOnlyList<string> UnreachedRoots { get; init; } = [];
+
     /// <summary>The candidates called any of <paramref name="names"/>, for the provider that owns them.</summary>
     public IReadOnlyList<string> Named(IReadOnlyList<string> names) =>
     [
@@ -135,6 +146,7 @@ public sealed class SourceDirectoryDiscovery
 
         var candidates = new List<string>();
         var unreadable = new List<string>();
+        var unreached = new List<string>();
         var refused = new List<string>();
         var usedIndex = true;
 
@@ -156,7 +168,7 @@ public sealed class SourceDirectoryDiscovery
                 // approved was searched. That is what UnreadableDirectories reports, and it is not
                 // the same as a drive that is not attached.
                 case PathPresence.Refused:
-                    unreadable.Add(root.Path);
+                    unreached.Add(root.Path);
                     continue;
 
                 // An approved root on a drive that is not currently attached. Finding nothing is
@@ -202,7 +214,10 @@ public sealed class SourceDirectoryDiscovery
             [.. candidates.Distinct(StringComparer.OrdinalIgnoreCase)],
             usedIndex,
             [.. unreadable.Distinct(StringComparer.OrdinalIgnoreCase)],
-            [.. refused.Distinct(StringComparer.OrdinalIgnoreCase)]);
+            [.. refused.Distinct(StringComparer.OrdinalIgnoreCase)])
+        {
+            UnreachedRoots = [.. unreached.Distinct(StringComparer.OrdinalIgnoreCase)],
+        };
 
         Remember(roots, result);
 

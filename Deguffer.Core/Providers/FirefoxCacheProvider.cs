@@ -334,23 +334,30 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
             // Before the existence check, not after it. A link partway up the path resolves onto a
             // directory that holds no profile of its own, so the profile itself reads as absent and
-            // the pass would end reporting nothing at all about a redirection it did detect.
-            if (DerivedPath.FirstLinkBetween(Environment.LocalAppData, profile.LocalPath) is { } link)
+            // the pass would end reporting nothing at all about a redirection it did detect. The
+            // walk answers the refusal too, so a segment Windows would not describe stops the pass
+            // here rather than being read as "no link, carry on".
+            if (DerivedPath.FirstObstacleBetween(Environment.LocalAppData, profile.LocalPath) is { } obstacle)
             {
-                notes.Add(LinkNote(link));
-                declined.Add((link, LinkReason));
+                if (obstacle.IsLink)
+                {
+                    notes.Add(LinkNote(obstacle.Path));
+                    declined.Add((obstacle.Path, LinkReason));
+                }
+                else
+                {
+                    notes.Add(UnreadableRoot.UnreachedNote(obstacle.Path));
+                    unreadable = true;
+                }
+
                 continue;
             }
 
-            switch (LongPath.ProbeDirectory(profile.LocalPath))
+            // Absence is all the walk above leaves: it stops on a link and on a refusal, and the
+            // profile folder is its last segment.
+            if (!LongPath.DirectoryExists(profile.LocalPath))
             {
-                case PathPresence.Refused:
-                    notes.Add(UnreadableRoot.UnreachedNote(profile.LocalPath));
-                    unreadable = true;
-                    continue;
-
-                case PathPresence.Absent:
-                    continue;
+                continue;
             }
 
             survivors.Add((

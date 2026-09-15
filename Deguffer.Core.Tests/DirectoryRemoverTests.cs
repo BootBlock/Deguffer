@@ -46,15 +46,40 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.False(outcome.RootRemoved);
         Assert.Equal(0, outcome.BytesReclaimed);
         Assert.Equal([LongPath.Display(root)], outcome.LeftStanding);
-        Assert.Equal(1, outcome.RefusedFolders.Denied);
+
+        // No folder refusal counted. PathPresence does not carry the exception, so "Windows would
+        // not let Deguffer remove it" would be a guess between an access rule and a link Windows
+        // will not follow — and the second of those is the ordinary cause.
+        Assert.True(outcome.RefusedFolders.IsEmpty);
 
         // Untouched, which is the half a count cannot show: nothing was enumerated, so nothing here
         // could have been deleted whatever the outcome claimed.
         Assert.True(File.Exists(Path.Combine(root, "a.bin")));
 
-        // §6.3: the question reached Win32 in extended-length form, which is the only thing about a
-        // path that a removal's outcome cannot demonstrate.
+        // §6.3: every path handed across the seam is in extended-length form, which is what that
+        // seam exists to make observable — a removal's outcome cannot show it.
         Assert.All(fs.Probed, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A root the caller asked to keep is never attempted, so a refusal to describe it is not
+    /// reported as a folder this removal could not take. <see cref="RemovalOutcome.LeftStanding"/>
+    /// means "tried and still here", and <c>ClearAsync</c> is the caller that keeps its root.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotCallAKeptRootLeftStandingWhenWindowsWillNotDescribeIt()
+    {
+        var root = _temp.CreateDirectory("kept");
+        _temp.CreateFile(1024, "kept", "a.bin");
+
+        var fs = new UndescribableDirectoryFileSystem(WindowsFileSystem.Default, root);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, fileSystem: fs, bounds: new RemovalBounds(KeepRoot: true, []));
+
+        Assert.False(outcome.RootRemoved);
+        Assert.Empty(outcome.LeftStanding);
+        Assert.True(outcome.RefusedFolders.IsEmpty);
     }
 
     /// <summary>A path already gone was not removed by this run, so nothing is counted for it.</summary>

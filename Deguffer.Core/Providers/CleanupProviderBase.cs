@@ -226,15 +226,15 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// rather than <see cref="CleanupPlan.WasNotExamined"/>: the second of those is Deguffer's own
     /// decision not to look, and this is not a decision Deguffer made.</para>
     /// </summary>
-    protected CleanupPlan UnreadableRootPlan(string root) => new()
-    {
-        ProviderId = Id,
-        ProviderName = Name,
-        Tier = Tier,
-        WhatHappensOnNextUse = WhatHappensOnNextUse,
-        Notes = [UnreadableRoot.UnreachedNote(root)],
-        HasUnreadableRoot = true,
-    };
+    protected CleanupPlan UnreadableRootPlan(string root) =>
+        // Composed from EmptyPlan rather than repeating its skeleton, as UnexaminedPlan is: a field
+        // added there has to reach every plan with nothing to do. The note is replaced rather than
+        // appended, because EmptyPlan's is Information and this one is a warning.
+        EmptyPlan(UnreadableRoot.WhyItCouldNotBeReached(root)) with
+        {
+            Notes = [UnreadableRoot.UnreachedNote(root)],
+            HasUnreadableRoot = true,
+        };
 
     /// <summary>
     /// The plan a provider owes before it has looked at anything, or null where its root is there

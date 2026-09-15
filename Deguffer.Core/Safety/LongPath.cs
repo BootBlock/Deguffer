@@ -161,15 +161,17 @@ public static class LongPath
     /// than a second identical one. For a caller that needs both of a path, which the walk down a
     /// derived path needs of every segment.
     ///
-    /// <para><b><paramref name="isLink"/> is an answer only where this returns
-    /// <see cref="PathPresence.Present"/>.</b> Windows described nothing in the other two cases, so
-    /// it is false there — and false is what every link check reads as "proceed". A caller must
-    /// settle <see cref="PathPresence.Refused"/> before it looks at this. That is deliberately the
-    /// opposite of <see cref="IsReparsePoint"/>, which fails closed because it has no way to say
-    /// "I could not tell"; this one says it through the return value instead, and a second
-    /// fail-closed answer beside it would be one too many.</para>
+    /// <para><b>Null where Windows described nothing</b>, which is every case but
+    /// <see cref="PathPresence.Present"/>. Nullable rather than false, because false is what every
+    /// link check in this codebase reads as "proceed" — so a caller that forgot to settle
+    /// <see cref="PathPresence.Refused"/> would be handed the open answer with no diagnostic. It
+    /// has to say <c>is true</c>, and saying that about a null is the safe reading by
+    /// construction.</para>
+    ///
+    /// <para>That is deliberately not <see cref="IsReparsePoint"/>'s shape, which fails closed
+    /// because it has no way to say "I could not tell". This one has two.</para>
     /// </summary>
-    public static PathPresence ProbeDirectory(string path, out bool isLink) =>
+    public static PathPresence ProbeDirectory(string path, out bool? isLink) =>
         Probe(path, expectDirectory: true, out isLink);
 
     /// <summary>
@@ -209,14 +211,54 @@ public static class LongPath
     /// than present: a file where a directory was expected means there is no directory there, which
     /// is the question that was put.
     /// </param>
-    private static PathPresence Probe(string path, bool expectDirectory, out bool isLink)
-    {
-        isLink = false;
+    /// <summary>
+    /// The Win32 errors <see cref="Directory.Exists"/> itself treats as "nothing is there", taken
+    /// from .NET's own <c>FillAttributeInfo</c> exclusion list.
+    ///
+    /// <para><b>Copied rather than reasoned about, because matching it exactly is the safety
+    /// argument.</b> <see cref="DirectoryExists"/> is read at around a hundred call sites, several
+    /// of them guarding a deletion, and it stopped being <c>Directory.Exists</c> when the third
+    /// answer arrived. Deciding absence on the same error set is what makes the two answer
+    /// identically for every input, so the third answer is added to those call sites and nothing
+    /// else is.</para>
+    ///
+    /// <para>They are also right on their own terms. A share that does not exist, a drive with no
+    /// media in it and a value Windows will not accept as a path are complete answers — nothing is
+    /// there — and folding one of those into a refusal would put a warning about somebody's disk on
+    /// an unplugged card reader. That is the mirror image of the defect this whole probe exists to
+    /// end.</para>
+    /// </summary>
+    private static bool SaysNothingIsThere(int win32Error) => win32Error is
+        2 or      // ERROR_FILE_NOT_FOUND
+        3 or      // ERROR_PATH_NOT_FOUND
+        6 or      // ERROR_INVALID_HANDLE
+        15 or     // ERROR_INVALID_DRIVE
+        21 or     // ERROR_NOT_READY
+        53 or     // ERROR_BAD_NETPATH
+        65 or     // ERROR_NETWORK_ACCESS_DENIED
+        67 or     // ERROR_BAD_NET_NAME
+        87 or     // ERROR_INVALID_PARAMETER
+        123 or    // ERROR_INVALID_NAME
+        161 or    // ERROR_BAD_PATHNAME
+        206 or    // ERROR_FILENAME_EXCED_RANGE
+        1231;     // ERROR_NETWORK_UNREACHABLE
 
-        // Outside the try, exactly where the two-state form has always had it. A path Windows will
-        // not accept as one is a caller's mistake, not an answer Windows declined to give, and
-        // reporting it as a refusal would put a warning about somebody's disk on a bug in Deguffer.
+    private static PathPresence Probe(string path, bool expectDirectory, out bool? isLink)
+    {
+        isLink = null;
+
+        // Outside the try, exactly where the two-state form has always had it. A value Windows will
+        // not accept at all throws from here, as it did before, rather than being reported as
+        // something about the user's disk.
         var extended = Extended(path);
+
+        // A file cannot be named with a trailing separator, and Win32 answers for the file anyway.
+        // File.Exists refuses it, so without this the two-state form's answer would reverse — and a
+        // caller that opened what this said was there would meet ERROR_DIRECTORY instead.
+        if (!expectDirectory && EndsWithSeparator(extended))
+        {
+            return PathPresence.Absent;
+        }
 
         try
         {
@@ -235,13 +277,28 @@ public static class LongPath
         {
             return PathPresence.Absent;
         }
+        catch (IOException ex) when (SaysNothingIsThere(ex.HResult & 0xFFFF))
+        {
+            return PathPresence.Absent;
+        }
+        catch (ArgumentException)
+        {
+            // Extended() validates ahead of this, so it looks unreachable — and it is caught anyway
+            // because IsReparsePoint and WindowsFileSystem.MayExist both catch it, and three
+            // near-identical blocks that disagree about one exception is how one of them ends up
+            // wrong. Absent, for the reason the error list above gives.
+            return PathPresence.Absent;
+        }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
-            // An access rule on both ends of the path, or a link Windows will not follow. Neither
-            // says anything about what is there.
+            // An access rule on both ends of the path, or a link Windows will not follow
+            // (ERROR_UNTRUSTED_MOUNT_POINT). Neither says anything about what is there.
             return PathPresence.Refused;
         }
     }
+
+    private static bool EndsWithSeparator(string path) =>
+        path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
 
     /// <summary>
     /// Whether this path is a junction or symbolic link rather than a real directory.
@@ -271,14 +328,23 @@ public static class LongPath
     /// "not installed" branch, which was a coincidence holding a safety property up. It is not a
     /// coincidence now.</para>
     ///
-    /// <para>Three callers do <em>not</em> ask first. <see cref="BuildDirectorySignature"/> and
+    /// <para><b>Six callers do <em>not</em> ask first, and three of them are answered by what they
+    /// do with a true.</b> <see cref="BuildDirectorySignature"/> and
     /// <see cref="DotNetIntermediateSignature"/> put a candidate and its parent through this
     /// without probing either, and what they say when they get a true is "not recognised as build
     /// output, so it is left alone" — §5.2's own answer for a thing that could not be classified,
     /// which names no link and claims nothing. <see cref="Execution.FileRemover"/> asks this before
     /// anything else, through the <see cref="IFileSystem"/> seam, and a true there removes the path
     /// as a link and reports nothing reclaimed rather than its length. That under-reports, which is
-    /// the safe direction, and it is the one place the closed answer still costs something.</para>
+    /// the safe direction.</para>
+    ///
+    /// <para><b>The other three read the closed answer as a reason to do less, and that is a defect
+    /// rather than a rendering.</b> <see cref="Execution.RefusalCheck"/> asks it of a step's root
+    /// and again per entry, and a true returns "nothing here will be refused" — the preview then
+    /// promises a figure back off a root Windows would not describe.
+    /// <c>ExploreRemover</c> asks it before searching for an Outlook store, so a true skips the §9
+    /// search on a folder it is about to recycle. All three predate this probe and none is reached
+    /// by a caller it changed, so they are recorded here rather than fixed alongside it.</para>
     ///
     /// <para><see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now
     /// calls here instead. A safety predicate written twice is one that gets changed once.</para>

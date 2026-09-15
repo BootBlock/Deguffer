@@ -273,7 +273,12 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
             if (editor.Partitions.Unreadable)
             {
-                notes.Add(UnreadableRoot.Note(Path.Combine(folder, VsCodeWebStorage.DirectoryName)));
+                var webStorage = Path.Combine(folder, VsCodeWebStorage.DirectoryName);
+
+                notes.Add(editor.Partitions.Unreached
+                    ? UnreadableRoot.UnreachedNote(webStorage)
+                    : UnreadableRoot.Note(webStorage));
+
                 unreadable = true;
             }
 

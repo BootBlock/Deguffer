@@ -20,7 +20,9 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     /// <summary>Every path this fake was asked to describe, in the form it was asked in (§6.3).</summary>
     public List<string> Probed { get; } = [];
 
-    public bool DirectoryExists(string path) => ProbeDirectory(path) is PathPresence.Present;
+    // Delegated rather than derived from the probe below, because WindowsFileSystem.DirectoryExists
+    // does not extend and ProbeDirectory does — a fake that closed that gap would hide it.
+    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
 
     public PathPresence ProbeDirectory(string path)
     {

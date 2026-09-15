@@ -73,6 +73,14 @@ internal static class SourceTreePlanNotes
         // Collapsed past the first, on the rule this file's neighbours already follow: a source root
         // can hold any number of directories the account may not list, and a plan nobody reads
         // protects nothing. One named example plus a count says the same thing and stays readable.
+        foreach (var unreached in discovered.UnreachedRoots)
+        {
+            // A folder the user approved, and Windows would not say whether it is there. Not
+            // "could not list", which asserts that it is — see UnreadableRoot. Named one at a time
+            // rather than collapsed, because there are as many of these as the user has roots.
+            notes.Add(UnreadableRoot.UnreachedNote(unreached));
+        }
+
         if (discovered.UnreadableDirectories.Count > 0)
         {
             notes.Add(discovered.UnreadableDirectories.Count == 1

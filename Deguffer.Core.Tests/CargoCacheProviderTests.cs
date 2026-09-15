@@ -29,6 +29,16 @@ public sealed class CargoCacheProviderTests : IDisposable
 
     private string Home => Path.Combine(_environment.UserProfile, ".cargo");
 
+    /// <summary>
+    /// Every path the provider's presence probe asks about, by the declaration it asks through — so
+    /// the refusal the test builds and the question the provider puts cannot drift apart.
+    /// </summary>
+    private IReadOnlyList<string> RecognisedCachePaths() =>
+    [
+        .. CargoCacheProvider.Levels.SelectMany(level => level.Children.DisposableNames
+            .Select(name => Path.Combine(level.Resolve(Home), name))),
+    ];
+
     /// <summary>A directory holding one file, so it measures above zero and is selectable.</summary>
     private static string Populate(string directory, int bytes = 4096)
     {
@@ -308,17 +318,21 @@ public sealed class CargoCacheProviderTests : IDisposable
     {
         CreateFullHome();
 
-        var denials = CargoCacheProvider.Levels
-            .SelectMany(level => level.Children.DisposableNames
-                .Select(name => Path.Combine(level.Resolve(Home), name)))
-            .Select(DeniedDirectory.WithUnreadableAttributes)
-            .ToList();
+        // Built inside the try, one at a time. DeniedDirectory writes each rule to disk before it
+        // returns, so a throw part-way through a list comprehension would leave earlier denials
+        // standing with nothing to dispose them — and a Deny/ListDirectory on the scratch tree
+        // defeats TempDirectory's own delete, which forgives the failure silently.
+        var denials = new List<DeniedDirectory>();
 
         try
         {
+            foreach (var path in RecognisedCachePaths())
+            {
+                denials.Add(DeniedDirectory.WithUnreadableAttributes(path));
+            }
+
             Assert.All(
-                CargoCacheProvider.Levels.SelectMany(level => level.Children.DisposableNames
-                    .Select(name => Path.Combine(level.Resolve(Home), name))),
+                RecognisedCachePaths(),
                 path => Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(path)));
 
             // The whole of the defect. Without this the shell never draws the row, and no sentence
@@ -332,13 +346,19 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A home Windows will not describe is said to be unreachable rather than missing, and every
-    /// recognised cache under it is left standing (§5.6).
+    /// A home Windows will not describe is said to be unreachable rather than missing.
+    ///
+    /// <para>The caches are asserted to be on the disk <em>before</em> the plan is built, as a
+    /// precondition rather than as §5.6: planning removes nothing, so the same assertion after it
+    /// would hold whatever the provider did.</para>
     /// </summary>
     [Fact]
     public async Task AHomeWindowsWillNotDescribeIsSaidSoRatherThanReportedAsNotInstalled()
     {
         CreateFullHome();
+
+        Assert.True(Directory.Exists(Path.Combine(Home, "registry", "cache")));
+        Assert.True(Directory.Exists(Path.Combine(Home, "git", "checkouts")));
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(Home);
 
@@ -350,9 +370,6 @@ public sealed class CargoCacheProviderTests : IDisposable
         Assert.DoesNotContain(
             plan.Notes,
             n => n.Message.Contains("not installed", StringComparison.OrdinalIgnoreCase));
-
-        Assert.True(Directory.Exists(Path.Combine(Home, "registry", "cache")));
-        Assert.True(Directory.Exists(Path.Combine(Home, "git", "checkouts")));
     }
 
     /// <summary>

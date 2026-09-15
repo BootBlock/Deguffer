@@ -447,3 +447,27 @@ answers "may exist" on a refusal. A probe that decides what a location *is* — 
 Chromium's `Local State`, vcpkg's `.vcpkg-root` or Squirrel's `Update.exe` — keeps its two-state
 answer, because a refusal is not evidence for the classification and reading it as one would invent
 an application that is not installed.
+
+**What this did not reach, stated rather than implied.** Every presence probe and every "the tool is
+not installed" early return is converted, which is the defect #147 reported: a row that never
+appears cannot be corrected by anything downstream. A second rank of existence probes sits below
+that, where the row is already drawn from the tool's executable and the wrong sentence is narrower —
+"Conda is installed but has cached nothing yet", "none of its NuGet cache locations exist yet", and
+the like. Those are `CondaCacheProvider`, `NuGetCacheProvider`, `GoCacheProvider`,
+`PoetryCacheProvider`'s named caches, `SpotifyStorage`, `VcpkgDiscovery`'s archive directory,
+`SteamCacheProvider`'s install root, `FileHistoryDiscovery`'s target and `AzureFunctionsToolTags`.
+Several of them have no flag to carry the answer to, so each is a small design decision rather than
+a mechanical edit. The memoised `Examine()` and `DiscoverToolRootsAsync` siblings of six converted
+providers are in the same position: the plan names a refused root and the §5.2 declaration still
+drops it.
+
+Two further defects this work surfaced and did not fix, both needing a decision of their own:
+
+- **`CleanupProviderBase.Protect` folds "refused" into "was never there".** `ProtectedPath.ExistedBefore`
+  is a two-state probe, so a §5.6 survivor Windows will not describe records itself as "nothing to
+  preserve" and `PlanVerifier` then passes over whatever happened to it. Two sites route around it by
+  declining to record such a survivor at all; the seam that manufactures the vacuous assertion is
+  untouched, and closing it needs a `PlanVerifier` outcome for "could not be measured before the run".
+- **Three callers read `LongPath.IsReparsePoint`'s fail-closed answer as a reason to do less.**
+  `RefusalCheck` twice, and `ExploreRemover` once before the §9 mail-store search. All three predate
+  this probe. `LongPath.IsReparsePoint`'s own doc names them.

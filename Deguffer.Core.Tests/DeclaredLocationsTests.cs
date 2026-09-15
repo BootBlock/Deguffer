@@ -32,7 +32,7 @@ public sealed class DeclaredLocationsTests : IDisposable
     [Fact]
     public void ARootWindowsWillNotDescribeIsNotAMachineWithNothingOnIt()
     {
-        var root = _temp.CreateDirectory("root", "logs");
+        _temp.CreateDirectory("root", "logs");
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(Path.Combine(_temp.Path, "root"));
 

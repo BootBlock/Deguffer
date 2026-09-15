@@ -253,9 +253,9 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                 + "through a link.");
         }
 
-        if (look.Folder.Unreached)
+        if (look.Folder.UnreachedAt is { } unreached)
         {
-            return UnreadableRootPlan(SavedPath);
+            return UnreadableRootPlan(unreached);
         }
 
         if (!look.Folder.Exists)

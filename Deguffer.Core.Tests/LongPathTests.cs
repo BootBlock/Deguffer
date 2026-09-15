@@ -248,32 +248,47 @@ public class LongPathTests
         Assert.Equal(PathPresence.Present, LongPath.ProbeDirectory(directory, out var plainIsALink));
         Assert.False(plainIsALink);
 
-        Assert.Equal(PathPresence.Absent, LongPath.ProbeDirectory(Path.Combine(temp.Path, "nothing"), out var goneIsALink));
-        Assert.False(goneIsALink);
+        // Null rather than false for the two states Windows described nothing in, so a caller that
+        // skipped the return value cannot read the answer as "not a link, carry on".
+        Assert.Equal(
+            PathPresence.Absent,
+            LongPath.ProbeDirectory(Path.Combine(temp.Path, "nothing"), out var goneIsALink));
+        Assert.Null(goneIsALink);
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(directory);
 
         Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(directory, out var refusedIsALink));
-        Assert.False(refusedIsALink);
+        Assert.Null(refusedIsALink);
 
         // And the fail-closed predicate disagrees, which is why the two may not be read the same way.
         Assert.True(LongPath.IsReparsePoint(directory));
     }
 
     /// <summary>
-    /// <see cref="LongPath.DirectoryExists"/> is now the probe's <see cref="PathPresence.Present"/>
-    /// arm rather than a second call to <c>Directory.Exists</c>, and a hundred call sites depend on
-    /// the two agreeing. The kinds below are where an attribute read and a resolving existence check
-    /// could plausibly differ — a link whose target has gone is the sharp one, because
-    /// <c>Directory.Exists</c> could reasonably have answered for the target rather than the link.
+    /// <see cref="LongPath.DirectoryExists"/> and <see cref="LongPath.FileExists"/> are now the
+    /// probe's <see cref="PathPresence.Present"/> arm rather than <c>Directory.Exists</c> and
+    /// <c>File.Exists</c>, and around a hundred call sites depend on the answer not moving.
+    ///
+    /// <para><b>The shapes below are the ones measured to differ, or to be capable of it.</b> A
+    /// trailing separator after a <em>file</em> is the one that did: <c>File.Exists</c> refuses it
+    /// and <c>GetFileAttributes</c> answers for the file anyway, so without the guard in
+    /// <c>Probe</c> this reverses from false to true and a caller that opened what it was told was
+    /// there would meet <c>ERROR_DIRECTORY</c>. The same separator after a directory agrees either
+    /// way, which is why the shape has to be listed for both kinds and not one.</para>
+    ///
+    /// <para>A path past <c>MAX_PATH</c> is here because it is the one §6.3 exists for, and a
+    /// dangling link because an attribute read describes the link while a resolving check could
+    /// reasonably have described the target. Neither turned out to differ; they are asserted so
+    /// that a later change to <c>Probe</c> cannot make them.</para>
     /// </summary>
     [Fact]
-    public void AnswersExactlyWhatDirectoryExistsAnswersForEveryKindOfPath()
+    public void AnswersExactlyWhatTheFrameworkAnswersForEveryShapeThatCouldDiffer()
     {
         using var temp = new TempDirectory();
 
         var directory = temp.CreateDirectory("cache");
         var file = temp.CreateFile(1, "cache", "a.bin");
+        var deep = temp.CreateFile(1, "cache", new string('d', 120), new string('e', 120), new string('f', 120), "deep.bin");
 
         var target = temp.CreateDirectory("gone");
         var dangling = Path.Combine(temp.Path, "dangling");
@@ -281,12 +296,27 @@ public class LongPathTests
         Directory.Delete(target);
 
         foreach (var path in (string[])
-                 [directory, file, dangling, temp.Path, temp.Path + Path.DirectorySeparatorChar,
-                  Path.Combine(temp.Path, "nothing")])
+                 [
+                     directory,
+                     directory + Path.DirectorySeparatorChar,
+                     file,
+                     file + Path.DirectorySeparatorChar,
+                     file + Path.AltDirectorySeparatorChar,
+                     deep,
+                     Path.GetDirectoryName(deep)!,
+                     dangling,
+                     temp.Path,
+                     temp.Path + Path.DirectorySeparatorChar,
+                     Path.Combine(temp.Path, "nothing"),
+                     Path.Combine(temp.Path, "nothing") + Path.DirectorySeparatorChar,
+                 ])
         {
             Assert.Equal(Directory.Exists(path), LongPath.DirectoryExists(path));
             Assert.Equal(File.Exists(path), LongPath.FileExists(path));
         }
+
+        // The long path is genuinely long, or the two entries above prove nothing about §6.3.
+        Assert.True(deep.Length > 260);
     }
 
     /// <summary>

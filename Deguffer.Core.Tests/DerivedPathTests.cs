@@ -38,6 +38,10 @@ public sealed class DerivedPathTests : IDisposable
     /// right for a predicate guarding a deletion and would be a specific claim about somebody's
     /// machine if it were rendered. The probe is asked first so that it never is, and that ordering
     /// is what this pins.</para>
+    ///
+    /// <para>The obstacle carries which of the two it met for the same reason. A form of this that
+    /// answered only "is there a link" had to say no here, and no is what every caller reads as
+    /// "carry on" — so a refused segment stopped stopping the plan.</para>
     /// </summary>
     [Fact]
     public void DoesNotCallASegmentWindowsWillNotDescribeALink()
@@ -55,9 +59,6 @@ public sealed class DerivedPathTests : IDisposable
         Assert.Equal(
             new DerivedPathObstacle(logs, IsLink: false),
             DerivedPath.FirstObstacleBetween(root, Path.Combine(logs, "Cache")));
-
-        // And the older two-state form says there is no link, rather than naming one.
-        Assert.Null(DerivedPath.FirstLinkBetween(root, Path.Combine(logs, "Cache")));
     }
 
     /// <summary>

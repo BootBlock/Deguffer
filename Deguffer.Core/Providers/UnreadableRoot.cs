@@ -51,16 +51,18 @@ internal static class UnreadableRoot
     /// The sentence for a root Windows would not describe at all, so Deguffer cannot say whether it
     /// is there, let alone what is in it.
     ///
-    /// <para>It names both causes because they send the reader to different places and neither is
-    /// guessable from the other. An access rule is the user's to change. A link Windows declines to
-    /// follow is not: relocating a cache onto another drive is a thing developers do on purpose, and
-    /// there are no permissions to fix.</para>
+    /// <para>It names the causes rather than one of them, because they send the reader to different
+    /// places and none is guessable from the others. An access rule is the user's to change. A link
+    /// Windows declines to follow is not, and neither is a drive that is not connected: relocating a
+    /// cache onto another drive is a thing developers do on purpose, and there are no permissions to
+    /// fix. The list is deliberately not exhaustive, because the probe cannot tell which of them it
+    /// met.</para>
     ///
     /// <para>What it must never say is that the location is absent, which is what the two-state
     /// probe this replaced made every such provider say about a cache that was on the disk.</para>
     /// </summary>
     public static string WhyItCouldNotBeReached(string root) =>
-        $"Windows would not say what is at '{root}', so Deguffer could not look inside it. That "
-        + "happens where a link cannot be followed, and where an account is refused a folder's own "
-        + "attributes. Nothing was planned, and nothing was ruled out either.";
+        $"Windows would not say what is at '{root}', so Deguffer could not look inside it. A link it "
+        + "will not follow, a folder this account may not read and a drive that is not connected all "
+        + "do that. Nothing was planned, and nothing was ruled out either.";
 }
