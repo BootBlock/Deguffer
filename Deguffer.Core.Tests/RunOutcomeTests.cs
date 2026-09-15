@@ -114,12 +114,12 @@ public sealed class RunOutcomeTests
     /// <summary>
     /// The defect in issue #117, in the words it produced: 5.9 GB that Windows would not
     /// let go was reported as "252994 item(s) in use were left alone", which reads as a handful of
-    /// locked files — and the next preview offered all of it again. A denial is not a file in use,
+    /// locked files — and the next scan offered all of it again. A denial is not a file in use,
     /// its size is what tells the reader the run fell short, and the reader is owed the answer to
     /// whether the row will keep offering it.
     /// </summary>
     [Fact]
-    public void SaysHowMuchWindowsWouldNotLetGoAndWhatTheNextPreviewDoesWithIt()
+    public void SaysHowMuchWindowsWouldNotLetGoAndWhatTheNextScanDoesWithIt()
     {
         const long guarded = 6_340_000_000;
 
@@ -130,7 +130,7 @@ public sealed class RunOutcomeTests
             statement,
             StringComparison.Ordinal);
         Assert.Contains(
-            "The next preview leaves out whatever is still refused, apart from a running program's own files.",
+            "The next scan leaves out whatever is still refused, apart from a running program's own files.",
             statement,
             StringComparison.Ordinal);
 
@@ -138,7 +138,7 @@ public sealed class RunOutcomeTests
         Assert.DoesNotContain("Another program", statement, StringComparison.Ordinal);
     }
 
-    /// <summary>Both kinds together are both stated, and the promise about the next preview once.</summary>
+    /// <summary>Both kinds together are both stated, and the promise about the next scan once.</summary>
     [Fact]
     public void StatesBothKindsOfRefusalAndThePromiseOnce()
     {
@@ -146,12 +146,12 @@ public sealed class RunOutcomeTests
 
         Assert.Contains("Another program had 1 file(s)", statement, StringComparison.Ordinal);
         Assert.Contains("Windows would not let Deguffer remove 2 file(s)", statement, StringComparison.Ordinal);
-        Assert.Equal(1, statement.Split("The next preview").Length - 1);
+        Assert.Equal(1, statement.Split("The next scan").Length - 1);
     }
 
     /// <summary>
     /// Folders Windows would not let go are stated apart from files, in the same two kinds, and never
-    /// under the promise about the next preview. That promise is about bytes the preview leaves out,
+    /// under the promise about the next scan. That promise is about bytes the scan leaves out,
     /// and a folder holds none.
     /// </summary>
     [Fact]
@@ -167,17 +167,17 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
-    /// With files refused as well, the folders come after the promise about the next preview, so the
+    /// With files refused as well, the folders come after the promise about the next scan, so the
     /// promise does not read as covering them.
     /// </summary>
     [Fact]
-    public void PutsTheFoldersAfterThePromiseAboutTheNextPreview()
+    public void PutsTheFoldersAfterThePromiseAboutTheNextScan()
     {
         var statement = RunOutcome.For(
             [Result("Temporary files", refused: InUse(1, 10), folders: new FolderRefusals(InUse: 1, Denied: 0))]).Statement;
 
         Assert.True(
-            statement.IndexOf("The next preview", StringComparison.Ordinal)
+            statement.IndexOf("The next scan", StringComparison.Ordinal)
             < statement.IndexOf("folder(s)", StringComparison.Ordinal),
             statement);
     }
@@ -242,7 +242,7 @@ public sealed class RunOutcomeTests
         Assert.True(outcome.NeedsReporting);
 
         Assert.Contains(".NET intermediate build output", outcome.Statement, StringComparison.Ordinal);
-        Assert.Contains("Preview again", outcome.Statement, StringComparison.Ordinal);
+        Assert.Contains("Scan again", outcome.Statement, StringComparison.Ordinal);
         Assert.DoesNotContain("please report this", outcome.Statement, StringComparison.Ordinal);
         Assert.DoesNotContain("All protected paths survived", outcome.Statement, StringComparison.Ordinal);
     }

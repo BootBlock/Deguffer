@@ -439,7 +439,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         // is the ordinary case and the sentence reads wrong on a developer's machine otherwise.
         var note = Assert.Single(plan.Notes, n => n.Message.StartsWith("Left Library in Open", StringComparison.Ordinal));
 
-        Assert.Contains("Close what is using it and preview again", note.Message, StringComparison.Ordinal);
+        Assert.Contains("Close what is using it and scan again", note.Message, StringComparison.Ordinal);
 
         // §5.6's negative, on the case it exists for: two directories of the same name in the same
         // tree, separated only by evidence. Asserting the target went proves nothing about the one
@@ -470,7 +470,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         Assert.Contains("Library in Open", note.Message, StringComparison.Ordinal);
         Assert.Contains("Library in AlsoOpen", note.Message, StringComparison.Ordinal);
-        Assert.Contains("Close what is using each one and preview again", note.Message, StringComparison.Ordinal);
+        Assert.Contains("Close what is using each one and scan again", note.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -379,7 +379,8 @@ Deliberate points, and the traps that come with them:
   have carried, and totals what is going. Switching that off as well is a second, separate choice,
   and what then stands between the user and the deletion is the preview below and Tier 3 never being
   pre-selected. **No preference reaches Tier 4**, which stays excluded however the settings are left.
-- **Dry run is the default action.** The primary button previews; deleting is the second step.
+- **Dry run is the default action.** The primary button scans and removes nothing; deleting is the
+  second step.
 - **Show free space before and after**, prominently. It is the only number the user came for.
 - **Age is a first-class column** for per-workspace and per-project data — "last touched 5 months
   ago" drives the decision more than size does.

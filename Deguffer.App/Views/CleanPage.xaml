@@ -528,8 +528,8 @@
             </Grid>
         </Border>
 
-        <!-- §7: the primary button previews. Deleting is a separate, deliberate second step, so
-             Preview carries the accent and Clean does not. -->
+        <!-- §7: the primary button scans and removes nothing. Deleting is a separate, deliberate
+             second step, so Scan carries the accent and Clean does not. -->
         <Grid Grid.Row="3" ColumnSpacing="12" Padding="0,4,0,20" ColumnDefinitions="Auto,*,Auto">
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -558,7 +558,7 @@
                         Command="{x:Bind ViewModel.CancelCommand}" />
                 <Button Content="Clean"
                         Command="{x:Bind ViewModel.CleanCommand}" />
-                <Button Content="Preview"
+                <Button Content="Scan"
                         Style="{StaticResource AccentButtonStyle}"
                         Command="{x:Bind ViewModel.PreviewCommand}" />
             </StackPanel>

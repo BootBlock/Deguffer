@@ -21,7 +21,7 @@ body:
     attributes:
       label: What stage did this reach?
       options:
-        - "It was offered in the preview, but I have not run it"
+        - "It was offered by a scan, but I have not run it"
         - "I ran it, and something was deleted"
         - "It was deleted, and I have since restored it"
     validations:
@@ -47,8 +47,8 @@ body:
   - type: dropdown
     id: tier
     attributes:
-      label: What safety tier did the preview show for it?
-      description: The tier badge sits on the row in the preview.
+      label: What safety tier did the scan show for it?
+      description: The tier badge sits on the row.
       options:
         - "Tier 1"
         - "Tier 2"
@@ -62,7 +62,7 @@ body:
     id: steps
     attributes:
       label: Steps to reproduce
-      description: How you got to that preview, if you can retrace it.
+      description: How you got to that row, if you can retrace it.
     validations:
       required: false
   - type: dropdown

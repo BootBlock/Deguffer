@@ -85,7 +85,7 @@ public static class PlanVerifier
                 VerificationOutcome.RemovedFromOutside,
                 "GONE — and so is the folder that held it, which no step in this run named or "
                 + "deleted anything inside. Something else on the machine removed it after the "
-                + "preview was made.")
+                + "scan ran.")
             : new VerificationCheck(
                 protectedPath.Path,
                 protectedPath.Reason,

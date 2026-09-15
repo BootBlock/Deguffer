@@ -162,17 +162,17 @@ public static class MailStorePlan
             $"Not running {plan.ProviderName}'s own command ({Path.GetFileName(command.FileName)} "
             + $"{command.Arguments}): what it clears holds {Every(command.MailStores)}. The tool decides "
             + "for itself what it removes and cannot be told to leave one file, and Deguffer never removes "
-            + "one. Move what is named here somewhere else, and preview again.",
+            + "one. Move what is named here somewhere else, and scan again.",
 
         EmptyRecycleBinStep bin =>
             $"Leaving the Recycle Bin at {LongPath.Display(bin.Path)} as it is: it holds "
             + $"{Every(bin.MailStores)}. Windows empties a bin whole, and Deguffer never removes one. "
-            + "Restore what is named here, or delete it from the Recycle Bin yourself, and preview again.",
+            + "Restore what is named here, or delete it from the Recycle Bin yourself, and scan again.",
 
         DeleteDirectoryStep { IsIndivisible: true } whole =>
             $"Leaving {LongPath.Display(whole.Path)} as it is: it holds {Every(whole.MailStores)}. What is "
             + "inside it goes whole or not at all, and Deguffer never removes one. Move what is named here "
-            + "out, or delete it yourself, and preview again.",
+            + "out, or delete it yourself, and scan again.",
 
         DeleteFileStep file =>
             $"Leaving {LongPath.Display(file.Path)} alone: it is an Outlook data file, and Deguffer never "

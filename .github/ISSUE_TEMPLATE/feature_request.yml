@@ -28,7 +28,7 @@ body:
       multiple: true
       options:
         - Scanning
-        - The preview, or the plan it describes
+        - The scan, or the plan it describes
         - Executing a cleanup
         - A new cache source or tool to support
         - User interface

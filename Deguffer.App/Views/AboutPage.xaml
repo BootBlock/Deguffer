@@ -157,7 +157,7 @@
             <Border Style="{StaticResource CardStyle}">
                 <StackPanel Spacing="10">
                     <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                               Text="Nothing is removed without a preview first, and the exact steps are inspectable on every row before you agree to them." />
+                               Text="Nothing is removed until a scan has shown you what it is, and the exact steps are inspectable on every row before you agree to them." />
                     <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
                                Text="It asks a tool to clear its own cache wherever the tool offers that, rather than deleting the folder behind its back." />
                     <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"

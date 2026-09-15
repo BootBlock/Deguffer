@@ -138,7 +138,7 @@ public sealed class PlanExecutor(
         // packages in the background, most likely. Report what is actually still there rather
         // than clamping to zero and claiming nothing was reclaimed.
         var message = reclaimed < 0
-            ? $"{outcome.Message} (the cache grew since the preview; " +
+            ? $"{outcome.Message} (the cache grew since the scan; " +
               $"{FreeSpace.Format(after)} remains)"
             : outcome.Message;
 
