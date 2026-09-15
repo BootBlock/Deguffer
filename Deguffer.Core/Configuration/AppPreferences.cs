@@ -41,9 +41,15 @@ public enum ViewDensity
 /// an outer ring gives more area for the same proportion, because area grows with the square of the
 /// radius.</para>
 ///
-/// <para>The values are ordinal, and the view picker lists them in this order. They are stored by
-/// name rather than by number, so the order is a presentation decision and not a compatibility
-/// one.</para>
+/// <para><see cref="Tree"/> is the two together: a list that opens where the pictures nest. It is
+/// what a list cannot do — show what is inside something without leaving what holds it — and what a
+/// picture cannot do — be read a row at a time. The Memory page offers it, because a process tree
+/// goes several levels deep and a reader following one down a flat list loses the rest of the
+/// machine at the first step.</para>
+///
+/// <para>The values are ordinal, and a view picker lists them in this order. A destination offers
+/// the views that suit what it draws rather than all of them. They are stored by name rather than
+/// by number, so the order is a presentation decision and not a compatibility one.</para>
 /// </summary>
 public enum ExploreView
 {
@@ -51,6 +57,7 @@ public enum ExploreView
     Icicle = 1,
     Sunburst = 2,
     List = 3,
+    Tree = 4,
 }
 
 /// <summary>

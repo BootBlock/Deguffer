@@ -51,6 +51,7 @@
                 <ComboBoxItem Content="Icicle" />
                 <ComboBoxItem Content="Sunburst" />
                 <ComboBoxItem Content="List" />
+                <ComboBoxItem Content="Tree" />
             </ComboBox>
         </Grid>
 
@@ -74,11 +75,24 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:MemoryCrumb">
-                        <!-- The crumb itself carries which node it means, because the tree renumbers
-                             its nodes on every reading and a number bound here would not. -->
-                        <HyperlinkButton Content="{x:Bind Name, Mode=OneWay}"
-                                         Padding="4,2"
-                                         Click="OnCrumbClicked" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- The separator between two steps, so the trail reads as a path down
+                                 into something rather than as a row of links. Raw to a screen
+                                 reader, which is given the steps themselves and their order. -->
+                            <FontIcon Glyph="&#xE76C;"
+                                      FontSize="10"
+                                      Margin="2,0,2,0"
+                                      Visibility="{x:Bind FollowsAnother, Mode=OneWay}"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+
+                            <!-- The crumb itself carries which node it means, because the tree
+                                 renumbers its nodes on every reading and a number bound here would
+                                 not. -->
+                            <HyperlinkButton Content="{x:Bind Name, Mode=OneWay}"
+                                             Padding="4,2"
+                                             Click="OnCrumbClicked" />
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -155,7 +169,7 @@
                                  and wrapped across two lines they read as two rows. -->
                             <Grid ColumnSpacing="12" Padding="0,4"
                                   Background="Transparent"
-                                  ColumnDefinitions="*,120,280,16"
+                                  ColumnDefinitions="*,120,280,36"
                                   AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
                                   AutomationProperties.HelpText="{x:Bind Explanation, Mode=OneWay}">
                                 <ToolTipService.ToolTip>
@@ -189,18 +203,100 @@
                                            VerticalAlignment="Center"
                                            Style="{StaticResource SecondaryText}" />
 
-                                <!-- Which rows open into something. Nesting is plain on the picture
-                                     and invisible in a list, so the list says it too. Raw, because
-                                     Description already says it in words. -->
-                                <FontIcon Grid.Column="3"
-                                          FontSize="12"
-                                          VerticalAlignment="Center"
-                                          Glyph="{x:Bind Icon, Mode=OneWay}"
-                                          AutomationProperties.AccessibilityView="Raw" />
+                                <!-- Which rows open into something, and the way in. Nesting is
+                                     plain on the picture and invisible in a list, so the list says
+                                     it — and a chevron that says a row opens and cannot be pressed
+                                     is the affordance without the action, so it is a button. It
+                                     names the row it opens rather than saying "this", because a
+                                     screen reader reads it on its own.
+
+                                     Pressing it opens the row and does not pick it: the button
+                                     takes the press, so the list reports no selection for it, and a
+                                     single click on the row itself still means "I pick this one". -->
+                                <Button Grid.Column="3"
+                                        Width="32"
+                                        Height="28"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        VerticalAlignment="Center"
+                                        Visibility="{x:Bind HasChildren, Mode=OneWay}"
+                                        Click="OnOpenRow"
+                                        ToolTipService.ToolTip="{x:Bind Opens, Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind Opens, Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE76C;" FontSize="12" />
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+
+                <!--
+                    The same contents again, as a tree that opens where it sits. The list is a route:
+                    going inside a process replaces the rows with what it held, and a reader
+                    following a process tree down four levels has the rest of the machine off screen
+                    by the second. The tree answers the same question without leaving: what holds a
+                    thing stays above it, and its neighbours stay beside it.
+
+                    One row at a time is selectable here too, and §7.2.1's one action is the same
+                    action on the same selection, so a reader who prefers the tree is not sent back
+                    to the list to use it.
+                -->
+                <TreeView x:Name="TreeList"
+                          Visibility="Collapsed"
+                          SelectionMode="Single"
+                          ItemsSource="{x:Bind ViewModel.Rows}"
+                          Expanding="OnRowExpanding"
+                          Collapsed="OnRowCollapsed"
+                          SelectionChanged="OnTreeSelectionChanged"
+                          AutomationProperties.Name="Where memory is, as a tree"
+                          AutomationProperties.HelpText="A tree of where physical memory is. Open a row to see what it holds without leaving what holds it.">
+                    <TreeView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MemoryRow">
+                            <!-- The rows under a row, which the view model fills in for as far as
+                                 the reader has opened. A row whose contents have not been filled in
+                                 carries no expander, so they are filled one level ahead of what is
+                                 on screen. -->
+                            <TreeViewItem ItemsSource="{x:Bind Children}"
+                                          AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
+                                          AutomationProperties.HelpText="{x:Bind Explanation, Mode=OneWay}">
+                                <Grid ColumnSpacing="12"
+                                      Background="Transparent"
+                                      ColumnDefinitions="*,120,280">
+                                    <ToolTipService.ToolTip>
+                                        <ToolTip MaxWidth="420" Content="{x:Bind Explanation, Mode=OneWay}">
+                                            <ToolTip.ContentTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ToolTip.ContentTemplate>
+                                        </ToolTip>
+                                    </ToolTipService.ToolTip>
+
+                                    <TextBlock Grid.Column="0"
+                                               Text="{x:Bind Name, Mode=OneWay}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+
+                                    <!-- Scaled against what holds this row, as the list's is. -->
+                                    <ProgressBar Grid.Column="1"
+                                                 VerticalAlignment="Center"
+                                                 Maximum="100"
+                                                 Value="{x:Bind Share, Mode=OneWay}"
+                                                 AutomationProperties.AccessibilityView="Raw" />
+
+                                    <TextBlock Grid.Column="2"
+                                               Text="{x:Bind Held, Mode=OneWay}"
+                                               TextAlignment="Right"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"
+                                               Style="{StaticResource SecondaryText}" />
+                                </Grid>
+                            </TreeViewItem>
+                        </DataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
 
                 <!-- Before the first reading arrives, and where one failed outright. -->
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6"
