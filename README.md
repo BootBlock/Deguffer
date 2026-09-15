@@ -30,7 +30,7 @@ On the workstation this tool was designed against — Windows 11, a ~330 GB syst
 minutes without touching a single piece of user data. That audit is what the safety model was built
 from.
 
-Previewing that same drive today, version 0.70.0 recognises 34 locations and finds 29 of them
+Scanning that same drive today, version 0.70.0 recognises 34 locations and finds 29 of them
 present. It offers **10.3 GB** of Tier 1 cache pre-selected and **1.4 GB** of Tier 2 beside it, and
 reports **6.4 GB** of Tier 3 user data separately with nothing pre-selected. The Recycle Bin and the
 crash dumps are real space, and they are still yours to decide about.
@@ -74,8 +74,8 @@ class of error is invisible until it is irreversible.
 - **Never delete a tool's root directory.** `~\.gradle` holds `caches` and `wrapper` (disposable)
   next to `gradle.properties`, which may contain signing keys. Only recognised children are ever
   targeted; anything unrecognised is Tier 4 by construction.
-- **Nothing is deleted without a preview.** Preview is the primary action; cleaning is a separate,
-  explicit step.
+- **Nothing is deleted until you have seen what it is.** Scanning is the primary action; cleaning
+  is a separate, explicit step.
 - **Verify the negative.** After acting, assert that the things that should have survived did —
   config files, protected directories — and report it. This turns "I think it worked" into
   evidence, and catches an over-broad rule on the first run rather than the hundredth.

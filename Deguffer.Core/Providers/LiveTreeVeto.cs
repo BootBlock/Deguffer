@@ -94,8 +94,8 @@ internal static class LiveTreeVeto
         return new PlanNote(
             PlanNoteSeverity.Warning,
             $"Left {string.Join(", ", held)} alone. " + (vetoed.Count == 1
-                ? "Close what is using it and preview again to include it."
-                : "Close what is using each one and preview again to include them."));
+                ? "Close what is using it and scan again to include it."
+                : "Close what is using each one and scan again to include them."));
     }
 
     private static string Name(string path) => Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));

@@ -12,8 +12,14 @@ using Microsoft.UI.Xaml.Controls;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// Drives the two-step flow of §7: Preview is the primary action and touches nothing; Clean is a
-/// separate, explicit second step that only becomes available once a preview exists.
+/// Drives the two-step flow of §7: Scan is the primary action and touches nothing; Clean is a
+/// separate, explicit second step that only becomes available once a scan has run.
+///
+/// <para><b>"Scan" is what the user is told and "preview" is what the code calls the report it
+/// produces.</b> The button said "Preview" beside one that said "Elevate and scan", which named one
+/// action twice; every sentence the user reads now says scan. The type names below keep "preview"
+/// because the thing they name is the plan, which is still a preview of a clean that has not
+/// happened.</para>
 ///
 /// This type orchestrates and formats. It holds no knowledge of what any cache is or how to
 /// remove it — that lives entirely in the providers.
@@ -183,7 +189,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string Status { get; set; } =
-        "Preview to see what can be reclaimed. Nothing is removed until you say so.";
+        "Scan to see what can be reclaimed. Nothing is removed until you say so.";
 
     /// <summary>
     /// How loudly to say it. A §5.6 verification failure and a routine progress message used to
@@ -374,7 +380,7 @@ public sealed partial class CleanViewModel : ObservableObject
     public string EmptyStateMessage => IsHiddenByFilters
         ? "The scan found locations, and the filters are hiding all of them. Tick “Show items not "
           + "installed” above, or switch on “Show items that are already clear” in Settings."
-        : "Preview looks at the locations Deguffer recognises and reports what each one holds. It "
+        : "A scan looks at the locations Deguffer recognises and reports what each one holds. It "
           + "reads only — nothing is removed until you choose to.";
 
     private void NotifyEmptyStateChanged()
@@ -402,13 +408,13 @@ public sealed partial class CleanViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            Report("Preview cancelled. Nothing was changed.");
+            Report("Scan cancelled. Nothing was changed.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             // A provider failing must not take the window down — this app's entire premise is
             // being trustworthy around deletion, and a crash is the worst available outcome.
-            Report($"Preview failed: {ex.Message}", InfoBarSeverity.Error);
+            Report($"Scan failed: {ex.Message}", InfoBarSeverity.Error);
         }
         finally
         {
@@ -653,7 +659,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// §6.3: a process cannot grant itself rights it started without, so this starts a replacement
     /// and stands down. The new instance previews on launch: the user asked for a scan by pressing
-    /// this, and landing them on an empty window to press Preview again would not be that.
+    /// this, and landing them on an empty window to press Scan again would not be that.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
     private void ElevateAndRescan()

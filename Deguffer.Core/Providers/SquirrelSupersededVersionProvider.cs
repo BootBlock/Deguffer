@@ -267,7 +267,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                 + (live.Vetoed.Count == 1 ? "it is" : "they are")
                 + " running. Close "
                 + (live.Vetoed.Count == 1 ? "it" : "them")
-                + " and preview again to include the builds."));
+                + " and scan again to include the builds."));
         }
 
         if (!live.Complete)

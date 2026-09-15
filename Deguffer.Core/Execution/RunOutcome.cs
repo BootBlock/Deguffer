@@ -78,15 +78,15 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
             // what driving the real window is for. The "(s)" shorthand the counts below use does
             // not stretch to a clause that also has to agree in "it" and "them".
             var went = count == 1
-                ? $"One protected path for {Names(outside)} went missing between the preview and "
+                ? $"One protected path for {Names(outside)} went missing between the scan and "
                   + "the clean, along with the folder holding it"
-                : $"{count} protected paths for {Names(outside)} went missing between the preview "
+                : $"{count} protected paths for {Names(outside)} went missing between the scan "
                   + "and the clean, along with the folders holding them";
 
             // What the run left behind stays on this one, because it is not an alarm and because
             // both facts explain the same thing: why the figures are not what the preview implied.
             return new RunOutcome(
-                $"Cleaned. {went} — which no step in this run named. Preview again to see the "
+                $"Cleaned. {went} — which no step in this run named. Scan again to see the "
                 + "machine as it is now."
                 + LeftBehind(results),
                 RunVerdict.RemovedFromOutside);
@@ -137,7 +137,7 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
             // program's own files open for deletion and refuse only the deletion. See DeletionProbe.
             + (refused.IsEmpty
                 ? string.Empty
-                : " The next preview leaves out whatever is still refused, apart from a running program's own files.")
+                : " The next scan leaves out whatever is still refused, apart from a running program's own files.")
             + (folders.InUse > 0
                 ? $" Another program was using {folders.InUse:N0} folder(s), so they were left in place."
                 : string.Empty)
