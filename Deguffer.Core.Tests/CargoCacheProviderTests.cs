@@ -282,35 +282,67 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A Cargo home Windows will not describe leaves the row on screen, saying what happened,
-    /// instead of reporting Rust as not installed.
+    /// A home whose caches Windows will not describe keeps the row on screen, instead of reporting
+    /// Rust as not installed.
     ///
     /// <para>This is the shape reported from a Windows 11 workstation at 26100.9445, where the
     /// account's own directory symbolic links could be created and read but not followed: Windows
-    /// answered <c>ERROR_UNTRUSTED_MOUNT_POINT</c> for every path through one. Every recognised
-    /// cache path is built by joining names onto the home, so all of them read as absent,
-    /// <c>IsPresentAsync</c> answered false, and Deguffer drew nothing at all about a cache
-    /// documented as "routinely the largest thing this tool would have found".</para>
+    /// answered <c>ERROR_UNTRUSTED_MOUNT_POINT</c> for every path through one. Presence here is
+    /// every recognised cache path, each built by joining names onto the home, so a home that was
+    /// itself such a link made all six read as absent — and Deguffer drew nothing at all about a
+    /// cache its own documentation calls "routinely the largest thing this tool would have
+    /// found".</para>
     ///
-    /// <para>The refusal here is the access-rule shape of the same condition rather than the link
-    /// shape. Both reach <see cref="LongPath.ProbeDirectory"/> as
-    /// <see cref="PathPresence.Refused"/>, and only one of them can be arranged without setting
-    /// machine-wide symbolic link policy — which a test may not do, and which would make the suite
-    /// depend on the machine it runs on rather than on the code.</para>
+    /// <para><b>The refusal is arranged with access rules on each cache rather than with a link,
+    /// and that is not a weaker reproduction of the same thing.</b> A link Windows declines to
+    /// follow needs machine-wide symbolic link policy, which a test may not set and which would
+    /// make this pass or fail on the machine rather than on the code. Denying traversal is no
+    /// substitute: every account holds "Bypass traverse checking" by default, so a Deny/Traverse
+    /// rule is measured to have no effect at all. What both real conditions have in common is the
+    /// only thing this provider sees — <see cref="LongPath.ProbeDirectory"/> answering
+    /// <see cref="PathPresence.Refused"/> for every recognised cache — and that is what is built
+    /// here.</para>
     /// </summary>
     [Fact]
-    public async Task AHomeWindowsWillNotDescribeIsSaidSoRatherThanReportedAsNoRustAtAll()
+    public async Task AHomeWhoseCachesWindowsWillNotDescribeIsNotReportedAsNoRustAtAll()
+    {
+        CreateFullHome();
+
+        var denials = CargoCacheProvider.Levels
+            .SelectMany(level => level.Children.DisposableNames
+                .Select(name => Path.Combine(level.Resolve(Home), name)))
+            .Select(DeniedDirectory.WithUnreadableAttributes)
+            .ToList();
+
+        try
+        {
+            Assert.All(
+                CargoCacheProvider.Levels.SelectMany(level => level.Children.DisposableNames
+                    .Select(name => Path.Combine(level.Resolve(Home), name))),
+                path => Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(path)));
+
+            // The whole of the defect. Without this the shell never draws the row, and no sentence
+            // the plan carries can be read.
+            Assert.True(await CreateProvider().IsPresentAsync());
+        }
+        finally
+        {
+            denials.ForEach(d => d.Dispose());
+        }
+    }
+
+    /// <summary>
+    /// A home Windows will not describe is said to be unreachable rather than missing, and every
+    /// recognised cache under it is left standing (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task AHomeWindowsWillNotDescribeIsSaidSoRatherThanReportedAsNotInstalled()
     {
         CreateFullHome();
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(Home);
 
-        var provider = CreateProvider();
-
-        // Without this the shell never draws the row, and no sentence in the plan can be read.
-        Assert.True(await provider.IsPresentAsync());
-
-        var plan = await provider.PlanAsync();
+        var plan = await CreateProvider().PlanAsync();
 
         Assert.True(plan.HasUnreadableRoot);
         Assert.Empty(plan.TargetedPaths);
@@ -319,8 +351,6 @@ public sealed class CargoCacheProviderTests : IDisposable
             plan.Notes,
             n => n.Message.Contains("not installed", StringComparison.OrdinalIgnoreCase));
 
-        // §5.6, made explicit because the whole point of the row is that nothing was looked at:
-        // every recognised cache is still on the disk.
         Assert.True(Directory.Exists(Path.Combine(Home, "registry", "cache")));
         Assert.True(Directory.Exists(Path.Combine(Home, "git", "checkouts")));
     }
