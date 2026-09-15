@@ -665,6 +665,42 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same rule over Affinity, where what sits beside the cache is the user's whole asset
+    /// library and the records that keep the product activated. Three levels declare it: the profile
+    /// root and the shared folder recognise nothing at all, and only a version folder lets one child
+    /// go.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                                         // Affinity's own folder
+    [InlineData("Photo", false)]                                    // a product tree
+    [InlineData(@"Photo\2.0\autosave", false)]                      // unsaved-document recovery
+    [InlineData("Common", false)]                                   // the shared folder, never a target
+    [InlineData(@"Common\2.0", false)]                              // the asset library and the licences
+    [InlineData(@"Common\2.0\user", false)]                         // the asset library itself
+    [InlineData(@"Common\2.0\Licences", false)]                     // what keeps the product activated
+    [InlineData(@"Common\2.0\modelcache", true)]                    // the downloaded models
+    [InlineData(@"Common\2.0\modelcache\Saliency_2.6.onnx", true)]  // inside them
+    [InlineData(@"Common\3", false)]                                // not how Affinity names a version
+    [InlineData(@"Common\3\modelcache", false)]                     // so nothing in it is reached either
+    public void AnAffinityProfileIsClassifiedLevelByLevel(string relative, bool allowed)
+    {
+        const string Affinity = AffinityProfiles.ProfileFolderName;
+
+        var root = _temp.CreateDirectory("profile", Affinity);
+        _temp.CreateDirectory("profile", Affinity, "Photo", "2.0", "autosave");
+        _temp.CreateDirectory("profile", Affinity, "Common", "2.0", "user");
+        _temp.CreateDirectory("profile", Affinity, "Common", "2.0", "Licences");
+        _temp.CreateDirectory("profile", Affinity, "Common", "2.0", "modelcache");
+        _temp.CreateDirectory("profile", Affinity, "Common", "3", "modelcache");
+
+        var policy = new ExploreActionPolicy([], new AffinityModelCacheProvider(_environment).ToolRoots);
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
     /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
     /// and repeats the whole layout inside every profile.
@@ -1323,7 +1359,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         """);
 
     /// <summary>
-    /// Firefox and the Azure Functions tooling are deliberately absent. The sweep above probes a
+    /// Firefox, Affinity and the Azure Functions tooling are deliberately absent. The sweep above probes a
     /// sibling of <c>ToolRoots[0]</c>, and each of those providers declares a first root that
     /// recognises nothing at all, so the probe would be refused structurally rather than by the
     /// allow-list — an assertion that cannot fail. Each has its own theory instead, covering every
