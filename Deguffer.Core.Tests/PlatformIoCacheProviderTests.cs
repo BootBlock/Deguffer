@@ -639,7 +639,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var provider = CreateProvider(new FakeProcessRunner().Responding("system info", report));
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.NotEqual(provider.CoreRoot, core);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(packages, StringComparison.OrdinalIgnoreCase));

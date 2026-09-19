@@ -284,7 +284,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
 
         var provider = CreateProvider(Reporting(store));
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.False(store.StartsWith(provider.HomeDirectory, StringComparison.OrdinalIgnoreCase));
 

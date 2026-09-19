@@ -19,6 +19,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeSystemDirectories _system;
     private readonly FakeUserEnvironment _environment;
+    private readonly FakeVolumeInventory _volumes = new();
 
     public ExploreActionPolicyTests()
     {
@@ -204,10 +205,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// What Windows reserves at the top of a volume, on a drive the policy was never told about.
     ///
     /// <para>The drive is the point. These were once a table built from
-    /// <see cref="Deguffer.Core.Safety.IVolumeInventory"/>, which is a snapshot — so a volume mounted
-    /// after the page opened was scannable with its paging file and its restore points unprotected.
-    /// Reading it from the path needs no inventory, and this asserts it against a letter no fake ever
-    /// mentioned.</para>
+    /// <see cref="Deguffer.Core.Safety.IVolumeInventory"/>'s list of volumes, which is a snapshot — so
+    /// a volume mounted after the page opened was scannable with its paging file and its restore
+    /// points unprotected. Where the machine says nothing about a volume the path's own root answers,
+    /// and this asserts it against a letter no fake ever mentioned.</para>
     /// </summary>
     [Theory]
     [InlineData("System Volume Information")]
@@ -341,6 +342,77 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.True(Policy()
             .MayRemove(Path.Combine(_environment.UserProfile, "Documents", "$MFT"))
             .IsAllowed);
+    }
+
+    /// <summary>
+    /// What Windows and NTFS keep at the top of a volume, on a volume mounted at a folder. Its top
+    /// is that folder, so <c>Q:\Mount\pagefile.sys</c> is the volume's paging file. Read from the
+    /// drive letter it was one level below <c>Q:\</c> under a folder called <c>Mount</c>, and every
+    /// one of these was offered for deletion — another account's deleted files among them.
+    /// </summary>
+    [Theory]
+    [InlineData("System Volume Information")]
+    [InlineData("pagefile.sys")]
+    [InlineData("hiberfil.sys")]
+    [InlineData("$MFT")]
+    [InlineData(@"$Extend\$UsnJrnl")]
+    [InlineData("$Recycle.Bin")]
+    [InlineData(@"$Recycle.Bin\S-1-5-21-1000-1000-1000-1002\$RQ4ZKJX.txt")]
+    public void WhatWindowsKeepsAtTheTopOfAVolumeMountedAtAFolderIsRefused(string relative)
+    {
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+
+        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\Mount", relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The §5.6 half. The rest of a mounted volume stays ordinary, and so do the same names in a
+    /// folder nothing is mounted at, or one whose name only starts like the mount point's. What
+    /// decides is where the volume is mounted, not what the folder is called.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Q:\Mount\Holiday photos")]
+    [InlineData(@"Q:\Mount\Holiday photos\pagefile.sys")]
+    [InlineData(@"Q:\Plain\pagefile.sys")]
+    [InlineData(@"Q:\Plain\$Recycle.Bin\S-1-5-21-1000-1000-1000-1002")]
+    [InlineData(@"Q:\Mountains\$MFT")]
+    public void EverythingElseOnOrBesideAVolumeMountedAtAFolderIsOrdinary(string path)
+    {
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+
+        Assert.True(Policy().MayRemove(path).IsAllowed);
+    }
+
+    /// <summary>
+    /// The folder a volume is mounted at is that whole volume. Read from the drive letter it was an
+    /// ordinary folder of <c>Q:</c>.
+    /// </summary>
+    [Fact]
+    public void TheFolderAVolumeIsMountedAtIsRefusedAsAWholeDrive()
+    {
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+
+        var verdict = Policy().MayRemove(@"Q:\Mount");
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("whole drive", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A volume mounted after the policy was built is covered. The policy lives for a scan and the
+    /// folder picker can reach a volume mounted a moment ago, so it asks at each question.
+    /// </summary>
+    [Fact]
+    public void AVolumeMountedAfterThePolicyWasBuiltIsCovered()
+    {
+        _volumes.With(@"Q:\");
+        var policy = Policy();
+
+        Assert.True(policy.MayRemove(@"Q:\Mount\pagefile.sys").IsAllowed);
+
+        _volumes.With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+
+        Assert.False(policy.MayRemove(@"Q:\Mount\pagefile.sys").IsAllowed);
     }
 
     /// <summary>
@@ -1074,6 +1146,23 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same exception for a folder a volume is mounted at, which is that whole volume. Read from
+    /// the drive letter it was an ordinary folder, so it was declared, and everything on the
+    /// mounted volume was refused for one Spotify setting.
+    /// </summary>
+    [Fact]
+    public void AMovedSpotifyStorageAtAFolderAVolumeIsMountedAtIsLeftOutLikeADrive()
+    {
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+        WriteSpotifySettings(@"storage.location=""Q:\\Mount""");
+        var policy = new ExploreActionPolicy(
+            [], new SpotifyCacheProvider(_environment, volumes: _volumes).ToolRoots, volumes: _volumes);
+
+        Assert.True(policy.MayRemove(@"Q:\Mount\Holiday photos").IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\Plain\Holiday photos").IsAllowed);
+    }
+
+    /// <summary>
     /// A cache the Storage page withholds is refused here too, or Explore would offer the one
     /// directory the plan has just declined, for the reason it declined it. Withheld because the
     /// storage was moved inside it, and withheld because the settings name a location nobody can
@@ -1400,7 +1489,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public async Task ThePolicyReadsSection52OutOfTheProvidersThemselves()
     {
         var provider = new GradleCacheProvider(_environment);
-        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Equal(GradleRoot, provider.RootPath);
         Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
@@ -1428,6 +1517,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var policy = await ExploreActionPolicy.ForAsync(
             _system,
             _environment,
+            new FakeVolumeInventory(),
             [new StubProvider([declared], [VendorTool(moved)])]);
 
         Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
@@ -1605,7 +1695,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// of them through a provider would make forty tests asynchronous to establish nothing.
     /// </summary>
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
-        new(ProtectedRegions.For(_system, _environment), toolRoots);
+        new(ProtectedRegions.For(_system, _environment), toolRoots, volumes: _volumes);
 
     private sealed class StubProvider(
         IReadOnlyList<ToolRoot> roots,

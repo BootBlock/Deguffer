@@ -104,5 +104,6 @@ public sealed class ExploreHoverNoteTests : IDisposable
     /// </summary>
     private ItemGuide Guide() => new(
         [new KnownItem(KnownPlace.WindowsDirectory, string.Empty, "Windows itself", "It cannot be deleted.")],
-        new Dictionary<KnownPlace, string> { [KnownPlace.WindowsDirectory] = _system.WindowsDirectory });
+        new Dictionary<KnownPlace, string> { [KnownPlace.WindowsDirectory] = _system.WindowsDirectory },
+        new FakeVolumeInventory());
 }

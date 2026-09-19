@@ -635,7 +635,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
         var provider = CreateProvider(Poetry(cache, environments));
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.NotEqual(provider.DefaultCacheRoot, cache);
 

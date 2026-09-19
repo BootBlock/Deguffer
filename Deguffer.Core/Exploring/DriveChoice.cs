@@ -22,8 +22,9 @@ namespace Deguffer.Core.Exploring;
 /// <see cref="LocalVolume.RootPath"/>: a volume mounted at both a letter and a folder is one drive
 /// to the reader, and listing it twice would ask them which of the two to scan when the answer is
 /// the same either way. A volume with no letter at all is listed under its folder mount point,
-/// which is the name the user sees it under in File Explorer, and is refused there — see
-/// <see cref="NoDriveLetterRefusal"/>.</para>
+/// which is the name the user sees it under in File Explorer, and is scanned there like any other:
+/// <see cref="VolumeRoot"/> finds the top of a volume wherever it is mounted, so what Windows keeps
+/// there is refused on it as it is on a drive.</para>
 /// </param>
 /// <param name="Label">What the volume is called, or null where it has none.</param>
 /// <param name="TotalBytes">Capacity, or null where the volume would not say.</param>
@@ -49,57 +50,14 @@ public sealed record DriveChoice(
         "Deguffer does not scan this drive. It is cloud storage that Windows shows as an ordinary "
         + "drive or folder, and reading it would download every file on it onto this computer.";
 
-    /// <summary>
-    /// What a volume mounted at a folder rather than under a drive letter is told.
-    ///
-    /// <para><b>A withheld capability rather than a hazard in the volume.</b> Such a volume is
-    /// ordinary and reading it is safe. What is not yet safe is what Explore would then offer to
-    /// delete on it: <c>ExploreActionPolicy</c> keeps a volume's paging file, its
-    /// <c>System Volume Information</c>, its NTFS records and its Recycle Bin out of every deletion
-    /// by asking whether a path is a direct child of its own volume root, and
-    /// <see cref="Safety.VolumeRoot"/> answers that from the path's drive letter. On a volume
-    /// mounted at <c>C:\Mount</c> the first segment below the root reads as <c>Mount</c>, so none
-    /// of those refusals fire and another account's deleted files would be drawn as an ordinary
-    /// folder.</para>
-    ///
-    /// <para>So the entry is listed and refused rather than hidden (§7.1), and the refusal is
-    /// removed when that rule can name a volume by where it is really mounted. The folder picker
-    /// reaches such a volume exactly as it did before, which is the arrangement this preserves
-    /// rather than removes.</para>
-    /// </summary>
-    public const string NoDriveLetterRefusal =
-        "Deguffer does not scan this drive. It is mounted at a folder rather than under a drive "
-        + "letter, and the rules that keep a volume's own system files out of a deletion cannot yet "
-        + "recognise one mounted that way.";
-
-    /// <summary>
-    /// What the machine reported about <paramref name="volume"/>, as an entry.
-    ///
-    /// <para>Remote storage is tested first where both apply, because it is the refusal with the
-    /// larger consequence behind it: one withholds a picture of a disk, the other prevents a
-    /// download of everything the user keeps in the cloud.</para>
-    /// </summary>
+    /// <summary>What the machine reported about <paramref name="volume"/>, as an entry.</summary>
     public static DriveChoice From(LocalVolume volume) =>
         new(
             volume.RootPath,
             volume.Label,
             volume.TotalBytes,
             volume.FreeBytes,
-            RefusalFor(volume));
-
-    private static string? RefusalFor(LocalVolume volume)
-    {
-        if (volume.StoresContentRemotely)
-        {
-            return RemoteStorageRefusal;
-        }
-
-        // A drive letter is its own path root and nothing else is, which is the same test
-        // ShellRecycleBinEmptier.Serves applies for its own reason.
-        return string.Equals(Path.GetPathRoot(volume.RootPath), volume.RootPath, StringComparison.OrdinalIgnoreCase)
-            ? null
-            : NoDriveLetterRefusal;
-    }
+            volume.StoresContentRemotely ? RemoteStorageRefusal : null);
 
     /// <summary>
     /// Whether a scan may be pointed at this volume.

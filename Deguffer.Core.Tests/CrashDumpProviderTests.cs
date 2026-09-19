@@ -51,7 +51,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var provider = CreateProvider();
 
         var plan = await provider.PlanAsync();
-        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);

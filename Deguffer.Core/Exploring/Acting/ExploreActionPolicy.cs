@@ -14,7 +14,8 @@ namespace Deguffer.Core.Exploring.Acting;
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
 /// The first is <see cref="ProtectedRegions"/>, a table of regions — the operating system's own directories, the signed-in user's
 /// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which is
-/// read from the path rather than from a list of drives. Apart from Outlook's folder, all of that is
+/// read from where the path's volume is mounted rather than from a list of drives. Apart from
+/// Outlook's folder, all of that is
 /// a fact about Windows and is stated here. The second is
 /// §5.2, which is a fact about a tool and belongs to whichever provider knows the tool: Explore
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
@@ -61,6 +62,7 @@ public sealed class ExploreActionPolicy
     private readonly IReadOnlyList<ToolRoot> _toolRoots;
     private readonly IReadOnlyList<ToolRoot> _probedRoots;
     private readonly HeldLocations _held;
+    private readonly IVolumeInventory _volumes;
 
     /// <param name="regions">
     /// The structural table. Sorted here rather than trusted from the caller, because the
@@ -78,11 +80,18 @@ public sealed class ExploreActionPolicy
     /// <paramref name="toolRoots"/> because it is asked separately and can only narrow what the rest
     /// allows. <see cref="MayRemove"/> says why.
     /// </param>
+    /// <param name="volumes">
+    /// Where <see cref="VolumeRoot"/> asks which volume a path is on, so that what sits at the top
+    /// of a volume mounted at a folder is recognised as surely as what sits at the top of a drive.
+    /// Asked at each <see cref="MayRemove"/> rather than once here, which is what keeps a volume
+    /// mounted after this policy was built covered.
+    /// </param>
     public ExploreActionPolicy(
         IEnumerable<ProtectedRegion> regions,
         IEnumerable<ToolRoot> toolRoots,
         IFileSystem? fileSystem = null,
-        IEnumerable<ToolRoot>? probedRoots = null)
+        IEnumerable<ToolRoot>? probedRoots = null,
+        IVolumeInventory? volumes = null)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
@@ -118,12 +127,15 @@ public sealed class ExploreActionPolicy
                     .Select(root => (root.Path!, root.Reason)),
             ],
             fileSystem ?? WindowsFileSystem.Default);
+
+        _volumes = volumes ?? VolumeInventory.Current;
     }
 
     /// <summary>
     /// The policy for this machine: Windows' own directories, the signed-in user's profile, Outlook's
-    /// mail stores, and every §5.2 declaration the providers make. What sits at the top of a volume is decided from
-    /// the path instead, so no list of drives has to be kept current.
+    /// mail stores, and every §5.2 declaration the providers make. What sits at the top of a volume
+    /// is decided by asking <paramref name="volumes"/> where the path's volume is mounted, at the
+    /// moment of each question, so no list of drives has to be kept current.
     ///
     /// <para>Assembled from the two seams rather than from <see cref="Environment"/> directly, so
     /// the whole of §7.1's refusal set is provable against a synthetic profile — which is what G1's
@@ -143,11 +155,13 @@ public sealed class ExploreActionPolicy
     public static async Task<ExploreActionPolicy> ForAsync(
         ISystemDirectories system,
         IUserEnvironment environment,
+        IVolumeInventory volumes,
         IEnumerable<ICleanupProvider> providers,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(volumes);
         ArgumentNullException.ThrowIfNull(providers);
 
         IReadOnlyList<ICleanupProvider> asked = [.. providers];
@@ -164,7 +178,8 @@ public sealed class ExploreActionPolicy
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
             [.. asked.SelectMany(p => p.ToolRoots)],
-            probedRoots: [.. discovered.SelectMany(roots => roots)]);
+            probedRoots: [.. discovered.SelectMany(roots => roots)],
+            volumes: volumes);
     }
 
     /// <summary>
@@ -186,26 +201,27 @@ public sealed class ExploreActionPolicy
                 "Deguffer could not make sense of that path, so it will not act on it.");
         }
 
-        // A whole volume, or something with no containing directory at all. Neither is a thing to
-        // remove, and asking the path rather than a list of drives means a volume mounted after this
-        // policy was built is covered exactly as one mounted before it.
-        if (Path.GetDirectoryName(target) is null)
+        // A whole volume, whether a drive or a folder one is mounted at, or something with no
+        // containing directory at all. None of them is a thing to remove, and asking where the volume
+        // is mounted now rather than a list of drives means a volume mounted after this policy was
+        // built is covered exactly as one mounted before it.
+        if (VolumeRoot.Below(_volumes, target) is not { } below)
         {
             return ExploreVerdict.Refuse(
                 $"'{target}' is a whole drive. Explore removes things from a drive, never the drive itself.");
         }
 
-        if (ReservedByTheFilesystem(target) is { } filesystem)
+        if (ReservedByTheFilesystem(below) is { } filesystem)
         {
             return filesystem;
         }
 
-        if (InARecycleBin(target) is { } bin)
+        if (InARecycleBin(below) is { } bin)
         {
             return bin;
         }
 
-        if (AtAVolumeRoot(target) is { } reserved)
+        if (AtAVolumeRoot(below) is { } reserved)
         {
             return reserved;
         }
@@ -238,27 +254,29 @@ public sealed class ExploreActionPolicy
     /// <summary>
     /// What Windows keeps at the top of a volume, refused wherever the volume is.
     ///
-    /// <para>Decided from the path rather than from a list of drives, and that is the point. A table
-    /// built from <see cref="IVolumeInventory"/> is a snapshot: Explore re-reads its drive list
-    /// whenever the page refreshes, so a volume mounted after the policy was built would be
-    /// scannable with its paging file and its restore points unprotected. The question "is this a
-    /// direct child of its own volume root, named one of these?" needs no inventory and is right on
-    /// every drive, mounted before or after. <see cref="VolumeRoot"/> answers the first half of it,
-    /// where <see cref="Knowledge.ItemGuide"/> can read the same rule rather than restate it.</para>
+    /// <para>Decided by asking where the path's volume is mounted at the moment of the question,
+    /// never from a remembered list of drives, and that is the point. A remembered list is a
+    /// snapshot: Explore re-reads its drive list whenever the page refreshes, so a volume mounted
+    /// after the policy was built would be scannable with its paging file and its restore points
+    /// unprotected. Asked live, the question "is this a direct child of its own volume root, named
+    /// one of these?" is right on every volume, mounted before or after and at a drive letter or at
+    /// a folder. <see cref="VolumeRoot"/> answers the first half of it, where
+    /// <see cref="Knowledge.ItemGuide"/> can read the same rule rather than restate it.</para>
     ///
     /// <para>They are named at all because Explore draws them.
     /// <c>System Volume Information</c> and the paging files are among the largest items on a drive,
     /// so they are exactly what a size picture puts in front of somebody — and "access denied" from
     /// a deletion the app offered is a worse answer than not offering it.</para>
     /// </summary>
-    private static ExploreVerdict? AtAVolumeRoot(string target)
+    /// <param name="below">Where the path sits below its volume's root, from <see cref="VolumeRoot"/>.</param>
+    private static ExploreVerdict? AtAVolumeRoot(string below)
     {
-        if (!VolumeRoot.Holds(target))
+        if (below.IndexOfAny(Separators) >= 0)
         {
             return null;
         }
 
-        return Path.GetFileName(target).ToLowerInvariant() switch
+        return below.ToLowerInvariant() switch
         {
             "system volume information" => ExploreVerdict.Refuse(
                 "Windows keeps this drive's restore points, indexing data and change journal here. "
@@ -297,9 +315,8 @@ public sealed class ExploreActionPolicy
     /// and <c>$WinREAgent</c> and <c>$Windows.~BT</c> are ordinary leftovers a user may legitimately
     /// want gone — refusing those would take away a capability rather than add a protection.</para>
     /// </summary>
-    private static ExploreVerdict? ReservedByTheFilesystem(string target) =>
-        VolumeRoot.Below(target) is { } below
-        && below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
+    private static ExploreVerdict? ReservedByTheFilesystem(string below) =>
+        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
         && NtfsReserved.Contains(first)
             ? ExploreVerdict.Refuse(
                 $"'{first}' is part of NTFS itself rather than something stored on the drive — it is "
@@ -322,9 +339,8 @@ public sealed class ExploreActionPolicy
     /// asks, so a folder somebody named <c>$Recycle.Bin</c> inside their own documents stays
     /// theirs.</para>
     /// </summary>
-    private static ExploreVerdict? InARecycleBin(string target) =>
-        VolumeRoot.Below(target) is { } below
-        && below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
+    private static ExploreVerdict? InARecycleBin(string below) =>
+        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
         && first.Equals("$Recycle.Bin", StringComparison.OrdinalIgnoreCase)
             ? ExploreVerdict.Refuse(
                 "This is the drive's Recycle Bin, where each account on this computer keeps what it "

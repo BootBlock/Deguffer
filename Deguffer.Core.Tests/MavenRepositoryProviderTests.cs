@@ -454,7 +454,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(container, StringComparison.OrdinalIgnoreCase));
 
@@ -476,7 +476,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         WriteSettings(repository);
 
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [CreateProvider()]);
 
         Assert.True(policy.MayRemove(documents).IsAllowed);
         Assert.True(policy.MayRemove(repository).IsAllowed);

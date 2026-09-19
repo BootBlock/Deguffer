@@ -714,7 +714,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, binaryCache);
 
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [CreateProvider()]);
 
         Assert.False(policy.MayRemove(root).IsAllowed);
         Assert.All(
@@ -750,7 +750,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.DoesNotContain(Path.Combine(root, "downloads"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.False(policy.MayRemove(Path.Combine(root, "downloads")).IsAllowed);
@@ -780,7 +780,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             child => Assert.False(declared.Recognises(child), child));
 
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [CreateProvider()]);
 
         Assert.False(policy.MayRemove(Path.Combine(root, "buildtrees")).IsAllowed);
     }
@@ -801,7 +801,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, binaryCache);
 
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [CreateProvider()]);
 
         Assert.False(policy.MayRemove(Path.Combine(root, "installed")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(root, "ports")).IsAllowed);

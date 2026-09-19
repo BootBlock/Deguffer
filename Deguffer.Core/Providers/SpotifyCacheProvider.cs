@@ -54,21 +54,30 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         "Where Spotify's settings say it keeps its storage. Deguffer never measures or removes "
         + "anything in it, because the music and podcasts you downloaded may be there.";
 
+    private readonly IVolumeInventory _volumes;
+
     private IReadOnlyList<DeclaredRoot>? _roots;
     private IReadOnlyList<ToolRoot>? _toolRoots;
     private SpotifyStorage? _storage;
 
+    /// <param name="volumes">
+    /// Asked whether a moved storage location is a whole volume, which is left out of
+    /// <see cref="ToolRoots"/>. Asked where the volume is mounted rather than read from the drive
+    /// letter, so a location at a folder a volume is mounted at is recognised as that volume.
+    /// </param>
     public SpotifyCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
     {
+        _volumes = volumes ?? VolumeInventory.Current;
     }
 
     public override string Id => "spotify";
@@ -356,7 +365,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         // from Explore for one Spotify setting, and a volume root is never itself removable there.
         roots.AddRange(
             from location in storage.Moved
-            where VolumeRoot.Below(location) is not null
+            where VolumeRoot.Below(_volumes, location) is not null
             select ToolRoot.Of(location, LocationReason, new DisposableChildSet([])));
 
         return roots;

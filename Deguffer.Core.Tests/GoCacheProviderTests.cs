@@ -316,7 +316,7 @@ public sealed class GoCacheProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.NotEqual(provider.DefaultGoPath, GoPath);
         Assert.All(
@@ -354,7 +354,7 @@ public sealed class GoCacheProviderTests : IDisposable
         var provider = CreateProvider(Reporting(BuildCache, string.Empty, $"{first}{Path.PathSeparator}{second}"));
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(firstModules));
 
@@ -381,7 +381,7 @@ public sealed class GoCacheProviderTests : IDisposable
 
         var provider = CreateProvider(Reporting(BuildCache, ModuleCache, profile));
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.True(policy.MayRemove(documents).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(profile, "bin")).IsAllowed);

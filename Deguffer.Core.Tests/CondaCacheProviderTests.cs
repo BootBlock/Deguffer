@@ -487,7 +487,7 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         var provider = CreateProvider(Reporting(info: info));
         var plan = await provider.PlanAsync();
-        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(elsewhere, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(outsideCache, StringComparison.OrdinalIgnoreCase));

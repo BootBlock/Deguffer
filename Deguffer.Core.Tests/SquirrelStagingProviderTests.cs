@@ -615,7 +615,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         var provider = CreateProvider(new FakeLiveTreeInspector(busy));
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(provider.ToolRoots, r => r.Recognises("tempa"));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
@@ -643,7 +643,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.True(plan.HasUnreadableRoot);
         Assert.False(policy.MayRemove(idle).IsAllowed);

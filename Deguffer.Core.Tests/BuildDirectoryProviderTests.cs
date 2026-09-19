@@ -975,7 +975,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     private Task<ExploreActionPolicy> ExplorePolicy(ICleanupProvider provider) =>
-        ExploreActionPolicy.ForAsync(new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+        ExploreActionPolicy.ForAsync(new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
     private BuildDirectoryProvider ProviderFor(Toolchain toolchain, ILiveTreeInspector live) => toolchain switch
     {
