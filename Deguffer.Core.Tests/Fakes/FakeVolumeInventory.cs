@@ -73,8 +73,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 
         return _volumes
             .SelectMany(volume => volume.MountPoints)
-            .Where(mountPoint => LongPath.Contains(mountPoint, comparable)
-                || comparable.Equals(Path.TrimEndingDirectorySeparator(mountPoint), StringComparison.OrdinalIgnoreCase))
+            .Where(mountPoint => HostVolume.Holds(mountPoint, comparable))
             .MaxBy(mountPoint => mountPoint.Length);
     }
 

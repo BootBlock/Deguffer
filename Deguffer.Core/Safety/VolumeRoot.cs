@@ -14,14 +14,12 @@ namespace Deguffer.Core.Safety;
 /// <para><b>Where the machine gives no position, the drive letter does.</b> Windows answers nothing
 /// for a drive that is not there and for a share it cannot reach, and a path through a junction is
 /// answered with the volume on the junction's far side, which is not a prefix of the path and so
-/// names no position in it. Each of those falls back to <see cref="Path.GetPathRoot(string)"/>,
-/// which is exactly the answer this type gave before it asked, so the lookup can only move the top
-/// of a volume deeper into the path and never lose one the path's text shows.</para>
+/// names no position in it. Each of those is read from <see cref="Path.GetPathRoot(string)"/>
+/// alone, which is the answer this type gave before it asked the machine.</para>
 ///
 /// <para>Its callers are the policy that refuses to delete a volume's paging file or NTFS's own
-/// records, the reference that explains to a reader what those are, and a provider that will not
-/// declare a whole volume as a tool's folder. A safety rule written twice is one that gets changed
-/// once, so all of them read it here.</para>
+/// records, and the reference that explains to a reader what those are. A safety rule written twice
+/// is one that gets changed once, so both read it here.</para>
 ///
 /// <para>Its own type rather than a member on <see cref="LongPath"/>, which is about a path's
 /// <em>length</em> and the <c>\\?\</c> prefix §6.3 requires. This is about a path's position in a
@@ -33,14 +31,17 @@ public static class VolumeRoot
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
     /// <summary>
-    /// Where <paramref name="path"/> sits below the top of its volume, or null where it has no top
-    /// to sit below — which is a relative path, a drive-relative one such as <c>C:file</c>, and a
-    /// volume root itself, including a folder a volume is mounted at.
+    /// Where <paramref name="path"/> sits below the top of the volume it is on, or null where it
+    /// has no top to sit below — which is a relative path, a drive-relative one such as
+    /// <c>C:file</c>, and a volume root itself, including a folder a volume is mounted at.
     ///
     /// <para>A root is answered as null rather than as an empty remainder, so a caller cannot
     /// mistake "the volume itself" for "something at the top of the volume". Those are the two
     /// answers the callers here have to keep apart: one is never a thing to remove and never a thing
     /// to explain, and the other is both.</para>
+    ///
+    /// <para>For a caller that explains. A caller that refuses reads <see cref="Readings"/>, which
+    /// also keeps the drive letter's answer.</para>
     /// </summary>
     /// <param name="volumes">Asked where the volume holding the path is mounted.</param>
     /// <param name="path">
@@ -56,7 +57,22 @@ public static class VolumeRoot
     /// <para>The extended-length form is accepted and answered as its display form (§6.3), because
     /// that is the form the machine's answer comes back in.</para>
     /// </param>
-    public static string? Below(IVolumeInventory volumes, string path)
+    public static string? Below(IVolumeInventory volumes, string path) => Readings(volumes, path)?[0];
+
+    /// <summary>
+    /// Every position <paramref name="path"/> can be read at: below the folder its volume is
+    /// mounted at first, where that is deeper than the path's own root, and below that root. Null
+    /// where either reading makes the path a volume root, and for a path <see cref="Below"/> answers
+    /// null for.
+    ///
+    /// <para><b>Both, for a caller that refuses.</b> Asking the machine is what finds the top of a
+    /// volume mounted at a folder, and it must not also take away what the drive letter already
+    /// showed. A volume mounted at a folder inside <c>C:\$Recycle.Bin</c> would otherwise read
+    /// everything under it as ordinary, where the drive letter reads it as inside the Recycle Bin.
+    /// A refusal that holds on either reading therefore holds, and the lookup can only add
+    /// refusals to what the path's text alone gave.</para>
+    /// </summary>
+    public static IReadOnlyList<string>? Readings(IVolumeInventory volumes, string path)
     {
         ArgumentNullException.ThrowIfNull(volumes);
 
@@ -67,39 +83,31 @@ public static class VolumeRoot
 
         var display = LongPath.Display(path);
 
-        if (MountedAt(volumes, display) is not { } root)
+        if (Path.GetPathRoot(display) is not { Length: > 0 } root
+            || Remainder(display, root) is not { } belowRoot)
         {
             return null;
         }
 
-        var below = root.Length < display.Length ? display[root.Length..].TrimStart(Separators) : string.Empty;
+        if (volumes.MountPointOf(display) is not { } mountPoint
+            || mountPoint.Length <= root.Length
+            || !HostVolume.Holds(mountPoint, display))
+        {
+            return [belowRoot];
+        }
 
-        return below.Length > 0 ? below : null;
+        return Remainder(display, mountPoint) is { } belowMountPoint ? [belowMountPoint, belowRoot] : null;
     }
 
     /// <summary>
-    /// The top of the volume <paramref name="path"/> is on, as a prefix of the path: the machine's
-    /// answer where it is one and reaches deeper than the path's own root, and that root otherwise.
-    ///
-    /// <para>Compared through <see cref="LongPath.Contains"/>, which gets a volume root right, and
-    /// against the mount point named without its trailing separator as well: <c>C:\Mount</c> is the
-    /// folder a volume is mounted at, and is the volume's root rather than a child of the disk it
-    /// sits on.</para>
+    /// What follows <paramref name="top"/> in <paramref name="path"/>, which it is a prefix of, or
+    /// null where nothing does. A mount point named without its trailing separator is as long as
+    /// the path it names, which is the same directory, so it answers null as well.
     /// </summary>
-    private static string? MountedAt(IVolumeInventory volumes, string path)
+    private static string? Remainder(string path, string top)
     {
-        var lexical = Path.GetPathRoot(path);
+        var below = top.Length < path.Length ? path[top.Length..].TrimStart(Separators) : string.Empty;
 
-        if (lexical is not { Length: > 0 })
-        {
-            return null;
-        }
-
-        return volumes.MountPointOf(path) is { } mountPoint
-            && mountPoint.Length > lexical.Length
-            && (LongPath.Contains(mountPoint, path)
-                || path.Equals(Path.TrimEndingDirectorySeparator(mountPoint), StringComparison.OrdinalIgnoreCase))
-                ? mountPoint
-                : lexical;
+        return below.Length > 0 ? below : null;
     }
 }

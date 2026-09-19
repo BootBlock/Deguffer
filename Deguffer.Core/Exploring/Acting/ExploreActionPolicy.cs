@@ -70,6 +70,14 @@ public sealed class ExploreActionPolicy
     /// resolve by declaration order instead — silently, and differently for each caller.
     /// </param>
     /// <param name="toolRoots">The §5.2 declarations, as the providers wrote them.</param>
+    /// <param name="volumes">
+    /// Where <see cref="VolumeRoot"/> asks which volume a path is on, so that what sits at the top
+    /// of a volume mounted at a folder is recognised as surely as what sits at the top of a drive.
+    /// Asked at each <see cref="MayRemove"/> rather than once here, which is what keeps a volume
+    /// mounted after this policy was built covered. Required rather than defaulted, because a
+    /// default would be the real machine's volumes, and a test that forgot to pass a fake would
+    /// quietly be asking about the developer's disks.
+    /// </param>
     /// <param name="fileSystem">
     /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk. Injected so a
     /// test can see the form of the path it is asked about (§6.3), and what a probe that fails does.
@@ -80,21 +88,16 @@ public sealed class ExploreActionPolicy
     /// <paramref name="toolRoots"/> because it is asked separately and can only narrow what the rest
     /// allows. <see cref="MayRemove"/> says why.
     /// </param>
-    /// <param name="volumes">
-    /// Where <see cref="VolumeRoot"/> asks which volume a path is on, so that what sits at the top
-    /// of a volume mounted at a folder is recognised as surely as what sits at the top of a drive.
-    /// Asked at each <see cref="MayRemove"/> rather than once here, which is what keeps a volume
-    /// mounted after this policy was built covered.
-    /// </param>
     public ExploreActionPolicy(
         IEnumerable<ProtectedRegion> regions,
         IEnumerable<ToolRoot> toolRoots,
+        IVolumeInventory volumes,
         IFileSystem? fileSystem = null,
-        IEnumerable<ToolRoot>? probedRoots = null,
-        IVolumeInventory? volumes = null)
+        IEnumerable<ToolRoot>? probedRoots = null)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(toolRoots);
+        ArgumentNullException.ThrowIfNull(volumes);
 
         // A region whose path will not resolve is dropped, not kept with the value it arrived
         // with. An empty one is the case that matters: LongPath.Contains("", candidate) builds the
@@ -128,7 +131,7 @@ public sealed class ExploreActionPolicy
             ],
             fileSystem ?? WindowsFileSystem.Default);
 
-        _volumes = volumes ?? VolumeInventory.Current;
+        _volumes = volumes;
     }
 
     /// <summary>
@@ -178,8 +181,8 @@ public sealed class ExploreActionPolicy
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
             [.. asked.SelectMany(p => p.ToolRoots)],
-            probedRoots: [.. discovered.SelectMany(roots => roots)],
-            volumes: volumes);
+            volumes,
+            probedRoots: [.. discovered.SelectMany(roots => roots)]);
     }
 
     /// <summary>
@@ -205,23 +208,25 @@ public sealed class ExploreActionPolicy
         // containing directory at all. None of them is a thing to remove, and asking where the volume
         // is mounted now rather than a list of drives means a volume mounted after this policy was
         // built is covered exactly as one mounted before it.
-        if (VolumeRoot.Below(_volumes, target) is not { } below)
+        if (VolumeRoot.Readings(_volumes, target) is not { } readings)
         {
             return ExploreVerdict.Refuse(
                 $"'{target}' is a whole drive. Explore removes things from a drive, never the drive itself.");
         }
 
-        if (ReservedByTheFilesystem(below) is { } filesystem)
+        // Each rule on every reading, because a refusal that holds on either holds: VolumeRoot says
+        // why the drive letter's reading is kept beside the mount point's.
+        if (OnAnyReading(readings, ReservedByTheFilesystem) is { } filesystem)
         {
             return filesystem;
         }
 
-        if (InARecycleBin(below) is { } bin)
+        if (OnAnyReading(readings, InARecycleBin) is { } bin)
         {
             return bin;
         }
 
-        if (AtAVolumeRoot(below) is { } reserved)
+        if (OnAnyReading(readings, AtAVolumeRoot) is { } reserved)
         {
             return reserved;
         }
@@ -347,6 +352,20 @@ public sealed class ExploreActionPolicy
                 + "deleted. Emptying yours is offered on the Storage page, where Deguffer can tell your "
                 + "own deleted files from another account's.")
             : null;
+
+    private static ExploreVerdict? OnAnyReading(
+        IReadOnlyList<string> readings, Func<string, ExploreVerdict?> rule)
+    {
+        foreach (var below in readings)
+        {
+            if (rule(below) is { } refusal)
+            {
+                return refusal;
+            }
+        }
+
+        return null;
+    }
 
     private static ExploreVerdict Managed(string what) => ExploreVerdict.Refuse(
         $"This is {what}. Windows manages it, and its size is changed through the system settings "

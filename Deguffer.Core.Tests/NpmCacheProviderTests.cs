@@ -97,7 +97,7 @@ public sealed class NpmCacheProviderTests : IDisposable
     public void ExploreRefusesWhatThePlanProtects()
     {
         var provider = new NpmCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
         var global = Path.Combine(_environment.RoamingAppData, "npm");
 
         Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, ".npmrc")).IsAllowed);

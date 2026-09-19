@@ -54,30 +54,21 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         "Where Spotify's settings say it keeps its storage. Deguffer never measures or removes "
         + "anything in it, because the music and podcasts you downloaded may be there.";
 
-    private readonly IVolumeInventory _volumes;
-
     private IReadOnlyList<DeclaredRoot>? _roots;
     private IReadOnlyList<ToolRoot>? _toolRoots;
     private SpotifyStorage? _storage;
 
-    /// <param name="volumes">
-    /// Asked whether a moved storage location is a whole volume, which is left out of
-    /// <see cref="ToolRoots"/>. Asked where the volume is mounted rather than read from the drive
-    /// letter, so a location at a folder a volume is mounted at is recognised as that volume.
-    /// </param>
     public SpotifyCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null,
-        IVolumeInventory? volumes = null)
+        IDirectoryScanner? scanner = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
     {
-        _volumes = volumes ?? VolumeInventory.Current;
     }
 
     public override string Id => "spotify";
@@ -361,11 +352,14 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
                     new ChildClassification(SpotifyEdition.AccountsName, SafetyTier.DoNotTouch, AccountsReason))));
         }
 
-        // A volume root is left out. Refusing every child of a drive would take the whole drive away
-        // from Explore for one Spotify setting, and a volume root is never itself removable there.
+        // A drive or share root is left out. Refusing every child of a drive would take the whole
+        // drive away from Explore for one Spotify setting, and a volume root is never itself
+        // removable there. Read from the path's text alone, so a folder a volume is mounted at stays
+        // declared: leaving it out as well would widen what Explore removes to the downloads the
+        // setting names, and a refusal is the direction §5.2 takes when the two conflict.
         roots.AddRange(
             from location in storage.Moved
-            where VolumeRoot.Below(_volumes, location) is not null
+            where Path.GetDirectoryName(location) is not null
             select ToolRoot.Of(location, LocationReason, new DisposableChildSet([])));
 
         return roots;

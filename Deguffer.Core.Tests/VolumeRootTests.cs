@@ -134,6 +134,23 @@ public sealed class VolumeRootTests
     }
 
     /// <summary>
+    /// A caller that refuses reads both positions, the mount point's first, so asking the machine
+    /// can add a refusal to what the drive letter shows and never take one away. A path with no
+    /// mount point deeper than its root has the one reading.
+    /// </summary>
+    [Fact]
+    public void ReadingsKeepTheDriveLettersPositionBesideTheMountPoints()
+    {
+        _volumes.With(@"C:\").With(@"D:\", alsoMountedAt: [@"C:\Mount\"]);
+
+        Assert.Equal(
+            ["pagefile.sys", @"Mount\pagefile.sys"],
+            VolumeRoot.Readings(_volumes, @"C:\Mount\pagefile.sys"));
+        Assert.Equal(["pagefile.sys"], VolumeRoot.Readings(_volumes, @"C:\pagefile.sys"));
+        Assert.Null(VolumeRoot.Readings(_volumes, @"C:\Mount"));
+    }
+
+    /// <summary>
     /// A folder whose name starts with a mount point's is not inside it. <c>C:\Mountains</c> is a
     /// folder of <c>C:</c>, whatever is mounted at <c>C:\Mount</c>.
     /// </summary>

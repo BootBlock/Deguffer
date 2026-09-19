@@ -387,7 +387,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         var provider = CreateProvider(Answering(ProcessState.Running));
         await provider.PlanAsync();
 
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         Assert.True(policy.MayRemove(offered).IsAllowed, "Explore refused a session the Storage page would clean");
 
@@ -452,7 +452,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
 
         Assert.True(plan.HasUnreadableRoot);
 
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         foreach (var refused in new[] { _claude.Home, _claude.FileHistory, session })
         {

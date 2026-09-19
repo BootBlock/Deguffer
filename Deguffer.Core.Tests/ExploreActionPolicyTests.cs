@@ -426,7 +426,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     {
         var policy = new ExploreActionPolicy(
             [ProtectedRegion.Refusing(string.Empty, RegionScope.PathAndBelow, "Nowhere.")],
-            []);
+            [], new FakeVolumeInventory());
 
         Assert.True(policy.MayRemove(@"\\server\share\folder").IsAllowed);
         Assert.True(policy.MayRemove(@"C:\anywhere\at\all").IsAllowed);
@@ -619,7 +619,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     {
         var root = _temp.CreateDirectory("profile", "AppData", "Local", "Vendor", "Tool");
         var recording = new RecordingFileSystem(WindowsFileSystem.Default);
-        var policy = new ExploreActionPolicy([], [VendorTool(root)], recording);
+        var policy = new ExploreActionPolicy([], [VendorTool(root)], new FakeVolumeInventory(), recording);
 
         Assert.False(policy.MayRemove(Path.GetDirectoryName(root)!).IsAllowed);
         Assert.NotEmpty(recording.Paths);
@@ -697,7 +697,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void TheInnermostToolRootDecidesANestedPath(string relative, bool allowed)
     {
         var provider = new CargoCacheProvider(_environment);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
         var home = Path.Combine(_environment.UserProfile, ".cargo");
 
         Assert.Equal(
@@ -726,7 +726,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void TheOuterAzureFunctionsRootRecognisesNothingAtAll(string relative, bool allowed)
     {
         var provider = new AzureFunctionsToolsProvider(_environment);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -765,7 +765,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         _temp.CreateDirectory("profile", Affinity, "Common", "2.0", "modelcache");
         _temp.CreateDirectory("profile", Affinity, "Common", "3", "modelcache");
 
-        var policy = new ExploreActionPolicy([], new AffinityModelCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new AffinityModelCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -796,7 +796,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         _temp.CreateFile(1, "profile", "AppData", "Local", "TestBrowser", "Local State");
         _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default");
 
-        var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -837,7 +837,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             [],
-            new EpicLauncherWebCacheProvider(_environment).ToolRoots);
+            new EpicLauncherWebCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -866,11 +866,11 @@ public sealed class ExploreActionPolicyTests : IDisposable
             new EpicLauncherLogProvider(_environment),
         ];
 
-        var together = new ExploreActionPolicy([], providers.SelectMany(p => p.ToolRoots));
+        var together = new ExploreActionPolicy([], providers.SelectMany(p => p.ToolRoots), new FakeVolumeInventory());
 
         foreach (var provider in providers)
         {
-            var alone = new ExploreActionPolicy([], provider.ToolRoots);
+            var alone = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
             foreach (var relative in new[] { "Config", "Data", "Saves", "UserVaultSettings", "Crashes", "Logs" })
             {
@@ -905,7 +905,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         RegisterFirefoxProfile();
 
         var provider = new FirefoxCacheProvider(_environment);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
         var profile = Assert.Single(provider.Profiles());
         var root = local ? profile.LocalPath : profile.RoamingPath;
 
@@ -936,7 +936,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var editor = CreateVsCodeFolder();
         _temp.CreateDirectory("profile", "AppData", "Roaming", "Code", "WebStorage", "42");
 
-        var policy = new ExploreActionPolicy([], new VsCodeCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new VsCodeCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -973,7 +973,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
                 .. new ChromiumCacheProvider(_environment).ToolRoots,
                 .. new VsCodeCacheProvider(_environment).ToolRoots,
                 .. new VsCodeLogProvider(_environment).ToolRoots,
-            ]);
+            ], new FakeVolumeInventory());
 
         Assert.Equal(allowed, policy.MayRemove(Path.Combine(editor, child)).IsAllowed);
 
@@ -1012,7 +1012,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         RegisterFirefoxProfile();
 
         var provider = new FirefoxCacheProvider(_environment);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         var root = Path.Combine(
             roaming ? _environment.RoamingAppData : _environment.LocalAppData, "Mozilla", "Firefox");
@@ -1036,7 +1036,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void SteamsProfileFolderOffersOnlyTheBrowserCache(string relative, bool allowed)
     {
         var root = Path.Combine(_environment.LocalAppData, "Steam");
-        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -1067,7 +1067,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void SteamsInstallDirectoryOffersOnlyTheHttpCache(string relative, bool allowed)
     {
         var install = RegisterSteamInstall();
-        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -1089,7 +1089,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void SpotifysFolderOffersOnlyTheStreamingCache(string relative, bool allowed)
     {
         var root = Path.Combine(_environment.LocalAppData, "Spotify");
-        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -1118,7 +1118,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var root = store
             ? Path.Combine(_environment.LocalAppData, "Packages", SpotifyEdition.StorePackageFamily)
             : Path.Combine(_environment.RoamingAppData, "Spotify");
-        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -1137,7 +1137,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         WriteSpotifySettings(
             $"storage.location=\"{moved.Replace(@"\", @"\\")}\"",
             @"storage.last-location=""Q:\\""");
-        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.False(policy.MayRemove(moved).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(moved, "0a")).IsAllowed);
@@ -1146,20 +1146,36 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// The same exception for a folder a volume is mounted at, which is that whole volume. Read from
-    /// the drive letter it was an ordinary folder, so it was declared, and everything on the
-    /// mounted volume was refused for one Spotify setting.
+    /// The drive exception does not reach a folder a volume is mounted at. The storage there is
+    /// still refused whole, because leaving it out would make the downloads it may hold removable,
+    /// and a refusal is the direction §5.2 takes. The policy recognises the folder as a volume
+    /// root, so the premise is asserted too: without it the refusal below would prove nothing.
     /// </summary>
     [Fact]
-    public void AMovedSpotifyStorageAtAFolderAVolumeIsMountedAtIsLeftOutLikeADrive()
+    public void AMovedSpotifyStorageAtAFolderAVolumeIsMountedAtIsStillRefused()
     {
         _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
         WriteSpotifySettings(@"storage.location=""Q:\\Mount""");
-        var policy = new ExploreActionPolicy(
-            [], new SpotifyCacheProvider(_environment, volumes: _volumes).ToolRoots, volumes: _volumes);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, _volumes);
 
-        Assert.True(policy.MayRemove(@"Q:\Mount\Holiday photos").IsAllowed);
+        Assert.Contains("whole drive", policy.MayRemove(@"Q:\Mount").Reason, StringComparison.Ordinal);
+
+        Assert.False(policy.MayRemove(@"Q:\Mount\Storage").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\Mount\Holiday photos").IsAllowed);
         Assert.True(policy.MayRemove(@"Q:\Plain\Holiday photos").IsAllowed);
+    }
+
+    /// <summary>
+    /// A volume mounted at a folder inside a drive's Recycle Bin. Where it is mounted makes what is
+    /// under it look like the top of an ordinary volume, and the drive letter still reads it as inside
+    /// the bin. A refusal on either reading holds, so asking the machine never takes one away.
+    /// </summary>
+    [Fact]
+    public void AVolumeMountedInsideARecycleBinDoesNotOpenIt()
+    {
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\$Recycle.Bin\S-1-5-21-1000\Archive\"]);
+
+        Assert.False(Policy().MayRemove(@"Q:\$Recycle.Bin\S-1-5-21-1000\Archive\notes.txt").IsAllowed);
     }
 
     /// <summary>
@@ -1174,7 +1190,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void ASpotifyCacheTheStoragePageWithholdsIsRefused(bool movedInside)
     {
         var cache = Path.Combine(_environment.LocalAppData, "Spotify", "Data");
-        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         // The premise, without which the refusal below proves nothing: with no settings file, the
         // cache is allowed.
@@ -1183,7 +1199,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         WriteSpotifySettings(movedInside
             ? $"storage.location=\"{Path.Combine(cache, "offline").Replace(@"\", @"\\")}\""
             : "storage.location=\"relative\"");
-        policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.False(policy.MayRemove(cache).IsAllowed);
     }
@@ -1197,7 +1213,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void AMovedSpotifyStorageAboveSpotifysOwnFolderIsRefused()
     {
         WriteSpotifySettings($"storage.location=\"{_environment.LocalAppData.Replace(@"\", @"\\")}\"");
-        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.False(policy.MayRemove(_environment.LocalAppData).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(_environment.LocalAppData, "0a")).IsAllowed);
@@ -1215,7 +1231,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         WriteSpotifySettings(
             "storage.location=\"relative\"",
             $"storage.last-location=\"{moved.Replace(@"\", @"\\")}\"");
-        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots);
+        var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.False(policy.MayRemove(moved).IsAllowed);
     }
@@ -1254,7 +1270,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
             [
                 .. new SquirrelStagingProvider(_environment).ToolRoots,
                 .. new SquirrelSupersededVersionProvider(_environment).ToolRoots,
-            ]);
+            ], new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -1277,7 +1293,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var root = _temp.CreateDirectory("profile", "AppData", "Local", "SquirrelTemp");
 
         var policy = new ExploreActionPolicy(
-            [], new SquirrelStagingProvider(_environment).ToolRoots);
+            [], new SquirrelStagingProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -1332,7 +1348,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void EveryDeclaredRootRefusesAnUnrecognisedSibling(string providerId, string sibling)
     {
         var provider = Providers().Single(p => p.Id == providerId);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         Assert.NotEmpty(provider.ToolRoots);
 
@@ -1358,7 +1374,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void RoslynsCacheIsRecognisedByWhatASetHoldsAndNothingAboveASetIsRemovable()
     {
         var provider = new RoslynCacheProvider(_environment);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
         var cache = provider.CachePath;
         var roslyn = Path.GetDirectoryName(cache)!;
 
@@ -1398,7 +1414,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void ANameDisposableInOneTierIsStillRefusedInTheOther()
     {
         var provider = new GpuShaderCacheProvider(_environment);
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         var local = NvidiaRoot(ProfileArea.LocalAppData);
         var localLow = NvidiaRoot(ProfileArea.LocalLowAppData);
@@ -1562,12 +1578,12 @@ public sealed class ExploreActionPolicyTests : IDisposable
             static name => name.Equals("gradle.properties", StringComparison.OrdinalIgnoreCase));
 
         var policy = new ExploreActionPolicy(
-            ProtectedRegions.For(_system, _environment), [Gradle()], probedRoots: [probed]);
+            ProtectedRegions.For(_system, _environment), [Gradle()], new FakeVolumeInventory(), probedRoots: [probed]);
 
         // The premise: on its own, the probed root allows the file, so the refusal below is the
         // declared root's and the probed root could not lift it.
         var alone = new ExploreActionPolicy(
-            ProtectedRegions.For(_system, _environment), [], probedRoots: [probed]);
+            ProtectedRegions.For(_system, _environment), [], new FakeVolumeInventory(), probedRoots: [probed]);
 
         Assert.True(alone.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
@@ -1584,7 +1600,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             ProtectedRegions.For(_system, _environment),
-            [Gradle()],
+            [Gradle()], new FakeVolumeInventory(),
             probedRoots: [new ToolRoot(inside, "A folder a setting names.", static _ => true)]);
 
         Assert.False(policy.MayRemove(Path.Combine(inside, "init.gradle")).IsAllowed);
@@ -1602,7 +1618,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             ProtectedRegions.For(_system, _environment),
-            [],
+            [], new FakeVolumeInventory(),
             probedRoots: [new ToolRoot(container, "A folder a plan protects.", static _ => true)]);
 
         Assert.False(policy.MayRemove(container).IsAllowed);
@@ -1621,7 +1637,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             ProtectedRegions.For(_system, _environment),
-            [],
+            [], new FakeVolumeInventory(),
             probedRoots:
             [
                 new ToolRoot(
@@ -1647,7 +1663,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             ProtectedRegions.For(_system, _environment),
-            [],
+            [], new FakeVolumeInventory(),
             probedRoots:
             [
                 new ToolRoot(live, "Something is using this.", static _ => false),
@@ -1671,7 +1687,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             ProtectedRegions.For(_system, _environment),
-            [],
+            [], new FakeVolumeInventory(),
             probedRoots: [new ToolRoot(live, reason, static _ => false)]);
 
         var inside = policy.MayRemove(Path.Combine(live, "working.txt"));

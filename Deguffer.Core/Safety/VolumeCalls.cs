@@ -33,6 +33,12 @@ internal static partial class VolumeCalls
 
     private const int ErrorMoreData = 234;
 
+    /// <summary>
+    /// The longest path an extended-length name can be, 32,767 characters, and a terminator. What
+    /// <see cref="MountPointOf"/> allocates, since its answer can be longer than its question.
+    /// </summary>
+    private const uint LongestPath = 32_768;
+
     private static readonly IntPtr InvalidHandle = new(-1);
 
     /// <summary>
@@ -146,12 +152,14 @@ internal static partial class VolumeCalls
     /// <para>Answers for a path that does not exist, and for a file as readily as a directory,
     /// which is what separates it from asking the filesystem.</para>
     ///
-    /// <para>§6.3: the path is normalised and extended before it crosses, and the buffer is sized
-    /// from it rather than fixed at <c>MAX_PATH</c>. A mount point is a prefix of every path it
-    /// holds, so the extended form's own length is always enough — where a fixed 260 would answer
-    /// null for the Node and NuGet trees §6.3 exists for, and a dash would appear where a figure
-    /// belongs. The answer comes back in display form, because that is what the rest of the app
-    /// shows and hands on.</para>
+    /// <para>§6.3: the path is normalised and extended before it crosses, and the buffer holds the
+    /// longest path an extended-length name can be rather than <c>MAX_PATH</c>, where a fixed 260
+    /// would answer null for the Node and NuGet trees §6.3 exists for. It is not sized from the
+    /// path, because the answer can be longer than the question: the folder a volume is mounted at
+    /// comes back with a separator it was asked without, and a path through a junction is answered
+    /// with a mount point somewhere else entirely, and <see cref="VolumeRoot"/> decides what may be
+    /// deleted from that answer. The answer
+    /// comes back in display form, because that is what the rest of the app shows and hands on.</para>
     /// </summary>
     internal static string? MountPointOf(string path)
     {
@@ -164,12 +172,11 @@ internal static partial class VolumeCalls
         }
 
         var extended = LongPath.Extended(qualified);
-        var length = extended.Length + 1;
-        var buffer = Marshal.AllocHGlobal(length * sizeof(char));
+        var buffer = Marshal.AllocHGlobal((int)LongestPath * sizeof(char));
 
         try
         {
-            return GetVolumePathName(extended, buffer, (uint)length)
+            return GetVolumePathName(extended, buffer, LongestPath)
                 && Marshal.PtrToStringUni(buffer) is { Length: > 0 } mountPoint
                 ? LongPath.Display(mountPoint)
                 : null;
