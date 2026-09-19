@@ -46,15 +46,21 @@ public enum FileHistoryLookup
 /// Where <paramref name="Outcome"/> is <see cref="FileHistoryLookup.Unreachable"/>, the folder
 /// Windows would not describe.
 /// </param>
-/// <param name="Candidate">
-/// Where that folder belongs to a target the configuration names, the target. It may be the one in
-/// use, so what it holds is declared to Explore as if it were.
-/// </param>
 public sealed record FileHistoryLocation(
     FileHistoryLookup Outcome,
     FileHistoryTarget? Target = null,
-    string? Unreached = null,
-    FileHistoryTarget? Candidate = null);
+    string? Unreached = null)
+{
+    /// <summary>
+    /// Every target the configuration names whose saved versions are there or that Windows would not
+    /// describe, in the order they were named, the one decided on included.
+    ///
+    /// <para>Separate from <see cref="Target"/> because the two answer different questions. Only one
+    /// target may be trimmed, and a refusal before it means none is. Every one of these may hold
+    /// saved versions, though, stale or not, so each is declared to Explore as a backup.</para>
+    /// </summary>
+    public IReadOnlyList<FileHistoryTarget> Seen { get; init; } = [];
+}
 
 /// <summary>
 /// Where Windows is currently sending this account's File History, read from the configuration
@@ -126,24 +132,27 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
 
         // The first candidate Windows answers for decides, as the first found always has. A refusal
         // decides too, rather than being passed for a later candidate: see FileHistoryLookup.Unreachable.
+        // The rest are still probed, because each may hold saved versions Explore has to refuse.
+        FileHistoryLocation? decided = null;
+        var seen = new List<FileHistoryTarget>();
+
         foreach (var candidate in ConfiguredRoots())
         {
             var target = new FileHistoryTarget(candidate, environment.UserName, environment.MachineName);
+            var presence = LongPath.ProbeDirectory(target.DataDirectory);
 
-            switch (LongPath.ProbeDirectory(target.DataDirectory))
+            if (presence is PathPresence.Absent)
             {
-                case PathPresence.Present:
-                    return new FileHistoryLocation(FileHistoryLookup.Found, target);
-
-                case PathPresence.Refused:
-                    return new FileHistoryLocation(
-                        FileHistoryLookup.Unreachable,
-                        Unreached: target.DataDirectory,
-                        Candidate: target);
+                continue;
             }
+
+            seen.Add(target);
+            decided ??= presence is PathPresence.Present
+                ? new FileHistoryLocation(FileHistoryLookup.Found, target)
+                : new FileHistoryLocation(FileHistoryLookup.Unreachable, Unreached: target.DataDirectory);
         }
 
-        return new FileHistoryLocation(FileHistoryLookup.TargetNotFound);
+        return (decided ?? new FileHistoryLocation(FileHistoryLookup.TargetNotFound)) with { Seen = seen };
     }
 
     /// <summary>

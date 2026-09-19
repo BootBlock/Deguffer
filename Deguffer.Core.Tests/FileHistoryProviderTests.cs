@@ -523,6 +523,37 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A target after a refused one is declared as well. It may be a stale copy, and it may be the
+    /// only record of a file, so Explore refuses it though the plan trims neither.
+    /// </summary>
+    [Fact]
+    public void ATargetAfterOneWindowsWillNotDescribeIsDeclaredToo()
+    {
+        var refused = CreateDrive("E");
+        var refusedData = CreateData(refused);
+        var stale = CreateDrive("F");
+        CreateData(stale);
+
+        var directory = Path.Combine(
+            _environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "Config.xml"),
+            $"<DataProtectionConfig><Target><Url>{refused}</Url></Target><Old><Url>{stale}</Url></Old></DataProtectionConfig>");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(refusedData);
+
+        var roots = CreateProvider().ToolRoots;
+
+        foreach (var drive in new[] { refused, stale })
+        {
+            var root = Assert.Single(
+                roots, r => r.Path.Equals(Path.Combine(drive, "FileHistory"), StringComparison.Ordinal));
+            Assert.False(root.Recognises(FakeUserEnvironment.Account));
+        }
+    }
+
+    /// <summary>
     /// Windows' own command is the only route to removing a saved version, so without it there is
     /// nothing to offer — and a path deletion is not the fallback, because §5.2 puts the whole
     /// directory out of reach.

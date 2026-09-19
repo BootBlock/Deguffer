@@ -149,7 +149,11 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
         Assert.Equal(FileHistoryLookup.Unreachable, located.Outcome);
         Assert.Null(located.Target);
         Assert.Equal(data, located.Unreached);
-        Assert.Equal(data, located.Candidate!.DataDirectory);
+
+        // Both are still named, because each may hold saved versions Explore has to refuse.
+        Assert.Equal(
+            [data, Path.Combine(stale, "FileHistory", FakeUserEnvironment.Account, FakeUserEnvironment.Machine, "Data")],
+            located.Seen.Select(target => target.DataDirectory));
     }
 
     /// <summary>

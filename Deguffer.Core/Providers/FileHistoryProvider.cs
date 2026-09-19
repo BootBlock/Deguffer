@@ -141,26 +141,26 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     /// <para>The settings folder is declared with the target, recognising nothing, because the plan
     /// names it as a path that must survive and §7.1 has Explore refuse every such path.</para>
     ///
-    /// <para><b>A target Windows would not describe is declared as though it were the one in
-    /// use</b>, because the plan names it and nothing established that it is not. The settings
-    /// folder is declared whenever either of them was refused. A declaration only ever narrows what
-    /// Explore allows.</para>
+    /// <para><b>Every target the configuration names that holds saved versions, or that Windows would
+    /// not describe, is declared</b>, whichever one is in use. A refused target may be the one in use,
+    /// and the one after it may be a stale copy holding the only record of a file, so Explore refuses
+    /// each. The settings folder is declared with them, and on its own where it was refused. A
+    /// declaration only ever narrows what Explore allows.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots
     {
         get
         {
             var located = _discovery.Locate();
-            var target = located.Target ?? located.Candidate;
 
-            if (target is null && located.Outcome is not FileHistoryLookup.Unreachable)
+            if (located.Seen.Count == 0 && located.Outcome is not FileHistoryLookup.Unreachable)
             {
                 return [];
             }
 
-            var roots = new List<ToolRoot>(2);
+            var roots = new List<ToolRoot>(located.Seen.Count + 1);
 
-            if (target is not null)
+            foreach (var target in located.Seen)
             {
                 roots.Add(new ToolRoot(
                     // Display form, which is ToolRoot's contract. On a drive with no letter the
