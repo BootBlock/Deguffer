@@ -120,13 +120,16 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
         }
 
         var locals = await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false);
-        var present = locals.Where(LongPath.DirectoryExists).ToList();
+        var found = ReachedDirectories.Of(locals);
 
-        if (present.Count == 0)
+        if (NothingToPlanFor(
+                found,
+                "The .NET SDK is installed but none of its NuGet cache locations exist yet.") is { } nothing)
         {
-            return EmptyPlan("The .NET SDK is installed but none of its NuGet cache locations exist yet.");
+            return nothing;
         }
 
+        var present = found.Present;
         var measured = await MeasureAllAsync(present, ct).ConfigureAwait(false);
 
         var notes = new List<PlanNote>
@@ -135,6 +138,10 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
                 "Cleared by NuGet itself, which reaches locations outside .nuget that a folder delete would miss: " +
                 string.Join(", ", present.Select(LongPath.Display))),
         };
+
+        // NuGet's command clears these too, so they are named rather than dropped: the figure above
+        // leaves them out, by an amount nobody could measure.
+        notes.AddRange(found.UnreachedNotes);
 
         if (measured.Note is { } scanNote)
         {
@@ -163,6 +170,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
             ProtectedPaths = BuildProtectedPaths(),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = found.CouldNotBeReached,
         };
     }
 

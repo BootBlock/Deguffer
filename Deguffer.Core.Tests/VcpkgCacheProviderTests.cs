@@ -59,6 +59,20 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         return root;
     }
 
+    /// <summary>
+    /// A clone to deny the attribute read of, built without the marker. The one refusal a test may
+    /// build is an access rule on a directory, and it leaves a file inside readable: NTFS answers for
+    /// the file out of the folder's own index. A link Windows will not follow refuses the marker as
+    /// well, and a refused marker probe reads as no marker, which is this.
+    /// </summary>
+    private static string CreateRefusableClone(string root)
+    {
+        Populate(Path.Combine(root, "buildtrees"));
+        Populate(Path.Combine(root, "installed"));
+
+        return root;
+    }
+
     [Fact]
     public async Task ReportsNotPresentWhenVcpkgHasCachedNothing()
     {
@@ -354,6 +368,80 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             && n.Message.Contains(VcpkgDiscovery.RootMarker, StringComparison.Ordinal));
         Assert.DoesNotContain(plan.Notes, n =>
             n.Message.Contains("cached nothing", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A clone Windows will not describe is not a clone that is missing, and not one without the
+    /// marker either. The two-state probe read it as nothing at all: the row was not drawn, and had
+    /// it been, the plan would have told somebody who set <c>VCPKG_ROOT</c> to set it.
+    /// </summary>
+    [Fact]
+    public async Task ACloneWindowsWillNotDescribeIsSaidToBeUnreachedRatherThanMissing()
+    {
+        var root = CreateRefusableClone(Path.Combine(_temp.Path, "dev", "vcpkg"));
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(root);
+
+        var provider = CreateProvider();
+        Assert.Equal(root, provider.Locate().UnreachedRoot);
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(root, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("cached nothing", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(VcpkgDiscovery.RootVariable, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(VcpkgDiscovery.RootMarker, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A cache variable naming a clone Windows will not describe is refused as vcpkg's own directory,
+    /// as it is for a clone without the marker: a refusal is no more evidence that it is not a clone.
+    /// </summary>
+    [Fact]
+    public async Task RefusesACacheVariableThatNamesACloneWindowsWillNotDescribe()
+    {
+        var root = CreateRefusableClone(Path.Combine(_temp.Path, "dev", "vcpkg"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, root);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(root);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("that is vcpkg's own directory", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The search for the binary cache stops at a local one Windows will not describe, because
+    /// vcpkg's may have stopped there too. Passing it for the roaming one sized a cache vcpkg may not
+    /// be using, and said nothing about the one it may be.
+    /// </summary>
+    [Fact]
+    public async Task TheBinaryCacheSearchStopsAtALocalCacheWindowsWillNotDescribe()
+    {
+        Populate(DefaultBinaryCache);
+        var roaming = Populate(Path.Combine(_environment.RoamingAppData, "vcpkg", "archives"));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(DefaultBinaryCache);
+
+        var provider = CreateProvider();
+        Assert.Equal(DefaultBinaryCache, provider.Locate().BinaryCache);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(roaming, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains(DefaultBinaryCache, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -670,6 +758,31 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Assert.False(policy.MayRemove(holder).IsAllowed);
         Assert.True(policy.MayRemove(downloads).IsAllowed);
         Assert.True(policy.MayRemove(Populate(Path.Combine(holder, "unrelated"))).IsAllowed);
+    }
+
+    /// <summary>
+    /// §7.1 over a clone Windows will not describe. Nothing established what is in it, so Explore
+    /// refuses all of it, the scratch directories included, rather than being told nothing.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAllOfACloneWindowsWillNotDescribe()
+    {
+        var root = CreateRefusableClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(root);
+
+        var roots = await CreateProvider().DiscoverToolRootsAsync();
+
+        var declared = Assert.Single(roots, r => r.Path.Equals(root, StringComparison.OrdinalIgnoreCase));
+        Assert.All(
+            new[] { "installed", "buildtrees", "downloads", "packages" },
+            child => Assert.False(declared.Recognises(child), child));
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [CreateProvider()]);
+
+        Assert.False(policy.MayRemove(Path.Combine(root, "buildtrees")).IsAllowed);
     }
 
     /// <summary>

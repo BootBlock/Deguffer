@@ -23,12 +23,44 @@ public enum FileHistoryLookup
     /// </summary>
     TargetNotFound,
 
+    /// <summary>
+    /// Windows would not describe the configuration folder, or a target it names before any that
+    /// holds the saved versions, so nothing established which drive is in use.
+    ///
+    /// <para><b>Not <see cref="TargetNotFound"/>, whose sentence suggests an unplugged drive.</b>
+    /// Nothing here says a drive is missing, and the target may be the one Windows would not
+    /// describe. It is not <see cref="Found"/> either: a later candidate may be a stale copy on a
+    /// drive File History no longer uses, and sizing it would preview one drive and trim
+    /// another.</para>
+    /// </summary>
+    Unreachable,
+
     /// <summary>The target is named, connected, and holds this machine's saved versions.</summary>
     Found,
 }
 
 /// <summary>The outcome of one lookup, and the target where there is one.</summary>
-public sealed record FileHistoryLocation(FileHistoryLookup Outcome, FileHistoryTarget? Target = null);
+/// <param name="Outcome">What the lookup established.</param>
+/// <param name="Target">The target, where <paramref name="Outcome"/> is <see cref="FileHistoryLookup.Found"/>.</param>
+/// <param name="Unreached">
+/// Where <paramref name="Outcome"/> is <see cref="FileHistoryLookup.Unreachable"/>, the folder
+/// Windows would not describe.
+/// </param>
+public sealed record FileHistoryLocation(
+    FileHistoryLookup Outcome,
+    FileHistoryTarget? Target = null,
+    string? Unreached = null)
+{
+    /// <summary>
+    /// Every target the configuration names whose saved versions are there or that Windows would not
+    /// describe, in the order they were named, the one decided on included.
+    ///
+    /// <para>Separate from <see cref="Target"/> because the two answer different questions. Only one
+    /// target may be trimmed, and a refusal before it means none is. Every one of these may hold
+    /// saved versions, though, stale or not, so each is declared to Explore as a backup.</para>
+    /// </summary>
+    public IReadOnlyList<FileHistoryTarget> Seen { get; init; } = [];
+}
 
 /// <summary>
 /// Where Windows is currently sending this account's File History, read from the configuration
@@ -86,22 +118,41 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
 
     private FileHistoryLocation Find()
     {
-        if (!IsConfigured)
+        switch (LongPath.ProbeDirectory(ConfigurationDirectory))
         {
-            return new FileHistoryLocation(FileHistoryLookup.NotConfigured);
+            case PathPresence.Absent:
+                return new FileHistoryLocation(FileHistoryLookup.NotConfigured);
+
+            // The settings were never read, so saying the drive may be unplugged would be a guess
+            // about a folder nobody reached. Measured: a folder Windows will not describe is not
+            // listed either.
+            case PathPresence.Refused:
+                return new FileHistoryLocation(FileHistoryLookup.Unreachable, Unreached: ConfigurationDirectory);
         }
+
+        // The first candidate Windows answers for decides, as the first found always has. A refusal
+        // decides too, rather than being passed for a later candidate: see FileHistoryLookup.Unreachable.
+        // The rest are still probed, because each may hold saved versions Explore has to refuse.
+        FileHistoryLocation? decided = null;
+        var seen = new List<FileHistoryTarget>();
 
         foreach (var candidate in ConfiguredRoots())
         {
             var target = new FileHistoryTarget(candidate, environment.UserName, environment.MachineName);
+            var presence = LongPath.ProbeDirectory(target.DataDirectory);
 
-            if (LongPath.DirectoryExists(target.DataDirectory))
+            if (presence is PathPresence.Absent)
             {
-                return new FileHistoryLocation(FileHistoryLookup.Found, target);
+                continue;
             }
+
+            seen.Add(target);
+            decided ??= presence is PathPresence.Present
+                ? new FileHistoryLocation(FileHistoryLookup.Found, target)
+                : new FileHistoryLocation(FileHistoryLookup.Unreachable, Unreached: target.DataDirectory);
         }
 
-        return new FileHistoryLocation(FileHistoryLookup.TargetNotFound);
+        return (decided ?? new FileHistoryLocation(FileHistoryLookup.TargetNotFound)) with { Seen = seen };
     }
 
     /// <summary>

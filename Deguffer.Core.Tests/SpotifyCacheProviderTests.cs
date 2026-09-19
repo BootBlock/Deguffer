@@ -261,6 +261,36 @@ public sealed class SpotifyCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache the settings withhold is withheld and explained even where Windows will not describe
+    /// it. The two-state probe dropped it from the withheld list, so the plan said nothing about the
+    /// overlap and called the location an ordinary move. It is named as unreached as well, and it is
+    /// not asserted as a survivor: §5.6 cannot measure it, and would pass whatever happened.
+    /// </summary>
+    [Fact]
+    public async Task AWithheldCacheWindowsWillNotDescribeIsStillWithheldAndExplained()
+    {
+        var cache = Populate(Path.Combine(LocalFolder, "Data"));
+        WriteSettings(RoamingFolder, $"{SpotifySettings.LocationKey}={Quoted(Path.Combine(cache, "offline"))}");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(cache);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(cache, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("left the cache alone", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(cache, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not measure or remove", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// A moved storage that holds where a cache would be, with no cache there. Nothing is withheld,
     /// so no sentence about a cache applies, and the location still has to be named: the row must
     /// read neither "Not installed" nor "Already clear" about a folder nobody examined.

@@ -140,12 +140,29 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     ///
     /// <para>The settings folder is declared with the target, recognising nothing, because the plan
     /// names it as a path that must survive and §7.1 has Explore refuse every such path.</para>
+    ///
+    /// <para><b>Every target the configuration names that holds saved versions, or that Windows would
+    /// not describe, is declared</b>, whichever one is in use. A refused target may be the one in use,
+    /// and the one after it may be a stale copy holding the only record of a file, so Explore refuses
+    /// each. The settings folder is declared with them, and on its own where it was refused. A
+    /// declaration only ever narrows what Explore allows.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _discovery.Locate().Target is { } target
-            ?
-            [
-                new ToolRoot(
+    public override IReadOnlyList<ToolRoot> ToolRoots
+    {
+        get
+        {
+            var located = _discovery.Locate();
+
+            if (located.Seen.Count == 0 && located.Outcome is not FileHistoryLookup.Unreachable)
+            {
+                return [];
+            }
+
+            var roots = new List<ToolRoot>(located.Seen.Count + 1);
+
+            foreach (var target in located.Seen)
+            {
+                roots.Add(new ToolRoot(
                     // Display form, which is ToolRoot's contract. On a drive with no letter the
                     // target is named in the device namespace, and LongPath.Display leaves such a
                     // path alone rather than producing one that resolves nowhere (§6.3).
@@ -153,15 +170,18 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     "This is your File History backup, and it holds every saved version of your own "
                     + "files as well as anyone else's who backs up to this drive. Deguffer never "
                     + "removes anything here itself.",
-                    static _ => false),
+                    static _ => false));
+            }
 
-                new ToolRoot(
-                    _discovery.ConfigurationDirectory,
-                    "This is where Windows keeps your File History settings: what is backed up, and "
-                    + "to which drive. Deguffer never removes anything here.",
-                    static _ => false),
-            ]
-            : [];
+            roots.Add(new ToolRoot(
+                _discovery.ConfigurationDirectory,
+                "This is where Windows keeps your File History settings: what is backed up, and "
+                + "to which drive. Deguffer never removes anything here.",
+                static _ => false));
+
+            return roots;
+        }
+    }
 
     /// <summary>
     /// Presence is File History being set up for this account, never <c>FhManagew.exe</c> existing:
@@ -187,7 +207,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
 
         if (located.Target is not { } target)
         {
-            return DescribeAbsence(located.Outcome);
+            return DescribeAbsence(located);
         }
 
         var manager = Environment.FindExecutable(ManagerCommand);
@@ -272,17 +292,18 @@ public sealed class FileHistoryProvider : CleanupProviderBase
         MinimumAge.Within(TimeSpan.FromDays(days), DateTime.UtcNow);
 
     /// <summary>
-    /// Why there is nothing to offer. The two cases ask for different things — nothing at all, and
-    /// plugging a drive in — so they are not one sentence.
+    /// Why there is nothing to offer. The cases ask for different things — nothing at all, a folder
+    /// to go and look at, and plugging a drive in — so they are not one sentence.
     ///
-    /// <para>Only two, because <see cref="FileHistoryLookup"/> makes only two claims it can support.
-    /// "The drive is unplugged" and "the settings named nothing Deguffer could use" are one outcome
-    /// there, so the sentence names the likely reason without asserting it.</para>
+    /// <para>"The drive is unplugged" and "the settings named nothing Deguffer could use" are one
+    /// outcome in <see cref="FileHistoryLookup"/>, so that sentence names the likely reason without
+    /// asserting it.</para>
     /// </summary>
-    private CleanupPlan DescribeAbsence(FileHistoryLookup outcome) => outcome switch
+    private CleanupPlan DescribeAbsence(FileHistoryLocation located) => located.Outcome switch
     {
         FileHistoryLookup.NotConfigured =>
             EmptyPlan("File History is not set up on this machine, so there are no saved versions."),
+        FileHistoryLookup.Unreachable => UnreadableRootPlan(located.Unreached!),
         _ => UnexaminedPlan(
             "File History is set up, and Deguffer did not find this machine's saved versions on any "
             + "drive its settings name. The drive it saves to may not be connected. Nothing is "

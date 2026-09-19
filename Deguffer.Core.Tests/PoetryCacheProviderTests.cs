@@ -260,6 +260,32 @@ public sealed class PoetryCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache Poetry names and Windows will not describe is named in turn and gets no command,
+    /// rather than being dropped as though it were not there. The artifacts beside it are still
+    /// offered, and the environments are still asserted to survive (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task ANamedCacheWindowsWillNotDescribeIsSaidToBeUnreachedRatherThanDropped()
+    {
+        var (artifacts, repositories, environments) = CreateCache();
+        var pypi = Path.Combine(repositories, "PyPI");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(pypi);
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(pypi, StringComparison.Ordinal));
+
+        Assert.Contains(artifacts, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(plan.TargetedPaths, p => LongPath.Contains(environments, p));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// <c>poetry cache clear</c> asks "Delete N entries?" before it does anything, and Deguffer
     /// starts it with no console attached. Without the flag the step's behaviour would depend on
     /// what a detached standard input does to a prompt.

@@ -193,11 +193,22 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
         var (buildCache, moduleCache) = (located.BuildCache, located.ModuleCache);
 
+        var found = ReachedDirectories.Of([buildCache, moduleCache]);
+
+        if (NothingToPlanFor(
+                found,
+                $"Go is installed but has cached nothing yet ({buildCache} and {moduleCache} are both absent).")
+            is { } nothing)
+        {
+            return nothing;
+        }
+
         // One entry per location Go actually has on disk, so a machine that has built but never
-        // downloaded a module gets one step rather than a second that would reclaim nothing.
+        // downloaded a module gets one step rather than a second that would reclaim nothing. A cache
+        // Windows would not describe gets no step either: nothing could measure what it would free.
         var locations = new List<(string Path, string Arguments, string What)>();
 
-        if (LongPath.DirectoryExists(buildCache))
+        if (found.Present.Contains(buildCache))
         {
             locations.Add((
                 buildCache,
@@ -205,18 +216,12 @@ public sealed class GoCacheProvider : CleanupProviderBase
                 "Clear the Go build cache using Go's own command"));
         }
 
-        if (LongPath.DirectoryExists(moduleCache))
+        if (found.Present.Contains(moduleCache))
         {
             locations.Add((
                 moduleCache,
                 "clean -modcache",
                 "Clear the Go module cache using Go's own command"));
-        }
-
-        if (locations.Count == 0)
-        {
-            return EmptyPlan(
-                $"Go is installed but has cached nothing yet ({buildCache} and {moduleCache} are both absent).");
         }
 
         var measured = await MeasureAllAsync([.. locations.Select(l => l.Path)], ct).ConfigureAwait(false);
@@ -243,6 +248,8 @@ public sealed class GoCacheProvider : CleanupProviderBase
                   + $"than this machine's settings: {buildCache} and {moduleCache}."),
         };
 
+        notes.AddRange(found.UnreachedNotes);
+
         if (measured.Note is { } scanNote)
         {
             notes.Add(scanNote);
@@ -263,6 +270,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
             ProtectedPaths = BuildProtectedPaths(located.GoPaths),
             Notes = notes,
             Fallback = measured.Fallback,
+            HasUnreadableRoot = found.CouldNotBeReached,
         };
     }
 

@@ -120,16 +120,12 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: the tool's folder and the cache folder in it, both
     /// recognising nothing, and each project's folder, recognising a server's log folder by its name.
+    ///
+    /// <para>The first two are declared for a cache folder Windows would not describe as well, with no
+    /// project's folder under them. The plan names it, and recognising nothing refuses everything
+    /// inside it.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots ??= Look() is { } survey
-            ?
-            [
-                new ToolRoot(Path.GetDirectoryName(CacheFolder)!, ToolFolderReason, static _ => false),
-                new ToolRoot(CacheFolder, CacheFolderReason, static _ => false),
-                .. survey.ProjectFolders.Select(folder => new ToolRoot(folder, ProjectFolderReason, IsLogFolderName)),
-            ]
-            : [];
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
     public override void InvalidateCaches()
     {
@@ -197,6 +193,23 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
             HasUnreadableRoot = survey.Unreadable,
             WasNotExamined = survey.Targets.Count == 0 && survey.Declined.Count > 0,
         };
+    }
+
+    private IReadOnlyList<ToolRoot> Declare()
+    {
+        var survey = Look();
+
+        if (survey is null && LongPath.ProbeDirectory(CacheFolder) is not PathPresence.Refused)
+        {
+            return [];
+        }
+
+        return
+        [
+            new ToolRoot(Path.GetDirectoryName(CacheFolder)!, ToolFolderReason, static _ => false),
+            new ToolRoot(CacheFolder, CacheFolderReason, static _ => false),
+            .. (survey?.ProjectFolders ?? []).Select(folder => new ToolRoot(folder, ProjectFolderReason, IsLogFolderName)),
+        ];
     }
 
     /// <summary>Whether a child of a project's folder is named like a server's log folder.</summary>

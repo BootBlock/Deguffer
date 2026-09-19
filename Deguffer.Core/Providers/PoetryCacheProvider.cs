@@ -493,11 +493,25 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         var named = await _discovery.ListCachesAsync(poetry, ct).ConfigureAwait(false);
 
-        var caches = named
+        var resolved = named
             .Select(name => (Name: name, Path: Resolve(repositories, name)))
-            .Where(cache => cache.Path is not null && LongPath.DirectoryExists(cache.Path))
+            .Where(cache => cache.Path is not null)
             .Select(cache => (cache.Name, Path: cache.Path!))
             .ToList();
+
+        var found = ReachedDirectories.Of(resolved.Select(cache => cache.Path));
+        var caches = resolved.Where(cache => found.Present.Contains(cache.Path)).ToList();
+
+        // A cache Poetry named and Windows would not describe is named in turn, and gets no step:
+        // nothing could measure what clearing it would free. Where that leaves no cache to clear, the
+        // route is declined as well as unreachable, for the reason the refused repository directory
+        // above is both.
+        notes.AddRange(found.UnreachedNotes);
+
+        if (caches.Count == 0 && found.CouldNotBeReached)
+        {
+            return ([], NothingMeasured, true, true);
+        }
 
         if (caches.Count == 0)
         {
@@ -533,7 +547,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             }),
         ];
 
-        return (steps, measured, false, false);
+        return (steps, measured, false, found.CouldNotBeReached);
     }
 
     /// <summary>

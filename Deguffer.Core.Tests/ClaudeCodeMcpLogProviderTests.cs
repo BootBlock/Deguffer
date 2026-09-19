@@ -155,6 +155,31 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A cache folder Windows will not describe is declared all the same. The plan names it as
+    /// unreached, and the declaration dropped it, so Explore offered a server's log and the folder
+    /// holding it about a folder the Storage page said nothing was ruled out in.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAllOfACacheFolderWindowsWillNotDescribe()
+    {
+        var log = ServerLog("filesystem");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(Cache);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        foreach (var refused in new[] { Path.GetDirectoryName(Cache)!, Cache, Project(), log })
+        {
+            Assert.False(policy.MayRemove(refused).IsAllowed, $"Explore would remove {refused}");
+        }
+    }
+
     [Fact]
     public async Task ALinkedLogFolderIsNamedAndNeverFollowed()
     {

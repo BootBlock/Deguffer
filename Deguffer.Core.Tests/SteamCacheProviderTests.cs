@@ -249,6 +249,55 @@ public sealed class SteamCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A recorded install Windows will not describe is named as one Deguffer could not reach. The
+    /// two-state probe read it as no record at all, and with no Steam folder in the profile the row
+    /// was not drawn, about a directory Steam's own record names and the game library sits in.
+    /// Explore refuses all of it, because nothing established what is in there.
+    /// </summary>
+    [Fact]
+    public async Task ARecordedInstallWindowsWillNotDescribeIsSaidToBeUnreachedAndRefusedWhole()
+    {
+        var install = RegisterInstall();
+        Populate(Path.Combine(install, "steamapps", "common", "SomeGame"));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(install);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(install, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("could not work out", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("is not there", StringComparison.Ordinal));
+
+        var declared = Assert.Single(
+            provider.ToolRoots, r => r.Path.Equals(install, StringComparison.OrdinalIgnoreCase));
+        Assert.False(declared.Recognises("steamapps"));
+        Assert.False(declared.Recognises("appcache"));
+    }
+
+    /// <summary>
+    /// A Steam folder in the profile that Windows will not describe is no evidence that Steam was
+    /// never installed, so the sentence about the install it could not find is still said.
+    /// </summary>
+    [Fact]
+    public async Task AProfileFolderWindowsWillNotDescribeStillOwesTheSentenceAboutTheInstall()
+    {
+        Populate(Path.Combine(LocalRoot, "htmlcache"));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(LocalRoot);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("could not work out where Steam is installed", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A cache moved onto another drive with a link. Deguffer removes nothing through it and says
     /// so, rather than deleting the far side of a redirection nobody classified.
     /// </summary>

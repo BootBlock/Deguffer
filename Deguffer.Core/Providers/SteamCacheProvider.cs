@@ -151,19 +151,25 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     {
         var scan = DeclaredLocations.Examine(Roots, ct);
         var unreached = InstallUnreached();
+        var refusedInstall = _discovery.Install.UnreachedRoot;
 
         if (scan.FoundNothing)
         {
-            return unreached is { } why
-                ? UnexaminedPlan(why)
-                : EmptyPlan("The Steam client is keeping no web cache on this machine.");
+            if (unreached is null)
+            {
+                return EmptyPlan("The Steam client is keeping no web cache on this machine.");
+            }
+
+            return refusedInstall is null
+                ? UnexaminedPlan(unreached.Message)
+                : UnreadableRootPlan(refusedInstall) with { Notes = [unreached] };
         }
 
         var notes = new List<PlanNote>(scan.Notes);
 
         if (unreached is { } sentence)
         {
-            notes.Add(new PlanNote(PlanNoteSeverity.Information, sentence));
+            notes.Add(sentence);
         }
 
         var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
@@ -191,8 +197,11 @@ public sealed class SteamCacheProvider : CleanupProviderBase
             // An install directory nobody could reach counts here for the same reason a declined
             // link does: nothing was removed and something was never looked at, so the shell must
             // not call the row clear.
-            WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || unreached is not null),
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            // A refused install directory is Windows' answer rather than Deguffer's decision, so it
+            // is the other flag.
+            WasNotExamined = scan.Targets.Count == 0
+                && (scan.Declined.Count > 0 || (unreached is not null && refusedInstall is null)),
+            HasUnreadableRoot = scan.CouldNotBeReached || refusedInstall is not null,
         };
     }
 
@@ -201,22 +210,44 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// when it was found — or when there is no Steam in this profile to be missing one.
     ///
     /// <para>Gated on the profile folder because the alternative is to tell somebody who has never
-    /// installed Steam that Deguffer could not find it.</para>
+    /// installed Steam that Deguffer could not find it. A profile folder Windows would not describe
+    /// passes the gate: it is no evidence that Steam was never installed, and the sentence it lets
+    /// through is true either way.</para>
+    ///
+    /// <para>A warning where Windows would not describe the recorded directory, because that is not
+    /// Deguffer's own decision, and information otherwise.</para>
     /// </summary>
-    private string? InstallUnreached()
+    private PlanNote? InstallUnreached()
     {
-        if (_discovery.Install.Root is not null || !LongPath.DirectoryExists(_discovery.LocalRoot))
+        if (_discovery.Install.Root is not null)
         {
             return null;
         }
 
-        return _discovery.Install.UnmarkedRoot is { } unmarked
-            ? $"Windows records Steam as installed in '{unmarked}', but the Steam program is not "
-                + "there. Deguffer did not look inside it, so the cache Steam keeps beside the "
-                + "program was neither cleared nor ruled out."
-            : "Deguffer could not work out where Steam is installed, so it did not look at the "
-                + "cache Steam keeps beside the program. That cache was neither cleared nor ruled "
-                + "out.";
+        if (_discovery.Install.UnreachedRoot is { } refused)
+        {
+            return new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Windows records Steam as installed in '{refused}', and would not say what is there, so "
+                + "Deguffer could not check for the Steam program or look inside it. A link Windows will "
+                + "not follow, a folder this account may not read and a drive that is not connected all do "
+                + "that. The cache Steam keeps beside the program was neither cleared nor ruled out.");
+        }
+
+        if (!LongPath.DirectoryMayExist(_discovery.LocalRoot))
+        {
+            return null;
+        }
+
+        return new PlanNote(
+            PlanNoteSeverity.Information,
+            _discovery.Install.UnmarkedRoot is { } unmarked
+                ? $"Windows records Steam as installed in '{unmarked}', but the Steam program is not "
+                    + "there. Deguffer did not look inside it, so the cache Steam keeps beside the "
+                    + "program was neither cleared nor ruled out."
+                : "Deguffer could not work out where Steam is installed, so it did not look at the "
+                    + "cache Steam keeps beside the program. That cache was neither cleared nor ruled "
+                    + "out.");
     }
 
     /// <summary>
@@ -343,6 +374,18 @@ public sealed class SteamCacheProvider : CleanupProviderBase
                         "Artwork Steam downloaded for your library. Deguffer does not offer it, "
                         + "because what fetching it again costs was never established."),
                 ])));
+        }
+
+        // Recognising nothing, because nothing established what is in there, and Steam's own record
+        // says your games are. A declaration only ever narrows what Explore allows.
+        if (_discovery.Install.UnreachedRoot is { } unreached)
+        {
+            roots.Add(new ToolRoot(
+                unreached,
+                "Windows records Steam as installed here, and would not say what is in this folder. Your "
+                + "games, your cloud saves and Steam's own configuration may be in here, so Deguffer "
+                + "leaves all of it alone.",
+                static _ => false));
         }
 
         return roots;

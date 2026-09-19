@@ -14,7 +14,13 @@ namespace Deguffer.Core.Providers;
 /// reason <see cref="VcpkgLocations.UnmarkedRoot"/> is: "nothing said where it is" and "something
 /// did and Deguffer declined it" are different facts, and the user is owed the second one.
 /// </param>
-public sealed record SteamInstall(string? Root, string? UnmarkedRoot = null);
+/// <param name="UnreachedRoot">
+/// The directory Steam's own record points at, where Windows would not describe it. Nothing
+/// established whether it is there or holds the program, so it is neither an install nor an
+/// <paramref name="UnmarkedRoot"/>, and reading it as no record at all would tell the user Deguffer
+/// could not work out where Steam is when Steam's record said so plainly.
+/// </param>
+public sealed record SteamInstall(string? Root, string? UnmarkedRoot = null, string? UnreachedRoot = null);
 
 /// <summary>
 /// Finds Steam. Separate from the provider for the reason <see cref="VcpkgDiscovery"/> and
@@ -77,12 +83,22 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
         // Steam writes this as "c:/program files (x86)/steam", so it needs normalising before it can
         // be compared with or joined to anything. Configured also refuses a relative value, which
         // would otherwise resolve against Deguffer's own working directory.
-        if (LongPath.Configured(recorded) is not { } root || !LongPath.DirectoryExists(root))
+        if (LongPath.Configured(recorded) is not { } root)
+        {
+            return new SteamInstall(null);
+        }
+
+        switch (LongPath.ProbeDirectory(root))
         {
             // A recorded directory that is no longer there is the same answer as no record at all:
             // there is nothing at that path to examine, so there is nothing to tell the user about
             // it beyond the sentence a null already produces.
-            return new SteamInstall(null);
+            case PathPresence.Absent:
+                return new SteamInstall(null);
+
+            // Asked before the marker, whose two-state answer would read a refusal as "not Steam".
+            case PathPresence.Refused:
+                return new SteamInstall(null, UnreachedRoot: root);
         }
 
         return LongPath.FileExists(Path.Combine(root, RootMarker))

@@ -115,6 +115,59 @@ public sealed class NuGetCacheProviderTests : IDisposable
         Assert.All(before_, p => Assert.DoesNotContain(p, replannedStep.MeasuredPaths));
     }
 
+    /// <summary>
+    /// A location NuGet names and Windows will not describe is reported as one Deguffer could not
+    /// reach. "None of its NuGet cache locations exist yet" was said about a packages folder holding
+    /// a package, because the two-state probe read the refusal as absence.
+    /// </summary>
+    [Fact]
+    public async Task ALocationWindowsWillNotDescribeIsSaidToBeUnreachedRatherThanMissing()
+    {
+        var packages = _temp.CreateDirectory("profile", ".nuget", "packages");
+        File.WriteAllBytes(Path.Combine(packages, "payload.bin"), new byte[1024]);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(packages);
+
+        var plan = await PlanReporting($"global-packages: {packages}");
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Empty(plan.Steps);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(packages, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("exist yet", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// NuGet's command clears every location it named, the refused one included, so the one the
+    /// figure leaves out is named beside it rather than dropped.
+    /// </summary>
+    [Fact]
+    public async Task ALocationWindowsWillNotDescribeIsNamedBesideTheOnesMeasured()
+    {
+        var packages = _temp.CreateDirectory("profile", ".nuget", "packages");
+        var http = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "v3-cache");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(http);
+
+        var plan = await PlanReporting($"global-packages: {packages}\nhttp-cache: {http}");
+
+        var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+        Assert.Equal([packages], step.MeasuredPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(http, StringComparison.Ordinal));
+    }
+
+    private Task<CleanupPlan> PlanReporting(string listing)
+    {
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding("locals all --list", listing);
+
+        return new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+    }
+
     private async Task<(CleanupPlan Plan, string[] Locations)> PlanWithLocals()
     {
         // Deliberately mirrors the audit: two locations under .nuget, two well outside it.

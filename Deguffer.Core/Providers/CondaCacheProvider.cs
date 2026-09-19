@@ -172,11 +172,13 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             return UnexaminedPlan("conda did not describe where its package caches are, so nothing is offered rather than guessed.");
         }
 
-        var packageCaches = installation.PackageCacheDirs.Where(LongPath.DirectoryExists).ToList();
-        if (packageCaches.Count == 0)
+        var caches = ReachedDirectories.Of(installation.PackageCacheDirs);
+        if (NothingToPlanFor(caches, "Conda is installed but has cached nothing yet.") is { } nothing)
         {
-            return EmptyPlan("Conda is installed but has cached nothing yet.");
+            return nothing;
         }
+
+        var packageCaches = caches.Present;
 
         var outcome = await Runner
             .RunAsync(conda, CleanCategories + " --dry-run --json", ct)
@@ -199,21 +201,26 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         // and that is exactly why the step carries both — see RunCommandStep.MeasuredBefore.
         var probed = await MeasureAllAsync(packageCaches, ct).ConfigureAwait(false);
 
-        var indexCaches = packageCaches
-            .Select(directory => Path.Combine(directory, "cache"))
-            .Where(LongPath.DirectoryExists)
-            .ToList();
-        var indexMeasured = await MeasureAllAsync(indexCaches, ct).ConfigureAwait(false);
+        var indexCaches = ReachedDirectories.Of(packageCaches.Select(directory => Path.Combine(directory, "cache")));
+        var indexMeasured = await MeasureAllAsync(indexCaches.Present, ct).ConfigureAwait(false);
 
         var estimated = ScanSize.Approximate(preview.TarballBytes + preview.PackageBytes)
             + indexMeasured.Total;
 
+        // Named even beside conda's own report, because conda runs as this account too: a cache
+        // Windows would not describe to Deguffer is one conda's dry run may not have read either.
+        var unreached = caches.UnreachedNotes.Concat(indexCaches.UnreachedNotes).ToList();
+
         if (estimated.Reclaimable == 0)
         {
-            return EmptyPlan("conda reports nothing unused in its package caches.");
+            var empty = EmptyPlan("conda reports nothing unused in its package caches.");
+
+            return unreached.Count == 0
+                ? empty
+                : empty with { Notes = [.. empty.Notes, .. unreached], HasUnreadableRoot = true };
         }
 
-        var notes = new List<PlanNote>
+        var notes = new List<PlanNote>(unreached)
         {
             new(PlanNoteSeverity.Information,
                 $"The figure is conda's own dry run over {Describe(packageCaches)}, plus the "
@@ -255,6 +262,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             ProtectedPaths = BuildProtectedPaths(installation, packageCaches),
             Notes = notes,
             Fallback = probed.Fallback,
+            HasUnreadableRoot = unreached.Count > 0,
         };
     }
 
