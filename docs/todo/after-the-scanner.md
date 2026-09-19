@@ -459,7 +459,12 @@ the like. Those are `CondaCacheProvider`, `NuGetCacheProvider`, `GoCacheProvider
 Several of them have no flag to carry the answer to, so each is a small design decision rather than
 a mechanical edit. The memoised `Examine()` and `DiscoverToolRootsAsync` siblings of six converted
 providers are in the same position: the plan names a refused root and the §5.2 declaration still
-drops it.
+drops it. **Fixed by #150:** a cache a tool names and Windows will not describe is named as unreached
+rather than absent, a refused vcpkg clone or Steam install has an answer of its own, File History
+reports a refused target or settings folder as unreachable rather than passing it for the next, and
+each declaration keeps a refused root, recognising nothing. `AzureFunctionsToolTags` and
+`SpotifyInstall.IsInstalled` keep two states on purpose, and say why: a refusal there changes no
+sentence the user reads.
 
 Two further defects this work surfaced and did not fix, both needing a decision of their own:
 
