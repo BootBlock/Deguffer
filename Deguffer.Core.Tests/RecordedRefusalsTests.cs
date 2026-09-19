@@ -161,6 +161,32 @@ public sealed class RecordedRefusalsTests : IDisposable
         Assert.Equal(1, Assert.Single(applied.Steps).Estimated.Entries);
     }
 
+    /// <summary>
+    /// A recorded place Windows would not describe is said, not passed over. Silence reads as
+    /// "nothing is refused any more", and the row then promises back everything it measured. Nothing
+    /// was measured there, so nothing comes out of the size, and the note says the size may be high.
+    /// </summary>
+    [Fact]
+    public void SaysWhichRecordedPlaceCouldNotBeAskedAboutAndLeavesTheSizeAsMeasured()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var profile = _temp.CreateDirectory("temp", "profile");
+        _temp.CreateFile(4096, "temp", "profile", "Cookies");
+
+        Record.Replace(step, [profile]);
+
+        var plan = Plan(new ClearDirectoryStep(step, "Scratch files") { Estimated = ScanSize.FromLengths(20_000) });
+        var applied = RecordedRefusals.Apply(
+            plan, Record, new UndescribableDirectoryFileSystem(WindowsFileSystem.Default, profile), default);
+
+        var note = Assert.Single(applied.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+
+        Assert.Contains("Windows would not say what is at 'profile'", note.Message, StringComparison.Ordinal);
+        Assert.Contains("could not check", note.Message, StringComparison.Ordinal);
+        Assert.Equal(20_000, applied.EstimatedBytes);
+        Assert.False(applied.HasRefusedContent, "a place nobody could ask about was reported as still refused");
+    }
+
     private static CleanupPlan Plan(CleanupStep step) => new()
     {
         ProviderId = "test",

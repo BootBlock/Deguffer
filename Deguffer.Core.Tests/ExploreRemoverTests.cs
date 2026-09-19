@@ -365,6 +365,34 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// §9 for a folder Windows will not describe. The link question fails closed, and asked first it
+    /// read the refusal as "a link" and skipped the look for a store, so the folder went to the shell
+    /// unexamined with a store inside it. A folder that cannot be shown to hold no store is left, as
+    /// the permanent route leaves a root it cannot describe, and the sentence says why.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFolderWindowsWillNotDescribeOutOfTheRecycleBinAndSaysWhy()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "old mail");
+        var store = _temp.CreateFile(64, "profile", "Downloads", "old mail", "archive.pst");
+        var bin = new FakeRecycleBin();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin,
+            new UndescribableDirectoryFileSystem(WindowsFileSystem.Default, folder));
+
+        Assert.Empty(bin.Paths);
+        Assert.True(LongPath.FileExists(store), "a folder nobody could look inside was moved to the Recycle Bin");
+
+        var refused = Assert.Single(report.Refused);
+        Assert.Contains("could not check it for an Outlook data file", refused.Message, StringComparison.Ordinal);
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// The policy is asked again inside the remover rather than trusted from the caller, so a shell
     /// that never asked cannot get past it. Driven here by handing the remover a refused path
     /// directly, which is what such a shell would do.

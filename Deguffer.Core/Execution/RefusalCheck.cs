@@ -10,10 +10,17 @@ namespace Deguffer.Core.Execution;
 /// file, and every folder above one up to the step's own path, each counted once. A folder still
 /// holding something cannot be removed, so a refused file keeps all of them.
 /// </param>
+/// <param name="Undescribed">
+/// The places Windows would not describe, in display form, so whether they still refuse is unknown.
+/// Nothing is taken out of the estimate for them, because nothing was measured, and they are not
+/// among <paramref name="Places"/>, because "still refused" is a claim nobody established. See
+/// <see cref="PathPresence.Refused"/>.
+/// </param>
 internal sealed record RefusalFinding(
     Refusals Refused,
     IReadOnlyList<(string Place, Refusals Refused)> Places,
-    long Standing);
+    long Standing,
+    IReadOnlyList<string> Undescribed);
 
 /// <summary>
 /// What Windows would still refuse, of the places a previous clean of one step found it refusing.
@@ -26,7 +33,7 @@ internal sealed record RefusalFinding(
 /// </summary>
 internal static class RefusalCheck
 {
-    private static readonly RefusalFinding Nothing = new(Refusals.None, [], Standing: 0);
+    private static readonly RefusalFinding Nothing = new(Refusals.None, [], Standing: 0, Undescribed: []);
 
     /// <param name="recorded">
     /// The places <see cref="RefusalRecord"/> holds for <paramref name="step"/>, in display form.
@@ -38,10 +45,25 @@ internal static class RefusalCheck
         IFileSystem fs,
         CancellationToken ct)
     {
+        if (LongPath.Configured(step.Path) is not { } root)
+        {
+            return Nothing;
+        }
+
+        var extendedRoot = LongPath.Extended(root);
+
+        // Settled before the link question, which fails closed: a root Windows would not describe
+        // answers "a link" there, and was read as "nothing here will be refused". Nothing beneath it
+        // can be asked about either, so the finding says that rather than a clean answer.
+        if (fs.ProbeDirectory(extendedRoot) is PathPresence.Refused)
+        {
+            return Nothing with { Undescribed = [root] };
+        }
+
         // A root that is a link is removed as a link, or left alone where it must stay, and never
         // entered — so nothing beneath it is anything the removal would attempt. Asking about the far
         // side would open files nobody classified and take them out of a figure about somewhere else.
-        if (LongPath.Configured(step.Path) is not { } root || fs.IsReparsePoint(LongPath.Extended(root)))
+        if (fs.IsReparsePoint(extendedRoot))
         {
             return Nothing;
         }
@@ -56,8 +78,8 @@ internal static class RefusalCheck
 
         var refused = Refusals.None;
         var places = new List<(string, Refusals)>();
+        var undescribed = new List<string>();
 
-        var extendedRoot = LongPath.Extended(root);
         var standing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // A folder cleared in place stays whatever happens, and its own entry was never in the count.
@@ -77,6 +99,12 @@ internal static class RefusalCheck
 
             var found = Check(extended, keep, bounds, fs, options, ct);
 
+            if (found.Undescribed)
+            {
+                undescribed.Add(place);
+                continue;
+            }
+
             if (!found.Refused.IsEmpty)
             {
                 refused += found.Refused;
@@ -89,7 +117,7 @@ internal static class RefusalCheck
             }
         }
 
-        return new RefusalFinding(refused, places, standing.Count);
+        return new RefusalFinding(refused, places, standing.Count, undescribed);
 
         // The refused file, and every folder above it the removal would otherwise have taken. A folder
         // already standing has everything above it standing too, so the climb stops there.
@@ -127,8 +155,7 @@ internal static class RefusalCheck
         recorded.Where(place => place.Equals(root, StringComparison.OrdinalIgnoreCase)
             || string.Equals(Path.GetDirectoryName(place), root, StringComparison.OrdinalIgnoreCase));
 
-    /// <returns>What is refused at one place, and the refused files themselves in extended form.</returns>
-    private static (Refusals Refused, IReadOnlyCollection<string> Files) Check(
+    private static PlaceCheck Check(
         string extended,
         MinimumAge keep,
         RemovalBounds bounds,
@@ -136,13 +163,22 @@ internal static class RefusalCheck
         ParallelOptions options,
         CancellationToken ct)
     {
+        // Kind-agnostic, although it is the directory probe: a refusal is decided before the kind is
+        // read, so a place that is a file refuses here too. Asked first for the reason the root is.
+        var presence = fs.ProbeDirectory(extended);
+
+        if (presence is PathPresence.Refused)
+        {
+            return PlaceCheck.CouldNotAsk;
+        }
+
         // A link is removed as a link and holds nothing the estimate counted.
         if (fs.IsReparsePoint(extended))
         {
-            return (Refusals.None, []);
+            return PlaceCheck.Clear;
         }
 
-        if (fs.DirectoryExists(extended))
+        if (presence is PathPresence.Present)
         {
             var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
             var counter = new RefusalCounter();
@@ -157,7 +193,7 @@ internal static class RefusalCheck
                 }
             });
 
-            return (counter.Total, files);
+            return new PlaceCheck(counter.Total, files);
         }
 
         // A file, or nothing at all. The guard is asked before the probe, because a file it protects
@@ -165,11 +201,20 @@ internal static class RefusalCheck
         if (fs.TryGetFileLength(extended) is not { } length
             || (fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest)))
         {
-            return (Refusals.None, []);
+            return PlaceCheck.Clear;
         }
 
         return fs.ProbeRemoval(extended) is { } refusal
-            ? (Refusals.One(refusal, length), [extended])
-            : (Refusals.None, []);
+            ? new PlaceCheck(Refusals.One(refusal, length), [extended])
+            : PlaceCheck.Clear;
+    }
+
+    /// <summary>What is refused at one place, and the refused files themselves in extended form.</summary>
+    /// <param name="Undescribed">Windows would not describe the place, so nothing was asked.</param>
+    private readonly record struct PlaceCheck(Refusals Refused, IReadOnlyCollection<string> Files, bool Undescribed = false)
+    {
+        public static PlaceCheck Clear => new(Refusals.None, []);
+
+        public static PlaceCheck CouldNotAsk => new(Refusals.None, [], Undescribed: true);
     }
 }

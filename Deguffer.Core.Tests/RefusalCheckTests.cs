@@ -267,6 +267,58 @@ public sealed class RefusalCheckTests : IDisposable
             new ClearDirectoryStep(root, "Scratch"), [Path.Combine(root, "profile")], MinimumAge.Off, recorder, default);
 
         Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(finding.Undescribed);
         Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// A step root Windows would not describe is not a clean answer. The link question fails closed,
+    /// and asked first it read the refusal as "a link", which returned "nothing here will be
+    /// refused" — so the preview promised back the whole figure off a root nobody could look at. The
+    /// finding says the root could not be asked about, and opens nothing beneath it.
+    /// </summary>
+    [Fact]
+    public void SaysAStepRootWindowsWouldNotDescribeCouldNotBeAskedAbout()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var profile = _temp.CreateDirectory("temp", "profile");
+        var denied = _temp.CreateFile(4096, "temp", "profile", "Cookies");
+
+        var recorder = new RecordingFileSystem(
+            new UndescribableDirectoryFileSystem(Refusing((denied, RefusalReason.Denied)), step));
+
+        var finding = RefusalCheck.Of(
+            new ClearDirectoryStep(step, "Scratch"), [profile], MinimumAge.Off, recorder, default);
+
+        Assert.Equal(step, Assert.Single(finding.Undescribed), ignoreCase: true);
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(finding.Places);
+        Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// The same refusal one level down, where the link question sat ahead of the existence check with
+    /// nothing to settle the refusal first. The place is named as one that could not be asked about,
+    /// never as one still refused, and the places beside it are still counted.
+    /// </summary>
+    [Fact]
+    public void SaysARecordedPlaceWindowsWouldNotDescribeCouldNotBeAskedAboutAndCountsTheRest()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var profile = _temp.CreateDirectory("temp", "profile");
+        var hidden = _temp.CreateFile(4096, "temp", "profile", "Cookies");
+        var other = _temp.CreateDirectory("temp", "other");
+        var denied = _temp.CreateFile(1024, "temp", "other", "Cookies");
+
+        var recorder = new RecordingFileSystem(new UndescribableDirectoryFileSystem(
+            Refusing((hidden, RefusalReason.Denied), (denied, RefusalReason.Denied)), profile));
+
+        var finding = RefusalCheck.Of(
+            new ClearDirectoryStep(step, "Scratch"), [profile, other], MinimumAge.Off, recorder, default);
+
+        Assert.Equal(profile, Assert.Single(finding.Undescribed), ignoreCase: true);
+        Assert.Equal(new RefusalTally(1, 1024), finding.Refused.Denied);
+        Assert.Equal(other, Assert.Single(finding.Places).Place, ignoreCase: true);
+        Assert.DoesNotContain(recorder.Probed, p => LongPath.Display(p).Equals(hidden, StringComparison.OrdinalIgnoreCase));
     }
 }
