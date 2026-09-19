@@ -87,7 +87,7 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         // It is not merely absent from the plan — it is asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(properties, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(properties, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]

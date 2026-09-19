@@ -180,7 +180,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         foreach (var asserted in mustBeAsserted)
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

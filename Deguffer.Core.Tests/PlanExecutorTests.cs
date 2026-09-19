@@ -695,7 +695,7 @@ public sealed class PlanExecutorTests : IDisposable
             // is the over-reach under test.
             ProtectedPaths =
             [
-                new ProtectedPath(live, "A program is working in it.", ExistedBefore: true, HeldContentBefore: true),
+                new ProtectedPath(live, "A program is working in it.", PresenceBefore: PathPresence.Present, HeldContentBefore: true),
             ],
         };
 

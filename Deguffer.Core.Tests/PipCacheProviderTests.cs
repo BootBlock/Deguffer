@@ -128,8 +128,8 @@ public sealed class PipCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(pipRoot, plan.TargetedPaths);
         Assert.DoesNotContain(config, plan.TargetedPaths);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == pipRoot && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == config && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == pipRoot && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == config && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]

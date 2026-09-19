@@ -207,8 +207,8 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
 
         Assert.DoesNotContain(root, plan.TargetedPaths);
         Assert.DoesNotContain(links, plan.TargetedPaths);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == root && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == links && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == root && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == links && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

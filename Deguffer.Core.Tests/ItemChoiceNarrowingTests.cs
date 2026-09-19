@@ -1,6 +1,7 @@
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -59,7 +60,7 @@ public sealed class ItemChoiceNarrowingTests : IDisposable
             var protection = Assert.Single(
                 narrowed.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
 
-            Assert.True(protection.ExistedBefore);
+            Assert.Equal(PathPresence.Present, protection.PresenceBefore);
         }
 
         var result = await provider.ExecuteAsync(narrowed);

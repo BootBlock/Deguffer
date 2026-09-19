@@ -279,6 +279,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// §5.6 — capture what each protected path was before the run, so verification can tell
     /// "survived" from "was never there", and from "is still standing and has been emptied".
     ///
+    /// <para>A path Windows would not describe is recorded as <see cref="PathPresence.Refused"/>, never
+    /// as absent, so a provider protects a folder it could not reach exactly as it protects one it
+    /// could. See <see cref="ProtectedPath.PresenceBefore"/>.</para>
+    ///
     /// <para>The content question stops at the first content it finds, so it costs a listing or two
     /// per protected path rather than a walk of everything the path holds (G4). See
     /// <see cref="DirectoryContent"/>.</para>
@@ -288,7 +292,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         .. candidates.Select(c => new ProtectedPath(
             c.Path,
             c.Reason,
-            LongPath.FileExists(c.Path) || LongPath.DirectoryExists(c.Path),
+            LongPath.ProbeEntry(c.Path),
             DirectoryContent.IsPresent(c.Path))),
     ];
 
@@ -547,7 +551,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                     // Measured during planning, so it was there when the plan was made — the same
                     // claim, and the same reasoning, as CleanupPlan.NarrowedTo makes for a step the
                     // user declined.
-                    ExistedBefore: true,
+                    PresenceBefore: PathPresence.Present,
 
                     // The row's zero now excludes a real file, and this is the only place left on
                     // the plan to say so. See CleanupPlan.HasRecentContentHeldBack.

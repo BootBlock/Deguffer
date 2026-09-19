@@ -100,7 +100,7 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.DoesNotContain(sibling, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -121,7 +121,7 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         foreach (var path in new[] { tool, Cache, project })
         {
             Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

@@ -48,6 +48,14 @@ internal static class UnreadableRoot
         WhyItCouldNotBeReached(root));
 
     /// <summary>
+    /// Why §5.6 asserts that a location Windows would not describe survived. It is recorded as a
+    /// refusal rather than as absent, so the check afterwards either sees it or says it could not.
+    /// See <see cref="ProtectedPath.PresenceBefore"/>.
+    /// </summary>
+    public const string UnreachedReason =
+        "Windows would not say what is here, so nothing in it was examined and it is left alone.";
+
+    /// <summary>
     /// The sentence for a root Windows would not describe at all, so Deguffer cannot say whether it
     /// is there, let alone what is in it.
     ///

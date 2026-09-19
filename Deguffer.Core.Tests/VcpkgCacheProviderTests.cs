@@ -146,12 +146,12 @@ public sealed class VcpkgCacheProviderTests : IDisposable
                 IsAtOrUnder(path, targeted), $"{targeted} would have taken {name} with it."));
 
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         Assert.DoesNotContain(root, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -272,7 +272,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
 
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Path.Combine(roamingProfile, "registries"), StringComparison.OrdinalIgnoreCase)
-            && p.ExistedBefore);
+            && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

@@ -371,7 +371,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(catalogue, StringComparison.OrdinalIgnoreCase)
-            && p.ExistedBefore);
+            && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

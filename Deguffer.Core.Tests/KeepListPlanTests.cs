@@ -68,7 +68,7 @@ public sealed class KeepListPlanTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("on your keep list", StringComparison.Ordinal));
 
         var protection = Assert.Single(plan.ProtectedPaths, p => p.Path == kept);
-        Assert.True(protection.ExistedBefore);
+        Assert.Equal(PathPresence.Present, protection.PresenceBefore);
         Assert.False(protection.HeldContentBefore);
         Assert.Equal(Withholding.OnKeepList, protection.Withheld);
 
@@ -245,7 +245,7 @@ public sealed class KeepListPlanTests : IDisposable
                 ],
                 ProtectedPaths =
                 [
-                    new ProtectedPath(@"C:\Users\testuser\AppData\Local\example", "The root.", ExistedBefore: true),
+                    new ProtectedPath(@"C:\Users\testuser\AppData\Local\example", "The root.", PresenceBefore: PathPresence.Present),
                 ],
             };
 

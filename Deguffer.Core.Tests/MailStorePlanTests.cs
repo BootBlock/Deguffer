@@ -56,7 +56,7 @@ public sealed class MailStorePlanTests
         var protection = Assert.Single(applied.ProtectedPaths);
         Assert.Equal(Archive, protection.Path);
         Assert.Equal(Withholding.MailStore, protection.Withheld);
-        Assert.True(protection.ExistedBefore);
+        Assert.Equal(PathPresence.Present, protection.PresenceBefore);
         Assert.False(protection.HeldContentBefore);
 
         Assert.True(applied.HoldsMailStores);

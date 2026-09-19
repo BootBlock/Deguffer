@@ -64,7 +64,7 @@ public sealed class ClaudeCodeLivenessTests : IDisposable
     private static void AssertKept(CleanupPlan plan, string path)
     {
         Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public sealed class ClaudeCodeLivenessTests : IDisposable
         foreach (var path in recent)
         {
             Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase)
-                && p.ExistedBefore
+                && p.PresenceBefore is PathPresence.Present
                 && p.Withheld == Withholding.TooRecent);
         }
 

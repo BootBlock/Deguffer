@@ -2,11 +2,18 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
-/// <summary>How a finished run's §5.6 verification came out, worst first.</summary>
+/// <summary>How a finished run's §5.6 verification came out, from the clean result to the alarm.</summary>
 public enum RunVerdict
 {
     /// <summary>Every protected path was still there.</summary>
     AllSurvived,
+
+    /// <summary>
+    /// Nothing went missing, and Windows would not describe at least one protected path after the
+    /// run, so it could not be checked. Worth saying, and not an alarm — see
+    /// <see cref="VerificationOutcome.Unverified"/>.
+    /// </summary>
+    Unverified,
 
     /// <summary>
     /// A protected path went missing, and this run demonstrably did not take it. Worth saying, and
@@ -46,8 +53,9 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
 
     /// <summary>
     /// Whether this sentence has to hold the info bar rather than yield to the fresh preview's
-    /// totals. Both of the non-clean verdicts do: one is a fault to report, and the other is the
-    /// reason the run's figures describe a machine that moved underneath them.
+    /// totals. Every verdict but the clean one does: one is a fault to report, one is the reason the
+    /// run's figures describe a machine that moved underneath them, and one names paths nobody could
+    /// check, which the fresh preview's totals would not mention.
     /// </summary>
     public bool NeedsReporting => Verdict != RunVerdict.AllSurvived;
 
@@ -88,11 +96,44 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
             return new RunOutcome(
                 $"Cleaned. {went} — which no step in this run named. Scan again to see the "
                 + "machine as it is now."
+                + NotChecked(results)
                 + LeftBehind(results),
                 RunVerdict.RemovedFromOutside);
         }
 
+        if (results.Any(r => r.Verification is { Unverified.Count: > 0 }))
+        {
+            return new RunOutcome("Cleaned." + NotChecked(results) + LeftBehind(results), RunVerdict.Unverified);
+        }
+
         return new RunOutcome("All protected paths survived." + LeftBehind(results), RunVerdict.AllSurvived);
+    }
+
+    /// <summary>
+    /// The protected paths Windows would not describe after the run, or nothing where there were none.
+    ///
+    /// <para>The cause is named because the reader cannot guess it and it is not Deguffer's to
+    /// change: an access rule, or a directory link Windows declines to follow. Relocating a cache
+    /// onto another drive with a link is something developers do on purpose, so a sentence that read
+    /// as a fault would be wrong about the ordinary case.</para>
+    /// </summary>
+    private static string NotChecked(IReadOnlyList<CleanupResult> results)
+    {
+        var unverified = results.Where(r => r.Verification is { Unverified.Count: > 0 }).ToList();
+        var count = unverified.Sum(r => r.Verification!.Unverified.Count);
+
+        if (count == 0)
+        {
+            return string.Empty;
+        }
+
+        var paths = count == 1
+            ? $" Windows would not describe one protected path for {Names(unverified)} after the clean, "
+              + "so Deguffer could not check that it survived."
+            : $" Windows would not describe {count} protected paths for {Names(unverified)} after the "
+              + "clean, so Deguffer could not check that they survived.";
+
+        return paths + " An access rule, or a link Windows declines to follow, is the usual cause.";
     }
 
     /// <summary>Each provider that has something to answer for, because each one is a separate rule.</summary>

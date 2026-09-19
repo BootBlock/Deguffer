@@ -165,9 +165,9 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Assert.DoesNotContain(Common(RoamingRoot), plan.TargetedPaths);
         Assert.DoesNotContain(Version(RoamingRoot, "3.0"), plan.TargetedPaths);
 
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == RoamingRoot && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Common(RoamingRoot) && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Version(RoamingRoot, "3.0") && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == RoamingRoot && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Common(RoamingRoot) && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Version(RoamingRoot, "3.0") && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -188,7 +188,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
 
         Assert.All(
             [.. beside, unheardOf],
-            path => Assert.Contains(plan.ProtectedPaths, p => p.Path == path && p.ExistedBefore));
+            path => Assert.Contains(plan.ProtectedPaths, p => p.Path == path && p.PresenceBefore is PathPresence.Present));
     }
 
     /// <summary>
@@ -218,7 +218,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(plan.TargetedPaths, p => LongPath.Contains(stranger, p));
         Assert.Contains(plan.Notes, n => n.Message.Contains($"Leaving '{name}' alone", StringComparison.Ordinal));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == stranger && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == stranger && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -448,6 +448,27 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.6 asserts a folder Windows will not describe, at either level, recorded as a refusal. Left
+    /// out, it was a folder nothing could fail over, holding the asset library beside the models.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFolderWindowsWillNotDescribeIsStillASurvivor(bool refuseTheRoot)
+    {
+        CreateVersion(RoamingRoot, "3.0");
+        var refused = refuseTheRoot ? RoamingRoot : Common(RoamingRoot);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(refused);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(refused, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Refused);
+    }
+
+    /// <summary>
     /// The folder is found by name, and a listing right is separate from a traverse right — so a
     /// refusal here yields a plan with no steps, which the shell would otherwise render as "already
     /// clear" about a folder nobody read.
@@ -526,7 +547,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
 
         var protectedPath = Assert.Single(plan.ProtectedPaths, p => p.Path == impostor);
 
-        Assert.True(protectedPath.ExistedBefore);
+        Assert.Equal(PathPresence.Present, protectedPath.PresenceBefore);
         Assert.DoesNotContain("downloads them again", protectedPath.Reason, StringComparison.Ordinal);
     }
 

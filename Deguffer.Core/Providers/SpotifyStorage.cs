@@ -6,16 +6,14 @@ namespace Deguffer.Core.Providers;
 public sealed record SpotifyInstall(SpotifyEdition Edition, SpotifySettings Settings)
 {
     /// <summary>
-    /// Whether this edition has left either of its folders on this machine.
+    /// Whether this edition may have left either of its folders on this machine.
     ///
-    /// <para><b>Two answers, and a refusal reads as no.</b> It decides only which folders §5.6
-    /// asserts survived, and a folder Windows would not describe is one that check cannot measure:
-    /// it would record "nothing to preserve" and pass whatever happened. Nothing the user reads
-    /// depends on it. The plan names such a folder through <see cref="DeclaredLocations"/>, and a
-    /// withheld cache through its own probe. See <see cref="PathPresence"/>.</para>
+    /// <para>It decides only which folders §5.6 asserts survived, so a refusal reads as "may be
+    /// there": §5.6 records a folder Windows would not describe as a refusal and checks it again
+    /// after the run. See <see cref="PathPresence"/>.</para>
     /// </summary>
     public bool IsInstalled =>
-        LongPath.DirectoryExists(Edition.CacheFolder) || LongPath.DirectoryExists(Edition.SettingsFolder);
+        LongPath.DirectoryMayExist(Edition.CacheFolder) || LongPath.DirectoryMayExist(Edition.SettingsFolder);
 }
 
 /// <summary>

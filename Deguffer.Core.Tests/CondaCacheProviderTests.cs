@@ -280,7 +280,7 @@ public sealed class CondaCacheProviderTests : IDisposable
                  [RootPrefix, Environments, PackageCache, Path.Combine(_environment.UserProfile, ".condarc")])
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 

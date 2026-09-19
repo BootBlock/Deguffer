@@ -187,14 +187,11 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         {
             var cache = edition.Cache;
 
-            if (presence is PathPresence.Present)
+            survivors.Add((cache, WithheldCacheReason));
+
+            if (presence is PathPresence.Refused)
             {
-                survivors.Add((cache, WithheldCacheReason));
-            }
-            else
-            {
-                // Not a survivor: §5.6 cannot measure it, and would pass whatever happened to it. Named
-                // unless the folder holding it already was, which says the same thing about it.
+                // Named unless the folder holding it already was, which says the same thing about it.
                 if (!scan.Unreachable.Any(root => LongPath.Contains(root, cache)))
                 {
                     notes.Add(UnreadableRoot.UnreachedNote(cache));

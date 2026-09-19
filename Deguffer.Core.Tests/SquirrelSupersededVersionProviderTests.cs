@@ -153,7 +153,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         {
             Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -187,7 +187,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not read", StringComparison.Ordinal));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == odd && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == odd && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -213,7 +213,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("Chatterbox", StringComparison.Ordinal));
         Assert.Contains(
             plan.ProtectedPaths,
-            p => p.Path == Path.Combine(running, "app-3.6.3") && p.ExistedBefore);
+            p => p.Path == Path.Combine(running, "app-3.6.3") && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -267,7 +267,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.PresenceBefore is PathPresence.Present);
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
         Assert.True(Directory.Exists(outside), $"{outside} was removed through the link");
@@ -300,7 +300,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         foreach (var path in mustSurvive)
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

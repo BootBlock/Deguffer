@@ -160,7 +160,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.DoesNotContain(root, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(provider.BinRoots, r => r.Equals(root, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -187,7 +187,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         {
             Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         Assert.Contains(plan.Notes, n => n.Message.Contains(AnotherAccount, StringComparison.Ordinal));

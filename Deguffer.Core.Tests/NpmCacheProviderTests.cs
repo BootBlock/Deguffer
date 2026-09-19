@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
@@ -83,9 +84,9 @@ public sealed class NpmCacheProviderTests : IDisposable
         var plan = await PlanWithPopulatedCache();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(npmrc, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(npmrc, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.EndsWith(Path.Combine("Roaming", "npm"), StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.EndsWith(Path.Combine("Roaming", "npm"), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

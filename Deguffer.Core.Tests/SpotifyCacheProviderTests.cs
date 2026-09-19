@@ -145,7 +145,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         foreach (var path in directories.Concat(files))
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -209,7 +209,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             n.Message.Contains("did not measure or remove", StringComparison.Ordinal)
             && n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -287,7 +287,8 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(cache, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not measure or remove", StringComparison.Ordinal));
-        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Refused);
     }
 
     /// <summary>
@@ -315,7 +316,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             n.Message.Contains("did not measure or remove", StringComparison.Ordinal)
             && n.Message.Contains(location, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(location, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(location, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]
@@ -417,7 +418,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
         AssertNothingIsOffered(provider, plan);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>The downloads' usual place, written out, is not a move and owes no sentence.</summary>

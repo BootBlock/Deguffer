@@ -340,9 +340,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <see cref="VerificationResult"/> and reached no surface at all. A request to report a fault,
     /// with no way to say what the fault was, is a dead end.</para>
     ///
-    /// <para>Both kinds of check appear here, because both describe a path nobody could verify. The
-    /// sentence is what separates a fault to report from a folder that went away on its own, and
-    /// each row's own detail repeats which of the two it is.</para>
+    /// <para>Every kind of check that is not a pass appears here, because each describes a path
+    /// nobody could verify. The sentence is what separates a fault to report from a folder that went
+    /// away on its own or one Windows would not describe, and each row's own detail repeats which of
+    /// those it is.</para>
     /// </summary>
     public ObservableCollection<VerificationCheck> RunVerificationNotes { get; } = [];
 
@@ -756,7 +757,7 @@ public sealed partial class CleanViewModel : ObservableObject
                 .. results
                     .Select(r => r.Verification)
                     .OfType<VerificationResult>()
-                    .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside)),
+                    .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside).Concat(v.Unverified)),
             ]);
 
         OnPropertyChanged(nameof(HasRunVerificationNotes));
@@ -777,7 +778,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <para>A protected path taken by something else keeps it too, as a warning rather than an
     /// error. It is not a fault to report, but it is the reason the run's figures describe a machine
     /// that moved while the preview sat on screen — and yielding to the fresh preview's totals would
-    /// replace that explanation with the numbers it explains.</para>
+    /// replace that explanation with the numbers it explains. A protected path Windows would not
+    /// describe keeps it as a warning as well, because nothing else on the screen says it went
+    /// unchecked.</para>
     ///
     /// <para>Every other outcome yields to those totals, which describe the list now on screen. That
     /// sentence is also the only one a selection change may keep current, so stating it here is what

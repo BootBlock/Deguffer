@@ -86,7 +86,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
             Assert.All(plan.TargetedPaths, path =>
                 Assert.False(IsAtOrUnder(folder, path), $"{path} would have taken {folder} with it."));
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 
@@ -347,7 +347,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
         Assert.DoesNotContain(link, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains(OtherHost, StringComparison.Ordinal) && n.Message.Contains("link", StringComparison.Ordinal));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.True(plan.WasNotExamined);
 
         var result = await provider.ExecuteAsync(plan);

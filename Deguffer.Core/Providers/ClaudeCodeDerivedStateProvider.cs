@@ -268,7 +268,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.
                 .. recent.Select(item => new ProtectedPath(
-                    item.Path, item.Reason, ExistedBefore: true, Withheld: Withholding.TooRecent)),
+                    item.Path, item.Reason, PresenceBefore: PathPresence.Present, Withheld: Withholding.TooRecent)),
             ],
             Notes = [.. notes.DistinctBy(note => note.Message, StringComparer.Ordinal)],
             Fallback = measured.Fallback,

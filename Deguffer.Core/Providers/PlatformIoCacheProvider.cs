@@ -416,7 +416,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     ///
     /// <para>Built from the directory PlatformIO reported rather than from <see cref="CoreRoot"/>.
     /// A relocated core directory would otherwise leave every one of these paths absent, and
-    /// <see cref="ProtectedPath.ExistedBefore"/> would record them as never present — six assertions
+    /// <see cref="ProtectedPath.PresenceBefore"/> would record them as absent — six assertions
     /// that pass without establishing anything, on exactly the installs where the guess about where
     /// PlatformIO lives has already been shown to be wrong.</para>
     /// </summary>
