@@ -182,8 +182,8 @@ public static class LongPath
     /// <summary>
     /// The same three-state answer for a path that may be either kind, which is what §5.6 asks of a
     /// protected path. <see cref="PathPresence.Present"/> exactly where
-    /// <c>FileExists || DirectoryExists</c> is true, so the two-state question it replaces gains the
-    /// third answer and loses nothing.
+    /// <c>FileExists || DirectoryExists</c> is true, so it answers everything that pair answers and
+    /// keeps a refusal apart from an absence as well.
     /// </summary>
     public static PathPresence ProbeEntry(string path) => ProbeDirectory(path) switch
     {

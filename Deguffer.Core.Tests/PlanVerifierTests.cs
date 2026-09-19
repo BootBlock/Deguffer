@@ -678,11 +678,6 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
-    /// A result holding both kinds accounts for both. Naming the failures alone would say "1 of 3"
-    /// about a run where two paths went unverified, and a §5.6 report that states less than it
-    /// established is the overstatement's mirror image.
-    /// </summary>
-    /// <summary>
     /// A path nobody could check is counted in the denominator and named in the sentence. Leaving it
     /// out would say "all 1 survived" about a run that checked one of two.
     /// </summary>
@@ -718,6 +713,11 @@ public sealed class PlanVerifierTests : IDisposable
             result.Summary);
     }
 
+    /// <summary>
+    /// A result holding both kinds accounts for both. Naming the failures alone would say "1 of 3"
+    /// about a run where two paths went unverified, and a §5.6 report that states less than it
+    /// established is the overstatement's mirror image.
+    /// </summary>
     [Fact]
     public void TheSummaryCountsBothKindsWhenARunHasBoth()
     {

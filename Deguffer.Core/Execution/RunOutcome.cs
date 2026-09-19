@@ -42,7 +42,7 @@ public enum RunVerdict
 /// able to contradict it.</para>
 /// </summary>
 /// <param name="Statement">The sentence, always non-empty: a run that verified cleanly still says so.</param>
-/// <param name="Verdict">Which of the three things above happened.</param>
+/// <param name="Verdict">Which of the things above happened.</param>
 public sealed record RunOutcome(string Statement, RunVerdict Verdict)
 {
     /// <summary>

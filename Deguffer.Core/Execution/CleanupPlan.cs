@@ -14,10 +14,10 @@ namespace Deguffer.Core.Execution;
 /// destroyed, so an <see cref="PathPresence.Absent"/> one is evidence of nothing.
 ///
 /// <para><b>Three answers, because the third is not the first.</b> A path behind an access rule, or
-/// behind a link Windows declines to follow, is <see cref="PathPresence.Refused"/>. Folded into
-/// absence, it recorded "nothing to preserve", and <see cref="PlanVerifier"/> then passed over
-/// whatever the run did to it: an assertion nobody could fail, reading as one that held. Recorded as
-/// a refusal, it is measured again afterwards like any other survivor.</para>
+/// behind a link Windows declines to follow, is <see cref="PathPresence.Refused"/>. Read as absent,
+/// it would record "nothing to preserve", and <see cref="PlanVerifier"/> would pass over whatever the
+/// run did to it: an assertion nobody can fail, reading as one that held. Recorded as a refusal, it
+/// is measured again afterwards like any other survivor.</para>
 /// </param>
 /// <param name="HeldContentBefore">
 /// Whether it was a directory with content anywhere below it when the plan was made: a file, a link,
