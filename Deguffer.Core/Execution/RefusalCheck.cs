@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
@@ -11,7 +11,8 @@ namespace Deguffer.Core.Execution;
 /// holding something cannot be removed, so a refused file keeps all of them.
 /// </param>
 /// <param name="Undescribed">
-/// The places Windows would not describe, in display form, so whether they still refuse is unknown.
+/// What Windows would not describe, in display form: the step's own path, which stands in for every
+/// recorded place beneath it, or a recorded place. Whether what is there still refuses is unknown.
 /// Nothing is taken out of the estimate for them, because nothing was measured, and they are not
 /// among <paramref name="Places"/>, because "still refused" is a claim nobody established. See
 /// <see cref="PathPresence.Refused"/>.
@@ -53,7 +54,7 @@ internal static class RefusalCheck
         var extendedRoot = LongPath.Extended(root);
 
         // Settled before the link question, which fails closed: a root Windows would not describe
-        // answers "a link" there, and was read as "nothing here will be refused". Nothing beneath it
+        // answers "a link" there, which reads as "nothing here will be refused". Nothing beneath it
         // can be asked about either, so the finding says that rather than a clean answer.
         if (fs.ProbeDirectory(extendedRoot) is PathPresence.Refused)
         {

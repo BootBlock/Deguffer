@@ -181,10 +181,34 @@ public sealed class RecordedRefusalsTests : IDisposable
 
         var note = Assert.Single(applied.Notes, n => n.Severity == PlanNoteSeverity.Warning);
 
-        Assert.Contains("Windows would not say what is at 'profile'", note.Message, StringComparison.Ordinal);
+        Assert.Contains("Windows would not describe 'profile'", note.Message, StringComparison.Ordinal);
         Assert.Contains("could not check", note.Message, StringComparison.Ordinal);
         Assert.Equal(20_000, applied.EstimatedBytes);
         Assert.False(applied.HasRefusedContent, "a place nobody could ask about was reported as still refused");
+    }
+
+    /// <summary>
+    /// A step path Windows would not describe stands in for every recorded place beneath it, none of
+    /// which can be asked about. The note names the step path, and nothing comes out of the size.
+    /// </summary>
+    [Fact]
+    public void SaysAStepPathWindowsWouldNotDescribeCouldNotBeAskedAboutAndLeavesTheSizeAsMeasured()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var profile = _temp.CreateDirectory("temp", "profile");
+        _temp.CreateFile(4096, "temp", "profile", "Cookies");
+
+        Record.Replace(step, [profile]);
+
+        var plan = Plan(new ClearDirectoryStep(step, "Scratch files") { Estimated = ScanSize.FromLengths(20_000) });
+        var applied = RecordedRefusals.Apply(
+            plan, Record, new UndescribableDirectoryFileSystem(WindowsFileSystem.Default, step), default);
+
+        var note = Assert.Single(applied.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+
+        Assert.Contains("Windows would not describe 'temp'", note.Message, StringComparison.Ordinal);
+        Assert.Equal(20_000, applied.EstimatedBytes);
+        Assert.False(applied.HasRefusedContent, "a step nobody could ask about was reported as still refused");
     }
 
     private static CleanupPlan Plan(CleanupStep step) => new()

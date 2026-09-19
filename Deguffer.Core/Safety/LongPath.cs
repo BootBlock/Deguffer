@@ -331,10 +331,10 @@ public static class LongPath
     /// <para><b>A caller that reads a true as a reason to do <em>less</em> asks the probe first
     /// too.</b> <see cref="Execution.RefusalCheck"/> asks this of a step's root and of each place it
     /// checks, where a true means "nothing here will be refused", and <c>ExploreRemover</c> asks it
-    /// before searching a folder for an Outlook store, where a true skips the search. Reached
-    /// unprobed, each turned a path Windows would not describe into a smaller claim than the truth:
-    /// a preview promising back a figure nobody could check, and a folder moved to the Recycle Bin
-    /// unexamined. Each now settles <see cref="PathPresence.Refused"/> first and says so.</para>
+    /// before searching a folder for an Outlook store, where a true skips the search. Asked
+    /// unprobed, each would turn a path Windows would not describe into a smaller claim than the
+    /// truth: a preview promising back a figure nobody could check, and a folder moved to the Recycle
+    /// Bin unexamined. So each settles <see cref="PathPresence.Refused"/> first and says so.</para>
     ///
     /// <para><b>Three callers do <em>not</em> ask first, and each is answered by what it does with a
     /// true.</b> <see cref="BuildDirectorySignature"/> and <see cref="DotNetIntermediateSignature"/>

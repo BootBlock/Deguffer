@@ -77,10 +77,14 @@ internal static class RecordedRefusals
     }
 
     /// <summary>
-    /// The places a previous clean was refused that Windows would not describe this time, so whether
-    /// they still refuse could not be asked. Said rather than left silent, because silence here reads
-    /// as "nothing is refused any more" and the row then promises back everything it measured. Nothing
-    /// comes out of the size, because nothing was measured to take out, and the sentence says so.
+    /// The step paths and recorded places Windows would not describe this time, so whether what a
+    /// previous clean was refused there is still refused could not be asked. The sentence claims no
+    /// refusal <em>of</em> the named path, because a step path stands in for the places beneath it and
+    /// was not itself where the refusal was recorded.
+    ///
+    /// <para>Said rather than left silent, because silence here reads as "nothing is refused any
+    /// more" and the row then promises back everything it measured. Nothing comes out of the size,
+    /// because nothing was measured to take out, and the sentence says so.</para>
     /// </summary>
     private static IEnumerable<PlanNote> Unasked(IReadOnlyList<string> undescribed)
     {
@@ -88,8 +92,8 @@ internal static class RecordedRefusals
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Windows would not say what is at {Names(undescribed)}, where it refused Deguffer when it "
-                + "last cleaned, so Deguffer could not check whether it still does. The size shown may "
+                $"Windows would not describe {Names(undescribed)}, so Deguffer could not check whether "
+                + "what Windows refused it there when it last cleaned is still refused. The size shown may "
                 + "include space the next clean cannot take.");
         }
     }

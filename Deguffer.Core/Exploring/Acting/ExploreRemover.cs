@@ -254,10 +254,11 @@ public static class ExploreRemover
             // and this look is the one that decides.
             //
             // A folder Windows will not describe is left where it is. The link question fails closed, so
-            // asked first it read the refusal as "a link" and skipped the look, and a folder nobody could
-            // classify went to the shell unexamined. §9 is unconditional, so a folder that cannot be
-            // shown to hold no store is not moved — the answer the permanent route's DirectoryRemover
-            // already gives a root it cannot describe, which it leaves standing.
+            // asked first it would read the refusal as "a link" and skip the look, and a folder nobody
+            // could classify would go to the shell unexamined. The permanent route's DirectoryRemover
+            // gives a root it cannot describe the same answer, and leaves it standing. A folder that is
+            // described but will not be listed is not caught here: MailStoreSearch skips it (§5.3), as
+            // it skips one below.
             if (item.IsDirectory && fs.ProbeDirectory(LongPath.Extended(item.Path)) is PathPresence.Refused)
             {
                 return new ExploreItemOutcome(
