@@ -150,11 +150,15 @@ public sealed class VolumeRootTests
     /// is not a prefix of the path and so names no position in it. The path's own root answers
     /// instead, which is what this type gave before it asked the machine: an answer the path does
     /// not contain can never take a volume root away.
+    ///
+    /// <para>The far side is a volume mounted at a folder, so the answer is longer than the path's
+    /// own root. An answer only as long as <c>C:\</c> would be passed over for its length alone, and
+    /// would not show that the answer is checked against the path.</para>
     /// </summary>
     [Fact]
     public void AnAnswerThatIsNotAPrefixOfThePathFallsBackToItsRoot()
     {
-        _volumes.Answering(@"D:\");
+        _volumes.Answering(@"D:\Volumes\Archive\");
 
         Assert.Equal(@"Link\pagefile.sys", VolumeRoot.Below(_volumes, @"C:\Link\pagefile.sys"));
         Assert.Equal("pagefile.sys", VolumeRoot.Below(_volumes, @"C:\pagefile.sys"));
