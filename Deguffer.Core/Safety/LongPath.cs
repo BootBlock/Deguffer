@@ -328,23 +328,23 @@ public static class LongPath
     /// "not installed" branch, which was a coincidence holding a safety property up. It is not a
     /// coincidence now.</para>
     ///
-    /// <para><b>Six callers do <em>not</em> ask first, and three of them are answered by what they
-    /// do with a true.</b> <see cref="BuildDirectorySignature"/> and
-    /// <see cref="DotNetIntermediateSignature"/> put a candidate and its parent through this
-    /// without probing either, and what they say when they get a true is "not recognised as build
-    /// output, so it is left alone" — §5.2's own answer for a thing that could not be classified,
-    /// which names no link and claims nothing. <see cref="Execution.FileRemover"/> asks this before
-    /// anything else, through the <see cref="IFileSystem"/> seam, and a true there removes the path
-    /// as a link and reports nothing reclaimed rather than its length. That under-reports, which is
-    /// the safe direction.</para>
+    /// <para><b>A caller that reads a true as a reason to do <em>less</em> asks the probe first
+    /// too.</b> <see cref="Execution.RefusalCheck"/> asks this of a step's root and of each place it
+    /// checks, where a true means "nothing here will be refused", and <c>ExploreRemover</c> asks it
+    /// before searching a folder for an Outlook store, where a true skips the search. Asked
+    /// unprobed, each would turn a path Windows would not describe into a smaller claim than the
+    /// truth: a preview promising back a figure nobody could check, and a folder moved to the Recycle
+    /// Bin unexamined. So each settles <see cref="PathPresence.Refused"/> first and says so.</para>
     ///
-    /// <para><b>The other three read the closed answer as a reason to do less, and that is a defect
-    /// rather than a rendering.</b> <see cref="Execution.RefusalCheck"/> asks it of a step's root
-    /// and again per entry, and a true returns "nothing here will be refused" — the preview then
-    /// promises a figure back off a root Windows would not describe.
-    /// <c>ExploreRemover</c> asks it before searching for an Outlook store, so a true skips the §9
-    /// search on a folder it is about to recycle. All three predate this probe and none is reached
-    /// by a caller it changed, so they are recorded here rather than fixed alongside it.</para>
+    /// <para><b>Three callers do <em>not</em> ask first, and each is answered by what it does with a
+    /// true.</b> <see cref="BuildDirectorySignature"/> and <see cref="DotNetIntermediateSignature"/>
+    /// put a candidate and its parent through this without probing either, and what they say when
+    /// they get a true is "not recognised as build output, so it is left alone" — §5.2's own answer
+    /// for a thing that could not be classified, which names no link and claims nothing.
+    /// <see cref="Execution.FileRemover"/> asks this before anything else, through the
+    /// <see cref="IFileSystem"/> seam, and a true there removes the path as a link and reports
+    /// nothing reclaimed rather than its length. That under-reports, which is the safe
+    /// direction.</para>
     ///
     /// <para><see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now
     /// calls here instead. A safety predicate written twice is one that gets changed once.</para>

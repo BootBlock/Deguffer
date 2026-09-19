@@ -28,12 +28,17 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     {
         Probed.Add(path);
 
-        return LongPath.Display(path).Equals(refused, StringComparison.OrdinalIgnoreCase)
-            ? PathPresence.Refused
-            : inner.ProbeDirectory(path);
+        return IsRefused(path) ? PathPresence.Refused : inner.ProbeDirectory(path);
     }
 
-    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+    /// <summary>
+    /// True for the refused directory, because that is what <see cref="LongPath.IsReparsePoint"/>
+    /// answers for a path it could not read: it fails closed. Delegating instead would answer false
+    /// for the real directory underneath, and a caller that asked this before the probe would look
+    /// correct against the fake while reading a refusal as a link against Windows.
+    /// </summary>
+    public bool IsReparsePoint(string path) =>
+        IsRefused(path) || inner.IsReparsePoint(path);
 
     public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) => inner.EnumerateEntries(directory);
 
@@ -52,4 +57,7 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
 
     public bool MayExist(string path) => inner.MayExist(path);
+
+    private bool IsRefused(string path) =>
+        LongPath.Display(path).Equals(refused, StringComparison.OrdinalIgnoreCase);
 }

@@ -26,6 +26,7 @@ internal static class RecordedRefusals
     {
         var refused = Refusals.None;
         var places = new List<(string Place, Refusals Refused)>();
+        var undescribed = new List<string>();
         var steps = new List<CleanupStep>(plan.Steps.Count);
 
         foreach (var step in plan.Steps)
@@ -41,6 +42,8 @@ internal static class RecordedRefusals
             }
 
             var found = RefusalCheck.Of(delete, recorded, plan.Keep, fs, ct);
+
+            undescribed.AddRange(found.Undescribed);
 
             if (found.Refused.IsEmpty)
             {
@@ -61,9 +64,38 @@ internal static class RecordedRefusals
             places.AddRange(found.Places);
         }
 
-        return refused.IsEmpty
-            ? plan
-            : plan with { Steps = steps, Notes = [.. plan.Notes, .. Notes(refused, places)] };
+        if (refused.IsEmpty && undescribed.Count == 0)
+        {
+            return plan;
+        }
+
+        return plan with
+        {
+            Steps = steps,
+            Notes = [.. plan.Notes, .. Notes(refused, places), .. Unasked(undescribed)],
+        };
+    }
+
+    /// <summary>
+    /// The step paths and recorded places Windows would not describe this time, so whether what a
+    /// previous clean was refused there is still refused could not be asked. The sentence claims no
+    /// refusal <em>of</em> the named path, because a step path stands in for the places beneath it and
+    /// was not itself where the refusal was recorded.
+    ///
+    /// <para>Said rather than left silent, because silence here reads as "nothing is refused any
+    /// more" and the row then promises back everything it measured. Nothing comes out of the size,
+    /// because nothing was measured to take out, and the sentence says so.</para>
+    /// </summary>
+    private static IEnumerable<PlanNote> Unasked(IReadOnlyList<string> undescribed)
+    {
+        if (undescribed.Count > 0)
+        {
+            yield return new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Windows would not describe {Names(undescribed)}, so Deguffer could not check whether "
+                + "what Windows refused it there when it last cleaned is still refused. The size shown may "
+                + "include space the next clean cannot take.");
+        }
     }
 
     /// <summary>
@@ -110,10 +142,15 @@ internal static class RecordedRefusals
             .Select(p => p.Place)
             .ToList();
 
-        var rest = named.Count - NamedPlaces;
+        return ", in " + Names(named);
+    }
 
-        return ", in "
-            + string.Join(", ", named.Take(NamedPlaces).Select(p => $"'{Path.GetFileName(Path.TrimEndingDirectorySeparator(p))}'"))
+    /// <summary>The first few places by folder or file name, in the order given, and a count of the rest.</summary>
+    private static string Names(IReadOnlyList<string> places)
+    {
+        var rest = places.Count - NamedPlaces;
+
+        return string.Join(", ", places.Take(NamedPlaces).Select(p => $"'{Path.GetFileName(Path.TrimEndingDirectorySeparator(p))}'"))
             + (rest > 0 ? $" and {rest:N0} more" : string.Empty);
     }
 }

@@ -470,4 +470,6 @@ Two further defects this work surfaced and did not fix, both needing a decision 
   untouched, and closing it needs a `PlanVerifier` outcome for "could not be measured before the run".
 - **Three callers read `LongPath.IsReparsePoint`'s fail-closed answer as a reason to do less.**
   `RefusalCheck` twice, and `ExploreRemover` once before the §9 mail-store search. All three predate
-  this probe. `LongPath.IsReparsePoint`'s own doc names them.
+  this probe. **Fixed by #149:** each now asks `ProbeDirectory` first. `RefusalCheck` names a place
+  it could not ask about in a warning and takes nothing out of the size, and Explore leaves a folder
+  Windows will not describe out of the Recycle Bin.

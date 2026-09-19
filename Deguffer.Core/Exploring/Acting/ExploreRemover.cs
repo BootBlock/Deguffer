@@ -252,6 +252,23 @@ public static class ExploreRemover
             // It is not said before the confirmation, and that is a stated boundary rather than an
             // oversight: knowing it beforehand means a walk of the folder on every change of selection,
             // and this look is the one that decides.
+            //
+            // A folder Windows will not describe is left where it is. The link question fails closed, so
+            // asked first it would read the refusal as "a link" and skip the look, and a folder nobody
+            // could classify would go to the shell unexamined. The permanent route's DirectoryRemover
+            // gives a root it cannot describe the same answer, and leaves it standing. A folder that is
+            // described but will not be listed is not caught here: MailStoreSearch skips it (§5.3), as
+            // it skips one below.
+            if (item.IsDirectory && fs.ProbeDirectory(LongPath.Extended(item.Path)) is PathPresence.Refused)
+            {
+                return new ExploreItemOutcome(
+                    item.Path,
+                    Removed: false,
+                    Bytes: 0,
+                    $"Windows would not say what is in '{Path.GetFileName(item.Path)}', so Deguffer could not "
+                    + "check it for an Outlook data file. Deguffer never removes one, so it left the folder alone.");
+            }
+
             if (item.IsDirectory
                 && !fs.IsReparsePoint(LongPath.Extended(item.Path))
                 && MailStoreSearch.Under(item.Path, fs, ct) is { Count: > 0 } stores)
