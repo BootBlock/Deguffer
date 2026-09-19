@@ -56,7 +56,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
             n.Message.Contains("ipch", StringComparison.Ordinal) &&
             n.Message.Contains("link", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(link, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(link, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 

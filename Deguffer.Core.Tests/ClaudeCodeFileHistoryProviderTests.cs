@@ -50,7 +50,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
     private static void AssertKept(CleanupPlan plan, string path)
     {
         Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(session, StringComparison.OrdinalIgnoreCase)
-            && p.ExistedBefore
+            && p.PresenceBefore is PathPresence.Present
             && p.Withheld == Withholding.TooRecent);
         Assert.True(plan.HasRecentContentHeldBack);
 
@@ -323,7 +323,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         foreach (var path in mustSurvive)
         {
             Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -420,7 +420,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasRecentContentHeldBack);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase)
-            && p.ExistedBefore
+            && p.PresenceBefore is PathPresence.Present
             && p.Withheld == Withholding.None
             && p.Reason == CacheLevelWalk.LinkReason);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
@@ -495,7 +495,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(_claude.FileHistory, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(_claude.FileHistory, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]

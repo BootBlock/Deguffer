@@ -132,6 +132,15 @@ public enum VerificationOutcome
     Entered,
 
     /// <summary>
+    /// Windows would not describe it after the run, so nothing establishes whether it survived. Not
+    /// a pass, because a check that could not be made is not one that held, and not a failure,
+    /// because the ordinary cause is a directory link Windows declines to follow, which a run meets
+    /// every time and which says nothing about what the run did. See
+    /// <see cref="Safety.PathPresence.Refused"/>.
+    /// </summary>
+    Unverified,
+
+    /// <summary>
     /// Deguffer sent this subject something, and the check is the record of what and where (§7.2.1).
     /// It asserts nothing about survival: it is the half of §5.6 that states what the action did,
     /// which for a close is the one thing that is exact.
@@ -198,6 +207,14 @@ public sealed record VerificationResult
         [.. Checks.Where(c => c.Outcome == VerificationOutcome.RemovedFromOutside)];
 
     /// <summary>
+    /// The protected paths Windows would not describe after the run. Kept apart from both lists
+    /// above: nothing here is evidence that a rule was over-broad, and nothing here is evidence that
+    /// the path survived either, so the reader is told which paths went unchecked and why.
+    /// </summary>
+    public IReadOnlyList<VerificationCheck> Unverified =>
+        [.. Checks.Where(c => c.Outcome == VerificationOutcome.Unverified)];
+
+    /// <summary>
     /// The checks that assert something survived, which is what <see cref="Summary"/> counts.
     ///
     /// <para>A close also records what it sent and which processes exited beside its target
@@ -211,7 +228,8 @@ public sealed record VerificationResult
         [.. Checks.Where(c => c.Outcome
             is VerificationOutcome.NotPresentBefore or VerificationOutcome.Survived
             or VerificationOutcome.Failed or VerificationOutcome.RemovedFromOutside
-            or VerificationOutcome.Emptied or VerificationOutcome.Entered)];
+            or VerificationOutcome.Emptied or VerificationOutcome.Entered
+            or VerificationOutcome.Unverified)];
 
     /// <summary>
     /// Whether every protected subject is accounted for as still standing. An outside removal is not
@@ -231,23 +249,48 @@ public sealed record VerificationResult
     /// <summary>
     /// One sentence for the whole result, which has to account for every subject it could not verify.
     ///
-    /// The mixed case gets both counts rather than only the alarming one. Naming the failures alone
-    /// would say "1 of 7 did not survive" about a run where six went unverified, and a §5.6 report
-    /// that states less than it established is the overstatement's mirror image.
+    /// A mixed case gets every count rather than only the most alarming one, which leads. Naming the
+    /// failures alone would say "1 of 7 did not survive" about a run where six went unverified, and a
+    /// §5.6 report that states less than it established is the overstatement's mirror image.
     ///
     /// <para>"Item" rather than "path", because a close's subject is a process. A close writes its
     /// own sentence, as <see cref="Exploring.Acting.ExploreRemovalReport.Summary"/> does, and this one
     /// still has to be true of whatever it is handed.</para>
     /// </summary>
-    public string Summary => (Asserted.Count, Failures.Count, RemovedFromOutside.Count) switch
+    public string Summary
     {
-        (0, _, _) => "Nothing to verify.",
-        (var total, 0, 0) => $"All {total} protected item(s) survived.",
-        (var total, 0, var outside) =>
-            $"{outside} of {total} protected item(s) were removed from outside this run.",
-        (var total, var failed, 0) => $"{failed} of {total} protected item(s) did not survive.",
-        (var total, var failed, var outside) =>
-            $"{failed} of {total} protected item(s) did not survive, and {outside} more were "
-            + "removed from outside this run.",
-    };
+        get
+        {
+            var total = Asserted.Count;
+
+            if (total == 0)
+            {
+                return "Nothing to verify.";
+            }
+
+            (int Count, string Said)[] counts =
+            [
+                (Failures.Count, "did not survive"),
+                (RemovedFromOutside.Count, "were removed from outside this run"),
+                (Unverified.Count, "could not be checked"),
+            ];
+
+            var stated = counts.Where(c => c.Count > 0).ToList();
+
+            if (stated.Count == 0)
+            {
+                return $"All {total} protected item(s) survived.";
+            }
+
+            var first = $"{stated[0].Count} of {total} protected item(s) {stated[0].Said}";
+            var more = stated.Skip(1).Select(c => $"{c.Count} more {c.Said}").ToList();
+
+            return more.Count switch
+            {
+                0 => $"{first}.",
+                1 => $"{first}, and {more[0]}.",
+                _ => $"{first}, {string.Join(", ", more[..^1])}, and {more[^1]}.",
+            };
+        }
+    }
 }

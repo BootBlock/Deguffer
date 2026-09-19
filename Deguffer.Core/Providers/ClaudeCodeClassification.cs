@@ -94,12 +94,6 @@ internal sealed class ClaudeCodeClassificationBuilder
         {
             // Windows would not say whether the folder is there. Nothing in it was classified, and
             // an unqualified null would let the plan present that as a folder holding nothing.
-            //
-            // No survivor, unlike Unlisted below. That one was reached, so §5.6 can measure it
-            // before the run and the assertion can fail. This one cannot be measured, so it would
-            // record itself as "nothing to preserve" and pass over whatever happened to the folder —
-            // and an assertion nobody can fail reads as one that held. DeclaredLocations.Unreachable
-            // keeps the same rule.
             case PathPresence.Refused:
                 Unreached(folder);
                 return null;
@@ -202,12 +196,12 @@ internal sealed class ClaudeCodeClassificationBuilder
 
     /// <summary>
     /// Record a folder Windows would not describe at all. <see cref="Unlisted"/>'s sentence would
-    /// assert the folder is there, which nothing here established — and no survivor is recorded, for
-    /// the reason <see cref="Open"/> gives: §5.6 cannot measure the folder, so the assertion could
-    /// not fail.
+    /// assert the folder is there, which nothing here established. Asserted like anything else left
+    /// alone: §5.6 records it as a refusal and checks it again after the run.
     /// </summary>
     public void Unreached(string path)
     {
+        Keep(path, UnreadableRoot.UnreachedReason);
         _unreadable = true;
         _notes.Add(UnreadableRoot.UnreachedNote(path));
     }

@@ -266,7 +266,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var provider = Unity();
         var plan = await provider.PlanAsync();
 
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == project && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == project && p.PresenceBefore is PathPresence.Present);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "Assets"));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "ProjectSettings"));
 
@@ -298,8 +298,8 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         // Named as survivors in the plan, not merely left standing by luck. Neither identifies the
         // directory being removed, so neither would be here if §5.6's question were "what did
         // recognition read" rather than "what would an over-broad rule take".
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "src") && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "Cargo.lock") && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "src") && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(project, "Cargo.lock") && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 

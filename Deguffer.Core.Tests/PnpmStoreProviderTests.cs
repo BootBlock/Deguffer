@@ -1,3 +1,4 @@
+using Deguffer.Core.Safety;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
@@ -168,7 +169,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
         foreach (var path in (string[])[Store, Path.Combine(Home, "store"), Home, Path.Combine(Home, "global")])
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 

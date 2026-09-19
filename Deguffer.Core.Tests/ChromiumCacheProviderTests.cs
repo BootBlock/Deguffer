@@ -241,7 +241,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
                 Assert.False(IsAtOrUnder(root, path), $"{path} would have taken {root} with it."));
 
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 
@@ -273,7 +273,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         // Not merely absent from the plan — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -308,7 +308,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         {
             Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -344,7 +344,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         foreach (var file in new[] { cookies, logins, cards, localState })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -373,9 +373,9 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(cookies, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(cookies, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(Path.Combine(app, "Cookies"), StringComparison.OrdinalIgnoreCase) && !p.ExistedBefore);
+            p.Path.Equals(Path.Combine(app, "Cookies"), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Absent);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -457,7 +457,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         // rather than merely leaving it out.
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Path.Combine(app, "Profile backup"), StringComparison.OrdinalIgnoreCase) &&
-            p.ExistedBefore);
+            p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 

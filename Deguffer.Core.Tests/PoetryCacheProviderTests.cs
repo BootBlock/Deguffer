@@ -111,7 +111,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Contains(
             runner.Invocations, i => i.Arguments.Contains("config virtualenvs.path", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
         // Not merely unmentioned — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(CacheRoot, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(CacheRoot, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(CacheRoot, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -316,7 +316,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.DoesNotContain(
             Path.Combine(CacheRoot, "cache"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(Path.Combine(CacheRoot, "cache"), StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(Path.Combine(CacheRoot, "cache"), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -504,7 +504,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
         var plan = await CreateProvider(Poetry(environments: moved)).PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(environments, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>§5.6: the negative is the whole test. An over-broad rule passes every positive one.</summary>

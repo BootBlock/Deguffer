@@ -156,7 +156,7 @@ public sealed class ConfirmationRequirementTests
                 new ProtectedPath(
                     @"C:\Users\testuser\.cache\subject\withheld",
                     "Withheld.",
-                    ExistedBefore: true,
+                    PresenceBefore: PathPresence.Present,
                     Withheld: Withholding.TooRecent),
             ],
         };

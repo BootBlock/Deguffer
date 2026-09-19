@@ -437,7 +437,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         foreach (var sibling in siblings.Append(provider.CoreRoot))
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 
@@ -466,13 +466,13 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(relocated, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(relocated, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         foreach (var sibling in siblings)
         {
             var path = Path.Combine(relocated, sibling);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         Assert.Contains(
@@ -508,7 +508,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
 
             // Not merely unmentioned — asserted to survive (§5.6).
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 

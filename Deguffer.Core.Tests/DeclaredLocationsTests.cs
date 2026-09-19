@@ -45,11 +45,12 @@ public sealed class DeclaredLocationsTests : IDisposable
         Assert.Empty(scan.Declined);
         Assert.Contains(scan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
 
-        // Never a protected path. §5.6 measures a survivor before the run, and one it cannot measure
-        // records itself as "nothing to preserve" and then passes over whatever happened to it.
-        Assert.DoesNotContain(
+        // Protected like a decline. §5.6 records it as a refusal rather than as "nothing to
+        // preserve", and checks it again after the run.
+        Assert.Contains(
             scan.Protected,
-            p => p.Path.Equals(Path.Combine(_temp.Path, "root"), StringComparison.OrdinalIgnoreCase));
+            p => p.Path.Equals(Path.Combine(_temp.Path, "root"), StringComparison.OrdinalIgnoreCase)
+                && p.Reason == UnreadableRoot.UnreachedReason);
     }
 
     /// <summary>

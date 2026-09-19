@@ -180,6 +180,20 @@ public static class LongPath
     public static PathPresence ProbeFile(string path) => Probe(path, expectDirectory: false, out _);
 
     /// <summary>
+    /// The same three-state answer for a path that may be either kind, which is what §5.6 asks of a
+    /// protected path. <see cref="PathPresence.Present"/> exactly where
+    /// <c>FileExists || DirectoryExists</c> is true, so it answers everything that pair answers and
+    /// keeps a refusal apart from an absence as well.
+    /// </summary>
+    public static PathPresence ProbeEntry(string path) => ProbeDirectory(path) switch
+    {
+        // Asked of the other kind only on an absence. A refusal is the same attribute read failing,
+        // and asking again would only fail again.
+        PathPresence.Absent => ProbeFile(path),
+        var answer => answer,
+    };
+
+    /// <summary>
     /// Whether a directory may be at <paramref name="path"/>: true unless Windows said nothing is.
     ///
     /// <para><b>The form a presence probe asks in.</b> A row that does not appear cannot be

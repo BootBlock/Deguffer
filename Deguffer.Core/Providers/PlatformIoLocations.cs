@@ -12,8 +12,8 @@ namespace Deguffer.Core.Providers;
 /// <param name="CoreDirectory">
 /// The directory everything else sits in, and what §5.6's protected paths are built from. Getting
 /// this wrong costs the negative assertion entirely: every path beneath a guessed core directory is
-/// absent on a relocated install, and <see cref="Execution.ProtectedPath.ExistedBefore"/> then
-/// records six checks as never present, which pass while establishing nothing.
+/// absent on a relocated install, and <see cref="Execution.ProtectedPath.PresenceBefore"/> then
+/// records six checks as absent, which pass while establishing nothing.
 /// </param>
 /// <param name="CacheDirectory">The download cache, which is all <c>prune --cache</c> touches.</param>
 /// <param name="PackagesDirectory">

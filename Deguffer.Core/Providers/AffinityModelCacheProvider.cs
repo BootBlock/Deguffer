@@ -301,10 +301,9 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
         if (tree.Unreached is { } unreached)
         {
             found.Unreached(unreached);
+            found.Protect.Add((unreached, UnreadableRoot.UnreachedReason));
 
-            // Nothing below describes a root Windows would not describe, and its survival is not
-            // asserted either: §5.6 reads a path it cannot measure as "nothing to preserve" and then
-            // passes over whatever happened to the folder.
+            // Nothing below describes a root Windows would not describe.
             if (unreached.Equals(tree.Root, StringComparison.OrdinalIgnoreCase))
             {
                 return;

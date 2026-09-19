@@ -200,7 +200,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
                 Assert.False(WouldTakeWithIt(path, root), $"{path} would have taken {root} with it."));
 
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 
@@ -233,7 +233,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         // Not merely absent from the plan — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -264,7 +264,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -297,7 +297,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         // rather than merely leaving it out.
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Path.Combine(editor, "WebStorage", name), StringComparison.OrdinalIgnoreCase)
-            && p.ExistedBefore);
+            && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -331,7 +331,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         foreach (var path in new[] { workspaces, global, history, snippets, settings, database })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

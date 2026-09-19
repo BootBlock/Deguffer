@@ -9,9 +9,15 @@ namespace Deguffer.Core.Execution;
 /// </summary>
 /// <param name="Path">The path that must survive.</param>
 /// <param name="Reason">Why it matters — shown to the user in the verification report.</param>
-/// <param name="ExistedBefore">
-/// Whether it was present when the plan was made. A path that was never there cannot have been
-/// destroyed, so only the ones that existed constitute evidence.
+/// <param name="PresenceBefore">
+/// What Windows said about it when the plan was made. A path that was never there cannot have been
+/// destroyed, so an <see cref="PathPresence.Absent"/> one is evidence of nothing.
+///
+/// <para><b>Three answers, because the third is not the first.</b> A path behind an access rule, or
+/// behind a link Windows declines to follow, is <see cref="PathPresence.Refused"/>. Read as absent,
+/// it would record "nothing to preserve", and <see cref="PlanVerifier"/> would pass over whatever the
+/// run did to it: an assertion nobody can fail, reading as one that held. Recorded as a refusal, it
+/// is measured again afterwards like any other survivor.</para>
 /// </param>
 /// <param name="HeldContentBefore">
 /// Whether it was a directory with content anywhere below it when the plan was made: a file, a link,
@@ -44,7 +50,7 @@ namespace Deguffer.Core.Execution;
 public sealed record ProtectedPath(
     string Path,
     string Reason,
-    bool ExistedBefore,
+    PathPresence PresenceBefore,
     bool HeldContentBefore = false,
     Withholding Withheld = Withholding.None);
 
@@ -266,7 +272,7 @@ public sealed record CleanupPlan
     /// been cleaned.</para>
     /// </summary>
     public bool HasSomethingToProve =>
-        ProtectedPaths.Any(p => p.ExistedBefore && p.Withheld != Withholding.None);
+        ProtectedPaths.Any(p => p.PresenceBefore is not PathPresence.Absent && p.Withheld != Withholding.None);
 
     /// <summary>
     /// Whether an item this plan found is on the user's keep list, and so was left out of it.
@@ -338,9 +344,9 @@ public sealed record CleanupPlan
                 s.Path,
                 "Left alone because it was not selected for this run.",
                 // It was measured during planning, so it was there when the plan was made. That is
-                // the only claim ExistedBefore makes, and re-probing the disk here would let a
+                // the only claim PresenceBefore makes, and re-probing the disk here would let a
                 // directory deleted between planning and execution excuse itself.
-                ExistedBefore: true,
+                PresenceBefore: PathPresence.Present,
 
                 // Content is asked of the disk rather than assumed, which is the opposite of the
                 // line above and for a reason the two do not share. Assuming it would report every
@@ -412,7 +418,7 @@ public sealed record CleanupPlan
                     "On your keep list, so Deguffer left it alone.",
                     // Measured during planning, so it was there when the plan was made: the claim
                     // NarrowedTo makes, for the reason it gives.
-                    ExistedBefore: true,
+                    PresenceBefore: PathPresence.Present,
                     HeldContentBefore: false,
                     Withheld: Withholding.OnKeepList)),
             ],

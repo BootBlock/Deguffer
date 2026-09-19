@@ -64,6 +64,27 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
     }
 
+    /// <summary>
+    /// An edition whose settings folder Windows will not describe may be installed, so §5.6 asserts
+    /// what it keeps there, recorded as a refusal. Read as absent, the edition counted as not
+    /// installed and its settings, downloads index and accounts were never asserted at all.
+    /// </summary>
+    [Fact]
+    public async Task AnEditionWhoseSettingsFolderWindowsWillNotDescribeStillHasItsSurvivorsAsserted()
+    {
+        Populate(Path.Combine(LocalFolder, "Data"));
+        Directory.CreateDirectory(StoreSettingsFolder);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(StoreSettingsFolder);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.False(Directory.Exists(StoreCacheFolder));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(StoreSettingsFolder, StringComparison.OrdinalIgnoreCase)
+            && p.PresenceBefore is PathPresence.Refused);
+    }
+
     [Fact]
     public async Task ReportsNotPresentOnAMachineWithNoSpotify()
     {
@@ -145,7 +166,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         foreach (var path in directories.Concat(files))
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -209,7 +230,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             n.Message.Contains("did not measure or remove", StringComparison.Ordinal)
             && n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -264,7 +285,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
     /// A cache the settings withhold is withheld and explained even where Windows will not describe
     /// it. The two-state probe dropped it from the withheld list, so the plan said nothing about the
     /// overlap and called the location an ordinary move. It is named as unreached as well, and it is
-    /// not asserted as a survivor: §5.6 cannot measure it, and would pass whatever happened.
+    /// asserted as a survivor recorded as a refusal, so §5.6 checks it again after the run.
     /// </summary>
     [Fact]
     public async Task AWithheldCacheWindowsWillNotDescribeIsStillWithheldAndExplained()
@@ -287,7 +308,8 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(cache, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not measure or remove", StringComparison.Ordinal));
-        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Refused);
     }
 
     /// <summary>
@@ -315,7 +337,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             n.Message.Contains("did not measure or remove", StringComparison.Ordinal)
             && n.Message.Contains(location, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(location, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(location, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]
@@ -417,7 +439,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
         AssertNothingIsOffered(provider, plan);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>The downloads' usual place, written out, is not a move and owes no sentence.</summary>

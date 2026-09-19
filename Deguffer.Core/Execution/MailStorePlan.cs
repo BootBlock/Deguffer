@@ -76,7 +76,7 @@ public static class MailStorePlan
                     // Measured during planning, and a store was found inside it, so it was there and held
                     // something when the plan was made. Its figure cannot say so, because the store is left
                     // out of every figure.
-                    ExistedBefore: true,
+                    PresenceBefore: PathPresence.Present,
                     HeldContentBefore: true));
             }
         }
@@ -146,7 +146,7 @@ public static class MailStorePlan
                 Reason,
                 // Measured during planning, so it was there when the plan was made — the claim
                 // CleanupPlan.NarrowedTo makes, for the reason it gives.
-                ExistedBefore: true,
+                PresenceBefore: PathPresence.Present,
                 HeldContentBefore: false,
                 Withheld: Withholding.MailStore));
 

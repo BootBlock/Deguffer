@@ -224,7 +224,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.
                 .. snapshots.Recent.Select(item => new ProtectedPath(
-                    item.Path, item.Reason, ExistedBefore: true, Withheld: Withholding.TooRecent)),
+                    item.Path, item.Reason, PresenceBefore: PathPresence.Present, Withheld: Withholding.TooRecent)),
             ],
             Notes = notes,
             Keep = effective,

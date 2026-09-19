@@ -117,7 +117,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == unrecognised && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == unrecognised && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -231,7 +231,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == downloading && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == downloading && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -327,7 +327,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         {
             Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -353,7 +353,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(idle, Assert.Single(plan.TargetedPaths));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy && p.PresenceBefore is PathPresence.Present);
         Assert.Contains(plan.Notes, n => n.Message.Contains("installing or updating", StringComparison.Ordinal));
 
         var result = await provider.ExecuteAsync(plan);

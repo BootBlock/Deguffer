@@ -21,9 +21,8 @@ namespace Deguffer.Core.Providers;
 /// Declared paths Windows would not describe, so nothing here establishes whether they are there.
 ///
 /// <para>Separate from <paramref name="Declined"/> because the two send the reader to different
-/// places: a decline is Deguffer's own, and this is Windows'. Separate from
-/// <paramref name="Protected"/> for a harder reason — §5.6 reads a path it cannot measure as
-/// "nothing to preserve", so asserting one here would pass whatever happened to the folder.</para>
+/// places: a decline is Deguffer's own, and this is Windows'. Each one is in
+/// <paramref name="Protected"/> as well, because nothing here removed it.</para>
 /// </param>
 /// <param name="Notes">What the user is told, including anything left alone and why.</param>
 public sealed record DeclaredLocationScan(
@@ -104,7 +103,7 @@ public static class DeclaredLocations
             switch (LongPath.ProbeDirectory(root.Path))
             {
                 case PathPresence.Refused:
-                    Unreachable(root.Path, unreachable, notes);
+                    Unreachable(root.Path, unreachable, protectedPaths, notes);
                     continue;
 
                 case PathPresence.Absent:
@@ -183,7 +182,7 @@ public static class DeclaredLocations
             switch (LongPath.ProbeDirectory(current))
             {
                 case PathPresence.Refused:
-                    Unreachable(current, unreachable, notes);
+                    Unreachable(current, unreachable, protectedPaths, notes);
                     return;
 
                 case PathPresence.Absent:
@@ -207,7 +206,7 @@ public static class DeclaredLocations
         switch (isFile ? LongPath.ProbeFile(path) : LongPath.ProbeDirectory(path))
         {
             case PathPresence.Refused:
-                Unreachable(path, unreachable, notes);
+                Unreachable(path, unreachable, protectedPaths, notes);
                 return;
 
             case PathPresence.Absent:
@@ -279,14 +278,15 @@ public static class DeclaredLocations
 
     /// <summary>
     /// Record that Windows would not describe a declared path, once however many declarations run
-    /// through it — the same rule <see cref="Decline"/> gives, and for the same reason.
-    ///
-    /// <para><b>No protected path.</b> §5.6 measures a survivor before the run, and a path that
-    /// cannot be measured records itself as "nothing to preserve" and then passes over whatever
-    /// happened to it. An assertion nobody can fail is worse than none, because it reads as one
-    /// that held.</para>
+    /// through it — the same rule <see cref="Decline"/> gives, and for the same reason. Asserted to
+    /// have survived like a decline, because §5.6 records it as a refusal and checks it again after
+    /// the run.
     /// </summary>
-    private static void Unreachable(string path, List<string> unreachable, List<PlanNote> notes)
+    private static void Unreachable(
+        string path,
+        List<string> unreachable,
+        List<(string Path, string Reason)> protectedPaths,
+        List<PlanNote> notes)
     {
         if (unreachable.Contains(path, StringComparer.OrdinalIgnoreCase))
         {
@@ -294,6 +294,7 @@ public static class DeclaredLocations
         }
 
         unreachable.Add(path);
+        protectedPaths.Add((path, UnreadableRoot.UnreachedReason));
         notes.Add(UnreadableRoot.UnreachedNote(LongPath.Display(path)));
     }
 

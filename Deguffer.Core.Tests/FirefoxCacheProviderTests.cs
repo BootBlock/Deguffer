@@ -174,7 +174,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
                 Assert.False(IsAtOrUnder(root, path), $"{path} would have taken {root} with it."));
 
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 
@@ -203,7 +203,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         foreach (var file in userData)
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -247,7 +247,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         // Not merely absent from the plan — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -278,7 +278,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(synchronised, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(synchronised, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(synchronised, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         // Measured, not merely mentioned: the note carries the size, so a figure of zero would mean
         // the directory was never scanned.

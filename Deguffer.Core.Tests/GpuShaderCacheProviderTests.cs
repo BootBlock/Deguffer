@@ -142,7 +142,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(_environment.LocalAppData, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         // §7.1 refuses every path a provider names as protected, on the second route as on the first.
         var policy = await ExploreActionPolicy.ForAsync(
@@ -310,7 +310,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         // Not merely absent from the plan — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -337,7 +337,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(accounts, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(accounts, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -553,7 +553,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         // Not merely absent from the plan — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -578,7 +578,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(accounts, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(accounts, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 

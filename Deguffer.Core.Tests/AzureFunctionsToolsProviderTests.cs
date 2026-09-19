@@ -160,7 +160,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
             p => string.Equals(Path.GetFileName(p), name, StringComparison.Ordinal));
 
         Assert.Contains(plan.Notes, n => n.Message.Contains($"Leaving '{name}' alone", StringComparison.Ordinal));
-        Assert.Contains(plan.ProtectedPaths, p => Path.GetFileName(p.Path) == name && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => Path.GetFileName(p.Path) == name && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -184,10 +184,10 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         Assert.DoesNotContain(tags, plan.TargetedPaths);
         Assert.DoesNotContain(feed, plan.TargetedPaths);
 
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Root && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Releases && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == tags && p.ExistedBefore);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == feed && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Root && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Releases && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == tags && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == feed && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

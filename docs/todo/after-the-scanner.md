@@ -473,6 +473,13 @@ Two further defects this work surfaced and did not fix, both needing a decision 
   preserve" and `PlanVerifier` then passes over whatever happened to it. Two sites route around it by
   declining to record such a survivor at all; the seam that manufactures the vacuous assertion is
   untouched, and closing it needs a `PlanVerifier` outcome for "could not be measured before the run".
+  **Fixed by #148:** `ProtectedPath.PresenceBefore` is a `PathPresence`, taken by
+  `LongPath.ProbeEntry`, and `PlanVerifier` asks the same three-state question afterwards. A refused
+  survivor is checked again after the run: present is a survivor, gone is an alarm, and still refused is
+  `VerificationOutcome.Unverified`, which neither passes nor fails and gives the run a warning verdict
+  of its own. The four sites that declined to record one (`DeclaredLocations`, the Claude Code
+  classification, Affinity and Spotify) now record it, and `SpotifyInstall.IsInstalled` reads a
+  refusal as "may be there", because the reason it kept two states is gone.
 - **Three callers read `LongPath.IsReparsePoint`'s fail-closed answer as a reason to do less.**
   `RefusalCheck` twice, and `ExploreRemover` once before the §9 mail-store search. All three predate
   this probe. **Fixed by #149:** each now asks `ProbeDirectory` first. `RefusalCheck` names a place

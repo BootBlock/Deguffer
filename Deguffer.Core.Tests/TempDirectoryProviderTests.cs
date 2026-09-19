@@ -82,7 +82,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(UserTemp, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(UserTemp, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -195,7 +195,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.Equal(1024, step.EstimatedBytes);
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore && p.HeldContentBefore);
+            p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present && p.HeldContentBefore);
 
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("live-session", StringComparison.Ordinal));
@@ -568,7 +568,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
         {
             Assert.DoesNotContain(asserted, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

@@ -788,7 +788,7 @@ public sealed class CleanupPlannerTests
                     new ProtectedPath(
                         protects,
                         "Withheld from this plan.",
-                        ExistedBefore: Directory.Exists(protects),
+                        PresenceBefore: LongPath.ProbeDirectory(protects),
                         Withheld: protectsByRule ? Withholding.None : Withholding.TooRecent),
                 ],
         };

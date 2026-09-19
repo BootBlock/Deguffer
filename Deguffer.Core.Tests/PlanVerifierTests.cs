@@ -9,7 +9,7 @@ namespace Deguffer.Core.Tests;
 /// do it?</em>
 ///
 /// <para>A plan is built when the user presses Preview and carried out when they press Clean, and
-/// <see cref="ProtectedPath.ExistedBefore"/> is a claim about the first of those instants. The
+/// <see cref="ProtectedPath.PresenceBefore"/> is a claim about the first of those instants. The
 /// machine is free to change in between, and on a developer's disk it does — a source checkout
 /// removed while the preview sat on screen took a whole tree of protected paths with it, and every
 /// one of them was reported as a rule that had reached too far.</para>
@@ -39,7 +39,10 @@ public sealed class PlanVerifierTests : IDisposable
             ProtectedPaths = protectedPaths,
         };
 
-    private static ProtectedPath Protect(string path) => new(path, "It must survive.", ExistedBefore: true);
+    private static ProtectedPath Protect(string path) => new(path, "It must survive.", PresenceBefore: PathPresence.Present);
+
+    private static ProtectedPath ProtectRefused(string path) =>
+        new(path, "It must survive.", PresenceBefore: PathPresence.Refused);
 
     private static VerificationOutcome OutcomeFor(CleanupPlan plan, string path, RunReach? reach = null) =>
         PlanVerifier.Verify(plan, reach).Checks.Single(c => c.Subject == path).Outcome;
@@ -75,10 +78,118 @@ public sealed class PlanVerifierTests : IDisposable
         var absent = Path.Combine(_temp.Path, "project", "bin");
         var plan = Plan(
             [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
-            new ProtectedPath(absent, "It must survive.", ExistedBefore: false));
+            new ProtectedPath(absent, "It must survive.", PresenceBefore: PathPresence.Absent));
 
         Assert.Equal(VerificationOutcome.NotPresentBefore, OutcomeFor(plan, absent));
         Assert.True(PlanVerifier.Verify(plan).Passed);
+    }
+
+    /// <summary>
+    /// A survivor Windows would not describe when the plan was made, and which is gone afterwards.
+    /// Recorded as absent, it read "nothing to preserve" and the check passed over whatever had
+    /// taken it, which is the one shape in which §5.6 could not catch an over-broad rule.
+    /// </summary>
+    [Fact]
+    public void ASurvivorWindowsWouldNotDescribeBeforeTheRunThatIsGoneAfterItIsAFailure()
+    {
+        var target = _temp.CreateDirectory("project", "obj");
+        var vanished = _temp.CreateDirectory("project", "bin");
+        var plan = Plan([new DeleteDirectoryStep(target, "Output")], ProtectRefused(vanished));
+
+        Directory.Delete(vanished);
+
+        var verification = PlanVerifier.Verify(plan);
+        var check = Assert.Single(verification.Checks);
+
+        Assert.Equal(VerificationOutcome.Failed, check.Outcome);
+        Assert.Contains("would not describe it before the clean", check.Detail, StringComparison.Ordinal);
+        Assert.False(verification.Passed);
+    }
+
+    /// <summary>
+    /// The same survivor, described after the run. Nothing saw it before, and it is there now, so it
+    /// survived: the claim a protected path makes is about the end of the run.
+    /// </summary>
+    [Fact]
+    public void ASurvivorWindowsWouldNotDescribeBeforeTheRunThatIsThereAfterItSurvived()
+    {
+        var kept = _temp.CreateDirectory("project", "bin");
+        var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")], ProtectRefused(kept));
+
+        Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
+        Assert.True(PlanVerifier.Verify(plan).Passed);
+    }
+
+    /// <summary>
+    /// A survivor Windows will not describe after the run, whatever it said before. Reading that as
+    /// missing raised an alarm on every run for a cache behind a link Windows declines to follow, and
+    /// reading it as a survivor claims what nobody saw. It is a check that could not be made.
+    /// </summary>
+    [Theory]
+    [InlineData(PathPresence.Present, "it was there before the clean")]
+    [InlineData(PathPresence.Refused, "before the clean or after it")]
+    public void ASurvivorWindowsWillNotDescribeAfterTheRunIsUnverified(PathPresence before, string detail)
+    {
+        var survivor = _temp.CreateDirectory("project", "bin");
+        var plan = Plan(
+            [new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")],
+            new ProtectedPath(survivor, "It must survive.", before));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(survivor);
+
+        var verification = PlanVerifier.Verify(plan);
+        var check = Assert.Single(verification.Checks);
+
+        Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
+        Assert.Contains(detail, check.Detail, StringComparison.Ordinal);
+        Assert.Equal(survivor, Assert.Single(verification.Unverified).Subject);
+        Assert.Empty(verification.Failures);
+        Assert.Empty(verification.RemovedFromOutside);
+        Assert.False(verification.Passed);
+    }
+
+    /// <summary>
+    /// A refusal afterwards hides nothing the removal itself recorded. Deguffer's own deletion went
+    /// inside the survivor, which is the alarm whatever Windows will now say about it.
+    /// </summary>
+    [Fact]
+    public void ASurvivorARemovalWentIntoIsEnteredEvenWhereWindowsWillNotDescribeItAfterwards()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "live");
+        var working = _temp.CreateDirectory("scratch", "live", "work");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files")], Protect(live));
+
+        var residue = new RunResidue();
+        residue.Record(scratch, [working, live]);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(live);
+
+        var verification = PlanVerifier.Verify(plan, runReach: null, residue);
+
+        Assert.Equal(VerificationOutcome.Entered, Assert.Single(verification.Checks).Outcome);
+        Assert.Equal(live, Assert.Single(verification.Failures).Subject);
+    }
+
+    /// <summary>
+    /// The outside reading rests on the folder that held a missing path being gone. A folder Windows
+    /// will not describe is no evidence of that, so the missing path stays the alarm.
+    /// </summary>
+    [Fact]
+    public void AMissingPathWhoseFolderWindowsWillNotDescribeIsNotReadAsRemovedFromOutside()
+    {
+        var folder = _temp.CreateDirectory("checkout", "project");
+        var missing = Path.Combine(folder, "obj");
+        var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("elsewhere", "obj"), "Output")], Protect(missing));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(folder);
+
+        // The shape under test, asserted rather than assumed: the path answers as absent while the
+        // folder holding it will not answer at all.
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(missing));
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(folder));
+
+        Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, missing));
     }
 
     /// <summary>
@@ -522,7 +633,7 @@ public sealed class PlanVerifierTests : IDisposable
 
     /// <summary>A protected directory recorded as holding something, as a provider's capture records it.</summary>
     private static ProtectedPath ProtectHolding(string path) =>
-        new(path, "It must survive.", ExistedBefore: true, HeldContentBefore: true);
+        new(path, "It must survive.", PresenceBefore: PathPresence.Present, HeldContentBefore: true);
 
     /// <summary>A tool's own eviction command, sent to clear <paramref name="cache"/>.</summary>
     private static RunCommandStep Evict(string cache) =>
@@ -564,6 +675,42 @@ public sealed class PlanVerifierTests : IDisposable
 
         Assert.Contains("removed from outside this run", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("did not survive", summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path nobody could check is counted in the denominator and named in the sentence. Leaving it
+    /// out would say "all 1 survived" about a run that checked one of two.
+    /// </summary>
+    [Fact]
+    public void TheSummaryCountsWhatCouldNotBeChecked()
+    {
+        var result = new VerificationResult
+        {
+            Checks = [Check(VerificationOutcome.Survived), Check(VerificationOutcome.Unverified)],
+        };
+
+        Assert.Equal("1 of 2 protected item(s) could not be checked.", result.Summary);
+    }
+
+    /// <summary>Every kind a run can have to answer for, each counted once, the alarm first.</summary>
+    [Fact]
+    public void TheSummaryCountsEveryKindWhenARunHasAll()
+    {
+        var result = new VerificationResult
+        {
+            Checks =
+            [
+                Check(VerificationOutcome.Survived),
+                Check(VerificationOutcome.Unverified),
+                Check(VerificationOutcome.Failed),
+                Check(VerificationOutcome.RemovedFromOutside),
+            ],
+        };
+
+        Assert.Equal(
+            "1 of 4 protected item(s) did not survive, 1 more were removed from outside this run, and "
+            + "1 more could not be checked.",
+            result.Summary);
     }
 
     /// <summary>

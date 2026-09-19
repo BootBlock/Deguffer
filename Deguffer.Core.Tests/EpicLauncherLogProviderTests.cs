@@ -180,7 +180,7 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
 
             // Not merely absent from the plan — asserted to survive (§5.6).
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

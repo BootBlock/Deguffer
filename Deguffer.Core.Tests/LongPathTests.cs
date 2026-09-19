@@ -205,6 +205,28 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// The question §5.6 asks of a protected path, which may be either kind. A refusal is kept apart
+    /// from absence for a file as well as a directory, because a survivor recorded as absent is one
+    /// the check afterwards can never fail.
+    /// </summary>
+    [Fact]
+    public void AnEntryOfEitherKindIsTreatedAlikeAndARefusalIsNotAbsence()
+    {
+        using var temp = new TempDirectory();
+
+        var directory = temp.CreateDirectory("cache");
+        var file = temp.CreateFile(1, "cache", "a.bin");
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeEntry(directory));
+        Assert.Equal(PathPresence.Present, LongPath.ProbeEntry(file));
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(Path.Combine(temp.Path, "nothing")));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(directory);
+
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeEntry(directory));
+    }
+
+    /// <summary>
     /// The form a presence probe asks in: a refusal reads as "may be there", because a row that
     /// never appears is the one state nothing downstream can correct.
     /// </summary>
@@ -313,6 +335,9 @@ public class LongPathTests
         {
             Assert.Equal(Directory.Exists(path), LongPath.DirectoryExists(path));
             Assert.Equal(File.Exists(path), LongPath.FileExists(path));
+            Assert.Equal(
+                Directory.Exists(path) || File.Exists(path),
+                LongPath.ProbeEntry(path) is PathPresence.Present);
         }
 
         // The long path is genuinely long, or the two entries above prove nothing about §6.3.

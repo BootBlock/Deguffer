@@ -153,8 +153,8 @@ public static partial class AffinityProfiles
 
         switch (LongPath.ProbeDirectory(common))
         {
-            // Common stays null: it is what the caller asserts must survive, and §5.6 cannot
-            // measure a path Windows would not describe.
+            // Common stays null, because nothing below it was classified. The caller asserts it
+            // survived through Unreached, as a path Windows would not describe.
             case PathPresence.Refused:
                 return new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: null)
                 {

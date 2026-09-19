@@ -41,6 +41,69 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         return directory;
     }
 
+    /// <summary>
+    /// A container Windows would not describe when the plan was made is asserted like any other, and
+    /// a run after which it is gone fails. Before, it was never asserted at all, so §5.6 passed over
+    /// whatever had taken it.
+    /// </summary>
+    [Fact]
+    public async Task AContainerWindowsWouldNotDescribeThatIsGoneAfterTheRunFailsVerification()
+    {
+        Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+        Populate(Path.Combine("System32", "LogFiles", "WMI", "RtBackup"), file: "EtwRT.etl");
+        var logFiles = Path.Combine(Windows, "System32", "LogFiles");
+
+        var provider = CreateProvider();
+        CleanupPlan plan;
+
+        using (DeniedDirectory.WithUnreadableAttributes(logFiles))
+        {
+            plan = await provider.PlanAsync();
+        }
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(logFiles, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Refused);
+
+        // Stands in for the over-broad rule the negative exists to catch.
+        Directory.Delete(logFiles, recursive: true);
+
+        var result = await provider.ExecuteAsync(plan);
+        var check = Assert.Single(
+            result.Verification!.Checks,
+            c => c.Subject.Equals(logFiles, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(VerificationOutcome.Failed, check.Outcome);
+        Assert.False(result.Verification.Passed);
+        Assert.Equal(RunVerdict.VerificationFailed, RunOutcome.For([result]).Verdict);
+    }
+
+    /// <summary>
+    /// The same container, still undescribed after the run. The run neither passes nor fails over it:
+    /// the report names it as a check that could not be made, and the Windows directory, which is
+    /// never a target, is still there.
+    /// </summary>
+    [Fact]
+    public async Task AContainerWindowsStillWillNotDescribeAfterTheRunIsReportedAsNotChecked()
+    {
+        Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+        Populate(Path.Combine("System32", "LogFiles", "WMI", "RtBackup"), file: "EtwRT.etl");
+        var logFiles = Path.Combine(Windows, "System32", "LogFiles");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(logFiles);
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+        var verification = result.Verification!;
+
+        Assert.True(
+            logFiles.Equals(Assert.Single(verification.Unverified).Subject, StringComparison.OrdinalIgnoreCase),
+            verification.Summary);
+        Assert.Empty(verification.Failures);
+        Assert.False(verification.Passed);
+        Assert.Equal(RunVerdict.Unverified, RunOutcome.For([result]).Verdict);
+        Assert.True(Directory.Exists(Windows));
+    }
+
     [Fact]
     public async Task ReportsNotPresentOnAMachineHoldingNoneOfThem()
     {
@@ -108,7 +171,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         {
             Assert.DoesNotContain(container, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(container, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(container, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -149,7 +212,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         foreach (var asserted in new[] { Windows, winSxS, installer })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);

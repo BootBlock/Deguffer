@@ -49,6 +49,27 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     ];
 
     /// <summary>
+    /// One of the folders a clean works in, which Windows will not describe while the others are
+    /// cleaned. §5.6 asserts it, recorded as a refusal, so the check after the run either sees it or
+    /// says it could not. Left out, it was a folder beside the run's own deletions that nothing could
+    /// fail over.
+    /// </summary>
+    [Fact]
+    public async Task AFolderWindowsWillNotDescribeBesideTheOthersIsStillASurvivor()
+    {
+        CreateOneOfEachLeftover();
+        var snapshots = Path.Combine(_claude.Home, ClaudeCodeHome.ShellSnapshots);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(snapshots);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.NotEmpty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(snapshots, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Refused);
+    }
+
+    /// <summary>
     /// A Claude Code folder Windows will not describe is declared all the same, with the two
     /// neighbours the plan names. The declaration dropped it, so Explore offered every leftover in a
     /// folder the Storage page said nothing was ruled out in.
@@ -184,7 +205,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
 
         Assert.All(plan.TargetedPaths, path => Assert.False(
             LongPath.Contains(folder, path), $"{path} is inside {name}, which nothing recognises."));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -216,7 +237,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         Assert.All(plan.TargetedPaths, path => Assert.False(
             LongPath.Contains(_claude.FileHistory, path), $"{path} is inside the snapshot folder."));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(_claude.FileHistory, StringComparison.OrdinalIgnoreCase)
-            && p.ExistedBefore
+            && p.PresenceBefore is PathPresence.Present
             && p.Reason == declared.Reason);
 
         var result = await provider.ExecuteAsync(plan);
@@ -243,7 +264,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.DoesNotContain(folder, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -301,7 +322,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
             Assert.All(plan.TargetedPaths, target => Assert.False(
                 LongPath.Contains(target, path), $"{target} would have taken {path} with it."));
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -396,7 +417,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.DoesNotContain(sidecar, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(sidecar, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(sidecar, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.True(plan.HasUnreadableRoot);
 
         var result = await provider.ExecuteAsync(plan);
@@ -537,7 +558,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         Assert.DoesNotContain(sidecar, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(environmentFolder, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(endedLock, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(refused, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(refused, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
             && n.Message.Contains("project folder", StringComparison.Ordinal));

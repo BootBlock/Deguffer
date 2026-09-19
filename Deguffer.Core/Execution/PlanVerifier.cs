@@ -42,7 +42,7 @@ public static class PlanVerifier
     {
         // A path that was never there cannot be evidence of survival. Recording it with an honest
         // detail keeps the report from overstating what the run actually established.
-        if (!protectedPath.ExistedBefore)
+        if (protectedPath.PresenceBefore is PathPresence.Absent)
         {
             return new VerificationCheck(
                 protectedPath.Path,
@@ -51,7 +51,14 @@ public static class PlanVerifier
                 "Not present before the clean; nothing to preserve.");
         }
 
-        if (LongPath.FileExists(protectedPath.Path) || LongPath.DirectoryExists(protectedPath.Path))
+        var after = LongPath.ProbeEntry(protectedPath.Path);
+
+        if (after is PathPresence.Refused)
+        {
+            return Unmeasured(protectedPath, residue);
+        }
+
+        if (after is PathPresence.Present)
         {
             // Asked before the emptied question, because it is the more exact of the two. It names
             // Deguffer's own removal as the one that went inside, where an emptied folder may still be
@@ -90,8 +97,42 @@ public static class PlanVerifier
                 protectedPath.Path,
                 protectedPath.Reason,
                 VerificationOutcome.Failed,
-                "MISSING — it was there before the clean.");
+                protectedPath.PresenceBefore is PathPresence.Present
+                    ? "MISSING — it was there before the clean."
+                    : "MISSING — Windows would not describe it before the clean, and says it is not "
+                      + "there now.");
     }
+
+    /// <summary>
+    /// A protected path Windows would not describe after the run, which is the one answer that
+    /// establishes nothing about it.
+    ///
+    /// <para><b>Not read as missing.</b> That reading raised an alarm on every run for a user whose
+    /// cache sits behind a directory link Windows declines to follow, and a §5.6 alarm that cries
+    /// wolf is worth less than no alarm. <b>Not read as a survivor either</b>, because nothing saw
+    /// it survive. It is stated as a check that could not be made.</para>
+    ///
+    /// <para><b>A removal of Deguffer's own that went inside it still fails the run.</b>
+    /// <see cref="RunResidue"/> records that from the removal itself rather than from the disk, so a
+    /// refusal afterwards hides nothing it knows.</para>
+    /// </summary>
+    private static VerificationCheck Unmeasured(ProtectedPath protectedPath, RunResidue? residue) =>
+        residue?.Entered(protectedPath.Path) == true
+            ? new VerificationCheck(
+                protectedPath.Path,
+                protectedPath.Reason,
+                VerificationOutcome.Entered,
+                "ENTERED — a removal in this run went inside it and could not take everything it "
+                + "tried to. Windows would not describe it afterwards.")
+            : new VerificationCheck(
+                protectedPath.Path,
+                protectedPath.Reason,
+                VerificationOutcome.Unverified,
+                protectedPath.PresenceBefore is PathPresence.Present
+                    ? "NOT CHECKED — it was there before the clean, and Windows would not describe it "
+                      + "afterwards, so nothing shows whether it survived."
+                    : "NOT CHECKED — Windows would not describe it before the clean or after it, so "
+                      + "nothing shows whether it survived.");
 
     /// <summary>
     /// Whether a protected directory that held something now holds nothing, for a reason this run
@@ -162,7 +203,7 @@ public static class PlanVerifier
     /// account for.
     ///
     /// <para><b>Why the question is worth asking at all.</b> A plan is built when the user presses
-    /// Preview and carried out when they press Clean, and <see cref="ProtectedPath.ExistedBefore"/>
+    /// Preview and carried out when they press Clean, and <see cref="ProtectedPath.PresenceBefore"/>
     /// is a claim about the first of those instants. Anything at all may happen to the disk in
     /// between — on a machine where build directories are the subject, a removed source checkout is
     /// an ordinary event. Reading every such disappearance as an over-broad rule tells the user to
@@ -206,8 +247,11 @@ public static class PlanVerifier
         //
         // The folder is not put through IsTargeted as well, and it needs no separate guard: a
         // targeted folder means a targeted path, which the line above has already answered.
+        //
+        // Absent, not merely undescribed. A folder Windows would not describe is no evidence that
+        // it went, and reading it as gone would grant the outside reading on nothing.
         return Path.GetDirectoryName(Display(path)) is { Length: > 0 } parent
-            && !LongPath.DirectoryExists(parent)
+            && LongPath.ProbeDirectory(parent) is PathPresence.Absent
             && !HoldsAnyOf(parent, reach.TargetedPaths);
     }
 

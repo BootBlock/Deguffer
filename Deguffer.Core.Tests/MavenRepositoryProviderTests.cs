@@ -95,7 +95,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Assert.Equal([DefaultRepository], plan.TargetedPaths);
         Assert.DoesNotContain(Home, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(Home, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(Home, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
                 IsAtOrUnder(file, path), $"{path} would have taken {Path.GetFileName(file)} with it."));
 
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
     }
 
@@ -275,9 +275,9 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(settings, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(settings, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(Home, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(Home, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

@@ -102,7 +102,7 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
 
         // It is not merely absent from the plan — it is asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(prompts, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(prompts, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

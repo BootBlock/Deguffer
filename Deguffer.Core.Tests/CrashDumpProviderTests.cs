@@ -54,7 +54,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
 
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(_environment.LocalAppData, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.False(policy.MayRemove(_environment.LocalAppData).IsAllowed);
         Assert.True(policy.MayRemove(dumps).IsAllowed);
     }
@@ -193,7 +193,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         foreach (var asserted in new[] { Windows, ProgramData, winSxS, installer, packageCache, payloads })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+                p.Path.Equals(asserted, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         }
 
         var result = await provider.ExecuteAsync(plan);
@@ -469,7 +469,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
 
         Assert.DoesNotContain(plan.Steps, s => s is DeleteFileStep);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == memoryDump && p.ExistedBefore);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == memoryDump && p.PresenceBefore is PathPresence.Present);
 
         var result = await CreateProvider().ExecuteAsync(plan);
 

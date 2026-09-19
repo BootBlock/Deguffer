@@ -133,9 +133,9 @@ public sealed class UvCacheProviderTests : IDisposable
 
         // Not merely unmentioned — asserted to survive (§5.6).
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(tools, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(tools, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
         Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(provider.StateRoot, StringComparison.OrdinalIgnoreCase) && p.ExistedBefore);
+            p.Path.Equals(provider.StateRoot, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     [Fact]

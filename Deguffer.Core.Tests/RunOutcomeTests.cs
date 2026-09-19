@@ -254,6 +254,7 @@ public sealed class RunOutcomeTests
     [Theory]
     [InlineData(VerificationOutcome.Survived, false)]
     [InlineData(VerificationOutcome.NotPresentBefore, false)]
+    [InlineData(VerificationOutcome.Unverified, true)]
     [InlineData(VerificationOutcome.RemovedFromOutside, true)]
     [InlineData(VerificationOutcome.Failed, true)]
     public void OnlyAVerdictWithSomethingToAnswerForHoldsTheInfoBar(
@@ -261,6 +262,68 @@ public sealed class RunOutcomeTests
         bool expected)
     {
         Assert.Equal(expected, RunOutcome.For([Result("npm", outcome)]).NeedsReporting);
+    }
+
+    /// <summary>
+    /// A protected path Windows would not describe after the run. Nothing shows it survived, so the
+    /// run does not say every path did, and nothing shows a rule over-reached, so it does not ask the
+    /// user to report a fault: the ordinary cause is a link Windows declines to follow, which every
+    /// run on that machine meets.
+    /// </summary>
+    [Fact]
+    public void SaysAPathCouldNotBeCheckedWithoutCallingItAFailure()
+    {
+        var outcome = RunOutcome.For([Result("npm"), Result("Gradle", VerificationOutcome.Unverified)]);
+
+        Assert.Equal(RunVerdict.Unverified, outcome.Verdict);
+        Assert.False(outcome.VerificationFailed);
+        Assert.True(outcome.NeedsReporting);
+
+        Assert.Equal(
+            "Cleaned. Windows would not describe one protected path for Gradle after the clean, so "
+            + "Deguffer could not check that it survived. An access rule, or a link Windows declines to "
+            + "follow, is the usual cause.",
+            outcome.Statement);
+    }
+
+    /// <summary>Both grammatical forms, for the reason the outside sentence gives.</summary>
+    [Fact]
+    public void CountsThePathsThatCouldNotBeCheckedAcrossProviders()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm", VerificationOutcome.Unverified), Result("Gradle", VerificationOutcome.Unverified)]);
+
+        Assert.Contains(
+            "Windows would not describe 2 protected paths for npm, Gradle after the clean, so Deguffer "
+            + "could not check that they survived.",
+            outcome.Statement,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path taken from outside and one nobody could check are both said, the outside one first.
+    /// Either sentence alone would leave the other fact about the same run unsaid.
+    /// </summary>
+    [Fact]
+    public void APathTakenFromOutsideLeadsAndAPathThatCouldNotBeCheckedFollows()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm", VerificationOutcome.RemovedFromOutside), Result("Gradle", VerificationOutcome.Unverified)]);
+
+        Assert.Equal(RunVerdict.RemovedFromOutside, outcome.Verdict);
+        Assert.StartsWith("Cleaned. One protected path for npm went missing", outcome.Statement, StringComparison.Ordinal);
+        Assert.Contains("one protected path for Gradle after the clean", outcome.Statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>A failure outranks a path nobody could check, and says one thing, as it always does.</summary>
+    [Fact]
+    public void AFailureOutranksAPathThatCouldNotBeChecked()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm", VerificationOutcome.Unverified), Result("NuGet", VerificationOutcome.Failed)]);
+
+        Assert.Equal(RunVerdict.VerificationFailed, outcome.Verdict);
+        Assert.DoesNotContain("npm", outcome.Statement, StringComparison.Ordinal);
     }
 
     /// <summary>
