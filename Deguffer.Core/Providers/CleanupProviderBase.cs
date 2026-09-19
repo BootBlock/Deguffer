@@ -226,13 +226,20 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// rather than <see cref="CleanupPlan.WasNotExamined"/>: the second of those is Deguffer's own
     /// decision not to look, and this is not a decision Deguffer made.</para>
     /// </summary>
-    protected CleanupPlan UnreadableRootPlan(string root) =>
+    protected CleanupPlan UnreadableRootPlan(string root) => UnreadableRootPlan([root]);
+
+    /// <summary>
+    /// The same plan for a provider whose tool names several locations, every one of which Windows
+    /// would not describe. Each is named, because they may sit on different drives and the reader
+    /// has to be able to go and look at each.
+    /// </summary>
+    protected CleanupPlan UnreadableRootPlan(IReadOnlyList<string> roots) =>
         // Composed from EmptyPlan rather than repeating its skeleton, as UnexaminedPlan is: a field
         // added there has to reach every plan with nothing to do. The note is replaced rather than
         // appended, because EmptyPlan's is Information and this one is a warning.
-        EmptyPlan(UnreadableRoot.WhyItCouldNotBeReached(root)) with
+        EmptyPlan(UnreadableRoot.WhyItCouldNotBeReached(roots[0])) with
         {
-            Notes = [UnreadableRoot.UnreachedNote(root)],
+            Notes = [.. roots.Select(UnreadableRoot.UnreachedNote)],
             HasUnreadableRoot = true,
         };
 
@@ -255,6 +262,18 @@ public abstract class CleanupProviderBase : ICleanupProvider
         PathPresence.Refused => UnreadableRootPlan(root),
         _ => null,
     };
+
+    /// <summary>
+    /// The same for a provider whose tool names several locations: null where any of them is there,
+    /// so the provider carries on and adds <see cref="ReachedDirectories.UnreachedNotes"/> for the
+    /// rest, and otherwise the plan for none being there or none being described.
+    /// </summary>
+    /// <param name="found">What Windows said about each location the tool named.</param>
+    /// <param name="absent">What to tell the user where every location is genuinely not there.</param>
+    private protected CleanupPlan? NothingToPlanFor(ReachedDirectories found, string absent) =>
+        found.Present.Count > 0 ? null
+        : found.CouldNotBeReached ? UnreadableRootPlan(found.Refused)
+        : EmptyPlan(absent);
 
     /// <summary>
     /// §5.6 — capture what each protected path was before the run, so verification can tell

@@ -48,6 +48,36 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         _claude.FailedEvents(SessionA, age: Old),
     ];
 
+    /// <summary>
+    /// A Claude Code folder Windows will not describe is declared all the same, with the two
+    /// neighbours the plan names. The declaration dropped it, so Explore offered every leftover in a
+    /// folder the Storage page said nothing was ruled out in.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAllOfAFolderWindowsWillNotDescribe()
+    {
+        var leftovers = CreateOneOfEachLeftover();
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(_claude.Home);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        foreach (var refused in leftovers.Concat(
+        [
+            _claude.Home,
+            Path.Combine(_environment.UserProfile, ".claude.json"),
+            Path.Combine(_environment.UserProfile, ".claude-swap-backup"),
+        ]))
+        {
+            Assert.False(policy.MayRemove(refused).IsAllowed, $"Explore would remove {refused}");
+        }
+    }
+
     [Fact]
     public async Task ReportsNotPresentWhereClaudeCodeHasNoFolder()
     {

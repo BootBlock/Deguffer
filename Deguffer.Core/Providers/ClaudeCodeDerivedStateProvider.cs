@@ -347,7 +347,13 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     {
         if (Look() is not { } survey)
         {
-            return [];
+            // Nothing was classified. Where that is because Windows would not describe the folder, the
+            // plan names it, so Explore is told about it too. The folder's own rule recognises none of
+            // its children, so it refuses everything below without the per-folder roots a look adds.
+            return ClaudeCodeHome.Resolve(Environment) is { } home
+                && LongPath.ProbeDirectory(home) is PathPresence.Refused
+                    ? [ToolRoot.Of(home, HomeReason, HomeChildren), .. Neighbours()]
+                    : [];
         }
 
         var offered = new HashSet<string>(
@@ -357,16 +363,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         return
         [
             ToolRoot.Of(survey.Evidence.Home, HomeReason, HomeChildren),
-            new ToolRoot(
-                Path.Combine(Environment.UserProfile, ".claude.json"),
-                "This is Claude Code's own configuration: your account, and each project's trust decisions "
-                + "and servers. Deguffer never removes it.",
-                static _ => false),
-            new ToolRoot(
-                Path.Combine(Environment.UserProfile, ".claude-swap-backup"),
-                "This is not part of Claude Code. Another program keeps saved sign-ins here, under a name that "
-                + "begins the same way, and Deguffer never removes it.",
-                static _ => false),
+            .. Neighbours(),
             .. survey.Kinds
                 .SelectMany(kind => kind.Folders)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -376,6 +373,21 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                     name => offered.Contains(Path.Combine(folder, name)))),
         ];
     }
+
+    /// <summary>The two paths beside Claude Code's folder that the plan names as survivors.</summary>
+    private IEnumerable<ToolRoot> Neighbours() =>
+    [
+        new ToolRoot(
+            Path.Combine(Environment.UserProfile, ".claude.json"),
+            "This is Claude Code's own configuration: your account, and each project's trust decisions "
+            + "and servers. Deguffer never removes it.",
+            static _ => false),
+        new ToolRoot(
+            Path.Combine(Environment.UserProfile, ".claude-swap-backup"),
+            "This is not part of Claude Code. Another program keeps saved sign-ins here, under a name that "
+            + "begins the same way, and Deguffer never removes it.",
+            static _ => false),
+    ];
 
     /// <summary>
     /// Everything this pass knows, gathered once (G4). Presence answers from the folder alone, and the

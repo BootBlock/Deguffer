@@ -111,6 +111,50 @@ public sealed class GoCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache Windows will not describe is reported as one Deguffer could not reach, never as
+    /// absent. "Go is installed but has cached nothing yet" was said about a module cache holding
+    /// 4 KB, and the row read as clear.
+    /// </summary>
+    [Fact]
+    public async Task ACacheWindowsWillNotDescribeIsSaidToBeUnreachedRatherThanAbsent()
+    {
+        Populate(ModuleCache);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(ModuleCache);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Empty(plan.Steps);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(ModuleCache, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("cached nothing", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Beside a cache that is there, the refused one gets no step, because nothing could measure what
+    /// clearing it would free, and it is named rather than dropped.
+    /// </summary>
+    [Fact]
+    public async Task ACacheWindowsWillNotDescribeGetsNoStepAndIsNamedBesideTheOther()
+    {
+        Populate(BuildCache);
+        Populate(ModuleCache);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(ModuleCache);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal("clean -cache", step.Arguments);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(ModuleCache, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The locations move independently, and only <c>go env</c> knows where they are. A provider
     /// that assumed the defaults would measure and clear the wrong directories on any machine whose
     /// owner had moved one.

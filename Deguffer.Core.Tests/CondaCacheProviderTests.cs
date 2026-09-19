@@ -502,4 +502,49 @@ public sealed class CondaCacheProviderTests : IDisposable
         Assert.False(policy.MayRemove(elsewhere).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(elsewhere, "science")).IsAllowed);
     }
+
+    /// <summary>
+    /// A package cache conda names and Windows will not describe is reported as one Deguffer could
+    /// not reach, and not as a cache that is not there yet. "Conda is installed but has cached
+    /// nothing yet" was said about a cache holding 4 KB, because a filter through the two-state
+    /// probe dropped it before anything asked why.
+    /// </summary>
+    [Fact]
+    public async Task APackageCacheWindowsWillNotDescribeIsSaidToBeUnreachedRatherThanEmpty()
+    {
+        Populate(PackageCache);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(PackageCache);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Empty(plan.Steps);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(PackageCache, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("cached nothing", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Beside a cache that is there, one Windows will not describe is still named, and the row still
+    /// carries the flag: conda's command runs as this account too, so its figure may not cover it.
+    /// </summary>
+    [Fact]
+    public async Task ASecondPackageCacheWindowsWillNotDescribeIsNamedBesideTheCommand()
+    {
+        var refused = Populate(Path.Combine(_environment.LocalAppData, "conda", "pkgs"));
+        Populate(PackageCache);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(refused);
+
+        var plan = await CreateProvider(Reporting(packageCaches: [PackageCache, refused])).PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal([PackageCache], step.MeasuredPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(
+            plan.Notes,
+            n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(refused, StringComparison.Ordinal));
+    }
 }

@@ -1046,4 +1046,26 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(busy, "working.txt")).IsAllowed);
         Assert.True(policy.MayRemove(idle).IsAllowed);
     }
+
+    /// <summary>
+    /// §7.1 over a scratch folder Windows will not describe. Nothing could ask which of its entries a
+    /// running program is working in, so Explore refuses all of them rather than none.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAllOfAScratchFolderWindowsWillNotDescribe()
+    {
+        _environment.WithTempPath(Path.Combine(_environment.LocalAppData, "Temp"));
+
+        var idle = Path.Combine(UserTemp, "abandoned");
+        Abandoned(1024, "profile", "AppData", "Local", "Temp", "abandoned", "old.tmp");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(UserTemp);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.False(policy.MayRemove(idle).IsAllowed);
+    }
 }

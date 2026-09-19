@@ -126,6 +126,53 @@ public sealed class FileHistoryDiscoveryTests : IDisposable
         Assert.Equal(data, Discovery().Locate().Target!.DataDirectory);
     }
 
+    /// <summary>
+    /// A named target Windows will not describe decides the answer, and a later one holding saved
+    /// versions does not. It may be a stale copy on a drive File History stopped using, and sizing
+    /// it would preview one drive while Windows trims another. The two-state probe passed the
+    /// refused one over and did exactly that.
+    /// </summary>
+    [Fact]
+    public void ATargetWindowsWillNotDescribeIsUnreachableRatherThanPassedForTheNext()
+    {
+        var refused = CreateDrive("E");
+        var data = CreateHistory(refused);
+        var stale = CreateDrive("F");
+        CreateHistory(stale);
+        WriteConfiguration(
+            $"<DataProtectionConfig><Target><Url>{refused}</Url></Target><Old><Url>{stale}</Url></Old></DataProtectionConfig>");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(data);
+
+        var located = Discovery().Locate();
+
+        Assert.Equal(FileHistoryLookup.Unreachable, located.Outcome);
+        Assert.Null(located.Target);
+        Assert.Equal(data, located.Unreached);
+        Assert.Equal(data, located.Candidate!.DataDirectory);
+    }
+
+    /// <summary>
+    /// A settings folder Windows will not describe is unreachable, not a configuration naming no
+    /// connected drive: nothing read the settings, so nothing suggests a drive is missing.
+    /// </summary>
+    [Fact]
+    public void ASettingsFolderWindowsWillNotDescribeIsUnreachable()
+    {
+        var drive = CreateDrive("E");
+        CreateHistory(drive);
+        WriteConfiguration(NamingTarget(drive));
+        var settings = Discovery().ConfigurationDirectory;
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(settings);
+
+        var discovery = Discovery();
+
+        Assert.True(discovery.IsConfigured);
+        Assert.Equal(FileHistoryLookup.Unreachable, discovery.Locate().Outcome);
+        Assert.Equal(settings, discovery.Locate().Unreached);
+    }
+
     [Fact]
     public void ReportsNoTargetWhenTheNamedDriveHoldsNothing()
     {

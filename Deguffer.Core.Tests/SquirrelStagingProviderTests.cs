@@ -627,4 +627,26 @@ public sealed class SquirrelStagingProviderTests : IDisposable
 
         Assert.True(policy.MayRemove(idle).IsAllowed);
     }
+
+    /// <summary>
+    /// §7.1 over a staging folder Windows will not describe. Nothing could ask which of its
+    /// directories an application is installing through, so Explore refuses all of them, rather than
+    /// letting the name-shaped declaration allow every one.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAllOfAStagingFolderWindowsWillNotDescribe()
+    {
+        var idle = Populate(Path.Combine(StagingRoot, "tempb"));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(StagingRoot);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.False(policy.MayRemove(idle).IsAllowed);
+        Assert.False(policy.MayRemove(StagingRoot).IsAllowed);
+    }
 }

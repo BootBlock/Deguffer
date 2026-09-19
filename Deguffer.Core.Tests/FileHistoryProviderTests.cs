@@ -490,6 +490,39 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A target Windows will not describe is reported as one Deguffer could not reach, never as a
+    /// drive that may not be connected: the drive is there, and a link or an access rule is what the
+    /// user has to go and look at. Explore goes on refusing it and the settings folder, because the
+    /// plan names it and nothing established that it is not the target in use.
+    /// </summary>
+    [Fact]
+    public async Task ATargetWindowsWillNotDescribeIsSaidToBeUnreachedAndStaysDeclared()
+    {
+        var drive = CreateConfiguredDrive();
+        var data = Path.Combine(CreateHistory(drive), "Data");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(data);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Empty(_runner.Invocations);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(data, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("not be connected", StringComparison.Ordinal));
+
+        var root = Assert.Single(
+            provider.ToolRoots,
+            r => r.Path.Equals(Path.Combine(drive, "FileHistory"), StringComparison.Ordinal));
+        Assert.False(root.Recognises(FakeUserEnvironment.Account));
+        Assert.Contains(provider.ToolRoots, r => r.Path.Equals(
+            Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration"),
+            StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Windows' own command is the only route to removing a saved version, so without it there is
     /// nothing to offer — and a path deletion is not the fallback, because §5.2 puts the whole
     /// directory out of reach.

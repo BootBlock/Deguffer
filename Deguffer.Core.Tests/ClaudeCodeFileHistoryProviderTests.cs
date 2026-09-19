@@ -432,6 +432,34 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// A snapshot folder, or a home, Windows will not describe is declared all the same. The plan
+    /// names it as unreached, and the declaration dropped it, so Explore offered a session's snapshots
+    /// from a folder the Storage page said nothing was ruled out in. Nothing established which
+    /// sessions are running, so none of them may go.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExploreRefusesAllOfASnapshotFolderWindowsWillNotDescribe(bool refuseTheHome)
+    {
+        var session = OldSession(SessionA);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(refuseTheHome ? _claude.Home : _claude.FileHistory);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+
+        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+
+        foreach (var refused in new[] { _claude.Home, _claude.FileHistory, session })
+        {
+            Assert.False(policy.MayRemove(refused).IsAllowed, $"Explore would remove {refused}");
+        }
+    }
+
     [Fact]
     public async Task ASnapshotFolderThatIsALinkIsNeverLookedThrough()
     {

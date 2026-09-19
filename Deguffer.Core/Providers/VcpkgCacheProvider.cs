@@ -149,11 +149,6 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Presence is a declared path actually being there. The user's vcpkg directory exists on any
-    /// machine that has ever integrated vcpkg with Visual Studio, and reading that as a hit would
-    /// report a source the plan then has nothing to say about.
-    /// </summary>
-    /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Both of the user's vcpkg directories, because the
     /// documented search order for the binary cache falls through from the local profile to the
     /// roaming one, and a cache found under the second still has that second directory's own records
@@ -204,6 +199,18 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 disposable.Contains));
         }
 
+        // Recognising nothing, because nothing established what is in there. It may be a clone, and
+        // a declaration only ever narrows what Explore allows.
+        if (located.UnreachedRoot is { } unreached)
+        {
+            roots.Add(new ToolRoot(
+                unreached,
+                "Something on this machine names this folder as vcpkg's own directory, and Windows would "
+                + "not say what is in it. Deguffer leaves all of it alone, because a vcpkg clone holds the "
+                + "libraries you have installed.",
+                static _ => false));
+        }
+
         if (Holding(located.BinaryCache, located) is { } binaryCache)
         {
             roots.Add(binaryCache);
@@ -217,8 +224,18 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }
 
+    /// <summary>
+    /// Presence is a declared path actually being there, or a clone Windows would not describe. The
+    /// user's vcpkg directory exists on any machine that has ever integrated vcpkg with Visual
+    /// Studio, and reading that as a hit would report a source the plan then has nothing to say
+    /// about.
+    ///
+    /// <para>The unreached clone is there because the planner never asks an absent provider for a
+    /// plan, and the sentence naming it would then be unreachable.</para>
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryMayExist));
+        Task.FromResult(
+            DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryMayExist) || Locate().UnreachedRoot is not null);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -228,10 +245,24 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
         if (scan.FoundNothing)
         {
-            return EmptyPlan(
-                refused.Count > 0 ? RefusedSentence(refused[0])
+            var why = refused.Count > 0 ? RefusedSentence(refused[0])
                 : located.UnmarkedRoot is { } nothingFound ? UnmarkedRootSentence(nothingFound)
-                : "vcpkg has cached nothing on this machine.");
+                : null;
+
+            if (located.UnreachedRoot is not { } unreached)
+            {
+                return EmptyPlan(why ?? "vcpkg has cached nothing on this machine.");
+            }
+
+            // Never "cached nothing": the clone may hold the most of anything vcpkg keeps.
+            var unreadable = UnreadableRootPlan(unreached);
+
+            return why is null
+                ? unreadable with { Notes = [UnreachedRootNote(unreached)] }
+                : unreadable with
+                {
+                    Notes = [UnreachedRootNote(unreached), new PlanNote(PlanNoteSeverity.Information, why)],
+                };
         }
 
         var notes = new List<PlanNote>(scan.Notes);
@@ -248,14 +279,25 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             // it. The user is looking at a number, and the number is a quarter of the subject. Which
             // sentence they get matters: telling somebody to set a variable they have already set
             // sends them looking for a mistake they did not make.
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                located.UnmarkedRoot is { } declined
-                    ? UnmarkedRootSentence(declined)
-                    : "This covers the binary cache only. vcpkg's own directory is a clone that can be "
-                      + $"anywhere, and Deguffer could not find it — set {VcpkgDiscovery.RootVariable}, or "
-                      + "put vcpkg on PATH, and the buildtrees, downloads and packages directories inside "
-                      + "it are covered too."));
+            if (located.UnmarkedRoot is { } declined)
+            {
+                notes.Add(new PlanNote(PlanNoteSeverity.Information, UnmarkedRootSentence(declined)));
+            }
+
+            if (located.UnreachedRoot is { } unreached)
+            {
+                notes.Add(UnreachedRootNote(unreached));
+            }
+
+            if (located.UnmarkedRoot is null && located.UnreachedRoot is null)
+            {
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    "This covers the binary cache only. vcpkg's own directory is a clone that can be "
+                    + $"anywhere, and Deguffer could not find it — set {VcpkgDiscovery.RootVariable}, or "
+                    + "put vcpkg on PATH, and the buildtrees, downloads and packages directories inside "
+                    + "it are covered too."));
+            }
         }
 
         var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
@@ -281,7 +323,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            HasUnreadableRoot = scan.CouldNotBeReached || located.UnreachedRoot is not null,
         };
     }
 
@@ -297,6 +339,19 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         $"Leaving '{path}' alone: that is vcpkg's own directory, or something inside it Deguffer "
         + "never removes, rather than a cache. A variable can say where a cache is. It cannot ask "
         + "for the directory holding the tool.";
+
+    /// <summary>
+    /// What the user is told when something named a clone that Windows would not describe. It does
+    /// not say the marker is missing, which nothing established, and it gives no advice to set a
+    /// variable, which may be exactly what named it.
+    /// </summary>
+    private static PlanNote UnreachedRootNote(string unreached) => new(
+        PlanNoteSeverity.Warning,
+        $"Something on this machine names '{unreached}' as vcpkg's own directory, and Windows would not "
+        + "say what is there, so Deguffer could not check it or look inside it. A link Windows will not "
+        + "follow, a folder this account may not read and a drive that is not connected all do that. The "
+        + "buildtrees, downloads and packages directories of a vcpkg clone were neither cleared nor "
+        + "ruled out.");
 
     private static string UnmarkedRootSentence(string declined) =>
         $"Deguffer found {declined} but it does not hold vcpkg's own '{VcpkgDiscovery.RootMarker}' "
@@ -488,6 +543,13 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         if ((located.Root ?? located.UnmarkedRoot) is { } clone)
         {
             yield return (clone, ProtectedInRoot);
+        }
+
+        // Counted for the unmarked candidate's reason. A refusal is no more evidence that it is not a
+        // clone than a missing marker is.
+        if (located.UnreachedRoot is { } unreached)
+        {
+            yield return (unreached, ProtectedInRoot);
         }
 
         foreach (var profile in _discovery.ProfileDirectories)

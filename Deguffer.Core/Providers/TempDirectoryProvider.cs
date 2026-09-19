@@ -233,20 +233,24 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// <para>One pass over the process table however large the folder, which is what
     /// <see cref="ILiveTreeInspector.FindLiveChildren"/> exists for: the measured machine held
     /// 18,056 immediate entries, and naming them to ask about each would be a walk per entry.</para>
+    ///
+    /// <para><b>A folder Windows would not describe is refused whole</b>, because nothing could ask
+    /// which of its entries is in use. The plan names it as unreached, and a declaration only ever
+    /// narrows what Explore allows.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var folders = DeclaredPaths().Where(LongPath.DirectoryExists).ToList();
-
-        if (folders.Count == 0)
-        {
-            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
-        }
-
-        var live = _liveTrees.FindLiveChildren(folders, ct);
+        var folders = ReachedDirectories.Of(DeclaredPaths());
+        var live = _liveTrees.FindLiveChildren(folders.Present, ct);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
+            .. folders.Refused.Select(refused => new ToolRoot(
+                refused,
+                "Windows would not say what is in this temporary folder, so Deguffer cannot tell whether a "
+                + "running program is working in it. A temporary folder holds live working files among "
+                + "abandoned ones, so Deguffer leaves all of it alone.",
+                static _ => false)),
             .. live.Live.Select(held => new ToolRoot(
                 held.Directory,
                 (held.Holders.Count > 0

@@ -173,12 +173,38 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// <para>It is read again whenever Explore rebuilds its policy, because what is running changes
     /// and an answer kept for the life of the process would say an install finished an hour ago is
     /// still going on.</para>
+    ///
+    /// <para><b>A staging folder Windows would not describe is refused whole.</b> Nothing could ask
+    /// which of its directories is in use, and the name-shaped declaration would otherwise allow every
+    /// one of them. The plan names the folder as unreached, and a declaration only ever narrows what
+    /// Explore allows.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        if (_discovery.StagingRoot is not { } root
-            || !LongPath.DirectoryExists(root)
-            || LongPath.IsReparsePoint(root))
+        if (_discovery.StagingRoot is not { } root)
+        {
+            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+        }
+
+        switch (LongPath.ProbeDirectory(root, out var isLink))
+        {
+            case PathPresence.Refused:
+                return Task.FromResult<IReadOnlyList<ToolRoot>>(
+                [
+                    new ToolRoot(
+                        root,
+                        "Windows would not say what is in this folder, so Deguffer cannot tell whether an "
+                        + "application is installing or updating through it right now. Every application on "
+                        + "this machine that uses the Squirrel updater shares it, so Deguffer leaves all of it "
+                        + "alone.",
+                        static _ => false),
+                ]);
+
+            case PathPresence.Absent:
+                return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+        }
+
+        if (isLink is true)
         {
             return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
         }

@@ -155,9 +155,17 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     {
         var storage = Storage;
         var scan = DeclaredLocations.Examine(Roots, ct);
+
+        // A cache Windows would not describe is withheld all the same. What the sentence below says
+        // about it is a fact about Spotify's settings, not about the folder, and dropping it would
+        // leave a moved location's overlap unexplained.
         var withheld = storage.Installs
-            .Where(install => !storage.MayOffer(install.Edition) && LongPath.DirectoryExists(install.Edition.Cache))
+            .Where(install => !storage.MayOffer(install.Edition))
+            .Select(install => (install.Edition, Presence: LongPath.ProbeDirectory(install.Edition.Cache)))
+            .Where(withholding => withholding.Presence is not PathPresence.Absent)
             .ToList();
+
+        var unreached = scan.CouldNotBeReached;
 
         var owesASentence = withheld.Count > 0 || storage.Unsettled is not null || storage.Moved.Count > 0;
 
@@ -175,12 +183,27 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             notes.Add(Information(UnsettledSentence(unsettled, withheld.Count > 0)));
         }
 
-        foreach (var install in withheld)
+        foreach (var (edition, presence) in withheld)
         {
-            var cache = install.Edition.Cache;
-            survivors.Add((cache, WithheldCacheReason));
+            var cache = edition.Cache;
 
-            foreach (var location in storage.Overlapping(install.Edition))
+            if (presence is PathPresence.Present)
+            {
+                survivors.Add((cache, WithheldCacheReason));
+            }
+            else
+            {
+                // Not a survivor: §5.6 cannot measure it, and would pass whatever happened to it. Named
+                // unless the folder holding it already was, which says the same thing about it.
+                if (!scan.Unreachable.Any(root => LongPath.Contains(root, cache)))
+                {
+                    notes.Add(UnreadableRoot.UnreachedNote(cache));
+                }
+
+                unreached = true;
+            }
+
+            foreach (var location in storage.Overlapping(edition))
             {
                 explained.Add(location);
                 // "Keeps, or kept": a location comes from either key, and storage.last-location is
@@ -237,7 +260,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             // A withheld cache and a moved location count here for the reason a declined link does:
             // something was never examined, so the row must not read clear.
             WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || owesASentence),
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            HasUnreadableRoot = unreached,
         };
     }
 

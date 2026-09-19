@@ -149,21 +149,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
         var folder = Path.Combine(home, ClaudeCodeHome.FileHistory);
 
-        // The home first, then everything below it down to the snapshot folder, and all of it before
-        // the folder is probed for. Probing for the folder resolves through the home, so a link there
-        // that Windows declines to follow would leave the folder reading as unreachable and the link —
-        // which Deguffer can see perfectly well — never named.
-        if (LongPath.ProbeDirectory(home) is PathPresence.Refused)
-        {
-            return UnreadableRootPlan(home);
-        }
-
-        if (LongPath.IsReparsePoint(home))
-        {
-            return LinkedAway(home);
-        }
-
-        if (DerivedPath.FirstObstacleBetween(home, folder) is { } obstacle)
+        if (FirstObstacle(home, folder) is { } obstacle)
         {
             return obstacle.IsLink ? LinkedAway(obstacle.Path) : UnreadableRootPlan(obstacle.Path);
         }
@@ -252,7 +238,13 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     {
         if (Look() is not { } survey)
         {
-            return [];
+            // Nothing was classified. Where that is because Windows would not describe the folder or
+            // the way down to it, the plan names the place, so Explore is told about it too: the home
+            // recognising nothing refuses everything below it, snapshots included.
+            return ClaudeCodeHome.Resolve(Environment) is { } home
+                && FirstObstacle(home, Path.Combine(home, ClaudeCodeHome.FileHistory)) is { IsLink: false }
+                    ? [new ToolRoot(home, HomeReason, static _ => false)]
+                    : [];
         }
 
         var offered = new HashSet<string>(
@@ -275,6 +267,30 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         + "through a link.");
 
     /// <summary>
+    /// The first place on the way down to the snapshot folder that stops it, the folder included, or
+    /// null where nothing does. The plan, the survey and the declaration all ask this, so none of them
+    /// can read a refusal as absence while another names it.
+    ///
+    /// <para>The home first, then everything below it, and all of it before the folder is probed
+    /// for. Probing for the folder resolves through the home, so a link there that Windows declines
+    /// to follow would leave the folder reading as unreachable and the link — which Deguffer can see
+    /// perfectly well — never named.</para>
+    /// </summary>
+    private static DerivedPathObstacle? FirstObstacle(string home, string folder)
+    {
+        switch (LongPath.ProbeDirectory(home, out var isLink))
+        {
+            case PathPresence.Refused:
+                return new DerivedPathObstacle(home, IsLink: false);
+
+            case PathPresence.Present when isLink is true:
+                return new DerivedPathObstacle(home, IsLink: true);
+        }
+
+        return DerivedPath.FirstObstacleBetween(home, folder);
+    }
+
+    /// <summary>
     /// One look at the snapshot folder and the list of running sessions, memoised for the life of a planning
     /// pass (G4). Presence, planning and the declaration all read it.
     /// </summary>
@@ -282,16 +298,14 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
     private Survey? Examine(CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment) is not { } home
-            || !LongPath.DirectoryExists(home)
-            || LongPath.IsReparsePoint(home))
+        if (ClaudeCodeHome.Resolve(Environment) is not { } home)
         {
             return null;
         }
 
         var folder = Path.Combine(home, ClaudeCodeHome.FileHistory);
 
-        if (!LongPath.DirectoryExists(folder) || LongPath.IsReparsePoint(folder))
+        if (FirstObstacle(home, folder) is not null || !LongPath.DirectoryExists(folder))
         {
             return null;
         }

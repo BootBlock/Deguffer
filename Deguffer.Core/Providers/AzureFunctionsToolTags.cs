@@ -53,7 +53,11 @@ internal static class AzureFunctionsToolTags
     {
         var tags = Path.Combine(root, DirectoryName);
 
-        if (!LongPath.DirectoryExists(tags))
+        // A folder Windows would not describe is a tag nobody read, so it takes the whole answer
+        // with it, as one that refused to be listed does below. Folding it into absence says nothing
+        // untrue here: both leave every row described neutrally, and neither is a claim about the
+        // disk. Tags is never a target, so no figure is short by it either. See PathPresence.
+        if (LongPath.ProbeDirectory(tags) is not PathPresence.Present)
         {
             return null;
         }

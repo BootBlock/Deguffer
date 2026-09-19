@@ -25,11 +25,19 @@ namespace Deguffer.Core.Providers;
 /// declined it" — the second is a refusal the user is owed a sentence about, and telling somebody to
 /// set a variable they have already set sends them looking for a mistake they did not make.
 /// </param>
+/// <param name="UnreachedRoot">
+/// A directory something pointed at as the clone which Windows would not describe, so nothing
+/// established whether it is there, let alone whether it carries the marker. Separate from
+/// <paramref name="UnmarkedRoot"/> because that one is a finding: the directory was there and was
+/// not a clone. This one is not, and it is still treated as vcpkg's own directory wherever that
+/// keeps something out of a plan, because a refusal is not evidence that it is not one.
+/// </param>
 public sealed record VcpkgLocations(
     string? BinaryCache,
     string? Root,
     string? RelocatedDownloads,
-    string? UnmarkedRoot = null);
+    string? UnmarkedRoot = null,
+    string? UnreachedRoot = null);
 
 /// <summary>
 /// Finds vcpkg. Separate from the provider for the reason <see cref="ChromiumUserDataDiscovery"/>
@@ -89,9 +97,9 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
 
     public VcpkgLocations Discover()
     {
-        var (root, unmarked) = FindRoot();
+        var (root, unmarked, unreached) = FindRoot();
 
-        return new VcpkgLocations(FindBinaryCache(), root, FindRelocatedDownloads(root), unmarked);
+        return new VcpkgLocations(FindBinaryCache(), root, FindRelocatedDownloads(root), unmarked, unreached);
     }
 
     /// <summary>
@@ -102,6 +110,10 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     /// feed, and it is a small expression language rather than a path. It is not parsed here. The
     /// consequence of ignoring it is bounded and safe: a machine using a remote cache has no local
     /// <c>archives</c> directory, so there is nothing to find and nothing is offered.</para>
+    ///
+    /// <para>The search stops at a directory Windows would not describe, because vcpkg's own search
+    /// may have stopped there too. Passing it for the roaming one would size a cache vcpkg may not be
+    /// using, while the provider says nothing about the one it may be.</para>
     /// </summary>
     private string? FindBinaryCache()
     {
@@ -114,7 +126,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
         {
             var archives = Path.Combine(profile, "archives");
 
-            if (LongPath.DirectoryExists(archives))
+            if (LongPath.DirectoryMayExist(archives))
             {
                 return archives;
             }
@@ -136,9 +148,10 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     /// name under it and simply will not be there.</item>
     /// </list>
     /// </summary>
-    private (string? Root, string? Unmarked) FindRoot()
+    private (string? Root, string? Unmarked, string? Unreached) FindRoot()
     {
         string? unmarked = null;
+        string? unreached = null;
 
         foreach (var candidate in Candidates())
         {
@@ -151,16 +164,27 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
             // clone is there. The marker is, so it gates all three rather than only the weakest.
             if (LongPath.FileExists(Path.Combine(candidate, RootMarker)))
             {
-                return (candidate, null);
+                return (candidate, null, null);
             }
 
             // The first directory that was named and declined, so the provider can say which one it
             // means. A route naming somewhere that is not there at all is not a refusal worth
-            // reporting, because there is nothing for the user to go and look at.
-            unmarked ??= LongPath.DirectoryExists(candidate) ? candidate : null;
+            // reporting, because there is nothing for the user to go and look at. The marker's own
+            // answer stays two-state, because a refusal is no evidence of a clone: it is the probe of
+            // the directory that tells "not a clone" from "Windows would not say".
+            switch (LongPath.ProbeDirectory(candidate))
+            {
+                case PathPresence.Present:
+                    unmarked ??= candidate;
+                    break;
+
+                case PathPresence.Refused:
+                    unreached ??= candidate;
+                    break;
+            }
         }
 
-        return (null, unmarked);
+        return (null, unmarked, unreached);
     }
 
     private IEnumerable<string?> Candidates()
