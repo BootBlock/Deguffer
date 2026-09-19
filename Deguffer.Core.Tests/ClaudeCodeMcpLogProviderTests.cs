@@ -141,7 +141,7 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         var provider = CreateProvider();
         await provider.PlanAsync();
 
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         Assert.True(policy.MayRemove(log).IsAllowed);
 
@@ -172,7 +172,7 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
 
         Assert.True(plan.HasUnreadableRoot);
 
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         foreach (var refused in new[] { Path.GetDirectoryName(Cache)!, Cache, Project(), log })
         {

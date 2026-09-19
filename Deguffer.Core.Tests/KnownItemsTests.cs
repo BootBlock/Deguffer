@@ -148,7 +148,7 @@ public sealed class KnownItemsTests : IDisposable
     [MemberData(nameof(Everything))]
     public void EveryEntryIsFoundWhereItSaysItIs(KnownItem entry)
     {
-        Assert.Same(entry, ItemGuide.For(_system, _environment).Describe(Address(entry)));
+        Assert.Same(entry, ItemGuide.For(_system, _environment, new FakeVolumeInventory()).Describe(Address(entry)));
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public sealed class KnownItemsTests : IDisposable
     [InlineData(@"Microsoft\VisualStudio\Packages")]
     public void TheInstallerCachesAreExplainedEvenThoughNothingOffersThem(string relativePath)
     {
-        var entry = ItemGuide.For(_system, _environment)
+        var entry = ItemGuide.For(_system, _environment, new FakeVolumeInventory())
             .Describe(Path.Combine(_system.ProgramData, relativePath));
 
         Assert.NotNull(entry);
@@ -185,7 +185,7 @@ public sealed class KnownItemsTests : IDisposable
     [InlineData(@"E:\someone@example.com.ost")]
     public void OutlooksDataFilesAreExplainedWhereverTheyAre(string path)
     {
-        Assert.NotNull(ItemGuide.For(_system, _environment).Describe(path));
+        Assert.NotNull(ItemGuide.For(_system, _environment, new FakeVolumeInventory()).Describe(path));
     }
 
     [Theory]
@@ -194,7 +194,7 @@ public sealed class KnownItemsTests : IDisposable
     [InlineData(KnownPlace.UserProfile, @"OneDrive\Documents\Outlook Files")]
     public void OutlooksFoldersAreExplainedEvenThoughNothingOffersThem(KnownPlace place, string relativePath)
     {
-        Assert.NotNull(ItemGuide.For(_system, _environment).Describe(Path.Combine(Anchor(place), relativePath)));
+        Assert.NotNull(ItemGuide.For(_system, _environment, new FakeVolumeInventory()).Describe(Path.Combine(Anchor(place), relativePath)));
     }
 
     /// <summary>
@@ -215,7 +215,7 @@ public sealed class KnownItemsTests : IDisposable
     public void TheMachineWideSdksAreExplainedEvenThoughNothingOffersThem(
         KnownPlace place, string relativePath)
     {
-        var entry = ItemGuide.For(_system, _environment)
+        var entry = ItemGuide.For(_system, _environment, new FakeVolumeInventory())
             .Describe(Path.Combine(Anchor(place), relativePath));
 
         Assert.NotNull(entry);

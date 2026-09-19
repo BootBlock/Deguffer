@@ -27,7 +27,7 @@ public sealed class ExploreRemoverTests : IDisposable
         // The region table alone: these tests are about what the remover does with a verdict, and no
         // provider takes part in any of them. ExploreActionPolicy.ForAsync is asserted where §5.2's
         // declarations are, and it cannot be awaited in a constructor.
-        _policy = new ExploreActionPolicy(ProtectedRegions.For(_system, _environment), []);
+        _policy = new ExploreActionPolicy(ProtectedRegions.For(_system, _environment), [], new FakeVolumeInventory());
     }
 
     public void Dispose() => _temp.Dispose();
@@ -573,7 +573,7 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             [],
-            [ToolRoot.Of(gradle, "Gradle's own folder.", GradleCacheProvider.DisposableChildren)]);
+            [ToolRoot.Of(gradle, "Gradle's own folder.", GradleCacheProvider.DisposableChildren)], new FakeVolumeInventory());
 
         var report = await ExploreRemover.RemoveAsync(
             [new ExploreItem(properties, IsDirectory: false, Bytes: 8)],
@@ -600,7 +600,7 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var policy = new ExploreActionPolicy(
             [],
-            [new ToolRoot(root, "A vendor tool's own folder.", static _ => false)]);
+            [new ToolRoot(root, "A vendor tool's own folder.", static _ => false)], new FakeVolumeInventory());
 
         var report = await ExploreRemover.RemoveAsync(
             [

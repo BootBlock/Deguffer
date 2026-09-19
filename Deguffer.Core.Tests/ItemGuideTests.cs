@@ -20,6 +20,7 @@ public sealed class ItemGuideTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeSystemDirectories _system;
     private readonly FakeUserEnvironment _environment;
+    private readonly FakeVolumeInventory _volumes = new();
 
     public ItemGuideTests()
     {
@@ -137,6 +138,74 @@ public sealed class ItemGuideTests : IDisposable
         var guide = Guide(new KnownItem(KnownPlace.VolumeRoot, "pagefile.sys", "the paging file", "No."));
 
         Assert.Null(guide.Describe(@"C:\Users\testuser\pagefile.sys"));
+    }
+
+    /// <summary>
+    /// A volume mounted at a folder has its top at that folder, so its paging file is explained there
+    /// as it is at the top of a drive. Read from the drive letter, <c>C:\Mount\pagefile.sys</c> is
+    /// one level below <c>C:\</c> and nothing is said about it. Both depths of entry, because the
+    /// lookup finds a multi-segment one by a different number of trailing segments.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Mount\pagefile.sys")]
+    [InlineData(@"C:\Mount\$Extend\$Quota")]
+    public void AVolumeRootEntryIsFoundAtTheTopOfAVolumeMountedAtAFolder(string path)
+    {
+        _volumes.With(@"C:\").With(@"D:\", alsoMountedAt: [@"C:\Mount\"]);
+        var guide = Guide(
+            new KnownItem(KnownPlace.VolumeRoot, "pagefile.sys", "the paging file", "No."),
+            new KnownItem(KnownPlace.VolumeRoot, @"$Extend\$Quota", "quota tracking", "No."));
+
+        Assert.NotNull(guide.Describe(path));
+    }
+
+    /// <summary>
+    /// The same path where nothing is mounted at the folder. It is then an ordinary folder one level
+    /// below <c>C:\</c>, so the entry is not found there, which is what shows the answer above comes
+    /// from where the volume is mounted rather than from the folder's name.
+    /// </summary>
+    [Fact]
+    public void AVolumeRootEntryIsNotFoundInAFolderNothingIsMountedAt()
+    {
+        _volumes.With(@"C:\");
+        var guide = Guide(new KnownItem(KnownPlace.VolumeRoot, "pagefile.sys", "the paging file", "No."));
+
+        Assert.Null(guide.Describe(@"C:\Mount\pagefile.sys"));
+    }
+
+    /// <summary>
+    /// A volume mounted after the guide was built is recognised. The guide is built once for the
+    /// life of the app, and a volume can be mounted at any moment of it.
+    /// </summary>
+    [Fact]
+    public void AVolumeMountedAfterTheGuideWasBuiltIsRecognised()
+    {
+        _volumes.With(@"C:\");
+        var guide = Guide(new KnownItem(KnownPlace.VolumeRoot, "pagefile.sys", "the paging file", "No."));
+
+        _volumes.With(@"D:\", alsoMountedAt: [@"C:\Mount\"]);
+
+        Assert.NotNull(guide.Describe(@"C:\Mount\pagefile.sys"));
+    }
+
+    /// <summary>
+    /// The machine is asked only about a path named like something Windows keeps at a volume root.
+    /// The page asks the guide about every row it draws, and asking Windows where each of them is
+    /// mounted would be a call into the system per row for an answer nearly none of them needs.
+    /// </summary>
+    [Fact]
+    public void AnOrdinaryNameDoesNotAskWhereItsVolumeIsMounted()
+    {
+        var guide = Guide(
+            new KnownItem(KnownPlace.VolumeRoot, "pagefile.sys", "the paging file", "No."),
+            new KnownItem(KnownPlace.VolumeRoot, @"$Extend\$Quota", "quota tracking", "No."));
+
+        Assert.Null(guide.Describe(@"C:\Users\testuser\holiday photos"));
+        Assert.Null(guide.DescribeNearest(@"C:\Users\testuser\holiday photos\beach.jpg"));
+        Assert.Empty(_volumes.MountPointQueries);
+
+        Assert.NotNull(guide.Describe(@"C:\pagefile.sys"));
+        Assert.NotEmpty(_volumes.MountPointQueries);
     }
 
     [Fact]
@@ -267,7 +336,8 @@ public sealed class ItemGuideTests : IDisposable
     {
         var guide = new ItemGuide(
             [At(KnownPlace.ProgramFilesX86, "Common Files")],
-            new Dictionary<KnownPlace, string> { [KnownPlace.ProgramFilesX86] = string.Empty });
+            new Dictionary<KnownPlace, string> { [KnownPlace.ProgramFilesX86] = string.Empty },
+            _volumes);
 
         Assert.Null(guide.Describe(@"C:\Program Files (x86)\Common Files"));
     }
@@ -276,7 +346,8 @@ public sealed class ItemGuideTests : IDisposable
     [Fact]
     public void AnEntryWithNoAnchorAtAllIsAbsent()
     {
-        var guide = new ItemGuide([At(KnownPlace.ProgramData, "Package Cache")], new Dictionary<KnownPlace, string>());
+        var guide = new ItemGuide(
+            [At(KnownPlace.ProgramData, "Package Cache")], new Dictionary<KnownPlace, string>(), _volumes);
 
         Assert.Null(guide.Describe(@"C:\ProgramData\Package Cache"));
     }
@@ -380,7 +451,7 @@ public sealed class ItemGuideTests : IDisposable
     }
 
     private ItemGuide Guide(params KnownItem[] entries) =>
-        new(entries, Anchors());
+        new(entries, Anchors(), _volumes);
 
     private Dictionary<KnownPlace, string> Anchors() => new()
     {

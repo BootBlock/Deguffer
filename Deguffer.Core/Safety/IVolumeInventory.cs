@@ -144,6 +144,22 @@ public interface IVolumeInventory
     IReadOnlyList<LocalVolume> Volumes { get; }
 
     /// <summary>
+    /// Where the volume holding <paramref name="path"/> is mounted, asked of the machine at the
+    /// moment of the call rather than read from <see cref="Volumes"/>, or null where it will not say.
+    ///
+    /// <para>Live because its caller is <see cref="VolumeRoot"/>, which has to be right about a
+    /// volume mounted a moment ago, and the list is remembered until the next
+    /// <see cref="Invalidate"/>. A volume mounted at a folder after the list was read would
+    /// otherwise have its paging file and its Recycle Bin read as ordinary folders of the disk the
+    /// folder sits on.</para>
+    ///
+    /// <para>The answer is not always a prefix of the path. A path that passes through a junction
+    /// is answered with the volume on the junction's far side, so a caller that reads a position
+    /// from the answer has to check that it is one.</para>
+    /// </summary>
+    string? MountPointOf(string path);
+
+    /// <summary>
     /// Discard the remembered list, so a drive mounted while the app was open is seen on the next
     /// preview. Called at the start of a planning pass, as <see cref="IUserEnvironment.Invalidate"/>
     /// is.
@@ -179,6 +195,8 @@ public sealed class VolumeInventory : IVolumeInventory
             }
         }
     }
+
+    public string? MountPointOf(string path) => VolumeCalls.MountPointOf(path);
 
     public void Invalidate()
     {

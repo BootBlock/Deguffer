@@ -32,6 +32,20 @@ public sealed class ItemGuide
     /// </summary>
     private readonly Dictionary<string, KnownItem> _belowVolumeRoot;
 
+    /// <summary>
+    /// How many segments deep each <see cref="_belowVolumeRoot"/> key is, so a lookup can find the
+    /// one key a path could match from its own trailing segments before it asks the machine where
+    /// the path's volume is mounted.
+    ///
+    /// <para>That question costs a call into Windows, and the page asks about every row it draws and
+    /// every shape the pointer settles on. Nearly none of them is named like anything Windows keeps
+    /// at a volume root, so asking only for the ones that are keeps the lookup a dictionary probe
+    /// (G4) without remembering an answer that a volume mounted a moment later would make wrong.</para>
+    /// </summary>
+    private readonly SortedSet<int> _belowVolumeRootDepths = [];
+
+    private readonly IVolumeInventory _volumes;
+
     /// <summary><see cref="KnownPlace.Anywhere"/>, keyed by name.</summary>
     private readonly Dictionary<string, KnownItem> _byName;
 
@@ -45,10 +59,19 @@ public sealed class ItemGuide
     /// <c>%ProgramFiles(x86)%</c> on a 32-bit Windows, where it is empty and there is nothing there
     /// to explain.
     /// </param>
-    public ItemGuide(IEnumerable<KnownItem> entries, IReadOnlyDictionary<KnownPlace, string> anchors)
+    /// <param name="volumes">
+    /// Asked where a path's volume is mounted, so what Windows keeps at the top of a volume mounted
+    /// at a folder is explained as it is at the top of a drive, by the rule
+    /// <see cref="Acting.ExploreActionPolicy"/> refuses by.
+    /// </param>
+    public ItemGuide(
+        IEnumerable<KnownItem> entries, IReadOnlyDictionary<KnownPlace, string> anchors, IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(anchors);
+        ArgumentNullException.ThrowIfNull(volumes);
+
+        _volumes = volumes;
 
         _byPath = new Dictionary<string, KnownItem>(StringComparer.OrdinalIgnoreCase);
         _belowVolumeRoot = new Dictionary<string, KnownItem>(StringComparer.OrdinalIgnoreCase);
@@ -69,6 +92,7 @@ public sealed class ItemGuide
 
                 case KnownPlace.VolumeRoot:
                     _belowVolumeRoot[entry.RelativePath] = entry;
+                    _belowVolumeRootDepths.Add(Depth(entry.RelativePath));
                     break;
 
                 default:
@@ -84,18 +108,18 @@ public sealed class ItemGuide
 
     /// <summary>The catalogue against the machine the app is running on (G5: built once, injected).</summary>
     public static ItemGuide ForThisMachine() =>
-        For(SystemDirectories.Current, UserEnvironment.Current);
+        For(SystemDirectories.Current, UserEnvironment.Current, VolumeInventory.Current);
 
     /// <summary>
-    /// The catalogue against the directories these two seams name, which is what lets every entry
-    /// be asserted against a synthetic profile rather than the developer's own.
+    /// The catalogue against the directories and volumes these seams name, which is what lets every
+    /// entry be asserted against a synthetic profile rather than the developer's own.
     /// </summary>
-    public static ItemGuide For(ISystemDirectories system, IUserEnvironment environment)
+    public static ItemGuide For(ISystemDirectories system, IUserEnvironment environment, IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(environment);
 
-        return new ItemGuide(KnownItems.All, Anchors(system, environment));
+        return new ItemGuide(KnownItems.All, Anchors(system, environment), volumes);
     }
 
     /// <summary>
@@ -164,7 +188,7 @@ public sealed class ItemGuide
             return anchored;
         }
 
-        if (VolumeRoot.Below(target) is { } below && _belowVolumeRoot.TryGetValue(below, out var reserved))
+        if (AtTheTopOfAVolume(target) is { } reserved)
         {
             return reserved;
         }
@@ -178,6 +202,56 @@ public sealed class ItemGuide
             ? _byExtension.GetValueOrDefault(extension)
             : null;
     }
+
+    /// <summary>
+    /// The <see cref="KnownPlace.VolumeRoot"/> entry for <paramref name="target"/>, or null where it
+    /// is not one of them.
+    ///
+    /// <para>The path's trailing segments pick the one entry it could be, and only then is the
+    /// machine asked whether those segments really start at the top of the path's volume
+    /// (<see cref="_belowVolumeRootDepths"/> says why in that order). A path whose text is deeper
+    /// than its volume root, which is every path on a volume mounted at a folder, is therefore
+    /// answered by where the volume is mounted rather than by its drive letter.</para>
+    /// </summary>
+    private KnownItem? AtTheTopOfAVolume(string target)
+    {
+        foreach (var depth in _belowVolumeRootDepths)
+        {
+            if (Trailing(target, depth) is { } candidate
+                && _belowVolumeRoot.TryGetValue(candidate, out var reserved)
+                && candidate.Equals(VolumeRoot.Below(_volumes, target), StringComparison.OrdinalIgnoreCase))
+            {
+                return reserved;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The last <paramref name="depth"/> segments of <paramref name="path"/>, or null where it has
+    /// no more than that many — a path with nothing above those segments has no volume root above
+    /// them either.
+    /// </summary>
+    private static string? Trailing(string path, int depth)
+    {
+        var start = path.Length;
+
+        for (var remaining = depth; remaining > 0; remaining--)
+        {
+            start = path.LastIndexOf(Path.DirectorySeparatorChar, start - 1);
+
+            if (start <= 0)
+            {
+                return null;
+            }
+        }
+
+        return path[(start + 1)..];
+    }
+
+    private static int Depth(string relativePath) =>
+        relativePath.Count(c => c == Path.DirectorySeparatorChar) + 1;
 
     /// <summary>
     /// Where <paramref name="entry"/> sits on this machine, or null where its place names no

@@ -1038,7 +1038,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         var provider = CreateProvider(new FakeLiveTreeInspector(busy));
         var plan = await provider.PlanAsync();
-        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase));
 
@@ -1063,7 +1063,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
-        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, [provider]);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.True(plan.HasUnreadableRoot);
         Assert.False(policy.MayRemove(idle).IsAllowed);

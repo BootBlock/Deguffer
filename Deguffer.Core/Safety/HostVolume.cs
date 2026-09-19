@@ -13,9 +13,11 @@ namespace Deguffer.Core.Safety;
 /// three callers could not get at it, which is how an approved source folder on a cloud mount came
 /// to be walked in full.</para>
 ///
-/// <para>Its own type rather than a member on <see cref="VolumeRoot"/>. That one reads a path's
-/// position from the path itself and deliberately consults no list of drives; this one exists to
-/// consult the list, because what the volume <em>is</em> can only be read from the volume (G1).</para>
+/// <para>Its own type rather than a member on <see cref="VolumeRoot"/>. That one answers where a
+/// path sits in its volume, and asks the machine at each question rather than reading the
+/// remembered list, because it has to be right about a volume mounted a moment ago. This one exists
+/// to read the list, because what the volume <em>is</em> can only be read from the volume
+/// (G1).</para>
 /// </summary>
 public static class HostVolume
 {
@@ -84,8 +86,11 @@ public static class HostVolume
     /// a stored source root arrives in. <c>C:\Mount</c> and <c>C:\Mount\</c> are the same directory,
     /// but only the second is a prefix of itself — so without this the mount point itself would be
     /// answered as the volume it sits on, which is the one path where being wrong matters most.</para>
+    ///
+    /// <para>Internal because <see cref="VolumeRoot"/> asks the same question of the machine's live
+    /// answer, and a comparison that decides what is a volume root must be written once.</para>
     /// </summary>
-    private static bool Holds(string mountPoint, string path) =>
+    internal static bool Holds(string mountPoint, string path) =>
         LongPath.Contains(mountPoint, path)
         || path.Equals(Path.TrimEndingDirectorySeparator(mountPoint), StringComparison.OrdinalIgnoreCase);
 }

@@ -48,7 +48,7 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     private Task<ExploreActionPolicy> ExplorePolicy(ICleanupProvider provider) =>
-        ExploreActionPolicy.ForAsync(new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+        ExploreActionPolicy.ForAsync(new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
     private DotNetObjProvider CreateProvider(
         IDirectoryScanner? scanner = null,

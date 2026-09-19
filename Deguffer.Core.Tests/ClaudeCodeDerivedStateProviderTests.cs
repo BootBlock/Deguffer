@@ -86,7 +86,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
 
         Assert.True(plan.HasUnreadableRoot);
 
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         foreach (var refused in leftovers.Concat(
         [
@@ -443,7 +443,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
 
         var provider = CreateProvider(FakeProcessInspector.NothingRunning.WithProcess(4102, ProcessLiveness.Running(null)));
         var plan = await provider.PlanAsync();
-        var policy = new ExploreActionPolicy([], provider.ToolRoots);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 
         Assert.Contains(sidecar, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.True(policy.MayRemove(sidecar).IsAllowed, "Explore refused the output it would clean");

@@ -136,31 +136,28 @@ public sealed class DriveChoiceTests
     }
 
     /// <summary>
-    /// A volume mounted at a folder is listed and refused. The volume is ordinary and reading it is
-    /// safe; what is withheld is what Explore would then offer to delete on it, because the rules
-    /// that keep a volume's paging file, its NTFS records and its Recycle Bin out of a deletion
-    /// read a path's position from its drive letter and do not recognise one mounted this way.
-    ///
-    /// <para>Listed rather than hidden for the reason a cloud mount is: a drive the user can see in
-    /// File Explorer and cannot find here is one they cannot reason about (§7.1).</para>
+    /// A volume mounted at a folder is offered under that folder's name, like any other volume. The
+    /// rules that keep a volume's paging file, its NTFS records and its Recycle Bin out of a
+    /// deletion find the top of a volume wherever it is mounted, so scanning one mounted this way
+    /// offers nothing they would not refuse on a drive.
     /// </summary>
     [Fact]
-    public void AVolumeMountedAtAFolderIsListedAndRefused()
+    public void AVolumeMountedAtAFolderIsOffered()
     {
         var choice = DriveChoice.From(new LocalVolume(
             @"C:\Mount\", DriveType.Fixed, IsReady: true, Label: "Archive",
             Features: (VolumeFeatures)0x03E7_2EFF));
 
-        Assert.True(choice.IsRefused);
-        Assert.Equal(DriveChoice.NoDriveLetterRefusal, choice.Refusal);
+        Assert.False(choice.IsRefused);
+        Assert.Null(choice.Refusal);
         Assert.Equal(@"C:\Mount\", choice.RootPath);
         Assert.Equal("Archive", choice.Label);
     }
 
     /// <summary>
-    /// Where both apply, the reader is told about the download rather than about the mount point.
-    /// One refusal withholds a picture of a disk and the other prevents every file the user keeps
-    /// in the cloud being fetched onto the disk they are clearing.
+    /// A cloud volume is refused wherever it is mounted. Mounting one at a folder must not be a way
+    /// round the refusal that stops every file the user keeps in the cloud being fetched onto the
+    /// disk they are clearing.
     /// </summary>
     [Fact]
     public void ACloudVolumeMountedAtAFolderIsRefusedForTheDownload()

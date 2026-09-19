@@ -94,7 +94,8 @@ public sealed class ExploreActions
                     liveTrees: new LiveTreeInspector(),
                     environment: environment).Providers;
 
-                return ExploreActionPolicy.ForAsync(SystemDirectories.Current, environment, providers, ct);
+                return ExploreActionPolicy.ForAsync(
+                    SystemDirectories.Current, environment, VolumeInventory.Current, providers, ct);
             },
             prompt);
 

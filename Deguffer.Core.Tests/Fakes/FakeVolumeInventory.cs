@@ -10,6 +10,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 {
     private readonly List<LocalVolume> _volumes = [];
 
+    private string? _answer;
+
     public IReadOnlyList<LocalVolume> Volumes => _volumes;
 
     public int InvalidateCount { get; private set; }
@@ -39,6 +41,50 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         IReadOnlyList<string>? alsoMountedAt = null)
     {
         _volumes.Add(new LocalVolume(rootPath, kind, isReady, Features: features, AlsoMountedAt: alsoMountedAt));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Every path <see cref="MountPointOf"/> was asked about, in the form it arrived in, so a test
+    /// can see that a rule asked the machine rather than reading a drive letter.
+    /// </summary>
+    public List<string> MountPointQueries { get; } = [];
+
+    /// <summary>
+    /// The longest mount point of any volume here that holds <paramref name="path"/>, which is how
+    /// Windows answers for one volume mounted inside another, or null where none does — the answer
+    /// the machine gives for a drive that is not there.
+    ///
+    /// <para>Answers from the volumes as they are at the call rather than as they were when the list
+    /// was last read, because the real one asks the machine each time: a volume added after a caller
+    /// was built is seen by it, which is what a test of that behaviour needs.</para>
+    /// </summary>
+    public string? MountPointOf(string path)
+    {
+        MountPointQueries.Add(path);
+
+        if (_answer is { } answer)
+        {
+            return answer;
+        }
+
+        var comparable = LongPath.Display(path);
+
+        return _volumes
+            .SelectMany(volume => volume.MountPoints)
+            .Where(mountPoint => HostVolume.Holds(mountPoint, comparable))
+            .MaxBy(mountPoint => mountPoint.Length);
+    }
+
+    /// <summary>
+    /// Answer every <see cref="MountPointOf"/> with <paramref name="mountPoint"/>, whatever the path.
+    /// Windows gives an answer that is not a prefix of the path for a path through a junction to
+    /// another volume: it names the volume on the junction's far side.
+    /// </summary>
+    public FakeVolumeInventory Answering(string mountPoint)
+    {
+        _answer = mountPoint;
 
         return this;
     }

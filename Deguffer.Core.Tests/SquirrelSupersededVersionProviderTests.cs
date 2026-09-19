@@ -419,7 +419,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         var provider = CreateProvider(new FakeLiveTreeInspector(running));
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
-            new FakeSystemDirectories(_temp.Path), _environment, [provider]);
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(provider.ToolRoots, r =>
             r.Path.Equals(running, StringComparison.OrdinalIgnoreCase) && r.Recognises("app-3.6.3"));

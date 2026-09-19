@@ -352,11 +352,14 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
                     new ChildClassification(SpotifyEdition.AccountsName, SafetyTier.DoNotTouch, AccountsReason))));
         }
 
-        // A volume root is left out. Refusing every child of a drive would take the whole drive away
-        // from Explore for one Spotify setting, and a volume root is never itself removable there.
+        // A drive or share root is left out. Refusing every child of a drive would take the whole
+        // drive away from Explore for one Spotify setting, and a volume root is never itself
+        // removable there. Read from the path's text alone, so a folder a volume is mounted at stays
+        // declared: leaving it out as well would widen what Explore removes to the downloads the
+        // setting names, and a refusal is the direction §5.2 takes when the two conflict.
         roots.AddRange(
             from location in storage.Moved
-            where VolumeRoot.Below(location) is not null
+            where Path.GetDirectoryName(location) is not null
             select ToolRoot.Of(location, LocationReason, new DisposableChildSet([])));
 
         return roots;
