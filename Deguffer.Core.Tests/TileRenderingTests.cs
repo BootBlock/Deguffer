@@ -117,12 +117,27 @@ public sealed class TileRenderingTests
 
     /// <summary>
     /// The fixed-label-colour bug this exists to prevent: white text is legible on a dark shape and
-    /// illegible on a light one, and both are in the same picture. Asked round the whole circle and
-    /// at every depth the palette distinguishes, lifted and not, because the lightness ramp puts the
-    /// switch from white text to black somewhere inside it.
+    /// illegible on a light one, and both are in the same picture. The age ramp's darkest band and a
+    /// dark shape of any kind need white; its brightest needs black.
     /// </summary>
     [Fact]
     public void LabelColourIsWhicheverOfBlackAndWhiteContrastsMore()
+    {
+        var black = new TileColour(0, 0, 0);
+        var white = new TileColour(255, 255, 255);
+
+        Assert.Equal(white, TileColour.FromRgb(0x440154).ContrastingText);
+        Assert.Equal(white, TileColour.FromRgb(0x303040).ContrastingText);
+        Assert.Equal(black, TileColour.FromRgb(0xFDE725).ContrastingText);
+    }
+
+    /// <summary>
+    /// And the branch palette's own colours, round the whole circle and at every depth it
+    /// distinguishes, lifted and not. Its lightness starts high enough that every one of them takes
+    /// black, so this is the rule held over the palette rather than the rule itself.
+    /// </summary>
+    [Fact]
+    public void EveryBranchColourTakesTheLabelColourThatContrastsMore()
     {
         var black = new TileColour(0, 0, 0);
         var white = new TileColour(255, 255, 255);

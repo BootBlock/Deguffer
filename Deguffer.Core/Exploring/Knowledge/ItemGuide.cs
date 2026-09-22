@@ -137,7 +137,7 @@ public sealed class ItemGuide
     /// it does know, or null where nothing on the way to the top of the volume is described.
     ///
     /// <para>For the map, where the pointer answers with the deepest shape covering it and a folder
-    /// is drawn as a one-pixel frame around its children (<see cref="Layout.TreemapLayout"/>). So
+    /// is drawn as a frame around its children (<see cref="Layout.TreemapLayout"/>). So
     /// the shape under the pointer is nearly always a file nobody wrote about, sitting inside a
     /// folder somebody did, and asking about the exact path left the reference unreachable
     /// everywhere except on that frame.</para>

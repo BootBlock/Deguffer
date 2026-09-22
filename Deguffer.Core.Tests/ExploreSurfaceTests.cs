@@ -37,7 +37,7 @@ public sealed class ExploreSurfaceTests
 
         Assert.IsType<TiledSurface>(
             ExploreSurface.Create(
-                tree, tree.RootNode, view, Width, Height, scale: 1, Branch, Now, ExploreSpacing.Comfortable, volumeFreeBytes: 0));
+                tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, Branch, Now, ExploreSpacing.Comfortable, VolumeSpace.None));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class ExploreSurfaceTests
 
         Assert.IsType<SunburstSurface>(
             ExploreSurface.Create(
-                tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, Branch, Now, ExploreSpacing.Comfortable, volumeFreeBytes: 0));
+                tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, textScale: 1, Branch, Now, ExploreSpacing.Comfortable, VolumeSpace.None));
     }
 
     /// <summary>
@@ -64,7 +64,7 @@ public sealed class ExploreSurfaceTests
         var tree = NamedTree(10);
 
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, view, Width, Height, scale: 1, Branch, Now, ExploreSpacing.Comfortable, volumeFreeBytes: 0);
+            tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, Branch, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.IsType<TiledSurface>(surface);
         Assert.NotEmpty(surface.Labels);

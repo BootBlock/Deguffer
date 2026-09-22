@@ -5,7 +5,7 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// down.
 ///
 /// <para>The map needs it and a list does not, and the difference is geometry rather than taste. A
-/// treemap gives a directory a one-pixel frame around its children — see
+/// treemap gives a directory a frame around its children — see
 /// <see cref="Layout.TreemapLayout"/> — so the pointer is nearly always on a file several levels
 /// below the folder that explains it, and a lookup that only answered about the exact path answered
 /// nothing over the whole of <c>C:\Windows</c>. A list row is the folder itself, so it asks

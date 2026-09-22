@@ -41,7 +41,7 @@ internal sealed class ExploreLabels : Canvas
     /// brushes and make the framework measure and arrange a fresh set of them, for text that has
     /// usually not changed (G5).</para>
     /// </summary>
-    public void Show(ExploreSurface drawing, double scale, Func<int, string> caption)
+    public void Show(ExploreSurface drawing, double scale, Func<ExploreLabel, string> caption)
     {
         ArgumentNullException.ThrowIfNull(drawing);
         ArgumentNullException.ThrowIfNull(caption);
@@ -63,7 +63,7 @@ internal sealed class ExploreLabels : Canvas
             var label = drawing.Labels[i];
             var text = (TextBlock)Children[i];
 
-            text.Text = caption(label.Node);
+            text.Text = caption(label);
             text.TextAlignment = label.Centred ? TextAlignment.Center : TextAlignment.Left;
             text.Width = label.Width / scale;
 

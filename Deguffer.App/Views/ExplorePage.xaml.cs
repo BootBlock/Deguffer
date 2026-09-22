@@ -274,7 +274,7 @@ public sealed partial class ExplorePage : Page
             ViewModel.SelectedView,
             ViewModel.SelectedColouring,
             _spacing,
-            ViewModel.VolumeFreeBytes);
+            ViewModel.Volume);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the

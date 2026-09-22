@@ -15,12 +15,14 @@ public sealed class TiledSurface : ExploreSurface
     ///
     /// <para>Separate from <see cref="ExploreSurface.MaximumLabels"/>, which keeps the text over the
     /// picture from becoming noise. A folder's name is in a band the layout set aside for it, so it
-    /// covers nothing, and a band left empty reads as a folder with no name. The layout gives a band
-    /// only where one line of text fits, so a real canvas has a few hundred of them at most; this
-    /// bounds the controls the shell creates for a canvas that somehow has more, and the smallest
-    /// folders are the ones that go without.</para>
+    /// covers nothing, and a band left empty reads as a folder with no name — so this is set high
+    /// enough that a real drive at 4K does not reach it. A band needs a folder at least three lines
+    /// of text tall and a name wide, which a 3840 by 2160 canvas fits under two thousand of side by
+    /// side; nesting and the mix of sizes on a real drive leave far fewer. This bounds the controls
+    /// the shell creates for a canvas that somehow has more, and the smallest folders are the ones
+    /// that go without.</para>
     /// </summary>
-    private const int MaximumHeaders = 256;
+    private const int MaximumHeaders = 1024;
 
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
@@ -147,7 +149,8 @@ public sealed class TiledSurface : ExploreSurface
                 tile.Width - (Limits.LabelPadding * 2),
                 Rotation: 0,
                 Centred: false,
-                TextColourFor(tile.Node, tile.Depth)));
+                TextColourFor(tile.Node, tile.Depth),
+                tile.Bytes));
         }
 
         foreach (var i in Largest(insides, MaximumLabels))
@@ -161,7 +164,8 @@ public sealed class TiledSurface : ExploreSurface
                 tile.Width - (Limits.LabelPadding * 2),
                 Rotation: 0,
                 Centred: false,
-                TextColourFor(tile.Node, tile.Depth)));
+                TextColourFor(tile.Node, tile.Depth),
+                tile.Bytes));
         }
 
         return labels;

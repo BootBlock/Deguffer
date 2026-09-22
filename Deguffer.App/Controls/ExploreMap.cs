@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
+using Windows.UI.ViewManagement;
 
 namespace Deguffer.App.Controls;
 
@@ -93,11 +94,17 @@ public sealed class ExploreMap : UserControl
     private ExploreSpacing _spacing = ExploreSpacing.Comfortable;
 
     /// <summary>
-    /// What is left on the volume the tree covers the whole of, or zero. See
-    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, ShapeColours, ExploreSpacing, long)"/>
+    /// The volume the tree covers the whole of, or <see cref="VolumeSpace.None"/>. See
+    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace)"/>
     /// for where it is drawn.
     /// </summary>
-    private long _freeBytes;
+    private VolumeSpace _volume = VolumeSpace.None;
+
+    /// <summary>
+    /// The reader's Windows text size, which the labels grow with and the layout has to leave room
+    /// for. One instance for every map, because it is a window onto one system setting (G5).
+    /// </summary>
+    private static readonly UISettings TextSettings = new();
 
     /// <summary>
     /// Where the pointer was last seen, in this control's coordinates, or null while it is elsewhere.
@@ -150,6 +157,8 @@ public sealed class ExploreMap : UserControl
                 root.Changed += OnRootChanged;
             }
 
+            TextSettings.TextScaleFactorChanged += OnTextScaleChanged;
+
             // A resize that arrived while this was on screen, and was still waiting to be drawn
             // when the page was navigated away from, is dropped below rather than rasterised for a
             // page nobody is looking at. Coming back at that same size raises no SizeChanged, so
@@ -179,6 +188,8 @@ public sealed class ExploreMap : UserControl
             {
                 root.Changed -= OnRootChanged;
             }
+
+            TextSettings.TextScaleFactorChanged -= OnTextScaleChanged;
         };
 
         // The ground is baked into the bitmap, so unlike every themed control around it the map
@@ -232,8 +243,9 @@ public sealed class ExploreMap : UserControl
     /// with the shapes coloured to say <paramref name="colouring"/> and labelled with a name and a
     /// size.
     /// </summary>
-    /// <param name="volumeFreeBytes">
-    /// What is left on the volume, where the scan covered the whole of one, and zero otherwise.
+    /// <param name="volume">
+    /// The volume, where the scan covered the whole of one, and <see cref="VolumeSpace.None"/>
+    /// otherwise.
     /// </param>
     public void Show(
         ExploreTree? tree,
@@ -241,7 +253,7 @@ public sealed class ExploreMap : UserControl
         ExploreView view,
         ExploreColouring colouring,
         ExploreSpacing spacing,
-        long volumeFreeBytes) =>
+        VolumeSpace volume) =>
         Show(
             tree,
             node,
@@ -251,7 +263,7 @@ public sealed class ExploreMap : UserControl
                 ? _ => string.Empty
                 : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",
             spacing,
-            volumeFreeBytes);
+            volume);
 
     /// <summary>
     /// Draw <paramref name="node"/> of any tree a layout can lay out.
@@ -259,7 +271,7 @@ public sealed class ExploreMap : UserControl
     /// <param name="colours">What the colours are to say, asked at each repaint.</param>
     /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
     /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
-    /// <param name="volumeFreeBytes">What is left on the volume the tree covers the whole of, or zero.</param>
+    /// <param name="volume">The volume the tree covers the whole of, or <see cref="VolumeSpace.None"/>.</param>
     public void Show(
         ISizedTree? tree,
         int node,
@@ -267,7 +279,7 @@ public sealed class ExploreMap : UserControl
         Func<DateTime, ShapeColours> colours,
         Func<int, string> labelText,
         ExploreSpacing spacing,
-        long volumeFreeBytes)
+        VolumeSpace volume)
     {
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
@@ -278,7 +290,7 @@ public sealed class ExploreMap : UserControl
         _colours = colours;
         _labelText = labelText;
         _spacing = spacing;
-        _freeBytes = volumeFreeBytes;
+        _volume = volume;
 
         Redraw();
     }
@@ -416,7 +428,16 @@ public sealed class ExploreMap : UserControl
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
         var drawing = ExploreSurface.Create(
-            tree, _node, _view, width, height, _scale, _colours(DateTime.UtcNow), _spacing, _freeBytes);
+            tree,
+            _node,
+            _view,
+            width,
+            height,
+            _scale,
+            TextSettings.TextScaleFactor,
+            _colours(DateTime.UtcNow),
+            _spacing,
+            _volume);
         _drawing = drawing;
 
         // Both reused while the size holds. A scan redraws this every three quarters of a second,
@@ -500,11 +521,15 @@ public sealed class ExploreMap : UserControl
         : new TileColour(243, 243, 243);
 
     /// <summary>
-    /// What to write on a labelled shape. The free space block is the map's own, because it is the
-    /// one shape that is not a node of the page's tree.
+    /// What to write on a labelled shape. The two blocks standing for the rest of the volume are the
+    /// map's own, because they are not nodes of the page's tree.
     /// </summary>
-    private string LabelText(int node) =>
-        node == ExploreTile.FreeSpace ? $"Free space  {FreeSpace.Format(_freeBytes)}" : _labelText(node);
+    private string LabelText(ExploreLabel label) => label.Node switch
+    {
+        ExploreTile.FreeSpace => $"Free space  {FreeSpace.Format(label.Bytes)}",
+        ExploreTile.Unaccounted => $"Not accounted for  {FreeSpace.Format(label.Bytes)}",
+        _ => _labelText(label.Node),
+    };
 
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
     private void ShowPicked() =>
@@ -596,6 +621,12 @@ public sealed class ExploreMap : UserControl
             Redraw();
         }
     }
+
+    /// <summary>
+    /// Draw again for a new text size, because the bands and the label thresholds are sized for the
+    /// old one. Raised off the UI thread, so it is sent back to it.
+    /// </summary>
+    private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Redraw);
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {

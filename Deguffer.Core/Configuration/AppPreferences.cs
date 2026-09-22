@@ -76,7 +76,10 @@ public enum ExploreView
 /// </summary>
 public enum ExploreColouring
 {
-    /// <summary>A hue per top-level branch, shaded by depth. See <c>TilePalette</c>.</summary>
+    /// <summary>
+    /// A hue per folder, inside its parent's part of the hue circle, lighter by depth. See
+    /// <c>TilePalette</c> and <c>BranchHues</c>.
+    /// </summary>
     Branch = 0,
 
     /// <summary>

@@ -198,7 +198,8 @@ public sealed class SunburstSurface : ExploreSurface
                 width,
                 RotationAt(angle),
                 Centred: true,
-                TextColourFor(sector.Node, sector.Depth)));
+                TextColourFor(sector.Node, sector.Depth),
+                sector.Bytes));
         }
 
         return labels;

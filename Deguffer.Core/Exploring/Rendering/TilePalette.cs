@@ -55,10 +55,10 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
 /// branch.</para>
 ///
 /// <para>Hue is not the only cue, because a hue wheel is exactly what red-green colour blindness
-/// takes away. Neighbouring siblings alternate a step of lightness, deeper shapes are lighter and
-/// less saturated, and a folder with room for it is framed and named. The earlier palette of seven
-/// Okabe-Ito hues survived a deficiency better on its own and said nothing about which folder
-/// inside a branch a shape was in, which is the question this answers.</para>
+/// takes away, and a small categorical set such as Okabe and Ito's, which survives it, has too few
+/// colours to give every folder its own. So neighbouring siblings alternate a step of lightness,
+/// deeper shapes are lighter and less saturated, and a folder with room for it is framed and named:
+/// each of those says where a shape belongs without hue.</para>
 /// </summary>
 public static class TilePalette
 {
@@ -110,4 +110,11 @@ public static class TilePalette
     /// a run of them.
     /// </summary>
     public static TileColour FreeSpace => TileColour.FromRgb(0xC8C8C8);
+
+    /// <summary>
+    /// The colour for the block standing for use the scan did not account for: the neutral between
+    /// the aggregate's and the free space's, because it is in use like the one and not a thing on
+    /// the disk like the other.
+    /// </summary>
+    public static TileColour Unaccounted => TileColour.FromRgb(0x9C9C9C);
 }

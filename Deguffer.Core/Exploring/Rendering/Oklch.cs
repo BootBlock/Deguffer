@@ -9,7 +9,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// lightness keeps every step visible. The same steps taken in RGB or HSL make yellow glare and
 /// blue sink, and the depth a lightness step is meant to say is lost among the hues.</para>
 /// </summary>
-public static class Oklch
+internal static class Oklch
 {
     /// <summary>
     /// How many halvings the chroma search makes. The chroma range here is under 0.4, so twelve
@@ -54,9 +54,10 @@ public static class Oklch
             }
         }
 
-        // Chroma zero is always inside for a lightness between 0 and 1, so this never falls through
-        // to a colour the search did not check.
-        return Encode(Linear(lightness, inside * cos, inside * sin) ?? (lightness, lightness, lightness));
+        // Chroma zero is inside for any lightness from 0 to 1, which is every lightness the palette
+        // asks for, so the search always ends on a colour it checked.
+        return Encode(Linear(lightness, inside * cos, inside * sin)
+            ?? throw new ArgumentOutOfRangeException(nameof(lightness), lightness, "Outside 0 to 1."));
     }
 
     /// <summary>

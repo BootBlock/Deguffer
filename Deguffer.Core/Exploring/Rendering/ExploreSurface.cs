@@ -4,8 +4,8 @@ using Deguffer.Core.Exploring.Layout;
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
-/// What the pointer found: a node, the block standing in for items too small to draw, or the block
-/// standing for the volume's free space.
+/// What the pointer found: a node, the block standing in for items too small to draw, or one of the
+/// two blocks standing for the rest of the volume.
 /// </summary>
 /// <param name="Bytes">
 /// What was pointed at accounts for this much. Carried rather than looked up because neither block
@@ -16,6 +16,8 @@ public readonly record struct ExploreHit(int Node, long Bytes)
     public bool IsAggregate => Node == ExploreTile.Aggregated;
 
     public bool IsFreeSpace => Node == ExploreTile.FreeSpace;
+
+    public bool IsUnaccounted => Node == ExploreTile.Unaccounted;
 
     /// <summary>
     /// Whether what was pointed at is a node of the tree, and so something a click may pick (§7.1).
@@ -43,6 +45,10 @@ public readonly record struct ExploreHit(int Node, long Bytes)
 /// What colour the text has to be to stay legible against the shape underneath it. Decided here
 /// because the surface is what knows the colour it painted that shape in.
 /// </param>
+/// <param name="Bytes">
+/// What the shape accounts for. Carried for the blocks that are not nodes, whose figure a caption
+/// cannot look up in the tree.
+/// </param>
 public readonly record struct ExploreLabel(
     int Node,
     float X,
@@ -50,7 +56,8 @@ public readonly record struct ExploreLabel(
     float Width,
     float Rotation,
     bool Centred,
-    TileColour Colour);
+    TileColour Colour,
+    long Bytes);
 
 /// <summary>One corner of a shape's outline, in canvas pixels.</summary>
 public readonly record struct ExplorePoint(float X, float Y);
@@ -137,7 +144,10 @@ public abstract class ExploreSurface
 
     public int Height { get; }
 
-    /// <summary>Where the text goes, at most <see cref="MaximumLabels"/> of them.</summary>
+    /// <summary>
+    /// Where the text goes. At most <see cref="MaximumLabels"/> inside shapes, and for a treemap a
+    /// folder's name in each band as well — see <see cref="TiledSurface"/>.
+    /// </summary>
     public abstract IReadOnlyList<ExploreLabel> Labels { get; }
 
     protected ISizedTree Tree { get; }
@@ -164,13 +174,14 @@ public abstract class ExploreSurface
         int width,
         int height,
         double scale,
+        double textScale,
         ExploreColouring colouring,
         DateTime nowUtc,
         ExploreSpacing spacing,
-        long volumeFreeBytes) =>
+        VolumeSpace volume) =>
         Create(
-            tree, root, view, width, height, scale, ShapeColours.For(tree, colouring, nowUtc),
-            spacing, volumeFreeBytes);
+            tree, root, view, width, height, scale, textScale, ShapeColours.For(tree, colouring, nowUtc),
+            spacing, volume);
 
     /// <summary>
     /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a
@@ -181,13 +192,17 @@ public abstract class ExploreSurface
     /// one of them is stated in device-independent pixels and a layout measured in device pixels
     /// compared against raw constants draws half-size detail on a high-DPI display.</para>
     /// </summary>
+    /// <param name="textScale">
+    /// The reader's Windows text size, 1 at 100%. The labels grow with it, so the thresholds for
+    /// where a label fits grow with it too — see <see cref="LayoutLimits.ForText"/>.
+    /// </param>
     /// <param name="colours">What the colours are to say.</param>
     /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
-    /// <param name="volumeFreeBytes">
-    /// What is left on the volume <paramref name="tree"/> covers the whole of, or zero where it does
-    /// not cover a whole volume or the figure is not known. Drawn only beside the tree's own root and
-    /// only by the treemap: free space is in proportion to a whole volume and to nothing inside it,
-    /// so a folder the reader has opened is drawn without it.
+    /// <param name="volume">
+    /// The volume <paramref name="tree"/> covers the whole of, or <see cref="VolumeSpace.None"/>.
+    /// Drawn only beside the tree's own root and only by the treemap: free space is in proportion to
+    /// a whole volume and to nothing inside it, so a folder the reader has opened is drawn without
+    /// it.
     /// </param>
     public static ExploreSurface Create(
         ISizedTree tree,
@@ -196,14 +211,15 @@ public abstract class ExploreSurface
         int width,
         int height,
         double scale,
+        double textScale,
         ShapeColours colours,
         ExploreSpacing spacing,
-        long volumeFreeBytes)
+        VolumeSpace volume)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var limits = LayoutLimits.Default.Spaced(spacing).At(scale);
-        var free = root == tree.RootNode ? volumeFreeBytes : 0;
+        var limits = LayoutLimits.Default.Spaced(spacing).ForText(textScale).At(scale);
+        var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
         // A tree still being filled in orders its children by name rather than by size, so that a
         // growing child widens where it is instead of moving. Two of the four drawings cannot be
@@ -227,7 +243,7 @@ public abstract class ExploreSurface
             // the user switches back, and it is the one they last saw.
             _ => new TiledSurface(
                 tree, root, width, height, limits, colours,
-                TreemapLayout.Compute(tree, root, width, height, limits, free)),
+                TreemapLayout.Compute(tree, root, width, height, limits, beside)),
         };
     }
 
@@ -269,15 +285,16 @@ public abstract class ExploreSurface
     /// <see cref="ShapeColours"/> rather than an edit to each of them — and, more to the point, the
     /// labels cannot come out contrasted against a colour the shape underneath was not painted in.</para>
     ///
-    /// <para>Neither block is ever coloured by either scheme. An aggregate stands for a run of
-    /// siblings too small to draw, and free space for what the volume has left, so neither belongs
-    /// to a branch or has a date. Giving either a colour that reads as a thing on the disk would
-    /// invite the user to act on it.</para>
+    /// <para>No block is ever coloured by either scheme. An aggregate stands for a run of siblings
+    /// too small to draw, and the other two for the rest of the volume, so none belongs to a branch
+    /// or has a date. Giving one a colour that reads as a thing on the disk would invite the user to
+    /// act on it.</para>
     /// </summary>
     protected TileColour ColourFor(int node, int depth) => node switch
     {
         ExploreTile.Aggregated => TilePalette.Aggregate,
         ExploreTile.FreeSpace => TilePalette.FreeSpace,
+        ExploreTile.Unaccounted => TilePalette.Unaccounted,
         _ => _colours.For(this, node, depth),
     };
 

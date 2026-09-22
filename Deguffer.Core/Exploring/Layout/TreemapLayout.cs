@@ -40,10 +40,11 @@ public static class TreemapLayout
     /// That is a couple of million reads a frame on a full canvas, and an interface indexer
     /// returning a 32-byte struct is not free at that count (G4).</para>
     /// </summary>
-    /// <param name="freeBytes">
-    /// What the volume has left, drawn as a block of its own beside <paramref name="root"/> in
-    /// proportion to it, or zero for no block. The caller decides whether free space belongs in the
-    /// picture at all: it does beside the whole of a volume, and nowhere else.
+    /// <param name="volume">
+    /// The volume <paramref name="root"/> is the whole of, whose free space and whose unaccounted use
+    /// are drawn as blocks of their own beside it, in proportion to it; or
+    /// <see cref="VolumeSpace.None"/> for neither. The caller decides whether they belong in the
+    /// picture at all: they do beside the whole of a volume, and nowhere else.
     /// </param>
     public static IReadOnlyList<ExploreTile> Compute(
         ISizedTree tree,
@@ -51,7 +52,7 @@ public static class TreemapLayout
         float width,
         float height,
         LayoutLimits limits,
-        long freeBytes = 0)
+        VolumeSpace volume = default)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -73,7 +74,7 @@ public static class TreemapLayout
             return tiles.ToArray();
         }
 
-        var used = BesideFreeSpace(tree.SizeOf(root), freeBytes, width, height, limits, tiles);
+        var used = BesideTheVolume(tree.SizeOf(root), volume, width, height, limits, tiles);
 
         var pending = new Stack<(int Node, int Depth, float X, float Y, float Width, float Height)>();
         pending.Push((root, 0, used.X, used.Y, used.Width, used.Height));
@@ -343,55 +344,95 @@ public static class TreemapLayout
     }
 
     /// <summary>
-    /// Split the canvas between the root and the volume's free space, in proportion to their bytes,
-    /// and add the free space's rectangle. Returns what is left for the root.
+    /// Share the canvas between the root, the volume's use the scan did not account for, and its free
+    /// space, in proportion to their bytes, and add the two blocks' rectangles. Returns what is left
+    /// for the root.
     ///
-    /// <para>Cut along the longer side, larger first, which is what the squarified row does with two
-    /// children: each keeps the full length of the shorter side, so neither becomes a sliver until
-    /// the other dwarfs it. A share thinner than the smallest tile is not drawn at all, and the root
-    /// keeps the whole canvas. A block too thin to point at says nothing, and the drive picker states
-    /// the figure anyway.</para>
+    /// <para>Largest first, each taking a slab across the longer side of what is left, which is the
+    /// squarified row with one member: every part keeps the full length of the shorter side, so none
+    /// becomes a sliver until another dwarfs it. A block whose slab would be thinner than the smallest
+    /// tile is not drawn and the others share its room. A block too thin to point at says nothing,
+    /// and the drive picker states both figures anyway.</para>
     /// </summary>
-    private static Rectangle BesideFreeSpace(
+    private static Rectangle BesideTheVolume(
         long usedBytes,
-        long freeBytes,
+        VolumeSpace volume,
         float width,
         float height,
         LayoutLimits limits,
         List<ExploreTile> tiles)
     {
-        var whole = new Rectangle(0, 0, width, height);
+        var remaining = new Rectangle(0, 0, width, height);
 
-        if (freeBytes <= 0)
+        Span<(int Node, long Bytes)> parts =
+        [
+            (Root, usedBytes),
+            (ExploreTile.Unaccounted, volume.UnaccountedBytes(usedBytes)),
+            (ExploreTile.FreeSpace, volume.FreeBytes),
+        ];
+
+        double whole = usedBytes + parts[1].Bytes + parts[2].Bytes;
+        var longer = Math.Max(width, height);
+
+        // Dropped before anything is laid, so the parts that are drawn share the whole canvas between
+        // them rather than leaving the dropped one's room empty.
+        for (var i = 1; i < parts.Length; i++)
         {
-            return whole;
+            if (parts[i].Bytes > 0 && longer * (parts[i].Bytes / whole) < limits.MinimumTileSize)
+            {
+                parts[i].Bytes = 0;
+            }
         }
 
-        var across = width >= height;
-        var length = across ? width : height;
-        var freeLength = (float)(length * ((double)freeBytes / ((double)usedBytes + freeBytes)));
-        var usedLength = length - freeLength;
+        parts.Sort((a, b) => b.Bytes.CompareTo(a.Bytes));
 
-        if (freeLength < limits.MinimumTileSize || usedLength < limits.MinimumTileSize)
+        double left = 0;
+
+        foreach (var part in parts)
         {
-            return whole;
+            left += part.Bytes;
         }
 
-        var freeFirst = freeBytes > usedBytes;
-        var freeStart = freeFirst ? 0 : usedLength;
-        var usedStart = freeFirst ? freeLength : 0;
+        var root = remaining;
 
-        var free = across
-            ? new Rectangle(freeStart, 0, freeLength, height)
-            : new Rectangle(0, freeStart, width, freeLength);
+        foreach (var (node, bytes) in parts)
+        {
+            if (bytes <= 0)
+            {
+                continue;
+            }
 
-        // Depth zero, beside the root rather than inside it: it is not part of what was scanned.
-        tiles.Add(new ExploreTile(
-            ExploreTile.FreeSpace, 0, freeBytes, free.X, free.Y, free.Width, free.Height));
+            // The last part takes all that is left, so rounding cannot leave a hairline of canvas
+            // belonging to nothing.
+            var share = bytes >= left ? 1f : (float)(bytes / left);
+            left -= bytes;
 
-        return across
-            ? new Rectangle(usedStart, 0, usedLength, height)
-            : new Rectangle(0, usedStart, width, usedLength);
+            Rectangle slab;
+
+            if (remaining.Width >= remaining.Height)
+            {
+                slab = remaining with { Width = remaining.Width * share };
+                remaining = new Rectangle(
+                    remaining.X + slab.Width, remaining.Y, remaining.Width - slab.Width, remaining.Height);
+            }
+            else
+            {
+                slab = remaining with { Height = remaining.Height * share };
+                remaining = new Rectangle(
+                    remaining.X, remaining.Y + slab.Height, remaining.Width, remaining.Height - slab.Height);
+            }
+
+            if (node == Root)
+            {
+                root = slab;
+                continue;
+            }
+
+            // Depth zero, beside the root rather than inside it: neither is part of what was scanned.
+            tiles.Add(new ExploreTile(node, 0, bytes, slab.X, slab.Y, slab.Width, slab.Height));
+        }
+
+        return root;
     }
 
     /// <summary>
@@ -434,6 +475,9 @@ public static class TreemapLayout
 
         return shorter >= smallest ? (0, Math.Min(gap, 1f)) : (0, 0);
     }
+
+    /// <summary>Stands for the root among the parts <see cref="BesideTheVolume"/> lays out.</summary>
+    private const int Root = int.MaxValue;
 
     private readonly record struct Rectangle(float X, float Y, float Width, float Height);
 }

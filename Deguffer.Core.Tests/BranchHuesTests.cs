@@ -128,8 +128,8 @@ public sealed class BranchHuesTests
     }
 
     /// <summary>
-    /// The conversion checked against published values: sRGB red, white and black, and a mid grey,
-    /// in Ottosson's own figures for the space.
+    /// The conversion checked against published values: sRGB red, green, white and black, in
+    /// Ottosson's own figures for the space.
     /// </summary>
     [Theory]
     [InlineData(0.627955, 0.257683, 29.2339, 255, 0, 0)]
@@ -149,16 +149,51 @@ public sealed class BranchHuesTests
     /// A colour sRGB cannot show keeps its lightness and hue and loses chroma. Clipping instead
     /// shifts the hue towards a primary, so two neighbouring branches could come out the same.
     /// </summary>
-    [Fact]
-    public void AColourOutsideTheGamutKeepsItsHueAndLosesChroma()
+    [Theory]
+    [InlineData(0.7, 250)]
+    [InlineData(0.64, 140)]
+    [InlineData(0.8, 30)]
+    public void AColourOutsideTheGamutKeepsItsHueAndLightnessAndLosesChroma(double lightness, double hue)
     {
-        // Far more chroma than any sRGB colour has at this lightness.
-        var mapped = Oklch.ToSrgb(0.7, 0.5, 250);
-        var inside = Oklch.ToSrgb(0.7, 0.05, 250);
+        // Far more chroma than any sRGB colour has at these lightnesses.
+        var (l, c, h) = ToOklch(Oklch.ToSrgb(lightness, 0.5, hue));
 
-        // Blue-dominant at a blue hue, as the low-chroma version of the same colour is.
-        Assert.True(mapped.Blue > mapped.Red && mapped.Blue > mapped.Green);
-        Assert.True(inside.Blue > inside.Red);
+        Assert.InRange(l, lightness - 0.01, lightness + 0.01);
+        Assert.InRange(h, hue - 2, hue + 2);
+        Assert.InRange(c, 0.03, 0.4);
+    }
+
+    [Fact]
+    public void ALightnessOutsideZeroToOneIsRefused()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Oklch.ToSrgb(1.5, 0, 0));
+    }
+
+    /// <summary>
+    /// An sRGB colour back into OKLCH, through Ottosson's inverse matrices, so a test can read what
+    /// lightness and hue a conversion actually produced.
+    /// </summary>
+    private static (double L, double C, double H) ToOklch(TileColour colour)
+    {
+        static double Linear(byte channel)
+        {
+            var v = channel / 255.0;
+            return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+        }
+
+        var (r, g, b) = (Linear(colour.Red), Linear(colour.Green), Linear(colour.Blue));
+
+        var l = Math.Cbrt((0.4122214708 * r) + (0.5363325363 * g) + (0.0514459929 * b));
+        var m = Math.Cbrt((0.2119034982 * r) + (0.6806995451 * g) + (0.1073969566 * b));
+        var s = Math.Cbrt((0.0883024619 * r) + (0.2817188376 * g) + (0.6299787005 * b));
+
+        var lightness = (0.2104542553 * l) + (0.7936177850 * m) - (0.0040720468 * s);
+        var a = (1.9779984951 * l) - (2.4285922050 * m) + (0.4505937099 * s);
+        var bAxis = (0.0259040371 * l) + (0.7827717662 * m) - (0.8086757660 * s);
+
+        var hue = Math.Atan2(bAxis, a) * 180 / Math.PI;
+
+        return (lightness, Math.Sqrt((a * a) + (bAxis * bAxis)), hue < 0 ? hue + 360 : hue);
     }
 
     private static IEnumerable<int> Below(ExploreTree tree, int node)

@@ -11,8 +11,9 @@ namespace Deguffer.Core.Exploring.Layout;
 /// </summary>
 /// <param name="Node">
 /// The node in the tree, <see cref="Aggregated"/> where this rectangle stands for several siblings
-/// too small to draw individually, or <see cref="FreeSpace"/> where it stands for what the volume has
-/// left.
+/// too small to draw individually, <see cref="FreeSpace"/> where it stands for what the volume has
+/// left, or <see cref="Unaccounted"/> where it stands for what the volume has in use that the scan
+/// did not count.
 /// </param>
 /// <param name="Depth">How far below the layout's root this sits. The root itself is zero.</param>
 /// <param name="Bytes">
@@ -51,13 +52,25 @@ public readonly record struct ExploreTile(
     /// of a scanned volume so the used space is seen in proportion to what is left.
     ///
     /// <para>Not a thing on the disk, so it can never be picked, opened or outlined (§7.1). Every
-    /// caller that acts on a shape asks <see cref="IsNode"/>, which this and an aggregate both fail.</para>
+    /// caller that acts on a shape asks <see cref="IsNode"/>, which this and both other blocks fail.</para>
     /// </summary>
     public const int FreeSpace = -2;
+
+    /// <summary>
+    /// The node number of the rectangle standing for what the volume has in use and the scan did not
+    /// count: folders it could not read, and the file system's own records. Drawn beside the free
+    /// space, because without it the free space would take the share of the picture these bytes
+    /// belong to, and a lower bound would look like the whole drive (§7.1).
+    ///
+    /// <para>Not a thing on the disk either, on the terms <see cref="FreeSpace"/> is.</para>
+    /// </summary>
+    public const int Unaccounted = -3;
 
     public bool IsAggregate => Node == Aggregated;
 
     public bool IsFreeSpace => Node == FreeSpace;
+
+    public bool IsUnaccounted => Node == Unaccounted;
 
     /// <summary>Whether this rectangle is a node of the tree, rather than one standing for something else.</summary>
     public bool IsNode => Node >= 0;
@@ -154,6 +167,21 @@ public readonly record struct LayoutLimits(
     /// has to be remembered and scaled.
     /// </summary>
     public float LabelPadding => MinimumLabelHeight / 4;
+
+    /// <summary>
+    /// These limits with the text thresholds grown by <paramref name="textScale"/>, the reader's
+    /// Windows text size.
+    ///
+    /// <para>The labels are text controls and grow with that setting, as they have to. A threshold
+    /// left at its 100% size then gives a band one line of 100% text tall to a line of 150% text,
+    /// and the name spills out of the band onto the shapes below it, where its colour was not
+    /// chosen for what it sits on (§6.5).</para>
+    /// </summary>
+    public LayoutLimits ForText(double textScale) => this with
+    {
+        MinimumLabelWidth = (float)(MinimumLabelWidth * textScale),
+        MinimumLabelHeight = (float)(MinimumLabelHeight * textScale),
+    };
 
     /// <summary>The same limits in device pixels, for a display at <paramref name="scale"/>.</summary>
     public LayoutLimits At(double scale) => new(

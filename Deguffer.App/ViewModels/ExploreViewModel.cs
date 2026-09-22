@@ -394,15 +394,19 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasViewNote => ViewNote is not null;
 
     /// <summary>
-    /// What was left on the volume when the scan on screen finished, where it covered the whole of
-    /// one, and zero otherwise. See <see cref="VolumeFreeSpace"/>.
+    /// How large the volume was and how much of it was free when the scan on screen finished, where
+    /// it covered the whole of one, and <see cref="VolumeSpace.None"/> otherwise.
     ///
     /// <para>Read once, as the scan finishes, rather than kept current. Everything else on screen
-    /// describes the disk as that scan found it, so a figure that moved on its own would set the free
-    /// block against sizes it no longer matches. A removal from this page makes both stale together,
-    /// and the stale note says so.</para>
+    /// describes the disk as that scan found it, so a figure that moved on its own would set the
+    /// blocks against sizes they no longer match. A removal from this page makes both stale
+    /// together, and the stale note says so.</para>
+    ///
+    /// <para>Replaced only with the tree it describes. A scan that fails leaves the last finished
+    /// tree on screen, and that tree keeps its own figures; the snapshots a running scan draws are
+    /// icicles, which have no blocks.</para>
     /// </summary>
-    public long VolumeFreeBytes { get; private set; }
+    public VolumeSpace Volume { get; private set; } = VolumeSpace.None;
 
     /// <summary>
     /// Which node the views are drawing. The scan's root until the user descends, and then wherever
@@ -433,9 +437,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// that it knows anything about, ready to show. Empty where nothing on the way to the top of
     /// the volume is described.
     ///
-    /// <para>Nearest rather than exact, because a treemap draws a folder as a one-pixel frame round
-    /// its children and the pointer is nearly always on a file inside it. Asked exactly, the whole
-    /// of <c>C:\Windows</c> answered nothing but that frame.</para>
+    /// <para>Nearest rather than exact, because a treemap draws a folder as a frame round its
+    /// children and the pointer is nearly always on a file inside it. Asked exactly, the whole of
+    /// <c>C:\Windows</c> answered nothing but that frame.</para>
     ///
     /// <para>Only what the reference says, and not the size or the date: those are already on the
     /// status line under the picture, where they can be read without waiting for anything to
@@ -497,7 +501,6 @@ public sealed partial class ExploreViewModel : ObservableObject
         IsBusy = true;
         Progress = null;
         RouteNote = null;
-        VolumeFreeBytes = 0;
 
         // Started with the scan and never awaited here. Part of §7.1's refusal set says what is
         // running right now, so it goes stale while the page is open, and a scan is the moment the
@@ -517,7 +520,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // Before Show, which is what draws the map. Read afresh, because the space figures the
             // drive picker holds are from whenever it last opened.
             _volumes.Invalidate();
-            VolumeFreeBytes = VolumeFreeSpace.Beside(_volumes, target);
+            Volume = VolumeSpace.Of(_volumes, target);
 
             Show(scan.Tree, ExplorePlace.Carry(Tree, CurrentNode, scan.Tree));
 
@@ -536,6 +539,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // navigates exactly like a finished scan — so leaving it on screen states a total for
             // the drive that is wrong by however much was left.
             Tree = null;
+            Volume = VolumeSpace.None;
             Selection.Show(null);
             Rows.Clear();
             Trail.Clear();
@@ -767,7 +771,13 @@ public sealed partial class ExploreViewModel : ObservableObject
                 "Items too small to draw separately", FreeSpace.Format(aggregate.Bytes), string.Empty),
 
             (_, { IsFreeSpace: true } free) => (
-                "Free space on this drive", FreeSpace.Format(free.Bytes), string.Empty),
+                "Free space available on this drive", FreeSpace.Format(free.Bytes), string.Empty),
+
+            (_, { IsUnaccounted: true } unaccounted) => (
+                "In use, but not accounted for by this scan",
+                FreeSpace.Format(unaccounted.Bytes),
+                "Windows says this much of the drive is in use beyond what the scan counted: folders "
+                + "it could not read, and the file system's own records."),
 
             ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 

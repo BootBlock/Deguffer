@@ -104,13 +104,50 @@ public sealed class TreemapFrameTests
     {
         var tree = TwoFolders();
 
-        int NodeAt(ExploreSpacing spacing) => ExploreSurface.Create(
-                tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1,
-                ShapeColours.ByBranch, spacing, volumeFreeBytes: 0)
-            .At(4.5f, Height / 2)!.Value.Node;
+        int NodeAt(ExploreSpacing spacing)
+        {
+            var hit = ExploreSurface.Create(
+                    tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale: 1,
+                    ShapeColours.ByBranch, spacing, VolumeSpace.None)
+                .At(4.5f, Height / 2);
+
+            Assert.NotNull(hit);
+            return hit.Value.Node;
+        }
 
         Assert.Equal(tree.RootNode, NodeAt(ExploreSpacing.Spacious));
         Assert.NotEqual(tree.RootNode, NodeAt(ExploreSpacing.Dense));
+    }
+
+    /// <summary>
+    /// §6.5: a folder's name is a text control that grows with the reader's Windows text size, so
+    /// the band it sits in grows with it. A band kept at its 100% height under 150% text would let
+    /// the name spill onto the shapes below, whose colours its own was not chosen against.
+    /// </summary>
+    [Fact]
+    public void TheBandGrowsWithTheReadersTextSize()
+    {
+        var tree = TwoFolders();
+
+        ExploreSurface Drawn(double textScale) => ExploreSurface.Create(
+            tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale,
+            ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None);
+
+        float BranchLabelY(ExploreSurface surface) =>
+            surface.Labels.Single(label => label.Node == tree.RootNode).Y;
+
+        var limits = LayoutLimits.Default.ForText(1.5);
+
+        Assert.Equal(LayoutLimits.Default.MinimumLabelHeight * 1.5f, limits.MinimumLabelHeight, 0.01f);
+
+        // The root's band is the first thing inside the canvas, so its children start where it ends.
+        var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
+
+        Assert.Equal(limits.HeaderHeight, tiles.Where(tile => tile.Depth == 1).Min(tile => tile.Y), 0.01f);
+        Assert.True(limits.HeaderHeight > LayoutLimits.Default.HeaderHeight);
+
+        // And the label is centred in the taller band, not left at the top of it.
+        Assert.True(BranchLabelY(Drawn(1.5)) >= BranchLabelY(Drawn(1)));
     }
 
     /// <summary>A band is for a folder's name above its contents, so nothing without contents has one.</summary>
@@ -147,8 +184,8 @@ public sealed class TreemapFrameTests
     {
         var tree = TwoFolders();
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1,
-            ShapeColours.ByBranch, ExploreSpacing.Comfortable, volumeFreeBytes: 0);
+            tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None);
         var big = TileOf(Layout(tree, LayoutLimits.Default), tree, "big");
 
         var pixels = new byte[PixelBuffer.LengthFor((int)Width, (int)Height)];

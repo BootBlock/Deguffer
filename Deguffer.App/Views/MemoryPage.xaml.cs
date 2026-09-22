@@ -1,6 +1,7 @@
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
 using Microsoft.UI.Xaml;
@@ -309,7 +310,7 @@ public sealed partial class MemoryPage : Page
             _ => ShapeColours.ByBranch,
             ViewModel.LabelFor,
             _spacing,
-            volumeFreeBytes: 0);
+            VolumeSpace.None);
 
     /// <summary>Put both screens back in step with what is selected: the outline on the map, and the highlight in the list.</summary>
     private void ShowSelection()

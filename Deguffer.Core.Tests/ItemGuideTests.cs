@@ -354,7 +354,7 @@ public sealed class ItemGuideTests : IDisposable
 
     /// <summary>
     /// The map's case, and the reason <see cref="ItemGuide.DescribeNearest"/> exists. A treemap
-    /// draws a folder as a one-pixel frame round its children, so what the pointer answers with is
+    /// draws a folder as a frame round its children, so what the pointer answers with is
     /// nearly always a file several levels below the folder that explains it.
     /// </summary>
     [Fact]
