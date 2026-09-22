@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
@@ -119,7 +120,7 @@ public sealed class NestedPaintingTests
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
 
         TileRasteriser.Paint(
-            pixels, tiles, width, height, Ground, (node, depth) => TilePalette.For(node, depth));
+            pixels, tiles, width, height, Ground, (node, depth) => Hues.Colour(node, depth));
 
         return pixels;
     }

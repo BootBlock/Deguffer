@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
@@ -151,7 +152,7 @@ public sealed class SectorRenderingTests
     [Fact]
     public void ShadingChangesBrightnessWithoutChangingHue()
     {
-        var expected = TilePalette.For(0, 0);
+        var expected = Hues.Colour(0, 0);
         var pixels = Paint(Rings(1));
 
         var middle = Polar(pixels, radius: 10, degrees: 0);
@@ -183,7 +184,7 @@ public sealed class SectorRenderingTests
             pixels, new SectorHitTest(sunburst), Size, Size, Ground,
             (node, _) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : TilePalette.For(0, 0));
+                : Hues.Colour(0, 0));
 
         return pixels;
     }

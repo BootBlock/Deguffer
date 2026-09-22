@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
@@ -59,7 +60,7 @@ public sealed class TileRenderingTests
     public void ShadingChangesTheBrightnessOfARectangleWithoutChangingItsHue()
     {
         var tile = new ExploreTile(Node: 1, Depth: 0, Bytes: 1, X: 0, Y: 0, Width: Width, Height: Height);
-        var expected = TilePalette.For(0, 0);
+        var expected = Hues.Colour(0, 0);
 
         var pixels = Paint([tile], Width, Height, Ground, _ => 0);
 
@@ -115,62 +116,92 @@ public sealed class TileRenderingTests
     }
 
     /// <summary>
-    /// The fixed-label-colour bug this exists to prevent: white text is legible on the palette's
-    /// blue and illegible on its yellow, and both are in the same picture.
+    /// The fixed-label-colour bug this exists to prevent: white text is legible on a dark shape and
+    /// illegible on a light one, and both are in the same picture. Asked round the whole circle and
+    /// at every depth the palette distinguishes, lifted and not, because the lightness ramp puts the
+    /// switch from white text to black somewhere inside it.
     /// </summary>
     [Fact]
     public void LabelColourIsWhicheverOfBlackAndWhiteContrastsMore()
     {
-        Assert.Equal(new TileColour(0, 0, 0), TilePalette.For(3, 0).ContrastingText);      // yellow
-        Assert.Equal(new TileColour(255, 255, 255), TilePalette.For(4, 0).ContrastingText); // blue
+        var black = new TileColour(0, 0, 0);
+        var white = new TileColour(255, 255, 255);
 
-        foreach (var branch in Enumerable.Range(0, 8))
+        for (var hue = 0; hue < 360; hue += 15)
         {
-            var colour = TilePalette.For(branch, 0);
-            var chosen = colour.ContrastingText;
+            for (var depth = 0; depth <= 6; depth++)
+            {
+                foreach (var lifted in new[] { false, true })
+                {
+                    var colour = TilePalette.For(new BranchHue(hue, 10, lifted), depth);
+                    var chosen = colour.ContrastingText;
+                    var other = chosen == black ? white : black;
 
-            var chosenContrast = Contrast(colour, chosen);
-            var other = chosen.Red == 0 ? new TileColour(255, 255, 255) : new TileColour(0, 0, 0);
-
-            Assert.True(chosenContrast >= Contrast(colour, other), $"branch {branch} took the worse label colour");
+                    Assert.True(
+                        Contrast(colour, chosen) >= Contrast(colour, other),
+                        $"hue {hue} at depth {depth} took the worse label colour");
+                }
+            }
         }
     }
 
     /// <summary>
-    /// Hue says which branch and lightness says how deep. Two branches that came out the same
-    /// colour would make the map claim a relationship that is not there.
+    /// Lightness says how deep. A child drawn no lighter than its parent would read as a sibling, and
+    /// the ramp stops after a few levels so the deepest shapes are not white.
     /// </summary>
     [Fact]
-    public void EveryBranchGetsADistinctColour()
+    public void DepthRaisesLightnessForAFewLevelsAndThenHolds()
     {
-        var colours = Enumerable.Range(0, 8).Select(b => TilePalette.For(b, 0)).ToList();
+        var hue = new BranchHue(200, 20, Lifted: false);
 
-        Assert.Equal(8, colours.Distinct().Count());
-    }
+        for (var depth = 1; depth < 5; depth++)
+        {
+            Assert.True(
+                TilePalette.For(hue, depth + 1).RelativeLuminance > TilePalette.For(hue, depth).RelativeLuminance,
+                $"depth {depth + 1} was not lighter than depth {depth}");
+        }
 
-    [Fact]
-    public void DepthChangesLightnessAndKeepsTheBranchRecognisable()
-    {
-        var shallow = TilePalette.For(1, 0);
-        var deeper = TilePalette.For(1, 1);
-
-        Assert.NotEqual(shallow, deeper);
-        Assert.True(deeper.RelativeLuminance > shallow.RelativeLuminance);
-
-        // Four steps, then it repeats — long enough to separate a parent from its child, short
-        // enough that the eighth level is not white.
-        Assert.Equal(shallow, TilePalette.For(1, 4));
+        Assert.Equal(TilePalette.For(hue, 5), TilePalette.For(hue, 9));
     }
 
     /// <summary>
-    /// A branch number past the palette wraps rather than throwing. A directory can hold any number
-    /// of children, and an exception from a repaint handler takes the window down.
+    /// Alternate siblings are a step lighter, so two neighbours whose hues are close still differ in
+    /// the one property a colour-vision deficiency leaves intact.
     /// </summary>
     [Fact]
-    public void ABranchNumberBeyondThePaletteWrapsRatherThanFailing()
+    public void ALiftedSiblingIsLighterThanItsNeighbourAtTheSameHue()
     {
-        Assert.Equal(TilePalette.For(0, 0), TilePalette.For(8, 0));
-        Assert.Equal(TilePalette.For(1, 0), TilePalette.For(9, 0));
+        var plain = TilePalette.For(new BranchHue(120, 20, Lifted: false), 2);
+        var lifted = TilePalette.For(new BranchHue(120, 20, Lifted: true), 2);
+
+        Assert.True(lifted.RelativeLuminance > plain.RelativeLuminance);
+    }
+
+    /// <summary>
+    /// The drawing's root owns the whole circle and so has no hue of its own. It is drawn neutral,
+    /// because it is the frame round everything else rather than a branch of it.
+    /// </summary>
+    [Fact]
+    public void TheRootIsANeutralGrey()
+    {
+        var root = TilePalette.For(BranchHue.Whole, 0);
+
+        Assert.Equal(root.Red, root.Green);
+        Assert.Equal(root.Green, root.Blue);
+    }
+
+    /// <summary>
+    /// Free space is neither a thing on the disk nor a run of them, so it is kept apart from the
+    /// aggregate's colour as well as from every hue.
+    /// </summary>
+    [Fact]
+    public void FreeSpaceIsANeutralApartFromTheAggregate()
+    {
+        var free = TilePalette.FreeSpace;
+
+        Assert.NotEqual(TilePalette.Aggregate, free);
+        Assert.Equal(free.Red, free.Green);
+        Assert.Equal(free.Green, free.Blue);
     }
 
     private static double Contrast(TileColour a, TileColour b)
@@ -198,7 +229,7 @@ public sealed class TileRenderingTests
             pixels, tiles, width, height, ground,
             (node, depth) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : TilePalette.For(branchOf(node), depth));
+                : Hues.Colour(branchOf(node), depth));
 
         return pixels;
     }

@@ -89,6 +89,16 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private Func<int, string> _labelText = _ => string.Empty;
 
+    /// <summary>How much room a treemap leaves round what each folder holds.</summary>
+    private ExploreSpacing _spacing = ExploreSpacing.Comfortable;
+
+    /// <summary>
+    /// What is left on the volume the tree covers the whole of, or zero. See
+    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, ShapeColours, ExploreSpacing, long)"/>
+    /// for where it is drawn.
+    /// </summary>
+    private long _freeBytes;
+
     /// <summary>
     /// Where the pointer was last seen, in this control's coordinates, or null while it is elsewhere.
     /// Kept so a redraw can say what is under it again: a page that refreshes on its own would
@@ -212,17 +222,26 @@ public sealed class ExploreMap : UserControl
     public event EventHandler<Point>? MenuRequested;
 
     /// <summary>
-    /// What the pointer moved over: a node, or a byte count where it is over the block standing in
-    /// for items too small to draw. Both null when it is over nothing.
+    /// What the pointer moved over: a node, or one of the two blocks that stand for something other
+    /// than a node. Null when it is over nothing.
     /// </summary>
-    public event EventHandler<(int? Node, long? AggregateBytes)>? Hovered;
+    public event EventHandler<ExploreHit?>? Hovered;
 
     /// <summary>
     /// Draw <paramref name="node"/> of a scanned <paramref name="tree"/> in <paramref name="view"/>,
     /// with the shapes coloured to say <paramref name="colouring"/> and labelled with a name and a
     /// size.
     /// </summary>
-    public void Show(ExploreTree? tree, int node, ExploreView view, ExploreColouring colouring) =>
+    /// <param name="volumeFreeBytes">
+    /// What is left on the volume, where the scan covered the whole of one, and zero otherwise.
+    /// </param>
+    public void Show(
+        ExploreTree? tree,
+        int node,
+        ExploreView view,
+        ExploreColouring colouring,
+        ExploreSpacing spacing,
+        long volumeFreeBytes) =>
         Show(
             tree,
             node,
@@ -230,15 +249,25 @@ public sealed class ExploreMap : UserControl
             tree is null ? _ => ShapeColours.ByBranch : now => ShapeColours.For(tree, colouring, now),
             tree is null
                 ? _ => string.Empty
-                : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}");
+                : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",
+            spacing,
+            volumeFreeBytes);
 
     /// <summary>
     /// Draw <paramref name="node"/> of any tree a layout can lay out.
     /// </summary>
     /// <param name="colours">What the colours are to say, asked at each repaint.</param>
-    /// <param name="labelText">What to write on a shape this drawing chose to label.</param>
+    /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
+    /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
+    /// <param name="volumeFreeBytes">What is left on the volume the tree covers the whole of, or zero.</param>
     public void Show(
-        ISizedTree? tree, int node, ExploreView view, Func<DateTime, ShapeColours> colours, Func<int, string> labelText)
+        ISizedTree? tree,
+        int node,
+        ExploreView view,
+        Func<DateTime, ShapeColours> colours,
+        Func<int, string> labelText,
+        ExploreSpacing spacing,
+        long volumeFreeBytes)
     {
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
@@ -248,6 +277,8 @@ public sealed class ExploreMap : UserControl
         _view = view;
         _colours = colours;
         _labelText = labelText;
+        _spacing = spacing;
+        _freeBytes = volumeFreeBytes;
 
         Redraw();
     }
@@ -385,7 +416,7 @@ public sealed class ExploreMap : UserControl
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
         var drawing = ExploreSurface.Create(
-            tree, _node, _view, width, height, _scale, _colours(DateTime.UtcNow));
+            tree, _node, _view, width, height, _scale, _colours(DateTime.UtcNow), _spacing, _freeBytes);
         _drawing = drawing;
 
         // Both reused while the size holds. A scan redraws this every three quarters of a second,
@@ -405,7 +436,7 @@ public sealed class ExploreMap : UserControl
         _pixels!.CopyTo(0, bitmap.PixelBuffer, 0, _pixels!.Length);
         bitmap.Invalidate();
 
-        _labels.Show(drawing, _scale, _labelText);
+        _labels.Show(drawing, _scale, LabelText);
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now, and so is whatever the pointer is over.
@@ -468,6 +499,13 @@ public sealed class ExploreMap : UserControl
         ? new TileColour(32, 32, 32)
         : new TileColour(243, 243, 243);
 
+    /// <summary>
+    /// What to write on a labelled shape. The free space block is the map's own, because it is the
+    /// one shape that is not a node of the page's tree.
+    /// </summary>
+    private string LabelText(int node) =>
+        node == ExploreTile.FreeSpace ? $"Free space  {FreeSpace.Format(_freeBytes)}" : _labelText(node);
+
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
     private void ShowPicked() =>
         _highlight.ShowPicked(_drawing is { } drawing ? drawing.Outlines(_picked) : []);
@@ -475,17 +513,18 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Draw the fainter outline round whatever the pointer is over.
     ///
-    /// <para>Three shapes get nothing. One already picked would carry two outlines, leaving the
-    /// weaker claim on top of the stronger one. The other two cannot be picked at all (§7.1), so
-    /// marking either out would invite a click that selects nothing: the block standing in for items
-    /// too small to draw, and anything removed since the scan, which the picture goes on showing
-    /// because the tree behind it is not rebuilt for a deletion.</para>
+    /// <para>Four shapes get nothing. One already picked would carry two outlines, leaving the
+    /// weaker claim on top of the stronger one. The other three cannot be picked at all (§7.1), so
+    /// marking any of them out would invite a click that selects nothing: the block standing in for
+    /// items too small to draw, the block standing for free space, and anything removed since the
+    /// scan, which the picture goes on showing because the tree behind it is not rebuilt for a
+    /// deletion.</para>
     /// </summary>
     private void ShowHovered()
     {
         _under.Clear();
 
-        if (_hovered is { IsAggregate: false } hit
+        if (_hovered is { IsNode: true } hit
             && !_picked.Contains(hit.Node)
             && !_gone(hit.Node))
         {
@@ -542,14 +581,8 @@ public sealed class ExploreMap : UserControl
         Report(hit);
     }
 
-    /// <summary>Say what the pointer found, in the shape a page wants it.</summary>
-    private void Report(ExploreHit? hit) =>
-        Hovered?.Invoke(this, hit switch
-        {
-            { IsAggregate: true } aggregate => (null, aggregate.Bytes),
-            { } node => (node.Node, null),
-            _ => (null, null),
-        });
+    /// <summary>Say what the pointer found.</summary>
+    private void Report(ExploreHit? hit) => Hovered?.Invoke(this, hit);
 
     /// <summary>
     /// Redraw only when the scale actually moved. The root raises this for several reasons — the
@@ -584,8 +617,9 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Say what is at <paramref name="point"/>. The block standing in for items too small to draw
-    /// picks nothing: it is several thousand files at once, and §7.1 has no bulk action.
+    /// Say what is at <paramref name="point"/>. Neither block picks anything. The one standing in
+    /// for items too small to draw is several thousand files at once, and §7.1 has no bulk action,
+    /// and free space is not on the disk to be acted on.
     /// </summary>
     private void Pick(Point point)
     {
@@ -596,7 +630,7 @@ public sealed class ExploreMap : UserControl
 
         Picked?.Invoke(this, At(drawing, point) switch
         {
-            { IsAggregate: false } hit => hit.Node,
+            { IsNode: true } hit => hit.Node,
             _ => null,
         });
     }
@@ -608,7 +642,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        if (At(drawing, e.GetPosition(this)) is { IsAggregate: false } hit)
+        if (At(drawing, e.GetPosition(this)) is { IsNode: true } hit)
         {
             Activated?.Invoke(this, hit.Node);
         }

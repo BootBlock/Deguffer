@@ -138,9 +138,13 @@ public static class TileRasteriser
 
         var ridge = CushionShading.RidgeAt(tile.Depth);
 
-        // An aggregate is not a thing on the disk, so it is drawn flat: a cushion would give it the
-        // same physical presence as the files it stands in for.
-        if (tile.IsAggregate)
+        // Three shapes are drawn flat. Neither block is a thing on the disk, and a cushion would give
+        // it the same physical presence as the files it stands for. A folder with a band has its
+        // name written across its top edge, where a cushion is at its brightest on the left and its
+        // darkest on the right, so text chosen to contrast with the folder's colour would be chosen
+        // against a colour the band is not. The band and the gap already say where the folder is,
+        // which is the job the cushion was doing.
+        if (!tile.IsNode || tile.Header > 0)
         {
             ridge = 0;
         }

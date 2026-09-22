@@ -21,6 +21,7 @@ public class PreferenceStoreTests
             ViewDensity.Standard,
             ExploreView.List,
             ExploreColouring.Age,
+            ExploreSpacing.Spacious,
             ExploreNotesDismissed: true,
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
@@ -43,6 +44,9 @@ public class PreferenceStoreTests
 
         // Not the default either, and for the same reason: Branch is zero.
         Assert.Equal(ExploreColouring.Age, loaded.ExploreColours);
+
+        // Not the default, which is Comfortable, so the assertion fails with the preference gone.
+        Assert.Equal(ExploreSpacing.Spacious, loaded.TreemapSpacing);
 
         // Not the default, for the reason the two above give: false is what the record declares and
         // what a missing key deserialises to, so asserting false would pass with the preference
@@ -169,6 +173,16 @@ public class PreferenceStoreTests
         Assert.Equal(ViewDensity.Compact, AppPreferences.Default.View);
         Assert.False(AppPreferences.Default.ShowNotInstalled);
         Assert.False(AppPreferences.Default.ShowAlreadyClear);
+    }
+
+    /// <summary>
+    /// The treemap ships framed and named but not loose: dense enough to show a whole drive, with
+    /// room enough to tell one folder from the next.
+    /// </summary>
+    [Fact]
+    public void TheShippedTreemapSpacingIsComfortable()
+    {
+        Assert.Equal(ExploreSpacing.Comfortable, AppPreferences.Default.TreemapSpacing);
     }
 
     [Fact]

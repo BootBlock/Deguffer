@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Tests.Fakes;
 
@@ -60,8 +61,11 @@ public sealed class ExploreHoverNoteTests : IDisposable
     {
         var (tree, surface) = Drawn();
 
+        // Halfway across the folder's own gap: the root's gap is the first one in from the edge.
+        var gap = LayoutLimits.Default.ContainerGap;
+
         var found = Guide().DescribeNearest(
-            tree.PathOf(surface.At(1.5f, Canvas / 2f)!.Value.Node));
+            tree.PathOf(surface.At(gap * 1.5f, Canvas / 2f)!.Value.Node));
 
         Assert.Equal(_system.WindowsDirectory, found?.Path);
         Assert.True(found?.IsExact);
@@ -94,7 +98,9 @@ public sealed class ExploreHoverNoteTests : IDisposable
             Canvas,
             scale: 1,
             ExploreColouring.Branch,
-            Now));
+            Now,
+            ExploreSpacing.Comfortable,
+            volumeFreeBytes: 0));
     }
 
     /// <summary>

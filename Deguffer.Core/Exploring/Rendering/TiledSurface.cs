@@ -10,6 +10,18 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// </summary>
 public sealed class TiledSurface : ExploreSurface
 {
+    /// <summary>
+    /// How many folders to name in their frames at most, on top of the labels inside the shapes.
+    ///
+    /// <para>Separate from <see cref="ExploreSurface.MaximumLabels"/>, which keeps the text over the
+    /// picture from becoming noise. A folder's name is in a band the layout set aside for it, so it
+    /// covers nothing, and a band left empty reads as a folder with no name. The layout gives a band
+    /// only where one line of text fits, so a real canvas has a few hundred of them at most; this
+    /// bounds the controls the shell creates for a canvas that somehow has more, and the smallest
+    /// folders are the ones that go without.</para>
+    /// </summary>
+    private const int MaximumHeaders = 256;
+
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
 
@@ -49,7 +61,7 @@ public sealed class TiledSurface : ExploreSurface
         {
             var tile = _tiles[i];
 
-            if (tile.IsAggregate || !nodes.Contains(tile.Node))
+            if (!tile.IsNode || !nodes.Contains(tile.Node))
             {
                 continue;
             }
@@ -69,14 +81,17 @@ public sealed class TiledSurface : ExploreSurface
     }
 
     /// <summary>
-    /// Lay the labels over the finished bitmap.
+    /// Lay the labels over the finished bitmap: each framed folder's name in the band along its top,
+    /// and a name inside each shape with nothing drawn in it.
     ///
-    /// <para>Only a rectangle with nothing drawn inside it gets one. A child is inset from its
-    /// parent by a single pixel, so a parent's label and its first child's land within two pixels of
-    /// each other and overprint into an unreadable stack — which is what the top-left corner of a
-    /// treemap of any real drive looked like. Labelling the innermost rectangles instead is both
-    /// legible and the more useful half: the parent's name is on the breadcrumb, and what is inside
-    /// it is not written anywhere else.</para>
+    /// <para>A shape that has children drawn inside it and no band gets no label. Its children are
+    /// inset by a pixel or two, so its label and its first child's would land within a few pixels of
+    /// each other and overprint into an unreadable stack. The band is what makes a folder's own name
+    /// affordable, because nothing is drawn in it.</para>
+    ///
+    /// <para>The largest shapes are named first, in both kinds. The layout emits shapes depth first,
+    /// so taking them in that order would spend the whole allowance on the first branch and leave
+    /// the largest folder elsewhere unnamed.</para>
     /// </summary>
     private IReadOnlyList<ExploreLabel> BuildLabels()
     {
@@ -93,25 +108,51 @@ public sealed class TiledSurface : ExploreSurface
         {
             var tile = _tiles[i];
 
-            if (!tile.IsAggregate && tile.Node != Root)
+            if (tile.IsNode && tile.Node != Root)
             {
                 covered.Add(Tree.ParentOf(tile.Node));
             }
         }
 
-        var labels = new List<ExploreLabel>();
+        var headers = new List<int>();
+        var insides = new List<int>();
 
-        for (var i = 0; i < _tiles.Count && labels.Count < MaximumLabels; i++)
+        for (var i = 0; i < _tiles.Count; i++)
         {
             var tile = _tiles[i];
 
-            if (tile.IsAggregate
-                || tile.Node == Root
-                || covered.Contains(tile.Node)
-                || !tile.HasRoomForALabel(Limits))
+            if (tile.Header > 0)
             {
-                continue;
+                headers.Add(i);
             }
+            else if (!tile.IsAggregate
+                && (tile.IsFreeSpace || (tile.Node != Root && !covered.Contains(tile.Node)))
+                && tile.HasRoomForALabel(Limits))
+            {
+                insides.Add(i);
+            }
+        }
+
+        var labels = new List<ExploreLabel>();
+
+        foreach (var i in Largest(headers, MaximumHeaders))
+        {
+            var tile = _tiles[i];
+
+            // Centred in the band, which is one line of text with the gap shared above and below it.
+            labels.Add(new ExploreLabel(
+                tile.Node,
+                tile.X + Limits.LabelPadding,
+                tile.Y + ((tile.Header - Limits.MinimumLabelHeight) / 2),
+                tile.Width - (Limits.LabelPadding * 2),
+                Rotation: 0,
+                Centred: false,
+                TextColourFor(tile.Node, tile.Depth)));
+        }
+
+        foreach (var i in Largest(insides, MaximumLabels))
+        {
+            var tile = _tiles[i];
 
             labels.Add(new ExploreLabel(
                 tile.Node,
@@ -125,4 +166,19 @@ public sealed class TiledSurface : ExploreSurface
 
         return labels;
     }
+
+    /// <summary>At most <paramref name="count"/> of <paramref name="indices"/>, largest shape first.</summary>
+    private List<int> Largest(List<int> indices, int count)
+    {
+        indices.Sort((a, b) => Area(_tiles[b]).CompareTo(Area(_tiles[a])));
+
+        if (indices.Count > count)
+        {
+            indices.RemoveRange(count, indices.Count - count);
+        }
+
+        return indices;
+    }
+
+    private static float Area(ExploreTile tile) => tile.Width * tile.Height;
 }

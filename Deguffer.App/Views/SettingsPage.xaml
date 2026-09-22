@@ -48,6 +48,22 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- Indexed against ExploreSpacing. Both pages that draw a treemap read it as they come
+                 back on screen, so it takes effect on the picture already drawn, with no rescan. -->
+            <views:SettingsRow Glyph="&#xE80A;"
+                               Title="Treemap spacing"
+                               Description="How much room a treemap leaves round each folder, with the folder's name across its top. More room makes folders easier to tell apart and leaves less for what is in them.">
+                <views:SettingsRow.Control>
+                    <ComboBox SelectedIndex="{x:Bind ViewModel.TreemapSpacingIndex, Mode=TwoWay}"
+                              MinWidth="150"
+                              AutomationProperties.Name="Treemap spacing">
+                        <ComboBoxItem Content="Dense" />
+                        <ComboBoxItem Content="Comfortable" />
+                        <ComboBoxItem Content="Spacious" />
+                    </ComboBox>
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <TextBlock Text="Storage list" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
 
             <!-- A location with nothing left to reclaim states a fact about the machine and offers

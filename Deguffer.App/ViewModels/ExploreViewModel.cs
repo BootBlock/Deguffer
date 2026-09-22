@@ -7,6 +7,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
@@ -393,6 +394,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasViewNote => ViewNote is not null;
 
     /// <summary>
+    /// What was left on the volume when the scan on screen finished, where it covered the whole of
+    /// one, and zero otherwise. See <see cref="VolumeFreeSpace"/>.
+    ///
+    /// <para>Read once, as the scan finishes, rather than kept current. Everything else on screen
+    /// describes the disk as that scan found it, so a figure that moved on its own would set the free
+    /// block against sizes it no longer matches. A removal from this page makes both stale together,
+    /// and the stale note says so.</para>
+    /// </summary>
+    public long VolumeFreeBytes { get; private set; }
+
+    /// <summary>
     /// Which node the views are drawing. The scan's root until the user descends, and then wherever
     /// they descended to — including across the partial trees a running scan publishes, which is
     /// <see cref="ExplorePlace"/>'s job to establish.
@@ -485,6 +497,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         IsBusy = true;
         Progress = null;
         RouteNote = null;
+        VolumeFreeBytes = 0;
 
         // Started with the scan and never awaited here. Part of §7.1's refusal set says what is
         // running right now, so it goes stale while the page is open, and a scan is the moment the
@@ -500,6 +513,11 @@ public sealed partial class ExploreViewModel : ObservableObject
         try
         {
             var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
+
+            // Before Show, which is what draws the map. Read afresh, because the space figures the
+            // drive picker holds are from whenever it last opened.
+            _volumes.Invalidate();
+            VolumeFreeBytes = VolumeFreeSpace.Beside(_volumes, target);
 
             Show(scan.Tree, ExplorePlace.Carry(Tree, CurrentNode, scan.Tree));
 
@@ -741,14 +759,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// Say what the pointer is over. Called from the map on every move, so it formats and assigns
     /// and does nothing else — anything heavier here runs at the display's refresh rate.
     /// </summary>
-    public void Hover(int? node, long? aggregateBytes)
+    public void Hover(ExploreHit? hit)
     {
-        (Hovered, HoveredFigures, HoveredNote) = (Tree, node, aggregateBytes) switch
+        (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
         {
-            (_, _, { } bytes) => (
-                "Items too small to draw separately", FreeSpace.Format(bytes), string.Empty),
+            (_, { IsAggregate: true } aggregate) => (
+                "Items too small to draw separately", FreeSpace.Format(aggregate.Bytes), string.Empty),
 
-            ({ } tree, { } value, _) => Over(tree, value),
+            (_, { IsFreeSpace: true } free) => (
+                "Free space on this drive", FreeSpace.Format(free.Bytes), string.Empty),
+
+            ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
             _ => (string.Empty, string.Empty, string.Empty),
         };

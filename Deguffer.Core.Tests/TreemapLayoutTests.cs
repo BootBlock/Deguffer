@@ -19,9 +19,9 @@ public sealed class TreemapLayoutTests
         var tree = TreeOf(400, 300, 200, 100);
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
 
-        // The root keeps a one-pixel frame around its children, so they share what is inside it
-        // rather than the whole canvas.
-        var available = (Width - 2) * (Height - 2);
+        // The root keeps a frame round its children, a band along its top and a gap down its sides
+        // and bottom, so they share what is inside it rather than the whole canvas.
+        var available = Inside(LayoutLimits.Default);
 
         foreach (var tile in tiles.Where(t => t.Depth == 1))
         {
@@ -37,7 +37,7 @@ public sealed class TreemapLayoutTests
         var tree = TreeOf(400, 300, 200, 100);
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
 
-        var available = (double)(Width - 2) * (Height - 2);
+        var available = Inside(LayoutLimits.Default);
         var covered = tiles.Where(t => t.Depth == 1).Sum(t => (double)t.Width * t.Height);
 
         // The upper bound carries a tolerance rather than sitting exactly on the available area:
@@ -266,4 +266,8 @@ public sealed class TreemapLayoutTests
 
         return builder.Build(ExploreChildOrder.BySize);
     }
+
+    /// <summary>What the root's frame leaves for its children on the whole canvas.</summary>
+    private static double Inside(LayoutLimits limits) =>
+        (double)(Width - (limits.ContainerGap * 2)) * (Height - limits.HeaderHeight - limits.ContainerGap);
 }

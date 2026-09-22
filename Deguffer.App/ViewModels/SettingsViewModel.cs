@@ -147,6 +147,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { Theme = (AppTheme)value });
     }
 
+    /// <summary>
+    /// Index into the treemap spacing combo box, ordered to match <see cref="ExploreSpacing"/>.
+    /// Presentation only: it moves the frames round the folders in a treemap and nothing else.
+    /// </summary>
+    public int TreemapSpacingIndex
+    {
+        get => (int)_preferences.Current.TreemapSpacing;
+        set => Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
+    }
+
     public bool BackdropEnabled
     {
         get => _preferences.Current.BackdropEnabled;

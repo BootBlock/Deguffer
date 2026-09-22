@@ -257,7 +257,7 @@ public sealed class ExploreOutlineTests
 
     private static ExploreSurface Surface(ExploreTree tree, ExploreView view) =>
         ExploreSurface.Create(
-            tree, tree.RootNode, view, Width, Height, scale: 1, ExploreColouring.Branch, Now);
+            tree, tree.RootNode, view, Width, Height, scale: 1, ExploreColouring.Branch, Now, ExploreSpacing.Comfortable, volumeFreeBytes: 0);
 
     private static ExploreSurface Treemap(ExploreTree tree) => Surface(tree, ExploreView.Treemap);
 

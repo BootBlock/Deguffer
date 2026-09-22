@@ -3,14 +3,25 @@ using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.Core.Exploring.Rendering;
 
-/// <summary>What the pointer found: a node, or the block standing in for items too small to draw.</summary>
+/// <summary>
+/// What the pointer found: a node, the block standing in for items too small to draw, or the block
+/// standing for the volume's free space.
+/// </summary>
 /// <param name="Bytes">
-/// What was pointed at accounts for this much. Carried rather than looked up because an aggregate
-/// has no node to look it up from.
+/// What was pointed at accounts for this much. Carried rather than looked up because neither block
+/// has a node to look it up from.
 /// </param>
 public readonly record struct ExploreHit(int Node, long Bytes)
 {
     public bool IsAggregate => Node == ExploreTile.Aggregated;
+
+    public bool IsFreeSpace => Node == ExploreTile.FreeSpace;
+
+    /// <summary>
+    /// Whether what was pointed at is a node of the tree, and so something a click may pick (§7.1).
+    /// Neither block is.
+    /// </summary>
+    public bool IsNode => Node >= 0;
 }
 
 /// <summary>
@@ -93,14 +104,10 @@ public abstract class ExploreSurface
     protected const int MaximumLabels = 64;
 
     /// <summary>
-    /// Which of the root's children each direct child is, so a whole subtree shares one hue.
-    ///
-    /// <para>The answer is the branch's <em>position</em> among its siblings, not its node number.
-    /// Node numbers are whatever the scan happened to assign, so taking them modulo the palette
-    /// gives two adjacent branches the same hue often enough to be visible — and the two largest
-    /// shapes on the screen sharing a colour is precisely the collision that matters.</para>
+    /// Which part of the hue circle each node owns, measured from this drawing's root. See
+    /// <see cref="BranchHues"/>.
     /// </summary>
-    private readonly Dictionary<int, int> _branches = [];
+    private readonly BranchHues _hues;
 
     private readonly ShapeColours _colours;
 
@@ -123,13 +130,7 @@ public abstract class ExploreSurface
         Height = height;
         Limits = limits;
         _colours = colours;
-
-        var children = tree.ChildrenOf(root);
-
-        for (var i = 0; i < children.Length; i++)
-        {
-            _branches[children[i]] = i;
-        }
+        _hues = new BranchHues(tree, root);
     }
 
     public int Width { get; }
@@ -164,8 +165,12 @@ public abstract class ExploreSurface
         int height,
         double scale,
         ExploreColouring colouring,
-        DateTime nowUtc) =>
-        Create(tree, root, view, width, height, scale, ShapeColours.For(tree, colouring, nowUtc));
+        DateTime nowUtc,
+        ExploreSpacing spacing,
+        long volumeFreeBytes) =>
+        Create(
+            tree, root, view, width, height, scale, ShapeColours.For(tree, colouring, nowUtc),
+            spacing, volumeFreeBytes);
 
     /// <summary>
     /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a
@@ -177,6 +182,13 @@ public abstract class ExploreSurface
     /// compared against raw constants draws half-size detail on a high-DPI display.</para>
     /// </summary>
     /// <param name="colours">What the colours are to say.</param>
+    /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
+    /// <param name="volumeFreeBytes">
+    /// What is left on the volume <paramref name="tree"/> covers the whole of, or zero where it does
+    /// not cover a whole volume or the figure is not known. Drawn only beside the tree's own root and
+    /// only by the treemap: free space is in proportion to a whole volume and to nothing inside it,
+    /// so a folder the reader has opened is drawn without it.
+    /// </param>
     public static ExploreSurface Create(
         ISizedTree tree,
         int root,
@@ -184,11 +196,14 @@ public abstract class ExploreSurface
         int width,
         int height,
         double scale,
-        ShapeColours colours)
+        ShapeColours colours,
+        ExploreSpacing spacing,
+        long volumeFreeBytes)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var limits = LayoutLimits.Default.At(scale);
+        var limits = LayoutLimits.Default.Spaced(spacing).At(scale);
+        var free = root == tree.RootNode ? volumeFreeBytes : 0;
 
         // A tree still being filled in orders its children by name rather than by size, so that a
         // growing child widens where it is instead of moving. Two of the four drawings cannot be
@@ -212,7 +227,7 @@ public abstract class ExploreSurface
             // the user switches back, and it is the one they last saw.
             _ => new TiledSurface(
                 tree, root, width, height, limits, colours,
-                TreemapLayout.Compute(tree, root, width, height, limits)),
+                TreemapLayout.Compute(tree, root, width, height, limits, free)),
         };
     }
 
@@ -238,23 +253,13 @@ public abstract class ExploreSurface
     public abstract IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes);
 
     /// <summary>
-    /// Which top-level branch a node belongs to, so a whole subtree shares one hue.
+    /// Which part of the hue circle a node owns, so a whole subtree shares one part of it.
     ///
-    /// <para>Walked up from the node rather than carried in the shape, because "top level" means
-    /// relative to whatever the user has descended into — the same node is a branch of its own when
-    /// opened, and part of a larger one when seen from above.</para>
+    /// <para>Measured from this drawing's root rather than carried in the shape, because the same
+    /// folder owns the whole circle when it is opened and one arc of a larger one when it is seen
+    /// from above.</para>
     /// </summary>
-    internal int BranchOf(int node)
-    {
-        var current = node;
-
-        while (current != Root && Tree.ParentOf(current) != Root && current != Tree.RootNode)
-        {
-            current = Tree.ParentOf(current);
-        }
-
-        return _branches.TryGetValue(current, out var position) ? position : 0;
-    }
+    internal BranchHue HueOf(int node) => _hues.Of(node);
 
     /// <summary>
     /// What the shape for this node at this depth is painted.
@@ -264,12 +269,17 @@ public abstract class ExploreSurface
     /// <see cref="ShapeColours"/> rather than an edit to each of them — and, more to the point, the
     /// labels cannot come out contrasted against a colour the shape underneath was not painted in.</para>
     ///
-    /// <para>An aggregate is never coloured by either scheme. It is not a thing on the disk: it
-    /// stands for a run of siblings too small to draw, so it belongs to no branch and has no single
-    /// date. Giving it a colour that reads as one would invite the user to act on it.</para>
+    /// <para>Neither block is ever coloured by either scheme. An aggregate stands for a run of
+    /// siblings too small to draw, and free space for what the volume has left, so neither belongs
+    /// to a branch or has a date. Giving either a colour that reads as a thing on the disk would
+    /// invite the user to act on it.</para>
     /// </summary>
-    protected TileColour ColourFor(int node, int depth) =>
-        node == ExploreTile.Aggregated ? TilePalette.Aggregate : _colours.For(this, node, depth);
+    protected TileColour ColourFor(int node, int depth) => node switch
+    {
+        ExploreTile.Aggregated => TilePalette.Aggregate,
+        ExploreTile.FreeSpace => TilePalette.FreeSpace,
+        _ => _colours.For(this, node, depth),
+    };
 
     /// <summary>The colour text over a shape of this node at this depth has to be drawn in.</summary>
     protected TileColour TextColourFor(int node, int depth) => ColourFor(node, depth).ContrastingText;

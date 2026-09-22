@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
@@ -111,7 +112,7 @@ public sealed class ParallelPaintingTests
             pixels, tiles, Width, Height, Ground,
             (node, depth) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : TilePalette.For(node, depth));
+                : Hues.Colour(node, depth));
 
         return pixels;
     }

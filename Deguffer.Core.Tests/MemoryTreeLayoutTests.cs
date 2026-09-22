@@ -34,8 +34,10 @@ public sealed class MemoryTreeLayoutTests
     {
         var tiles = TreemapLayout.Compute(Tree, Tree.RootNode, Width, Height, LayoutLimits.Default);
 
-        // The root keeps a one-pixel frame round its children, so they share what is inside it.
-        var available = (Width - 2) * (Height - 2);
+        // The root keeps a frame round its children, a band along its top and a gap down its sides
+        // and bottom, so they share what is inside it.
+        var limits = LayoutLimits.Default;
+        var available = (Width - (limits.ContainerGap * 2)) * (Height - limits.HeaderHeight - limits.ContainerGap);
         var total = (double)Tree.SizeOf(Tree.RootNode);
         var parts = tiles.Where(tile => tile.Depth == 1 && !tile.IsAggregate && Tree.SizeOf(tile.Node) > 0).ToArray();
 
@@ -110,7 +112,7 @@ public sealed class MemoryTreeLayoutTests
         var dates = ShapeColours.For(drive, ExploreColouring.Age, new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
 
         Assert.Throws<ArgumentException>(() =>
-            ExploreSurface.Create(Tree, Tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, dates));
+            ExploreSurface.Create(Tree, Tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, dates, ExploreSpacing.Comfortable, volumeFreeBytes: 0));
     }
 
     /// <summary>
@@ -124,7 +126,7 @@ public sealed class MemoryTreeLayoutTests
     [InlineData(ExploreView.Icicle, Width / 2, 8)]
     public void EveryViewDrawsTheMemoryTreeAndFindsAPartUnderThePointer(ExploreView view, float x, float y)
     {
-        var surface = ExploreSurface.Create(Tree, Tree.RootNode, view, (int)Width, (int)Height, scale: 1, ShapeColours.ByBranch);
+        var surface = ExploreSurface.Create(Tree, Tree.RootNode, view, (int)Width, (int)Height, scale: 1, ShapeColours.ByBranch, ExploreSpacing.Comfortable, volumeFreeBytes: 0);
         var pixels = new byte[PixelBuffer.LengthFor((int)Width, (int)Height)];
 
         surface.Paint(pixels, new TileColour(32, 32, 32));

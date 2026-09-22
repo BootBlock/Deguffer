@@ -30,6 +30,9 @@ public sealed partial class MemoryPage : Page
     private CancellationTokenSource? _watching;
     private bool _onScreen;
 
+    /// <summary>The treemap spacing the map was last told. See <see cref="FollowSpacing"/>.</summary>
+    private ExploreSpacing _spacing = App.Preferences.Current.TreemapSpacing;
+
     /// <summary>Whether the page is writing the list's own selection. See <see cref="IsUserSelecting"/>.</summary>
     private bool _showingSelectedRow;
 
@@ -100,7 +103,7 @@ public sealed partial class MemoryPage : Page
         // the reader chose.
         NavigationCacheMode = NavigationCacheMode.Required;
 
-        Map.Hovered += (_, what) => ViewModel.Hover(what.Node, what.AggregateBytes);
+        Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.Picked += (_, node) => ViewModel.Selection.Select(node);
 
@@ -174,6 +177,8 @@ public sealed partial class MemoryPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _onScreen = true;
+
+        FollowSpacing();
 
         if (XamlRoot is { } root)
         {
@@ -274,6 +279,22 @@ public sealed partial class MemoryPage : Page
     }
 
     /// <summary>
+    /// Draw again if the treemap spacing changed while this page was away. Re-read on every visit
+    /// because it is chosen on the Settings page, which persists before it applies — see
+    /// <c>ExplorePage.FollowSpacing</c>.
+    /// </summary>
+    private void FollowSpacing()
+    {
+        var spacing = App.Preferences.Current.TreemapSpacing;
+
+        if (spacing != _spacing)
+        {
+            _spacing = spacing;
+            ShowCurrentNode();
+        }
+    }
+
+    /// <summary>
     /// Draw the current node.
     ///
     /// <para>The colours are asked for per repaint rather than handed over once, which is what the
@@ -281,7 +302,14 @@ public sealed partial class MemoryPage : Page
     /// its shapes say which part they belong to.</para>
     /// </summary>
     private void ShowCurrentNode() =>
-        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView, _ => ShapeColours.ByBranch, ViewModel.LabelFor);
+        Map.Show(
+            ViewModel.Tree,
+            ViewModel.CurrentNode,
+            ViewModel.SelectedView,
+            _ => ShapeColours.ByBranch,
+            ViewModel.LabelFor,
+            _spacing,
+            volumeFreeBytes: 0);
 
     /// <summary>Put both screens back in step with what is selected: the outline on the map, and the highlight in the list.</summary>
     private void ShowSelection()
