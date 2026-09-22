@@ -129,12 +129,16 @@ public sealed class TreemapFrameTests
     {
         var tree = TwoFolders();
 
-        ExploreSurface Drawn(double textScale) => ExploreSurface.Create(
-            tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale,
-            ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None);
+        int NodeAt(double textScale, float y)
+        {
+            var hit = ExploreSurface.Create(
+                    tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale,
+                    ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None)
+                .At(Width / 2, y);
 
-        float BranchLabelY(ExploreSurface surface) =>
-            surface.Labels.Single(label => label.Node == tree.RootNode).Y;
+            Assert.NotNull(hit);
+            return hit.Value.Node;
+        }
 
         var limits = LayoutLimits.Default.ForText(1.5);
 
@@ -146,8 +150,12 @@ public sealed class TreemapFrameTests
         Assert.Equal(limits.HeaderHeight, tiles.Where(tile => tile.Depth == 1).Min(tile => tile.Y), 0.01f);
         Assert.True(limits.HeaderHeight > LayoutLimits.Default.HeaderHeight);
 
-        // And the label is centred in the taller band, not left at the top of it.
-        Assert.True(BranchLabelY(Drawn(1.5)) >= BranchLabelY(Drawn(1)));
+        // And the drawing is laid out with it: just below a 100% band is still the root's own band
+        // at 150%, and already a folder at 100%.
+        var below = LayoutLimits.Default.HeaderHeight + 2;
+
+        Assert.Equal(tree.RootNode, NodeAt(1.5, below));
+        Assert.NotEqual(tree.RootNode, NodeAt(1, below));
     }
 
     /// <summary>A band is for a folder's name above its contents, so nothing without contents has one.</summary>
