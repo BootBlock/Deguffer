@@ -71,7 +71,9 @@ public sealed class TreemapFreeSpaceTests
         var tree = Folder();
         var folder = tree.ChildrenOf(tree.RootNode)[0];
 
-        var surface = Treemap(tree, folder, ExploreView.Treemap, freeBytes: 1_000_000);
+        // As much free space as the folder holds, so a block beside it would be half the canvas
+        // rather than a share too thin to draw, which would pass this without the rule.
+        var surface = Treemap(tree, folder, ExploreView.Treemap, freeBytes: tree.SizeOf(folder));
 
         Assert.DoesNotContain(Hits(surface), hit => hit.IsFreeSpace);
     }
@@ -84,7 +86,9 @@ public sealed class TreemapFreeSpaceTests
     {
         var tree = Folder();
 
-        Assert.DoesNotContain(Hits(Treemap(tree, tree.RootNode, view, freeBytes: 1_000_000)), hit => hit.IsFreeSpace);
+        var free = tree.SizeOf(tree.RootNode);
+
+        Assert.DoesNotContain(Hits(Treemap(tree, tree.RootNode, view, free)), hit => hit.IsFreeSpace);
     }
 
     /// <summary>

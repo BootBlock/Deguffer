@@ -15,7 +15,7 @@ public sealed class TreemapFrameTests
     private const float Width = 800;
     private const float Height = 600;
 
-    /// <summary>Half a pixel, for the single-precision edges a squarified row produces.</summary>
+    /// <summary>A hundredth of a pixel, for the single-precision edges a squarified row produces.</summary>
     private const float Hair = 0.01f;
 
     [Fact]
@@ -93,6 +93,24 @@ public sealed class TreemapFrameTests
 
         Assert.Equal(0, root.Header);
         Assert.Equal(limits.ContainerGap, tiles.Where(tile => tile.Depth == 1).Min(tile => tile.Y), 0.01f);
+    }
+
+    /// <summary>
+    /// The setting reaches the drawing, not only the layout: a point just inside the edge is the
+    /// root's own gap at Spacious and already a folder at Dense.
+    /// </summary>
+    [Fact]
+    public void TheDrawingUsesTheSpacingItWasGiven()
+    {
+        var tree = TwoFolders();
+
+        int NodeAt(ExploreSpacing spacing) => ExploreSurface.Create(
+                tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1,
+                ShapeColours.ByBranch, spacing, volumeFreeBytes: 0)
+            .At(4.5f, Height / 2)!.Value.Node;
+
+        Assert.Equal(tree.RootNode, NodeAt(ExploreSpacing.Spacious));
+        Assert.NotEqual(tree.RootNode, NodeAt(ExploreSpacing.Dense));
     }
 
     /// <summary>A band is for a folder's name above its contents, so nothing without contents has one.</summary>
