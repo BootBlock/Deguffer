@@ -261,9 +261,9 @@ public static class LongPath
     {
         isLink = null;
 
-        // Outside the try, exactly where the two-state form has always had it. A value Windows will
-        // not accept at all throws from here, as it did before, rather than being reported as
-        // something about the user's disk.
+        // Exactly where the two-state form has always had it. A value Windows will not accept at all
+        // throws from here, as it did before, rather than being reported as something about the
+        // user's disk.
         var extended = Extended(path);
 
         // A file cannot be named with a trailing separator, and Win32 answers for the file anyway.
@@ -274,41 +274,24 @@ public static class LongPath
             return PathPresence.Absent;
         }
 
-        try
+        var error = FileAttributeRead.Read(extended, out var attributes);
+
+        if (error != 0)
         {
-            var attributes = File.GetAttributes(extended);
-
-            if (attributes.HasFlag(FileAttributes.Directory) != expectDirectory)
-            {
-                return PathPresence.Absent;
-            }
-
-            isLink = attributes.HasFlag(FileAttributes.ReparsePoint);
-
-            return PathPresence.Present;
+            // Anything but the absent set is an access rule on both ends of the path, or a link
+            // Windows will not follow (ERROR_UNTRUSTED_MOUNT_POINT). Neither says anything about
+            // what is there.
+            return SaysNothingIsThere(error) ? PathPresence.Absent : PathPresence.Refused;
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+
+        if (attributes.HasFlag(FileAttributes.Directory) != expectDirectory)
         {
             return PathPresence.Absent;
         }
-        catch (IOException ex) when (SaysNothingIsThere(ex.HResult & 0xFFFF))
-        {
-            return PathPresence.Absent;
-        }
-        catch (ArgumentException)
-        {
-            // Extended() validates ahead of this, so it looks unreachable — and it is caught anyway
-            // because IsReparsePoint and WindowsFileSystem.MayExist both catch it, and three
-            // near-identical blocks that disagree about one exception is how one of them ends up
-            // wrong. Absent, for the reason the error list above gives.
-            return PathPresence.Absent;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
-            // An access rule on both ends of the path, or a link Windows will not follow
-            // (ERROR_UNTRUSTED_MOUNT_POINT). Neither says anything about what is there.
-            return PathPresence.Refused;
-        }
+
+        isLink = attributes.HasFlag(FileAttributes.ReparsePoint);
+
+        return PathPresence.Present;
     }
 
     private static bool EndsWithSeparator(string path) =>
@@ -365,19 +348,22 @@ public static class LongPath
     /// </summary>
     public static bool IsReparsePoint(string path)
     {
+        string extended;
+
         try
         {
-            var attributes = File.GetAttributes(Extended(path));
-
-            return attributes.HasFlag(FileAttributes.ReparsePoint);
+            extended = Extended(path);
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return false;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
+        catch (ArgumentException)
         {
             return true;
         }
+
+        return FileAttributeRead.Read(extended, out var attributes) switch
+        {
+            0 => attributes.HasFlag(FileAttributes.ReparsePoint),
+            FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound => false,
+            _ => true,
+        };
     }
 }

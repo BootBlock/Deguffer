@@ -345,6 +345,93 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// A path that is not there is answered without an exception being thrown to say so.
+    ///
+    /// <para>Nearly every presence question is asked about something absent: a <c>PATH</c> search
+    /// tries each directory against each extension, and discovery asks after every place a tool
+    /// might keep something. Read through <c>File.GetAttributes</c>, each of those threw and was
+    /// caught, and building Explore's removal policy threw more than five thousand times. Both
+    /// errors that say "absent" are covered: a missing leaf is <c>ERROR_FILE_NOT_FOUND</c> and a
+    /// missing parent is <c>ERROR_PATH_NOT_FOUND</c>.</para>
+    ///
+    /// <para>Counted on this thread only, because the suite runs other tests in parallel and their
+    /// exceptions are raised through the same event.</para>
+    /// </summary>
+    [Fact]
+    public void AnswersAbsenceWithoutThrowing()
+    {
+        using var temp = new TempDirectory();
+
+        string[] absent = [Path.Combine(temp.Path, "nothing.bin"), Path.Combine(temp.Path, "nothing", "a.bin")];
+
+        var thread = Environment.CurrentManagedThreadId;
+        var thrown = new List<Exception>();
+
+        void Record(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e)
+        {
+            if (Environment.CurrentManagedThreadId == thread)
+            {
+                thrown.Add(e.Exception);
+            }
+        }
+
+        var answers = new List<object?>();
+
+        AppDomain.CurrentDomain.FirstChanceException += Record;
+
+        try
+        {
+            foreach (var path in absent)
+            {
+                answers.Add(LongPath.ProbeFile(path));
+                answers.Add(LongPath.ProbeDirectory(path));
+                answers.Add(LongPath.ProbeEntry(path));
+                answers.Add(LongPath.IsReparsePoint(path));
+                answers.Add(WindowsFileSystem.Default.MayExist(path));
+                answers.Add(WindowsFileSystem.Default.TryGetAttributes(path));
+            }
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.FirstChanceException -= Record;
+        }
+
+        Assert.Empty(thrown);
+
+        // And the answers are still the absent ones, or not throwing would be no achievement.
+        object?[] expected = [PathPresence.Absent, PathPresence.Absent, PathPresence.Absent, false, false, null];
+        Assert.Equal([.. expected, .. expected], answers);
+    }
+
+    /// <summary>
+    /// A file whose first attribute read is refused is still described, through the directory's own
+    /// index, exactly as the framework describes it.
+    ///
+    /// <para>The framework asks <c>FindFirstFileExW</c> whenever the first read fails for any reason
+    /// but an unreachable path, and the answers here have to stay the framework's: around a hundred
+    /// call sites read presence through <see cref="LongPath"/>. Without that second read, a file
+    /// pending deletion reads as refused rather than present, and so does <c>pagefile.sys</c>, which
+    /// answers the first read with a sharing violation.</para>
+    /// </summary>
+    [Fact]
+    public void DescribesAFileTheFirstAttributeReadRefusesAsTheFrameworkDoes()
+    {
+        using var temp = new TempDirectory();
+
+        var file = temp.CreateFile(1, "pending.bin");
+
+        using var pending = new PendingDeletion(file);
+
+        // What the framework says, which is what the answers below must match.
+        Assert.True(File.Exists(file));
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeFile(file));
+        Assert.True(LongPath.FileExists(file));
+        Assert.False(LongPath.IsReparsePoint(file));
+        Assert.Equal(File.GetAttributes(file), WindowsFileSystem.Default.TryGetAttributes(file));
+    }
+
+    /// <summary>
     /// The one refusal that leaves the attributes readable, and the reason the §5.3 fixture next to
     /// this one cannot reach <see cref="LongPath.IsReparsePoint"/>'s closed branch.
     ///
