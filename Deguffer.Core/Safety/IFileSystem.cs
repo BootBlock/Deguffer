@@ -201,34 +201,27 @@ public sealed class WindowsFileSystem : IFileSystem
 
     public void ClearAttributes(string path) => File.SetAttributes(path, FileAttributes.Normal);
 
-    public FileAttributes? TryGetAttributes(string path)
-    {
-        try
-        {
-            return File.GetAttributes(path);
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException or IOException)
-        {
-            // Gone, or unreadable. Either way there is nothing here to decide about.
-            return null;
-        }
-    }
+    // Both extend the path themselves, as File.GetAttributes did: a caller behind this seam may hand
+    // over either form.
+    public FileAttributes? TryGetAttributes(string path) =>
+        // Gone, or unreadable. Either way there is nothing here to decide about.
+        FileAttributeRead.Read(LongPath.Extended(path), out var attributes) == 0 ? attributes : null;
 
     public bool MayExist(string path)
     {
+        string extended;
+
         try
         {
-            _ = File.GetAttributes(path);
-            return true;
+            extended = LongPath.Extended(path);
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return false;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
+        catch (ArgumentException)
         {
             // Not an answer, and read as present for the reason LongPath.IsReparsePoint gives.
             return true;
         }
+
+        return FileAttributeRead.Read(extended, out _)
+            is not (FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound);
     }
 }
