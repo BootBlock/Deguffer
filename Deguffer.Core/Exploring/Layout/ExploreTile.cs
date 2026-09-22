@@ -1,3 +1,5 @@
+using Deguffer.Core.Configuration;
+
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
@@ -8,14 +10,21 @@ namespace Deguffer.Core.Exploring.Layout;
 /// Core, where they can be tested, rather than inside a XAML control where they cannot (G1).</para>
 /// </summary>
 /// <param name="Node">
-/// The node in the tree, or <see cref="Aggregated"/> where this rectangle stands for several
-/// siblings too small to draw individually.
+/// The node in the tree, <see cref="Aggregated"/> where this rectangle stands for several siblings
+/// too small to draw individually, <see cref="FreeSpace"/> where it stands for what the volume has
+/// left, or <see cref="Unaccounted"/> where it stands for what the volume has in use that the scan
+/// did not count.
 /// </param>
 /// <param name="Depth">How far below the layout's root this sits. The root itself is zero.</param>
 /// <param name="Bytes">
 /// What this rectangle represents. Carried rather than looked up because an aggregate has no node
 /// to look it up from, and the whole reason to draw an aggregate rather than a gap is to be able to
 /// say how much is hidden in it.
+/// </param>
+/// <param name="Header">
+/// How tall the band along the top of a folder's frame is, which is where its name goes, or zero
+/// where the layout gave it no band. Carried rather than worked out again from the size, because
+/// the layout decided it and the label and the shading have to agree with that decision.
 /// </param>
 public readonly record struct ExploreTile(
     int Node,
@@ -24,7 +33,8 @@ public readonly record struct ExploreTile(
     float X,
     float Y,
     float Width,
-    float Height)
+    float Height,
+    float Header = 0)
 {
     /// <summary>
     /// The node number of a rectangle standing in for omitted siblings.
@@ -37,7 +47,33 @@ public readonly record struct ExploreTile(
     /// </summary>
     public const int Aggregated = -1;
 
+    /// <summary>
+    /// The node number of the rectangle standing for the volume's free space, drawn beside the whole
+    /// of a scanned volume so the used space is seen in proportion to what is left.
+    ///
+    /// <para>Not a thing on the disk, so it can never be picked, opened or outlined (§7.1). Every
+    /// caller that acts on a shape asks <see cref="IsNode"/>, which this and both other blocks fail.</para>
+    /// </summary>
+    public const int FreeSpace = -2;
+
+    /// <summary>
+    /// The node number of the rectangle standing for what the volume has in use and the scan did not
+    /// count: folders it could not read, and the file system's own records. Drawn beside the free
+    /// space, because without it the free space would take the share of the picture these bytes
+    /// belong to, and a lower bound would look like the whole drive (§7.1).
+    ///
+    /// <para>Not a thing on the disk either, on the terms <see cref="FreeSpace"/> is.</para>
+    /// </summary>
+    public const int Unaccounted = -3;
+
     public bool IsAggregate => Node == Aggregated;
+
+    public bool IsFreeSpace => Node == FreeSpace;
+
+    public bool IsUnaccounted => Node == Unaccounted;
+
+    /// <summary>Whether this rectangle is a node of the tree, rather than one standing for something else.</summary>
+    public bool IsNode => Node >= 0;
 
     /// <summary>
     /// Whether this rectangle has room for a readable label.
@@ -88,19 +124,42 @@ public readonly record struct ExploreTile(
 /// a flame-graph label at 40 by 14; a name and a size together need more width than either.
 /// </param>
 /// <param name="MinimumLabelHeight">The shortest rectangle worth putting text in.</param>
+/// <param name="ContainerGap">
+/// The gap a treemap leaves between a folder's edge and what it holds, down its sides and along its
+/// bottom. The top edge has <see cref="HeaderHeight"/> instead. See <see cref="ExploreSpacing"/>.
+/// </param>
 public readonly record struct LayoutLimits(
     float MinimumTileSize,
     int MaximumDepth,
     float RowHeight,
     float MinimumLabelWidth,
-    float MinimumLabelHeight)
+    float MinimumLabelHeight,
+    float ContainerGap)
 {
     public static readonly LayoutLimits Default = new(
         MinimumTileSize: 3f,
         MaximumDepth: 6,
         RowHeight: 22f,
         MinimumLabelWidth: 48f,
-        MinimumLabelHeight: 16f);
+        MinimumLabelHeight: 16f,
+        ContainerGap: 3f);
+
+    /// <summary>
+    /// The band along the top of a folder's frame: one line of text, with half the gap above it and
+    /// half below, so a wider spacing loosens the band as much as the sides.
+    /// </summary>
+    public float HeaderHeight => MinimumLabelHeight + ContainerGap;
+
+    /// <summary>These limits with the gap <paramref name="spacing"/> asks for, in device-independent pixels.</summary>
+    public LayoutLimits Spaced(ExploreSpacing spacing) => this with
+    {
+        ContainerGap = spacing switch
+        {
+            ExploreSpacing.Dense => 1f,
+            ExploreSpacing.Spacious => 6f,
+            _ => 3f,
+        },
+    };
 
     /// <summary>
     /// The gap between a shape's edge and the text inside it. A quarter of the label height, so the
@@ -109,11 +168,27 @@ public readonly record struct LayoutLimits(
     /// </summary>
     public float LabelPadding => MinimumLabelHeight / 4;
 
+    /// <summary>
+    /// These limits with the text thresholds grown by <paramref name="textScale"/>, the reader's
+    /// Windows text size.
+    ///
+    /// <para>The labels are text controls and grow with that setting, as they have to. A threshold
+    /// left at its 100% size then gives a band one line of 100% text tall to a line of 150% text,
+    /// and the name spills out of the band onto the shapes below it, where its colour was not
+    /// chosen for what it sits on (§6.5).</para>
+    /// </summary>
+    public LayoutLimits ForText(double textScale) => this with
+    {
+        MinimumLabelWidth = (float)(MinimumLabelWidth * textScale),
+        MinimumLabelHeight = (float)(MinimumLabelHeight * textScale),
+    };
+
     /// <summary>The same limits in device pixels, for a display at <paramref name="scale"/>.</summary>
     public LayoutLimits At(double scale) => new(
         (float)(MinimumTileSize * scale),
         MaximumDepth,
         (float)(RowHeight * scale),
         (float)(MinimumLabelWidth * scale),
-        (float)(MinimumLabelHeight * scale));
+        (float)(MinimumLabelHeight * scale),
+        (float)(ContainerGap * scale));
 }

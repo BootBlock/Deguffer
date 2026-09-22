@@ -11,8 +11,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// A branch is a fact about any tree's shape. A last-written date is a fact about files, so only a
 /// scanned drive can be coloured by one: a memory tree has no such date to band.</para>
 ///
-/// <para>An aggregate is coloured by neither. <see cref="ExploreSurface"/> settles that before asking,
-/// because it is a run of siblings rather than a thing with a branch or a date.</para>
+/// <para>An aggregate and a volume's free space are coloured by neither. <see cref="ExploreSurface"/>
+/// settles that before asking, because neither is a thing with a branch or a date.</para>
 /// </summary>
 public abstract class ShapeColours
 {
@@ -20,7 +20,7 @@ public abstract class ShapeColours
     {
     }
 
-    /// <summary>A hue per top-level branch, shaded by depth. What every tree can be coloured by.</summary>
+    /// <summary>A hue per folder inside its parent's, lighter by depth. What every tree can be coloured by.</summary>
     public static ShapeColours ByBranch { get; } = new BranchColours();
 
     /// <summary>
@@ -55,7 +55,7 @@ public abstract class ShapeColours
     private sealed class BranchColours : ShapeColours
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
-            TilePalette.For(surface.BranchOf(node), depth);
+            TilePalette.For(surface.HueOf(node), depth);
     }
 
     private sealed class AgeColours(ExploreTree tree, DateTime nowUtc) : ShapeColours

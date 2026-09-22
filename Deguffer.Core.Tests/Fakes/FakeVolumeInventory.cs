@@ -20,9 +20,10 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// Pretend <paramref name="rootPath"/> is a mounted volume. It defaults to the fixed, ready
     /// case, so a test that names another kind is visibly testing that kind.
     ///
-    /// <para>Says nothing about the label or the space a volume reports. Those are read inside
-    /// <see cref="VolumeInventory"/> from a real <c>DriveInfo</c>, and no rule that decides a
-    /// deletion consults them, so there is nothing here for a fake to stand in for yet.</para>
+    /// <para>Says nothing about the label a volume reports. It is read inside
+    /// <see cref="VolumeInventory"/> from a real <c>DriveInfo</c>, and no rule consults it. The
+    /// capacity and the free space are the exception, because Explore draws them beside a scan of the
+    /// whole volume.</para>
     /// </summary>
     /// <param name="features">
     /// What the volume says it supports. Defaults to the local NTFS reading, because a fake volume
@@ -33,14 +34,25 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// Every other path the volume is reachable at, each ending in a separator as Windows reports
     /// them. A test that names one is testing a volume mounted in more than one place.
     /// </param>
+    /// <param name="totalBytes">The volume's capacity, or null where it would not say.</param>
+    /// <param name="freeBytes">What the volume says it has left, or null where it would not say.</param>
     public FakeVolumeInventory With(
         string rootPath,
         DriveType kind = DriveType.Fixed,
         bool isReady = true,
         VolumeFeatures features = VolumeFeatures.ReparsePoints,
-        IReadOnlyList<string>? alsoMountedAt = null)
+        IReadOnlyList<string>? alsoMountedAt = null,
+        long? totalBytes = null,
+        long? freeBytes = null)
     {
-        _volumes.Add(new LocalVolume(rootPath, kind, isReady, Features: features, AlsoMountedAt: alsoMountedAt));
+        _volumes.Add(new LocalVolume(
+            rootPath,
+            kind,
+            isReady,
+            TotalBytes: totalBytes,
+            FreeBytes: freeBytes,
+            Features: features,
+            AlsoMountedAt: alsoMountedAt));
 
         return this;
     }

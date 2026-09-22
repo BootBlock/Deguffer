@@ -40,12 +40,19 @@ public static class TreemapLayout
     /// That is a couple of million reads a frame on a full canvas, and an interface indexer
     /// returning a 32-byte struct is not free at that count (G4).</para>
     /// </summary>
+    /// <param name="volume">
+    /// The volume <paramref name="root"/> is the whole of, whose free space and whose unaccounted use
+    /// are drawn as blocks of their own beside it, in proportion to it; or
+    /// <see cref="VolumeSpace.None"/> for neither. The caller decides whether they belong in the
+    /// picture at all: they do beside the whole of a volume, and nowhere else.
+    /// </param>
     public static IReadOnlyList<ExploreTile> Compute(
         ISizedTree tree,
         int root,
         float width,
         float height,
-        LayoutLimits limits)
+        LayoutLimits limits,
+        VolumeSpace volume = default)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -67,27 +74,33 @@ public static class TreemapLayout
             return tiles.ToArray();
         }
 
+        var used = BesideTheVolume(tree.SizeOf(root), volume, width, height, limits, tiles);
+
         var pending = new Stack<(int Node, int Depth, float X, float Y, float Width, float Height)>();
-        pending.Push((root, 0, 0, 0, width, height));
+        pending.Push((root, 0, used.X, used.Y, used.Width, used.Height));
 
         while (pending.TryPop(out var frame))
         {
+            var opens = frame.Depth < limits.MaximumDepth && tree.IsContainer(frame.Node);
+
+            // The frame is what makes nesting visible, and it is only affordable where there is room
+            // for it. A rectangle too small to frame is drawn as one block, which is the honest
+            // rendering of "there is more in here than fits".
+            var (header, gap) = opens ? FrameOf(frame.Width, frame.Height, limits) : (0f, 0f);
+
             tiles.Add(new ExploreTile(
                 frame.Node, frame.Depth, tree.SizeOf(frame.Node),
-                frame.X, frame.Y, frame.Width, frame.Height));
+                frame.X, frame.Y, frame.Width, frame.Height, header));
 
-            if (frame.Depth >= limits.MaximumDepth || !tree.IsContainer(frame.Node))
+            if (!opens)
             {
                 continue;
             }
 
-            // The frame is what makes nesting visible without shading every level, and it is only
-            // affordable where there is room for it. A rectangle too small to inset is drawn as one
-            // block, which is the honest rendering of "there is more in here than fits".
-            var inset = Inset(frame.Width, frame.Height, limits);
+            var top = header > 0 ? header : gap;
             var area = new Rectangle(
-                frame.X + inset, frame.Y + inset,
-                frame.Width - (inset * 2), frame.Height - (inset * 2));
+                frame.X + gap, frame.Y + top,
+                frame.Width - (gap * 2), frame.Height - top - gap);
 
             if (area.Width < limits.MinimumTileSize || area.Height < limits.MinimumTileSize)
             {
@@ -331,19 +344,140 @@ public static class TreemapLayout
     }
 
     /// <summary>
-    /// The border a parent keeps around its children, or zero where the rectangle has no room to
-    /// spare. Two pixels of frame inside a six-pixel tile leaves nothing to draw the children in.
+    /// Share the canvas between the root, the volume's use the scan did not account for, and its free
+    /// space, in proportion to their bytes, and add the two blocks' rectangles. Returns what is left
+    /// for the root.
+    ///
+    /// <para>Largest first, each taking a slab across the longer side of what is left, which is the
+    /// squarified row with one member: every part keeps the full length of the shorter side, so none
+    /// becomes a sliver until another dwarfs it. A block whose slab would be thinner than the smallest
+    /// tile is not drawn and the others share its room. A block too thin to point at says nothing,
+    /// and the drive picker states both figures anyway.</para>
+    /// </summary>
+    private static Rectangle BesideTheVolume(
+        long usedBytes,
+        VolumeSpace volume,
+        float width,
+        float height,
+        LayoutLimits limits,
+        List<ExploreTile> tiles)
+    {
+        var remaining = new Rectangle(0, 0, width, height);
+
+        Span<(int Node, long Bytes)> parts =
+        [
+            (Root, usedBytes),
+            (ExploreTile.Unaccounted, volume.UnaccountedBytes(usedBytes)),
+            (ExploreTile.FreeSpace, volume.FreeBytes),
+        ];
+
+        double whole = usedBytes + parts[1].Bytes + parts[2].Bytes;
+        var longer = Math.Max(width, height);
+
+        // Dropped before anything is laid, so the parts that are drawn share the whole canvas between
+        // them rather than leaving the dropped one's room empty.
+        for (var i = 1; i < parts.Length; i++)
+        {
+            if (parts[i].Bytes > 0 && longer * (parts[i].Bytes / whole) < limits.MinimumTileSize)
+            {
+                parts[i].Bytes = 0;
+            }
+        }
+
+        parts.Sort((a, b) => b.Bytes.CompareTo(a.Bytes));
+
+        double left = 0;
+
+        foreach (var part in parts)
+        {
+            left += part.Bytes;
+        }
+
+        var root = remaining;
+
+        foreach (var (node, bytes) in parts)
+        {
+            if (bytes <= 0)
+            {
+                continue;
+            }
+
+            // The last part takes all that is left, so rounding cannot leave a hairline of canvas
+            // belonging to nothing.
+            var share = bytes >= left ? 1f : (float)(bytes / left);
+            left -= bytes;
+
+            Rectangle slab;
+
+            if (remaining.Width >= remaining.Height)
+            {
+                slab = remaining with { Width = remaining.Width * share };
+                remaining = new Rectangle(
+                    remaining.X + slab.Width, remaining.Y, remaining.Width - slab.Width, remaining.Height);
+            }
+            else
+            {
+                slab = remaining with { Height = remaining.Height * share };
+                remaining = new Rectangle(
+                    remaining.X, remaining.Y + slab.Height, remaining.Width, remaining.Height - slab.Height);
+            }
+
+            if (node == Root)
+            {
+                root = slab;
+                continue;
+            }
+
+            // Depth zero, beside the root rather than inside it: neither is part of what was scanned.
+            tiles.Add(new ExploreTile(node, 0, bytes, slab.X, slab.Y, slab.Width, slab.Height));
+        }
+
+        return root;
+    }
+
+    /// <summary>
+    /// The frame a folder keeps round what it holds: a band along its top for its name, and a gap
+    /// down its sides and along its bottom. Where there is no room for the band, a gap on all four
+    /// sides; where there is no room for that, a single pixel; and in a rectangle too small for even
+    /// that, nothing. Two pixels of frame inside a six-pixel tile leaves nothing to draw the children
+    /// in.
+    ///
+    /// <para>The band is given only where the name fits across it and the children keep at least as
+    /// much height again below it. Less than that, and the folder would be all name and no
+    /// contents.</para>
     ///
     /// <para>The frame is not free, and the cost is a real distortion rather than lost pixels.
     /// Barlow and Neville (Proc. IEEE InfoVis 2001) put it exactly: with an offset, a rectangle's
     /// area is proportional to its size <em>relative to all its ancestors</em>, so two equal nodes
-    /// at different depths get different areas. One pixel per level keeps that within a rounding
-    /// error at the sizes drawn here, and it cannot be removed without also removing the only cue
-    /// that says where one directory ends and the next begins. Lü and Fogarty's two-stage layout
-    /// (Graphics Interface 2008) is the correction, and it is a different algorithm.</para>
+    /// at different depths get different areas, and a band of text per level makes that larger than
+    /// a one-pixel border does. It is the cost every treemap that names its folders in place
+    /// accepts, Space Monger's among them, because the alternative is a picture whose folders cannot
+    /// be told apart. The spacing setting is how a reader trades one for the other. Lü and Fogarty's
+    /// two-stage layout (Graphics Interface 2008) is the correction, and it is a different
+    /// algorithm.</para>
     /// </summary>
-    private static float Inset(float width, float height, LayoutLimits limits) =>
-        Math.Min(width, height) >= limits.MinimumTileSize * 4 ? 1f : 0f;
+    private static (float Header, float Gap) FrameOf(float width, float height, LayoutLimits limits)
+    {
+        var gap = limits.ContainerGap;
+
+        if (width >= limits.MinimumLabelWidth && height >= (limits.HeaderHeight * 2) + gap)
+        {
+            return (limits.HeaderHeight, gap);
+        }
+
+        var shorter = Math.Min(width, height);
+        var smallest = limits.MinimumTileSize * 4;
+
+        if (shorter >= smallest + (gap * 2))
+        {
+            return (0, gap);
+        }
+
+        return shorter >= smallest ? (0, Math.Min(gap, 1f)) : (0, 0);
+    }
+
+    /// <summary>Stands for the root among the parts <see cref="BesideTheVolume"/> lays out.</summary>
+    private const int Root = int.MaxValue;
 
     private readonly record struct Rectangle(float X, float Y, float Width, float Height);
 }

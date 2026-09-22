@@ -19,8 +19,8 @@ public readonly record struct AgeBand(string Label, int MaximumDays, TileColour 
 /// ordered too — a reader has to be able to say which of two shapes is older without consulting the
 /// legend, and a categorical palette cannot do that however distinguishable its entries are.
 /// Viridis is perceptually uniform and monotonic in lightness, so it survives being printed in grey
-/// and survives all three common colour-vision deficiencies. That last property is the one
-/// <see cref="TilePalette"/> chose Okabe and Ito for, arrived at from the opposite direction.</para>
+/// and survives all three common colour-vision deficiencies, which a categorical hue wheel such as
+/// <see cref="TilePalette"/>'s does not on hue alone.</para>
 ///
 /// <para><b>Newest is brightest.</b> Recently written work glows and abandoned work recedes, which
 /// is the reading a user arrives with. The alternative puts the loudest colour on the thing the

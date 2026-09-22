@@ -37,7 +37,7 @@ public sealed class ExploreSurfaceTests
 
         Assert.IsType<TiledSurface>(
             ExploreSurface.Create(
-                tree, tree.RootNode, view, Width, Height, scale: 1, Branch, Now));
+                tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, Branch, Now, ExploreSpacing.Comfortable, VolumeSpace.None));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class ExploreSurfaceTests
 
         Assert.IsType<SunburstSurface>(
             ExploreSurface.Create(
-                tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, Branch, Now));
+                tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, textScale: 1, Branch, Now, ExploreSpacing.Comfortable, VolumeSpace.None));
     }
 
     /// <summary>
@@ -64,42 +64,65 @@ public sealed class ExploreSurfaceTests
         var tree = NamedTree(10);
 
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, view, Width, Height, scale: 1, Branch, Now);
+            tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, Branch, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.IsType<TiledSurface>(surface);
         Assert.NotEmpty(surface.Labels);
     }
 
     /// <summary>
-    /// Only a rectangle with nothing drawn inside it gets a label. A child is inset from its parent
-    /// by a single pixel, so a parent's label and its first child's land within two pixels of each
-    /// other and overprint into an unreadable stack.
+    /// A folder with a band is named in it, above everything drawn inside it, so its name and its
+    /// first child's cannot overprint.
     /// </summary>
     [Fact]
-    public void AParentWithSomethingDrawnInsideItIsNotLabelled()
+    public void AParentIsNamedInItsBandAboveItsChildren()
     {
         var tree = NestedTree();
-        var labelled = Names(tree, Treemap(tree));
+        var surface = Treemap(tree);
+        var branch = surface.Labels.Single(label => tree.NameOf(label.Node) == "branch");
+        var leaf = surface.Labels.Single(label => tree.NameOf(label.Node) == "leaf0");
 
-        Assert.DoesNotContain("branch", labelled);
-        Assert.Contains("leaf0", labelled);
+        Assert.True(
+            branch.Y + LayoutLimits.Default.MinimumLabelHeight <= leaf.Y,
+            $"the folder's name at {branch.Y} runs into its child's at {leaf.Y}");
     }
 
     /// <summary>
-    /// The node being drawn fills the canvas, and the breadcrumb above the picture already names
-    /// it. A label for it would sit in the top-left corner over its own first child.
+    /// Where a folder has children drawn inside it and no band, it gets no label. Its children are
+    /// inset by a pixel or two, so its label and its first child's would land on top of each other
+    /// and overprint into an unreadable stack.
     /// </summary>
     [Fact]
-    public void TheNodeBeingDrawnIsNotLabelled()
+    public void AParentWithNoBandAndSomethingDrawnInsideItIsNotLabelled()
     {
-        // Small enough that nothing inside the root is big enough to draw. The covering rule then
-        // has nothing to say about the root, so this rule is the only thing keeping its label off.
+        // Too short for a band: two of them do not fit.
+        var tree = NestedTree();
+        var limits = LayoutLimits.Default;
+        var height = (int)(limits.HeaderHeight * 2);
+
+        var surface = new TiledSurface(
+            tree, tree.RootNode, (int)Width, height, limits, ShapeColours.ByBranch,
+            TreemapLayout.Compute(tree, tree.RootNode, Width, height, limits));
+
+        Assert.DoesNotContain("branch", Names(tree, surface));
+    }
+
+    /// <summary>
+    /// The node being drawn is named only where it has a band. Anywhere else a label for it would
+    /// sit in the top-left corner over its own first child, and the breadcrumb names it anyway.
+    /// </summary>
+    [Fact]
+    public void TheNodeBeingDrawnIsNotLabelledWithoutABand()
+    {
+        // Small enough that nothing inside the root is big enough to draw, and too short for a band.
+        // The covering rule then has nothing to say about the root, so this rule is the only thing
+        // keeping its label off.
         var tree = FlatTree(500);
         var limits = LayoutLimits.Default;
 
         var surface = new TiledSurface(
-            tree, tree.RootNode, 60, 60, limits, ShapeColours.ByBranch,
-            TreemapLayout.Compute(tree, tree.RootNode, 60, 60, limits));
+            tree, tree.RootNode, 60, 30, limits, ShapeColours.ByBranch,
+            TreemapLayout.Compute(tree, tree.RootNode, 60, 30, limits));
 
         Assert.DoesNotContain(tree.RootNode, surface.Labels.Select(l => l.Node));
     }
@@ -108,12 +131,45 @@ public sealed class ExploreSurfaceTests
     /// A directory of several hundred near-equal children defeats the size threshold — every
     /// rectangle is then big enough to label and none of them is interesting. Past a few dozen the
     /// labels are noise over the picture, and the list view is the honest way to read that many
-    /// names.
+    /// names. The folder's own name in its band is not one of them.
     /// </summary>
     [Fact]
-    public void TheLabelsAreCappedHoweverManyShapesWouldTakeOne()
+    public void TheLabelsInsideShapesAreCappedHoweverManyShapesWouldTakeOne()
     {
-        Assert.Equal(64, Treemap(FlatTree(100)).Labels.Count);
+        var tree = FlatTree(100);
+
+        Assert.Equal(64, Treemap(tree).Labels.Count(label => label.Node != tree.RootNode));
+    }
+
+    /// <summary>
+    /// The largest shapes are named first. The layout emits shapes depth first, so taking them in
+    /// that order spent the whole allowance on whatever came first and left larger shapes unnamed.
+    /// </summary>
+    [Fact]
+    public void TheLargestShapesAreTheOnesLabelled()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [.. Enumerable.Range(0, 200).Select(i =>
+                new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 20_000 - (i * 90)))]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        var limits = LayoutLimits.Default;
+        var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
+        var labelled = new TiledSurface(tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch, tiles)
+            .Labels.Select(label => label.Node).ToHashSet();
+
+        var candidates = tiles.Where(tile => tile.Depth == 1 && tile.HasRoomForALabel(limits)).ToList();
+        var smallestNamed = candidates.Where(tile => labelled.Contains(tile.Node)).Min(tile => tile.Width * tile.Height);
+        var unnamed = candidates.Where(tile => !labelled.Contains(tile.Node)).ToList();
+
+        // More shapes with room for a label than the allowance, or this proves nothing.
+        Assert.NotEmpty(unnamed);
+        Assert.All(unnamed, tile => Assert.True(
+            tile.Width * tile.Height <= smallestNamed,
+            $"a shape of {tile.Width * tile.Height} went unnamed while one of {smallestNamed} was named"));
     }
 
     [Fact]

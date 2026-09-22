@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Tests.Fakes;
 
@@ -12,7 +13,7 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>The two halves are covered apart — <see cref="ExploreSurfaceTests"/> for what a point
 /// answers with, <see cref="ItemGuideTests"/> for what a path is described as — and the defect was
-/// in neither. It was in the join. A folder is drawn as a one-pixel frame round its children, so a
+/// in neither. It was in the join. A folder is drawn as a frame round its children, so a
 /// point in the middle of it answers with a file nobody wrote about, and a lookup asked about that
 /// exact file had nothing to say. The reference was reachable on the frame and nowhere else.</para>
 /// </summary>
@@ -60,8 +61,11 @@ public sealed class ExploreHoverNoteTests : IDisposable
     {
         var (tree, surface) = Drawn();
 
+        // Halfway across the folder's own gap: the root's gap is the first one in from the edge.
+        var gap = LayoutLimits.Default.ContainerGap;
+
         var found = Guide().DescribeNearest(
-            tree.PathOf(surface.At(1.5f, Canvas / 2f)!.Value.Node));
+            tree.PathOf(surface.At(gap * 1.5f, Canvas / 2f)!.Value.Node));
 
         Assert.Equal(_system.WindowsDirectory, found?.Path);
         Assert.True(found?.IsExact);
@@ -92,9 +96,11 @@ public sealed class ExploreHoverNoteTests : IDisposable
             ExploreView.Treemap,
             Canvas,
             Canvas,
-            scale: 1,
+            scale: 1, textScale: 1,
             ExploreColouring.Branch,
-            Now));
+            Now,
+            ExploreSpacing.Comfortable,
+            VolumeSpace.None));
     }
 
     /// <summary>

@@ -7,6 +7,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
@@ -393,6 +394,21 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasViewNote => ViewNote is not null;
 
     /// <summary>
+    /// How large the volume was and how much of it was free when the scan on screen finished, where
+    /// it covered the whole of one, and <see cref="VolumeSpace.None"/> otherwise.
+    ///
+    /// <para>Read once, as the scan finishes, rather than kept current. Everything else on screen
+    /// describes the disk as that scan found it, so a figure that moved on its own would set the
+    /// blocks against sizes they no longer match. A removal from this page makes both stale
+    /// together, and the stale note says so.</para>
+    ///
+    /// <para>Replaced only with the tree it describes. A scan that fails leaves the last finished
+    /// tree on screen, and that tree keeps its own figures; the snapshots a running scan draws are
+    /// icicles, which have no blocks.</para>
+    /// </summary>
+    public VolumeSpace Volume { get; private set; } = VolumeSpace.None;
+
+    /// <summary>
     /// Which node the views are drawing. The scan's root until the user descends, and then wherever
     /// they descended to — including across the partial trees a running scan publishes, which is
     /// <see cref="ExplorePlace"/>'s job to establish.
@@ -421,9 +437,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// that it knows anything about, ready to show. Empty where nothing on the way to the top of
     /// the volume is described.
     ///
-    /// <para>Nearest rather than exact, because a treemap draws a folder as a one-pixel frame round
-    /// its children and the pointer is nearly always on a file inside it. Asked exactly, the whole
-    /// of <c>C:\Windows</c> answered nothing but that frame.</para>
+    /// <para>Nearest rather than exact, because a treemap draws a folder as a frame round its
+    /// children and the pointer is nearly always on a file inside it. Asked exactly, the whole of
+    /// <c>C:\Windows</c> answered nothing but that frame.</para>
     ///
     /// <para>Only what the reference says, and not the size or the date: those are already on the
     /// status line under the picture, where they can be read without waiting for anything to
@@ -501,6 +517,11 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
 
+            // Before Show, which is what draws the map. Read afresh, because the space figures the
+            // drive picker holds are from whenever it last opened.
+            _volumes.Invalidate();
+            Volume = VolumeSpace.Of(_volumes, target);
+
             Show(scan.Tree, ExplorePlace.Carry(Tree, CurrentNode, scan.Tree));
 
             RouteNote = scan.RouteNote;
@@ -518,6 +539,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // navigates exactly like a finished scan — so leaving it on screen states a total for
             // the drive that is wrong by however much was left.
             Tree = null;
+            Volume = VolumeSpace.None;
             Selection.Show(null);
             Rows.Clear();
             Trail.Clear();
@@ -741,14 +763,23 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// Say what the pointer is over. Called from the map on every move, so it formats and assigns
     /// and does nothing else — anything heavier here runs at the display's refresh rate.
     /// </summary>
-    public void Hover(int? node, long? aggregateBytes)
+    public void Hover(ExploreHit? hit)
     {
-        (Hovered, HoveredFigures, HoveredNote) = (Tree, node, aggregateBytes) switch
+        (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
         {
-            (_, _, { } bytes) => (
-                "Items too small to draw separately", FreeSpace.Format(bytes), string.Empty),
+            (_, { IsAggregate: true } aggregate) => (
+                "Items too small to draw separately", FreeSpace.Format(aggregate.Bytes), string.Empty),
 
-            ({ } tree, { } value, _) => Over(tree, value),
+            (_, { IsFreeSpace: true } free) => (
+                "Free space available on this drive", FreeSpace.Format(free.Bytes), string.Empty),
+
+            (_, { IsUnaccounted: true } unaccounted) => (
+                "In use, but not accounted for by this scan",
+                FreeSpace.Format(unaccounted.Bytes),
+                "Windows says this much of the drive is in use beyond what the scan counted: folders "
+                + "it could not read, and the file system's own records."),
+
+            ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
             _ => (string.Empty, string.Empty, string.Empty),
         };

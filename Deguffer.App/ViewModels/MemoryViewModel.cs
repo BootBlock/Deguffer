@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Viewing;
 
@@ -240,14 +241,14 @@ public sealed partial class MemoryViewModel : ObservableObject
     /// Say what the pointer is over. Called on every move that lands on a different shape, so it
     /// formats and assigns and does nothing else.
     /// </summary>
-    public void Hover(int? node, long? aggregateBytes)
+    public void Hover(ExploreHit? hit)
     {
-        (Hovered, HoveredFigures, HoveredNote) = (Tree, node, aggregateBytes) switch
+        (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
         {
-            (_, _, { } bytes) => (
-                "Parts too small to draw separately", Core.Scanning.FreeSpace.Format(bytes), string.Empty),
+            (_, { IsAggregate: true } aggregate) => (
+                "Parts too small to draw separately", Core.Scanning.FreeSpace.Format(aggregate.Bytes), string.Empty),
 
-            ({ } tree, { } over, _) when over >= 0 && over < tree.NodeCount => (
+            ({ } tree, { IsNode: true, Node: var over }) when over < tree.NodeCount => (
                 MemoryText.Name(tree, over),
                 MemoryText.Figures(tree, over),
                 MemoryPartGuide.Describe(tree, over)),

@@ -65,6 +65,9 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private readonly Thickness _rowsMargin;
 
+    /// <summary>The treemap spacing the map was last told. See <see cref="FollowSpacing"/>.</summary>
+    private ExploreSpacing _spacing;
+
     public ExplorePage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -159,7 +162,7 @@ public sealed partial class ExplorePage : Page
         // under the pointer whose folder has already gone.
         Map.Excluding(ViewModel.Selection.WasRemoved);
 
-        Map.Hovered += (_, what) => ViewModel.Hover(what.Node, what.AggregateBytes);
+        Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
@@ -170,6 +173,10 @@ public sealed partial class ExplorePage : Page
         var preferences = App.Preferences.Current;
 
         ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
+        _spacing = preferences.TreemapSpacing;
+
+        // The spacing is chosen on the Settings page, so it can change while this page is away.
+        Loaded += (_, _) => FollowSpacing();
 
         // The colouring first, because ShowAs draws the map and the map has to be told what its
         // colours mean before it paints rather than after.
@@ -194,6 +201,26 @@ public sealed partial class ExplorePage : Page
     }
 
     public ExploreViewModel ViewModel { get; }
+
+    /// <summary>
+    /// Draw again if the treemap spacing changed while this page was away.
+    ///
+    /// <para>Re-read on every visit, unlike the view and the colouring. Those are set on this page
+    /// and applied before they are persisted, so re-reading them would undo a choice whose write to
+    /// disk had failed. This one is set on the Settings page, which persists first and applies
+    /// second, so <see cref="Shell.PreferenceService.Current"/> is never anything but what took
+    /// effect.</para>
+    /// </summary>
+    private void FollowSpacing()
+    {
+        var spacing = App.Preferences.Current.TreemapSpacing;
+
+        if (spacing != _spacing)
+        {
+            _spacing = spacing;
+            ShowCurrentNode();
+        }
+    }
 
     /// <summary>
     /// Draw the page in <paramref name="view"/>, and leave the selector agreeing with what is on
@@ -241,7 +268,13 @@ public sealed partial class ExplorePage : Page
     /// selected when the selection last changed and that has not stopped being true.
     /// </summary>
     private void ShowCurrentNode() =>
-        Map.Show(ViewModel.Tree, ViewModel.CurrentNode, ViewModel.SelectedView, ViewModel.SelectedColouring);
+        Map.Show(
+            ViewModel.Tree,
+            ViewModel.CurrentNode,
+            ViewModel.SelectedView,
+            ViewModel.SelectedColouring,
+            _spacing,
+            ViewModel.Volume);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the

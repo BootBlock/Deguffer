@@ -29,10 +29,6 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
             ? new TileColour(0, 0, 0)
             : new TileColour(255, 255, 255);
 
-    /// <summary>This colour scaled towards black or white, for the depth shading.</summary>
-    public TileColour Scaled(double factor) => new(
-        Clamp(Red * factor), Clamp(Green * factor), Clamp(Blue * factor));
-
     /// <summary>
     /// Written out rather than left to the record, whose generated version walks every public
     /// property — <see cref="ContrastingText"/> among them, which is another
@@ -40,8 +36,6 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
     /// a colour took the test host down instead of reporting which colour it got.
     /// </summary>
     public override string ToString() => $"#{Red:X2}{Green:X2}{Blue:X2}";
-
-    private static byte Clamp(double value) => (byte)Math.Clamp(value, 0, 255);
 
     private static double Linear(byte channel)
     {
@@ -51,44 +45,56 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
 }
 
 /// <summary>
-/// What colour each rectangle is drawn in.
+/// What colour each shape is drawn in when the colours say where it belongs.
 ///
-/// <para>Hue identifies the top-level branch a rectangle belongs to, and lightness says how deep it
-/// sits. That pairing is the one of the four schemes in common use that survives a colour-vision
-/// deficiency: the alternatives colour by extension, by depth alone, or by a single ramp, and the
-/// first of those is where the reference implementation went wrong — WinDirStat's default extension
-/// palette puts pure red at index 1 and pure green at index 2, which is the exact pair deuteranopia
-/// and protanopia cannot separate.</para>
-///
-/// <para>The seven hues are Okabe and Ito's Color Universal Design set, chosen because it is the
-/// most widely used categorical palette that is distinguishable under all three common
-/// deficiencies. WinDirStat's own newer views moved to it too. The eighth entry is a neutral grey
-/// rather than that palette's black, which would read as a hole in the picture rather than as a
+/// <para>Hue says which folder a shape is part of, and lightness says how deep it sits. The hue
+/// comes from <see cref="BranchHues"/>, which gives every folder an arc of the circle inside its
+/// parent's, so everything in one top-level folder shares one part of the circle and a folder is
+/// told from its neighbour by its own part of that. Both are stated in <see cref="Oklch"/>, whose
+/// lightness is the same lightness whatever the hue, so a depth step is visible in every
 /// branch.</para>
+///
+/// <para>Hue is not the only cue, because a hue wheel is exactly what red-green colour blindness
+/// takes away, and a small categorical set such as Okabe and Ito's, which survives it, has too few
+/// colours to give every folder its own. So neighbouring siblings alternate a step of lightness,
+/// deeper shapes are lighter and less saturated, and a folder with room for it is framed and named:
+/// each of those says where a shape belongs without hue.</para>
 /// </summary>
 public static class TilePalette
 {
-    private static readonly TileColour[] Branches =
-    [
-        TileColour.FromRgb(0xE69F00), // orange
-        TileColour.FromRgb(0x56B4E9), // sky blue
-        TileColour.FromRgb(0x009E73), // bluish green
-        TileColour.FromRgb(0xF0E442), // yellow
-        TileColour.FromRgb(0x0072B2), // blue
-        TileColour.FromRgb(0xD55E00), // vermillion
-        TileColour.FromRgb(0xCC79A7), // reddish purple
-        TileColour.FromRgb(0x999999), // neutral, for the eighth branch; a ninth wraps to the first
-    ];
+    private const double RootLightness = 0.62;
+    private const double FirstLightness = 0.64;
+    private const double LightnessStep = 0.055;
+    private const double Lift = 0.045;
+    private const double FirstChroma = 0.14;
+    private const double ChromaStep = 0.015;
 
     /// <summary>
-    /// The colour for a rectangle in <paramref name="branch"/> at <paramref name="depth"/>.
-    ///
-    /// <para>The lightness cycle is deliberately short. Four steps distinguish a parent from its
-    /// child without the eighth level being white, and a longer ramp would make two distant depths
-    /// of the same branch look like different branches.</para>
+    /// How many levels the lightness keeps rising for. Past it every level is drawn alike, because a
+    /// longer ramp takes the deepest shapes so close to white that no two hues can be told apart.
     /// </summary>
-    public static TileColour For(int branch, int depth) =>
-        Branches[Math.Abs(branch) % Branches.Length].Scaled(0.86 + (Math.Abs(depth) % 4 * 0.07));
+    private const int Levels = 4;
+
+    /// <summary>
+    /// The colour for a shape owning <paramref name="hue"/> at <paramref name="depth"/> below the
+    /// drawing's root.
+    ///
+    /// <para>The root itself owns the whole circle, which has no hue to give it, so it is drawn a
+    /// neutral grey: it is the frame round everything else.</para>
+    /// </summary>
+    public static TileColour For(BranchHue hue, int depth)
+    {
+        if (hue.Sweep >= 360 || depth <= 0)
+        {
+            return Oklch.ToSrgb(RootLightness, 0, 0);
+        }
+
+        var level = Math.Min(depth - 1, Levels);
+        var lightness = FirstLightness + (level * LightnessStep) + (hue.Lifted ? Lift : 0);
+        var chroma = FirstChroma - (level * ChromaStep);
+
+        return Oklch.ToSrgb(lightness, chroma, hue.Centre);
+    }
 
     /// <summary>
     /// The colour for a rectangle standing in for siblings too small to draw.
@@ -97,4 +103,18 @@ public static class TilePalette
     /// disk, so giving it a colour that reads as one would invite the user to act on it.</para>
     /// </summary>
     public static TileColour Aggregate => TileColour.FromRgb(0x707070);
+
+    /// <summary>
+    /// The colour for the block standing for a volume's free space: a light neutral, apart from
+    /// the aggregate's darker one and from every hue, because it is neither a thing on the disk nor
+    /// a run of them.
+    /// </summary>
+    public static TileColour FreeSpace => TileColour.FromRgb(0xC8C8C8);
+
+    /// <summary>
+    /// The colour for the block standing for use the scan did not account for: the neutral between
+    /// the aggregate's and the free space's, because it is in use like the one and not a thing on
+    /// the disk like the other.
+    /// </summary>
+    public static TileColour Unaccounted => TileColour.FromRgb(0x9C9C9C);
 }
