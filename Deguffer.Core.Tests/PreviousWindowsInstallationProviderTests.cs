@@ -402,6 +402,32 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §9 again, at the moment Windows is asked: a store saved into the previous installation while the
+    /// preview sat on screen is found on the disk, and the handler is never run over it.
+    /// </summary>
+    [Fact]
+    public async Task AnOutlookDataFileThatArrivesAfterThePreviewStopsTheHandler()
+    {
+        var old = Leftover("Windows.old", PastTheWindow);
+        var handlers = FakeDiskCleanupHandlers.Windows();
+        var provider = CreateProvider(handlers);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        var store = Path.Combine(old, "mailbox.ost");
+        File.WriteAllBytes(store, new byte[1024]);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(File.Exists(store));
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.Equal(1, step.MailStores);
+    }
+
+    /// <summary>
     /// The guard on recently changed files cannot be honoured by a handler that clears whole, so a
     /// folder holding anything it would keep is withdrawn rather than cleared with it.
     /// </summary>
