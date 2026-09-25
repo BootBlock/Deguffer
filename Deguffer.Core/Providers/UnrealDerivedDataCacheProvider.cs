@@ -139,15 +139,28 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
-    /// Every store that is there, as a root recognising nothing, while a Zen server runs. A
-    /// declaration that ages, which is why it is here rather than in <see cref="ToolRoots"/>.
+    /// Every cache that is there and may hold a live store, as a root recognising nothing, while a
+    /// Zen server runs. A declaration that ages, which is why it is here rather than in
+    /// <see cref="ToolRoots"/>.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>(
-            ZenServerIsRunning()
-                ? [.. Stores().Select(store => store.Path).Where(LongPath.DirectoryMayExist)
-                    .Select(store => new ToolRoot(store, HeldReason, static _ => false))]
-                : []);
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        if (!ZenServerIsRunning())
+        {
+            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+        }
+
+        var named = ZenLocations();
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. Stores()
+                .Select(store => store.Path)
+                .Prepend(Path.Combine(UnrealCacheLocations.EngineRoot(Environment), LegacyCache))
+                .Where(path => MayHoldAStore(path, named) && LongPath.DirectoryMayExist(path))
+                .Select(path => new ToolRoot(path, HeldReason, static _ => false)),
+        ]);
+    }
 
     /// <summary>
     /// Any cache with something in it, or any that Windows would not describe. A refusal reads as
@@ -169,7 +182,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
         var stores = Stores();
         var scan = DeclaredLocations.Examine(Declare(stores), ct);
 
-        var storePaths = new HashSet<string>(stores.Select(s => s.Path), StringComparer.OrdinalIgnoreCase);
+        var named = ZenLocations();
         var zenRunning = ZenServerIsRunning();
 
         var targets = new List<DeletionTarget>();
@@ -184,7 +197,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            if (zenRunning && storePaths.Contains(target.Path))
+            if (zenRunning && MayHoldAStore(target.Path, named))
             {
                 held.Add(target.Path);
                 continue;
@@ -204,8 +217,9 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left Unreal's Zen {(held.Count == 1 ? "store" : "stores")} alone: {ZenServer} is "
-                + "running, and removing a store's data under the server using it is not safe. Close "
+                $"Left {string.Join(", ", held.Select(path => $"'{LongPath.Display(path)}'"))} alone: "
+                + $"{ZenServer} is running, and removing a Zen store's data under the server using it "
+                + "is not safe. Close "
                 + "the Unreal Editor, and stop Zen if it is set to keep running, then scan again to "
                 + $"include {(held.Count == 1 ? "it" : "them")}."));
         }
@@ -317,8 +331,9 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     /// <para><b>A named store inside or around Unreal's own folders is dropped.</b> Those are reached
     /// by name only, through <see cref="Declare"/>. A local cache path set to <c>Common</c> would
     /// otherwise make <c>Common\Zen</c> a store and take the server's <c>Install</c> folder with it,
-    /// and one set to <c>Common\DerivedDataCache</c> would put a store inside the filesystem cache,
-    /// where removing that cache would take a store held back for a running server.</para>
+    /// and one set to <c>Common\DerivedDataCache</c> would make a store of its own out of part of the
+    /// filesystem cache. Such a store goes with the cache around it, and <see cref="MayHoldAStore"/>
+    /// holds that cache back while a server runs.</para>
     ///
     /// <para><b>So is one inside or around another named store.</b> Each is removed whole, so one
     /// inside another would be a survivor of one step and part of another's target.</para>
@@ -424,6 +439,26 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     }
 
     private bool ZenServerIsRunning() => Inspector.FindRunning([ZenServer]).Count > 0;
+
+    /// <summary>
+    /// Every place a default or a setting names for a Zen store, whether or not it is reached as a
+    /// store of its own. A named store is left out of <see cref="Stores"/> where it sits inside
+    /// something else, and while a server runs that something else must be held back with it.
+    /// </summary>
+    private IReadOnlyList<string> ZenLocations() =>
+    [
+        .. UnrealCacheLocations.DefaultStores(Environment, _system)
+            .Concat(UnrealCacheLocations.ConfiguredStores(Environment))
+            .Select(store => store.Path),
+    ];
+
+    /// <summary>
+    /// Whether removing <paramref name="path"/> could take a store a running server is writing:
+    /// it is one of <paramref name="named"/>, or holds one. A local cache path set inside the
+    /// filesystem cache puts a store there.
+    /// </summary>
+    private static bool MayHoldAStore(string path, IReadOnlyList<string> named) =>
+        named.Any(store => LongPath.Contains(path, store));
 
     /// <summary>
     /// Whether <paramref name="path"/> was listed and holds nothing at any depth. False where it

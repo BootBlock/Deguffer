@@ -451,21 +451,52 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A local cache path set to the filesystem cache itself would put a store inside a target, so a
-    /// store held back for a running server would go with the cache around it. The setting is not
-    /// followed, and the store survives.
+    /// A local cache path set to the filesystem cache itself puts a store inside that cache, so
+    /// removing the cache would take the store. While a server runs, the cache is held back with the
+    /// store in it, refused in Explore, and both are standing after a run.
     /// </summary>
     [Fact]
-    public async Task AStoreInsideTheFilesystemCacheIsNotFollowedAndSurvivesARunningServer()
+    public async Task AStoreInsideTheFilesystemCacheSurvivesARunningServer()
     {
+        Populate(Path.Combine(LegacyCache, "Buckets"));
         var nested = PopulateStore(Path.Combine(LegacyCache, "Zen"));
+        var marker = Path.Combine(nested, UnrealCacheLocations.StoreMarker);
         _environment.WithEnvironmentVariable("UE-LocalDataCachePath", LegacyCache);
 
         var provider = CreateProvider(new FakeProcessInspector("zenserver"));
         var plan = await provider.PlanAsync();
 
-        Assert.DoesNotContain(plan.TargetedPaths, path => path.Equals(nested, StringComparison.OrdinalIgnoreCase));
-        Assert.Empty(await provider.DiscoverToolRootsAsync());
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(LegacyCache, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(await provider.DiscoverToolRootsAsync(), root =>
+            root.Path.Equals(LegacyCache, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(marker), "a store was removed with the cache around it under a running server");
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// With no server running, the same store is removed with the cache around it rather than as a
+    /// step of its own, so no path is both a target and a survivor.
+    /// </summary>
+    [Fact]
+    public async Task AStoreInsideTheFilesystemCacheGoesWithItWhileNoServerRuns()
+    {
+        Populate(Path.Combine(LegacyCache, "Buckets"));
+        PopulateStore(Path.Combine(LegacyCache, "Zen"));
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", LegacyCache);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([LegacyCache], plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(LegacyCache));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>
