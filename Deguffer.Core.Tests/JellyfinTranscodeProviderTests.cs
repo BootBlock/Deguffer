@@ -299,7 +299,7 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("no longer records", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("records no Jellyfin", StringComparison.Ordinal));
 
         await provider.ExecuteAsync(plan);
 
@@ -330,6 +330,87 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the transcoder folder."));
+    }
+
+    /// <summary>
+    /// The same rule where the cache folder is what moved. Settings the installer does not record move
+    /// the cache, and the transcoder with it, to a folder that may carry an old marker or another
+    /// tool's cache tag.
+    /// </summary>
+    [Fact]
+    public async Task NeverTrustsAMovedCacheNamedBySettingsTheInstallerDoesNotRecord()
+    {
+        var local = Path.Combine(_environment.LocalAppData, "jellyfin");
+        CreateData(local);
+        var cache = Path.Combine(_temp.Path, "Stuff");
+        var segment = Transcoding(Path.Combine(cache, "transcodes"));
+        Write(Path.Combine(cache, JellyfinServerLayout.CacheTag), Old, "Signature: 8a477f597d28d172789f06886806bc55");
+        Write(Path.Combine(local, "config", "system.xml"), Old, Settings("CachePath", cache));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("records no Jellyfin", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(segment), "a moved cache named by an unrecorded install's settings was emptied.");
+    }
+
+    /// <summary>
+    /// <c>CACHEDIR.TAG</c> is a convention other tools write too, so it counts only above the folder at
+    /// the path Jellyfin's own name gives it, never above a moved one.
+    /// </summary>
+    [Fact]
+    public async Task TheCacheTagIsNoEvidenceForAMovedCache()
+    {
+        CreateData(Data);
+        var cache = Path.Combine(_temp.Path, "ToolCache");
+        var file = Write(Path.Combine(cache, "transcodes", "0b1c2d.ts"), Old);
+        Write(Path.Combine(cache, JellyfinServerLayout.CacheTag), Old, "Signature: 8a477f597d28d172789f06886806bc55");
+        Write(Path.Combine(Data, "config", "system.xml"), Old, Settings("CachePath", cache));
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(file), "a moved cache was emptied on another tool's cache tag.");
+    }
+
+    /// <summary>
+    /// A data folder Windows would not describe still counts. A transcoder folder that holds it would
+    /// take it along, and nothing here could say what was in it.
+    /// </summary>
+    [Fact]
+    public async Task NeverEmptiesATranscoderFolderThatHoldsADataFolderWindowsWouldNotDescribe()
+    {
+        CreateData(Data);
+        var outer = Path.Combine(_system.ProgramData, "Jellyfin");
+        var service = Path.Combine(outer, "Server");
+        Transcoding(outer);
+        var held = Write(Path.Combine(service, "data", "jellyfin.db"), Old);
+        Write(Path.Combine(Data, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", outer));
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        CleanupPlan plan;
+
+        using (DeniedDirectory.WithUnreadableAttributes(service))
+        {
+            Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(service));
+            plan = await CreateProvider().PlanAsync();
+        }
+
+        Assert.DoesNotContain(outer, plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("overlaps", StringComparison.Ordinal));
+
+        await CreateProvider().ExecuteAsync(plan);
+
+        Assert.True(File.Exists(held), "a data folder Windows would not describe went with the transcoder folder.");
     }
 
     /// <summary>The other direction: a transcoder folder inside what the data folder keeps.</summary>

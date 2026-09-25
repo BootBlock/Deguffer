@@ -284,8 +284,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
     }
 
     /// <summary>
-    /// Not memoised: every caller memoises the answer it derives for the life of a planning pass,
-    /// and a second cache here would be a second thing for <see cref="Invalidate"/> to get wrong.
+    /// Not memoised, so no answer here can outlive <see cref="Invalidate"/>. A caller that needs one
+    /// for the life of a planning pass keeps what it derives from it.
     /// </summary>
     public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
     {

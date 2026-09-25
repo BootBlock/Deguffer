@@ -1994,7 +1994,7 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 When a player cannot play a file as it is, Plex converts it as it streams and writes the parts to
 `Transcode\Sessions`, one `plex-transcode-…` folder per stream. A stream that ends badly, or a
-server that crashes, can leave its parts there for months: Plex's forums report sessions months old. `PhotoTranscoder` holds the posters and
+server that crashes, can leave its parts there for months. `PhotoTranscoder` holds the posters and
 thumbnails Plex resized for its apps, which Plex makes again as they are shown.
 
 ### What Deguffer does
