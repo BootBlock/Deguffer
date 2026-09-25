@@ -51,8 +51,8 @@ internal sealed record IndexRemoval(
             refusals.Replace(index, removal.RefusedAt);
             leftStanding.Record(index, removal.LeftStanding);
 
-            // Gone, or never there when the run arrived. Either way nothing is left to point anywhere.
-            var complete = removal.RootRemoved || LongPath.ProbeDirectory(index) is PathPresence.Absent;
+            // Also true of an index already gone when the run arrived: nothing is left to point anywhere.
+            var complete = removal.RootRemoved;
 
             total = new IndexRemoval(
                 complete,
