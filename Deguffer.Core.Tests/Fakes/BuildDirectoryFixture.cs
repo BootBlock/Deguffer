@@ -3,7 +3,7 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Tests.Fakes;
 
 /// <summary>
-/// Builds the four project layouts the build-directory providers recognise, on disk.
+/// Builds the project layouts the build-directory providers recognise, on disk.
 ///
 /// Every marker is separately defeatable, because the interesting cases are the ones where a piece
 /// of evidence is missing: that is precisely where a rule which recognises by directory name rather
@@ -139,6 +139,35 @@ public static class BuildDirectoryFixture
         WriteBytes(Path.Combine(environment, "Lib", "site.py"), payloadBytes);
 
         return environment;
+    }
+
+    /// <summary>
+    /// An Unreal project, returning its build directory of <paramref name="directoryName"/>.
+    /// <paramref name="descriptor"/> null is a folder of that name in something that is not an
+    /// Unreal project. The project's own folders are written with something in each, so §5.6 has
+    /// content to assert: <c>Saved\Autosaves</c> above all, which is the only copy of unsaved work.
+    /// </summary>
+    public static string CreateUnrealProject(
+        string projectDirectory,
+        string directoryName = "Intermediate",
+        string? descriptor = "Game.uproject",
+        int payloadBytes = 4096)
+    {
+        if (descriptor is not null)
+        {
+            WriteText(Path.Combine(projectDirectory, descriptor), "{ \"FileVersion\": 3 }");
+        }
+
+        WriteText(Path.Combine(projectDirectory, "Source", "Game", "Game.cpp"), "// the user's own source");
+        WriteText(Path.Combine(projectDirectory, "Config", "DefaultEngine.ini"), "[/Script/Engine.Engine]");
+        WriteBytes(Path.Combine(projectDirectory, "Content", "Maps", "Main.umap"), 512);
+        WriteBytes(Path.Combine(projectDirectory, "Saved", "Autosaves", "Main_Auto1.umap"), 512);
+        WriteBytes(Path.Combine(projectDirectory, "Binaries", "Win64", "UnrealEditor-Game.dll"), 512);
+
+        var build = Directory(projectDirectory, directoryName);
+        WriteBytes(Path.Combine(build, "Build", "payload.bin"), payloadBytes);
+
+        return build;
     }
 
     private static string Directory(params string[] segments)

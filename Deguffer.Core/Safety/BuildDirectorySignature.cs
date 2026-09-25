@@ -58,7 +58,46 @@ public static class BuildDirectorySignature
             return null;
         }
 
+        foreach (var extension in kind.RequiredSiblingExtensions)
+        {
+            if (SiblingFiles(project, extension).Count == 0)
+            {
+                return null;
+            }
+        }
+
         return project;
+    }
+
+    /// <summary>
+    /// The names of the files in <paramref name="project"/> whose extension is
+    /// <paramref name="extension"/>. Empty where there are none, and where the folder would not be
+    /// listed: a refusal is not evidence of a project (§5.2).
+    ///
+    /// <para>Each name is compared with its own extension rather than handed to Windows as a
+    /// wildcard, whose matching has rules of its own for dots and short names. A backup called
+    /// <c>Game.uproject.bak</c> is not a descriptor.</para>
+    /// </summary>
+    public static IReadOnlyList<string> SiblingFiles(string project, string extension)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(project);
+        ArgumentException.ThrowIfNullOrWhiteSpace(extension);
+
+        try
+        {
+            return
+            [
+                .. new DirectoryInfo(LongPath.Extended(project))
+                    .EnumerateFiles()
+                    .Where(file => file.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase))
+                    .Select(file => file.Name),
+            ];
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // Refused, or gone since the candidate was found. Either way nothing was seen.
+            return [];
+        }
     }
 
     /// <summary>

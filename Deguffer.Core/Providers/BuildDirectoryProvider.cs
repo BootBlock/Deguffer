@@ -184,7 +184,18 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = BuildProtectedPaths(live, declined),
             Notes = SourceTreePlanNotes.For(
-                discovered, Kind.DisplayNames, Subject, declined.Count, live, measured.Note),
+                discovered,
+                Kind.DisplayNames,
+                Subject,
+                declined.Count,
+                live,
+                measured.Note,
+
+                // §5.3's warning as well as the veto, for a tool whose editor the veto cannot see:
+                // the Unreal editor works from the engine's folder rather than the project's, and
+                // holds no file the veto is told to ask about. Only where something is offered, as
+                // every cache provider says it.
+                steps.Count > 0 && BuildRunningProcessNote() is { } running ? [running] : null),
             Fallback = measured.Fallback,
             HasUnreadableRoot =
                 discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0,
@@ -216,9 +227,11 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         .. live.Cleared.SelectMany(target => new[]
         {
             (target.Project, $"The project folder for {Path.GetFileName(target.Project)} — only its build output is removed."),
-        }.Concat(Markers.Select(marker =>
+        }.Concat(MarkersOf(target.Project).Select(marker =>
             (Path.Combine(target.Project, marker),
-             $"{marker} is source, and is what the build output is regenerated from.")))),
+             // Not "source": Unreal's Saved sits here too, holding the editor's autosaves, and
+             // what every entry named here shares is only that it is the project's own.
+             $"{marker} is part of the project, not its build output.")))),
         .. declined.Select(path => (path, $"Not recognised as {Subject}, so it is left alone.")),
         .. live.Vetoed.Select(vetoed => (vetoed.Directory, LiveTreeVeto.ProtectedReason)),
     ]);
@@ -227,7 +240,16 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// Everything beside the directory that has to survive it: every sibling the recognition looked
     /// at, and every one the kind names as a survivor without recognising by. The alternatives are
     /// included because §5.6 asserts survival of what exists, and only one of them will.
+    ///
+    /// <para>Per project, because a sibling recognised by its extension has the project's own name,
+    /// which only the folder can say.</para>
     /// </summary>
-    private IReadOnlyList<string> Markers =>
-        [.. Kind.RequiredSiblings, .. Kind.AnyOfSiblings, .. Kind.ProtectedSiblings];
+    private IReadOnlyList<string> MarkersOf(string project) =>
+    [
+        .. Kind.RequiredSiblings,
+        .. Kind.AnyOfSiblings,
+        .. Kind.RequiredSiblingExtensions.SelectMany(extension =>
+            BuildDirectorySignature.SiblingFiles(project, extension)),
+        .. Kind.ProtectedSiblings,
+    ];
 }
