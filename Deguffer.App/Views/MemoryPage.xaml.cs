@@ -31,8 +31,8 @@ public sealed partial class MemoryPage : Page
     private CancellationTokenSource? _watching;
     private bool _onScreen;
 
-    /// <summary>The treemap spacing the map was last told. See <see cref="FollowSpacing"/>.</summary>
-    private ExploreSpacing _spacing = App.Preferences.Current.TreemapSpacing;
+    /// <summary>The look the map was last drawn in. See <see cref="FollowLook"/>.</summary>
+    private MapLook _look = MapLook.From(App.Preferences.Current);
 
     /// <summary>Whether the page is writing the list's own selection. See <see cref="IsUserSelecting"/>.</summary>
     private bool _showingSelectedRow;
@@ -179,7 +179,8 @@ public sealed partial class MemoryPage : Page
     {
         _onScreen = true;
 
-        FollowSpacing();
+        FollowLook();
+        App.Preferences.Changed += OnPreferencesChanged;
 
         if (XamlRoot is { } root)
         {
@@ -192,6 +193,8 @@ public sealed partial class MemoryPage : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _onScreen = false;
+
+        App.Preferences.Changed -= OnPreferencesChanged;
 
         if (XamlRoot is { } root)
         {
@@ -280,37 +283,43 @@ public sealed partial class MemoryPage : Page
     }
 
     /// <summary>
-    /// Draw again if the treemap spacing changed while this page was away. Re-read on every visit
-    /// because it is chosen on the Settings page, which persists before it applies — see
-    /// <c>ExplorePage.FollowSpacing</c>.
+    /// Draw again if the colours or the treemap spacing changed. Re-read on every visit, because
+    /// both are chosen elsewhere — the spacing on the Settings page, and both in the Explore page's
+    /// appearance window, which can stay open while this page is on screen.
     /// </summary>
-    private void FollowSpacing()
+    private void FollowLook()
     {
-        var spacing = App.Preferences.Current.TreemapSpacing;
+        var look = MapLook.From(App.Preferences.Current);
 
-        if (spacing != _spacing)
+        if (look != _look)
         {
-            _spacing = spacing;
+            _look = look;
             ShowCurrentNode();
         }
     }
+
+    private void OnPreferencesChanged(object? sender, EventArgs e) => FollowLook();
 
     /// <summary>
     /// Draw the current node.
     ///
     /// <para>The colours are asked for per repaint rather than handed over once, which is what the
-    /// map's clock reading is for elsewhere. Here they never change: a memory tree has no dates, so
-    /// its shapes say which part they belong to.</para>
+    /// map's clock reading is for elsewhere. Here they change only with the scheme: a memory tree has
+    /// no dates, so its shapes say which part they belong to.</para>
     /// </summary>
-    private void ShowCurrentNode() =>
+    private void ShowCurrentNode()
+    {
+        var colours = ShapeColours.ByBranch(_look.SchemeFor(ViewModel.SelectedView));
+
         Map.Show(
             ViewModel.Tree,
             ViewModel.CurrentNode,
             ViewModel.SelectedView,
-            _ => ShapeColours.ByBranch,
+            _ => colours,
             ViewModel.LabelFor,
-            _spacing,
+            _look.Spacing,
             VolumeSpace.None);
+    }
 
     /// <summary>Put both screens back in step with what is selected: the outline on the map, and the highlight in the list.</summary>
     private void ShowSelection()

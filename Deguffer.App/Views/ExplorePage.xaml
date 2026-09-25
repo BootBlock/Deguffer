@@ -16,7 +16,7 @@
             a box carrying the label pushed the scope chip's button off the end of it. See
             DriveEntryTemplates for how the two are told apart.
         -->
-        <DataTemplate x:Key="DriveChosen" x:DataType="exploring:DriveChoice">
+        <DataTemplate x:Key="DriveChosen" x:DataType="exploring:DriveEntry">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <!-- Collapsed on every ordinary volume, so it costs the toolbar nothing until
                      there is something to warn about. The sentence itself is on the status line,
@@ -24,7 +24,7 @@
                 <FontIcon Glyph="&#xE7BA;"
                           FontSize="14"
                           VerticalAlignment="Center"
-                          Visibility="{x:Bind IsRefused}"
+                          Visibility="{x:Bind Choice.IsRefused, Mode=OneWay}"
                           AutomationProperties.AccessibilityView="Raw" />
 
                 <TextBlock Text="{x:Bind RootPath}" />
@@ -38,18 +38,18 @@
             Each row states its own name, because a templated item is otherwise announced as its
             parts in layout order with nothing between them.
         -->
-        <DataTemplate x:Key="DriveListed" x:DataType="exploring:DriveChoice">
-            <StackPanel Spacing="2" AutomationProperties.Name="{x:Bind Description}">
+        <DataTemplate x:Key="DriveListed" x:DataType="exploring:DriveEntry">
+            <StackPanel Spacing="2" AutomationProperties.Name="{x:Bind Choice.Description, Mode=OneWay}">
                 <Grid ColumnSpacing="8" ColumnDefinitions="Auto,116,Auto">
                     <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
 
                     <TextBlock Grid.Column="1"
-                               Text="{x:Bind LabelText}"
+                               Text="{x:Bind Choice.LabelText, Mode=OneWay}"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                     <TextBlock Grid.Column="2"
-                               Text="{x:Bind Sizes}"
+                               Text="{x:Bind Choice.Sizes, Mode=OneWay}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
 
@@ -62,8 +62,8 @@
                      the row hands its excess to the Auto columns in the span, which pushed this
                      one row's label and size figures out of line with every other row - the very
                      alignment the fixed label column above exists to hold. -->
-                <TextBlock Text="{x:Bind Refusal}"
-                           Visibility="{x:Bind IsRefused}"
+                <TextBlock Text="{x:Bind Choice.Refusal, Mode=OneWay}"
+                           Visibility="{x:Bind Choice.IsRefused, Mode=OneWay}"
                            TextWrapping="Wrap"
                            MaxWidth="380"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -85,7 +85,7 @@
             it governs — a control that changes how something is drawn belongs next to the drawing,
             not next to the thing that produced the data.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
             <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
                  page would otherwise stop naming the folder it is still scanning. -->
             <ComboBox Grid.Column="0"
@@ -185,6 +185,18 @@
                 <ComboBoxItem Content="Branch" />
                 <ComboBoxItem Content="Age" />
             </ComboBox>
+
+            <!-- Beside the two boxes that decide what the picture shows, because this decides how it
+                 looks. It opens a window of its own, which stays open beside the map so each change
+                 can be watched as it lands. -->
+            <Button Grid.Column="8"
+                    VerticalAlignment="Bottom"
+                    Padding="8"
+                    Click="OnAppearanceClicked"
+                    ToolTipService.ToolTip="Map appearance: colours and spacing"
+                    AutomationProperties.Name="Map appearance">
+                <FontIcon Glyph="&#xE713;" FontSize="16" />
+            </Button>
         </Grid>
 
         <!--
@@ -737,7 +749,10 @@
                  tail rather than the size beside it. The size is the answer this page exists to
                  give, and the trimmed tail is the part the map has already drawn on the shape
                  itself. -->
-            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto" MinHeight="20">
+            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                <!-- Holds the line open while nothing is under the pointer. See LineStrut. -->
+                <TextBlock Grid.ColumnSpan="2" Style="{StaticResource LineStrut}" />
+
                 <TextBlock Grid.Column="0"
                            Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"
@@ -760,9 +775,12 @@
                  on the user having picked the thing out by hand, so a path this cut short at the
                  leaf — the one segment that tells two folders apart — would be the page naming
                  something other than the target. Two lines hold every path either picture is
-                 likely to draw, and the floor keeps them there whether or not anything is
+                 likely to draw, and the strut keeps them there whether or not anything is
                  selected. -->
-            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto" MinHeight="40">
+            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                <!-- Two lines, at whatever size the reader's text is. See LineStrut. -->
+                <TextBlock Grid.ColumnSpan="2" Style="{StaticResource LineStrut}" Text="Ag&#x0A;Ag" />
+
                 <TextBlock Grid.Column="0"
                            Text="{x:Bind ViewModel.Selection.Label, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"

@@ -17,6 +17,8 @@ public class AgeColouringTests
 
     private static readonly DateTime Now = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
+    public static TheoryData<ExploreScheme> Schemes => [.. Enum.GetValues<ExploreScheme>()];
+
     [Theory]
     [InlineData(0, "Today")]
     [InlineData(3, "This week")]
@@ -26,7 +28,7 @@ public class AgeColouringTests
     [InlineData(1000, "2 to 5 years")]
     [InlineData(4000, "Over 5 years")]
     public void EachAgeFallsInTheBandThatNamesIt(int daysAgo, string expected) =>
-        Assert.Equal(expected, AgePalette.BandOf(Written(daysAgo), Now).Label);
+        Assert.Equal(expected, AgePalette.BandOf(Written(daysAgo), Now, ExploreScheme.Standard).Label);
 
     /// <summary>
     /// The band boundaries themselves, which is where an off-by-one lives. A file written exactly
@@ -36,11 +38,11 @@ public class AgeColouringTests
     [Fact]
     public void ABoundaryBelongsToTheOlderBand()
     {
-        Assert.Equal("This week", AgePalette.BandOf(Written(6), Now).Label);
-        Assert.Equal("This month", AgePalette.BandOf(Written(7), Now).Label);
+        Assert.Equal("This week", AgePalette.BandOf(Written(6), Now, ExploreScheme.Standard).Label);
+        Assert.Equal("This month", AgePalette.BandOf(Written(7), Now, ExploreScheme.Standard).Label);
 
-        Assert.Equal("This year", AgePalette.BandOf(Written(364), Now).Label);
-        Assert.Equal("1 to 2 years", AgePalette.BandOf(Written(365), Now).Label);
+        Assert.Equal("This year", AgePalette.BandOf(Written(364), Now, ExploreScheme.Standard).Label);
+        Assert.Equal("1 to 2 years", AgePalette.BandOf(Written(365), Now, ExploreScheme.Standard).Label);
     }
 
     /// <summary>
@@ -48,11 +50,12 @@ public class AgeColouringTests
     /// reading of this picture that could get something deleted, and it is the same rule
     /// <see cref="Scanning.RelativeAge"/> holds for the sentence.
     /// </summary>
-    [Fact]
-    public void AnUndatedEntryGetsItsOwnColourAndNotTheOldestOne()
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void AnUndatedEntryGetsItsOwnColourAndNotTheOldestOne(ExploreScheme scheme)
     {
-        var unknown = AgePalette.BandOf(ExploreTimestamp.Unknown, Now);
-        var oldest = AgePalette.BandOf(Written(20_000), Now);
+        var unknown = AgePalette.BandOf(ExploreTimestamp.Unknown, Now, scheme);
+        var oldest = AgePalette.BandOf(Written(20_000), Now, scheme);
 
         Assert.Equal("Not known", unknown.Label);
         Assert.NotEqual(oldest.Colour, unknown.Colour);
@@ -61,7 +64,7 @@ public class AgeColouringTests
         // scale it is sitting next to.
         Assert.DoesNotContain(
             unknown.Colour,
-            AgePalette.Bands.Where(b => b.Label != "Not known").Select(b => b.Colour));
+            AgePalette.Bands(scheme).Where(b => b.Label != "Not known").Select(b => b.Colour));
     }
 
     /// <summary>
@@ -72,25 +75,48 @@ public class AgeColouringTests
     /// </summary>
     [Fact]
     public void ADateInTheFutureIsDrawnAsTheNewest() =>
-        Assert.Equal("Today", AgePalette.BandOf(Written(-30), Now).Label);
+        Assert.Equal("Today", AgePalette.BandOf(Written(-30), Now, ExploreScheme.Standard).Label);
 
     /// <summary>
     /// Every band is a different colour. A ramp with a repeat in it reads as two ages that are the
     /// same age, which is worse than a shorter ramp would be.
     /// </summary>
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void NoTwoBandsShareAColour(ExploreScheme scheme) =>
+        Assert.Equal(AgePalette.Bands(scheme).Count, AgePalette.Bands(scheme).Select(b => b.Colour).Distinct().Count());
+
+    /// <summary>
+    /// The schemes differ in colour and in nothing else: every one names the same bands at the same
+    /// edges, so changing the scheme cannot change what a shape is said to be.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void EverySchemeNamesTheSameBands(ExploreScheme scheme) =>
+        Assert.Equal(
+            AgePalette.Bands(ExploreScheme.Standard).Select(b => (b.Label, b.MaximumDays)),
+            AgePalette.Bands(scheme).Select(b => (b.Label, b.MaximumDays)));
+
+    /// <summary>A scheme is a different set of colours, or it is not a choice worth offering.</summary>
     [Fact]
-    public void NoTwoBandsShareAColour() =>
-        Assert.Equal(AgePalette.Bands.Count, AgePalette.Bands.Select(b => b.Colour).Distinct().Count());
+    public void NoTwoSchemesPaintTheBandsAlike() =>
+        Assert.Equal(
+            Enum.GetValues<ExploreScheme>().Length,
+            Enum.GetValues<ExploreScheme>()
+                .Select(scheme => string.Join(",", AgePalette.Bands(scheme).Select(b => b.Colour)))
+                .Distinct()
+                .Count());
 
     /// <summary>
     /// The ramp has to be readable as an order, which is what a categorical palette cannot do. Its
     /// lightness moves the same way at every step, so which of two shapes is older can be read off
     /// the picture without consulting the legend — and it survives being seen in grey.
     /// </summary>
-    [Fact]
-    public void TheRampGetsDarkerWithEveryStepBackwards()
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void TheRampGetsDarkerWithEveryStepBackwards(ExploreScheme scheme)
     {
-        var dated = AgePalette.Bands.Where(b => b.Label != "Not known").ToList();
+        var dated = AgePalette.Bands(scheme).Where(b => b.Label != "Not known").ToList();
 
         for (var i = 1; i < dated.Count; i++)
         {
@@ -150,13 +176,13 @@ public class AgeColouringTests
         var tree = TwoChildrenOfDifferentAges();
 
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, ExploreColouring.Age, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
+            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, ExploreColouring.Age, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.NotEmpty(surface.Labels);
 
         foreach (var label in surface.Labels)
         {
-            var painted = AgePalette.For(tree.ModifiedOf(label.Node), Now);
+            var painted = AgePalette.For(tree.ModifiedOf(label.Node), Now, ExploreScheme.Standard);
 
             Assert.Equal(painted.ContrastingText, label.Colour);
         }
@@ -189,7 +215,7 @@ public class AgeColouringTests
         var tree = ManyEqualChildren(500);
 
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, ExploreView.Treemap, Small, Small, scale: 1, textScale: 1, colouring, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
+            tree, tree.RootNode, ExploreView.Treemap, Small, Small, scale: 1, textScale: 1, colouring, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         var pixels = new byte[PixelBuffer.LengthFor(Small, Small)];
         surface.Paint(pixels, new TileColour(0, 0, 0));
@@ -210,7 +236,7 @@ public class AgeColouringTests
         // which is exactly where an aggregate would land if it were treated as a node at all — and
         // the shading scales both by the same factor, so the order between them survives it.
         Assert.True(
-            painted.Red < AgePalette.For(ExploreTimestamp.Unknown, Now).Red,
+            painted.Red < AgePalette.For(ExploreTimestamp.Unknown, Now, ExploreScheme.Standard).Red,
             $"Painted {painted.Red}, which is not darker than the 'not known' grey.");
     }
 
@@ -276,7 +302,7 @@ public class AgeColouringTests
     private static byte[] Painted(ExploreTree tree, ExploreColouring colouring)
     {
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, colouring, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
+            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, colouring, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         var pixels = new byte[PixelBuffer.LengthFor(Width, Height)];
         surface.Paint(pixels, new TileColour(0, 0, 0));
@@ -313,7 +339,7 @@ public class AgeColouringTests
         var tree = builder.Build(ExploreChildOrder.BySize);
 
         var surface = ExploreSurface.Create(
-            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, ExploreColouring.Age, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
+            tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, ExploreColouring.Age, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.NotEmpty(surface.Labels);
 
@@ -323,10 +349,10 @@ public class AgeColouringTests
             // one. So the guard is on the contrast rather than on the band, or a later change to these
             // dates could satisfy it while leaving the two indistinguishable here.
             Assert.NotEqual(
-                AgePalette.For(tree.CreatedOf(label.Node), Now).ContrastingText,
-                AgePalette.For(tree.ModifiedOf(label.Node), Now).ContrastingText);
+                AgePalette.For(tree.CreatedOf(label.Node), Now, ExploreScheme.Standard).ContrastingText,
+                AgePalette.For(tree.ModifiedOf(label.Node), Now, ExploreScheme.Standard).ContrastingText);
 
-            Assert.Equal(AgePalette.For(tree.ModifiedOf(label.Node), Now).ContrastingText, label.Colour);
+            Assert.Equal(AgePalette.For(tree.ModifiedOf(label.Node), Now, ExploreScheme.Standard).ContrastingText, label.Colour);
         }
     }
 

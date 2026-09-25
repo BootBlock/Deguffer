@@ -162,6 +162,7 @@ public abstract class ExploreSurface
     /// <paramref name="view"/>, coloured to say <paramref name="colouring"/>. See the overload taking
     /// <see cref="ShapeColours"/> for everything else.
     /// </summary>
+    /// <param name="scheme">Which set of colours the colouring is drawn in.</param>
     /// <param name="nowUtc">
     /// What "now" is, for the age bands. Passed in rather than read, so a drawing coloured by age is
     /// provable without a clock (G8) — the same seam
@@ -176,11 +177,12 @@ public abstract class ExploreSurface
         double scale,
         double textScale,
         ExploreColouring colouring,
+        ExploreScheme scheme,
         DateTime nowUtc,
         ExploreSpacing spacing,
         VolumeSpace volume) =>
         Create(
-            tree, root, view, width, height, scale, textScale, ShapeColours.For(tree, colouring, nowUtc),
+            tree, root, view, width, height, scale, textScale, ShapeColours.For(tree, colouring, scheme, nowUtc),
             spacing, volume);
 
     /// <summary>

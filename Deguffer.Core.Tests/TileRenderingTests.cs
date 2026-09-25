@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Tests.Fakes;
@@ -132,12 +133,16 @@ public sealed class TileRenderingTests
     }
 
     /// <summary>
-    /// And the branch palette's own colours, round the whole circle and at every depth it
-    /// distinguishes, lifted and not. Its lightness starts high enough that every one of them takes
-    /// black, so this is the rule held over the palette rather than the rule itself.
+    /// And the branch palette's own colours, in every scheme, round the whole circle and at every
+    /// depth it distinguishes, lifted and not. The lighter schemes take black throughout and the
+    /// deep one takes white near the root, so this is the rule held over every palette rather than
+    /// the rule itself.
     /// </summary>
-    [Fact]
-    public void EveryBranchColourTakesTheLabelColourThatContrastsMore()
+    public static TheoryData<ExploreScheme> Schemes => [.. Enum.GetValues<ExploreScheme>()];
+
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void EveryBranchColourTakesTheLabelColourThatContrastsMore(ExploreScheme scheme)
     {
         var black = new TileColour(0, 0, 0);
         var white = new TileColour(255, 255, 255);
@@ -148,7 +153,7 @@ public sealed class TileRenderingTests
             {
                 foreach (var lifted in new[] { false, true })
                 {
-                    var colour = TilePalette.For(new BranchHue(hue, 10, lifted), depth);
+                    var colour = TilePalette.For(new BranchHue(hue, 10, lifted), depth, scheme);
                     var chosen = colour.ContrastingText;
                     var other = chosen == black ? white : black;
 
@@ -164,30 +169,32 @@ public sealed class TileRenderingTests
     /// Lightness says how deep. A child drawn no lighter than its parent would read as a sibling, and
     /// the ramp stops after a few levels so the deepest shapes are not white.
     /// </summary>
-    [Fact]
-    public void DepthRaisesLightnessForAFewLevelsAndThenHolds()
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void DepthRaisesLightnessForAFewLevelsAndThenHolds(ExploreScheme scheme)
     {
         var hue = new BranchHue(200, 20, Lifted: false);
 
         for (var depth = 1; depth < 5; depth++)
         {
             Assert.True(
-                TilePalette.For(hue, depth + 1).RelativeLuminance > TilePalette.For(hue, depth).RelativeLuminance,
+                TilePalette.For(hue, depth + 1, scheme).RelativeLuminance > TilePalette.For(hue, depth, scheme).RelativeLuminance,
                 $"depth {depth + 1} was not lighter than depth {depth}");
         }
 
-        Assert.Equal(TilePalette.For(hue, 5), TilePalette.For(hue, 9));
+        Assert.Equal(TilePalette.For(hue, 5, scheme), TilePalette.For(hue, 9, scheme));
     }
 
     /// <summary>
     /// Alternate siblings are a step lighter, so two neighbours whose hues are close still differ in
     /// the one property a colour-vision deficiency leaves intact.
     /// </summary>
-    [Fact]
-    public void ALiftedSiblingIsLighterThanItsNeighbourAtTheSameHue()
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void ALiftedSiblingIsLighterThanItsNeighbourAtTheSameHue(ExploreScheme scheme)
     {
-        var plain = TilePalette.For(new BranchHue(120, 20, Lifted: false), 2);
-        var lifted = TilePalette.For(new BranchHue(120, 20, Lifted: true), 2);
+        var plain = TilePalette.For(new BranchHue(120, 20, Lifted: false), 2, scheme);
+        var lifted = TilePalette.For(new BranchHue(120, 20, Lifted: true), 2, scheme);
 
         Assert.True(lifted.RelativeLuminance > plain.RelativeLuminance);
     }
@@ -196,10 +203,11 @@ public sealed class TileRenderingTests
     /// The drawing's root owns the whole circle and so has no hue of its own. It is drawn neutral,
     /// because it is the frame round everything else rather than a branch of it.
     /// </summary>
-    [Fact]
-    public void TheRootIsANeutralGrey()
+    [Theory]
+    [MemberData(nameof(Schemes))]
+    public void TheRootIsANeutralGrey(ExploreScheme scheme)
     {
-        var root = TilePalette.For(BranchHue.Whole, 0);
+        var root = TilePalette.For(BranchHue.Whole, 0, scheme);
 
         Assert.Equal(root.Red, root.Green);
         Assert.Equal(root.Green, root.Blue);

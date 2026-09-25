@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
@@ -203,14 +204,20 @@ public sealed record ExploreCrumb(int Node, string Name, bool FollowsAnother = f
 public sealed record ExploreLegendBand(string Label, SolidColorBrush Swatch)
 {
     /// <summary>
-    /// Every band, newest first, ready to bind. Built once for the life of the app rather than per
-    /// view-model: the scale does not depend on what was scanned, and a brush per band per page
-    /// would be objects created to say the same thing again (G5).
+    /// Every scheme's bands, built once for the life of the app rather than per view-model: the
+    /// scale does not depend on what was scanned, and a brush per band per page would be objects
+    /// created to say the same thing again (G5).
     /// </summary>
-    public static IReadOnlyList<ExploreLegendBand> All { get; } =
+    private static readonly IReadOnlyList<ExploreLegendBand>[] Schemes =
     [
-        .. AgePalette.Bands.Select(band => new ExploreLegendBand(
-            band.Label,
-            new SolidColorBrush(Color.FromArgb(255, band.Colour.Red, band.Colour.Green, band.Colour.Blue)))),
+        .. Enum.GetValues<ExploreScheme>().Select(scheme => (IReadOnlyList<ExploreLegendBand>)
+        [
+            .. AgePalette.Bands(scheme).Select(band => new ExploreLegendBand(
+                band.Label,
+                new SolidColorBrush(Color.FromArgb(255, band.Colour.Red, band.Colour.Green, band.Colour.Blue)))),
+        ]),
     ];
+
+    /// <summary>Every band of <paramref name="scheme"/>, newest first, ready to bind.</summary>
+    public static IReadOnlyList<ExploreLegendBand> For(ExploreScheme scheme) => Schemes[(int)scheme];
 }

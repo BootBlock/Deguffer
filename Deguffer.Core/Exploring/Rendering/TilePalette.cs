@@ -1,3 +1,5 @@
+using Deguffer.Core.Configuration;
+
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
@@ -59,15 +61,25 @@ public readonly record struct TileColour(byte Red, byte Green, byte Blue)
 /// colours to give every folder its own. So neighbouring siblings alternate a step of lightness,
 /// deeper shapes are lighter and less saturated, and a folder with room for it is framed and named:
 /// each of those says where a shape belongs without hue.</para>
+///
+/// <para>Each <see cref="ExploreScheme"/> moves where that ramp starts and how saturated it is, and
+/// none changes its shape: every one still rises by depth for the same number of levels and lifts
+/// alternate siblings, because those steps are what say where a shape belongs.</para>
 /// </summary>
 public static class TilePalette
 {
-    private const double RootLightness = 0.62;
-    private const double FirstLightness = 0.64;
-    private const double LightnessStep = 0.055;
-    private const double Lift = 0.045;
-    private const double FirstChroma = 0.14;
-    private const double ChromaStep = 0.015;
+    /// <summary>
+    /// Indexed by <see cref="ExploreScheme"/>. The Oklch gamut mapping takes a saturation the screen
+    /// cannot show back to one it can at the same lightness and hue, so a vivid set asks for more
+    /// than some hues can give and each hue gets as much of it as it can.
+    /// </summary>
+    private static readonly Ramp[] Ramps =
+    [
+        new(RootLightness: 0.62, FirstLightness: 0.64, LightnessStep: 0.055, Lift: 0.045, FirstChroma: 0.14, ChromaStep: 0.015),
+        new(RootLightness: 0.58, FirstLightness: 0.60, LightnessStep: 0.06, Lift: 0.05, FirstChroma: 0.20, ChromaStep: 0.02),
+        new(RootLightness: 0.74, FirstLightness: 0.78, LightnessStep: 0.03, Lift: 0.035, FirstChroma: 0.075, ChromaStep: 0.008),
+        new(RootLightness: 0.48, FirstLightness: 0.50, LightnessStep: 0.06, Lift: 0.05, FirstChroma: 0.13, ChromaStep: 0.012),
+    ];
 
     /// <summary>
     /// How many levels the lightness keeps rising for. Past it every level is drawn alike, because a
@@ -77,21 +89,23 @@ public static class TilePalette
 
     /// <summary>
     /// The colour for a shape owning <paramref name="hue"/> at <paramref name="depth"/> below the
-    /// drawing's root.
+    /// drawing's root, in <paramref name="scheme"/>.
     ///
     /// <para>The root itself owns the whole circle, which has no hue to give it, so it is drawn a
     /// neutral grey: it is the frame round everything else.</para>
     /// </summary>
-    public static TileColour For(BranchHue hue, int depth)
+    public static TileColour For(BranchHue hue, int depth, ExploreScheme scheme)
     {
+        var ramp = Ramps[(int)scheme];
+
         if (hue.Sweep >= 360 || depth <= 0)
         {
-            return Oklch.ToSrgb(RootLightness, 0, 0);
+            return Oklch.ToSrgb(ramp.RootLightness, 0, 0);
         }
 
         var level = Math.Min(depth - 1, Levels);
-        var lightness = FirstLightness + (level * LightnessStep) + (hue.Lifted ? Lift : 0);
-        var chroma = FirstChroma - (level * ChromaStep);
+        var lightness = ramp.FirstLightness + (level * ramp.LightnessStep) + (hue.Lifted ? ramp.Lift : 0);
+        var chroma = ramp.FirstChroma - (level * ramp.ChromaStep);
 
         return Oklch.ToSrgb(lightness, chroma, hue.Centre);
     }
@@ -117,4 +131,13 @@ public static class TilePalette
     /// the disk like the other.
     /// </summary>
     public static TileColour Unaccounted => TileColour.FromRgb(0x9C9C9C);
+
+    /// <summary>Where one scheme's lightness and saturation start, and how far each level moves them.</summary>
+    private readonly record struct Ramp(
+        double RootLightness,
+        double FirstLightness,
+        double LightnessStep,
+        double Lift,
+        double FirstChroma,
+        double ChromaStep);
 }

@@ -108,7 +108,7 @@ public sealed class TreemapFrameTests
         {
             var hit = ExploreSurface.Create(
                     tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale: 1,
-                    ShapeColours.ByBranch, spacing, VolumeSpace.None)
+                    ShapeColours.ByBranch(ExploreScheme.Standard), spacing, VolumeSpace.None)
                 .At(4.5f, Height / 2);
 
             Assert.NotNull(hit);
@@ -133,7 +133,7 @@ public sealed class TreemapFrameTests
         {
             var hit = ExploreSurface.Create(
                     tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale,
-                    ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None)
+                    ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None)
                 .At(Width / 2, y);
 
             Assert.NotNull(hit);
@@ -193,7 +193,7 @@ public sealed class TreemapFrameTests
         var tree = TwoFolders();
         var surface = ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
         var big = TileOf(Layout(tree, LayoutLimits.Default), tree, "big");
 
         var pixels = new byte[PixelBuffer.LengthFor((int)Width, (int)Height)];

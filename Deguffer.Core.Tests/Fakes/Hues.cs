@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Rendering;
 
 namespace Deguffer.Core.Tests.Fakes;
@@ -11,5 +12,5 @@ internal static class Hues
 {
     public static BranchHue Of(int branch) => new((branch * 45) % 360, 30, Lifted: false);
 
-    public static TileColour Colour(int branch, int depth) => TilePalette.For(Of(branch), depth + 1);
+    public static TileColour Colour(int branch, int depth) => TilePalette.For(Of(branch), depth + 1, ExploreScheme.Standard);
 }

@@ -1,3 +1,5 @@
+using Deguffer.Core.Configuration;
+
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>One step of the age ramp: what it means, and what it is drawn in.</summary>
@@ -29,22 +31,36 @@ public readonly record struct AgeBand(string Label, int MaximumDays, TileColour 
 /// <para><b>Bands rather than a continuous ramp.</b> A continuous ramp cannot be given a legend that
 /// means anything, and the useful distinctions here are not linear in days: the difference between
 /// yesterday and last week matters, and the difference between four years and five does not.</para>
+///
+/// <para><b>One ramp per <see cref="ExploreScheme"/>.</b> Plasma and magma are viridis's siblings
+/// and share its two properties, so a scheme changes how the bands look and not how they read. The
+/// soft ramp is viridis washed towards white, which keeps its order. Each is sampled at the points
+/// the standard ramp was, so a band sits at the same place along every one of them.</para>
 /// </summary>
 public static class AgePalette
 {
     /// <summary>
-    /// The dated bands, newest first. The last has no far edge, so it answers for anything the ones
-    /// before it do not claim.
+    /// Where each dated band ends, newest first. The last has no far edge, so it answers for anything
+    /// the ones before it do not claim.
     /// </summary>
-    private static readonly AgeBand[] Dated =
+    private static readonly (string Label, int MaximumDays)[] Steps =
     [
-        new("Today", 1, TileColour.FromRgb(0xFDE725)),
-        new("This week", 7, TileColour.FromRgb(0x7AD151)),
-        new("This month", 31, TileColour.FromRgb(0x22A884)),
-        new("This year", 365, TileColour.FromRgb(0x2A788E)),
-        new("1 to 2 years", 730, TileColour.FromRgb(0x3B528B)),
-        new("2 to 5 years", 1826, TileColour.FromRgb(0x482878)),
-        new("Over 5 years", int.MaxValue, TileColour.FromRgb(0x440154)),
+        ("Today", 1),
+        ("This week", 7),
+        ("This month", 31),
+        ("This year", 365),
+        ("1 to 2 years", 730),
+        ("2 to 5 years", 1826),
+        ("Over 5 years", int.MaxValue),
+    ];
+
+    /// <summary>The colour of each step, per <see cref="ExploreScheme"/>, newest first.</summary>
+    private static readonly uint[][] Ramps =
+    [
+        [0xFDE725, 0x7AD151, 0x22A884, 0x2A788E, 0x3B528B, 0x482878, 0x440154],
+        [0xF0F921, 0xFCA636, 0xE16462, 0xB12A90, 0x7E03A8, 0x46039F, 0x0D0887],
+        [0xFEF078, 0xACE393, 0x76C9B3, 0x7BABB9, 0x8594B7, 0x8D7AAB, 0x8B6295],
+        [0xFCFDBF, 0xFEAC76, 0xEF5D5E, 0xB2357B, 0x7C2382, 0x4E117B, 0x251255],
     ];
 
     /// <summary>
@@ -59,19 +75,29 @@ public static class AgePalette
     private static readonly AgeBand Unknown =
         new("Not known", int.MaxValue, TileColour.FromRgb(0x9E9E9E));
 
-    /// <summary>Every band, newest first, with the unknown one last. What a legend lists.</summary>
-    public static IReadOnlyList<AgeBand> Bands { get; } = [.. Dated, Unknown];
+    /// <summary>Every scheme's bands, worked out once (G5).</summary>
+    private static readonly AgeBand[][] Schemes = [.. Ramps.Select(Banded)];
 
-    /// <summary>The band an entry last written at <paramref name="when"/> falls in.</summary>
+    /// <summary>
+    /// Every band of <paramref name="scheme"/>, newest first, with the unknown one last. What a
+    /// legend lists.
+    /// </summary>
+    public static IReadOnlyList<AgeBand> Bands(ExploreScheme scheme) => Schemes[(int)scheme];
+
+    /// <summary>
+    /// The band of <paramref name="scheme"/> an entry last written at <paramref name="when"/> falls in.
+    /// </summary>
     /// <param name="nowUtc">
     /// Injected rather than read, so the banding is provable without a clock — the same seam
     /// <see cref="Scanning.RelativeAge.Describe"/> takes for the same reason.
     /// </param>
-    public static AgeBand BandOf(ExploreTimestamp when, DateTime nowUtc)
+    public static AgeBand BandOf(ExploreTimestamp when, DateTime nowUtc, ExploreScheme scheme)
     {
+        var bands = Schemes[(int)scheme];
+
         if (when.Utc is not { } written)
         {
-            return Unknown;
+            return bands[^1];
         }
 
         // A file written during the scan, and a clock that disagrees with the filesystem's, both
@@ -82,17 +108,22 @@ public static class AgePalette
         // Searched rather than switched on. The thresholds are already stated once, in the list a
         // legend is drawn from, and stating them a second time here is how a legend comes to
         // disagree with the picture it explains.
-        for (var i = 0; i < Dated.Length - 1; i++)
+        for (var i = 0; i < Steps.Length - 1; i++)
         {
-            if (days < Dated[i].MaximumDays)
+            if (days < bands[i].MaximumDays)
             {
-                return Dated[i];
+                return bands[i];
             }
         }
 
-        return Dated[^1];
+        return bands[Steps.Length - 1];
     }
 
-    /// <summary>What to paint a shape last written at <paramref name="when"/>.</summary>
-    public static TileColour For(ExploreTimestamp when, DateTime nowUtc) => BandOf(when, nowUtc).Colour;
+    /// <summary>What to paint a shape last written at <paramref name="when"/>, in <paramref name="scheme"/>.</summary>
+    public static TileColour For(ExploreTimestamp when, DateTime nowUtc, ExploreScheme scheme) =>
+        BandOf(when, nowUtc, scheme).Colour;
+
+    /// <summary>One ramp's bands, with the unknown one after them.</summary>
+    private static AgeBand[] Banded(uint[] ramp) =>
+        [.. Steps.Select((step, at) => new AgeBand(step.Label, step.MaximumDays, TileColour.FromRgb(ramp[at]))), Unknown];
 }

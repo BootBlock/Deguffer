@@ -58,6 +58,17 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     }
 
     /// <summary>
+    /// Pretend the volume at <paramref name="rootPath"/> has been taken away. With
+    /// <see cref="With"/> after it, the same volume read again with other figures.
+    /// </summary>
+    public FakeVolumeInventory Without(string rootPath)
+    {
+        _volumes.RemoveAll(volume => volume.RootPath.Equals(rootPath, StringComparison.OrdinalIgnoreCase));
+
+        return this;
+    }
+
+    /// <summary>
     /// Every path <see cref="MountPointOf"/> was asked about, in the form it arrived in, so a test
     /// can see that a rule asked the machine rather than reading a drive letter.
     /// </summary>

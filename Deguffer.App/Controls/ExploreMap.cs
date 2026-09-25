@@ -82,7 +82,7 @@ public sealed class ExploreMap : UserControl
     /// What the colours are to say, asked for at each repaint rather than held. See
     /// <see cref="ShapeColours.For"/>: an age band is relative to the moment it is drawn.
     /// </summary>
-    private Func<DateTime, ShapeColours> _colours = _ => ShapeColours.ByBranch;
+    private Func<DateTime, ShapeColours> _colours = _ => ShapeColours.ByBranch(ExploreScheme.Standard);
 
     /// <summary>
     /// What to write on a shape. The tree knows its own names, and what a name means differs between
@@ -102,9 +102,10 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// The reader's Windows text size, which the labels grow with and the layout has to leave room
-    /// for. One instance for every map, because it is a window onto one system setting (G5).
+    /// for, and the accent colour the hover outline is drawn in. One instance for every map, because
+    /// it is a window onto the system's settings (G5).
     /// </summary>
-    private static readonly UISettings TextSettings = new();
+    private static readonly UISettings SystemSettings = new();
 
     /// <summary>
     /// Where the pointer was last seen, in this control's coordinates, or null while it is elsewhere.
@@ -157,7 +158,9 @@ public sealed class ExploreMap : UserControl
                 root.Changed += OnRootChanged;
             }
 
-            TextSettings.TextScaleFactorChanged += OnTextScaleChanged;
+            SystemSettings.TextScaleFactorChanged += OnTextScaleChanged;
+            SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
+            TintHighlight();
 
             // A resize that arrived while this was on screen, and was still waiting to be drawn
             // when the page was navigated away from, is dropped below rather than rasterised for a
@@ -189,7 +192,8 @@ public sealed class ExploreMap : UserControl
                 root.Changed -= OnRootChanged;
             }
 
-            TextSettings.TextScaleFactorChanged -= OnTextScaleChanged;
+            SystemSettings.TextScaleFactorChanged -= OnTextScaleChanged;
+            SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
         };
 
         // The ground is baked into the bitmap, so unlike every themed control around it the map
@@ -240,8 +244,8 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Draw <paramref name="node"/> of a scanned <paramref name="tree"/> in <paramref name="view"/>,
-    /// with the shapes coloured to say <paramref name="colouring"/> and labelled with a name and a
-    /// size.
+    /// with the shapes coloured to say <paramref name="colouring"/> in <paramref name="scheme"/> and
+    /// labelled with a name and a size.
     /// </summary>
     /// <param name="volume">
     /// The volume, where the scan covered the whole of one, and <see cref="VolumeSpace.None"/>
@@ -252,13 +256,16 @@ public sealed class ExploreMap : UserControl
         int node,
         ExploreView view,
         ExploreColouring colouring,
+        ExploreScheme scheme,
         ExploreSpacing spacing,
         VolumeSpace volume) =>
         Show(
             tree,
             node,
             view,
-            tree is null ? _ => ShapeColours.ByBranch : now => ShapeColours.For(tree, colouring, now),
+            tree is null
+                ? _ => ShapeColours.ByBranch(scheme)
+                : now => ShapeColours.For(tree, colouring, scheme, now),
             tree is null
                 ? _ => string.Empty
                 : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",
@@ -434,7 +441,7 @@ public sealed class ExploreMap : UserControl
             width,
             height,
             _scale,
-            TextSettings.TextScaleFactor,
+            SystemSettings.TextScaleFactor,
             _colours(DateTime.UtcNow),
             _spacing,
             _volume);
@@ -536,7 +543,7 @@ public sealed class ExploreMap : UserControl
         _highlight.ShowPicked(_drawing is { } drawing ? drawing.Outlines(_picked) : []);
 
     /// <summary>
-    /// Draw the fainter outline round whatever the pointer is over.
+    /// Draw the accent outline round whatever the pointer is over.
     ///
     /// <para>Four shapes get nothing. One already picked would carry two outlines, leaving the
     /// weaker claim on top of the stronger one. The other three cannot be picked at all (§7.1), so
@@ -627,6 +634,18 @@ public sealed class ExploreMap : UserControl
     /// old one. Raised off the UI thread, so it is sent back to it.
     /// </summary>
     private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Redraw);
+
+    /// <summary>
+    /// Follow a change of accent colour. Raised off the UI thread, like the text size above.
+    /// </summary>
+    private void OnSystemColoursChanged(UISettings sender, object args) =>
+        DispatcherQueue.TryEnqueue(TintHighlight);
+
+    /// <summary>
+    /// The lightest of the accent's shades, because it is drawn over a dark halo in either theme.
+    /// </summary>
+    private void TintHighlight() =>
+        _highlight.TintHovered(SystemSettings.GetColorValue(UIColorType.AccentLight2));
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {

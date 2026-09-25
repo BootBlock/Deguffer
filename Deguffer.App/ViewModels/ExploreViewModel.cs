@@ -36,15 +36,15 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly IVolumeInventory _volumes;
 
     /// <summary>
-    /// What a redraw puts in the list, the trail above it and the drive picker. Filled again per
-    /// redraw and never replaced: a walked scan publishes a snapshot every few hundred milliseconds,
-    /// and building three lists for each of those is work to say what was already said (G5).
+    /// What a redraw puts in the list and the trail above it. Filled again per redraw and never
+    /// replaced: a walked scan publishes a snapshot every few hundred milliseconds, and building two
+    /// lists for each of those is work to say what was already said (G5).
     /// </summary>
     private readonly List<int> _arriving = [];
 
     private readonly List<ExploreCrumb> _trail = [];
 
-    private readonly List<DriveChoice> _offered = [];
+    private readonly DriveList _drives;
 
     /// <summary>
     /// What the app knows about well-known files and folders, resolved against this machine once
@@ -66,10 +66,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     ///
     /// <para>A picker whose selected entry stops being in the list where it was writes null back
     /// through its two-way binding, before this has put the selection back. Taken at face value that
-    /// is the user choosing a different drive, so it drops the folder scope — and the refresh happens
-    /// as the picker opens, which is to say every time somebody looks at the list without touching
-    /// it. A refresh that finds the same drives unchanged now says nothing to the picker at all, but
-    /// one that finds a drive gone, or the free space on the chosen one moved, still does.</para>
+    /// is the user choosing a different drive, so it drops the folder scope — and the refresh can
+    /// happen as the picker opens, when somebody is only looking at the list. Rows are written over
+    /// in place, so only a reading that finds the chosen drive gone still does this.</para>
     /// </summary>
     private bool _refreshingDrives;
 
@@ -79,11 +78,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private string? _statedRefusal;
 
+    /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
     public ExploreViewModel(
-        ExploreScanner scanner, IVolumeInventory volumes, ExploreActions actions, ItemGuide guide)
+        ExploreScanner scanner,
+        IVolumeInventory volumes,
+        TimeProvider time,
+        ExploreActions actions,
+        ItemGuide guide)
     {
         _scanner = scanner;
         _volumes = volumes;
+        _drives = new DriveList(volumes, time);
         _guide = guide;
 
         Selection = new ExploreSelection(actions);
@@ -119,7 +124,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     public ExploreSelection Selection { get; }
 
     /// <summary>The volumes offered in the picker, each with what it is called and how full it is.</summary>
-    public ObservableCollection<DriveChoice> Drives { get; } = [];
+    public ObservableCollection<DriveEntry> Drives => _drives.Entries;
 
     /// <summary>
     /// What the current node holds, in the tree's own order: largest first once a scan has
@@ -133,7 +138,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
-    public partial DriveChoice? SelectedDrive { get; set; }
+    public partial DriveEntry? SelectedDrive { get; set; }
 
     /// <summary>
     /// The folder a scan is scoped to, or null for a whole drive.
@@ -345,6 +350,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial ExploreColouring SelectedColouring { get; set; }
 
     /// <summary>
+    /// Which set of colours the picture on screen is drawn in. See <see cref="ExploreScheme"/>.
+    /// Here rather than only on the page because the legend below has to be drawn in it too: a
+    /// legend in one set of colours beside a map in another names every band wrongly.
+    /// </summary>
+    [ObservableProperty]
+    public partial ExploreScheme SelectedScheme { get; set; }
+
+    partial void OnSelectedSchemeChanged(ExploreScheme value) =>
+        LiveList.Rewrite(AgeLegend, ExploreLegendBand.For(value));
+
+    /// <summary>
     /// What each colour on the map means, or an empty list where the colours are branches.
     ///
     /// <para>A legend is not decoration for this one. A hue per branch is self-explanatory, because
@@ -352,7 +368,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// without the scale beside it, and a picture whose colours the reader cannot decode is worse
     /// than one with no colours in it.</para>
     /// </summary>
-    public IReadOnlyList<ExploreLegendBand> AgeLegend => ExploreLegendBand.All;
+    public ObservableCollection<ExploreLegendBand> AgeLegend { get; } = [.. ExploreLegendBand.For(ExploreScheme.Standard)];
 
     /// <summary>
     /// Whether to show that legend: only when the colours are ages, only when there is a picture
@@ -631,10 +647,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// does not offer it. Null in, null out, so a path with no root and an absent drive are one case
     /// here rather than two at each caller.
     /// </summary>
-    private DriveChoice? Offered(string? volume) =>
-        volume is null
-            ? null
-            : Drives.FirstOrDefault(listed => listed.RootPath.Equals(volume, StringComparison.OrdinalIgnoreCase));
+    private DriveEntry? Offered(string? volume) => _drives.Find(volume);
 
     /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
@@ -647,7 +660,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>Only where a person chose it. See <see cref="_refreshingDrives"/> for the writes that
     /// come from rebuilding the list rather than from the picker.</para>
     /// </summary>
-    partial void OnSelectedDriveChanged(DriveChoice? value)
+    partial void OnSelectedDriveChanged(DriveEntry? value)
     {
         if (_refreshingDrives)
         {
@@ -760,6 +773,33 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
+    /// What the block for space in use that the scan did not count can be made of, most likely
+    /// first. A block with a size and no explanation reads as a fault in the scan, and every item
+    /// here is something the reader can check or act on.
+    ///
+    /// <para>Two versions, because the first item is the one an elevated scan fixes. Offering that
+    /// fix to a scan that is already elevated would send the reader round in a circle.</para>
+    /// </summary>
+    private const string UnaccountedCauses =
+        "\n• Restore points and shadow copies, which Windows keeps in System Volume Information."
+        + "\n• Space Windows keeps back for updates (reserved storage)."
+        + "\n• The file system's own records: the file table, its journals and the free-space map."
+        + "\n• Rounding: each file takes whole clusters, so many small files use more than their sizes."
+        + "\n• Files deleted while a program still has them open. The space comes back when it closes them."
+        + "\n• A disk quota, which makes Windows report less free space to this account.";
+
+    private const string UnaccountedNote =
+        "Windows says this much of the drive is in use beyond what the scan counted. It can include:"
+        + "\n• Folders this scan was not allowed to open, such as other accounts' files. Scan as "
+        + "administrator to count most of them."
+        + UnaccountedCauses;
+
+    private const string UnaccountedNoteElevated =
+        "Windows says this much of the drive is in use beyond what the scan counted. It can include:"
+        + "\n• Folders even an administrator's scan cannot open."
+        + UnaccountedCauses;
+
+    /// <summary>
     /// Say what the pointer is over. Called from the map on every move, so it formats and assigns
     /// and does nothing else — anything heavier here runs at the display's refresh rate.
     /// </summary>
@@ -776,8 +816,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             (_, { IsUnaccounted: true } unaccounted) => (
                 "In use, but not accounted for by this scan",
                 FreeSpace.Format(unaccounted.Bytes),
-                "Windows says this much of the drive is in use beyond what the scan counted: folders "
-                + "it could not read, and the file system's own records."),
+                ElevatedRelaunch.IsElevated ? UnaccountedNoteElevated : UnaccountedNote),
 
             ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
@@ -986,16 +1025,15 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Read the volumes again, so the picker offers what is mounted now and states how full it is
-    /// now.
+    /// Read the volumes again where the last reading has gone stale, so the picker offers what is
+    /// mounted now and states how full it is now. See <see cref="DriveList"/> for how often that is.
     ///
-    /// <para>Called whenever the picker is about to be read rather than once at startup. A mount
-    /// point does not go stale, but the space figures beside it do: a build, a download or a
-    /// removal through this very page moves them, and a picker still quoting the figures from when
-    /// the app opened is worse than one quoting none.</para>
+    /// <para>Called as the page is shown and as the picker opens rather than once at startup. A
+    /// mount point does not go stale, but the space figures beside it do: a build, a download or a
+    /// removal through this very page moves them.</para>
     ///
-    /// <para>The chosen volume survives the rebuild. It is found again by mount point, because the
-    /// entry that replaces it carries newer figures and so is not the same value.</para>
+    /// <para>The chosen volume keeps its row, because a row is written over rather than replaced.
+    /// Only a volume that has gone takes the selection with it.</para>
     /// </summary>
     public void RefreshDrives()
     {
@@ -1005,22 +1043,10 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         try
         {
-            _volumes.Invalidate();
-
-            _offered.Clear();
-
-            // Only volumes that can actually be read. An optical drive with no disc and a card
-            // reader with no card are both mounted and both answer no, and offering them is
-            // offering a scan that cannot start.
-            foreach (var volume in _volumes.Volumes.Where(v => v.IsReady && v.Kind != DriveType.Network))
+            if (!_drives.Refresh())
             {
-                _offered.Add(DriveChoice.From(volume));
+                return;
             }
-
-            // By mount point, so a refresh that finds the same drives with the same figures — which
-            // is most of them, most of the time — tells the picker nothing at all. An entry whose
-            // figures moved is replaced where it sits rather than the list being emptied and filled.
-            LiveList.Show(Drives, _offered, listed => listed.RootPath);
 
             // A refused volume is listed and is not defaulted onto. It is in the list because the
             // user can see the drive and needs to be told why it is not scanned, and it is not the
@@ -1028,7 +1054,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // that failed to start. Where every volume is refused there is nothing better to point
             // at, and ExplainRefusal below says so.
             SelectedDrive = Offered(chosen)
-                ?? Drives.FirstOrDefault(listed => !listed.IsRefused)
+                ?? Drives.FirstOrDefault(static listed => !listed.Choice.IsRefused)
                 ?? Drives.FirstOrDefault();
         }
         finally
@@ -1036,8 +1062,8 @@ public sealed partial class ExploreViewModel : ObservableObject
             _refreshingDrives = false;
         }
 
-        // A rebuild that hands the same volume back is not a choice, and the guard above stopped it
-        // reading as one. A rebuild that cannot — the drive was unplugged, the disc ejected, the
+        // A reading that hands the same volume back is not a choice, and the guard above stopped it
+        // reading as one. A reading that cannot — the drive was unplugged, the disc ejected, the
         // volume re-locked — has moved the page to a volume nobody picked, and that is a change of
         // drive however it came about. Leaving the scope and the offer alone there is exactly the
         // state OnSelectedDriveChanged exists to prevent: one target stated, another scanned.
@@ -1051,7 +1077,14 @@ public sealed partial class ExploreViewModel : ObservableObject
             OfferElevation(null);
         }
 
-        // After the guard, because the rebuild suppressed the selection's own handler. Without it
+        // A reading can change whether the chosen volume is refused without changing which row is
+        // chosen — the row is written over, not replaced — so the selection raises nothing and the
+        // two commands would go on answering for the last reading. §7.1: a button that scans a
+        // volume the status line has just refused is the page stating one thing and doing another.
+        ScanCommand.NotifyCanExecuteChanged();
+        ElevateAndRescanCommand.NotifyCanExecuteChanged();
+
+        // After the guard, because the reading suppressed the selection's own handler. Without it
         // the page can open pointed at a refused volume, with the button dead and nothing said.
         ExplainRefusal();
     }
