@@ -880,6 +880,14 @@ Scanning one level under the two application-data roots also leaves the browsers
 which is intended: Chrome and Edge keep their user data three levels down, and every
 general-purpose cleaner already reaches them.
 
+**Superseded (issue #43):** the browsers are now reached. Measured, the six directories in one
+browser's user data came to about 276 MB, so leaving them to other cleaners left a large case out.
+They are declared rather than walked, in `ChromiumBrowser`: a vendor and product table on the shape
+`ShaderCacheRoot` already used, because a depth-2 walk of both roots would multiply the candidates
+the one-marker design keeps few. Every declared path is checked segment by
+segment for a link before the marker is probed, since nothing enumerated it. `Local State` still
+decides what qualifies, and the six names and the §5.6 negatives are unchanged.
+
 Cleaners handle browsers. Almost none handle the desktop applications that embed the same engine,
 each carrying the same cache directories under its own vendor name.
 

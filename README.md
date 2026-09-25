@@ -117,7 +117,7 @@ installed" cleanly on a machine without that toolchain.
 | Roslyn solution index cache | One dated row per set of indexes, so the sets a program left behind when it moved folder can go; never the rest of Visual Studio's folder |
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
-| Chromium application caches | |
+| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, and every application that embeds the same engine |
 | Firefox caches | |
 | Steam web cache | |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |

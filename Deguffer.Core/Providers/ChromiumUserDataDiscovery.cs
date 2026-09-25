@@ -5,9 +5,15 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>One application's Chromium user-data folder, as found on disk.</summary>
 /// <param name="Name">
-/// The folder's own name, which is the application's name: Chromium's user-data folder is created
-/// by the embedding application under its own vendor name, so this is the only label available and
-/// it is the one the user will recognise in the folder listing.
+/// What the user knows the application as. For a declared browser that is its product name. For an
+/// application embedding the engine it is the folder's own name: the embedding application creates
+/// the folder under its own vendor name, so this is the only label available and it is the one the
+/// user will recognise in the folder listing.
+/// </param>
+/// <param name="ProcessName">
+/// The application's process, for §5.3's warning. A declared browser names it. For an embedding
+/// application the folder's name stands in for it, which is right far more often than not for an
+/// application that named its own data folder.
 /// </param>
 /// <param name="Path">The folder, in display form — a plan never holds an extended-length path.</param>
 /// <param name="Profiles">
@@ -25,13 +31,15 @@ namespace Deguffer.Core.Providers;
 /// </param>
 public sealed record ChromiumUserData(
     string Name,
+    string ProcessName,
     string Path,
     IReadOnlyList<string> Profiles,
     bool ProfilesIncomplete = false);
 
 /// <summary>
-/// Finds the Chromium user-data folders on this machine, one level under <c>%APPDATA%</c> and
-/// <c>%LOCALAPPDATA%</c>.
+/// Finds the Chromium user-data folders on this machine: one level under <c>%APPDATA%</c> and
+/// <c>%LOCALAPPDATA%</c>, where an application embedding the engine keeps its folder, and at each
+/// place a <see cref="ChromiumBrowser"/> declares, where a browser keeps its own.
 ///
 /// <para>Separate from <see cref="ChromiumCacheProvider"/> because the two answer different
 /// questions. This one answers "whose folder is this?", and the provider answers "what inside it
@@ -63,7 +71,8 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     private static partial Regex NumberedProfile();
 
     /// <summary>
-    /// Every Chromium user-data folder under the two application-data roots.
+    /// Every Chromium user-data folder under the two application-data roots, then every declared
+    /// browser's.
     ///
     /// <para>The roots hold hundreds of directories between them, so the order of the two checks is
     /// the performance design (G4): one file-existence check rejects almost every candidate, and
@@ -81,6 +90,7 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
         var found = new List<ChromiumUserData>();
 
         UnreadableRoots = [];
+        Obstructed = [];
 
         foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
         {
@@ -107,11 +117,66 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
                 }
 
                 var profiles = ProfilesUnder(path, out var incomplete);
-                found.Add(new ChromiumUserData(child.Name, path, profiles, incomplete));
+                found.Add(new ChromiumUserData(child.Name, child.Name, path, profiles, incomplete));
+            }
+        }
+
+        foreach (var browser in ChromiumBrowser.Declared)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (Identify(browser) is { } userData)
+            {
+                found.Add(userData);
             }
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// The declared browser's folder, if it holds <see cref="IdentifyingFile"/> and is reached
+    /// without passing through a link.
+    ///
+    /// <para><b>A declared path is built, not enumerated, so no listing has filtered its links
+    /// out.</b> The one-level walk above meets its only intermediate directory as a child of the
+    /// root, and a link there is set aside before anything is looked at. Here the vendor directory,
+    /// the product directory and the folder itself are joined from constants, and a junction at any
+    /// of them would put every deletion on the far side while each §5.6 survivor resolved through
+    /// the same link and passed. So every segment is checked before the marker is.</para>
+    ///
+    /// <para>An obstacle is recorded only where the browser may be behind it. A vendor directory
+    /// moved onto another drive is ordinary, and naming it for a browser that was never installed
+    /// would be a sentence about nothing. The marker is probed through the obstacle for that reason
+    /// alone: it decides whether to say something, never whether to look inside.</para>
+    /// </summary>
+    private ChromiumUserData? Identify(ChromiumBrowser browser)
+    {
+        if (browser.PathIn(environment) is not (var root, var userData))
+        {
+            return null;
+        }
+
+        var marker = Path.Combine(userData, IdentifyingFile);
+
+        if (DerivedPath.FirstObstacleBetween(root, userData) is { } obstacle)
+        {
+            if (LongPath.ProbeFile(marker) is not PathPresence.Absent)
+            {
+                Obstructed = [.. Obstructed, new ObstructedBrowser(browser, obstacle)];
+            }
+
+            return null;
+        }
+
+        if (!LongPath.FileExists(marker))
+        {
+            return null;
+        }
+
+        var path = LongPath.Display(userData);
+        var profiles = ProfilesUnder(path, out var incomplete);
+        return new ChromiumUserData(browser.Name, browser.ProcessName, path, profiles, incomplete);
     }
 
     /// <summary>
@@ -120,6 +185,13 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// machine: both roots sit inside the user's own profile.
     /// </summary>
     public IReadOnlyList<string> UnreadableRoots { get; private set; } = [];
+
+    /// <summary>
+    /// The declared browsers the last <see cref="Discover"/> did not look inside because a link, or
+    /// a segment Windows would not describe, stood between the application-data root and the
+    /// browser's folder. Empty on every ordinary machine.
+    /// </summary>
+    public IReadOnlyList<ObstructedBrowser> Obstructed { get; private set; } = [];
 
     /// <summary>
     /// The user-data folder itself, then its named profiles. The folder is always included because
@@ -150,3 +222,6 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     private static bool IsProfile(string name) =>
         name.Equals("Default", StringComparison.OrdinalIgnoreCase) || NumberedProfile().IsMatch(name);
 }
+
+/// <summary>A declared browser whose folder was not looked inside, and what stood in the way.</summary>
+public sealed record ObstructedBrowser(ChromiumBrowser Browser, DerivedPathObstacle Obstacle);

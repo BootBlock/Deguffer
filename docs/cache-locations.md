@@ -704,9 +704,9 @@ measured in seconds and there is no path by which anything is lost.
 
 | | |
 | --- | --- |
-| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%` |
+| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, and each Chromium-based browser's own user-data folder |
 | **Method** | Delete the six cache directories Chromium writes, per profile |
-| **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB |
+| **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB. One browser's `Code Cache` alone came to 194 MB on the same workstation |
 
 ### What it is
 
@@ -727,12 +727,26 @@ not need to know the application.
 | `DawnGraphiteCache`, `DawnWebGPUCache` | Compiled WebGPU pipelines |
 | `Service Worker\CacheStorage` | Responses a service worker stored for offline use |
 
+The browsers built on Chromium keep the same six directories, but further down: under a vendor
+folder and a product folder rather than directly in `%APPDATA%` or `%LOCALAPPDATA%`. Deguffer knows
+where each of these keeps its folder, including the beta, developer and nightly builds:
+
+| Browser | User-data folder |
+| --- | --- |
+| Google Chrome | `%LOCALAPPDATA%\Google\Chrome\User Data` (`Chrome Beta`, `Chrome Dev`, `Chrome SxS` and `Chrome for Testing` beside it) |
+| Chromium | `%LOCALAPPDATA%\Chromium\User Data` |
+| Microsoft Edge | `%LOCALAPPDATA%\Microsoft\Edge\User Data` (`Edge Beta`, `Edge Dev` and `Edge SxS` beside it) |
+| Brave | `%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data` (`-Beta` and `-Nightly` beside it) |
+| Vivaldi | `%LOCALAPPDATA%\Vivaldi\User Data` |
+| Opera, Opera GX | `%APPDATA%\Opera Software\Opera Stable`, `Opera GX Stable` |
+
 ### What Deguffer does
 
 **It identifies the folder before it looks inside it.** Any directory on your disk may happen to be
 called `GPUCache`, so a cache name is never on its own a reason to go in. Deguffer looks for
 `Local State`, the file Chromium writes into the user-data folder it owns, and only a folder holding
-that file is examined at all.
+that file is examined at all. The browser table above only says where to look: a browser's folder
+has to hold `Local State` too.
 
 Within such a folder it removes exactly the six directories above and nothing else, one step each,
 so you can clear one application and keep another. Where an application keeps several profiles —
@@ -765,7 +779,9 @@ survived, the ones that are files rather than folders included — those would o
 checked at all, because the rule that classifies a folder never sees a file.
 
 Deguffer also refuses to delete through a link. If you have redirected an application's cache to
-another drive with a junction, it removes nothing there and tells you why.
+another drive with a junction, it removes nothing there and tells you why. The same applies to a
+browser's folder and every folder above it: if you have moved `%LOCALAPPDATA%\Microsoft` onto
+another drive with a link, Deguffer names the link and leaves Edge alone.
 
 ### What it costs you
 
@@ -777,7 +793,8 @@ neighbouring directories, not in the six. An application that works offline need
 to refill what its service worker had stored.
 
 Close the applications first if you can. A running one keeps its cache files open, and anything held
-open is left in place rather than removed.
+open is left in place rather than removed. Edge can keep running in the background after its last
+window closes, so check the notification area for it.
 
 ### Why Tier 1
 
@@ -791,6 +808,16 @@ An application installed from the Microsoft Store does not write to `%APPDATA%`.
 it under `%LOCALAPPDATA%\Packages`, and reaching a Chromium cache there is a separate piece of work
 that is not done yet. If one of your Store applications embeds Chromium, Deguffer does not currently
 see its cache.
+
+### Not reached: what a browser keeps beside its profiles
+
+Edge keeps `component_crx_cache`, `extensions_crx_cache` and `GrShaderCache` in its user-data folder,
+beside the profiles, and on one workstation they came to about 210 MB together. None of them is one
+of the six, so all three stay in place until somebody classifies them deliberately.
+
+Opera keeps its web cache in `%LOCALAPPDATA%\Opera Software\Opera Stable`, apart from its settings.
+That folder holds no `Local State`, so Deguffer does not identify it, and Opera's web cache stays in
+place. Any of the six that Opera keeps beside its settings in `%APPDATA%` is reached.
 
 ---
 
