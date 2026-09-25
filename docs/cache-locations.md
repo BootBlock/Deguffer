@@ -1431,13 +1431,109 @@ in place rather than removed.
 Both are copies of pages and files Valve's servers still have. The client downloads what it needs
 again the next time it needs it, and nothing that only exists on your disk is in either of them.
 
-### Not reached: the shader cache
+### The shader cache is a separate row
 
-`steamapps\shadercache` holds compiled shaders per game and is commonly several gigabytes where
-pre-caching is enabled. It sits inside a Steam library, and a library can be on any drive rather than
-only beside the program, so reaching every copy of it means finding every library rather than reading
-one recorded path. No machine with one to measure was available either, so it is left for its own
-change.
+`steamapps\shadercache`, the shaders Steam downloads for each game, is not part of this row. Getting
+it back costs a download from Valve rather than a slower page, so it is Tier 2 and has a row of its
+own: see [Steam shader pre-cache](#steam-shader-pre-cache).
+
+---
+
+## Steam shader pre-cache
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `steamapps\shadercache\<app id>` in every Steam library |
+| **Method** | Delete the folders for single games, one item each |
+| **Typical size** | Nothing measured here: pre-caching was off, and the folder was empty. Reports from machines with large libraries and pre-caching on run past 60 GB |
+
+### What it is
+
+A game compiles its shaders for your graphics card the first time it needs them, and it stutters
+while it does. With **Shader Pre-Caching** switched on in Steam's settings, Steam downloads those
+shaders already compiled for your card and driver, and keeps them per game:
+
+```
+<Steam library>\steamapps\shadercache\<app id>\fozpipelinesv6\...
+```
+
+Every Steam library has one, and a library can be on any drive. The folder is named by the game's
+Steam application id, such as `440`, rather than by the game's name.
+
+### What Deguffer does
+
+**It reads Steam's own list of your libraries.** Steam records every library you have added in
+`steamapps\libraryfolders.vdf` under the install directory, and Deguffer reads that file rather than
+searching your drives. Both the current layout of the file and the older one are understood. If the
+list cannot be read or does not make sense, Deguffer still looks in the library beside the Steam
+program, and the plan says plainly that any other library was neither cleared nor ruled out.
+
+**Only folders named as a game are offered.** Inside `shadercache`, a child is removed only if its
+name is a Steam application id: digits only, and no larger than Steam allows. Anything else, such as
+`backup` or `440.old`, stays in Tier 4, and the plan names it.
+
+**Each game is its own item, named as Steam names it.** Deguffer lists the games in the row's items,
+so you can choose them one by one and keep one you want to hold on to. It reads each game's name from
+Steam's manifest for it, `appmanifest_<app id>.acf`, and says whether the game is still installed in
+any library. A cache for a game you have uninstalled costs nothing to remove. Where a manifest is
+missing, the item shows the app id instead. Where Deguffer could not look in every library, it says
+nothing about whether a game is installed rather than guess.
+
+**A library the list names but Deguffer cannot place**, an entry with no full path, is named on the
+plan as a warning, and a shader cache in it is neither cleared nor ruled out.
+
+**No row where there is nothing to reclaim.** An empty `shadercache`, or one holding only empty game
+folders, produces no row. Steam keeps the folder even with pre-caching switched off.
+
+Steam can delete pre-cached shaders itself, from **Settings → Shader Pre-Caching**. That is a button
+in a running client, not a command Deguffer can run, so the folders are deleted directly.
+
+### What is protected
+
+**Everything in the library except the game folders inside `shadercache`**, and the things that matter
+most are asserted by name after a clean rather than covered by an assertion on the folder above them:
+
+| Neighbour | What it really is |
+| --- | --- |
+| The library folder and `steamapps` | Your games, and Steam's records of them |
+| `steamapps\common` | The games themselves, on disk |
+| `steamapps\downloading` | The half-downloaded part of an update. Removing it restarts the download |
+| `steamapps\temp` | Steam's working space for an update in progress |
+| `steamapps\workshop` | Workshop content you subscribed to |
+| `steamapps\sourcemods` | Mods for Source games that you installed yourself |
+| `steamapps\libraryfolders.vdf` | Steam's list of your game libraries |
+| `libraryfolder.vdf` | Steam's record that a folder is one of its libraries |
+| `steamapps\appmanifest_<app id>.acf` | Steam's record that a game is installed, for each game whose cache is removed |
+| `steamapps\shadercache` itself | The container. Only the game folders inside it go |
+
+Explore enforces the same rule: in every library it refuses `steamapps`, everything in it, and
+`shadercache` itself, and allows only a game's folder inside `shadercache`.
+
+Deguffer also refuses to look through a link. If `steamapps` or `shadercache` is a link to another
+drive, or a game's folder is, it removes nothing there and tells you why.
+
+### What it costs you
+
+**While pre-caching is on, Steam downloads the shaders again from Valve for each game you play**,
+which can be several gigabytes. With it off, a game compiles its own shaders as it runs, and stutters
+the first time each scene appears.
+
+**Your games, your saves, your Workshop content and any download in progress are untouched.**
+
+Close Steam first if you can. The client downloads and processes shader caches while it runs, and a
+plan made with Steam open warns you.
+
+### Why Tier 2, not Tier 1
+
+A shader cache the game or driver rebuilds on your machine is Tier 1, as the
+[GPU shader caches](#gpu-shader-caches) are. This one is downloaded. Switching pre-caching off and on
+again is reported to fetch all of it again from Valve
+([steam-for-linux#13215](https://github.com/ValveSoftware/steam-for-linux/issues/13215)), so the
+cost of removing it is bandwidth and time rather than a moment of stutter. That is the second tier
+by definition.
 
 ---
 

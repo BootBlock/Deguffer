@@ -27,8 +27,8 @@ public class StepGrainTests
     /// its row into a list of folder names nobody chooses between, and one that lists items and
     /// declared <see cref="StepGrain.Parts"/> would hide a lone item behind its row.
     ///
-    /// <para>All three providers that let an item be kept are here, which is what keeps a kept item
-    /// listed where it can be released.</para>
+    /// <para>Every provider that lets an item be kept is here, which is what keeps a kept item listed
+    /// where it can be released.</para>
     /// </summary>
     [Fact]
     public void TheProvidersWhoseStepsAreItemsAreExactlyThese()
@@ -45,6 +45,7 @@ public class StepGrainTests
             "python-venv",
             "roslyn-cache",
             "squirrel-superseded-versions",
+            "steam-shader-cache",
             "unity-library",
             "vscode-cpptools",
         ];
