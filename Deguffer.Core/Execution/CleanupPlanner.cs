@@ -21,7 +21,7 @@ public sealed class CleanupPlanner
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
-    /// web caches, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// web caches and the shader caches it downloads per game, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
@@ -31,7 +31,7 @@ public sealed class CleanupPlanner
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, PlatformIO, Playwright, the Azure Functions Core Tools
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, PlatformIO, Playwright, the Azure Functions Core Tools
     /// releases and the superseded Squirrel builds, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -126,6 +126,7 @@ public sealed class CleanupPlanner
         new EpicLauncherWebCacheProvider(environment),
         new EpicLauncherContentCacheProvider(environment),
         new SteamCacheProvider(environment),
+        new SteamShaderCacheProvider(environment),
         new SpotifyCacheProvider(environment),
         new AffinityModelCacheProvider(environment),
         new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),

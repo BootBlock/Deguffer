@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -62,6 +63,7 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     public const string RootMarker = "steam.exe";
 
     private SteamInstall? _install;
+    private SteamLibraries? _libraries;
 
     /// <summary>Steam's folder in the profile. Known outright, and independent of the install.</summary>
     public string LocalRoot { get; } =
@@ -73,8 +75,75 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     /// </summary>
     public SteamInstall Install => _install ??= Find();
 
-    /// <summary>Drop the memoised answer, so a Steam installed while the app was open is seen.</summary>
-    public void Invalidate() => _install = null;
+    /// <summary>
+    /// Every game library the install's own list names, memoised with <see cref="Install"/>. Null
+    /// where the install itself was not found, because the list is kept inside it and there is then
+    /// nothing to read it from.
+    /// </summary>
+    public SteamLibraries? Libraries =>
+        Install.Root is { } root ? _libraries ??= SteamLibraryFolders.Of(root) : null;
+
+    /// <summary>
+    /// Drop the memoised answers, so a Steam installed, or a library added, while the app was open is
+    /// seen.
+    /// </summary>
+    public void Invalidate()
+    {
+        _install = null;
+        _libraries = null;
+    }
+
+    /// <summary>
+    /// The sentence a plan owes about an install directory this machine gave no usable answer for, or
+    /// null when it was found — or when there is no Steam in this profile to be missing one.
+    ///
+    /// <para>Gated on the profile folder because the alternative is to tell somebody who has never
+    /// installed Steam that Deguffer could not find it. A profile folder Windows would not describe
+    /// passes the gate: it is no evidence that Steam was never installed, and the sentence it lets
+    /// through is true either way.</para>
+    ///
+    /// <para>A warning where Windows would not describe the recorded directory, because that is not
+    /// Deguffer's own decision, and information otherwise. Here rather than on a provider because
+    /// every provider that looks inside the install owes the same sentence, and only what it did not
+    /// look at differs.</para>
+    /// </summary>
+    /// <param name="unexamined">
+    /// What was therefore not looked at, as a singular noun phrase in lower case, such as "the cache
+    /// Steam keeps beside the program".
+    /// </param>
+    public PlanNote? UnreachedInstallNote(string unexamined)
+    {
+        if (Install.Root is not null)
+        {
+            return null;
+        }
+
+        var sentenceCase = char.ToUpperInvariant(unexamined[0]) + unexamined[1..];
+
+        if (Install.UnreachedRoot is { } refused)
+        {
+            return new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Windows records Steam as installed in '{refused}', and would not say what is there, so "
+                + "Deguffer could not check for the Steam program or look inside it. A link Windows will "
+                + "not follow, a folder this account may not read and a drive that is not connected all do "
+                + $"that. {sentenceCase} was neither cleared nor ruled out.");
+        }
+
+        if (!LongPath.DirectoryMayExist(LocalRoot))
+        {
+            return null;
+        }
+
+        return new PlanNote(
+            PlanNoteSeverity.Information,
+            Install.UnmarkedRoot is { } unmarked
+                ? $"Windows records Steam as installed in '{unmarked}', but the Steam program is not "
+                    + $"there. Deguffer did not look inside it, so {unexamined} was neither cleared nor "
+                    + "ruled out."
+                : "Deguffer could not work out where Steam is installed, so it did not look at "
+                    + $"{unexamined}. It was neither cleared nor ruled out.");
+    }
 
     private SteamInstall Find()
     {

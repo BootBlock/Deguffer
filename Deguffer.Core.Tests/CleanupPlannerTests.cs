@@ -389,7 +389,7 @@ public sealed class CleanupPlannerTests
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
-                "epic-launcher-content-cache", "steam", "spotify", "affinity-model-cache",
+                "epic-launcher-content-cache", "steam", "steam-shader-cache", "spotify", "affinity-model-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
                 "claude-code-leftovers", "recycle-bin", "file-history", "temp-directories", "crash-dumps",
@@ -401,7 +401,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "cargo-target", "node-modules", "python-venv",
-                "conda", "maven", "vcpkg", "affinity-model-cache", "platformio", "playwright",
+                "conda", "maven", "vcpkg", "steam-shader-cache", "affinity-model-cache", "platformio", "playwright",
                 "squirrel-superseded-versions", "azure-functions-tools", "temp-directories",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
