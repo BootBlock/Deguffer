@@ -273,6 +273,7 @@
                 CornerRadius="6">
             <Grid>
                 <controls:ExploreMap x:Name="Map"
+                                     Zoomable="True"
                                      KeyboardAcceleratorPlacementMode="Hidden">
                     <!--
                         What the thing under the pointer actually is, where the app knows. Not the

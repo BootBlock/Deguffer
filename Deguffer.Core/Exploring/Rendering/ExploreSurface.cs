@@ -124,7 +124,8 @@ public abstract class ExploreSurface
         int width,
         int height,
         LayoutLimits limits,
-        ShapeColours colours)
+        ShapeColours colours,
+        MapViewport? viewport)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(colours);
@@ -135,6 +136,7 @@ public abstract class ExploreSurface
         Root = root;
         Width = width;
         Height = height;
+        Viewport = viewport;
         Limits = limits;
         _colours = colours;
         _hues = new BranchHues(tree, root);
@@ -143,6 +145,18 @@ public abstract class ExploreSurface
     public int Width { get; }
 
     public int Height { get; }
+
+    /// <summary>
+    /// The part of the whole picture this drawing shows, or null where this way of drawing cannot be
+    /// zoomed and it shows all of it.
+    ///
+    /// <para>Said by the drawing rather than assumed by the caller, because the caller asks for a view
+    /// and does not always get it: a scan still running is drawn as an icicle whichever view was
+    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport)"/>).
+    /// A caller that took its own zoom as what was drawn would place the picture, and resolve a click
+    /// on it, for a zoom the picture does not have (§7.1).</para>
+    /// </summary>
+    public MapViewport? Viewport { get; }
 
     /// <summary>
     /// Where the text goes. At most <see cref="MaximumLabels"/> inside shapes, and for a treemap a
@@ -206,6 +220,10 @@ public abstract class ExploreSurface
     /// a whole volume and to nothing inside it, so a folder the reader has opened is drawn without
     /// it.
     /// </param>
+    /// <param name="viewport">
+    /// The part of the picture to show. Only the treemap can be zoomed, and every other drawing shows
+    /// the whole picture whatever this asks; <see cref="Viewport"/> says which happened.
+    /// </param>
     public static ExploreSurface Create(
         ISizedTree tree,
         int root,
@@ -216,7 +234,8 @@ public abstract class ExploreSurface
         double textScale,
         ShapeColours colours,
         ExploreSpacing spacing,
-        VolumeSpace volume)
+        VolumeSpace volume,
+        MapViewport viewport = default)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -245,7 +264,8 @@ public abstract class ExploreSurface
             // the user switches back, and it is the one they last saw.
             _ => new TiledSurface(
                 tree, root, width, height, limits, colours,
-                TreemapLayout.Compute(tree, root, width, height, limits, beside)),
+                TreemapLayout.Compute(tree, root, width, height, limits, beside, viewport),
+                viewport),
         };
     }
 

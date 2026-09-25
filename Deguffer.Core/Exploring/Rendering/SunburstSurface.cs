@@ -18,7 +18,7 @@ public sealed class SunburstSurface : ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours)
-        : base(tree, root, width, height, limits, colours)
+        : base(tree, root, width, height, limits, colours, viewport: null)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
 
