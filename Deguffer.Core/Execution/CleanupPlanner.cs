@@ -23,7 +23,7 @@ public sealed class CleanupPlanner
     /// shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
-    /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
@@ -34,7 +34,7 @@ public sealed class CleanupPlanner
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, PlatformIO, Playwright, the Azure Functions Core Tools
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -158,6 +158,7 @@ public sealed class CleanupPlanner
             new EmbyTranscodeProvider(environment),
             new AffinityModelCacheProvider(environment),
             new CaptureOneCacheProvider(environment, liveTrees: liveTrees),
+            new ResolveRenderCacheProvider(environment),
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
             new PlatformIoCacheProvider(environment),
             new PlaywrightBrowsersProvider(environment),

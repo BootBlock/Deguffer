@@ -2470,6 +2470,118 @@ Sources:
 
 ---
 
+## DaVinci Resolve render cache
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | Each project's folder inside a hidden `CacheClip` folder, at the root of a local drive or in your Videos folder |
+| **Method** | Delete each project folder that holds render files and nothing else, and nothing else in `CacheClip` or beside it |
+| **Typical size** | Not measured here: no render cache existed on the machine this was written on, although Resolve 20 was installed. The format you choose sets the size. At 25 frames a second, ProRes 422 HQ at 1920×1080 is about 23 MB a second of timeline, and DNxHR HQX at 3840×2160 about 87 MB a second |
+
+### What it is
+
+DaVinci Resolve renders the graded and effected parts of a timeline ahead of time, so that playback
+stays real time. Its manual says it writes them to a hidden `CacheClip` folder in the first Media
+Storage location you set, and to the system disk if you set none. Inside it, Resolve keeps one folder
+of `.dvcc` render files for each project. Resolve creates the folder the first time it writes to the
+cache, so a machine with Resolve installed and no `CacheClip` folder is the ordinary case.
+
+### How Deguffer finds it
+
+**Where Resolve puts it by default, and nowhere else.** Deguffer looks for `CacheClip` at the root of
+each drive on this computer, including a USB drive, and in your Videos folder. One report finds the
+cache in the Videos folder where no Media Storage location was set, and Resolve's manual gives no path
+for that case. A network share and a drive whose files are stored in the cloud are not searched, and
+neither is a Videos folder that has been moved onto one: a Resolve on another computer may be writing
+there, and Deguffer can see only what runs on this one.
+
+**Deguffer never reads Resolve's settings or its project database** to work out where the cache is.
+The database's name, format and layout are undocumented and change between versions, and a deletion
+target worked out from them is one nobody can check. So one limit is stated here rather than left to
+be discovered:
+
+- **A Media Storage location that is not a drive's root is not searched.** If you set Resolve's first
+  location to a folder such as `D:\Resolve`, use Resolve's own **Delete Render Cache** instead.
+
+### What Deguffer does
+
+Inside `CacheClip`, **only a folder that holds `.dvcc` render files and nothing else, at every
+depth, is offered**, as one project's render cache. A project folder is removed whole, so one holding
+any other file, or a link, is left alone and named. Everything else in `CacheClip` is Tier 4, whether
+or not Deguffer knows what it is. The cache folder itself stays.
+
+**`OptimizedMedia` is never offered, although it holds `.dvcc` files too.** Resolve writes optimised
+media into the same folder as its render cache, with the same extension, so its name is the only
+thing that tells the two apart. Resolve's manual says optimised media must be deleted by hand, so it
+is not a cache Resolve rebuilds on its own. A folder whose name begins with `OptimizedMedia`, such as
+a copy called `OptimizedMedia_old`, is refused, and `ProxyMedia` is refused in the same way.
+
+A `CacheClip` that is a link, or a project folder that is a link, is left alone and named. A
+`CacheClip` or a project folder that Windows will not list is named, and the row does not claim to be
+clear.
+
+**Nothing is offered while Resolve is running.** Resolve writes the cache while it is open, and can
+keep running in the background after its window closes. While it runs, every `CacheClip` is left
+alone and named, and Explore will not remove anything in it. The same question is asked again when
+you press Clean.
+
+### What is protected
+
+Resolve writes its cache into a folder that holds your only copies of your work. **What Resolve
+writes beside `CacheClip` is named, checked after the run, and refused in Explore**, and none of it is
+ever a target:
+
+- **`Capture`**: audio you recorded in Resolve, such as voiceover. Nothing can recreate it.
+- **`ProjectBackup`**: Resolve's backups of your projects and timelines.
+- **`Resolve Live`**: the snapshots Resolve Live took on set.
+- **`.gallery`**: your saved stills and PowerGrades.
+- **`ProxyMedia`**: your proxies. Resolve can edit with the proxies alone, and with the camera
+  originals archived a proxy is the only copy that can be edited.
+
+Inside `CacheClip`, `OptimizedMedia`, `ProxyMedia` and anything not recognised are checked and refused
+in the same way. Anything else beside `CacheClip`, such as your footage, is not something this row
+reaches at all.
+
+### What it costs you
+
+**Resolve renders the cache again as you play each timeline**, so graded and effected sections play
+back slowly until it has, which for a long graded timeline takes hours. It can do that only while the
+media is connected. Your projects, media, optimised media, proxies, backups and recordings are
+untouched.
+
+### Why Tier 2, not Tier 1
+
+The render cache is produced from your media and your grade, and Resolve re-creates it by itself as
+you work, so nothing is lost. The refill is the render itself, though. Resolve caches a section
+because it plays slower than real time, so each second of cache costs at least a second of rendering,
+and a feature's cache is hundreds of gigabytes of it. That is §3's "re-indexing for minutes", the
+same reason the Unreal Engine derived data cache is Tier 2. With the media on a drive that is not
+connected, nothing can be rendered again until it is.
+
+**Resolve has its own ways to delete the cache, and Deguffer cannot drive any of them.** They are
+**Playback → Delete Render Cache**, with **All**, **Unused** or **Selected Clips**, the Cache Manager
+under **Playback → Manage Render Cache**, and, from Resolve 20, a preference that deletes cache older
+than a number of days. All of them are inside the running program. The Cache Manager gives no
+warning and has no undo. Resolve's scripting interface has no call that deletes the cache, and
+external scripting needs the paid edition.
+
+Sources:
+
+- DaVinci Resolve 20 reference manual:
+  <https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf>
+- DaVinci Resolve 19 reference manual:
+  <https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_19_Reference_Manual.pdf>
+- A render cache in the Videos folder, where no location was set:
+  <https://learn.microsoft.com/en-us/answers/questions/4351404/can-i-delete-cacheclip-folder-in-videos>
+- Apple ProRes white paper, for the ProRes 422 HQ rate: <https://www.apple.com/final-cut-pro/docs/Apple_ProRes.pdf>
+- Avid DNxHR codec bandwidth specifications:
+  <https://kb.avid.com/pkb/articles/en_US/Knowledge/DNxHR-Codec-Bandwidth-Specifications>
+
+---
+
 ## Squirrel updater leftovers
 
 | **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |

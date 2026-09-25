@@ -5,9 +5,9 @@
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs and completed upgrade scaffolding, §7's per-volume recycle bins, §8's Unreal Engine
-> derived-data caches, §10's release of OneDrive's local copies and §12's Squirrel staging and
-> superseded builds have shipped; everything else is unstarted. **Open questions 1, 2 and 3 are
-> answered** — see the foot of this document.
+> derived-data caches and DaVinci Resolve render cache, §10's release of OneDrive's local copies
+> and §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
+> **Open questions 1, 2 and 3 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -1414,6 +1414,14 @@ preferences — a signal that path deletion here is expected rather than clever.
 The same shape appears in `%LOCALAPPDATA%\Adobe\CameraRaw\Cache`, in DaVinci Resolve's cache and
 optimised-media directories, and in Blender's temporary render directory. None appeared on the
 audited machine, so all of it is documentation rather than observation.
+
+**Outcome for DaVinci Resolve:** its render cache shipped at Tier 2 as
+`ResolveRenderCacheProvider`, not the Tier 1 this entry implies, because the refill is the render
+itself. The cache is found in a `CacheClip` folder at the root of each local drive and in the Videos
+folder, never derived from Resolve's settings, and only a project folder holding `.dvcc` files and
+nothing else is offered. Resolve's manual corrected this entry: optimised media is written inside
+`CacheClip`, not beside it, and it is refused by name. See
+[../cache-locations.md](../cache-locations.md).
 
 ### Game engine derived-data caches — Tier 2, present but empty ✅ done
 
