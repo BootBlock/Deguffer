@@ -794,7 +794,7 @@ not need to know the application.
 | `Code Cache` | JavaScript and WebAssembly compiled ahead of time |
 | `GPUCache` | Compiled graphics pipelines |
 | `GrShaderCache`, `ShaderCache` | Compiled graphics shaders, for the engine's renderer and for the graphics layer beneath it |
-| `GraphiteDawnCache` | Compiled graphics pipelines, for the engine's renderer when it draws through WebGPU |
+| `GraphiteDawnCache` | Compiled graphics pipelines, in a directory of its own beside `DawnGraphiteCache` |
 | `DawnGraphiteCache`, `DawnWebGPUCache` | Compiled WebGPU pipelines |
 | `DawnCache` | Compiled WebGPU pipelines, under the name older builds of the engine gave that cache. Battle.net's engine still writes it |
 | `Service Worker\CacheStorage` | Responses a service worker stored for offline use |
@@ -898,10 +898,9 @@ see its cache.
 ### Not reached: what a browser keeps beside its profiles
 
 Edge keeps `component_crx_cache` and `extensions_crx_cache` in its user-data folder, beside the
-profiles, and chat clients built on the engine keep `component_crx_cache` too. They hold component
-and extension updates waiting to be installed rather than a cache, and nothing has established what
-removing them costs, so both stay in place. The `GrShaderCache` Edge keeps beside them is one of
-the ten, and is removed.
+profiles, and chat clients built on the engine keep `component_crx_cache` too. That one holds
+component updates waiting to be installed rather than a cache. Nothing has established what removing
+either of them costs, so both stay in place.
 
 Opera keeps its web cache in `%LOCALAPPDATA%\Opera Software\Opera Stable`, apart from its settings.
 That folder holds no `Local State`, so Deguffer does not identify it, and Opera's web cache stays in

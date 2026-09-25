@@ -251,10 +251,10 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.2's dangerous direction, and the whole reason this provider is an exact allow-list. Every
-    /// one of these sits in the same folder in the same naming style as the ten, four of them with
-    /// the word "Cache" in the name, and every one of them is user data or live state. The two
-    /// <c>_crx_cache</c> directories are staging areas for component and extension updates rather
-    /// than caches, and nothing has established what removing them costs.
+    /// one of these sits in the same folder in the same naming style as the ten, three of them with
+    /// the word "cache" in the name. The first six are user data or live state.
+    /// <c>component_crx_cache</c> stages component updates rather than caching anything, and
+    /// nothing has established what removing either <c>_crx_cache</c> directory costs.
     /// </summary>
     [Theory]
     [InlineData("Local Storage")]

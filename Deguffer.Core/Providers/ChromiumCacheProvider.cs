@@ -88,8 +88,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 SafetyTier.RegenerableCache,
                 "Compiled WebGPU pipelines. The application rebuilds them on demand."),
 
-            // Skia's Graphite renderer drawing through Dawn, as opposed to WebGPU content drawing
-            // through it: the name puts the two words the other way round from DawnGraphiteCache.
+            // A separate directory from DawnGraphiteCache, not a misspelling of it: the engine writes
+            // both names, and a user-data folder was measured holding this one beside GPUCache.
             new ChildClassification(
                 "GraphiteDawnCache",
                 SafetyTier.RegenerableCache,
