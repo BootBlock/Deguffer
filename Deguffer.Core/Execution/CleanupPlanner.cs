@@ -138,6 +138,7 @@ public sealed class CleanupPlanner
             new CondaCacheProvider(environment),
             new CargoCacheProvider(environment),
             new GoCacheProvider(environment),
+            new ZigCacheProvider(environment),
             new MavenRepositoryProvider(environment),
             new VcpkgCacheProvider(environment),
             new GpuShaderCacheProvider(environment),

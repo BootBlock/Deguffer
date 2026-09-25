@@ -217,11 +217,8 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
     /// otherwise offer that folder. Only the per-version directories Node makes are recognised in it.
     /// </para>
     ///
-    /// <para><b>Declined where it would make this row assert what it does not own.</b> Examining a
-    /// folder as Node's names everything else in it as a survivor (§5.6). A drive root, a folder
-    /// holding a temporary folder, or one holding a folder Windows is built out of is somewhere other
-    /// rows legitimately remove things, and each of those removals would then read as a failure of
-    /// this one — and in Explore the whole of it would read as Node's.</para>
+    /// <para><b>Declined where it would make this row assert what it does not own.</b> See
+    /// <see cref="ConfiguredFolder"/>.</para>
     /// </summary>
     private NodeCacheSetting ConfiguredNodeCache(IReadOnlyList<string> accountFolders)
     {
@@ -238,29 +235,8 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
             return default;
         }
 
-        if (string.IsNullOrEmpty(Path.GetDirectoryName(unaliased)))
-        {
-            return new NodeCacheSetting(configured, null, "it is the root of a drive or a share.");
-        }
-
-        string[] mustNotHold =
-        [
-            .. accountFolders,
-            Path.Combine(Machine.WindowsDirectory, "Temp"),
-            Environment.UserProfile,
-            Environment.RoamingAppData,
-            Environment.LocalAppData,
-            Machine.WindowsDirectory,
-            Machine.ProgramData,
-            Machine.ProgramFiles,
-            Machine.ProgramFilesX86,
-        ];
-
-        return mustNotHold.Any(inside => inside.Length > 0 && LongPath.Contains(unaliased, LongPath.Unaliased(inside)))
-            ? new NodeCacheSetting(
-                configured,
-                null,
-                "it holds a temporary folder, or a folder Windows is built out of, where other rows remove things.")
+        return ConfiguredFolder.WhyNotOwned(configured, Environment, Machine, accountFolders) is { } declined
+            ? new NodeCacheSetting(configured, null, declined)
             : new NodeCacheSetting(configured, configured, null);
     }
 

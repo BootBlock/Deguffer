@@ -466,30 +466,43 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MinimumAge keep,
         CancellationToken ct)
     {
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], keep, ct).ConfigureAwait(false);
+        if (targets.FirstOrDefault(t => t.IndexedBy is { Count: > 0 } && t.Kind != TargetKind.Directory) is { Path: { } unindexable })
+        {
+            throw new ArgumentException($"Only a directory removed outright can carry an index: {unindexable}.", nameof(targets));
+        }
+
+        // An index is removed with the directory it indexes, so it is measured with it: one step's
+        // figure is the sum of several paths, and the pairing of sizes with paths is positional.
+        var measured = await MeasureAllAsync(
+            [.. targets.SelectMany(t => (IEnumerable<string>)[t.Path, .. t.IndexedBy ?? []])], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
+        var next = 0;
+
+        foreach (var target in targets)
         {
-            var target = targets[i];
+            var span = Enumerable.Range(next, 1 + (target.IndexedBy?.Count ?? 0)).ToList();
+            next += span.Count;
+
+            var size = span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]);
 
             DeleteStep step = target.Kind switch
             {
                 TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
                 TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
                 TargetKind.DirectoryContents => new ClearDirectoryStep(target.Path, target.Reason),
-                _ => new DeleteDirectoryStep(target.Path, target.Reason),
+                _ => new DeleteDirectoryStep(target.Path, target.Reason) { IndexedBy = target.IndexedBy ?? [] },
             };
 
             steps.Add(step with
             {
                 Estimated = target.Kind is TargetKind.DirectoryContents or TargetKind.RecycleBin
-                    ? WithoutItsOwnEntry(measured.Sizes[i])
-                    : measured.Sizes[i],
+                    ? WithoutItsOwnEntry(size)
+                    : size,
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
-                WithheldRecent = measured.WithheldRecent[i],
-                MailStores = measured.MailStores[i],
+                WithheldRecent = span.Any(i => measured.WithheldRecent[i]),
+                MailStores = [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
                 Identity = target.Identity,
                 IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],
@@ -580,6 +593,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// back.</b> Windows clears its directories whole and there is no direct route to fall back on,
     /// because the handler is chosen for what it does besides deleting. Where the guard holds nothing
     /// back it is satisfied, and the step stays.</para>
+    ///
+    /// <para><b>So is a directory that goes with its index</b>, for the reason that step gives: see
+    /// <see cref="DeleteDirectoryStep.IndexedBy"/>.</para>
     /// </summary>
     /// <param name="keep">
     /// The guard actually in force, which is the stricter of the user's and the provider's own.
@@ -604,12 +620,24 @@ public abstract class CleanupProviderBase : ICleanupProvider
             .Where(step => step.WithheldRecent)
             .ToList();
 
+        // A directory goes only once its whole index has, and a manifest the guard kept would name an
+        // output nobody could then promise is there. See DeleteDirectoryStep.IndexedBy.
+        var indexed = plan.Steps
+            .OfType<DeleteDirectoryStep>()
+            .Where(step => step.IndexedBy.Count > 0 && step.WithheldRecent)
+            .ToList();
+
         var notes = new List<PlanNote>(plan.Notes);
 
         notes.AddRange(whole.Select(step => new PlanNote(
             PlanNoteSeverity.Information,
             $"Leaving {LongPath.Display(step.Path)} alone: Windows clears it whole, and something in it "
             + $"{keep.DescribeChange()}.")));
+
+        notes.AddRange(indexed.Select(step => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Leaving {LongPath.Display(step.Path)} and its index alone: they go together and whole or not "
+            + $"at all, and something in them {keep.DescribeChange()}.")));
 
         // Only where there is something to say it about. Every plan comes through here, including
         // the empty one a provider returns for a toolchain that is not installed — and "the sizes
@@ -642,7 +670,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         return plan with
         {
             Keep = keep,
-            Steps = [.. plan.Steps.Except(files).Except(whole)],
+            Steps = [.. plan.Steps.Except(files).Except(whole).Except(indexed)],
             Notes = notes,
             ProtectedPaths =
             [
@@ -650,6 +678,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 .. files.Select(step => (Path: step.Path, Reason: $"Left alone because it {keep.DescribeChange()}."))
                     .Concat(whole.SelectMany(step => step.Destroys).Select(path => (Path: path, Reason:
                         $"Left alone because Windows clears it whole, and something it would clear {keep.DescribeChange()}.")))
+                    .Concat(indexed.SelectMany(step => step.Destroys).Select(path => (Path: path, Reason:
+                        $"Left alone because it goes whole with its index or not at all, and something there {keep.DescribeChange()}.")))
                     .Select(withheld => new ProtectedPath(
                         withheld.Path,
                         withheld.Reason,

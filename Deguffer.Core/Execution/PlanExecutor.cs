@@ -356,9 +356,10 @@ public sealed class PlanExecutor(
     {
         // A directory whose parts only mean something together is looked at first, on the disk: anything
         // the guard would keep, or a folder that would not be listed, and the removal below would leave a
-        // part of it standing. See DeleteDirectoryStep.IsAllOrNothing.
-        if (step.IsAllOrNothing
-            && (await WholeTreeLook.TakeAsync([step.Path], keep, ct).ConfigureAwait(false))
+        // part of it standing. A directory that goes with its index is one of these by construction. See
+        // DeleteDirectoryStep.IsAllOrNothing and DeleteDirectoryStep.IndexedBy.
+        if ((step.IsAllOrNothing || step.IndexedBy.Count > 0)
+            && (await WholeTreeLook.TakeAsync(step.Destroys, keep, ct).ConfigureAwait(false))
                 .WhyNot("Its parts only mean something together, so it goes whole or not at all", keep) is { } partial)
         {
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, partial);
@@ -367,7 +368,7 @@ public sealed class PlanExecutor(
         // §9, for a directory that goes whole or not at all: the walk below would step over a store that
         // arrived since the preview and take what belongs with it. Looked for on the disk, as it is before
         // Windows empties a bin. See DeleteDirectoryStep.IsIndivisible.
-        if (step.IsIndivisible && await MailStoreSearch.InsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } arrived)
+        if (step.IsIndivisible && await MailStoreSearch.InsideAsync(step.Destroys, ct).ConfigureAwait(false) is { Count: > 0 } arrived)
         {
             return new StepOutcome(
                 step.Description,
@@ -379,10 +380,29 @@ public sealed class PlanExecutor(
                 MailStores: arrived.Count);
         }
 
+        // The index first, and the directory it indexes only once all of it is gone. See
+        // DeleteDirectoryStep.IndexedBy.
+        var index = await IndexRemoval.RemoveAsync(step, keep, refusals, leftStanding, ct).ConfigureAwait(false);
+
+        if (!index.Complete)
+        {
+            return index.Stopped(step);
+        }
+
         var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
         refusals.Replace(step.Path, removal.RefusedAt);
         leftStanding.Record(step.Path, removal.LeftStanding);
+
+        // The index went with it, so what the step reports is both. Nothing is added where there is none.
+        removal = removal with
+        {
+            BytesReclaimed = removal.BytesReclaimed + index.BytesReclaimed,
+            Refused = removal.Refused + index.Refused,
+            RefusedFolders = removal.RefusedFolders + index.RefusedFolders,
+            EntriesRemoved = removal.EntriesRemoved + index.EntriesRemoved,
+            Kept = removal.Kept + index.Kept,
+        };
 
         // A refusal is not a failure (§5.3). The step only fails if the directory survived intact
         // and nothing at all was reclaimed — that is, we achieved nothing.
@@ -395,7 +415,7 @@ public sealed class PlanExecutor(
         // it reclaims no bytes.
         // An Outlook mail store left where it was is something achieved for the same reason: it is the
         // outcome §9 requires, and a folder holding nothing else would otherwise read as a failure.
-        var stores = removal.MailStores.Count;
+        var stores = removal.MailStores.Count + index.MailStores;
 
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0
             || removal.EntriesRemoved > 0 || stores > 0;

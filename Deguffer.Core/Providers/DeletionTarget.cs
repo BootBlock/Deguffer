@@ -57,6 +57,10 @@ public enum TargetKind
 /// <param name="UseCheck">
 /// What the run asks again before removing it. See <see cref="Execution.DeleteStep.UseCheck"/>.
 /// </param>
+/// <param name="IndexedBy">
+/// The directories holding this directory's index, which are measured and removed with it. Null for
+/// none. See <see cref="Execution.DeleteDirectoryStep.IndexedBy"/>.
+/// </param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
@@ -67,4 +71,5 @@ public readonly record struct DeletionTarget(
     bool IsLeftover = false,
     IReadOnlyList<Execution.ItemFacet>? Facets = null,
     string? Group = null,
-    Execution.IUseCheck? UseCheck = null);
+    Execution.IUseCheck? UseCheck = null,
+    IReadOnlyList<string>? IndexedBy = null);
