@@ -75,16 +75,18 @@ public sealed class CloudFiles : ICloudFiles
             : SyncProviderState.Running;
     }
 
+    /// <summary>
+    /// <para><b>Placeholders are exposed for the listing and for nothing else.</b> Windows disguises a
+    /// placeholder as an ordinary file to every process but the sync app connected to its root, so
+    /// the listing Deguffer is given carries neither the reparse attribute nor the tag, and every
+    /// file in a OneDrive folder read as one that is no placeholder at all. The mode is the calling
+    /// thread's, set around each call that lists and put back straight after, so no other file
+    /// operation in the process sees a placeholder it was not written to expect.</para>
+    /// </summary>
     public IEnumerable<CloudEntry> List(string directory, CancellationToken ct)
     {
         var display = LongPath.Display(directory);
-        var handle = FindFirstFileEx(
-            Path.Join(LongPath.Extended(directory), "*"),
-            FindExInfoBasic,
-            out var data,
-            FindExSearchNameMatch,
-            searchFilter: 0,
-            FindFirstExLargeFetch);
+        var handle = FindFirst(Path.Join(LongPath.Extended(directory), "*"), out var data);
 
         if (handle == InvalidHandle)
         {
@@ -102,11 +104,50 @@ public sealed class CloudFiles : ICloudFiles
                     yield return entry;
                 }
             }
-            while (FindNextFile(handle, out data));
+            while (FindNext(handle, out data));
         }
         finally
         {
             FindClose(handle);
+        }
+    }
+
+    /// <summary>The first entry of a listing, made with placeholders exposed to this thread.</summary>
+    private static nint FindFirst(string pattern, out FindData data)
+    {
+        var previous = RtlSetThreadPlaceholderCompatibilityMode(ExposePlaceholders);
+
+        try
+        {
+            return FindFirstFileEx(pattern, FindExInfoBasic, out data, FindExSearchNameMatch, searchFilter: 0, FindFirstExLargeFetch);
+        }
+        finally
+        {
+            Restore(previous);
+        }
+    }
+
+    /// <summary>The next entry of a listing, on the same terms as <see cref="FindFirst"/>.</summary>
+    private static bool FindNext(nint handle, out FindData data)
+    {
+        var previous = RtlSetThreadPlaceholderCompatibilityMode(ExposePlaceholders);
+
+        try
+        {
+            return FindNextFile(handle, out data);
+        }
+        finally
+        {
+            Restore(previous);
+        }
+    }
+
+    /// <summary>The thread's own mode back, where setting it answered one.</summary>
+    private static void Restore(sbyte previous)
+    {
+        if (previous >= 0)
+        {
+            RtlSetThreadPlaceholderCompatibilityMode(previous);
         }
     }
 

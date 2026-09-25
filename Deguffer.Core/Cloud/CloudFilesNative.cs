@@ -51,6 +51,10 @@ internal static unsafe partial class CloudFilesNative
     private const uint OpenReparsePoint = 0x0020_0000;
     private const int FileBasicInfoClass = 0;
 
+    /// <summary><c>PHCM_DISGUISE_PLACEHOLDER</c> and <c>PHCM_EXPOSE_PLACEHOLDERS</c>.</summary>
+    public const sbyte DisguisePlaceholders = 1;
+    public const sbyte ExposePlaceholders = 2;
+
     public const int FindExInfoBasic = 1;
     public const int FindExSearchNameMatch = 0;
     public const uint FindFirstExLargeFetch = 0x0002;
@@ -158,6 +162,13 @@ internal static unsafe partial class CloudFilesNative
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool FindClose(nint findFile);
+
+    /// <summary>
+    /// Set how placeholders appear to the calling thread, and answer the mode it had, or a negative
+    /// value where it could not be set.
+    /// </summary>
+    [LibraryImport("ntdll.dll")]
+    public static partial sbyte RtlSetThreadPlaceholderCompatibilityMode(sbyte mode);
 
     [LibraryImport("cldapi.dll")]
     public static partial uint CfGetPlaceholderStateFromAttributeTag(uint fileAttributes, uint reparseTag);
