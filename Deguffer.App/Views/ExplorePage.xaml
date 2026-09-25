@@ -215,7 +215,7 @@
             Where you are, and the way back out. A breadcrumb rather than a path in a label: every
             tool in this category lets you climb back by clicking a step, and a label does not.
         -->
-        <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*"
+        <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto"
               Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
             <Button Grid.Column="0"
                     Padding="8,4"
@@ -252,6 +252,16 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- How the mouse moves the treemap, which nothing on the map itself says. Terse because
+                 it sits beside the trail on every visit, and spelled out for a screen reader. -->
+            <TextBlock Grid.Column="2"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Text="Wheel: zoom · LMB drag: pan · Dbl-click: open"
+                       Visibility="{x:Bind ViewModel.ShowsMapControls, Mode=OneWay}"
+                       AutomationProperties.Name="Turn the mouse wheel over the map to zoom, drag with the left button to move it, and double-click a folder to open it." />
         </Grid>
 
         <!--

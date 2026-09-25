@@ -1,16 +1,15 @@
-using System.Runtime.InteropServices.WindowsRuntime;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
 using Windows.UI.ViewManagement;
 
@@ -19,10 +18,11 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// Draws a scanned tree, and says what the pointer is over.
 ///
-/// <para>The geometry is one bitmap. A full volume lays out to tens of thousands of shapes, and the
+/// <para>The geometry is a bitmap. A full volume lays out to tens of thousands of shapes, and the
 /// framework's own performance guidance is that a vector element repeated enough times should
 /// become an image instead — which is also what every reference implementation does, WinDirStat
-/// rendering into a cached surface and blitting it rather than keeping a shape per file.</para>
+/// rendering into a cached surface and blitting it rather than keeping a shape per file. A zoomed
+/// picture keeps a few, one per part of it drawn: see <see cref="ExploreLayers"/>.</para>
 ///
 /// <para>Two things are not in the bitmap, and each has a control of its own:
 /// <see cref="ExploreLabels"/> for the names, so they scale with the user's text size, and
@@ -52,12 +52,13 @@ public sealed class ExploreMap : UserControl
     private static readonly TimeSpan ResizeSettleTime = TimeSpan.FromMilliseconds(120);
 
     /// <summary>
-    /// Where the bitmap is moved and magnified to while a zoom is on its way, and where it stays
-    /// otherwise, which is nowhere. Kept and written through rather than replaced at each frame (G5).
+    /// How far a pressed pointer has to move, in device-independent pixels, before it drags the picture
+    /// rather than clicking it. The size of the rectangle Windows itself allows a click to wander in
+    /// before it calls it a drag.
     /// </summary>
-    private readonly CompositeTransform _placed = new();
+    private const double DragThreshold = 4;
 
-    private readonly Image _surface;
+    private readonly PixelScratch _scratch = new();
 
     private readonly ExploreLabels _labels = new();
 
@@ -66,6 +67,41 @@ public sealed class ExploreMap : UserControl
     private readonly DispatcherQueueTimer _settled;
 
     private readonly ExploreZoom _zoom = new();
+
+    private readonly ExploreDescent _descent = new();
+
+    /// <summary>The pointer's look while it drags the picture. One for the life of the map (G5).</summary>
+    private readonly InputCursor _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
+
+    /// <summary>
+    /// The drawings of the picture on screen. See <see cref="ExploreLayers"/>. Swapped with
+    /// <see cref="_departing"/> as a folder opens, so the old picture can go on showing while the new
+    /// one grows over it.
+    /// </summary>
+    private ExploreLayers _pictures;
+
+    /// <summary>The picture a folder is opening out of, while it does, and empty otherwise.</summary>
+    private ExploreLayers _departing;
+
+    /// <summary>
+    /// The folder the page is being asked to open, and where its shape is on the screen, for the one
+    /// moment the request is being made. See <see cref="OnDoubleTapped"/>.
+    /// </summary>
+    private (int Node, MapFrame Shape)? _opening;
+
+    /// <summary>
+    /// Where the left button went down on a picture that can be dragged, and then where the drag was
+    /// last seen, for as long as the button is held.
+    /// </summary>
+    private Point? _held;
+
+    private bool _dragging;
+
+    /// <summary>
+    /// Whether the last press dragged the picture, so the click the framework may still raise at its
+    /// release picks nothing: the reader was moving the picture, not pointing at a shape in it.
+    /// </summary>
+    private bool _dragged;
 
     /// <summary>
     /// What everything drawn is cut to while the picture is zoomed. A zoomed picture's shapes, their
@@ -134,8 +170,13 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private MapViewport _drawn;
 
-    private WriteableBitmap? _bitmap;
-    private byte[]? _pixels;
+    /// <summary>
+    /// What the colours say in every drawing of the picture on screen, taken once per picture from
+    /// <see cref="_colours"/>. A zoom that stops later draws in the same colours as the drawings kept
+    /// under it, or an age band could change at the edge of one.
+    /// </summary>
+    private ShapeColours? _shapeColours;
+
     private double _scale = 1;
     private ExploreHit? _hovered;
 
@@ -144,32 +185,35 @@ public sealed class ExploreMap : UserControl
 
     public ExploreMap()
     {
-        _surface = new Image
-        {
-            // The bitmap is rendered at the display's pixel size and stretched back over the
-            // control's logical size, so this maps one bitmap pixel to one device pixel rather than
-            // resampling.
-            Stretch = Stretch.Fill,
-            RenderTransform = _placed,
-        };
+        _pictures = new ExploreLayers(_scratch);
+        _departing = new ExploreLayers(_scratch);
 
         // The outlines go over the picture and under the labels. A label is inset from its shape's
         // edge and an outline runs along it, so the two rarely meet — and where they do, the name
-        // of the thing is worth more than the last pixel of the line round it.
+        // of the thing is worth more than the last pixel of the line round it. The picture a folder
+        // is opening out of goes under the one opening, which grows over it. Ordered by index rather
+        // than by position, because the two pictures change places at every opening.
         //
-        // The ground is transparent rather than absent, so the whole control takes the pointer. While
-        // a zoom out is on its way the bitmap is shrunk inside the control, and without a ground the
-        // space around it is not hit-testable: the wheel turns that finish the zoom out, and the
-        // pointer's moves, went to whatever was behind the map instead.
+        // The ground is transparent rather than absent, so the whole control takes the pointer. The
+        // pictures themselves take none of it, so what is under the pointer is always this
+        // control's own answer rather than whichever bitmap happens to be topmost there.
         _layers = new Grid
         {
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Children = { _surface, _highlight, _labels },
+            Children = { _departing.Element, _pictures.Element, _highlight, _labels },
         };
         Content = _layers;
 
+        Canvas.SetZIndex(_departing.Element, 0);
+        Canvas.SetZIndex(_pictures.Element, 1);
+        Canvas.SetZIndex(_highlight, 2);
+        Canvas.SetZIndex(_labels, 3);
+
         _zoom.Moved += OnZoomMoved;
-        _zoom.Arrived += (_, _) => Redraw();
+        _zoom.Arrived += (_, _) => OnZoomArrived();
+
+        _descent.Moved += OnDescentMoved;
+        _descent.Arrived += OnDescentArrived;
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -177,7 +221,11 @@ public sealed class ExploreMap : UserControl
         _settled.Tick += (_, _) => Redraw();
 
         SizeChanged += OnSizeChanged;
+        PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
+        PointerReleased += OnDragEnded;
+        PointerCanceled += OnDragEnded;
+        PointerCaptureLost += OnDragEnded;
         PointerExited += OnPointerExited;
         PointerWheelChanged += OnPointerWheelChanged;
         DoubleTapped += OnDoubleTapped;
@@ -211,22 +259,30 @@ public sealed class ExploreMap : UserControl
             // over the old canvas for as long as the page is open.
             //
             // The same goes for a zoom that was still moving when the page was left. It was finished
-            // where it was going rather than eased for nobody, so the drawing is of where it was.
-            if (_drawing is { } drawing
-                && (drawing.Width != DevicePixels(ActualWidth)
-                    || drawing.Height != DevicePixels(ActualHeight)
-                    || _drawn != _zoom.Shown))
+            // where it was going rather than eased for nobody, so the drawing is of where it was, and
+            // the drawings kept of the rest of the picture are still good for the one it went to.
+            if (_drawing is { } drawing)
             {
-                Redraw();
+                if (drawing.Width != DevicePixels(ActualWidth) || drawing.Height != DevicePixels(ActualHeight))
+                {
+                    Redraw();
+                }
+                else if (_drawn != _zoom.Shown)
+                {
+                    OnZoomArrived();
+                }
             }
         };
 
         Unloaded += (_, _) =>
         {
             // A pending redraw for a size this control is no longer showing at. Left running it
-            // would rasterise a whole volume for a page that has been navigated away from.
+            // would rasterise a whole volume for a page that has been navigated away from. A folder
+            // still opening, or a drag still held, is finished where it was going for the same reason.
             _settled.Stop();
             _zoom.Stop();
+            _descent.Finish();
+            EndDrag();
 
             // The labels go back with it. Dropping the redraw drops the thing that would have put
             // them back, and Loaded only redraws where the size has actually moved — so without
@@ -265,13 +321,18 @@ public sealed class ExploreMap : UserControl
             + "contents as a readable list.");
     }
 
-    /// <summary>The node the user asked to open, by double-clicking a shape.</summary>
+    /// <summary>
+    /// The node the user asked to open, by double-clicking a shape. A page that opens it by showing it
+    /// here, before this returns, has it open out of its shape on a treemap. See
+    /// <see cref="OnDoubleTapped"/>.
+    /// </summary>
     public event EventHandler<int>? Activated;
 
     /// <summary>
-    /// Whether the mouse wheel zooms the picture, where the drawing can be zoomed at all. Off unless
-    /// the page asks, because every new tree starts from the whole picture, and a page that draws a
-    /// new tree every few seconds would take the reader's zoom away every few seconds.
+    /// Whether the mouse wheel zooms the picture and the left button drags it, where the drawing can
+    /// be zoomed at all. Off unless the page asks, because every new tree starts from the whole
+    /// picture, and a page that draws a new tree every few seconds would take the reader's zoom away
+    /// every few seconds.
     /// </summary>
     public bool Zoomable { get; set; }
 
@@ -345,12 +406,34 @@ public sealed class ExploreMap : UserControl
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
 
+        // A folder opened by a double-click on its shape, in the same tree and the same view, opens
+        // out of that shape. Anything else arriving here is not what the double-click asked for.
+        var opening = _opening is { } asked && asked.Node == node && ReferenceEquals(tree, _tree) && view == _view
+            ? asked.Shape
+            : (MapFrame?)null;
+
         // A zoom is into one picture. Another tree, another folder or another view is another
         // picture, and the part of this one the reader had magnified means nothing in it. A new
         // colouring, scheme or spacing is the same picture, so the zoom stays.
         if (!ReferenceEquals(tree, _tree) || node != _node || view != _view)
         {
+            _descent.Finish();
+            EndDrag();
             _zoom.Reset();
+
+            // The picture on screen stays, to open out of, and the new one is drawn into the other
+            // set of layers over it.
+            if (opening is not null && _drawing is not null)
+            {
+                (_pictures, _departing) = (_departing, _pictures);
+
+                Canvas.SetZIndex(_departing.Element, 0);
+                Canvas.SetZIndex(_pictures.Element, 1);
+            }
+            else
+            {
+                opening = null;
+            }
         }
 
         _tree = tree;
@@ -362,6 +445,24 @@ public sealed class ExploreMap : UserControl
         _volume = volume;
 
         Redraw();
+
+        if (opening is not { } shape)
+        {
+            return;
+        }
+
+        if (_drawing is null)
+        {
+            _departing.Clear();
+            return;
+        }
+
+        // The names and the outlines are the new drawing's, at the size it will be when it has
+        // opened, so they wait for it the way they wait for a zoom.
+        _labels.Hide();
+        _highlight.Visibility = Visibility.Collapsed;
+        _descent.Start(shape);
+        Place();
     }
 
     /// <summary>
@@ -421,7 +522,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_bitmap is null)
+        if (_drawing is null)
         {
             Redraw();
             return;
@@ -444,8 +545,9 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Put the bitmap, and the outlines over it, where the zoom on screen says the drawing belongs:
-    /// over the whole control, unless a zoom is on its way and the drawing is of where it started.
+    /// Put the drawings, and the outlines over them, where the zoom on screen says each belongs:
+    /// the one worked from over the whole control, unless a zoom is on its way and it is of where the
+    /// zoom started, and the others where their parts of the picture are.
     /// </summary>
     private void Place()
     {
@@ -453,23 +555,22 @@ public sealed class ExploreMap : UserControl
 
         // Cut only while something can run past the edges. Unzoomed, nothing does except the halo of
         // an outline round a shape at the edge, which has always been drawn whole.
-        _layers.Clip = _zoom.Shown.IsWhole && _drawn.IsWhole ? null : _edges;
+        _layers.Clip = _zoom.Shown.IsWhole && _drawn.IsWhole && !_descent.IsMoving ? null : _edges;
+
+        _pictures.Place(_zoom.Shown, ActualWidth, ActualHeight);
 
         var placement = _zoom.Shown.PlacementOf(_drawn);
-        var onto = new Rect(
-            placement.X * ActualWidth,
-            placement.Y * ActualHeight,
-            placement.Scale * ActualWidth,
-            placement.Scale * ActualHeight);
-
-        _placed.ScaleX = placement.Scale;
-        _placed.ScaleY = placement.Scale;
-        _placed.TranslateX = onto.X;
-        _placed.TranslateY = onto.Y;
 
         if (_drawing is { } drawing)
         {
-            _highlight.StretchOver(drawing.Width, drawing.Height, onto);
+            _highlight.StretchOver(
+                drawing.Width,
+                drawing.Height,
+                new Rect(
+                    placement.X * ActualWidth,
+                    placement.Y * ActualHeight,
+                    placement.Scale * ActualWidth,
+                    placement.Scale * ActualHeight));
         }
     }
 
@@ -493,14 +594,14 @@ public sealed class ExploreMap : UserControl
         var width = DevicePixels(ActualWidth);
         var height = DevicePixels(ActualHeight);
 
-        if (_tree is not { } tree || width <= 0 || height <= 0 || tree.SizeOf(_node) <= 0)
+        if (_tree is null || width <= 0 || height <= 0 || _tree.SizeOf(_node) <= 0)
         {
-            // The bitmap goes with the source. Keeping it would let the reuse below match on size
-            // and never reattach it, leaving the control blank until the window is resized.
-            _surface.Source = null;
-            _bitmap = null;
-            _pixels = null;
+            // Every bitmap goes, and the buffer they were painted through: a map with nothing to
+            // show holds no memory for it.
+            _pictures.Clear();
+            _scratch.Release();
             _drawing = null;
+            _shapeColours = null;
             _hovered = null;
             _labels.Clear();
             _highlight.Clear();
@@ -515,21 +616,59 @@ public sealed class ExploreMap : UserControl
         // The clock is read here rather than held, because the age bands are relative to now and
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
-        //
-        // Drawn at the zoom on screen now, which is partway through a move if one is on its way: a
-        // repaint mid-move is placed for the rest of the move like any other drawing.
-        var drawing = ExploreSurface.Create(
-            tree,
-            _node,
-            _view,
-            width,
-            height,
-            _scale,
-            SystemSettings.TextScaleFactor,
-            _colours(DateTime.UtcNow),
-            _spacing,
-            _volume,
-            _zoom.Shown);
+        _shapeColours = _colours(DateTime.UtcNow);
+
+        // Every drawing kept is of the picture as it was, so none of them is shown again. Drawn at
+        // the zoom on screen now, which is partway through a move if one is on its way: a repaint
+        // mid-move is placed for the rest of the move like any other drawing.
+        _pictures.Forget();
+
+        Present(_pictures.Show(_zoom.Shown, Draw, Ground()));
+    }
+
+    /// <summary>
+    /// Show the picture where a zoom or a drag stopped: the drawing kept of that part of it, where
+    /// there is one, and a new one otherwise. The picture has not changed, so every drawing already
+    /// made of it still stands.
+    /// </summary>
+    private void OnZoomArrived()
+    {
+        // Left for Loaded, which shows the arrival when the map is back, as it does a redraw.
+        if (!IsLoaded || Visibility != Visibility.Visible || _drawing is null)
+        {
+            return;
+        }
+
+        if (_zoom.Shown == _drawn)
+        {
+            // Nothing new to draw, and the names are still where this drawing put them.
+            _labels.Reveal();
+            Place();
+            return;
+        }
+
+        Present(_pictures.Show(_zoom.Shown, Draw, Ground()));
+    }
+
+    /// <summary>
+    /// A drawing of the picture on screen at <paramref name="viewport"/>, at the control's size now.
+    /// </summary>
+    private ExploreSurface Draw(MapViewport viewport) => ExploreSurface.Create(
+        _tree!,
+        _node,
+        _view,
+        DevicePixels(ActualWidth),
+        DevicePixels(ActualHeight),
+        _scale,
+        SystemSettings.TextScaleFactor,
+        _shapeColours!,
+        _spacing,
+        _volume,
+        viewport);
+
+    /// <summary>Work from <paramref name="drawing"/>, which is on top of the rest now.</summary>
+    private void Present(ExploreSurface drawing)
+    {
         _drawing = drawing;
 
         // A drawing that cannot be zoomed shows the whole picture whatever was asked, and the zoom
@@ -545,24 +684,14 @@ public sealed class ExploreMap : UserControl
             _drawn = MapViewport.Whole;
         }
 
-        // Both reused while the size holds. A scan redraws this every three quarters of a second,
-        // and at 3840 by 2160 the buffer alone is 33 MB of large-object-heap allocation — several
-        // megabytes of garbage per second, for a surface whose dimensions only change when the
-        // window does (G5).
-        if (_bitmap is not { } bitmap || bitmap.PixelWidth != width || bitmap.PixelHeight != height)
-        {
-            bitmap = new WriteableBitmap(width, height);
-            _bitmap = bitmap;
-            _pixels = new byte[PixelBuffer.LengthFor(width, height)];
-            _surface.Source = bitmap;
-        }
-
-        drawing.Paint(_pixels!, Ground());
-
-        _pixels!.CopyTo(0, bitmap.PixelBuffer, 0, _pixels!.Length);
-        bitmap.Invalidate();
-
         _labels.Show(drawing, _scale, LabelText);
+
+        // A resize settling while a folder opens draws the new picture again, and its names wait for
+        // it to finish opening like the first drawing's.
+        if (_descent.IsMoving)
+        {
+            _labels.Hide();
+        }
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now, and so is whatever the pointer is over.
@@ -679,14 +808,25 @@ public sealed class ExploreMap : UserControl
     /// something the user never pointed at — the same mistake <c>ExplorePage</c> avoids by picking
     /// from the row under the pointer rather than from the last selection.</para>
     ///
-    /// <para>A zoom on its way is the same case again. The screen shows the drawing moved and
-    /// magnified, so the point is taken back through that placement first. A point the moved drawing
-    /// does not reach is over nothing, even where a shape running off the drawing's edge would
-    /// contain it: the screen is blank there.</para>
+    /// <para>A zoom or a drag on its way is the same case again. The screen shows the drawing moved
+    /// and magnified, so the point is taken back through that placement first. A point the moved
+    /// drawing does not reach is over nothing, even where a shape running off the drawing's edge would
+    /// contain it, and even though a kept drawing shows there: that one is at another zoom, it names
+    /// fewer shapes than the drawing that replaces it a moment later, and the outline that would
+    /// confirm the pick is drawn in this drawing's geometry, not in its. A folder opening is over
+    /// nothing throughout, for the same reason: the picture is on its way to being another one.</para>
     /// </summary>
-    private ExploreHit? At(ExploreSurface drawing, Point point)
+    private ExploreHit? At(ExploreSurface drawing, Point point) =>
+        InDrawing(drawing, point) is (var x, var y) ? drawing.At(x, y) : null;
+
+    /// <summary>
+    /// Where <paramref name="point"/>, in the control's own coordinates, falls in
+    /// <paramref name="drawing"/>'s canvas, or null where the drawing does not reach it. See
+    /// <see cref="At"/>.
+    /// </summary>
+    private (float X, float Y)? InDrawing(ExploreSurface drawing, Point point)
     {
-        if (ActualWidth <= 0 || ActualHeight <= 0)
+        if (ActualWidth <= 0 || ActualHeight <= 0 || _descent.IsMoving)
         {
             return null;
         }
@@ -694,8 +834,26 @@ public sealed class ExploreMap : UserControl
         var (x, y) = _zoom.Shown.PlacementOf(_drawn).InDrawing(point.X / ActualWidth, point.Y / ActualHeight);
 
         return x is >= 0 and < 1 && y is >= 0 and < 1
-            ? drawing.At((float)(x * drawing.Width), (float)(y * drawing.Height))
+            ? ((float)(x * drawing.Width), (float)(y * drawing.Height))
             : null;
+    }
+
+    /// <summary>
+    /// Where the shape at <paramref name="point"/> is on the screen, in fractions of it, or null where
+    /// there is no shape there or it is not a rectangle.
+    /// </summary>
+    private MapFrame? ShapeAt(ExploreSurface drawing, Point point)
+    {
+        if (InDrawing(drawing, point) is not (var x, var y) || drawing.TileAt(x, y) is not { } tile)
+        {
+            return null;
+        }
+
+        return _zoom.Shown.PlacementOf(_drawn).OnScreen(new MapFrame(
+            tile.X / (double)drawing.Width,
+            tile.Y / (double)drawing.Height,
+            tile.Width / (double)drawing.Width,
+            tile.Height / (double)drawing.Height));
     }
 
     /// <summary>
@@ -717,6 +875,8 @@ public sealed class ExploreMap : UserControl
         {
             return;
         }
+
+        _descent.Finish();
 
         _pointer = point.Position;
         _zoom.Turn(
@@ -747,11 +907,98 @@ public sealed class ExploreMap : UserControl
         FollowPointer();
     }
 
+    /// <summary>
+    /// Get ready to drag the picture, where the page allows it and the picture can be zoomed.
+    ///
+    /// <para>Nothing moves yet, and the press is left for the framework to make a click of. Whether
+    /// it is a drag is decided by how far it goes: see <see cref="OnPointerMoved"/>.</para>
+    /// </summary>
+    private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(this);
+
+        _dragged = false;
+
+        if (!Zoomable || _drawing is not { Viewport: not null } || !point.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        _descent.Finish();
+        _held = point.Position;
+    }
+
+    /// <summary>
+    /// Drag the picture with the left button held, once it has moved past what a click allows, and
+    /// otherwise say what is under the pointer.
+    ///
+    /// <para>The pointer is captured for the drag, so a hand that leaves the map while dragging goes on
+    /// moving the picture and its release is still heard.</para>
+    /// </summary>
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        _pointer = e.GetCurrentPoint(this).Position;
+        var point = e.GetCurrentPoint(this);
+        var position = point.Position;
+
+        _pointer = position;
+
+        if (_held is { } held && ActualWidth > 0 && ActualHeight > 0)
+        {
+            // Let go somewhere this control never heard about, before any drag had captured it.
+            if (!point.Properties.IsLeftButtonPressed)
+            {
+                _held = null;
+            }
+            else if (_dragging || Math.Abs(position.X - held.X) >= DragThreshold || Math.Abs(position.Y - held.Y) >= DragThreshold)
+            {
+                if (!_dragging)
+                {
+                    _dragging = true;
+                    _dragged = true;
+                    CapturePointer(e.Pointer);
+                    ProtectedCursor = _dragCursor;
+                }
+
+                _held = position;
+                _zoom.Drag((position.X - held.X) / ActualWidth, (position.Y - held.Y) / ActualHeight);
+
+                e.Handled = true;
+                return;
+            }
+        }
 
         FollowPointer();
+    }
+
+    /// <summary>The button came up, or the pointer was taken away: the drag is over and worth drawing.</summary>
+    private void OnDragEnded(object sender, PointerRoutedEventArgs e)
+    {
+        if (EndDrag())
+        {
+            _zoom.Release();
+        }
+    }
+
+    /// <summary>
+    /// Stop dragging, and say whether there was a drag to stop. The picture stays where the drag
+    /// left it, and the caller decides whether it is worth drawing there.
+    /// </summary>
+    private bool EndDrag()
+    {
+        _held = null;
+
+        if (!_dragging)
+        {
+            return false;
+        }
+
+        // Cleared first, because letting go of the capture raises the capture-lost event that
+        // brings the pointer back here.
+        _dragging = false;
+        ProtectedCursor = null;
+        ReleasePointerCaptures();
+
+        return true;
     }
 
     /// <summary>
@@ -823,7 +1070,13 @@ public sealed class ExploreMap : UserControl
         Report(null);
     }
 
-    private void OnTapped(object sender, TappedRoutedEventArgs e) => Pick(e.GetPosition(this));
+    private void OnTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (!_dragged)
+        {
+            Pick(e.GetPosition(this));
+        }
+    }
 
     private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
@@ -852,16 +1105,84 @@ public sealed class ExploreMap : UserControl
         });
     }
 
+    /// <summary>
+    /// Open what was double-clicked, and zoom to it where it cannot be opened.
+    ///
+    /// <para>A treemap draws what a folder holds inside the folder's own shape, so going into one is
+    /// a zoom into that shape, and it is animated as one: the shape grows from where it was until it
+    /// fills the map, and the folder's own drawing grows in over it. The page is what decides whether
+    /// a node opens, and it says so by showing it here before <see cref="Activated"/> returns, so the
+    /// shape is handed over for that moment and only for it.</para>
+    ///
+    /// <para>What does not open, a file, the block standing in for items too small to draw, or the
+    /// block standing for free space, is zoomed to until it fills the map as far as its shape allows.
+    /// For the block of small items that is how they come to be drawn one by one.</para>
+    /// </summary>
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (_drawing is not { } drawing)
+        var point = e.GetPosition(this);
+
+        if (_dragged || _drawing is not { } drawing || At(drawing, point) is not { } hit)
         {
             return;
         }
 
-        if (At(drawing, e.GetPosition(this)) is { IsNode: true } hit)
+        // Only a treemap nests: an icicle draws what a shape holds below it rather than in it.
+        var shape = drawing.Viewport is null ? null : ShapeAt(drawing, point);
+
+        if (hit.IsNode)
         {
-            Activated?.Invoke(this, hit.Node);
+            var standing = _node;
+
+            _opening = shape is { } opening ? (hit.Node, opening) : null;
+
+            try
+            {
+                Activated?.Invoke(this, hit.Node);
+            }
+            finally
+            {
+                _opening = null;
+            }
+
+            if (_node != standing)
+            {
+                return;
+            }
+        }
+
+        if (Zoomable && shape is { } frame)
+        {
+            _zoom.GlideTo(MapViewport.Fitting(_zoom.Shown.PictureOf(frame)));
+        }
+    }
+
+    /// <summary>
+    /// One frame of a folder opening: the old picture stretched so the folder's shape fills more of
+    /// the map, and the folder's own drawing over it on the same frame, coming in.
+    /// </summary>
+    private void OnDescentMoved(object? sender, EventArgs e)
+    {
+        _departing.Carry(_descent.Departing, 1, ActualWidth, ActualHeight);
+        _pictures.Carry(_descent.Opened, _descent.Opacity, ActualWidth, ActualHeight);
+    }
+
+    /// <summary>
+    /// The folder has opened: the old picture goes, and the names, the outlines and the readout are
+    /// the new drawing's from here.
+    /// </summary>
+    private void OnDescentArrived(object? sender, EventArgs e)
+    {
+        _departing.Clear();
+        _departing.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
+
+        _labels.Reveal();
+        _highlight.Visibility = Visibility.Visible;
+        Place();
+
+        if (_drawing is { } drawing)
+        {
+            ReportWhatThePointerIsOver(drawing);
         }
     }
 }

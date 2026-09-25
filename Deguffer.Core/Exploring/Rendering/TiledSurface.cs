@@ -58,6 +58,8 @@ public sealed class TiledSurface : ExploreSurface
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;
 
+    public override ExploreTile? TileAt(float x, float y) => _hits.At(x, y) is { } index ? _tiles[index] : null;
+
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);

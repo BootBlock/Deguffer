@@ -28,6 +28,7 @@ public readonly record struct MapGlide(MapViewport From, MapViewport To, TimeSpa
     /// <summary>
     /// A cubic ease out: fastest at the start, settling into place. A move that starts at speed is
     /// the answer to the wheel turn that asked for it; one that eased in would lag behind the hand.
+    /// <see cref="MapDescent"/> moves on the same curve, so every move the map makes feels alike.
     /// </summary>
-    private static double Eased(double progress) => 1 - Math.Pow(1 - progress, 3);
+    internal static double Eased(double progress) => 1 - Math.Pow(1 - progress, 3);
 }

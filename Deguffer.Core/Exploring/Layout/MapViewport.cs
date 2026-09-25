@@ -71,6 +71,34 @@ public readonly record struct MapViewport
     }
 
     /// <summary>
+    /// The viewport that shows all of <paramref name="part"/> of the picture as large as the screen
+    /// allows, centred on it.
+    ///
+    /// <para>The zoom is one factor on both axes, so a part that is not the screen's shape fills it one
+    /// way and leaves room beside it the other. Stretching it to fill both would draw every shape in it
+    /// a different shape from the one it has. A part smaller than the maximum zoom can show whole is
+    /// shown at the maximum, still centred, and a part at an edge is held inside the picture like any
+    /// other viewport.</para>
+    /// </summary>
+    public static MapViewport Fitting(MapFrame part)
+    {
+        var zoom = Math.Clamp(Math.Min(1 / part.Width, 1 / part.Height), 1, MaximumZoom);
+        var (centreX, centreY) = part.Centre;
+
+        return Within(zoom, centreX - (0.5 / zoom), centreY - (0.5 / zoom));
+    }
+
+    /// <summary>
+    /// This viewport moved with a hand dragging the picture by (<paramref name="screenX"/>,
+    /// <paramref name="screenY"/>) of the screen, so the part that was under the hand stays under it.
+    ///
+    /// <para>Held inside the picture, so a drag past an edge stops there and the part under the hand
+    /// slips as far as it has to, as it does for a zoom at an edge.</para>
+    /// </summary>
+    public MapViewport Panned(double screenX, double screenY) =>
+        Within(Zoom, Left - (screenX / Zoom), Top - (screenY / Zoom));
+
+    /// <summary>
     /// The viewport a fraction <paramref name="progress"/> of the way from <paramref name="from"/> to
     /// <paramref name="to"/>.
     ///
@@ -121,6 +149,14 @@ public readonly record struct MapViewport
     public (double X, double Y) PictureAt(double screenX, double screenY) =>
         (Left + (screenX / Zoom), Top + (screenY / Zoom));
 
+    /// <summary>Where <paramref name="onScreen"/>, a part of the screen, falls in the whole picture.</summary>
+    public MapFrame PictureOf(MapFrame onScreen)
+    {
+        var (x, y) = PictureAt(onScreen.X, onScreen.Y);
+
+        return new MapFrame(x, y, onScreen.Width / Zoom, onScreen.Height / Zoom);
+    }
+
     /// <summary>
     /// Where a drawing made at <paramref name="drawn"/> sits on a screen showing this viewport.
     ///
@@ -164,4 +200,11 @@ public readonly record struct MapPlacement(double Scale, double X, double Y)
     /// on (§7.1), and the screen is showing this placement rather than the drawing as it was made.</para>
     /// </summary>
     public (double X, double Y) InDrawing(double x, double y) => ((x - X) / Scale, (y - Y) / Scale);
+
+    /// <summary>Where <paramref name="inDrawing"/>, a part of the drawing, is on the screen.</summary>
+    public MapFrame OnScreen(MapFrame inDrawing) => new(
+        X + (inDrawing.X * Scale),
+        Y + (inDrawing.Y * Scale),
+        inDrawing.Width * Scale,
+        inDrawing.Height * Scale);
 }

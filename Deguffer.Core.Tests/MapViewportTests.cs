@@ -230,6 +230,117 @@ public sealed class MapViewportTests
         }
     }
 
+    /// <summary>
+    /// A double-clicked shape fills the screen the one way its shape allows, and sits in the middle of
+    /// the other. Its edges are asked for through the screen, which is what the reader sees.
+    /// </summary>
+    [Theory]
+    [InlineData(0.2, 0.3, 0.4, 0.1)]
+    [InlineData(0.55, 0.1, 0.05, 0.25)]
+    [InlineData(0.3, 0.3, 0.2, 0.2)]
+    public void FittingAShapeFillsTheScreenWithItAlongItsLongerSide(double x, double y, double width, double height)
+    {
+        var viewport = MapViewport.Fitting(new MapFrame(x, y, width, height));
+
+        var (left, top) = viewport.PictureAt(0, 0);
+        var (right, bottom) = viewport.PictureAt(1, 1);
+
+        Assert.Equal(Math.Min(1 / width, 1 / height), viewport.Zoom, Precision);
+        Assert.Equal(x + (width / 2), (left + right) / 2, Precision);
+        Assert.Equal(y + (height / 2), (top + bottom) / 2, Precision);
+
+        if (width >= height)
+        {
+            Assert.Equal(x, left, Precision);
+            Assert.Equal(x + width, right, Precision);
+        }
+        else
+        {
+            Assert.Equal(y, top, Precision);
+            Assert.Equal(y + height, bottom, Precision);
+        }
+    }
+
+    /// <summary>A shape smaller than the maximum can show whole is shown at the maximum, still centred on it.</summary>
+    [Fact]
+    public void FittingAShapeTooSmallToFillTheScreenStopsAtTheMaximumZoom()
+    {
+        var viewport = MapViewport.Fitting(new MapFrame(0.5, 0.4, 0.001, 0.002));
+
+        var (centreX, centreY) = viewport.PictureAt(0.5, 0.5);
+
+        Assert.Equal(MapViewport.MaximumZoom, viewport.Zoom, Precision);
+        Assert.Equal(0.5005, centreX, Precision);
+        Assert.Equal(0.401, centreY, Precision);
+    }
+
+    /// <summary>A shape in a corner is fitted without the screen showing past the picture's edge.</summary>
+    [Fact]
+    public void FittingAShapeAtAnEdgeStaysInsideThePicture()
+    {
+        var viewport = MapViewport.Fitting(new MapFrame(0.9, 0, 0.1, 0.05));
+
+        Assert.Equal(10, viewport.Zoom, Precision);
+        AssertInside(viewport);
+        Assert.Equal(0.9, viewport.Left, Precision);
+        Assert.Equal(0, viewport.Top, Precision);
+    }
+
+    /// <summary>
+    /// A drag keeps the part of the picture under the hand under it, wherever the hand goes, which is
+    /// what makes the picture feel held rather than scrolled.
+    /// </summary>
+    [Theory]
+    [InlineData(0.1, -0.05)]
+    [InlineData(-0.2, 0.15)]
+    public void DraggingKeepsWhatIsUnderTheHandUnderIt(double byX, double byY)
+    {
+        var viewport = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5);
+        var (pictureX, pictureY) = viewport.PictureAt(0.4, 0.6);
+
+        var (x, y) = viewport.Panned(byX, byY).PictureAt(0.4 + byX, 0.6 + byY);
+
+        Assert.Equal(pictureX, x, Precision);
+        Assert.Equal(pictureY, y, Precision);
+    }
+
+    /// <summary>A drag past the picture's edge stops there, and the whole picture cannot be dragged at all.</summary>
+    [Fact]
+    public void ADragStopsAtTheEdgeOfThePicture()
+    {
+        var viewport = MapViewport.Anchored(4, 0.1, 0.1, 0.5, 0.5);
+
+        var dragged = viewport.Panned(3, -3);
+
+        AssertInside(dragged);
+        Assert.Equal(0, dragged.Left, Precision);
+        Assert.Equal(1 - (1 / dragged.Zoom), dragged.Top, Precision);
+        Assert.Equal(MapViewport.Whole, MapViewport.Whole.Panned(0.3, 0.2));
+    }
+
+    /// <summary>
+    /// A shape of a drawing made at one zoom, found on a screen showing another, is the same part of
+    /// the picture as the drawing says it is. This is how a double-click during a move finds the part
+    /// to fit, so a wrong answer zooms to a shape the reader did not click.
+    /// </summary>
+    [Fact]
+    public void AShapeTakenFromADrawingToTheScreenIsTheSamePartOfThePicture()
+    {
+        var drawn = MapViewport.Anchored(3, 0.4, 0.4, 0.5, 0.5);
+        var shown = MapViewport.Anchored(5, 0.45, 0.35, 0.3, 0.6);
+        var inDrawing = new MapFrame(0.2, 0.3, 0.1, 0.25);
+
+        var onScreen = shown.PlacementOf(drawn).OnScreen(inDrawing);
+
+        var expected = drawn.PictureOf(inDrawing);
+        var actual = shown.PictureOf(onScreen);
+
+        Assert.Equal(expected.X, actual.X, Precision);
+        Assert.Equal(expected.Y, actual.Y, Precision);
+        Assert.Equal(expected.Width, actual.Width, Precision);
+        Assert.Equal(expected.Height, actual.Height, Precision);
+    }
+
     private static void AssertInside(MapViewport viewport)
     {
         var span = 1 / viewport.Zoom;
