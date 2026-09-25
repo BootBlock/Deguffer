@@ -3,19 +3,19 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// One folder a graphics driver's installer leaves its payloads in, and the rule that says which of
-/// its children are payloads.
+/// One folder an installer leaves its payloads in, and the rule that says which of its children are
+/// payloads.
 ///
 /// <para>A row rather than a type per vendor, for the reason <see cref="ShaderCacheRoot"/> is one:
-/// the tier, the consequence and the reasoning belong to
-/// <see cref="GraphicsDriverInstallerProvider"/>, and what differs between vendors is which folder
-/// and which children, which is data.</para>
+/// the tier, the consequence and the reasoning belong to the <see cref="InstallerPayloadProvider"/>
+/// that declares the row, and what differs between vendors is which folder and which children, which
+/// is data.</para>
 ///
-/// <para><b>The row names its folder from a base it never lists.</b> <c>C:\NVIDIA</c> and
-/// <c>C:\AMD</c> sit at the top of the system drive, beside <c>Program Files</c>, <c>Users</c> and
-/// <c>Windows</c>, and nothing may ever be classified there. So <see cref="Base"/> is reached by name
-/// only, every folder between it and <see cref="Path"/> is walked by name as well, and only
-/// <see cref="Path"/> itself is listed.</para>
+/// <para><b>The row names its folder from a base it never lists.</b> <c>C:\NVIDIA</c>,
+/// <c>C:\AMD</c> and <c>C:\Autodesk</c> sit at the top of the system drive, beside
+/// <c>Program Files</c>, <c>Users</c> and <c>Windows</c>, and nothing may ever be classified there.
+/// So <see cref="Base"/> is reached by name only, every folder between it and <see cref="Path"/> is
+/// walked by name as well, and only <see cref="Path"/> itself is listed.</para>
 /// </summary>
 /// <param name="Label">
 /// What the user is shown this folder called in a note, such as <c>NVIDIA\DisplayDriver</c>. Also
@@ -36,7 +36,7 @@ namespace Deguffer.Core.Providers;
 /// is the only way it is ever asserted; a directory is named where losing it breaks something
 /// outside this folder, so the evidence names it rather than folding it into "unrecognised".
 /// </param>
-public sealed record DriverInstallerRoot(
+public sealed record InstallerPayloadRoot(
     string Label,
     string Vendor,
     string Base,
