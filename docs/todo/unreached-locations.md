@@ -3,9 +3,10 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
-> shader caches and Steam shader pre-cache, §6's crash dumps and servicing logs, §7's per-volume
-> recycle bins, §8's Unreal Engine derived-data caches, §10's release of OneDrive's local copies and
-> §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
+> shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps and
+> servicing logs, §7's per-volume recycle bins, §8's Unreal Engine derived-data caches, §10's release
+> of OneDrive's local copies and §12's Squirrel staging and superseded builds have shipped; everything
+> else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
@@ -1011,6 +1012,10 @@ stutter the first time a scene renders, and nothing can be lost.
 Adjacent, and worth the same provider's attention: `%PROGRAMDATA%\NVIDIA Corporation\Downloader` and
 `C:\NVIDIA` keep whole extracted driver installers after installation. Tier 1, and nothing removes
 them.
+
+Shipped since as a provider of its own, with `C:\AMD`, at Tier 2 rather than Tier 1: nothing
+re-creates an installer payload, so reinstalling a release means downloading it again.
+`docs/cache-locations.md` records what it reaches and what it refuses.
 
 ---
 

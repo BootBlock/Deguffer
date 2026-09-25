@@ -169,4 +169,53 @@ public sealed class DirectoryContentTests : IDisposable
 
         Assert.False(DirectoryContent.HoldsAnyEntry(directory));
     }
+
+    /// <summary>
+    /// The presence probe's question. A folder holding only empty folders, or nothing, is not a
+    /// location worth a row, and a folder that is not there is not one either.
+    /// </summary>
+    [Fact]
+    public void AnEmptyTreeOrAMissingPathMayNotHoldContent()
+    {
+        var skeleton = _temp.CreateDirectory("skeleton");
+        _temp.CreateDirectory("skeleton", "a", "b");
+
+        Assert.False(DirectoryContent.MayBePresent(skeleton));
+        Assert.False(DirectoryContent.MayBePresent(_temp.CreateDirectory("empty")));
+        Assert.False(DirectoryContent.MayBePresent(Path.Combine(_temp.Path, "never-existed")));
+
+        _temp.CreateFile(8, "skeleton", "a", "b", "one.bin");
+
+        Assert.True(DirectoryContent.MayBePresent(skeleton));
+    }
+
+    /// <summary>
+    /// The case <see cref="DirectoryContent.IsPresent"/> answers false for, and a presence probe must
+    /// not. Nothing was seen of a directory that will not be listed, so it may hold anything, and
+    /// denying its row would leave the user nothing to correct.
+    /// </summary>
+    [Fact]
+    public void ADirectoryThatWillNotBeListedMayHoldContent()
+    {
+        var directory = _temp.CreateDirectory("denied");
+
+        Assert.False(DirectoryContent.MayBePresent(directory));
+
+        using var denied = new DeniedDirectory(directory);
+
+        Assert.True(DirectoryContent.MayBePresent(directory));
+        Assert.False(DirectoryContent.IsPresent(directory));
+    }
+
+    /// <summary>The same when Windows will not even describe the directory, let alone list it.</summary>
+    [Fact]
+    public void ADirectoryWindowsWillNotDescribeMayHoldContent()
+    {
+        var directory = _temp.CreateDirectory("holder", "undescribed");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(directory);
+
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(directory));
+        Assert.True(DirectoryContent.MayBePresent(directory));
+    }
 }
