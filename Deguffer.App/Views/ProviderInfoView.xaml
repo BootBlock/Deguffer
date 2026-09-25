@@ -132,20 +132,20 @@
         <PivotItem x:Name="ContentsSection" Header="Contents">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="{x:Bind Finding.Text.DetailHeader}"
+                    <TextBlock Text="{x:Bind Finding.Text.DetailHeader, Mode=OneWay}"
                                Style="{StaticResource FieldLabel}" />
 
                     <!-- A row whose toolchain is absent has no plan at all, so this tab would
                          otherwise be a blank panel behind a tab that promised a list. -->
-                    <TextBlock Visibility="{x:Bind Finding.HasNoDetail}"
+                    <TextBlock Visibility="{x:Bind Finding.HasNoDetail, Mode=OneWay}"
                                Style="{StaticResource SecondaryText}"
                                Text="There is nothing here for Deguffer to remove." />
 
                     <!-- A row whose steps are chosen one by one lists them on the Storage page, where
                          the list can be searched, the Selected total is on screen, and a thousand
                          items cost only the ones in view. This says where they are and goes there. -->
-                    <StackPanel Spacing="8" Visibility="{x:Bind Finding.OffersItems}">
-                        <TextBlock Text="{x:Bind Finding.Text.ItemsSentence}"
+                    <StackPanel Spacing="8" Visibility="{x:Bind Finding.OffersItems, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind Finding.Text.ItemsSentence, Mode=OneWay}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    TextWrapping="Wrap" />
                         <Button Content="Show the items"
@@ -153,9 +153,9 @@
                                 AutomationProperties.Name="{x:Bind Finding.Text.ItemsLinkName}" />
                     </StackPanel>
 
-                    <ContentControl Content="{x:Bind Finding.SoleStep}"
+                    <ContentControl Content="{x:Bind Finding.SoleStep, Mode=OneWay}"
                                     ContentTemplate="{StaticResource PlanStep}"
-                                    Visibility="{x:Bind Finding.HasSoleStep}"
+                                    Visibility="{x:Bind Finding.HasSoleStep, Mode=OneWay}"
                                     HorizontalContentAlignment="Stretch"
                                     IsTabStop="False" />
 

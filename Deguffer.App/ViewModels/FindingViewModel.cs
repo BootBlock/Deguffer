@@ -346,7 +346,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool OffersItems => Finding.Provider.Grain.OffersEachStep(Steps.Count);
 
-    /// <summary>What this row says about itself in words that do not change. See <see cref="FindingRowText"/>.</summary>
+    /// <summary>What this row says about itself in words that change only with its plan. See <see cref="FindingRowText"/>.</summary>
     public FindingRowText Text { get; private set; }
 
     /// <summary>

@@ -655,7 +655,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// Plan <paramref name="providers"/> again and write each new finding over its row where the row
     /// stands. The list is told nothing: no row leaves it, none joins it and none moves, so the reader
-    /// keeps their place, their focus and what they had open.
+    /// keeps their place and their focus.
     ///
     /// <para>The preview is withdrawn while it runs, as <see cref="LoadPreviewAsync"/> withdraws it.
     /// Until the last of these rows lands, the list describes the disk partly before the run and
@@ -664,13 +664,6 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private async Task ReplanAsync(IReadOnlyList<ICleanupProvider> providers, CancellationToken ct)
     {
-        // Its ticks belong to steps that are about to be replaced, and a tick there would reach none
-        // the next run takes.
-        if (ShownItems is { } items && providers.Contains(items.Row.Finding.Provider))
-        {
-            CloseItems();
-        }
-
         HasPreview = false;
         CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
         _barShowsPreviewSummary = false;
@@ -685,23 +678,35 @@ public sealed partial class CleanViewModel : ObservableObject
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));
-
-        // Nothing was inserted, so the subscription that follows the list raises nothing.
-        NotifyEmptyStateChanged();
-        UpdateShares();
-        UpdateSelectionTotal();
     }
 
+    /// <summary>
+    /// Write one new finding over its row, and bring the page's figures up to date with it at once
+    /// rather than at the end of the pass, which a cancelled or failed re-plan never reaches.
+    /// </summary>
     private void ReplanRow(Finding finding)
     {
         // Found by the provider itself, which is the one instance the planner holds for it.
         var row = Findings.First(row => ReferenceEquals(row.Finding.Provider, finding.Provider));
+
+        // Closed as its steps are replaced, not once before the pass: the rows stay on the page while
+        // it runs, so a row's list can be opened after the pass began. Left open, its ticks would land
+        // on steps no run takes, and an item unticked there would still be deleted.
+        if (ReferenceEquals(ShownItems?.Row, row))
+        {
+            CloseItems();
+        }
 
         row.Replan(finding, _selections.Memory, _keeps.Current);
         row.IsListed = IsListed(row);
 
         // The row's steps are new, and a re-plan runs while the keep list is not to be changed.
         AllowKeepListChanges(row, !IsBusy);
+
+        // Nothing was inserted, so the subscription that follows the list raises nothing.
+        NotifyEmptyStateChanged();
+        UpdateShares();
+        UpdateSelectionTotal();
     }
 
     /// <summary>
@@ -919,9 +924,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// One change by the user: retotal, and remember what they chose.
     ///
     /// Written on every change rather than at some tidier moment, because there is no reliable
-    /// later one. A scan can be cancelled, a clean re-plans the list from scratch, and the process
-    /// can be replaced outright by the elevated relaunch — all three would lose a choice that was
-    /// only being held until the end.
+    /// later one. A scan can be cancelled, a clean rebuilds the rows it changed from what was
+    /// remembered, and the process can be replaced outright by the elevated relaunch — all three
+    /// would lose a choice that was only being held until the end.
     /// </summary>
     private void OnRowSelectionChanged(FindingViewModel row)
     {
