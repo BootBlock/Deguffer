@@ -2310,6 +2310,111 @@ what is left.
 
 ---
 
+## Graphics driver installer files
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `C:\NVIDIA\DisplayDriver`, `%PROGRAMDATA%\NVIDIA Corporation\Downloader` and `C:\AMD`, where `C:` is the drive Windows is installed on |
+| **Method** | Delete the recognised driver packages one by one, never the folders that hold them |
+| **Typical size** | Not measured: none of these folders was on the machine this was researched on. An NVIDIA driver installer is about 900 MB today, and reports put `C:\AMD` at around 2 GB |
+
+### What it is
+
+A graphics driver installer unpacks the whole driver package onto the disk before it installs
+anything. The driver it installs runs from the copy Windows keeps in its own driver store, so the
+unpacked package has no part to play once the installation has finished. Older installers left it
+behind, one folder per release:
+
+| Folder | What wrote it |
+| --- | --- |
+| `C:\NVIDIA\DisplayDriver\<release>` | NVIDIA's driver installer, for releases up to 576.52. From 576.80 on it unpacks into a temporary folder and removes it |
+| `%PROGRAMDATA%\NVIDIA Corporation\Downloader` | GeForce Experience, which kept the driver packages it downloaded |
+| `C:\AMD\AMD-Software-Installer` | AMD's installer since 23.7.1. It removes the folder when it finishes, so one still here is from an installation that stopped part-way |
+| `C:\AMD\<release folder>` | AMD's installers before 23.7.1, one folder per release, under names that were never consistent |
+
+AMD's installer clears its older release folders itself from Adrenalin 24.1.1 on, which is AMD's
+own statement that nothing installed depends on them.
+
+### What Deguffer does
+
+**It never lists the top of the drive.** `C:\NVIDIA` and `C:\AMD` sit beside `Program Files`,
+`Users` and `Windows`, so Deguffer reaches each by name, checks every folder on the way down for
+being a link, and lists only the three folders in the table. Inside each one it recognises:
+
+- in `DisplayDriver`, a folder named as NVIDIA names a release: three digits, a point and two
+  digits, such as `546.33`;
+- in `Downloader`, `latest` and folders named by a long hexadecimal identifier;
+- in `C:\AMD`, `AMD-Software-Installer`, and any other folder holding AMD's display driver package
+  (`Packages\Drivers\Display`), because the older release folders cannot be recognised by name.
+
+Anything else is left alone, and Deguffer says so.
+
+**A folder with nothing in it is not offered.** An installer that tidies up after itself removes
+the files and can leave the folders that held them, and an AMD machine keeps `C:\AMD` for its
+chipset driver alone. Neither is shown as something to reclaim.
+
+**Each release is its own item**, so you can keep the one you might reinstall. None of these
+vendors offers a command that removes its downloaded packages, so this is the path-based case §5.2
+governs rather than §5.1's command.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `C:\AMD\Chipset_Software` | The chipset driver's install source. Windows Installer reads it to repair, upgrade or remove the chipset driver, and a reinstall fails with error 1308 once it has gone. Refused by name, whatever it holds |
+| `C:\AMD\Chipset_Driver_Installer` | An older chipset driver's install source. Nothing establishes that it is safe to remove |
+| `C:\AMD\Chipset_SoftwareLogs` | The chipset installer's logs |
+| `C:\AMD\WU-CCC2` | What a driver Windows Update installed is removed through |
+| `Downloader\config` and `status.json` | GeForce Experience's settings and its record of what it downloaded |
+| The rest of `%PROGRAMDATA%\NVIDIA Corporation` | Including the NVIDIA app's own update store, `NVIDIA app\UpdateFramework`. It can run to tens of gigabytes, but somebody who cleared part of it reported games crashing afterwards, and nothing establishes which part is safe. Deguffer does not reach it |
+| The rest of `C:\NVIDIA` | Including `PhysX`, where the PhysX installer unpacks itself |
+
+Deguffer also refuses to delete through a link. If one of these folders is a junction to another
+drive, it removes nothing there and tells you why.
+
+### What it costs you
+
+**The driver you are running is untouched.** To reinstall a release you removed, download its
+installer again from the vendor. An older AMD Software installation may ask for its setup files if
+you repair it, and the answer is the same.
+
+### Why Tier 2, not Tier 1
+
+The proposal for this location said Tier 1, because nothing installed depends on these files. That
+is true, but Tier 1 also asks that whatever wrote the content re-creates it on demand, and nothing
+re-creates an installer payload: the only thing that needs one again is reinstalling that release,
+which means downloading several hundred megabytes. That is Tier 2's consequence. It also keeps a
+location nobody has measured out of the default selection.
+
+### Sources
+
+- The extraction settings built into NVIDIA's driver installers from 341.96 to 581.80, read from the
+  installers downloaded from `us.download.nvidia.com`, for the `DisplayDriver\<release>` layout and
+  for the change at 576.80.
+- NVIDIA's driver installation guide, for how the driver is removed, which does not use `C:\NVIDIA`:
+  <https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/windows.html>
+- How-To Geek on GeForce Experience's `Downloader` folder, for what in it is a package and what is
+  its own state:
+  <https://www.howtogeek.com/342322/why-does-nvidia-store-gigabytes-of-installer-files-on-your-hard-drive/>
+- AMD's release notes for Adrenalin 24.1.1, which say the installer "will now automatically clear
+  previously installed drivers located in the C:\AMD folder to save space":
+  <https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-24-1-1.html>
+- The Guru3D thread for Adrenalin 23.7.1, on the fixed `AMD-Software-Installer` folder:
+  <https://forums.guru3d.com/threads/amd-software-adrenalin-edition-23-7-1-driver-download-and-discussion.448586/page-2>
+- A Ten Forums thread in which a chipset driver reinstall fails with error 1308 after
+  `C:\AMD\Chipset_Software` was deleted:
+  <https://www.tenforums.com/drivers-hardware/190784-amd-chipset-driver-3-10-22-706-wont-install-3.html>
+- A Guru3D thread on what `C:\AMD` holds, including `WU-CCC2`:
+  <https://forums.guru3d.com/threads/whats-in-the-c-amd-folder-and-do-i-need-it.402897/>
+- An NVIDIA forum thread reporting crashes after files in the NVIDIA app's update store were
+  removed:
+  <https://www.nvidia.com/en-us/geforce/forums/game-ready-drivers/13/569266/grd-post-processing-folder-in-nividia-corpapp-fi/>
+
+---
+
 ## Local copies of cloud files
 
 **Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and confirmed with an
