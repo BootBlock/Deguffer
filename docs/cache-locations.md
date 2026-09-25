@@ -2279,6 +2279,128 @@ Sources:
 
 ---
 
+## Capture One previews and thumbnails
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `<Catalog>.cocatalog\Cache` in each catalog, and `CaptureOne\Cache` inside each folder of images in a session, wherever Capture One's own list says they are |
+| **Method** | Delete each `Cache` folder, and nothing else in the catalog or the `CaptureOne` folder |
+| **Typical size** | Not measured here: Capture One was not installed where this was written. Its user community reports 51.8 GB for 33,608 images at a 2,560-pixel preview size, and 1.66 GB for 451 images at 5,120 pixels |
+
+### What it is
+
+Capture One keeps a thumbnail and a preview of every image so that browsing does not wait on the raw
+files. A catalog keeps them in `Cache` inside the catalog's own folder, in `Thumbnails`, `Previews`
+or `Proxies`, and `Browser`. A session gives every folder of images it shows a `CaptureOne` folder,
+and keeps them in `Cache` inside that. On Windows a `.cocatalog` package is an ordinary folder.
+
+Capture One's own help says that anything in `Cache` can be deleted, and that it rebuilds the files
+the next time an image is viewed. The size of each preview follows the preview size set in its
+preferences, which is why the figures above vary so widely.
+
+### How Deguffer finds them
+
+**Through Capture One's own record, and nowhere else.** Catalogs and sessions live wherever you put
+them, which is often a shoot drive or an external disk rather than your profile, so a search of the
+profile would miss them and a search of every drive would find folders that only look like
+catalogs. Capture One keeps its settings in a `user.config` under `%LOCALAPPDATA%\Capture_One`, or
+under `%LOCALAPPDATA%\Phase_One` for versions older than 21, and lists the documents you opened in
+it. Deguffer reads every full path in that file that ends in `.cocatalog`, `.cocatalogdb` or
+`.cosessiondb`, and takes nothing else from it.
+
+That has two limits, both stated here rather than left to be discovered:
+
+- **A catalog or session that has dropped off Capture One's recent list is not found.** Open it once
+  in Capture One and it is listed again.
+- **In a session, only the session's own folder is searched.** A folder of images elsewhere that the
+  session lists as a favourite has a `CaptureOne` folder too, and is not reached.
+
+A catalog or session on a drive that is not connected is named in the scan, nothing in it is
+examined, and the row does not claim to be clear. One Capture One still lists after it was deleted
+from a drive that is connected holds nothing to examine, and the scan says it no longer exists. If a settings file or folder cannot be read, the
+scan says so, because a catalog it lists was neither cleared nor ruled out.
+
+### What Deguffer does
+
+A path in Capture One's list is not evidence on its own. **A catalog must be a folder named
+`<Name>.cocatalog` holding its database**, a file ending in `.cocatalogdb`, and **a session's folder
+must hold its session file**, ending in `.cosessiondb`. A catalog database anywhere else does not make
+the folder around it a catalog, a session file at the root of a drive names no session, and a session
+folder that holds your profile or its application data is not searched. A listed folder that fails any of these is left
+alone, and the scan says why.
+
+Inside a catalog, and inside each `CaptureOne` folder of a session, **`Cache` is the only thing
+Deguffer will ever remove.** Everything else is Tier 4 by construction, whether or not Deguffer knows
+what it is. A folder called `CaptureOne` is recognised only with one of Capture One's settings folders,
+such as `Settings166`, beside its `Cache`, since the name alone is anybody's. A folder called `Cache`
+anywhere else in a session is yours, and is not offered. A link inside a session, or a `Cache` that is
+a link, is left alone and named.
+
+A session inside another session's folder is its own. Its `CaptureOne` folders are offered once,
+under it, and whether it is open is asked of its own session file.
+
+**A catalog or session Capture One has open is never offered.** Capture One writes previews while it
+works, so before anything is offered Deguffer asks Windows whether anything holds the catalog's
+database or its `writelock` file, or the session file, open. One that is held is left alone and
+named, and the same question is asked again when you press Clean. A plan made while Capture One is
+running also says so by name.
+
+### What is protected
+
+**Everything beside each `Cache`, by name**, which is the point of this entry rather than a footnote
+to it. The worst case here is total:
+
+- **`Originals`**, in a catalog that imported its images: **your photographs**, inside the same
+  folder as the cache. For many of them it is the only copy.
+- **`Settings120`, `Settings166` and their kin**: **every adjustment you have made**. Capture One
+  never writes to a raw file, so these small files are the edits. Their number follows Capture One's
+  rendering engine and keeps changing, which is why the rule names `Cache` and nothing else rather
+  than listing what to avoid.
+- **`Adjustments`**, holding your masks, and the catalog's **`.cocatalogdb`** or the session's
+  **`.cosessiondb`**, holding every image's place, rating and keyword.
+- The catalog folder, the session folder, each folder of images and each `CaptureOne` folder.
+
+**Nothing under `%LOCALAPPDATA%\CaptureOne` or `%APPDATA%\Capture One` is touched.** Those hold your
+styles, presets and preferences, and no cache at all.
+
+### What it costs you
+
+**Every preview and thumbnail is rebuilt from the original the next time you view the image.** For a
+large catalog that is the re-rendering of thousands of raw files, which takes a long time.
+
+**A catalog whose originals are offline loses its offline browsing.** Capture One builds offline
+working on this cache on purpose: with the drive holding the originals disconnected, the catalog
+stays browsable and you can still adjust its images. With the cache gone, those images show as
+missing until you reconnect the drive. Your photographs and your adjustments are untouched either
+way.
+
+### Why Tier 2, not Tier 1
+
+A thumbnail cache would normally be Tier 1. This one is not, and the reason is a feature rather than a
+caveat. Previews can be rebuilt only from the original raw files, and **Deguffer cannot tell "the
+originals are on this disk" from "the originals are on a shelf"**: both look the same from the cache
+folder. Where the originals are online, rebuilding a large catalog's previews is also §3's
+"re-indexing for minutes". So the row is never pre-selected, and it states the offline cost.
+
+**Capture One has no command to empty its cache**, so §5.1 has no route to drive. Its documented
+route is **Regenerate Previews** on the images you select, a menu item in the running program. Since
+Capture One 16.3 previews take less space, so regenerating an older catalog's previews in a current
+version is a reclaim of its own, and keeps the previews.
+
+Sources:
+
+- The Cache folder in Capture One:
+  <https://support.captureone.com/hc/en-us/articles/30111725200413-The-Cache-folder-in-Capture-One>
+- Session sidecar files explained:
+  <https://support.captureone.com/hc/en-us/articles/360002862137-Session-sidecar-files-explained-What-s-inside-the-CaptureOne-folder>
+- Working with offline photos:
+  <https://support.captureone.com/hc/en-us/articles/8236352543005-Working-with-offline-photos>
+
+---
+
 ## Squirrel updater leftovers
 
 | **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |

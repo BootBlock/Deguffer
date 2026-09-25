@@ -37,6 +37,7 @@ public class StepGrainTests
         [
             "affinity-model-cache",
             "azure-functions-tools",
+            "capture-one-cache",
             "cargo-target",
             "claude-code-file-history",
             "dotnet-obj",
