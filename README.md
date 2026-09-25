@@ -124,6 +124,7 @@ installed" cleanly on a machine without that toolchain.
 | Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue beside it, or the downloads folder |
 | Jellyfin transcoder files | Only a folder Jellyfin's own marker shows is Jellyfin's; never anything written in the last 24 hours |
 | Emby Server transcoder files | Only a `transcoding-temp` folder Emby made; never anything written in the last 24 hours |
+| DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
