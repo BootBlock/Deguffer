@@ -181,6 +181,44 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 }
 
 /// <summary>
+/// Ask a sync app to release the local copies of files it keeps in step with the cloud, leaving every
+/// one of them where it is (<c>docs/todo/unreached-locations.md</c> §10).
+///
+/// <para><b>Nothing is destroyed, so nothing here is a target.</b> Each file stays in its folder, lists,
+/// and opens while the machine is online, so this step adds nothing to
+/// <see cref="CleanupPlan.TargetedPaths"/>, and its §5.6 negative asserts the opposite of a
+/// deletion's: that every file it named is still there and is still a cloud file.</para>
+///
+/// <para><b>What it frees is a request, never a result.</b> Windows' own documentation for
+/// <c>CF_PIN_STATE_UNPINNED</c> says there is "no guarantee that the placeholders to be unpinned will be
+/// fully dehydrated after the API call completes successfully", and a scratch sync root showed nothing
+/// released at all until the sync app acted. So <see cref="CleanupStep.Estimated"/> is what the files
+/// held when they were chosen, and a run reports it as requested
+/// (<see cref="StepOutcome.BytesRequested"/>), never as reclaimed.</para>
+///
+/// <para><b>The files are named, and the rules are asked again.</b> The run acts on these files and no
+/// others, so the preview is what runs. Each is looked at again through the handle that unpins it,
+/// because any of them may have gained an edit, a pin or a pinned folder in the meantime. See
+/// <see cref="Cloud.ReleaseRules"/>.</para>
+/// </summary>
+/// <param name="SyncRoot">The folder the sync app owns, which is what identifies this step.</param>
+/// <param name="SyncApp">The sync app that will do the releasing, named for the user.</param>
+/// <param name="What">What these files are, written for the user.</param>
+public sealed record ReleaseLocalCopiesStep(string SyncRoot, string SyncApp, string What) : CleanupStep
+{
+    /// <summary>The placeholders chosen when the plan was made, and what each held on this PC then.</summary>
+    public IReadOnlyList<Cloud.ReleasableFile> Files { get; init; } = [];
+
+    /// <summary>
+    /// The folder, not the files: which files are eligible changes with every edit and every download,
+    /// and a key that moved with them would discard the user's choice about the account each time.
+    /// </summary>
+    public override string SelectionKey => SyncRoot;
+
+    public override string Description => $"{What} — {LongPath.Display(SyncRoot)}";
+}
+
+/// <summary>
 /// A step that destroys one path outright.
 ///
 /// The base exists so that "everything this plan would remove" is one question with one answer:
@@ -188,10 +226,9 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 /// this type, so a new kind of deletion joins the §5.2 assertions and the §5.6 negative by
 /// construction rather than by somebody remembering to update two <c>OfType</c> clauses.
 ///
-/// It is deliberately narrower than "a new kind of step". The cloud-sync dehydration in
-/// <c>docs/todo/unreached-locations.md</c> §10 frees space while leaving the file present and
-/// readable, so it will be a sibling of this and of <see cref="RunCommandStep"/> under
-/// <see cref="CleanupStep"/> — and it must *not* appear in
+/// It is deliberately narrower than "a new kind of step". <see cref="ReleaseLocalCopiesStep"/> frees
+/// space while leaving every file present and readable, so it is a sibling of this and of
+/// <see cref="RunCommandStep"/> under <see cref="CleanupStep"/> — and it must *not* appear in
 /// <see cref="CleanupPlan.TargetedPaths"/>, because it destroys nothing.
 /// </summary>
 /// <param name="Path">The path that will be removed, in display form.</param>

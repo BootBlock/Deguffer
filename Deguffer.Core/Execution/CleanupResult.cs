@@ -32,6 +32,12 @@ namespace Deguffer.Core.Execution;
 /// Apart from every count above, because none of their sentences is true of it: nothing refused, no
 /// setting was honoured, and nothing was using the file.
 /// </param>
+/// <param name="BytesRequested">
+/// What a sync app was asked to release, for a <see cref="ReleaseLocalCopiesStep"/>. Apart from
+/// <paramref name="BytesReclaimed"/>, which stays zero for that step, because the sync app releases a
+/// file when it chooses to and nothing Deguffer can read says when. A figure for what was freed would
+/// be a claim nobody checked.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -42,7 +48,8 @@ public sealed record StepOutcome(
     int Spared = 0,
     long EntriesRemoved = 0,
     FolderRefusals RefusedFolders = default,
-    int MailStores = 0);
+    int MailStores = 0,
+    long BytesRequested = 0);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -58,6 +65,9 @@ public sealed record CleanupResult
     public VerificationResult? Verification { get; init; }
 
     public long BytesReclaimed => Steps.Sum(s => s.BytesReclaimed);
+
+    /// <summary>What sync apps were asked to release, across every step. See <see cref="StepOutcome.BytesRequested"/>.</summary>
+    public long BytesRequested => Steps.Sum(s => s.BytesRequested);
 
     /// <summary>Entries the run took, across every step. See <see cref="StepOutcome.EntriesRemoved"/>.</summary>
     public long EntriesRemoved => Steps.Sum(s => s.EntriesRemoved);

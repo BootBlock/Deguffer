@@ -373,6 +373,17 @@
                             <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
                                        Style="{StaticResource Figure}" />
                         </StackPanel>
+
+                        <!-- A request rather than a result: the sync app releases these after the run,
+                             so the free space change beside it may not include them yet. -->
+                        <StackPanel Spacing="2"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind ViewModel.HasRequested, Mode=OneWay}"
+                                    ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
+                            <TextBlock Text="Asked to release" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{x:Bind ViewModel.RequestedLabel, Mode=OneWay}"
+                                       Style="{StaticResource Figure}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- §5.6's verdict on the run those two figures describe, and it stays as long

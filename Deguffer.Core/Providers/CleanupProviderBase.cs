@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Cloud;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -37,19 +38,26 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// rather than reached for because the real one empties the Recycle Bin of whoever runs the
     /// suite.
     /// </param>
+    /// <param name="cloud">
+    /// How a <see cref="ReleaseLocalCopiesStep"/> is planned, carried out and proved, for the one provider
+    /// that plans one. Defaulted and injected for the reason <paramref name="emptier"/> is: the real one
+    /// acts on the cloud accounts of whoever runs the suite.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
         IDirectoryScanner scanner,
-        IRecycleBinEmptier? emptier = null)
+        IRecycleBinEmptier? emptier = null,
+        ICloudFiles? cloud = null)
     {
         Environment = environment;
         Inspector = inspector;
         Scanner = scanner;
         _refusals = RefusalRecord.For(environment);
         Emptier = emptier ?? ShellRecycleBinEmptier.Default;
-        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier);
+        Cloud = cloud ?? CloudFiles.Default;
+        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud);
         Runner = runner;
     }
 
@@ -62,6 +70,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// one object's answer and then be executed by another.
     /// </summary>
     protected IRecycleBinEmptier Emptier { get; }
+
+    /// <summary>
+    /// The Cloud Files API a <see cref="ReleaseLocalCopiesStep"/> is planned through, and the same one it
+    /// is carried out and proved through, for the reason <see cref="Emptier"/> is shared.
+    /// </summary>
+    protected ICloudFiles Cloud { get; }
 
     protected IProcessRunner Runner { get; }
 
@@ -197,7 +211,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CleanupPlan plan,
         RunReach? runReach = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue: null, ct));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue: null, ct, Cloud));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()

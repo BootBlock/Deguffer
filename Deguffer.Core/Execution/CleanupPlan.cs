@@ -308,8 +308,8 @@ public sealed record CleanupPlan
     ///
     /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
     /// single file both count and a future deletion kind counts without an edit here. A step that
-    /// frees space without destroying anything contributes nothing, which is what the cloud-sync
-    /// dehydration in <c>docs/todo/unreached-locations.md</c> §10 will need.
+    /// frees space without destroying anything contributes nothing, which is what
+    /// <see cref="ReleaseLocalCopiesStep"/> needs.
     ///
     /// Deliberately not cached in a backing field: this is a record, and a <c>with</c> expression
     /// copies backing fields wholesale, so a cached list would survive a change to

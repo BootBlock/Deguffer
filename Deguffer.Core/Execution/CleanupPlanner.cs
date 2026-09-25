@@ -32,7 +32,7 @@ public sealed class CleanupPlanner
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, PlatformIO, Playwright, the Azure Functions Core Tools
-    /// releases and the superseded Squirrel builds, which are Tier 2, and the
+    /// releases, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
@@ -136,6 +136,7 @@ public sealed class CleanupPlanner
         new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
         new RecycleBinProvider(environment, preferences: preferences),
         new FileHistoryProvider(environment, preferences: preferences),
+        new CloudLocalCopiesProvider(environment),
         new TempDirectoryProvider(environment, liveTrees: liveTrees, preferences: preferences),
         new CrashDumpProvider(environment),
         new WindowsServicingLogProvider(environment),

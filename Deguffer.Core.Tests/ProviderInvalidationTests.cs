@@ -1,4 +1,5 @@
 using System.Reflection;
+using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
@@ -194,6 +195,9 @@ public sealed class ProviderInvalidationTests : IDisposable
 
         // Never the real one: it would empty the Recycle Bin of whoever ran the suite.
         : parameter == typeof(IRecycleBinEmptier) ? new FakeRecycleBinEmptier()
+
+        // Never the real one: it would walk and unpin the cloud accounts of whoever ran the suite.
+        : parameter == typeof(ICloudFiles) ? new FakeCloudFiles()
         : throw new XunitException(
             $"{provider.Name} takes a {parameter.Name}, which this test cannot fabricate from a fake. " +
             "Extend Argument so the provider is still covered.");

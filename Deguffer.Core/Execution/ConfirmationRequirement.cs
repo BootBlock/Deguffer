@@ -63,6 +63,16 @@ public sealed record ConfirmationRequirement
     public required string Consequence { get; init; }
 
     /// <summary>
+    /// The verb the question and its button use: "Delete", or "Release" for a plan that only asks a sync
+    /// app to release local copies of cloud files.
+    ///
+    /// <para>Decided here with the rest of what the user is told, because "Delete" over a plan that
+    /// destroys nothing is a false statement about their cloud files, and the one a reader is most
+    /// likely to refuse a harmless clean over, or to learn to click through.</para>
+    /// </summary>
+    public required string Verb { get; init; }
+
+    /// <summary>
     /// The words the user must type, for <see cref="ConfirmationLevel.TypedPhrase"/> only, and so
     /// null wherever the user has switched the typed phrase off.
     ///
@@ -140,6 +150,7 @@ public sealed record ConfirmationRequirement
             Tier = plan.Tier,
             Level = level,
             Consequence = ConsequenceOf(plan),
+            Verb = plan.Steps.Count > 0 && plan.Steps.All(step => step is ReleaseLocalCopiesStep) ? "Release" : "Delete",
             RequiredPhrase = level == ConfirmationLevel.TypedPhrase ? plan.ProviderName : null,
         };
     }

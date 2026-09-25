@@ -3,8 +3,9 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
-> shader caches, §6's crash dumps and servicing logs, §7's per-volume recycle bins and §12's
-> Squirrel staging and superseded builds have shipped; everything else is unstarted.
+> shader caches, §6's crash dumps and servicing logs, §7's per-volume recycle bins, §10's release
+> of OneDrive's local copies and §12's Squirrel staging and superseded builds have shipped;
+> everything else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
@@ -1398,6 +1399,15 @@ concrete kind — so this belongs beside `DeleteStep` and `RunCommandStep`, cont
 path and a §5.6 negative that asserts survival instead of removal. What remains is the design
 decision itself, which should still be taken deliberately rather than discovered while writing a
 provider.
+
+**Shipped for OneDrive** as `ReleaseLocalCopiesStep` and `CloudLocalCopiesProvider`, on the grounds
+recorded in issue #93. The step unpins each chosen placeholder with `CfSetPinState` and reports the
+bytes as requested, never reclaimed. Its §5.6 negative asserts that every file it named is still
+there and still a cloud file. A scratch sync root registered by the test suite showed the API unpin a
+file with unsynced edits, a pinned file and an ordinary file without complaint, so every rule is
+Deguffer's own, asked again through the handle that unpins. Google Drive and Dropbox, named above, do
+not qualify: Google Drive uses no placeholders, and Dropbox's mechanism is unestablished. Nextcloud and
+Proton Drive wait on a real install showing the name each registers under.
 
 ---
 
