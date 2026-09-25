@@ -94,6 +94,12 @@ internal static class RemovalWalk
                 continue;
             }
 
+            // Another row's, so it is neither this removal's subject nor something it held back.
+            if (bounds.OwnedElsewherePaths.Contains(entry.FullName))
+            {
+                continue;
+            }
+
             // §9, asked before the link branch and before the guard. Before the link branch, because the
             // mark Windows puts on a link is also on files that are not links — a OneDrive placeholder, a
             // deduplicated file — and deleting one of those deletes its content. Nothing here reads which

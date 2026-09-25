@@ -92,8 +92,14 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     private readonly ILiveTreeInspector _liveTrees;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
+    private readonly IReadOnlyList<ITemporaryFolderTenant> _tenants;
     private TempRootSet? _roots;
 
+    /// <param name="tenants">
+    /// The rows that offer an entry of a temporary folder under the name of the tool that wrote it.
+    /// This row leaves those entries out, so that each is offered once and by the row that knows what
+    /// it is. See <see cref="ITemporaryFolderTenant"/>.
+    /// </param>
     public TempDirectoryProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
@@ -101,7 +107,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
-        ICurrentPreferences? preferences = null)
+        ICurrentPreferences? preferences = null,
+        IReadOnlyList<ITemporaryFolderTenant>? tenants = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -111,6 +118,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
         _preferences = preferences ?? DefaultPreferences.Instance;
+        _tenants = tenants ?? [];
     }
 
     public override string Id => "temp-directories";
@@ -292,9 +300,16 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             return empty with { Notes = [.. empty.Notes, .. notes] };
         }
 
-        var live = _liveTrees.FindLiveChildren([.. scan.Targets.Select(t => t.Path)], ct);
+        IReadOnlyList<string> folders = [.. scan.Targets.Select(t => t.Path)];
+        var live = _liveTrees.FindLiveChildren(folders, ct);
+        var owned = await OwnedElsewhereAsync(folders, ct).ConfigureAwait(false);
         var (planned, measured) = await PlanDeletionsAsync(scan.Targets, effective, ct).ConfigureAwait(false);
-        var (steps, spared) = await SpareAsync(planned, live, effective, ct).ConfigureAwait(false);
+        var (steps, spared) = await SpareAsync(planned, live, owned, effective, ct).ConfigureAwait(false);
+
+        if (OwnedElsewhereNote(owned) is { } elsewhere)
+        {
+            notes.Add(elsewhere);
+        }
 
         // Three sentences, because there are three states and the difference between them is a rule
         // and its absence. Saying "only what nothing has touched for 0 days is offered" would read
@@ -377,11 +392,17 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// <para>Both figures are measured under the same guard, which is what makes the subtraction
     /// between two of the same quantity rather than between a guarded figure and an unguarded one.
     /// See <see cref="CleanupProviderBase.MeasureSparedAsync"/>.</para>
+    ///
+    /// <para><b>An entry another row owns is left out here too, and it is not a survivor.</b> It is
+    /// that row's to take, so this plan neither counts it nor asserts it is still standing: a run
+    /// with both rows ticked removes it legitimately. Where it is also in use it is still the other
+    /// row's, and that row's own plan is what protects it and says so.</para>
     /// </summary>
     private async Task<(IReadOnlyList<CleanupStep> Steps, IReadOnlyList<(string Path, string Reason)> Spared)>
         SpareAsync(
             IReadOnlyList<CleanupStep> planned,
             LiveTreeFindings live,
+            OwnedEntries owned,
             MinimumAge keep,
             CancellationToken ct)
     {
@@ -398,20 +419,24 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 continue;
             }
 
-            var held = live.Live.Where(l => LongPath.Contains(clear.Path, l.Directory)).ToList();
+            var others = owned.Paths.Where(p => LongPath.Contains(clear.Path, p)).ToList();
+            var held = live.Live
+                .Where(l => LongPath.Contains(clear.Path, l.Directory) && !owned.Contains(l.Directory))
+                .ToList();
 
-            if (held.Count == 0)
+            if (held.Count == 0 && others.Count == 0)
             {
                 steps.Add(clear);
                 continue;
             }
 
             var paths = held.Select(h => h.Directory).ToList();
-            var measured = await MeasureSparedAsync(paths, keep, ct).ConfigureAwait(false);
+            var measured = await MeasureSparedAsync([.. paths, .. others], keep, ct).ConfigureAwait(false);
 
             steps.Add(clear with
             {
                 Spared = paths,
+                OwnedElsewhere = others,
                 Estimated = clear.Estimated - measured.Total,
             });
 
@@ -420,6 +445,52 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         }
 
         return (steps, spared);
+    }
+
+    /// <summary>
+    /// Every entry of <paramref name="folders"/> a tenant's row offers, and the rows that offer them.
+    /// </summary>
+    private async Task<OwnedEntries> OwnedElsewhereAsync(IReadOnlyList<string> folders, CancellationToken ct)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rows = new List<string>();
+
+        foreach (var tenant in _tenants)
+        {
+            var claimed = await tenant.ClaimedEntriesAsync(folders, ct).ConfigureAwait(false);
+
+            if (claimed.Count > 0)
+            {
+                paths.UnionWith(claimed);
+                rows.Add(tenant.Name);
+            }
+        }
+
+        return new OwnedEntries(paths, rows);
+    }
+
+    /// <summary>
+    /// The sentence saying what this row leaves to others, or null where it leaves nothing.
+    ///
+    /// <para>Information rather than a warning, because nothing is lost: each entry is offered on a
+    /// row of its own. It is said at all because the figure on this row is smaller than the folder,
+    /// and a reader comparing the two would otherwise have no way to find out why.</para>
+    /// </summary>
+    private static PlanNote? OwnedElsewhereNote(OwnedEntries owned) => owned.Paths.Count == 0
+        ? null
+        : new PlanNote(
+            PlanNoteSeverity.Information,
+            (owned.Paths.Count == 1
+                ? "One entry in these folders is offered on the row of the tool that wrote it"
+                : $"{owned.Paths.Count} entries in these folders are offered on the rows of the tools that wrote them")
+            + $", so this row leaves {(owned.Paths.Count == 1 ? "it" : "them")} out: "
+            + $"{string.Join(", ", owned.Rows)}.");
+
+    /// <param name="Paths">Each entry a tenant claimed, as that tenant named it.</param>
+    /// <param name="Rows">The name of each row that claimed at least one, in the order they were asked.</param>
+    private sealed record OwnedEntries(IReadOnlySet<string> Paths, IReadOnlyList<string> Rows)
+    {
+        public bool Contains(string path) => Paths.Contains(Path.TrimEndingDirectorySeparator(path));
     }
 
     private IEnumerable<string> DeclaredPaths() =>

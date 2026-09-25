@@ -168,6 +168,37 @@ public sealed class NuGetCacheProviderTests : IDisposable
         return new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
     }
 
+    /// <summary>
+    /// NuGet's command clears its scratch folder, so the temporary-folder row must leave it to this
+    /// one — and only it: the caches NuGet keeps elsewhere are no entry of a temporary folder.
+    /// </summary>
+    [Fact]
+    public async Task ClaimsItsScratchFolderInATemporaryFolderAndNothingElse()
+    {
+        var packages = _temp.CreateDirectory("profile", ".nuget", "packages");
+        var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
+        var temporary = Path.GetDirectoryName(scratch)!;
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(
+            "locals all --list", $"global-packages: {packages}\\\ntemp: {scratch}\\");
+
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
+        Assert.Empty(await provider.ClaimedEntriesAsync([_temp.CreateDirectory("elsewhere")]));
+    }
+
+    /// <summary>Without the SDK nothing offers the scratch folder here, so the temporary-folder row keeps it.</summary>
+    [Fact]
+    public async Task ClaimsNothingWithoutTheDotnetSdk()
+    {
+        var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
+        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+        Assert.Empty(await provider.ClaimedEntriesAsync([Path.GetDirectoryName(scratch)!]));
+    }
+
     private async Task<(CleanupPlan Plan, string[] Locations)> PlanWithLocals()
     {
         // Deliberately mirrors the audit: two locations under .nuget, two well outside it.

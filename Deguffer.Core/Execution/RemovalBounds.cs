@@ -5,7 +5,7 @@ namespace Deguffer.Core.Execution;
 /// <summary>
 /// What a removal must leave behind, beyond the guard on recently changed files.
 ///
-/// <para>Both members exist for §5.3's scratch folders, and neither can be expressed as an age.
+/// <para>All three members exist for §5.3's scratch folders, and neither can be expressed as an age.
 /// <c>%TEMP%</c> is not a cache Deguffer may take away — every program on the machine expects the
 /// folder itself to be there, and Windows does not put it back — so its <em>contents</em> are the
 /// subject and the directory is not. And a folder a running program is working in is off limits
@@ -27,7 +27,16 @@ namespace Deguffer.Core.Execution;
 /// honoured rather than silently ignored — the direction §5.2 requires an unrecognised case to fail
 /// in.
 /// </param>
-public sealed record RemovalBounds(bool KeepRoot, IReadOnlyList<string> Spared)
+/// <param name="OwnedElsewhere">
+/// Paths this removal must not delete or descend into because another row offers them, in display
+/// form. Held apart from <paramref name="Spared"/> because the two are reported differently: a spared
+/// entry is one "something is using", and saying that of an entry the Node.js compile cache row owns
+/// would send the user looking for a program that is not there.
+/// </param>
+public sealed record RemovalBounds(
+    bool KeepRoot,
+    IReadOnlyList<string> Spared,
+    IReadOnlyList<string>? OwnedElsewhere = null)
 {
     /// <summary>Nothing held back: the tree goes, root included.</summary>
     public static readonly RemovalBounds None = new(KeepRoot: false, []);
@@ -44,8 +53,14 @@ public sealed record RemovalBounds(bool KeepRoot, IReadOnlyList<string> Spared)
     /// root yields extended children, and a set holding display paths would match none of them —
     /// which fails silently and in the dangerous direction: every spared path would be deleted.</para>
     /// </summary>
-    internal IReadOnlySet<string> SparedPaths { get; } =
-        Spared.Count == 0
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(Spared.Select(LongPath.Extended), StringComparer.OrdinalIgnoreCase);
+    internal IReadOnlySet<string> SparedPaths { get; } = ExtendedSet(Spared);
+
+    /// <summary>
+    /// <see cref="OwnedElsewhere"/> as a set the walk can ask cheaply, on the terms
+    /// <see cref="SparedPaths"/> gives.
+    /// </summary>
+    internal IReadOnlySet<string> OwnedElsewherePaths { get; } = ExtendedSet(OwnedElsewhere ?? []);
+
+    private static HashSet<string> ExtendedSet(IReadOnlyList<string> paths) =>
+        new(paths.Select(LongPath.Extended), StringComparer.OrdinalIgnoreCase);
 }

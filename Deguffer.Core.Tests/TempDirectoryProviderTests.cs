@@ -36,14 +36,16 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
     private TempDirectoryProvider CreateProvider(
         ILiveTreeInspector? liveTrees = null,
-        AppPreferences? preferences = null) =>
+        AppPreferences? preferences = null,
+        params ITemporaryFolderTenant[] tenants) =>
         new(
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             system: _system,
             liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
-            preferences: new FakePreferences(preferences ?? AppPreferences.Default));
+            preferences: new FakePreferences(preferences ?? AppPreferences.Default),
+            tenants: tenants);
 
     /// <summary>A file old enough for the provider to offer, returned so a test can name it.</summary>
     private string Abandoned(int bytes, params string[] segments) =>
@@ -205,6 +207,66 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.True(File.Exists(Path.Combine(busy, "working.txt")), "a live scratch directory was emptied");
         Assert.Equal(1024, result.BytesReclaimed);
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// One entry, one row. An entry a tool's own row offers is left out of this one — not taken, not
+    /// counted — and it is not a survivor either, because a run with both rows ticked removes it
+    /// legitimately and §5.6 must not read that as a failure.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAnEntryAnotherRowOwnsToThatRow()
+    {
+        var owned = _temp.CreateDirectory("temp", "tool-cache");
+        Abandoned(8192, "temp", "tool-cache", "compiled.bin");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var tenant = new FakeTemporaryFolderTenant("Tool cache", "tool-cache");
+        var provider = CreateProvider(tenants: [tenant]);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(UserTemp, tenant.AskedAbout);
+
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([owned], step.OwnedElsewhere);
+        Assert.Empty(step.Spared);
+        Assert.Equal(1024, step.EstimatedBytes);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(owned, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Information && n.Message.Contains("Tool cache", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(Path.Combine(owned, "compiled.bin")), "the temporary-folder row took another row's entry");
+        Assert.False(File.Exists(Path.Combine(UserTemp, "abandoned.tmp")));
+        Assert.Equal(1024, result.BytesReclaimed);
+
+        // Not "left alone because something is using them": nothing is.
+        Assert.Equal(0, result.SparedCount);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// An entry that is both another row's and in use stays that row's. Protecting it here as well
+    /// would make this plan assert its survival, and the owning row's run would then fail §5.6.
+    /// </summary>
+    [Fact]
+    public async Task AnOwnedEntryInUseIsStillTheOwningRowsAndNotASurvivorHere()
+    {
+        var owned = _temp.CreateDirectory("temp", "tool-cache");
+        Abandoned(8192, "temp", "tool-cache", "compiled.bin");
+
+        var plan = await CreateProvider(
+            new FakeLiveTreeInspector(owned),
+            tenants: [new FakeTemporaryFolderTenant("Tool cache", "tool-cache")]).PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([owned], step.OwnedElsewhere);
+        Assert.Empty(step.Spared);
+        Assert.Equal(0, step.EstimatedBytes);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(owned, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

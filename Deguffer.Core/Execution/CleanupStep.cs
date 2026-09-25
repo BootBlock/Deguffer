@@ -367,6 +367,13 @@ public sealed record ClearDirectoryStep(string Path, string What) : DeleteStep(P
     /// </summary>
     public IReadOnlyList<string> Spared { get; init; } = [];
 
+    /// <summary>
+    /// Entries directly inside <see cref="DeleteStep.Path"/> that another row offers under the name of
+    /// the tool that wrote them, so this step neither takes nor counts them. See
+    /// <see cref="Providers.ITemporaryFolderTenant"/>.
+    /// </summary>
+    public IReadOnlyList<string> OwnedElsewhere { get; init; } = [];
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 
