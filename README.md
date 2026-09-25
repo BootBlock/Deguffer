@@ -139,6 +139,7 @@ installed" cleanly on a machine without that toolchain.
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
 | Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |
+| Steam library artwork | One item per game, fetched again when Steam next shows it; never Steam's index of it. A picture you replaced by hand is lost, so keep that game |
 | Steam shader pre-cache | One item per game, in every library Steam's own list names; never the games beside it |
 | Unreal Engine derived data cache | The cache every project shares, in both the older folder and each Zen store; a store is left alone while its server runs |
 | Node.js project dependencies | `node_modules` under your own source trees |

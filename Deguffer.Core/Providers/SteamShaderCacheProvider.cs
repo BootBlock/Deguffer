@@ -398,11 +398,8 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
                 path,
                 $"Shaders Steam downloaded for {app.DisplayName}. Steam downloads them again from Valve "
                 + "while shader pre-caching is on.",
-
-                // The id is the game wherever its library is, so a game kept stays kept if the user
-                // moves it to another drive.
-                Identity: new ItemIdentity(app.Id, app.Name ?? $"Steam app {app.Id}"),
-                Facets: Facets(app),
+                Identity: app.Identity,
+                Facets: app.Facets,
                 Group: library));
 
             // The game's manifest is the record that it is installed, and it sits two levels above
@@ -412,13 +409,6 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
                 $"Steam's record that {app.DisplayName} is installed."));
         }
     }
-
-    private static IReadOnlyList<ItemFacet> Facets(SteamApp app) => app.IsInstalled switch
-    {
-        true => [new ItemFacet("App ID", app.Id), new ItemFacet("Installed", "Yes")],
-        false => [new ItemFacet("App ID", app.Id), new ItemFacet("Installed", "No")],
-        null => [new ItemFacet("App ID", app.Id)],
-    };
 
     private IReadOnlyList<ToolRoot> DeclareToolRoots()
     {

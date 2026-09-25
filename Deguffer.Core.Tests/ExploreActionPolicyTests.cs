@@ -1062,7 +1062,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("config", false)]                  // who is signed in on this computer
     [InlineData("appcache", false)]                // the container, which stays
     [InlineData(@"appcache\httpcache", true)]      // the one cache offered here
-    [InlineData(@"appcache\librarycache", false)]  // recognised, and deliberately not offered
+    [InlineData(@"appcache\librarycache", false)]  // the artwork's container, which stays
     [InlineData("something-unrecognised", false)]
     public void SteamsInstallDirectoryOffersOnlyTheHttpCache(string relative, bool allowed)
     {
