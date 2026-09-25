@@ -222,6 +222,17 @@ public sealed record CleanupPlan
     public bool WasNotExamined { get; init; }
 
     /// <summary>
+    /// Whether this plan's figure counts only the files nothing outside its own locations links to,
+    /// so a deletion anywhere else can change it without touching a path it names.
+    ///
+    /// <para>pnpm's store is the case: a file is reclaimable only once no <c>node_modules</c> holds a
+    /// link to it, so removing a project's <c>node_modules</c> grows the store's figure. No path of the
+    /// store's is shared with the project's, which is why <see cref="RunChanges"/> cannot see the
+    /// connection by comparing locations and has to be told.</para>
+    /// </summary>
+    public bool CountsLinksFromElsewhere { get; init; }
+
+    /// <summary>
     /// Whether any step here cannot be carried out without administrator rights.
     ///
     /// Separate from <see cref="Fallback"/> on purpose: that one is about how a size was arrived at,

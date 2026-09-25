@@ -208,6 +208,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             ProtectedPaths = BuildProtectedPaths(store),
             Notes = notes,
             Fallback = measured.Fallback,
+            CountsLinksFromElsewhere = true,
         };
     }
 

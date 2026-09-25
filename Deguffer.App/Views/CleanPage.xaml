@@ -84,8 +84,8 @@
                      finds. It shows the count because that is what says whether the list is worth
                      opening. -->
                 <HyperlinkButton Grid.Column="2"
-                                 Content="{x:Bind Text.ItemsLinkLabel}"
-                                 Visibility="{x:Bind OffersItems}"
+                                 Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
+                                 Visibility="{x:Bind OffersItems, Mode=OneWay}"
                                  Padding="4,2"
                                  VerticalAlignment="Center"
                                  Tag="{x:Bind}"
@@ -189,8 +189,8 @@
                             <!-- Beside the explanation's link, and before it, because for a row whose
                                  items are chosen one by one, choosing them is what the row is for. -->
                             <HyperlinkButton Grid.Column="2"
-                                             Content="{x:Bind Text.ItemsLinkLabel}"
-                                             Visibility="{x:Bind OffersItems}"
+                                             Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
+                                             Visibility="{x:Bind OffersItems, Mode=OneWay}"
                                              VerticalAlignment="Center"
                                              Padding="0,2"
                                              Tag="{x:Bind}"

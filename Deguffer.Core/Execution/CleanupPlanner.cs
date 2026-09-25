@@ -163,24 +163,42 @@ public sealed class CleanupPlanner
     /// inside it: every provider then agrees about which files are recent, and a plan previewed at
     /// the top of the pass protects the same files as one previewed at the bottom.
     /// </param>
-    public async Task<IReadOnlyList<Finding>> PlanAllAsync(
+    public Task<IReadOnlyList<Finding>> PlanAllAsync(
+        MinimumAge keep = default,
+        IProgress<string>? status = null,
+        IProgress<Finding>? found = null,
+        CancellationToken ct = default) =>
+        PlanAsync(_providers, keep, status, found, ct);
+
+    /// <summary>
+    /// Preview <paramref name="providers"/> alone, on the same terms <see cref="PlanAllAsync"/> previews
+    /// every one: their caches dropped first, one at a time, each reported as it lands, largest first.
+    ///
+    /// <para>For the re-plan after a clean, which only has to describe the locations the run changed.
+    /// Every other provider's finding still describes the disk, and measuring it again costs a walk of
+    /// its tree for an answer already on screen. See <see cref="RunChanges"/> for which those are.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<Finding>> PlanAsync(
+        IReadOnlyList<ICleanupProvider> providers,
         MinimumAge keep = default,
         IProgress<string>? status = null,
         IProgress<Finding>? found = null,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(providers);
+
         // Every provider drops its cached view of the machine before any of them plans. Doing
         // this up front rather than per-provider matters: the providers share collaborators by
         // default, so invalidating inside the loop would throw away the snapshot the previous
         // provider just paid for.
-        foreach (var provider in _providers)
+        foreach (var provider in providers)
         {
             provider.InvalidateCaches();
         }
 
-        var findings = new List<Finding>(_providers.Count);
+        var findings = new List<Finding>(providers.Count);
 
-        foreach (var provider in _providers)
+        foreach (var provider in providers)
         {
             ct.ThrowIfCancellationRequested();
 

@@ -80,6 +80,19 @@ public sealed class PnpmStoreProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The figure counts only files no project links, so removing a project's <c>node_modules</c>
+    /// changes it without touching the store. The plan says so, because the re-plan after a clean
+    /// has no path to find that connection by. See <see cref="RunChanges"/>.
+    /// </summary>
+    [Fact]
+    public async Task SaysItsFigureDependsOnLinksFromOutsideTheStore()
+    {
+        Populate(Store);
+
+        Assert.True((await CreateProvider().PlanAsync()).CountsLinksFromElsewhere);
+    }
+
+    /// <summary>
     /// The number this provider waited a phase for. Summing file lengths would count the linked
     /// file and promise 68 KB; pruning would free 4 KB; the §5.4 rule is that the smaller, true
     /// figure is the one shown.

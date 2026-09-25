@@ -1,13 +1,13 @@
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// What one Storage row says about itself in words that do not change while it is on screen: the names
-/// its links and its disclosure are announced by, and what its Contents tab says about its steps.
+/// What one Storage row says about itself in words that stand for one plan: the names its links and its
+/// disclosure are announced by, and what its Contents tab says about its steps.
 ///
 /// <para>Apart from <see cref="FindingViewModel"/> because none of it depends on what the row holds
 /// ticked or kept. It is fixed by the provider's name, how many steps it planned and whether it is
-/// waiting for approved folders, and none of those changes before a preview replaces the row. The row
-/// keeps the state that moves; this keeps the sentences that do not.</para>
+/// waiting for approved folders, so the row replaces it only when it is planned again. The row keeps
+/// the state that moves with every click; this keeps the sentences that move only with the plan.</para>
 /// </summary>
 /// <param name="name">The row's name, as the provider gives it.</param>
 /// <param name="stepCount">Every step the provider planned, kept ones included.</param>
