@@ -126,7 +126,7 @@ installed" cleanly on a machine without that toolchain.
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 | Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
-| Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one a running browser is using |
+| Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one Deguffer can see a running browser using |
 
 **Tier 2 — regenerable, with cost.** Re-created by re-downloading or rebuilding.
 

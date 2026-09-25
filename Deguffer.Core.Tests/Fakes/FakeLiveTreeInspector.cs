@@ -47,9 +47,9 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// only thing that tells a program in a project's build directory from one merely below the
     /// project.</para>
     ///
-    /// <para><paramref name="arguments"/> are the full paths it was started with, answered by
-    /// <see cref="FindLaunchedWith"/> under the real inspector's rule: a candidate is live where an
-    /// argument names it or a path inside it.</para>
+    /// <para><paramref name="arguments"/> are the full paths it was started with, which
+    /// <see cref="FindLiveChildren"/> alone answers, as the real inspector does: the child of a
+    /// scratch folder an argument names, or names a path inside.</para>
     /// </summary>
     public FakeLiveTreeInspector WithProgram(
         string name,
@@ -113,8 +113,8 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     /// <summary>
     /// The immediate children of <paramref name="directories"/> that are declared live, or that hold
-    /// a place a program added with <see cref="WithProgram"/> runs from or works in, which is how the
-    /// real inspector builds this answer.
+    /// a place a program added with <see cref="WithProgram"/> runs from, works in or was started
+    /// with, which is how the real inspector builds this answer.
     ///
     /// <para>Immediate, and never the root itself, because that is the contract
     /// <see cref="ILiveTreeInspector.FindLiveChildren"/> keeps: it names the child a plan can spare,
@@ -135,6 +135,11 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                         .Select(root => ChildHolding(root, place.Directory))
                         .OfType<string>()
                         .Select(child => new LiveTree(child, place.Holders))),
+                .. _programs
+                    .SelectMany(program => program.Arguments
+                        .SelectMany(argument => directories.Select(root => ChildHolding(root, argument)))
+                        .OfType<string>()
+                        .Select(child => new LiveTree(child, [$"{program.Name} was started with it"]))),
             ],
             _complete);
 
@@ -158,26 +163,6 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(child)) is { } parent
         && parent.Equals(
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// The candidates declared live, and those a program added with <see cref="WithProgram"/> was
-    /// started with a path at or inside.
-    /// </summary>
-    public LiveTreeFindings FindLaunchedWith(IReadOnlyList<string> directories, CancellationToken ct = default) =>
-        new(
-            [
-                .. directories
-                    .Select(directory => new LiveTree(
-                        directory,
-                        [
-                            .. _live.Contains(directory) ? ["a test says something is using it"] : Array.Empty<string>(),
-                            .. _programs
-                                .Where(program => program.Arguments.Any(argument => LongPath.Contains(directory, argument)))
-                                .Select(program => $"{program.Name} was started with it"),
-                        ]))
-                    .Where(tree => tree.Holders.Count > 0),
-            ],
-            _complete);
 
     public void Invalidate() => InvalidateCount++;
 

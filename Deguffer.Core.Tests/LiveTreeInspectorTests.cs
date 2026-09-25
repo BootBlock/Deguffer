@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
@@ -392,7 +391,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     {
         var scratch = _temp.CreateDirectory("Scratch");
         var session = _temp.CreateDirectory("Scratch", "Session-One");
-        var asAddressed = ShortFormOf(session) ?? session;
+        var asAddressed = ShortPath.Of(session) ?? session;
 
         using var busy = StartWaiting(asAddressed, new LiveTreeQuery(session, session));
 
@@ -402,18 +401,19 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
-    /// A program started with a directory as the value of a switch is using it, the way Chromium is
-    /// started with <c>--user-data-dir=</c> naming its test profile. It neither runs from the profile
-    /// nor works in it, so the command line is the only place this can be seen.
+    /// A program started with a scratch entry as the value of a switch is using it, the way Chromium
+    /// is started with <c>--user-data-dir=</c> naming its test profile. It neither runs from the
+    /// profile nor works in it, so the command line is the only place this can be seen.
     /// </summary>
     [Fact]
-    public void ADirectoryIsLiveWhileAProgramStartedWithItIsRunning()
+    public void NamesTheChildOfAScratchFolderAProgramWasStartedWith()
     {
+        var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-a1B2c3");
 
-        using var browser = StartLaunchedWith(profile, $"--user-data-dir={profile}");
+        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={profile}");
 
-        var findings = new LiveTreeInspector().FindLaunchedWith([profile]);
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
@@ -422,36 +422,23 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
     /// <summary>
     /// A path given as the argument after a switch counts, as Firefox is given <c>-profile</c> and
-    /// then its profile, and so does a path inside the directory. A directory whose name is a prefix
-    /// of the one named is a different directory, and is not live.
+    /// then its profile, and so does a path inside the entry. An entry whose name is a prefix of the
+    /// one named is a different entry, and is not live.
     /// </summary>
     [Fact]
-    public void ADirectoryIsLiveWhenAPathInsideItIsTheArgumentAfterASwitch()
+    public void NamesTheChildHoldingAPathGivenAfterASwitch()
     {
+        var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f6");
         var inside = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f6", "storage");
-        var prefix = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f");
+        _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f");
 
-        using var browser = StartLaunchedWith(profile, "-profile", inside);
+        using var browser = StartLaunchedWith(scratch, profile, "-profile", inside);
 
-        var findings = new LiveTreeInspector().FindLaunchedWith([profile, prefix]);
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Without this the tests above pass on a rule answering "live" to everything it is shown.
-    /// </summary>
-    [Fact]
-    public void ADirectoryNoProgramWasStartedWithIsNotLive()
-    {
-        var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-z9Y8x7");
-
-        var findings = new LiveTreeInspector().FindLaunchedWith([profile]);
-
-        Assert.True(findings.Complete);
-        Assert.Empty(findings.Live);
     }
 
     /// <summary>
@@ -464,25 +451,50 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// creation disabled</b>, where the fixture falls back to the ordinary path.</para>
     /// </summary>
     [Fact]
-    public void ADirectoryNamedInItsShortFormIsStillLive()
+    public void NamesTheChildAProgramWasStartedWithInItsShortForm()
     {
+        var scratch = _temp.CreateDirectory("Temporary Folder");
         var profile = _temp.CreateDirectory("Temporary Folder", "Profile-Folder-Long");
-        var asNamed = ShortFormOf(profile) ?? profile;
+        var asNamed = ShortPath.Of(profile) ?? profile;
 
-        using var browser = StartLaunchedWith(profile, $"--user-data-dir={asNamed}");
+        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={asNamed}");
 
-        var findings = new LiveTreeInspector().FindLaunchedWith([profile]);
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
 
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
+    /// The other side of the same comparison: a scratch folder asked about in its 8.3 form still
+    /// finds the child a program named in full, and names it under the folder as it was asked. A
+    /// temporary folder named in short form by a setting is where the question arrives like this.
+    /// The same caveat applies about volumes with 8.3 name creation disabled.
+    /// </summary>
+    [Fact]
+    public void NamesTheChildOfAScratchFolderAskedAboutInItsShortForm()
+    {
+        var scratch = _temp.CreateDirectory("Temporary Folder");
+        var profile = _temp.CreateDirectory("Temporary Folder", "Profile-Folder-Asked");
+        var asAsked = ShortPath.Of(scratch) ?? scratch;
+
+        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={profile}");
+
+        var findings = new LiveTreeInspector().FindLiveChildren([asAsked]);
+
+        Assert.Equal(
+            Path.Combine(asAsked, "Profile-Folder-Asked"),
+            Assert.Single(findings.Live).Directory,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// A program that waits for two minutes having been started with <paramref name="arguments"/>,
     /// which it ignores: PowerShell joins everything after <c>-Command</c> into one command, and
-    /// the <c>#</c> turns the arguments into a comment. Waits until the inspector can see it
-    /// started with <paramref name="visibleFor"/>, for the reason <see cref="StartWaiting"/> gives.
+    /// the <c>#</c> turns the arguments into a comment. Waits until the inspector names
+    /// <paramref name="child"/> of <paramref name="scratch"/>, for the reason
+    /// <see cref="StartWaiting"/> gives.
     /// </summary>
-    private static WaitingProcess StartLaunchedWith(string visibleFor, params string[] arguments)
+    private static WaitingProcess StartLaunchedWith(string scratch, string child, params string[] arguments)
     {
         var start = new ProcessStartInfo(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
@@ -497,43 +509,25 @@ public sealed class LiveTreeInspectorTests : IDisposable
             start.ArgumentList.Add(argument);
         }
 
-        var waiting = new WaitingProcess(Process.Start(start)!);
-
-        Assert.True(
-            SpinWait.SpinUntil(
-                () => new LiveTreeInspector().FindLaunchedWith([visibleFor]).IsLive(visibleFor),
-                TimeSpan.FromSeconds(20)),
-            "the helper process never became visible to the inspector, so the test below would prove nothing");
-
-        return waiting;
+        return VisibleOrStopped(
+            new WaitingProcess(Process.Start(start)!),
+            () => new LiveTreeInspector().FindLiveChildren([scratch]).IsLive(child));
     }
 
     /// <summary>
-    /// The 8.3 alias for <paramref name="path"/>, or null where this volume creates none.
-    ///
-    /// Asked of Windows rather than constructed, because whether short names exist at all is a
-    /// per-volume setting and the alias's digits depend on what else is in the folder.
+    /// <paramref name="waiting"/> once <paramref name="visible"/> holds, or stopped before the
+    /// failure is reported, so a helper that never became visible does not run on for two minutes.
     /// </summary>
-    private static string? ShortFormOf(string path)
+    private static WaitingProcess VisibleOrStopped(WaitingProcess waiting, Func<bool> visible)
     {
-        var length = GetShortPathName(path, null, 0);
-
-        if (length == 0)
+        if (!SpinWait.SpinUntil(visible, TimeSpan.FromSeconds(20)))
         {
-            return null;
+            waiting.Dispose();
+            Assert.Fail("the helper process never became visible to the inspector, so the test below would prove nothing");
         }
 
-        var buffer = new char[length];
-        var written = GetShortPathName(path, buffer, length);
-        var shortForm = written > 0 && written < length ? new string(buffer, 0, (int)written) : null;
-
-        return string.Equals(shortForm, path, StringComparison.Ordinal) ? null : shortForm;
+        return waiting;
     }
-
-    // DllImport rather than LibraryImport, which needs AllowUnsafeBlocks; the test project does not
-    // enable it and one fixture helper is a poor reason to.
-    [DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetShortPathName(string path, [Out] char[]? buffer, uint length);
 
     /// <summary>
     /// A program that waits without reading its console, so it can be started with a chosen working
@@ -567,15 +561,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         // Wrapped before anything can throw, so a failure while waiting still stops the child rather
         // than leaving a ping running for two minutes.
-        var waiting = new WaitingProcess(Process.Start(start)!);
-
-        Assert.True(
-            SpinWait.SpinUntil(
-                () => new LiveTreeInspector().FindLive([visibleAt]).IsLive(visibleAt.Directory),
-                TimeSpan.FromSeconds(20)),
-            "the helper process never became visible to the inspector, so the test below would prove nothing");
-
-        return waiting;
+        return VisibleOrStopped(
+            new WaitingProcess(Process.Start(start)!),
+            () => new LiveTreeInspector().FindLive([visibleAt]).IsLive(visibleAt.Directory));
     }
 
     private sealed class WaitingProcess(Process process) : IDisposable

@@ -43,11 +43,16 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
             liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
             preferences: new FakePreferences(preferences ?? AppPreferences.Default));
 
-    /// <summary>A profile in this account's temporary folder holding one old file, returned as its path.</summary>
+    /// <summary>
+    /// A profile in this account's temporary folder holding one old file, returned as its path. The
+    /// folders are aged too, after their contents are written, because the row judges a profile by
+    /// its own times as well as its files'.
+    /// </summary>
     private string AbandonedProfile(string name, int bytes = 1024)
     {
         TempDirectory.Age(_temp.CreateFile(bytes, "temp", name, "Default", "Preferences"), TimeSpan.FromDays(30));
-        return Path.Combine(UserTemp, name);
+        TempDirectory.Age(Path.Combine(UserTemp, name, "Default"), TimeSpan.FromDays(30));
+        return TempDirectory.Age(Path.Combine(UserTemp, name), TimeSpan.FromDays(30));
     }
 
     /// <summary>
@@ -93,6 +98,10 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
             plan.Steps.OfType<DeleteStep>().Select(s => s.Group).Order(StringComparer.Ordinal));
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
 
+        // The near misses are named for §5.6 to prove, rather than merely left out.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.EndsWith("playwright_chromiumdev_profile-short", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.EndsWith("Playwright_chromiumdev_profile-p7Q8r9", StringComparison.Ordinal));
+
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
@@ -110,7 +119,8 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
     [Fact]
     public async Task OffersAnEmptyWebKitProfileAsALeftover()
     {
-        var profile = _temp.CreateDirectory("temp", "playwright_webkitdev_profile-b1C2d3");
+        var profile = TempDirectory.Age(
+            _temp.CreateDirectory("temp", "playwright_webkitdev_profile-b1C2d3"), TimeSpan.FromDays(30));
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -118,6 +128,25 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
         Assert.Equal(profile, step.Path, StringComparer.OrdinalIgnoreCase);
         Assert.True(step.IsLeftover);
         Assert.Equal("Playwright WebKit", step.Group);
+    }
+
+    /// <summary>
+    /// An empty profile has no files for the age limit to hold back, so the folder's own times are
+    /// what show it was made a moment ago — for a WebKit test that may be running now, and that no
+    /// command line names.
+    /// </summary>
+    [Fact]
+    public async Task HoldsBackAnEmptyProfileMadeWithinTheAgeLimit()
+    {
+        var profile = _temp.CreateDirectory("temp", "playwright_webkitdev_profile-i1J2k3");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+        Assert.True(Directory.Exists(profile), "an empty profile made this minute was deleted");
     }
 
     /// <summary>
@@ -145,8 +174,7 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
 
     /// <summary>
     /// A browser a test started names its profile only on its command line. That profile is never a
-    /// target however old its files are, the plan says what is using it, and §5.6 asserts it
-    /// survived.
+    /// target however old its files are, and the plan says what is using it.
     /// </summary>
     [Fact]
     public async Task LeavesAProfileARunningBrowserWasStartedWith()
@@ -161,7 +189,6 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal([abandoned], plan.TargetedPaths);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(live, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
             && n.Message.Contains("chrome-headless-shell was started with it", StringComparison.Ordinal));
 
@@ -184,7 +211,6 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
         var plan = await CreateProvider(liveTrees).PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(live, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -227,6 +253,7 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
         TempDirectory.Age(
             _temp.CreateFile(512, "Windows", "Temp", "playwright_chromiumdev_profile-w4X5y6", "Local State"),
             TimeSpan.FromDays(30));
+        TempDirectory.Age(Path.Combine(MachineTemp, "playwright_chromiumdev_profile-w4X5y6"), TimeSpan.FromDays(30));
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -273,5 +300,60 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
         var root = Assert.Single(roots);
         Assert.Equal(live, root.Path, StringComparer.OrdinalIgnoreCase);
         Assert.False(root.Recognises("Default"));
+    }
+
+    /// <summary>
+    /// A test runner deletes its profile the moment its browser closes, usually seconds after the
+    /// preview saw it in use. That is not a path Deguffer promised to keep, so its going must not
+    /// fail §5.6's check on an ordinary run.
+    /// </summary>
+    [Fact]
+    public async Task AProfileItsRunnerDeletesBeforeTheCleanDoesNotFailVerification()
+    {
+        var live = AbandonedProfile("playwright_chromiumdev_profile-l4M5n6");
+        AbandonedProfile("playwright_chromiumdev_profile-o7P8q9");
+
+        var provider = CreateProvider(FakeLiveTreeInspector.NothingLive.WithProgram("firefox", arguments: [live]));
+        var plan = await provider.PlanAsync();
+
+        Directory.Delete(live, recursive: true);
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// With no age limit and no guard, a profile is held back only while Deguffer can see the
+    /// browser using it. That removes a safety rule on a pre-selected row, so the row says so.
+    /// </summary>
+    [Fact]
+    public async Task WarnsThatNothingButARunningBrowserHoldsAProfileBackWhenTheLimitIsOff()
+    {
+        AbandonedProfile("puppeteer_dev_chrome_profile-r1S2t3");
+
+        var off = await CreateProvider(
+            preferences: AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 }).PlanAsync();
+        var on = await CreateProvider().PlanAsync();
+
+        Assert.Contains(off.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("No age limit is set", StringComparison.Ordinal));
+        Assert.DoesNotContain(on.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+    }
+
+    /// <summary>
+    /// An ordinary account may not list the machine's temporary folder, so an unelevated preview is
+    /// refused there every time. That is said plainly, and not as a warning that is always there.
+    /// </summary>
+    [Fact]
+    public async Task SaysPlainlyThatTheMachinesTemporaryFolderNeedsAnAdministrator()
+    {
+        AbandonedProfile("playwright_chromiumdev_profile-u4V5w6");
+        using var denied = new DeniedDirectory(_temp.CreateDirectory("Windows", "Temp"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        var note = Assert.Single(plan.Notes, n => n.Message.Contains(MachineTemp, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(PlanNoteSeverity.Information, note.Severity);
+        Assert.Contains("administrator", note.Message, StringComparison.Ordinal);
     }
 }

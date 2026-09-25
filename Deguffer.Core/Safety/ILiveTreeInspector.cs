@@ -120,8 +120,8 @@ public interface ILiveTreeInspector
     LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default);
 
     /// <summary>
-    /// Which immediate children of <paramref name="directories"/> something is running from or
-    /// working in, asked without naming the children.
+    /// Which immediate children of <paramref name="directories"/> something is running from,
+    /// working in, or was started with, asked without naming the children.
     ///
     /// <para><b>The same evidence as <see cref="FindLive"/>, asked from the other end, and the
     /// reason is arithmetic.</b> That method tests each candidate against every process, which is
@@ -138,30 +138,25 @@ public interface ILiveTreeInspector
     /// <paramref name="directories"/> itself has no such child and is not reported — there is
     /// nothing below it to spare, and the folder itself is never a candidate for removal.</para>
     ///
-    /// <para>The same limits apply as to <see cref="FindLive"/>: every signal is positive evidence,
-    /// and an elevated program or one belonging to another account cannot be inspected at all.</para>
+    /// <para><b>A path a program was started with counts here, and only here</b>, because it is
+    /// the only signal that sees a test browser using its profile in <c>%TEMP%</c>. The browser
+    /// runs from its own install folder and works wherever the test runner does; the profile is on
+    /// its command line instead, as <c>--user-data-dir=</c> for Chromium and <c>-profile</c> for
+    /// Firefox, for as long as it runs. A project folder named on an editor's command line is not
+    /// evidence that its build output is in use, which is why <see cref="FindLive"/> and
+    /// <see cref="FindOccupiedDirectories"/> do not read it.</para>
+    ///
+    /// <para>An 8.3 alias on either side is expanded before anything is compared, because a program
+    /// builds its paths from <c>%TEMP%</c>, which Windows sets to the short form on a profile whose
+    /// folder name is longer than eight characters. Each child is named under its folder as the
+    /// folder was asked.</para>
+    ///
+    /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories or command
+    /// lines could not be read at all. The same limits apply as to <see cref="FindLive"/>: every
+    /// signal is positive evidence, and an elevated program or one belonging to another account
+    /// cannot be inspected at all.</para>
     /// </summary>
     LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default);
-
-    /// <summary>
-    /// Which of <paramref name="directories"/> a running program was started with: named as one of
-    /// its arguments, or with a path inside it named.
-    ///
-    /// <para><b>This is the only one of the signals that sees a browser using its profile.</b> A
-    /// test browser runs from its own install folder and works wherever the test runner does, so
-    /// neither of those places is the profile Playwright made for it in <c>%TEMP%</c>. The profile
-    /// is on its command line instead, as <c>--user-data-dir=</c> for Chromium and <c>-profile</c>
-    /// for Firefox, and it stays there for as long as the browser runs.</para>
-    ///
-    /// <para>A path held in its 8.3 form is expanded before it is compared, because a test runner
-    /// builds the profile's path from <c>%TEMP%</c>, which Windows sets to the short form on a
-    /// profile whose folder name is longer than eight characters.</para>
-    ///
-    /// <para><see cref="LiveTreeFindings.Complete"/> is false where command lines could not be read
-    /// at all. The same limits apply as to <see cref="FindLive"/>: every entry is positive evidence,
-    /// and a program belonging to another account cannot be inspected at all.</para>
-    /// </summary>
-    LiveTreeFindings FindLaunchedWith(IReadOnlyList<string> directories, CancellationToken ct = default);
 
     /// <summary>
     /// Discard any cached snapshot, so every provider in one planning pass sees the same machine.

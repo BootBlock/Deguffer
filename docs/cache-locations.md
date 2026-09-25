@@ -2438,8 +2438,8 @@ rather than a global install.
 | | |
 | --- | --- |
 | **Location** | Directly inside this account's temporary folder, ordinarily `%LOCALAPPDATA%\Temp`, and inside `C:\Windows\Temp` |
-| **Method** | Delete each recognised profile folder, taking only what nothing has touched for seven days — the same setting as the temporary files row |
-| **Typical size** | 6.7 GB across 1,862 profiles on one workstation, the oldest 70 days old |
+| **Method** | Delete each recognised profile folder, taking only what nothing has touched for the number of days set for temporary files — seven by default, and 0 means no age limit |
+| **Typical size** | 6,750.9 MB across 1,862 profiles on one workstation, the oldest 70 days old |
 
 ### What it is
 
@@ -2476,20 +2476,29 @@ and the machine with abandoned profiles is often one where the tool has since be
 
 ### What is protected
 
-Each temporary folder itself, every sibling of a profile, and **any profile a running browser is
-using**. A test browser runs from its own install folder and works wherever the test runner does, so
-neither of those shows which profile it has open. Its command line does: Playwright starts Chromium
-with `--user-data-dir=` and Firefox with `-profile`, each followed by the profile's path, and
-Puppeteer does the same. Deguffer reads the command line of every running program it may inspect,
-and leaves alone any profile one was started with. It also leaves alone a profile a program is
-running from or working in.
+Each temporary folder itself, and every sibling named like a profile but not in either tool's
+shape, are checked after the clean to prove they survived. Nothing else in the folder is touched.
+
+A profile a running browser is using is left alone. A test browser runs from its own install folder
+and works wherever the test runner does, so neither of those shows which profile it has open. Its
+command line does: Playwright starts Chromium with `--user-data-dir=` and Firefox with `-profile`,
+and Puppeteer uses `--user-data-dir=` and `--profile`, each naming the profile's path. Deguffer reads
+the command line of every running program it may inspect, and leaves alone any profile one was
+started with. It also leaves alone a profile a program is running from or working in. The
+[Windows temporary folders](#windows-temporary-folders) row asks the same question, so it leaves
+these profiles alone too.
 
 The age limit is the other half. A test that is running now has a profile it wrote to moments ago,
 so only profiles nothing has touched for the number of days set for temporary files are offered.
-Seven days is the default. On the workstation measured, that still offered 5.1 GB of the 6.7 GB.
+The profile folder's own times count as well as its files', because an empty profile has no files.
+On the workstation measured, the default of seven days still offered 5,140.2 MB of the 6,750.9 MB.
 
-A browser that runs as another account cannot be inspected from an ordinary Deguffer. Its profile
-is then protected by the age limit alone.
+A browser that runs as another account or as administrator cannot be inspected from an ordinary
+Deguffer, so its profile is then protected by the age limit alone. With the limit set to 0 and no
+guard on recently changed files, nothing protects it, and the row says so in a warning.
+
+A running browser's profile is not checked after the clean, because its test runner deletes it as
+soon as the browser closes. Its going is not something Deguffer did.
 
 ### What it costs you
 
@@ -2503,8 +2512,8 @@ leftover folder is the whole of what this row is for.
 A profile made for one launch holds nothing a later launch reads, and nothing of yours. There is no
 command to prefer under §5.1, because the only cleanup the tools have is the exit hook that never ran.
 
-The [Windows temporary folders](#windows-temporary-folders) row reaches these folders too, when
-they are old enough. Choosing both removes each profile once.
+The Windows temporary folders row reaches these folders too, when they are old enough. Choosing
+both removes each profile once.
 
 ---
 

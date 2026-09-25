@@ -24,8 +24,6 @@ internal static partial class CommandLinePaths
 {
     public static IReadOnlyList<string> Of(string commandLine)
     {
-        ArgumentNullException.ThrowIfNull(commandLine);
-
         if (string.IsNullOrWhiteSpace(commandLine))
         {
             // CommandLineToArgvW answers an empty string with the path of this process instead.
@@ -86,7 +84,7 @@ internal static partial class CommandLinePaths
         }
     }
 
-    [LibraryImport("shell32.dll", EntryPoint = "CommandLineToArgvW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("shell32.dll", EntryPoint = "CommandLineToArgvW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial nint CommandLineToArgv(string commandLine, out int count);
 
     [LibraryImport("kernel32.dll")]

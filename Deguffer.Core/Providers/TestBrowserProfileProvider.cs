@@ -8,7 +8,7 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The browser profiles Playwright and Puppeteer make in the temporary folder for each browser they
-/// launch, and leave there when a test run is stopped hard (1,862 of them, 6.7 GB, on the surveyed
+/// launch, and leave there when a test run is stopped hard (1,862 of them, 6,750.9 MB, on the surveyed
 /// machine, the oldest 70 days old).
 ///
 /// <para><b>Recognised by name, one child of a temporary folder at a time, and nothing else there
@@ -36,7 +36,7 @@ namespace Deguffer.Core.Providers;
 /// <item>The temporary-files age limit, which the plan carries as its <see cref="CleanupPlan.Keep"/>
 /// exactly as the temporary files row does. See <see cref="TemporaryAgeLimit"/>.</item>
 /// <item>A profile a running browser was started with is never a target.
-/// <see cref="ILiveTreeInspector.FindLaunchedWith"/> is what sees that: the browser runs from its
+/// <see cref="ILiveTreeInspector.FindLiveChildren"/> is what sees that: the browser runs from its
 /// own install and works wherever the test runner does, and names the profile only on its command
 /// line. Anything running from or working in a profile is excluded as well.</item>
 /// </list>
@@ -107,9 +107,9 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
         "Nothing changes for your tests: each run makes a new profile for every browser it starts, and "
         + "nothing reads an old one again. "
         + (TemporaryAgeLimit.Days(_preferences) is var days and > 0
-            ? $"Only profiles nothing has touched for {TemporaryAgeLimit.Describe(days)} are offered, "
-            : "")
-        + "and a profile a running browser was started with is left where it is.";
+            ? $"Only profiles nothing has touched for {TemporaryAgeLimit.Describe(days)} are offered, and "
+            : "No age limit is set for temporary files, but ")
+        + "a profile a running browser is using is left where it is, wherever Deguffer can see the browser.";
 
     public override ProviderDescription Description { get; } = new()
     {
@@ -138,7 +138,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Scans.Any(s => s.Children.Directories.Count > 0 || s.Children.Links.Count > 0));
+        Task.FromResult(Profiles().Count > 0 || Scans.Any(s => s.Children.Links.Count > 0));
 
     /// <summary>
     /// Every profile a running program is using, as a root recognising no child, so Explore refuses
@@ -172,9 +172,17 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
 
         foreach (var scan in scans)
         {
+            // The machine's temporary folder does not let an ordinary account list it, so an
+            // unelevated preview is refused there every time. That is a fact about the folder rather
+            // than something wrong, and a warning on every preview would teach the reader to skip it.
             if (scan.Children.Unreadable)
             {
-                notes.Add(UnreadableRoot.Note(scan.Folder));
+                notes.Add(scan.RequiresElevation
+                    ? new PlanNote(
+                        PlanNoteSeverity.Information,
+                        $"Deguffer could not look inside '{scan.Folder}' without administrator rights, "
+                        + "so no profile a test left there is counted.")
+                    : UnreadableRoot.Note(scan.Folder));
             }
 
             // A link is named rather than dropped, and never followed: what it points at was never
@@ -212,10 +220,18 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
                 continue;
             }
 
+            // The folder's own times, and not only its files'. The guard withholds recent files, and
+            // an empty folder has none, so a WebKit profile made a moment ago for a test that is
+            // running now would otherwise be offered under a row promising it is not.
+            if (effective.Protects(profile.Directory))
+            {
+                continue;
+            }
+
             targets.Add(new DeletionTarget(
                 profile.Path,
                 $"A {profile.Group} profile a test run left behind. Nothing reads it again.",
-                LastWritten: profile.LastWritten,
+                LastWritten: profile.Directory.LastWriteTimeUtc,
                 RequiresElevation: profile.RequiresElevation,
 
                 // The path is the leftover. An empty WebKit profile frees no bytes, and removing it
@@ -226,13 +242,25 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
 
         var (steps, measured) = await PlanDeletionsAsync(targets, effective, ct).ConfigureAwait(false);
 
-        if (floor.IsOn)
+        // Three states, as on the temporary files row, because the difference between them is a rule
+        // and its absence. With no limit and no guard, a profile is held back only while Deguffer can
+        // see the browser using it, and a browser it cannot inspect is not seen.
+        notes.Add((floor.IsOn, effective.IsOn) switch
         {
-            notes.Add(new PlanNote(
+            (true, _) => new PlanNote(
                 PlanNoteSeverity.Information,
                 $"Only profiles nothing has touched for {floor.Describe()} are offered, which is your "
-                + "limit for temporary files. A test that is running now has a profile open."));
-        }
+                + "limit for temporary files. A test that is running now has a profile open."),
+            (false, true) => new PlanNote(
+                PlanNoteSeverity.Information,
+                "No age limit is set for temporary files, so apart from a profile a running browser is "
+                + "using, the only thing holding a profile back is your guard on recently changed files."),
+            _ => new PlanNote(
+                PlanNoteSeverity.Warning,
+                "No age limit is set for temporary files, so every profile is offered however recently "
+                + "it was written, unless Deguffer can see a running browser using it. A browser running "
+                + "as another account, or as administrator, cannot be seen."),
+        });
 
         if (LiveTreeVeto.NoteFor(live.Live, l => Path.GetFileName(Path.TrimEndingDirectorySeparator(l.Directory)))
             is { } busy)
@@ -263,12 +291,15 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
+            // A profile held back as live or recent is deliberately absent. Its test runner deletes it
+            // the moment its browser closes, which is usually seconds, so asserting it survived
+            // would raise §5.6's alarm on an ordinary run and teach the reader to ignore it.
             ProtectedPaths = Protect(
             [
                 .. scans.Select(s => (s.Folder, "The temporary folder itself must survive — only the "
                     + "test browser profiles inside it are removed.")),
-                .. live.Live.Select(l => (l.Directory,
-                    $"Left alone because {string.Join("; ", l.Holders)}.")),
+                .. NearMisses().Select(path => (path, "Named like a test browser profile, but not in "
+                    + "the shape either tool writes, so it is somebody else's.")),
             ]),
             Notes = notes,
 
@@ -281,8 +312,13 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// The temporary folders and what each holds that looks like a profile, listed once per planning
-    /// pass because the presence probe, Explore and the plan all ask.
+    /// The temporary folders and every child named for either tool, listed once per planning pass
+    /// because the presence probe, Explore and the plan all ask.
+    ///
+    /// <para><b>By the tools' own prefixes rather than by the full rule</b>, so the near misses are
+    /// in hand as well: a sibling named like a profile is the one a looser rule would take, and §5.6
+    /// asserts it survived. Everything else in the folder has no name in common with a target, and
+    /// listing tens of thousands of entries to protect them would prove nothing more.</para>
     ///
     /// <para>The folders are the temporary files row's own, so a <c>%TEMP%</c> pointed somewhere
     /// Deguffer declines to treat as a temporary folder is declined here as well, and that row says
@@ -296,7 +332,9 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
            select new FolderScan(
                folder,
                root.RequiresElevation,
-               ChildDirectories.Under(folder, static name => RecognisedProfile().IsMatch(name))),
+               ChildDirectories.Under(folder, static name =>
+                   name.StartsWith("playwright_", StringComparison.OrdinalIgnoreCase)
+                   || name.StartsWith("puppeteer_", StringComparison.OrdinalIgnoreCase))),
     ];
 
     private IReadOnlyList<Profile> Profiles() =>
@@ -304,16 +342,25 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
         .. from scan in Scans
            from directory in scan.Children.Directories
            let match = RecognisedProfile().Match(directory.Name)
+           where match.Success
            select new Profile(
                LongPath.Display(directory.FullName),
                $"{DisplayNames[match.Groups["tool"].Value]} {DisplayNames[match.Groups["browser"].Value]}",
-               directory.LastWriteTimeUtc,
+               directory,
                scan.RequiresElevation),
     ];
 
+    /// <summary>The children named for either tool that are not in the shape either writes.</summary>
+    private IEnumerable<string> NearMisses() =>
+        from scan in Scans
+        from directory in scan.Children.Directories
+        where !RecognisedProfile().IsMatch(directory.Name)
+        select LongPath.Display(directory.FullName);
+
     /// <summary>
     /// What is using any of <paramref name="profiles"/>: a browser started with one, or a program
-    /// running from or working in one.
+    /// running from or working in one. Asked of the folders rather than the profiles, because the
+    /// process table already holds the answer whatever the folder holds.
     /// </summary>
     private LiveTreeFindings FindLive(IReadOnlyList<Profile> profiles, CancellationToken ct)
     {
@@ -322,19 +369,13 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
             return LiveTreeFindings.Nothing;
         }
 
-        var launched = _liveTrees.FindLaunchedWith([.. profiles.Select(p => p.Path)], ct);
-        var occupied = _liveTrees.FindLiveChildren([.. Scans.Select(s => s.Folder)], ct);
+        var children = _liveTrees.FindLiveChildren([.. Scans.Select(s => s.Folder)], ct);
         var named = profiles.Select(p => p.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return new LiveTreeFindings(
-            [
-                .. launched.Live,
-                .. occupied.Live.Where(l => named.Contains(l.Directory) && !launched.IsLive(l.Directory)),
-            ],
-            launched.Complete && occupied.Complete);
+        return children with { Live = [.. children.Live.Where(l => named.Contains(l.Directory))] };
     }
 
     private sealed record FolderScan(string Folder, bool RequiresElevation, ChildDirectoryScan Children);
 
-    private sealed record Profile(string Path, string Group, DateTime LastWritten, bool RequiresElevation);
+    private sealed record Profile(string Path, string Group, DirectoryInfo Directory, bool RequiresElevation);
 }
