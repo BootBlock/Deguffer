@@ -332,6 +332,26 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
         Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the transcoder folder."));
     }
 
+    /// <summary>The other direction: a transcoder folder inside what the data folder keeps.</summary>
+    [Fact]
+    public async Task NeverEmptiesATranscoderFolderInsideWhatTheDataFolderKeeps()
+    {
+        var kept = CreateData(Data);
+        var inside = Path.Combine(Data, "metadata", "library");
+        Transcoding(inside);
+        Write(Path.Combine(Data, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", inside));
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(inside, plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the transcoder folder."));
+    }
+
     /// <summary>
     /// Settings Deguffer cannot read may move the transcoder anywhere. The row says so and must not read
     /// as clear, and the default folder, which carries the marker, is still offered.

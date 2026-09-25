@@ -208,13 +208,12 @@ public static class JellyfinServerLayout
             // describe is offered all the same, so the scan names it rather than this guessing at it.
             string? Why(string folder, PathPresence presence, bool isMoved)
             {
-                // A data folder inside a transcoder folder would be emptied with it, and so would what a
-                // data folder keeps where the two overlap. Jellyfin refuses to start that way, so only
-                // settings nothing runs can say so. The default folder sits inside the data folder's
-                // cache, which is why the data folder itself is asked about in one direction only.
-                if (present.Any(other => LongPath.Contains(folder, other))
-                    || present.SelectMany(other => DataNames, (other, name) => Path.Combine(other, name.RelativePath))
-                        .Any(kept => LongPath.Contains(folder, kept) || LongPath.Contains(kept, folder)))
+                // What a data folder keeps would be emptied with a transcoder folder that overlaps it, and
+                // a transcoder folder holding a whole data folder overlaps all of it. Jellyfin refuses to
+                // start that way, so only settings nothing runs can say so. The data folder itself is not
+                // asked about, because the default folder sits inside its cache.
+                if (present.SelectMany(other => DataNames, (other, name) => Path.Combine(other, name.RelativePath))
+                    .Any(kept => LongPath.Contains(folder, kept) || LongPath.Contains(kept, folder)))
                 {
                     return "it overlaps a folder Jellyfin keeps its own data in";
                 }
