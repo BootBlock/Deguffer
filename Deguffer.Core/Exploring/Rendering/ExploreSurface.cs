@@ -276,6 +276,12 @@ public abstract class ExploreSurface
     public abstract ExploreHit? At(float x, float y);
 
     /// <summary>
+    /// The rectangle of the shape at this canvas point, or null where the point is over nothing or
+    /// this drawing is not made of rectangles. The shape is the one <see cref="At"/> names there.
+    /// </summary>
+    public abstract ExploreTile? TileAt(float x, float y);
+
+    /// <summary>
     /// Where each of <paramref name="nodes"/> was drawn, for a caller that wants to mark it out.
     ///
     /// <para>Only the nodes this drawing actually drew come back, so a selection made in a folder

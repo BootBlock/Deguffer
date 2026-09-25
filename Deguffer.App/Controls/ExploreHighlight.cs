@@ -133,6 +133,15 @@ internal sealed class ExploreHighlight : Canvas
         _pickedEdge.StrokeThickness = PickedEdgeWidth / scale;
     }
 
+    /// <summary>
+    /// Take the outlines off the screen while the picture under them is on its way to being another,
+    /// keeping them to put back. The labels are hidden on the same terms.
+    /// </summary>
+    public void Hide() => Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    /// <summary>Put the outlines back once the picture they mark out is the one on screen.</summary>
+    public void Reveal() => Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+
     /// <summary>Take every outline off, for a map that is no longer showing anything.</summary>
     public void Clear()
     {

@@ -317,6 +317,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasNoTree))]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
     [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
@@ -333,6 +334,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
+    [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
     [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
@@ -408,6 +410,14 @@ public sealed partial class ExploreViewModel : ObservableObject
         : null;
 
     public bool HasViewNote => ViewNote is not null;
+
+    /// <summary>
+    /// Whether the picture on screen is a treemap, the one the mouse zooms and drags, so the line
+    /// naming how is worth showing. Not while a scan runs: the map draws the icicle then, whatever
+    /// the View box says (see <see cref="ViewNote"/>).
+    /// </summary>
+    public bool ShowsMapControls =>
+        SelectedView == ExploreView.Treemap && Tree is { ChildOrder: ExploreChildOrder.BySize };
 
     /// <summary>
     /// How large the volume was and how much of it was free when the scan on screen finished, where
