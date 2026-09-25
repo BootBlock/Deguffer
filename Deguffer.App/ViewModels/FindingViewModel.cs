@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Configuration;
@@ -30,7 +31,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// The finding as its provider planned it, before the keep list took anything out. Held so that
     /// releasing an item puts it back with its size and its age, without a rescan.
     /// </summary>
-    private readonly Finding _found;
+    private Finding _found;
 
     /// <param name="memory">
     /// What this row and its steps were last left ticked as. It answers per step as well as per
@@ -42,7 +43,37 @@ public sealed partial class FindingViewModel : ObservableObject
     /// below reads the plan, so every figure, status and default this row states is about what it
     /// will actually offer.
     /// </param>
-    public FindingViewModel(Finding finding, SelectionMemory memory, KeepList keepList)
+    public FindingViewModel(Finding finding, SelectionMemory memory, KeepList keepList) =>
+        Load(finding, memory, keepList);
+
+    /// <summary>
+    /// Take the plan the re-plan after a clean made for this row's provider, and stay the same row.
+    ///
+    /// <para>Written over rather than replaced, so the list keeps the row's container, its place and
+    /// its focus: only the rows the run changed are planned again, and the rest of the list is not
+    /// about anything new. The row is not moved to where its new size would sort it either, which is
+    /// how a row shrunk by keeping an item already behaves: the list is not reshuffled under the user.</para>
+    ///
+    /// <para>Everything else is what a row built from <paramref name="finding"/> would state, ticks
+    /// included: <paramref name="memory"/> has recorded every change the user made, so each surviving
+    /// step comes back as it was left, and a step the run emptied comes back unticked because it can
+    /// no longer be ticked.</para>
+    /// </summary>
+    public void Replan(Finding finding, SelectionMemory memory, KeepList keepList)
+    {
+        foreach (var step in Steps)
+        {
+            step.PropertyChanged -= OnStepChanged;
+        }
+
+        Load(finding, memory, keepList);
+
+        // Every binding on the row reads the plan that has just been replaced.
+        OnPropertyChanged(string.Empty);
+    }
+
+    [MemberNotNull(nameof(_found), nameof(Finding), nameof(Notes), nameof(FacetColumns), nameof(Steps), nameof(Text))]
+    private void Load(Finding finding, SelectionMemory memory, KeepList keepList)
     {
         _found = finding;
         Finding = WithKeepList(finding, keepList);
@@ -276,7 +307,7 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool IsAlreadyClear => Status is FindingStatus.AlreadyClear;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
-    public IReadOnlyList<StepViewModel> Steps { get; }
+    public IReadOnlyList<StepViewModel> Steps { get; private set; }
 
     /// <summary>
     /// This finding narrowed to the steps still selected, which is what actually gets executed.
@@ -316,7 +347,7 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool OffersItems => Finding.Provider.Grain.OffersEachStep(Steps.Count);
 
     /// <summary>What this row says about itself in words that do not change. See <see cref="FindingRowText"/>.</summary>
-    public FindingRowText Text { get; }
+    public FindingRowText Text { get; private set; }
 
     /// <summary>
     /// The one step of a row that has nothing to choose between, which the Contents tab still states
@@ -328,7 +359,7 @@ public sealed partial class FindingViewModel : ObservableObject
     public bool HasSoleStep => SoleStep is not null;
 
     /// <summary>The headings of the item list's facet columns, in order. Empty where no step carries a facet.</summary>
-    public IReadOnlyList<string> FacetColumns { get; }
+    public IReadOnlyList<string> FacetColumns { get; private set; }
 
     public IReadOnlyList<string> Notes { get; private set; }
 

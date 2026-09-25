@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
@@ -163,8 +164,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>
     /// List <paramref name="row"/>'s items in place of the rows.
     ///
-    /// <para><b>Only for a row still on the page.</b> A row's dialog stays open while a preview, or the
-    /// re-plan after a clean, replaces every row, and its button still holds the row it was opened for.
+    /// <para><b>Only for a row still on the page.</b> A row's dialog stays open while a preview replaces
+    /// every row, and its button still holds the row it was opened for.
     /// A list for that row would take ticks the page no longer reads: nothing remembers them, the Selected
     /// figure ignores them, and Clean runs the row that replaced it. An item unticked there to keep it out
     /// of the next clean would still be deleted.</para>
@@ -526,9 +527,10 @@ public sealed partial class CleanViewModel : ObservableObject
             // for the length of a scan would describe a machine that no longer exists.
             var outcome = RecordRunResult(results, freeBefore);
 
-            // Re-plan rather than keeping the old rows: their sizes and "Ready to clean" labels
-            // describe a machine that no longer exists.
-            await LoadPreviewAsync(ct);
+            // The rows the run changed say sizes and "Ready to clean" labels about a machine that no
+            // longer exists, so they are planned again. Only those: every other row still describes
+            // the disk, and measuring it again is the whole scan over for answers already on screen.
+            await ReplanAsync(RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised), ct);
 
             // Last, so a re-plan's per-provider progress lines cannot be what the bar is left
             // showing. See ReportOutcome for which of the two sentences wins it.
@@ -648,6 +650,58 @@ public sealed partial class CleanViewModel : ObservableObject
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));
         UpdateSelectionTotal();
+    }
+
+    /// <summary>
+    /// Plan <paramref name="providers"/> again and write each new finding over its row where the row
+    /// stands. The list is told nothing: no row leaves it, none joins it and none moves, so the reader
+    /// keeps their place, their focus and what they had open.
+    ///
+    /// <para>The preview is withdrawn while it runs, as <see cref="LoadPreviewAsync"/> withdraws it.
+    /// Until the last of these rows lands, the list describes the disk partly before the run and
+    /// partly after it, and a re-plan that is cancelled or fails leaves it that way. Clean stays off
+    /// until a scan describes the whole of it again.</para>
+    /// </summary>
+    private async Task ReplanAsync(IReadOnlyList<ICleanupProvider> providers, CancellationToken ct)
+    {
+        // Its ticks belong to steps that are about to be replaced, and a tick there would reach none
+        // the next run takes.
+        if (ShownItems is { } items && providers.Contains(items.Row.Finding.Provider))
+        {
+            CloseItems();
+        }
+
+        HasPreview = false;
+        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+        _barShowsPreviewSummary = false;
+
+        var progress = new Progress<string>(message => Report(message));
+        var found = new Progress<Finding>(ReplanRow);
+
+        // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
+        var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
+
+        await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct), ct);
+
+        HasPreview = true;
+        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));
+
+        // Nothing was inserted, so the subscription that follows the list raises nothing.
+        NotifyEmptyStateChanged();
+        UpdateShares();
+        UpdateSelectionTotal();
+    }
+
+    private void ReplanRow(Finding finding)
+    {
+        // Found by the provider itself, which is the one instance the planner holds for it.
+        var row = Findings.First(row => ReferenceEquals(row.Finding.Provider, finding.Provider));
+
+        row.Replan(finding, _selections.Memory, _keeps.Current);
+        row.IsListed = IsListed(row);
+
+        // The row's steps are new, and a re-plan runs while the keep list is not to be changed.
+        AllowKeepListChanges(row, !IsBusy);
     }
 
     /// <summary>

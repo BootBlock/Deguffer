@@ -46,6 +46,28 @@ public sealed class CleanupPlannerTests
         Assert.Equal(["second", "first"], findings.Select(f => f.Provider.Id));
     }
 
+    /// <summary>
+    /// The re-plan after a clean measures the rows the run changed and no others. A provider left out
+    /// keeps its cached view as well as its finding, because nothing about its locations moved.
+    /// </summary>
+    [Fact]
+    public async Task PlanningChosenProvidersTouchesNoOtherProvider()
+    {
+        var journal = new List<string>();
+        var first = new StubProvider("first", bytes: 1_000, journal: journal);
+        var second = new StubProvider("second", bytes: 9_000, journal: journal);
+        var third = new StubProvider("third", bytes: 5_000, journal: journal);
+        var planner = new CleanupPlanner([first, second, third]);
+
+        var found = new ProgressRecorder<Finding>();
+
+        var findings = await planner.PlanAsync([third, first], MinimumAge.Off, status: null, found, CancellationToken.None);
+
+        Assert.Equal(["invalidate:third", "invalidate:first", "plan:third", "plan:first"], journal);
+        Assert.Equal(["third", "first"], found.Reports.Select(f => f.Provider.Id));
+        Assert.Equal(["third", "first"], findings.Select(f => f.Provider.Id));
+    }
+
     [Fact]
     public async Task AnAbsentToolchainYieldsAFindingWithNoPlanRatherThanBeingDropped()
     {
