@@ -1,4 +1,5 @@
 using System.Text;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -14,6 +15,20 @@ public sealed record SteamApp(string Id, string? Name, bool? IsInstalled)
 {
     /// <summary>The game's name where Steam recorded one, and its id otherwise.</summary>
     public string DisplayName => Name ?? $"the game with Steam app ID {Id}";
+
+    /// <summary>
+    /// The game as an item that can be kept. Keyed by the id, which is the game wherever its files
+    /// are, so a game kept stays kept if the user moves it to another drive.
+    /// </summary>
+    public ItemIdentity Identity => new(Id, Name ?? $"Steam app {Id}");
+
+    /// <summary>What a reader choosing between games is told about this one.</summary>
+    public IReadOnlyList<ItemFacet> Facets => IsInstalled switch
+    {
+        true => [new ItemFacet("App ID", Id), new ItemFacet("Installed", "Yes")],
+        false => [new ItemFacet("App ID", Id), new ItemFacet("Installed", "No")],
+        null => [new ItemFacet("App ID", Id)],
+    };
 }
 
 /// <summary>

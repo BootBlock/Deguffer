@@ -119,7 +119,8 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The row a reader chooses from: one item per game, Tier 1, each named as Steam names it where a
+    /// The row a reader chooses from: one item per game, Tier 2 because a picture replaced by hand is
+    /// lost, each named as Steam names it where a
     /// manifest says, keyed by its id so it can be kept, and in display form rather than the
     /// extended-length form the folder was listed in.
     /// </summary>
@@ -137,7 +138,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
+        Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
         Assert.Equal(StepGrain.Items, provider.Grain);
         Assert.Equal(
             new[] { installed, owned }.Order(StringComparer.OrdinalIgnoreCase),
@@ -187,7 +188,40 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.False(File.Exists(header));
+        Assert.False(File.Exists(logo));
         Assert.True(File.Exists(notPicture) && File.Exists(notGame));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A name is only half of what makes an entry recognised: a game's artwork is a folder named as
+    /// a game, and an older client's picture is a file. A file named as a game and a folder named as a
+    /// picture are neither, so each is named, protected and still there after the run.
+    /// </summary>
+    [Fact]
+    public async Task AnEntryOfTheWrongKindForItsNameIsLeftAlone()
+    {
+        RegisterInstall();
+        var game = ArtworkFor("440");
+        var fileNamedAsGame = WriteFile(Path.Combine(Container, "570"));
+        var folderNamedAsPicture = Populate(Path.Combine(Container, "570_header.jpg"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([game], plan.TargetedPaths);
+
+        foreach (var stranger in new[] { fileNamedAsGame, folderNamedAsPicture })
+        {
+            Assert.Contains(plan.Notes, n => n.Message.Contains(stranger, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(stranger, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(File.Exists(fileNamedAsGame), $"{fileNamedAsGame} was removed");
+        Assert.True(Directory.Exists(folderNamedAsPicture), $"{folderNamedAsPicture} was removed");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -402,7 +436,8 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
     /// <summary>
     /// §7.1: Explore reads the same rule. Inside the install directory, with both Steam rows'
     /// declarations, only a game's artwork and the web cache can go. The folder, Steam's index and
-    /// anything unrecognised are refused.
+    /// anything unrecognised are refused, and so is a child whose name passes and whose kind does not:
+    /// a file named as a game, a folder named as a picture, and a game's folder that is a link.
     /// </summary>
     [Theory]
     [InlineData(@"appcache\librarycache", false)]                   // the container
@@ -413,11 +448,26 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
     [InlineData(@"appcache\librarycache\440_notes.txt", false)]
     [InlineData(@"appcache\librarycache\440.old", false)]
     [InlineData(@"appcache\librarycache\backup", false)]
+    [InlineData(@"appcache\librarycache\570", false)]               // a file named as a game
+    [InlineData(@"appcache\librarycache\570_header.jpg", false)]    // a folder named as a picture
+    [InlineData(@"appcache\librarycache\730", false)]               // a game's folder that is a link
+    [InlineData(@"appcache\librarycache\730\header.jpg", false)]
     [InlineData(@"appcache\httpcache", true)]                       // the web cache row's
     [InlineData("steamapps", false)]
     public void ExploreOffersOnlyAGamesArtworkInsideTheFolder(string relative, bool allowed)
     {
         var install = RegisterInstall();
+        Index();
+        ArtworkFor("440");
+        WriteFile(Path.Combine(Container, "440_header.jpg"));
+        WriteFile(Path.Combine(Container, "440_notes.txt"));
+        Populate(Path.Combine(Container, "440.old"));
+        Populate(Path.Combine(Container, "backup"));
+        WriteFile(Path.Combine(Container, "570"));
+        Populate(Path.Combine(Container, "570_header.jpg"));
+        Directory.CreateSymbolicLink(
+            Path.Combine(Container, "730"), Populate(Path.Combine(_temp.Path, "elsewhere", "730")));
+
         var policy = new ExploreActionPolicy(
             [],
             [

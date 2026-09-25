@@ -1441,7 +1441,8 @@ own: see [Steam shader pre-cache](#steam-shader-pre-cache).
 
 ## Steam library artwork
 
-**Tier 1 — regenerable cache.** Offered and pre-selected.
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
 
 | | |
 | --- | --- |
@@ -1459,8 +1460,8 @@ installed. It keeps them per game, in a folder named by the game's Steam applica
 <Steam install>\appcache\librarycache\<app id>\library_600x900.jpg
 ```
 
-**Nothing removes them.** On the machine this was measured on, the oldest files were years old and
-the newest were from that day. The folder only grows, and it sits with the Steam program, which is
+**Steam keeps them for years.** On the machine this was measured on, the oldest files were years old
+and the newest were from that day. The folder grows with your library, and it sits with the Steam program, which is
 often on the system drive even when the games are on another one.
 
 ### What Deguffer does
@@ -1495,7 +1496,8 @@ command Deguffer can run. So the folders are deleted directly.
 | `config` | Steam's own configuration, including who is signed in on this computer |
 
 Explore enforces the same rule: it refuses `librarycache`, the index and anything unrecognised in it,
-and allows only what belongs to a single game.
+and allows only what belongs to a single game. It looks at what each entry is, not only at its name,
+so a file named like a game's folder, or a folder named like a picture, is refused there too.
 
 Deguffer also refuses to look through a link. If `librarycache` or a game's folder in it is a link to
 another drive, it removes nothing there and tells you why.
@@ -1510,10 +1512,16 @@ overwriting the files in this folder is a long-standing trick, and Deguffer cann
 from one Steam downloaded. Keep that game, or set the picture through Steam's own **Manage → Set
 custom artwork**, which stores it under `userdata` where Deguffer never goes.
 
-### Why Tier 1
+### Why Tier 2
 
-Every file is a copy of a picture Valve's servers still have, and Steam fetches it again on demand.
-That was observed on a real client rather than assumed.
+Almost every file is a copy of a picture Valve's servers still have, and Steam fetches it again on
+demand. That was observed on a real client rather than assumed, and on that evidence alone this
+would be Tier 1.
+
+It is not, because of the pictures replaced by hand. Tier 1 is for what loses nothing, and it is
+ticked without asking. A replaced picture is lost for good, and Deguffer cannot tell it from a
+downloaded one. So the row is offered but never ticked for you, and you acknowledge it before it
+runs.
 
 ---
 
