@@ -75,7 +75,8 @@ public static class CaptureOneLayout
     /// <summary>
     /// Whether <paramref name="path"/> can be a catalog: a folder named <c>&lt;Name&gt;.cocatalog</c>,
     /// and never a volume's root. A catalog database found anywhere else is not the layout Capture
-    /// One writes, and the folder around it may be a drive or the profile.
+    /// One writes, and the folder around it may be a drive or the profile. A drive's root cannot end
+    /// in the extension, but a share's can, since a share is named by whoever made it.
     /// </summary>
     public static bool IsCatalogFolder(string path) =>
         path.EndsWith(CatalogExtension, StringComparison.OrdinalIgnoreCase)
@@ -84,6 +85,9 @@ public static class CaptureOneLayout
     private const string SettingsPrefix = "Settings";
 
     private const string CatalogExtension = ".cocatalog";
+
+    private static bool IsSessionDatabase(FileSystemInfo entry) =>
+        entry is FileInfo && entry.Extension.Equals(SessionDatabaseExtension, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The files in <paramref name="entries"/> whose extension is <paramref name="extension"/>.</summary>
     public static IReadOnlyList<string> Databases(IReadOnlyList<FileSystemInfo> entries, string extension) =>
@@ -116,7 +120,7 @@ public static class CaptureOneLayout
     /// terms as <see cref="CatalogSurvivorReason"/>.
     /// </summary>
     public static string SidecarSurvivorReason(FileSystemInfo entry) =>
-        entry.Name.StartsWith("Settings", StringComparison.OrdinalIgnoreCase)
+        entry is DirectoryInfo && IsSettingsFolder(entry.Name)
             ? "Your adjustments to the images in this folder. Capture One never changes a raw file, "
                 + "so these are the edits themselves."
             : "Part of Capture One's record of these images rather than its cache, so it is left alone.";
@@ -142,31 +146,37 @@ public static class CaptureOneLayout
         var pending = new Stack<string>();
         pending.Push(LongPath.Extended(session));
 
+        var root = pending.Peek();
+
         while (pending.TryPop(out var directory))
         {
             ct.ThrowIfCancellationRequested();
 
-            var scan = ChildDirectories.Under(directory);
-
-            if (scan.Unreadable)
+            // One listing per folder, files included, because the files are what say whether the
+            // folder is another session's. A folder of images holds thousands of them, so they are
+            // looked at in passing rather than kept.
+            if (FolderEntries.Of(directory) is not { } entries)
             {
                 unreadable.Add(LongPath.Display(directory));
                 continue;
             }
 
-            links.AddRange(scan.Links.Select(link => LongPath.Display(link.FullName)));
-
-            foreach (var child in scan.Directories)
+            if (directory != root && entries.Any(IsSessionDatabase))
             {
-                if (IsSidecar(child.Name))
+                continue;
+            }
+
+            foreach (var child in entries.OfType<DirectoryInfo>())
+            {
+                if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    links.Add(LongPath.Display(child.FullName));
+                }
+                else if (IsSidecar(child.Name))
                 {
                     sidecars.Add(LongPath.Display(child.FullName));
                 }
-                else if (FolderEntries.Of(child.FullName) is not { } entries)
-                {
-                    unreadable.Add(LongPath.Display(child.FullName));
-                }
-                else if (Databases(entries, SessionDatabaseExtension).Count == 0)
+                else
                 {
                     pending.Push(child.FullName);
                 }

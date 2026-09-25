@@ -320,12 +320,16 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     [InlineData("profile")]
     [InlineData("local")]
     [InlineData("roaming")]
+    [InlineData("inside-local")]
+    [InlineData("inside-roaming")]
     public async Task ASessionFolderHoldingTheProfileOrItsDataIsNotSearched(string where)
     {
         var folder = where switch
         {
             "profile" => _environment.UserProfile,
             "local" => _environment.LocalAppData,
+            "inside-local" => Path.Combine(_environment.LocalAppData, "CaptureOne", "Styles"),
+            "inside-roaming" => Path.Combine(_environment.RoamingAppData, "Capture One", "Presets"),
             _ => _environment.RoamingAppData,
         };
 

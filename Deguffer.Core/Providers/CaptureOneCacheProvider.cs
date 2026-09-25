@@ -149,7 +149,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             return EmptyPlan("Capture One has not been used by this user.");
         }
 
-        var examination = new Examination();
+        var examination = new CaptureOneExamination();
 
         examination.Notes.AddRange(documents.Unread.Select(path => new PlanNote(
             PlanNoteSeverity.Warning,
@@ -257,6 +257,9 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         };
     }
 
+    private static bool Overlaps(string folder, string other) =>
+        LongPath.Contains(folder, other) || LongPath.Contains(other, folder);
+
     private static string Count(int count) => count == 1 ? "a catalog or session" : $"{count} catalogs and sessions";
 
     /// <summary>
@@ -264,7 +267,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// beside it. The catalog folder is taken as Capture One's record gives it, link or not, since
     /// that is the catalog Capture One opens; its <c>Cache</c> must not be a link.
     /// </summary>
-    private static void CollectCatalog(string catalog, Examination examination)
+    private static void CollectCatalog(string catalog, CaptureOneExamination examination)
     {
         if (!CaptureOneLayout.IsCatalogFolder(catalog))
         {
@@ -302,7 +305,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             .Select(entry => (LongPath.Display(entry.FullName), CaptureOneLayout.CatalogSurvivorReason(entry))));
 
         examination.LockFiles[catalog] = [.. databases, Path.Combine(catalog, CaptureOneLayout.CatalogWriteLock)];
-        examination.Candidates.Add(new Candidate(
+        examination.Candidates.Add(new CaptureOneCandidate(
             cache,
             catalog,
             $"Previews and thumbnails for the catalog {Path.GetFileNameWithoutExtension(catalog)}. Capture "
@@ -313,13 +316,14 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// One session: prove it by its database, then walk it for the <c>CaptureOne</c> folder beside
     /// each folder of images, and offer the <c>Cache</c> in each.
     /// </summary>
-    private void CollectSession(string session, Examination examination, CancellationToken ct)
+    private void CollectSession(string session, CaptureOneExamination examination, CancellationToken ct)
     {
-        // A session file left in the profile, above it, or in an application-data folder would make
-        // what those hold part of a session to walk, Capture One's own styles and presets included.
+        // A session file at or above the profile would make everything it holds a session to walk.
+        // One anywhere in an application-data folder is no photographer's session either, and a walk
+        // there would reach Capture One's own styles and presets.
         if (LongPath.Contains(session, Environment.UserProfile)
-            || LongPath.Contains(session, Environment.LocalAppData)
-            || LongPath.Contains(session, Environment.RoamingAppData))
+            || Overlaps(session, Environment.LocalAppData)
+            || Overlaps(session, Environment.RoamingAppData))
         {
             examination.Decline(
                 session,
@@ -387,7 +391,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
                 .Where(entry => !CaptureOneLayout.IsCache(entry.Name))
                 .Select(entry => (LongPath.Display(entry.FullName), CaptureOneLayout.SidecarSurvivorReason(entry))));
 
-            examination.Candidates.Add(new Candidate(
+            examination.Candidates.Add(new CaptureOneCandidate(
                 cache,
                 session,
                 $"Previews and thumbnails for the images in '{Path.GetRelativePath(Path.GetDirectoryName(session) ?? session, images)}'. "
@@ -402,104 +406,6 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
                 database,
                 "The session's own file: its collections, ratings and settings.")));
             examination.LockFiles[session] = databases;
-        }
-    }
-
-    /// <summary>One <c>Cache</c> folder a plan may offer, before the live-tree check.</summary>
-    /// <param name="Cache">The folder itself.</param>
-    /// <param name="Owner">The catalog or session it belongs to, which must survive.</param>
-    /// <param name="Reason">What the step says it removes.</param>
-    private sealed record Candidate(string Cache, string Owner, string Reason);
-
-    /// <summary>What one planning pass has found so far, across every catalog and session.</summary>
-    private sealed class Examination
-    {
-        public List<Candidate> Candidates { get; } = [];
-
-        /// <summary>The files Capture One holds open while it has each catalog or session open.</summary>
-        public Dictionary<string, IReadOnlyList<string>> LockFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-        public List<(string Path, string Reason)> Declined { get; } = [];
-
-        public List<(string Path, string Reason)> Survivors { get; } = [];
-
-        public List<string> Disconnected { get; } = [];
-
-        public List<PlanNote> Notes { get; } = [];
-
-        public bool Unreadable { get; set; }
-
-        public string OwnerOf(string cache) =>
-            Path.GetFileName(Candidates.First(c => c.Cache.Equals(cache, StringComparison.OrdinalIgnoreCase)).Owner);
-
-        /// <summary>
-        /// Whether <paramref name="folder"/> is there to examine. A folder on a drive that is not
-        /// connected is recorded for one sentence; one Windows would not describe is a warning.
-        /// </summary>
-        public bool Reached(string folder)
-        {
-            switch (LongPath.ProbeDirectory(folder))
-            {
-                case PathPresence.Absent:
-                    Disconnected.Add(folder);
-                    return false;
-
-                case PathPresence.Refused:
-                    Notes.Add(UnreadableRoot.UnreachedNote(folder));
-                    Unreadable = true;
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>The entries of <paramref name="folder"/>, or null with a warning where it would not be listed.</summary>
-        public IReadOnlyList<FileSystemInfo>? EntriesOf(string folder)
-        {
-            if (FolderEntries.Of(folder) is { } entries)
-            {
-                return entries;
-            }
-
-            Notes.Add(UnreadableRoot.Note(folder));
-            Unreadable = true;
-            return null;
-        }
-
-        /// <summary>
-        /// The <c>Cache</c> folder among <paramref name="entries"/> where it holds something, or null.
-        /// A link of that name is declined and named, since what it points at was never classified.
-        /// </summary>
-        public string? CacheIn(string folder, IReadOnlyList<FileSystemInfo> entries)
-        {
-            if (entries.FirstOrDefault(entry => entry is DirectoryInfo && CaptureOneLayout.IsCache(entry.Name))
-                is not { } cache)
-            {
-                return null;
-            }
-
-            var path = LongPath.Display(cache.FullName);
-
-            if (cache.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            {
-                DeclineLink(path);
-                return null;
-            }
-
-            return DirectoryContent.IsPresent(path) ? path : null;
-        }
-
-        public void Decline(string path, string reason)
-        {
-            Declined.Add((path, reason));
-            Notes.Add(new PlanNote(PlanNoteSeverity.Information, $"Leaving '{path}' alone. {reason}"));
-        }
-
-        /// <summary>A link, in the wording every provider uses for one it will not follow.</summary>
-        public void DeclineLink(string path)
-        {
-            Declined.Add((path, CacheLevelWalk.LinkReason));
-            Notes.Add(CacheLevelWalk.Note(path));
         }
     }
 }
