@@ -22,7 +22,7 @@ public sealed class CleanupPlanner
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
     /// web caches and the shader caches it downloads per game, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
-    /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, what
+    /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output inside the user's own
@@ -32,7 +32,7 @@ public sealed class CleanupPlanner
     ///
     /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, Steam's shader caches, PlatformIO, Playwright, the Azure Functions Core Tools
-    /// releases, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
+    /// releases, the graphics driver installer files, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
@@ -139,6 +139,7 @@ public sealed class CleanupPlanner
         new PlaywrightBrowsersProvider(environment),
         new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
         new AzureFunctionsToolsProvider(environment),
+        new GraphicsDriverInstallerProvider(environment),
         new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
         new RecycleBinProvider(environment, preferences: preferences),
         new FileHistoryProvider(environment, preferences: preferences),

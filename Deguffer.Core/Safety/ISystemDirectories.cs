@@ -36,6 +36,17 @@ public interface ISystemDirectories
     /// allow the other half, which is the shape of hole nobody notices.
     /// </summary>
     string ProgramFilesX86 { get; }
+
+    /// <summary>
+    /// The top of the drive Windows is installed on, ordinarily <c>C:\</c>, with its trailing
+    /// separator.
+    ///
+    /// <para>Named because installers write there. A graphics driver's installer unpacks itself into
+    /// <c>C:\NVIDIA</c> or <c>C:\AMD</c>, beside <c>Program Files</c>, <c>Users</c> and
+    /// <c>Windows</c>, so a provider reaching one has to be handed the drive a test can build rather
+    /// than the real one, for the reason <see cref="WindowsDirectory"/> is.</para>
+    /// </summary>
+    string SystemDrive { get; }
 }
 
 /// <inheritdoc />
@@ -53,6 +64,13 @@ public sealed class SystemDirectories : ISystemDirectories
     public string WindowsDirectory { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
     public string ProgramData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+    /// <summary>
+    /// Read off the Windows directory rather than from <c>%SystemDrive%</c>, which names the drive
+    /// without its separator, so <c>Path.Combine</c> would join a child onto it as a path relative to
+    /// that drive's current directory rather than to its root.
+    /// </summary>
+    public string SystemDrive => Path.GetPathRoot(WindowsDirectory) ?? string.Empty;
 
     /// <summary>
     /// The 64-bit program directory, from the environment rather than from
