@@ -139,6 +139,7 @@ installed" cleanly on a machine without that toolchain.
 | vcpkg build caches | |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
+| Capture One previews and thumbnails | The `Cache` in each catalog and session Capture One lists, wherever it is; never the photographs or the adjustments beside it. A catalog whose originals are offline cannot be browsed until they are reconnected |
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
 | Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |
