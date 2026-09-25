@@ -17,7 +17,7 @@ namespace Deguffer.Core.Providers;
 /// them. A browser is the same shape in a place that has to be named, because it keeps its folder
 /// below a vendor directory and a product directory — see <see cref="ChromiumHost"/>.</para>
 ///
-/// <para><b>The signature is an exact allow-list of seven names, and that is the whole safety
+/// <para><b>The signature is an exact allow-list of ten names, and that is the whole safety
 /// argument.</b> What sits beside them is Tier 3 and looks identical: <c>Local Storage</c>,
 /// <c>Session Storage</c> and <c>IndexedDB</c> are directories in the same folder in the same
 /// naming style, and <c>Local State</c>, <c>Cookies</c>, <c>Login Data</c> and <c>Web Data</c> are
@@ -31,7 +31,7 @@ namespace Deguffer.Core.Providers;
 /// anywhere may be called <c>GPUCache</c>, so identification is a separate and positive judgement:
 /// <see cref="ChromiumUserDataDiscovery"/> requires the folder to hold the engine's own
 /// <c>Local State</c> file, or the <c>LocalPrefs.json</c> a declared framework host writes instead,
-/// before this provider is ever asked what may go inside it. The seven names then say what may be
+/// before this provider is ever asked what may go inside it. The ten names then say what may be
 /// deleted; they never say whose folder this is.</para>
 ///
 /// <para>§5.1 does not apply. No embedding application exposes a cache-eviction command, and the
@@ -45,7 +45,7 @@ namespace Deguffer.Core.Providers;
 public sealed class ChromiumCacheProvider : CleanupProviderBase
 {
     /// <summary>
-    /// Chromium's seven cache directories, grouped by the directory each sits in. Anything not named
+    /// Chromium's ten cache directories, grouped by the directory each sits in. Anything not named
     /// here is Tier 4 by construction — which is what makes "we did not recognise that" fail closed
     /// beside data that would be gone for good.
     ///
@@ -66,6 +66,19 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 "GPUCache",
                 SafetyTier.RegenerableCache,
                 "Compiled graphics pipelines. The application rebuilds them on demand."),
+
+            // The engine's own shader caches, beside GPUCache and written by the same GPU process:
+            // GrShaderCache for the Skia renderer, ShaderCache for the ANGLE layer beneath it. Edge
+            // keeps GrShaderCache in its user-data folder beside the profiles rather than in one,
+            // which the walk reaches because that folder is always the first profile it visits.
+            new ChildClassification(
+                "GrShaderCache",
+                SafetyTier.RegenerableCache,
+                "Compiled graphics shaders. The application rebuilds them on demand."),
+            new ChildClassification(
+                "ShaderCache",
+                SafetyTier.RegenerableCache,
+                "Compiled graphics shaders. The application rebuilds them on demand."),
             new ChildClassification(
                 "DawnGraphiteCache",
                 SafetyTier.RegenerableCache,
@@ -74,6 +87,13 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 "DawnWebGPUCache",
                 SafetyTier.RegenerableCache,
                 "Compiled WebGPU pipelines. The application rebuilds them on demand."),
+
+            // A separate directory from DawnGraphiteCache, not a misspelling of it: the engine writes
+            // both names, and a user-data folder was measured holding this one beside GPUCache.
+            new ChildClassification(
+                "GraphiteDawnCache",
+                SafetyTier.RegenerableCache,
+                "Compiled graphics pipelines. The application rebuilds them on demand."),
 
             // Dawn is the engine's WebGPU implementation, and this is the name older builds gave its
             // pipeline cache. Battle.net's launcher still writes it, in the same disk-cache format as
@@ -181,7 +201,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             + "own folder in your profile, and an application built on Chromium does exactly the "
             + "same under its own. Almost no cleaner reaches the applications, so their caches grow "
             + "unnoticed across every such application on the machine.",
-        Recommendation = "Deguffer removes seven cache directories whose names belong to Chromium "
+        Recommendation = "Deguffer removes ten cache directories whose names belong to Chromium "
             + "itself, and leaves everything else in the folder alone — the sign-ins, saved "
             + "passwords, saved payment cards and offline data sit right beside them.",
     };
@@ -358,7 +378,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             // plan nobody reads — and a note nobody reads protects nothing. Each of them is still
             // asserted individually by §5.6, and this is the sentence that says so.
             //
-            // The second sentence is not decoration. Two of the seven caches sit inside a directory
+            // The second sentence is not decoration. Two of the ten caches sit inside a directory
             // that is itself kept, so a user who sees that directory still standing after a clean
             // has no way to tell that anything inside it went. It is said only when it happened.
             if (spared > 0)
@@ -418,8 +438,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Whether any of the seven declared names is on disk for this application, by probing the table
-    /// rather than by enumerating (G4). Seven existence checks per profile, and not one of them can
+    /// Whether any of the ten declared names is on disk for this application, by probing the table
+    /// rather than by enumerating (G4). Ten existence checks per profile, and not one of them can
     /// reach a path the table does not name.
     ///
     /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so an

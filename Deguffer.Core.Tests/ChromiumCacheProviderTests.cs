@@ -6,10 +6,10 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A Chromium user-data folder is the most dangerous neighbourhood any provider works in: the seven
+/// A Chromium user-data folder is the most dangerous neighbourhood any provider works in: the ten
 /// disposable directories sit among sign-in tokens, saved passwords, drafts and offline data, in
 /// the same folder and in the same naming style. So these are mostly negative tests. The positive
-/// ones only establish that the seven are reached at all.
+/// ones only establish that the ten are reached at all.
 /// </summary>
 public sealed class ChromiumCacheProviderTests : IDisposable
 {
@@ -176,14 +176,17 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task PlansAllSevenCacheNamesIncludingTheTwoThatAreGrandchildren()
+    public async Task PlansAllTenCacheNamesIncludingTheTwoThatAreGrandchildren()
     {
         var app = CreateApplication("Chatter");
 
         var codeCache = CreateDirectory(Path.Combine(app, "Code Cache"));
         var gpuCache = CreateDirectory(Path.Combine(app, "GPUCache"));
+        var skiaShaders = CreateDirectory(Path.Combine(app, "GrShaderCache"));
+        var angleShaders = CreateDirectory(Path.Combine(app, "ShaderCache"));
         var graphite = CreateDirectory(Path.Combine(app, "DawnGraphiteCache"));
         var webGpu = CreateDirectory(Path.Combine(app, "DawnWebGPUCache"));
+        var graphiteDawn = CreateDirectory(Path.Combine(app, "GraphiteDawnCache"));
         var dawn = CreateDirectory(Path.Combine(app, "DawnCache"));
         var httpCache = CreateDirectory(Path.Combine(app, "Cache", "Cache_Data"));
         var cacheStorage = CreateDirectory(Path.Combine(app, "Service Worker", "CacheStorage"));
@@ -194,7 +197,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
-            new[] { cacheStorage, codeCache, graphite, webGpu, dawn, gpuCache, httpCache }
+            new[] { cacheStorage, codeCache, skiaShaders, angleShaders, graphite, webGpu, graphiteDawn, dawn, gpuCache, httpCache }
                 .Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.True(plan.EstimatedBytes > 0);
@@ -248,8 +251,10 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.2's dangerous direction, and the whole reason this provider is an exact allow-list. Every
-    /// one of these sits in the same folder in the same naming style as the seven, two of them with
-    /// the word "Cache" in the name, and every one of them is user data or live state.
+    /// one of these sits in the same folder in the same naming style as the ten, three of them with
+    /// the word "cache" in the name. The first six are user data or live state.
+    /// <c>component_crx_cache</c> stages component updates rather than caching anything, and
+    /// nothing has established what removing either <c>_crx_cache</c> directory costs.
     /// </summary>
     [Theory]
     [InlineData("Local Storage")]
@@ -258,6 +263,8 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     [InlineData("Extensions")]
     [InlineData("Sync Data")]
     [InlineData("SuperCache")]
+    [InlineData("component_crx_cache")]
+    [InlineData("extensions_crx_cache")]
     public async Task AnUnrecognisedSiblingIsTier4AndIsAssertedToSurvive(string name)
     {
         var app = CreateApplication("Chatter");
@@ -469,7 +476,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §7 scopes the age column to per-workspace and per-project data. Each of these is one whole
-    /// cache for one profile, so a timestamp on it would be a number with nothing to mean — and seven
+    /// cache for one profile, so a timestamp on it would be a number with nothing to mean — and ten
     /// different dates for one application would invite the user to read a difference between them.
     /// </summary>
     [Fact]
@@ -603,7 +610,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Two of the seven sit inside a directory that is kept, so a user who sees that directory still
+    /// Two of the ten sit inside a directory that is kept, so a user who sees that directory still
     /// standing has no way to tell the cache inside it went. The sentence is said only when it
     /// happened, so a plan that emptied no container must not carry it.
     /// </summary>
@@ -685,14 +692,17 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The seven names, and only the seven. An eighth appearing in the table without the reasoning
+    /// The ten names, and only the ten. An eleventh appearing in the table without the reasoning
     /// that belongs to it is exactly how a signature stops being a signature.
     /// </summary>
     [Fact]
-    public void TheTableDeclaresTheSevenChromiumCacheNamesAndNoOthers()
+    public void TheTableDeclaresTheTenChromiumCacheNamesAndNoOthers()
     {
         Assert.Equal(
-            ["CacheStorage", "Cache_Data", "Code Cache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache"],
+            [
+                "CacheStorage", "Cache_Data", "Code Cache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
+                "GPUCache", "GrShaderCache", "GraphiteDawnCache", "ShaderCache",
+            ],
             ChromiumCacheProvider.Levels
                 .SelectMany(l => l.Children.DisposableNames)
                 .Order(StringComparer.Ordinal));

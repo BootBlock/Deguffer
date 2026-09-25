@@ -389,7 +389,7 @@ public sealed class ExploreActionPolicy
     /// about this path.</para>
     ///
     /// <para><b>Innermost is a set rather than one root, because a directory can have two owners.</b>
-    /// A VS Code user-data folder holds Chromium's seven engine caches and the editor's own, so
+    /// A VS Code user-data folder holds Chromium's ten engine caches and the editor's own, so
     /// <see cref="Providers.ChromiumCacheProvider"/> and
     /// <see cref="Providers.VsCodeCacheProvider"/> both declare that one path with disjoint child
     /// tables, and <see cref="Providers.VsCodeLogProvider"/> declares it a third time. Asking only
