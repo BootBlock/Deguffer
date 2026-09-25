@@ -11,7 +11,9 @@ namespace Deguffer.Core.Safety;
 /// </param>
 /// <param name="LockFileNames">
 /// Paths, relative to <paramref name="Directory"/>, of files the owning tool holds open for as long
-/// as it is using it — Unity's <c>UnityLockfile</c>, Visual Studio's <c>.suo</c>.
+/// as it is using it — Unity's <c>UnityLockfile</c>, Visual Studio's <c>.suo</c>. A full path is
+/// taken as it stands, for a file that sits elsewhere in the project: the Unreal editor's log is in
+/// <c>Saved\Logs</c>, beside the build directory rather than inside it.
 ///
 /// Declared by the provider and never guessed, for the same reason
 /// <see cref="DisposableChildSet"/>'s children are: a name list a reader can audit is worth more

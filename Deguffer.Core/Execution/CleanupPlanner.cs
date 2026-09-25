@@ -21,17 +21,17 @@ public sealed class CleanupPlanner
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
-    /// web caches and the shader caches it downloads per game, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
-    /// dumps, the Windows servicing logs and the per-project build output inside the user's own
+    /// dumps, the Windows servicing logs and the per-project build output, Unreal's included, inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
     /// terms before being added. Their reasoning and their rejected alternatives are in
     /// <c>docs/cache-locations.md</c>.
     ///
-    /// Tier 1 throughout except Unity, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, Steam's shader caches, PlatformIO, Playwright, the Azure Functions Core Tools
+    /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, PlatformIO, Playwright, the Azure Functions Core Tools
     /// releases, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -93,6 +93,8 @@ public sealed class CleanupPlanner
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees, environment),
             new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment),
+            new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment),
+            new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment),
             new CargoTargetProvider(roots, sourceTrees, liveTrees, environment),
             new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
@@ -132,6 +134,7 @@ public sealed class CleanupPlanner
         new EpicLauncherContentCacheProvider(environment),
         new SteamCacheProvider(environment, discovery: steam),
         new SteamShaderCacheProvider(environment, discovery: steam),
+        new UnrealDerivedDataCacheProvider(environment),
         new SpotifyCacheProvider(environment),
         new AffinityModelCacheProvider(environment),
         new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
