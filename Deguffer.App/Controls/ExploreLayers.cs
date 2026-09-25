@@ -10,7 +10,7 @@ namespace Deguffer.App.Controls;
 
 /// <summary>
 /// The drawings a map keeps of the one picture it shows: the whole of it, and the last parts of it a
-/// zoom stopped at, each a bitmap placed where its part of the picture is on the screen.
+/// zoom or a drag stopped at, each a bitmap placed where its part of the picture is on the screen.
 ///
 /// <para>Kept so a move has something to show wherever it goes. A zoom animates by moving and
 /// magnifying the drawing on hand, and with only that one a zoom out shrank it into an empty frame,
@@ -19,9 +19,10 @@ namespace Deguffer.App.Controls;
 /// edge is at the wrong resolution until the move stops, but it is in the right place, because a
 /// treemap lays a shape out once and only magnifies it after (see <see cref="TreemapDetail"/>).</para>
 ///
-/// <para>Kept also so a zoom that comes back to a part of the picture already drawn shows that drawing
-/// again rather than laying it out and painting it a second time. All the way out is the one every
-/// zoom comes back to, and it costs nothing.</para>
+/// <para>Kept also so a move that comes back to a part of the picture already drawn shows that drawing
+/// again rather than laying it out and painting it a second time. A zoom all the way out always
+/// does, and so does a double-click on a shape already zoomed to once; a wheel or a drag rarely lands
+/// on exactly the same part twice.</para>
 ///
 /// <para>The drawing the map works from is on top. The others are under it by how far they are
 /// zoomed, finest uppermost, so where one runs out the next finest shows through. At rest the one on
@@ -36,19 +37,12 @@ internal sealed class ExploreLayers
     /// <summary>
     /// How many zoomed drawings to keep besides the whole picture, the one on screen included.
     ///
-    /// <para>Each is a bitmap the size of the canvas, which is 33 MB at 3840 by 2160, so this trades
-    /// memory for the moves that come back to where they were. Two keeps the last place a zoom or a
-    /// drag stopped at under the one it stops at next, which is the one most likely to show through
-    /// as the reader goes back.</para>
+    /// <para>Each is a bitmap the size of the canvas, which is 33 MB at 3840 by 2160. Two keeps the
+    /// last place a zoom or a drag stopped at under the one it stops at next: finer than the whole
+    /// picture where the reader goes back over it, and shown again outright where they return to
+    /// exactly that place.</para>
     /// </summary>
     private const int ZoomedKept = 2;
-
-    /// <summary>
-    /// Where the drawing on top is stacked: above the finest any other can be (see
-    /// <see cref="Fineness"/>). Not <see cref="int.MaxValue"/>, which the framework refuses with an
-    /// argument error, because a z-index runs to a million at most.
-    /// </summary>
-    private const int Uppermost = (int)(MapViewport.MaximumZoom * 1000) + 1;
 
     private readonly Grid _panel = new() { IsHitTestVisible = false };
 
@@ -57,53 +51,54 @@ internal sealed class ExploreLayers
 
     private readonly List<Layer> _layers = [];
 
-    private readonly PixelScratch _scratch;
+    private readonly PaintBuffers _buffers;
 
     /// <summary>A count of the drawings shown, so the least recently shown is the first to go.</summary>
-    private long _shown;
+    private long _showings;
 
     private Layer? _current;
 
-    public ExploreLayers(PixelScratch scratch)
+    public ExploreLayers(PaintBuffers buffers)
     {
-        _scratch = scratch;
+        _buffers = buffers;
         _panel.RenderTransform = _carried;
     }
 
     public UIElement Element => _panel;
 
-    /// <summary>The drawing on top, which is the one the screen is working from.</summary>
-    public ExploreSurface? Current => _current?.Drawing;
-
     /// <summary>
     /// Show the drawing of <paramref name="viewport"/>: the one already made, where there is one, and
     /// otherwise one <paramref name="draw"/> makes and this paints on <paramref name="ground"/>.
-    ///
-    /// <para>A zoomed drawing brings the whole picture with it, drawn first where it is not already
-    /// kept, so there is always one under it.</para>
     /// </summary>
     public ExploreSurface Show(MapViewport viewport, Func<MapViewport, ExploreSurface> draw, TileColour ground)
     {
-        ArgumentNullException.ThrowIfNull(draw);
+        var layer = Kept(viewport) ?? Paint(draw(viewport), ground);
 
-        if (Kept(viewport) is not { } layer)
-        {
-            var drawing = draw(viewport);
-
-            if (drawing.Viewport is { IsWhole: false } && Kept(MapViewport.Whole) is null)
-            {
-                Paint(draw(MapViewport.Whole), ground);
-            }
-
-            layer = Paint(drawing, ground);
-        }
-
-        layer.Shown = ++_shown;
+        layer.LastShown = ++_showings;
         _current = layer;
 
         Release();
 
         return layer.Drawing!;
+    }
+
+    /// <summary>
+    /// Paint the whole picture under the drawing on top, where that one is zoomed and the whole
+    /// picture is not already kept. Says whether it painted.
+    ///
+    /// <para>Separate from <see cref="Show"/>, so the drawing the reader asked for is on screen first
+    /// and this one, which only shows once the picture moves, is painted after it.</para>
+    /// </summary>
+    public bool Underlay(Func<MapViewport, ExploreSurface> draw, TileColour ground)
+    {
+        if (_current is not { Viewport.IsWhole: false } || Kept(MapViewport.Whole) is not null)
+        {
+            return false;
+        }
+
+        Paint(draw(MapViewport.Whole), ground);
+
+        return true;
     }
 
     /// <summary>
@@ -121,7 +116,10 @@ internal sealed class ExploreLayers
         _current = null;
     }
 
-    /// <summary>Drop every drawing and bitmap, for a map with nothing to show.</summary>
+    /// <summary>
+    /// Drop every drawing, for a map with nothing to show or nobody to show it to. The last bitmap
+    /// goes back to the buffers for the next drawing.
+    /// </summary>
     public void Clear()
     {
         Forget();
@@ -148,7 +146,7 @@ internal sealed class ExploreLayers
             layer.Placed.TranslateX = placement.X * width;
             layer.Placed.TranslateY = placement.Y * height;
 
-            Canvas.SetZIndex(layer.Image, layer == _current ? Uppermost : Fineness(layer.Viewport));
+            Canvas.SetZIndex(layer.Image, Rank(layer));
         }
     }
 
@@ -166,11 +164,33 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
-    /// Where a drawing at <paramref name="viewport"/> is stacked among the others: finer higher. The
-    /// zoom runs to <see cref="MapViewport.MaximumZoom"/>, and a thousand steps a doubling keeps two
-    /// zooms a rounding error apart in order.
+    /// Where <paramref name="layer"/> is stacked: the one on top above all the rest, and each other
+    /// above every one coarser than it, or as fine and shown less recently. A rank rather than the
+    /// zoom itself, because two drawings a drag apart share a zoom and would share a place, and
+    /// which of them showed through would then be the panel's choice.
     /// </summary>
-    private static int Fineness(MapViewport viewport) => (int)(viewport.Zoom * 1000);
+    private int Rank(Layer layer)
+    {
+        var rank = 0;
+
+        foreach (var other in _layers)
+        {
+            if (other == layer || other.Drawing is null)
+            {
+                continue;
+            }
+
+            if (layer == _current
+                || (other != _current
+                    && (other.Viewport.Zoom < layer.Viewport.Zoom
+                        || (other.Viewport.Zoom == layer.Viewport.Zoom && other.LastShown < layer.LastShown))))
+            {
+                rank++;
+            }
+        }
+
+        return rank;
+    }
 
     /// <summary>The drawing already made of <paramref name="viewport"/>, or null.</summary>
     private Layer? Kept(MapViewport viewport)
@@ -201,7 +221,7 @@ internal sealed class ExploreLayers
 
             if (zoomed.Count >= ZoomedKept)
             {
-                layer = zoomed.Where(kept => kept != _current).MinBy(kept => kept.Shown);
+                layer = zoomed.Where(kept => kept != _current).MinBy(kept => kept.LastShown);
             }
         }
 
@@ -217,12 +237,12 @@ internal sealed class ExploreLayers
         // second for a surface whose size only changes with the window's (G5).
         if (layer.Bitmap is not { } bitmap || bitmap.PixelWidth != drawing.Width || bitmap.PixelHeight != drawing.Height)
         {
-            bitmap = new WriteableBitmap(drawing.Width, drawing.Height);
+            bitmap = _buffers.BitmapFor(drawing.Width, drawing.Height);
             layer.Bitmap = bitmap;
             layer.Image.Source = bitmap;
         }
 
-        var pixels = _scratch.For(drawing.Width, drawing.Height);
+        var pixels = _buffers.PixelsFor(drawing.Width, drawing.Height);
 
         drawing.Paint(pixels, ground);
         pixels.CopyTo(0, bitmap.PixelBuffer, 0, pixels.Length);
@@ -230,7 +250,7 @@ internal sealed class ExploreLayers
 
         layer.Drawing = drawing;
         layer.Viewport = viewport;
-        layer.Shown = ++_shown;
+        layer.LastShown = ++_showings;
         layer.Image.Visibility = Visibility.Visible;
 
         return layer;
@@ -259,16 +279,29 @@ internal sealed class ExploreLayers
         return other;
     }
 
-    /// <summary>Let go of every bitmap no drawing is using, which is memory nothing will show.</summary>
+    /// <summary>
+    /// Take out every layer no drawing is using, which is memory nothing will show, and hand its
+    /// bitmap back to the buffers for the next drawing.
+    /// </summary>
     private void Release()
     {
         for (var i = _layers.Count - 1; i >= 0; i--)
         {
-            if (_layers[i].Drawing is null)
+            var layer = _layers[i];
+
+            if (layer.Drawing is not null)
             {
-                _panel.Children.Remove(_layers[i].Image);
-                _layers.RemoveAt(i);
+                continue;
             }
+
+            if (layer.Bitmap is { } bitmap)
+            {
+                layer.Image.Source = null;
+                _buffers.Return(bitmap);
+            }
+
+            _panel.Children.Remove(layer.Image);
+            _layers.RemoveAt(i);
         }
     }
 
@@ -297,34 +330,7 @@ internal sealed class ExploreLayers
         /// <summary>The part of the picture the drawing shows.</summary>
         public MapViewport Viewport { get; set; }
 
-        /// <summary>When it was last shown, on the count <see cref="_shown"/> keeps.</summary>
-        public long Shown { get; set; }
+        /// <summary>When it was last shown, on the count <see cref="_showings"/> keeps.</summary>
+        public long LastShown { get; set; }
     }
-}
-
-/// <summary>
-/// The one buffer every drawing of a map is painted into before it is copied to its bitmap. Shared by
-/// the map's layers rather than one each, because only one drawing is ever being painted, and at
-/// 3840 by 2160 it is 33 MB of large-object heap (G5).
-/// </summary>
-internal sealed class PixelScratch
-{
-    private byte[]? _pixels;
-
-    /// <summary>A buffer for a canvas of this size, the one already held where it is that size.</summary>
-    public byte[] For(int width, int height)
-    {
-        var length = PixelBuffer.LengthFor(width, height);
-
-        if (_pixels is not { } pixels || pixels.Length != length)
-        {
-            pixels = new byte[length];
-            _pixels = pixels;
-        }
-
-        return pixels;
-    }
-
-    /// <summary>Let go of it, for a map with nothing left to paint.</summary>
-    public void Release() => _pixels = null;
 }

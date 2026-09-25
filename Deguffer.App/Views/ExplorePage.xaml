@@ -259,9 +259,9 @@
                        VerticalAlignment="Center"
                        Style="{StaticResource CaptionTextBlockStyle}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       Text="Wheel: zoom · LMB drag: pan · Dbl-click: open"
+                       Text="Wheel: zoom · LMB drag: pan · Dbl-click: open/zoom"
                        Visibility="{x:Bind ViewModel.ShowsMapControls, Mode=OneWay}"
-                       AutomationProperties.Name="Turn the mouse wheel over the map to zoom, drag with the left button to move it, and double-click a folder to open it." />
+                       AutomationProperties.Name="Turn the mouse wheel over the map to zoom, drag with the left button to move a zoomed picture, and double-click a folder to open it or anything else to zoom to it." />
         </Grid>
 
         <!--

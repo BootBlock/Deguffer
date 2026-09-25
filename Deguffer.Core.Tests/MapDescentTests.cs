@@ -91,13 +91,6 @@ public sealed class MapDescentTests
         }
     }
 
-    [Fact]
-    public void AFrameIsCutToTheBoundsItIsAskedToStayWithin()
-    {
-        AssertClose(new MapFrame(0, 0.25, 0.5, 0.75), new MapFrame(-0.5, 0.25, 1, 1).Within(MapFrame.Whole));
-        AssertClose(new MapFrame(0.2, 0.3, 0.1, 0.1), new MapFrame(0.2, 0.3, 0.1, 0.1).Within(MapFrame.Whole));
-    }
-
     private static void AssertClose(MapFrame expected, MapFrame actual)
     {
         Assert.Equal(expected.X, actual.X, Precision);

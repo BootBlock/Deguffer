@@ -24,15 +24,15 @@ namespace Deguffer.Core.Exploring.Layout;
 public readonly record struct MapDescent(MapFrame Shape, TimeSpan Start)
 {
     /// <summary>Where the drawing of what was opened is on the screen at <paramref name="now"/>.</summary>
-    public MapFrame Opened(TimeSpan now) => MapFrame.Between(Shown, MapFrame.Whole, MapGlide.Eased(Progress(now)));
+    public MapFrame Opened(TimeSpan now) => MapFrame.Between(OnScreen, MapFrame.Whole, MapGlide.Eased(Progress(now)));
 
     /// <summary>
     /// Where the old picture's screen is at <paramref name="now"/>: stretched so the opened shape lies
     /// exactly under the drawing of what is inside it.
     /// </summary>
-    public MapFrame Departing(TimeSpan now) => Shown.Carried(Opened(now));
+    public MapFrame Departing(TimeSpan now) => OnScreen.Carried(Opened(now));
 
-    private MapFrame Shown => Shape.Within(MapFrame.Whole);
+    private MapFrame OnScreen => Shape.Clipped(MapFrame.Whole);
 
     /// <summary>
     /// How opaque the drawing of what was opened is at <paramref name="now"/>, from nothing to all of

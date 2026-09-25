@@ -320,7 +320,7 @@ public sealed class MapViewportTests
 
     /// <summary>
     /// A shape of a drawing made at one zoom, found on a screen showing another, is the same part of
-    /// the picture as the drawing says it is. This is how a double-click during a move finds the part
+    /// the picture as the drawing says it is. This is how a double-click during a zoom or a drag finds the part
     /// to fit, so a wrong answer zooms to a shape the reader did not click.
     /// </summary>
     [Fact]

@@ -25,7 +25,7 @@ public readonly record struct MapFrame(double X, double Y, double Width, double 
         from.Height + ((to.Height - from.Height) * progress));
 
     /// <summary>The part of this inside <paramref name="bounds"/>, which is empty where none of it is.</summary>
-    public MapFrame Within(MapFrame bounds)
+    public MapFrame Clipped(MapFrame bounds)
     {
         var left = Math.Max(X, bounds.X);
         var top = Math.Max(Y, bounds.Y);

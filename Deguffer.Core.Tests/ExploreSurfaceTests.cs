@@ -275,6 +275,53 @@ public sealed class ExploreSurfaceTests
         return builder.Build(ExploreChildOrder.BySize);
     }
 
+    /// <summary>
+    /// The rectangle a drawing hands over for a point is the shape the pointer names there. It is what
+    /// a double-click opens a folder out of and zooms to, so a different one would open out of one
+    /// shape and show another.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Icicle)]
+    public void TheRectangleAtAPointIsTheShapeThePointIsOver(ExploreView view)
+    {
+        var surface = Drawn(NestedTree(), view);
+        var shapes = 0;
+
+        for (var x = 1f; x < Width; x += 13)
+        {
+            for (var y = 1f; y < Height; y += 11)
+            {
+                var hit = surface.At(x, y);
+                var tile = surface.TileAt(x, y);
+
+                Assert.Equal(hit?.Node, tile?.Node);
+
+                if (tile is { } shape)
+                {
+                    Assert.InRange(x, shape.X, shape.X + shape.Width);
+                    Assert.InRange(y, shape.Y, shape.Y + shape.Height);
+                    shapes++;
+                }
+            }
+        }
+
+        Assert.True(shapes > 0, "no point was over a shape");
+    }
+
+    [Fact]
+    public void ASunburstHandsOverNoRectangles()
+    {
+        var surface = Drawn(NestedTree(), ExploreView.Sunburst);
+
+        Assert.NotNull(surface.At(Width / 2f, Height / 2f));
+        Assert.Null(surface.TileAt(Width / 2f, Height / 2f));
+    }
+
+    private static ExploreSurface Drawn(ExploreTree tree, ExploreView view) => ExploreSurface.Create(
+        tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
+        Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
+
     /// <summary>The same shape in the order a scan still running publishes it.</summary>
     private static ExploreTree NamedTree(int children)
     {
