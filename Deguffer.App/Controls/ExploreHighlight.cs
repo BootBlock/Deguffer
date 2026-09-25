@@ -53,7 +53,7 @@ internal sealed class ExploreHighlight : Canvas
 
     private const double HoveredEdgeWidth = 2;
 
-    private readonly ScaleTransform _stretch = new();
+    private readonly CompositeTransform _stretch = new();
 
     private readonly Path _hoveredHalo = Stroke(Colors.Black, 0.75);
     private readonly Path _hoveredEdge = Stroke(Colors.White, 1);
@@ -67,9 +67,10 @@ internal sealed class ExploreHighlight : Canvas
         IsHitTestVisible = false;
 
         // The geometry is in the bitmap's own pixels, and this is what puts it over the bitmap
-        // wherever that has been stretched to. While a resize settles the map is the old picture
-        // scaled to fit, and the outlines have to be scaled with it or they mark out the wrong
-        // shapes for as long as that lasts.
+        // wherever that has been stretched or moved to. While a resize settles the map is the old
+        // picture scaled to fit, and while a zoom moves it is the old picture magnified and moved,
+        // and the outlines have to go with it or they mark out the wrong shapes for as long as that
+        // lasts.
         RenderTransform = _stretch;
 
         Children.Add(_hoveredHalo);
@@ -101,21 +102,24 @@ internal sealed class ExploreHighlight : Canvas
 
     /// <summary>
     /// Lay the outlines over a bitmap of <paramref name="canvasWidth"/> by
-    /// <paramref name="canvasHeight"/> pixels drawn across <paramref name="width"/> by
-    /// <paramref name="height"/> of the control.
+    /// <paramref name="canvasHeight"/> pixels drawn across <paramref name="onto"/>, in the control's
+    /// own coordinates.
     ///
     /// <para>The stroke widths are divided by the same ratio, so a line stays the width it was asked
-    /// for rather than thickening with the display's scale.</para>
+    /// for rather than thickening with the display's scale or with a zoom that has not yet been
+    /// drawn.</para>
     /// </summary>
-    public void StretchOver(double canvasWidth, double canvasHeight, double width, double height)
+    public void StretchOver(double canvasWidth, double canvasHeight, Rect onto)
     {
         if (canvasWidth <= 0 || canvasHeight <= 0)
         {
             return;
         }
 
-        _stretch.ScaleX = width / canvasWidth;
-        _stretch.ScaleY = height / canvasHeight;
+        _stretch.ScaleX = onto.Width / canvasWidth;
+        _stretch.ScaleY = onto.Height / canvasHeight;
+        _stretch.TranslateX = onto.X;
+        _stretch.TranslateY = onto.Y;
 
         // Divided by the larger of the two, which makes the asked-for width an upper bound: the
         // line is exactly that on the axis stretched most and a shade under it on the other. The

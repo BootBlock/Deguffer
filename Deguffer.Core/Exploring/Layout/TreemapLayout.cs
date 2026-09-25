@@ -46,13 +46,24 @@ public static class TreemapLayout
     /// <see cref="VolumeSpace.None"/> for neither. The caller decides whether they belong in the
     /// picture at all: they do beside the whole of a volume, and nowhere else.
     /// </param>
+    /// <param name="viewport">
+    /// The part of the picture the canvas shows. The layout is made across the whole picture
+    /// magnified by its zoom, and the rectangles come back in the canvas's own coordinates, so one
+    /// that runs off an edge comes back running off it. See <see cref="Visible"/> for what is left
+    /// out, and <see cref="DepthAt"/> for how much further down a zoomed picture goes.
+    ///
+    /// <para>The limits stay in canvas pixels rather than growing with the zoom, which is the point
+    /// of zooming: a shape too small to draw across the whole picture is a shape worth drawing once
+    /// it is magnified.</para>
+    /// </param>
     public static IReadOnlyList<ExploreTile> Compute(
         ISizedTree tree,
         int root,
         float width,
         float height,
         LayoutLimits limits,
-        VolumeSpace volume = default)
+        VolumeSpace volume = default,
+        MapViewport viewport = default)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -74,23 +85,38 @@ public static class TreemapLayout
             return tiles.ToArray();
         }
 
-        var used = BesideTheVolume(tree.SizeOf(root), volume, width, height, limits, tiles);
+        var canvas = new Rectangle(0, 0, width, height);
 
-        var pending = new Stack<(int Node, int Depth, float X, float Y, float Width, float Height)>();
-        pending.Push((root, 0, used.X, used.Y, used.Width, used.Height));
+        // The whole picture at this zoom, placed so the part the viewport names lands on the canvas.
+        var picture = new Rectangle(
+            -viewport.Left * width * viewport.Zoom,
+            -viewport.Top * height * viewport.Zoom,
+            width * viewport.Zoom,
+            height * viewport.Zoom);
 
-        while (pending.TryPop(out var frame))
+        var used = BesideTheVolume(tree.SizeOf(root), volume, picture, canvas, limits, tiles);
+        var deepest = DepthAt(limits, viewport);
+
+        var pending = new Stack<(int Node, int Depth, Rectangle Frame)>();
+        pending.Push((root, 0, used));
+
+        while (pending.TryPop(out var next))
         {
-            var opens = frame.Depth < limits.MaximumDepth && tree.IsContainer(frame.Node);
+            var (node, depth, frame) = next;
+
+            if (!Visible(frame, canvas))
+            {
+                continue;
+            }
+
+            var opens = depth < deepest && tree.IsContainer(node);
 
             // The frame is what makes nesting visible, and it is only affordable where there is room
             // for it. A rectangle too small to frame is drawn as one block, which is the honest
             // rendering of "there is more in here than fits".
             var (header, gap) = opens ? FrameOf(frame.Width, frame.Height, limits) : (0f, 0f);
 
-            tiles.Add(new ExploreTile(
-                frame.Node, frame.Depth, tree.SizeOf(frame.Node),
-                frame.X, frame.Y, frame.Width, frame.Height, header));
+            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, header));
 
             if (!opens)
             {
@@ -107,11 +133,50 @@ public static class TreemapLayout
                 continue;
             }
 
-            Place(tree, frame.Node, frame.Depth + 1, area, limits, tiles, pending);
+            Place(tree, node, depth + 1, area, canvas, limits, tiles, pending);
         }
 
         return tiles.ToArray();
     }
+
+    /// <summary>
+    /// How many levels a picture at <paramref name="viewport"/> descends: the limit, and a level more
+    /// for each doubling of the zoom.
+    ///
+    /// <para>The limit is there because past it a whole volume is frames round frames, paid for on
+    /// every repaint. Neither half of that holds for a magnified part of one. Only what is on the
+    /// canvas is laid out, so the cost is bounded by the canvas rather than by the depth, and the
+    /// frames a level deeper are the ones the zoom has just made big enough to read. Without this a
+    /// zoom would magnify folders that stay shut however large they grow, and the detail it was for
+    /// would never appear.</para>
+    /// </summary>
+    private static int DepthAt(LayoutLimits limits, MapViewport viewport) =>
+        limits.MaximumDepth + (int)Math.Floor(Math.Log2(viewport.Zoom));
+
+    /// <summary>
+    /// Whether any of <paramref name="frame"/> is on <paramref name="canvas"/>.
+    ///
+    /// <para>What keeps a zoomed layout the size of the canvas rather than of the picture. A shape off
+    /// the canvas is neither drawn nor opened, so nothing inside it is laid out either, and at a zoom
+    /// of sixty-four that is nearly all of the tree. A shape partly on it comes back whole, running
+    /// off the edge, because its shading and its outline are measured across all of it.</para>
+    /// </summary>
+    private static bool Visible(Rectangle frame, Rectangle canvas) =>
+        frame.X < canvas.X + canvas.Width
+        && frame.X + frame.Width > canvas.X
+        && frame.Y < canvas.Y + canvas.Height
+        && frame.Y + frame.Height > canvas.Y;
+
+    /// <summary>
+    /// One rectangle, in single precision once the arithmetic that placed it is done.
+    ///
+    /// <para>The layout itself runs in double precision. A zoomed picture's rectangles are placed by
+    /// adding up offsets hundreds of thousands of pixels long, and in single precision the error of
+    /// that sum is a visible fraction of a pixel by the time it reaches the canvas.</para>
+    /// </summary>
+    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, float header = 0) => new(
+        node, depth, bytes,
+        (float)frame.X, (float)frame.Y, (float)frame.Width, (float)frame.Height, header);
 
     /// <summary>
     /// Fit one node's children into <paramref name="area"/>, row by row, largest first.
@@ -126,9 +191,10 @@ public static class TreemapLayout
         int parent,
         int depth,
         Rectangle area,
+        Rectangle canvas,
         LayoutLimits limits,
         List<ExploreTile> tiles,
-        Stack<(int Node, int Depth, float X, float Y, float Width, float Height)> pending)
+        Stack<(int Node, int Depth, Rectangle Frame)> pending)
     {
         var children = tree.ChildrenOf(parent);
         var total = tree.SizeOf(parent);
@@ -141,7 +207,7 @@ public static class TreemapLayout
         // Bytes per square pixel, fixed for the whole of this node's area. Every child is measured
         // against it, including the ones that turn out to be too small to draw — which is what lets
         // the aggregate below state a byte count rather than a leftover shape.
-        var scale = (double)area.Width * area.Height / total;
+        var scale = area.Width * area.Height / total;
 
         var remaining = area;
         var index = 0;
@@ -161,13 +227,13 @@ public static class TreemapLayout
             // in the row fits. Checking again down in LayRow was the original bug — a child failing
             // there was skipped where it stood while `index` advanced past it, so its bytes were
             // drawn nowhere and counted in no aggregate.
-            if (row.Count == 0 || (float)(row.Area / side) < limits.MinimumTileSize)
+            if (row.Count == 0 || row.Area / side < limits.MinimumTileSize)
             {
-                Aggregate(tree, children[index..], remaining, depth, tiles);
+                Aggregate(tree, children[index..], remaining, canvas, depth, tiles);
                 return;
             }
 
-            var thickness = (float)(row.Area / side);
+            var thickness = row.Area / side;
 
             LayRow(tree, children.Slice(index, row.Count), row.Area, thickness, ref remaining, depth, tiles, pending);
             index += row.Count;
@@ -194,7 +260,7 @@ public static class TreemapLayout
         ISizedTree tree,
         ReadOnlySpan<int> children,
         int index,
-        float side,
+        double side,
         double scale,
         float minimumTileSize)
     {
@@ -241,9 +307,9 @@ public static class TreemapLayout
         return (count, sum);
     }
 
-    private static double Worst(double sum, double smallest, double largest, float side)
+    private static double Worst(double sum, double smallest, double largest, double side)
     {
-        var squared = (double)side * side;
+        var squared = side * side;
         return Math.Max(squared * largest / (sum * sum), sum * sum / (squared * smallest));
     }
 
@@ -258,11 +324,11 @@ public static class TreemapLayout
         ISizedTree tree,
         ReadOnlySpan<int> row,
         double rowArea,
-        float thickness,
+        double thickness,
         ref Rectangle remaining,
         int depth,
         List<ExploreTile> tiles,
-        Stack<(int Node, int Depth, float X, float Y, float Width, float Height)> pending)
+        Stack<(int Node, int Depth, Rectangle Frame)> pending)
     {
         var vertical = remaining.Width >= remaining.Height;
         var side = vertical ? remaining.Height : remaining.Width;
@@ -277,9 +343,9 @@ public static class TreemapLayout
         foreach (var child in row)
         {
             var area = tree.SizeOf(child) * scale;
-            var from = (float)(placed / rowArea * side);
+            var from = placed / rowArea * side;
             placed += area;
-            var to = (float)(placed / rowArea * side);
+            var to = placed / rowArea * side;
 
             var tile = vertical
                 ? new Rectangle(remaining.X, remaining.Y + from, thickness, to - from)
@@ -290,7 +356,7 @@ public static class TreemapLayout
             // fire on a rounding hair — and skipping a child at this point drops it from the
             // picture entirely, because the aggregate that should have stood for it was decided
             // one frame up.
-            pending.Push((child, depth, tile.X, tile.Y, tile.Width, tile.Height));
+            pending.Push((child, depth, tile));
         }
 
         remaining = vertical
@@ -322,6 +388,7 @@ public static class TreemapLayout
         ISizedTree tree,
         ReadOnlySpan<int> omitted,
         Rectangle area,
+        Rectangle canvas,
         int depth,
         List<ExploreTile> tiles)
     {
@@ -334,19 +401,18 @@ public static class TreemapLayout
 
         // Nothing to stand for. A directory whose remaining children are all empty would otherwise
         // get a grey block over the space they do not occupy, which invents an occupant.
-        if (bytes == 0)
+        if (bytes == 0 || !Visible(area, canvas))
         {
             return;
         }
 
-        tiles.Add(new ExploreTile(
-            ExploreTile.Aggregated, depth, bytes, area.X, area.Y, area.Width, area.Height));
+        tiles.Add(Tile(ExploreTile.Aggregated, depth, bytes, area));
     }
 
     /// <summary>
-    /// Share the canvas between the root, the volume's use the scan did not account for, and its free
-    /// space, in proportion to their bytes, and add the two blocks' rectangles. Returns what is left
-    /// for the root.
+    /// Share the whole picture between the root, the volume's use the scan did not account for, and
+    /// its free space, in proportion to their bytes, and add whichever of the two blocks' rectangles
+    /// reach the canvas. Returns what is left for the root.
     ///
     /// <para>Largest first, each taking a slab across the longer side of what is left, which is the
     /// squarified row with one member: every part keeps the full length of the shorter side, so none
@@ -357,12 +423,12 @@ public static class TreemapLayout
     private static Rectangle BesideTheVolume(
         long usedBytes,
         VolumeSpace volume,
-        float width,
-        float height,
+        Rectangle picture,
+        Rectangle canvas,
         LayoutLimits limits,
         List<ExploreTile> tiles)
     {
-        var remaining = new Rectangle(0, 0, width, height);
+        var remaining = picture;
 
         Span<(int Node, long Bytes)> parts =
         [
@@ -372,7 +438,10 @@ public static class TreemapLayout
         ];
 
         double whole = usedBytes + parts[1].Bytes + parts[2].Bytes;
-        var longer = Math.Max(width, height);
+        // Measured against the canvas rather than the magnified picture, so what is dropped is the
+        // same at every zoom. Deciding it at each zoom would let a block appear partway into one and
+        // take its share from the root, moving every shape in the picture a few pixels times the zoom.
+        var longer = Math.Max(canvas.Width, canvas.Height);
 
         // Dropped before anything is laid, so the parts that are drawn share the whole canvas between
         // them rather than leaving the dropped one's room empty.
@@ -404,7 +473,7 @@ public static class TreemapLayout
 
             // The last part takes all that is left, so rounding cannot leave a hairline of canvas
             // belonging to nothing.
-            var share = bytes >= left ? 1f : (float)(bytes / left);
+            var share = bytes >= left ? 1 : bytes / left;
             left -= bytes;
 
             Rectangle slab;
@@ -429,7 +498,10 @@ public static class TreemapLayout
             }
 
             // Depth zero, beside the root rather than inside it: neither is part of what was scanned.
-            tiles.Add(new ExploreTile(node, 0, bytes, slab.X, slab.Y, slab.Width, slab.Height));
+            if (Visible(slab, canvas))
+            {
+                tiles.Add(Tile(node, 0, bytes, slab));
+            }
         }
 
         return root;
@@ -456,7 +528,7 @@ public static class TreemapLayout
     /// two-stage layout (Graphics Interface 2008) is the correction, and it is a different
     /// algorithm.</para>
     /// </summary>
-    private static (float Header, float Gap) FrameOf(float width, float height, LayoutLimits limits)
+    private static (float Header, float Gap) FrameOf(double width, double height, LayoutLimits limits)
     {
         var gap = limits.ContainerGap;
 
@@ -479,5 +551,5 @@ public static class TreemapLayout
     /// <summary>Stands for the root among the parts <see cref="BesideTheVolume"/> lays out.</summary>
     private const int Root = int.MaxValue;
 
-    private readonly record struct Rectangle(float X, float Y, float Width, float Height);
+    private readonly record struct Rectangle(double X, double Y, double Width, double Height);
 }

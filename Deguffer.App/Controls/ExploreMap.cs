@@ -51,18 +51,30 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private static readonly TimeSpan ResizeSettleTime = TimeSpan.FromMilliseconds(120);
 
-    private readonly Image _surface = new()
-    {
-        // The bitmap is rendered at the display's pixel size and stretched back over the control's
-        // logical size, so this maps one bitmap pixel to one device pixel rather than resampling.
-        Stretch = Stretch.Fill,
-    };
+    /// <summary>
+    /// Where the bitmap is moved and magnified to while a zoom is on its way, and where it stays
+    /// otherwise, which is nowhere. Kept and written through rather than replaced at each frame (G5).
+    /// </summary>
+    private readonly CompositeTransform _placed = new();
+
+    private readonly Image _surface;
 
     private readonly ExploreLabels _labels = new();
 
     private readonly ExploreHighlight _highlight = new();
 
     private readonly DispatcherQueueTimer _settled;
+
+    private readonly ExploreZoom _zoom = new();
+
+    /// <summary>
+    /// What everything drawn is cut to while the picture is zoomed. A zoomed picture's shapes, their
+    /// outlines and the names in their bands run off the control's edges, and a transform draws them
+    /// over whatever is beside it unless something stops it. Kept and resized rather than replaced (G5).
+    /// </summary>
+    private readonly RectangleGeometry _edges = new();
+
+    private readonly Grid _layers;
 
     /// <summary>What the user picked, as a set because it is asked of every shape in the drawing.</summary>
     private readonly HashSet<int> _picked = [];
@@ -95,7 +107,7 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// The volume the tree covers the whole of, or <see cref="VolumeSpace.None"/>. See
-    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace)"/>
+    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport)"/>
     /// for where it is drawn.
     /// </summary>
     private VolumeSpace _volume = VolumeSpace.None;
@@ -115,6 +127,13 @@ public sealed class ExploreMap : UserControl
     private Point? _pointer;
 
     private ExploreSurface? _drawing;
+
+    /// <summary>
+    /// The part of the picture <see cref="_drawing"/> shows, which is the whole of it unless the
+    /// drawing said otherwise. See <see cref="ExploreSurface.Viewport"/>.
+    /// </summary>
+    private MapViewport _drawn;
+
     private WriteableBitmap? _bitmap;
     private byte[]? _pixels;
     private double _scale = 1;
@@ -125,10 +144,23 @@ public sealed class ExploreMap : UserControl
 
     public ExploreMap()
     {
+        _surface = new Image
+        {
+            // The bitmap is rendered at the display's pixel size and stretched back over the
+            // control's logical size, so this maps one bitmap pixel to one device pixel rather than
+            // resampling.
+            Stretch = Stretch.Fill,
+            RenderTransform = _placed,
+        };
+
         // The outlines go over the picture and under the labels. A label is inset from its shape's
         // edge and an outline runs along it, so the two rarely meet — and where they do, the name
         // of the thing is worth more than the last pixel of the line round it.
-        Content = new Grid { Children = { _surface, _highlight, _labels } };
+        _layers = new Grid { Children = { _surface, _highlight, _labels } };
+        Content = _layers;
+
+        _zoom.Moved += OnZoomMoved;
+        _zoom.Arrived += (_, _) => Redraw();
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -138,6 +170,7 @@ public sealed class ExploreMap : UserControl
         SizeChanged += OnSizeChanged;
         PointerMoved += OnPointerMoved;
         PointerExited += OnPointerExited;
+        PointerWheelChanged += OnPointerWheelChanged;
         DoubleTapped += OnDoubleTapped;
 
         // Picking is separate from opening, on the file-manager idiom: one click says which one, two
@@ -167,9 +200,13 @@ public sealed class ExploreMap : UserControl
             // page nobody is looking at. Coming back at that same size raises no SizeChanged, so
             // this is the only place that owes the redraw — and without it the map stays stretched
             // over the old canvas for as long as the page is open.
+            //
+            // The same goes for a zoom that was still moving when the page was left. It was finished
+            // where it was going rather than eased for nobody, so the drawing is of where it was.
             if (_drawing is { } drawing
                 && (drawing.Width != DevicePixels(ActualWidth)
-                    || drawing.Height != DevicePixels(ActualHeight)))
+                    || drawing.Height != DevicePixels(ActualHeight)
+                    || _drawn != _zoom.Shown))
             {
                 Redraw();
             }
@@ -180,6 +217,7 @@ public sealed class ExploreMap : UserControl
             // A pending redraw for a size this control is no longer showing at. Left running it
             // would rasterise a whole volume for a page that has been navigated away from.
             _settled.Stop();
+            _zoom.Stop();
 
             // The labels go back with it. Dropping the redraw drops the thing that would have put
             // them back, and Loaded only redraws where the size has actually moved — so without
@@ -220,6 +258,13 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>The node the user asked to open, by double-clicking a shape.</summary>
     public event EventHandler<int>? Activated;
+
+    /// <summary>
+    /// Whether the mouse wheel zooms the picture, where the drawing can be zoomed at all. Off unless
+    /// the page asks, because every new tree starts from the whole picture, and a page that draws a
+    /// new tree every few seconds would take the reader's zoom away every few seconds.
+    /// </summary>
+    public bool Zoomable { get; set; }
 
     /// <summary>
     /// The node the user picked out by hand, or null where they clicked nothing.
@@ -290,6 +335,14 @@ public sealed class ExploreMap : UserControl
     {
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
+
+        // A zoom is into one picture. Another tree, another folder or another view is another
+        // picture, and the part of this one the reader had magnified means nothing in it. A new
+        // colouring, scheme or spacing is the same picture, so the zoom stays.
+        if (!ReferenceEquals(tree, _tree) || node != _node || view != _view)
+        {
+            _zoom.Reset();
+        }
 
         _tree = tree;
         _node = node;
@@ -373,7 +426,7 @@ public sealed class ExploreMap : UserControl
 
         // The outlines do stretch with it, because a polygon scales exactly where a line of text
         // does not, so they go on marking out the same shapes throughout the drag.
-        StretchHighlight();
+        Place();
 
         // Stopped and started rather than started, so each size change puts the whole wait back and
         // a drag that is still moving never reaches the end of one.
@@ -382,13 +435,32 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Put the outlines over the bitmap wherever it is currently drawn, which is the whole control.
+    /// Put the bitmap, and the outlines over it, where the zoom on screen says the drawing belongs:
+    /// over the whole control, unless a zoom is on its way and the drawing is of where it started.
     /// </summary>
-    private void StretchHighlight()
+    private void Place()
     {
+        _edges.Rect = new Rect(0, 0, ActualWidth, ActualHeight);
+
+        // Cut only while something can run past the edges. Unzoomed, nothing does except the halo of
+        // an outline round a shape at the edge, which has always been drawn whole.
+        _layers.Clip = _zoom.Shown.IsWhole && _drawn.IsWhole ? null : _edges;
+
+        var placement = _zoom.Shown.PlacementOf(_drawn);
+        var onto = new Rect(
+            placement.X * ActualWidth,
+            placement.Y * ActualHeight,
+            placement.Scale * ActualWidth,
+            placement.Scale * ActualHeight);
+
+        _placed.ScaleX = placement.Scale;
+        _placed.ScaleY = placement.Scale;
+        _placed.TranslateX = onto.X;
+        _placed.TranslateY = onto.Y;
+
         if (_drawing is { } drawing)
         {
-            _highlight.StretchOver(drawing.Width, drawing.Height, ActualWidth, ActualHeight);
+            _highlight.StretchOver(drawing.Width, drawing.Height, onto);
         }
     }
 
@@ -434,6 +506,9 @@ public sealed class ExploreMap : UserControl
         // The clock is read here rather than held, because the age bands are relative to now and
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
+        //
+        // Drawn at the zoom on screen now, which is partway through a move if one is on its way: a
+        // repaint mid-move is placed for the rest of the move like any other drawing.
         var drawing = ExploreSurface.Create(
             tree,
             _node,
@@ -444,8 +519,22 @@ public sealed class ExploreMap : UserControl
             SystemSettings.TextScaleFactor,
             _colours(DateTime.UtcNow),
             _spacing,
-            _volume);
+            _volume,
+            _zoom.Shown);
         _drawing = drawing;
+
+        // A drawing that cannot be zoomed shows the whole picture whatever was asked, and the zoom
+        // has to agree with it: the screen is placed, and every click resolved, by what was drawn
+        // rather than by what was asked for (§7.1).
+        if (drawing.Viewport is { } viewport)
+        {
+            _drawn = viewport;
+        }
+        else
+        {
+            _zoom.Reset();
+            _drawn = MapViewport.Whole;
+        }
 
         // Both reused while the size holds. A scan redraws this every three quarters of a second,
         // and at 3840 by 2160 the buffer alone is 33 MB of large-object-heap allocation — several
@@ -468,7 +557,7 @@ public sealed class ExploreMap : UserControl
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now, and so is whatever the pointer is over.
-        StretchHighlight();
+        Place();
         ShowPicked();
         ReportWhatThePointerIsOver(drawing);
     }
@@ -580,13 +669,73 @@ public sealed class ExploreMap : UserControl
     /// what the menu then acts on, so a pick that disagrees with the picture is a Delete aimed at
     /// something the user never pointed at — the same mistake <c>ExplorePage</c> avoids by picking
     /// from the row under the pointer rather than from the last selection.</para>
+    ///
+    /// <para>A zoom on its way is the same case again. The screen shows the drawing moved and
+    /// magnified, so the point is taken back through that placement first. A point the moved drawing
+    /// does not reach is over nothing, even where a shape running off the drawing's edge would
+    /// contain it: the screen is blank there.</para>
     /// </summary>
-    private ExploreHit? At(ExploreSurface drawing, Point point) =>
-        ActualWidth > 0 && ActualHeight > 0
-            ? drawing.At(
-                (float)(point.X * drawing.Width / ActualWidth),
-                (float)(point.Y * drawing.Height / ActualHeight))
+    private ExploreHit? At(ExploreSurface drawing, Point point)
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return null;
+        }
+
+        var (x, y) = _zoom.Shown.PlacementOf(_drawn).InDrawing(point.X / ActualWidth, point.Y / ActualHeight);
+
+        return x is >= 0 and < 1 && y is >= 0 and < 1
+            ? drawing.At((float)(x * drawing.Width), (float)(y * drawing.Height))
             : null;
+    }
+
+    /// <summary>
+    /// Zoom at the pointer, where the page allows it and the picture can be zoomed.
+    ///
+    /// <para>Left unhandled otherwise, so a wheel over a map that does not zoom goes on to whatever
+    /// would have had it. A horizontal wheel is not a zoom either.</para>
+    /// </summary>
+    private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (!Zoomable || _drawing is not { Viewport: not null } || ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(this);
+
+        if (point.Properties.IsHorizontalMouseWheel)
+        {
+            return;
+        }
+
+        _pointer = point.Position;
+        _zoom.Turn(
+            point.Properties.MouseWheelDelta,
+            point.Position.X / ActualWidth,
+            point.Position.Y / ActualHeight);
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// One frame of a zoom on its way: move the picture on hand, and say what is under the pointer
+    /// now that the picture has moved beneath it.
+    ///
+    /// <para>The names go until the drawing that places them arrives, for the reason they go during
+    /// a resize: they are controls at fixed positions, and over a moving picture they would name
+    /// whatever shape had moved under them.</para>
+    /// </summary>
+    private void OnZoomMoved(object? sender, EventArgs e)
+    {
+        _labels.Hide();
+        Place();
+
+        if (_drawing is { } drawing)
+        {
+            ReportWhatThePointerIsOver(drawing);
+        }
+    }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {

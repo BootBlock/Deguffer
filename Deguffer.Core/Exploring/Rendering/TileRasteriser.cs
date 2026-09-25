@@ -109,6 +109,10 @@ public static class TileRasteriser
     /// boundary and put a seam across the picture wherever one fell; measuring it across only the
     /// unclaimed part would stretch a shape's whole cushion into the sliver of it that is
     /// visible.</para>
+    ///
+    /// <para>The same holds at the canvas's edges. A zoomed picture's shapes run off them, and a
+    /// cushion measured across only the part on the canvas would put a whole cushion in that part,
+    /// then move it as the zoom did.</para>
     /// </summary>
     private static void Cushion(
         byte[] pixels,
@@ -118,18 +122,21 @@ public static class TileRasteriser
         ExploreTile tile,
         TileColour colour)
     {
-        var left = Math.Max(0, (int)MathF.Round(tile.X));
-        var top = Math.Max(0, (int)MathF.Round(tile.Y));
-        var right = Math.Min(width, (int)MathF.Round(tile.X + tile.Width));
-        var bottom = Math.Min(height, (int)MathF.Round(tile.Y + tile.Height));
+        var shapeLeft = (int)MathF.Round(tile.X);
+        var shapeTop = (int)MathF.Round(tile.Y);
+        var shapeRight = (int)MathF.Round(tile.X + tile.Width);
+        var shapeBottom = (int)MathF.Round(tile.Y + tile.Height);
 
-        if (right <= left || bottom <= top)
+        var left = Math.Max(0, shapeLeft);
+        var right = Math.Min(width, shapeRight);
+
+        if (right <= left || Math.Min(height, shapeBottom) <= Math.Max(0, shapeTop))
         {
             return;
         }
 
-        var firstRow = Math.Max(top, claimed.Top);
-        var lastRow = Math.Min(bottom, claimed.Bottom);
+        var firstRow = Math.Max(Math.Max(0, shapeTop), claimed.Top);
+        var lastRow = Math.Min(Math.Min(height, shapeBottom), claimed.Bottom);
 
         if (lastRow <= firstRow)
         {
@@ -149,12 +156,12 @@ public static class TileRasteriser
             ridge = 0;
         }
 
-        var spanWidth = right - left;
-        var spanHeight = bottom - top;
+        var spanWidth = shapeRight - shapeLeft;
+        var spanHeight = shapeBottom - shapeTop;
 
         for (var y = firstRow; y < lastRow; y++)
         {
-            var v = spanHeight <= 1 ? 0.5 : (double)(y - top) / (spanHeight - 1);
+            var v = spanHeight <= 1 ? 0.5 : (double)(y - shapeTop) / (spanHeight - 1);
             var ny = ridge * ((2 * v) - 1);
             var offset = ((y * width) + left) * 4;
 
@@ -162,7 +169,7 @@ public static class TileRasteriser
             {
                 if (claimed.Claim(x, y))
                 {
-                    var u = spanWidth <= 1 ? 0.5 : (double)(x - left) / (spanWidth - 1);
+                    var u = spanWidth <= 1 ? 0.5 : (double)(x - shapeLeft) / (spanWidth - 1);
                     var nx = ridge * ((2 * u) - 1);
 
                     CushionShading.Write(pixels, offset, colour, CushionShading.LightAt(nx, ny));

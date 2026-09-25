@@ -27,6 +27,10 @@ public sealed class TiledSurface : ExploreSurface
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
 
+    /// <param name="viewport">
+    /// The part of the picture <paramref name="tiles"/> were laid out for, or null where their layout
+    /// draws only the whole of it. See <see cref="ExploreSurface.Viewport"/>.
+    /// </param>
     public TiledSurface(
         ISizedTree tree,
         int root,
@@ -34,8 +38,9 @@ public sealed class TiledSurface : ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours,
-        IReadOnlyList<ExploreTile> tiles)
-        : base(tree, root, width, height, limits, colours)
+        IReadOnlyList<ExploreTile> tiles,
+        MapViewport? viewport = null)
+        : base(tree, root, width, height, limits, colours, viewport)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 
@@ -94,6 +99,12 @@ public sealed class TiledSurface : ExploreSurface
     /// <para>The largest shapes are named first, in both kinds. The layout emits shapes depth first,
     /// so taking them in that order would spend the whole allowance on the first branch and leave
     /// the largest folder elsewhere unnamed.</para>
+    ///
+    /// <para>Every one of those decisions is made on the part of a shape that is on the canvas. A
+    /// zoomed treemap's shapes run off its edges, and a name placed at a shape's own left edge would
+    /// be off the canvas with it, or a shape judged by its whole size would be named in a sliver too
+    /// small to read. So a folder whose band runs off the left is named where the band comes on, and
+    /// a band that is off the canvas altogether is not named.</para>
     /// </summary>
     private IReadOnlyList<ExploreLabel> BuildLabels()
     {
@@ -122,14 +133,18 @@ public sealed class TiledSurface : ExploreSurface
         for (var i = 0; i < _tiles.Count; i++)
         {
             var tile = _tiles[i];
+            var shown = OnCanvas(tile);
 
             if (tile.Header > 0)
             {
-                headers.Add(i);
+                if (tile.Y + tile.Header > 0 && tile.Y < Height && shown.Width > 0)
+                {
+                    headers.Add(i);
+                }
             }
             else if (!tile.IsAggregate
                 && (tile.IsFreeSpace || (tile.Node != Root && !covered.Contains(tile.Node)))
-                && tile.HasRoomForALabel(Limits))
+                && shown.HasRoomForALabel(Limits))
             {
                 insides.Add(i);
             }
@@ -140,13 +155,16 @@ public sealed class TiledSurface : ExploreSurface
         foreach (var i in Largest(headers, MaximumHeaders))
         {
             var tile = _tiles[i];
+            var shown = OnCanvas(tile);
 
             // Centred in the band, which is one line of text with the gap shared above and below it.
+            // Along the band from where it comes on the canvas, and down from the band's own top,
+            // which moves with the folder as a zoom scrolls it away.
             labels.Add(new ExploreLabel(
                 tile.Node,
-                tile.X + Limits.LabelPadding,
+                shown.X + Limits.LabelPadding,
                 tile.Y + ((tile.Header - Limits.MinimumLabelHeight) / 2),
-                tile.Width - (Limits.LabelPadding * 2),
+                shown.Width - (Limits.LabelPadding * 2),
                 Rotation: 0,
                 Centred: false,
                 TextColourFor(tile.Node, tile.Depth),
@@ -156,12 +174,13 @@ public sealed class TiledSurface : ExploreSurface
         foreach (var i in Largest(insides, MaximumLabels))
         {
             var tile = _tiles[i];
+            var shown = OnCanvas(tile);
 
             labels.Add(new ExploreLabel(
                 tile.Node,
-                tile.X + Limits.LabelPadding,
-                tile.Y + (Limits.LabelPadding / 2),
-                tile.Width - (Limits.LabelPadding * 2),
+                shown.X + Limits.LabelPadding,
+                shown.Y + (Limits.LabelPadding / 2),
+                shown.Width - (Limits.LabelPadding * 2),
                 Rotation: 0,
                 Centred: false,
                 TextColourFor(tile.Node, tile.Depth),
@@ -174,7 +193,7 @@ public sealed class TiledSurface : ExploreSurface
     /// <summary>At most <paramref name="count"/> of <paramref name="indices"/>, largest shape first.</summary>
     private List<int> Largest(List<int> indices, int count)
     {
-        indices.Sort((a, b) => Area(_tiles[b]).CompareTo(Area(_tiles[a])));
+        indices.Sort((a, b) => Area(OnCanvas(_tiles[b])).CompareTo(Area(OnCanvas(_tiles[a]))));
 
         if (indices.Count > count)
         {
@@ -185,4 +204,24 @@ public sealed class TiledSurface : ExploreSurface
     }
 
     private static float Area(ExploreTile tile) => tile.Width * tile.Height;
+
+    /// <summary>
+    /// The part of <paramref name="tile"/> on the canvas, which is all of it unless the picture is
+    /// zoomed. Empty where none of it is.
+    /// </summary>
+    private ExploreTile OnCanvas(ExploreTile tile)
+    {
+        var left = Math.Max(0, tile.X);
+        var top = Math.Max(0, tile.Y);
+        var right = Math.Min(Width, tile.X + tile.Width);
+        var bottom = Math.Min(Height, tile.Y + tile.Height);
+
+        return tile with
+        {
+            X = left,
+            Y = top,
+            Width = Math.Max(0, right - left),
+            Height = Math.Max(0, bottom - top),
+        };
+    }
 }
