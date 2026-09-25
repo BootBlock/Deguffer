@@ -11,9 +11,10 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para>Four things are the same for every one of them and are done here: search the approved roots
 /// and nowhere else, prove the directory's identity from the project around it, refuse anything
-/// something is using, and turn what is left into steps that promise the source survives. What
-/// differs is a <see cref="BuildDirectoryKind"/>, a tier, and the sentence saying what the next use
-/// costs — so a subclass is a declaration rather than an algorithm.</para>
+/// something is using, at the preview and again at the clean, and turn what is left into steps that
+/// promise the source survives. What differs is a <see cref="BuildDirectoryKind"/>, a tier, and the
+/// sentence saying what the next use costs — so a subclass is a declaration rather than an
+/// algorithm.</para>
 ///
 /// <para>Deliberately not shared with <see cref="DotNetObjProvider"/>, whose identity check is a
 /// different thing entirely: three files inside the directory that must agree on a project name,
@@ -172,7 +173,8 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                     $"{Subject} for {Path.GetFileName(target.Project)}",
                     DirectoryAge.Of(target.Path, ct),
                     Facets: [new ItemFacet("Project", Path.GetFileName(target.Project))],
-                    Group: ApprovedRootHeading.For(ApprovedRoots, target.Path))),
+                    Group: ApprovedRootHeading.For(ApprovedRoots, target.Path),
+                    UseCheck: target.StillUnused)),
             ],
             keep,
             ct).ConfigureAwait(false);

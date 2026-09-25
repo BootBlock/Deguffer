@@ -8,6 +8,19 @@ namespace Deguffer.Core.Providers;
 /// <param name="Project">Its project or solution folder, which must survive (§5.6).</param>
 public readonly record struct RecognisedBuildDirectory(string Path, string Project);
 
+/// <summary>A directory the veto found nothing using, and the veto's question to ask again at the clean.</summary>
+/// <param name="Path">
+/// The directory a plan may go on to target, or, for a Squirrel installation, the folder holding the
+/// builds it targets.
+/// </param>
+/// <param name="Project">Its project or solution folder, which must survive (§5.6).</param>
+/// <param name="StillUnused">
+/// What every step removing this directory, or anything the veto's answer about it cleared, carries as
+/// its <see cref="DeleteStep.UseCheck"/>. Handed out with the directory rather than built by each
+/// provider, so a directory cannot be offered on the veto's answer without its question.
+/// </param>
+public sealed record ClearedBuildDirectory(string Path, string Project, IUseCheck StillUnused);
+
 /// <param name="Cleared">The directories a plan may go on to target.</param>
 /// <param name="Vetoed">The directories something is using, and what is using each.</param>
 /// <param name="Complete">
@@ -15,7 +28,7 @@ public readonly record struct RecognisedBuildDirectory(string Path, string Proje
 /// nothing has vouched for.
 /// </param>
 public sealed record LiveTreeVetoResult(
-    IReadOnlyList<RecognisedBuildDirectory> Cleared,
+    IReadOnlyList<ClearedBuildDirectory> Cleared,
     IReadOnlyList<LiveTree> Vetoed,
     bool Complete);
 
@@ -59,8 +72,15 @@ internal static class LiveTreeVeto
             [.. candidates.Select(c => new LiveTreeQuery(c.Path, c.Project, lockFilesOf(c)))],
             ct);
 
+        // The same rule for the lock files, not the list it produced, because the list is read from
+        // the project and an editor opened after the preview adds to it.
         return new LiveTreeVetoResult(
-            [.. candidates.Where(c => !findings.IsLive(c.Path))],
+            [
+                .. candidates.Where(c => !findings.IsLive(c.Path)).Select(c => new ClearedBuildDirectory(
+                    c.Path,
+                    c.Project,
+                    new LiveTreeCheck(inspector, c, lockFilesOf))),
+            ],
             findings.Live,
             findings.Complete);
     }

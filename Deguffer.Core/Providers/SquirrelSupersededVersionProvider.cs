@@ -36,7 +36,7 @@ namespace Deguffer.Core.Providers;
 /// less than this does: an application launched from an old build has that build open, and an
 /// application launched from the new one may still be reading the folder beside it while it
 /// finishes an update. The refusal covers the whole installation rather than one directory in
-/// it.</para>
+/// it, and the clean asks again immediately before each build is removed.</para>
 /// </summary>
 public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 {
@@ -244,6 +244,10 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         var held = new HashSet<string>(
             live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
 
+        // The installation's question, carried by every build removed from it: an application started
+        // after the preview holds its old builds back as one running at the preview would have.
+        var stillUnused = live.Cleared.ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
+
         // A build somebody moved onto another drive is named and not followed, on the same rule
         // every other root in this change applies. It counts when the versions are ordered — that is
         // what stops the newest build being called superseded — and it is never removed: what it
@@ -299,7 +303,8 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                  // Listed under the application, so the builds one updater left behind read as one
                  // group and each is told apart by its number.
                  Facets: [new ItemFacet("Version", version.Number.ToString())],
-                 Group: installation.Name))
+                 Group: installation.Name,
+                 UseCheck: stillUnused[installation.Root]))
             .ToList();
 
         // §5.6, and only once the targets are settled. Every build this provider is not removing is
