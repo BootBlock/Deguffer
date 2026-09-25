@@ -120,9 +120,8 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
 
     /// <summary>
     /// The row a reader chooses from: one item per game, Tier 2 because a picture replaced by hand is
-    /// lost, each named as Steam names it where a
-    /// manifest says, keyed by its id so it can be kept, and in display form rather than the
-    /// extended-length form the folder was listed in.
+    /// lost, each named as Steam names it where a manifest says, keyed by its id so it can be kept,
+    /// and in display form rather than the extended-length form the folder was listed in.
     /// </summary>
     [Fact]
     public async Task EachGamesArtworkIsAnItemNamedFromItsManifest()
