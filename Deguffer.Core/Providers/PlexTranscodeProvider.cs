@@ -37,7 +37,7 @@ public sealed class PlexTranscodeProvider : MediaServerTranscodeProvider
         Application = "Plex Media Server",
         Publisher = "Plex",
         Purpose = "When a player cannot play a file as it is, Plex converts it as it streams and writes "
-            + "the parts to a folder of its own. A stream that ends badly leaves its parts there for good. "
+            + "the parts to a folder of its own. A stream that ends badly can leave its parts there for months. "
             + "Plex also keeps the posters and thumbnails it resized for its apps.",
         Recommendation = "Deguffer removes the transcoder's leftovers and the resized pictures, and "
             + $"nothing written in the last {QuietHours} hours, so a film playing now is not cut off. It "

@@ -26,6 +26,12 @@ namespace Deguffer.Core.Providers;
 /// <c>CACHEDIR.TAG</c> Jellyfin writes there, which is how a server older than the marker is
 /// recognised. A folder with neither is left alone and named.</para>
 ///
+/// <para><b>A marker outlives the server that wrote it.</b> A folder the user once pointed Jellyfin at
+/// may be one they use again after the server has gone, so a moved folder is trusted only through the
+/// settings of the data folder the installer still records. A transcoder folder that holds a data
+/// folder, or overlaps what a data folder keeps, is never offered: emptying it would take the
+/// server's own data.</para>
+///
 /// <para>Jellyfin empties the whole folder itself each time it starts, marker included, and writes the
 /// marker again when it next transcodes.</para>
 /// </summary>
@@ -100,12 +106,15 @@ public static class JellyfinServerLayout
         var withheld = false;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var present = new List<string>();
+
         foreach (var data in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             switch (LongPath.ProbeDirectory(data))
             {
-                case PathPresence.Absent:
-                    continue;
+                case PathPresence.Present:
+                    present.Add(data);
+                    break;
 
                 // Declared at its default rather than read, so the scan names the folder Windows would
                 // not describe instead of this reporting settings it could not have read.
@@ -116,15 +125,20 @@ public static class JellyfinServerLayout
                         RequiresElevation: false,
                         [new DeclaredLocation(Path.Combine("cache", "transcodes"), TranscodeReason, DeclaredLocationKind.DirectoryContents)],
                         []));
-                    continue;
+                    break;
             }
+        }
 
+        foreach (var data in present)
+        {
             toolRoots.Add(ToolRoot.Of(data, ExploreReason, new DisposableChildSet([])));
             survivors.Add((data, DataReason));
             survivors.AddRange(DataNames.Select(name => (Path.Combine(data, name.RelativePath), name.Reason)));
 
+            var isRecorded = data.Equals(recorded, StringComparison.OrdinalIgnoreCase);
+
             // The service account owns what a service install writes, so this account may not remove it.
-            var elevated = data.Equals(recorded, StringComparison.OrdinalIgnoreCase)
+            var elevated = isRecorded
                 && serviceAccount is { Length: > 0 } account
                 && !account.Equals("None", StringComparison.OrdinalIgnoreCase);
 
@@ -151,29 +165,34 @@ public static class JellyfinServerLayout
             // server left its segments there until the setting was changed.
             foreach (var folder in new[] { transcodeSetting.Folder, fallback }.OfType<string>())
             {
-                if (!seen.Add(folder) || LongPath.ProbeDirectory(folder) is PathPresence.Absent)
+                if (!seen.Add(folder))
                 {
                     continue;
                 }
 
-                if (!folder.Equals(fallback, StringComparison.OrdinalIgnoreCase))
+                var presence = LongPath.ProbeDirectory(folder);
+
+                if (presence is PathPresence.Absent)
+                {
+                    continue;
+                }
+
+                var isMoved = !folder.Equals(fallback, StringComparison.OrdinalIgnoreCase);
+
+                if (isMoved)
                 {
                     toolRoots.AddRange(MediaServerLayout.Refusing(folder, TranscodeExploreReason));
                 }
 
                 if (Path.GetDirectoryName(folder) is not { } parent)
                 {
-                    withheld = true;
-                    notes.Add(Unrecognised(folder, "it is the whole of a drive"));
+                    Withhold(folder, "it is the whole of a drive");
                     continue;
                 }
 
-                // A folder Windows would not describe is declared anyway, so the scan names it.
-                if (LongPath.ProbeDirectory(folder) is PathPresence.Present && !IsJellyfins(folder, fallback, cache))
+                if (Why(folder, presence, isMoved) is { } why)
                 {
-                    withheld = true;
-                    survivors.Add((folder, "Left alone because nothing in it shows it is Jellyfin's."));
-                    notes.Add(Unrecognised(folder, $"it has no {Marker} file in it"));
+                    Withhold(folder, why);
                     continue;
                 }
 
@@ -184,9 +203,44 @@ public static class JellyfinServerLayout
                     [new DeclaredLocation(Path.GetFileName(folder), TranscodeReason, DeclaredLocationKind.DirectoryContents)],
                     []));
             }
+
+            // Why a transcoder folder is not offered, or null where it is. A folder Windows would not
+            // describe is offered all the same, so the scan names it rather than this guessing at it.
+            string? Why(string folder, PathPresence presence, bool isMoved)
+            {
+                // A data folder inside a transcoder folder would be emptied with it, and so would what a
+                // data folder keeps where the two overlap. Jellyfin refuses to start that way, so only
+                // settings nothing runs can say so. The default folder sits inside the data folder's
+                // cache, which is why the data folder itself is asked about in one direction only.
+                if (present.Any(other => LongPath.Contains(folder, other))
+                    || present.SelectMany(other => DataNames, (other, name) => Path.Combine(other, name.RelativePath))
+                        .Any(kept => LongPath.Contains(folder, kept) || LongPath.Contains(kept, folder)))
+                {
+                    return "it overlaps a folder Jellyfin keeps its own data in";
+                }
+
+                // A moved folder's marker outlives the server that wrote it, and a folder the user once
+                // pointed Jellyfin at may be one they use again. Only the settings of the install the
+                // installer still records are trusted to say the folder is still Jellyfin's.
+                if (isMoved && !isRecorded)
+                {
+                    return "the settings that name it belong to a Jellyfin the installer no longer records";
+                }
+
+                return presence is PathPresence.Present && !IsJellyfins(folder, fallback, cache)
+                    ? $"it has no {Marker} file in it"
+                    : null;
+            }
         }
 
         return new MediaServerLayout(roots, survivors, notes, toolRoots, withheld);
+
+        void Withhold(string folder, string why)
+        {
+            withheld = true;
+            survivors.Add((folder, $"Left alone because {why}."));
+            notes.Add(Unrecognised(folder, why));
+        }
     }
 
     private static bool IsJellyfins(string folder, string fallback, string cache) =>

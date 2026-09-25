@@ -162,12 +162,25 @@ public sealed class PlexTranscodeProviderTests : IDisposable
         var sessions = Path.Combine(moved, PlexServerLayout.FolderName, "Cache", "Transcode", "Sessions");
         Write(Path.Combine(sessions, "plex-transcode-a1b2", "media-00001.ts"), Old);
         CreateLayout();
+        var movedData = Path.Combine(moved, PlexServerLayout.FolderName);
+        var database = Write(Path.Combine(movedData, "Plug-in Support", "Databases", "com.plexapp.plugins.library.db"), Old);
+        var sync = Write(Path.Combine(movedData, "Cache", "Transcode", "Sync", "item-1", "media.mp4"), Old);
         WithSetting(PlexServerLayout.DataFolderValue, moved);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
         Assert.Contains(sessions, plan.TargetedPaths);
         Assert.DoesNotContain(Sessions, plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(
+            Path.Combine(movedData, "Plug-in Support", "Databases"), StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(sessions));
+        Assert.True(File.Exists(database), "the moved data folder's database went.");
+        Assert.True(File.Exists(sync), "the moved data folder's sync queue went.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -190,6 +203,8 @@ public sealed class PlexTranscodeProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal([Sessions, PhotoTranscoder, movedSessions], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(
+            Path.Combine(moved, "Transcode", "Sync"), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -228,20 +243,44 @@ public sealed class PlexTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A downloads setting that names no full path could be anywhere, so no transcoder folder can be
-    /// shown not to overlap it. The photo transcoder's folder is not the transcoder's, and stays offered.
+    /// A downloads setting that names no full path could be anywhere, so no folder can be shown not to
+    /// overlap it, and nothing is offered.
     /// </summary>
     [Fact]
-    public async Task WithholdsEveryTranscoderFolderWhenTheDownloadsFolderCannotBePlaced()
+    public async Task WithholdsEveryFolderWhenTheDownloadsFolderCannotBePlaced()
     {
         CreateLayout();
         WithSetting(PlexServerLayout.DownloadsValue, @"Downloads\Plex");
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.Equal([PhotoTranscoder], plan.TargetedPaths);
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains(@"'Downloads\Plex'", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Sessions, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(PhotoTranscoder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The overlap is not the transcoder's alone: a downloads folder set inside the photo transcoder's
+    /// folder would be emptied with it.
+    /// </summary>
+    [Fact]
+    public async Task WithholdsThePhotoTranscoderWhereItHoldsTheDownloadsFolder()
+    {
+        CreateLayout();
+        var downloads = Path.Combine(PhotoTranscoder, "Downloads");
+        var download = Write(Path.Combine(downloads, "film.mp4"), Old);
+        WithSetting(PlexServerLayout.DownloadsValue, downloads);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([Sessions], plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(download), "a download inside the photo transcoder's folder was deleted.");
     }
 
     /// <summary>A declared path reached by name has none of the protection an enumeration gives.</summary>

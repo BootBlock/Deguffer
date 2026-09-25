@@ -122,7 +122,7 @@ installed" cleanly on a machine without that toolchain.
 | Steam web cache | |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
 | Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue beside it, or the downloads folder |
-| Jellyfin transcoder files | Only a folder carrying Jellyfin's own marker; never anything written in the last 24 hours |
+| Jellyfin transcoder files | Only a folder Jellyfin's own marker shows is Jellyfin's; never anything written in the last 24 hours |
 | Emby Server transcoder files | Only a `transcoding-temp` folder Emby made; never anything written in the last 24 hours |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |

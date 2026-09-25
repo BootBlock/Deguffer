@@ -10,7 +10,7 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// Jellyfin's transcoder leftovers. A moved transcoder folder is used exactly as it is named, so the
 /// evidence that a folder is Jellyfin's is the marker file Jellyfin writes into it, and what has to be
-/// shown is that a folder without it is never emptied.
+/// shown is that a folder with no evidence is never emptied.
 /// </summary>
 public sealed class JellyfinTranscodeProviderTests : IDisposable
 {
@@ -219,8 +219,40 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
         Write(Path.Combine(Data, "cache", JellyfinServerLayout.CacheTag), Old, "Signature: 8a477f597d28d172789f06886806bc55");
         Record(JellyfinServerLayout.DataFolderValue, Data);
 
-        Assert.Equal([Transcodes], (await CreateProvider().PlanAsync()).TargetedPaths);
-        Assert.True(File.Exists(segment));
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([Transcodes], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(segment));
+        Assert.True(File.Exists(Path.Combine(Data, "cache", JellyfinServerLayout.CacheTag)), "the cache tag went.");
+        Assert.True(File.Exists(Path.Combine(Data, "cache", "images", "resized.webp")), "the rest of the cache went.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The unrecognised case at the default folder: with neither the marker nor the cache tag, nothing
+    /// shows the folder is Jellyfin's, so it is left whole.
+    /// </summary>
+    [Fact]
+    public async Task NeverEmptiesTheDefaultFolderWithNoEvidence()
+    {
+        CreateData(Data);
+        var file = Write(Path.Combine(Transcodes, "0b1c2d.ts"), Old);
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Transcodes, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(file), "a folder nothing showed was Jellyfin's was emptied.");
     }
 
     /// <summary><c>CachePath</c> in <c>system.xml</c> moves the cache, and the transcoder with it.</summary>
@@ -231,10 +263,73 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
         var cache = Path.Combine(_temp.Path, "JellyfinCache");
         var transcodes = Path.Combine(cache, "transcodes");
         Transcoding(transcodes);
+        var image = Write(Path.Combine(cache, "images", "resized.webp"), Old);
         Write(Path.Combine(Data, "config", "system.xml"), Old, Settings("CachePath", cache));
         Record(JellyfinServerLayout.DataFolderValue, Data);
 
-        Assert.Equal([transcodes], (await CreateProvider().PlanAsync()).TargetedPaths);
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([transcodes], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(image), "the rest of the moved cache went.");
+        Assert.True(File.Exists(Path.Combine(Data, "data", "jellyfin.db")), "the database went.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A moved folder's marker outlives the server that wrote it. Settings in a data folder the
+    /// installer does not record may belong to a Jellyfin that is gone, and the folder they name may
+    /// be one the user uses again, so it is left whole.
+    /// </summary>
+    [Fact]
+    public async Task NeverTrustsAMovedFolderNamedBySettingsTheInstallerDoesNotRecord()
+    {
+        var local = Path.Combine(_environment.LocalAppData, "jellyfin");
+        CreateData(local);
+        var moved = Path.Combine(_temp.Path, "Reused");
+        var segment = Transcoding(moved);
+        var document = Write(Path.Combine(moved, "letter.docx"), Old);
+        Write(Path.Combine(local, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", moved));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("no longer records", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(document), "a folder named by an unrecorded install's settings was emptied.");
+        Assert.True(File.Exists(segment));
+    }
+
+    /// <summary>
+    /// A transcoder folder that holds a data folder would take the server's database and backups with
+    /// it, marker or not. Jellyfin refuses to start that way, so only stale settings can say so.
+    /// </summary>
+    [Fact]
+    public async Task NeverEmptiesATranscoderFolderThatHoldsADataFolder()
+    {
+        var outer = Path.Combine(_temp.Path, "Media");
+        var data = Path.Combine(outer, "JellyfinData");
+        var kept = CreateData(data);
+        Transcoding(outer);
+        Write(Path.Combine(data, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", outer));
+        Record(JellyfinServerLayout.DataFolderValue, data);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(outer, plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("overlaps", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the transcoder folder."));
     }
 
     /// <summary>
@@ -264,14 +359,21 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
     {
         var local = Path.Combine(_environment.LocalAppData, "jellyfin");
         var service = Path.Combine(_system.ProgramData, "Jellyfin", "Server");
+        var kept = CreateData(local).Concat(CreateData(service)).ToList();
         Transcoding(Path.Combine(local, "cache", "transcodes"));
         Transcoding(Path.Combine(service, "cache", "transcodes"));
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
         Assert.Equal(
             [Path.Combine(local, "cache", "transcodes"), Path.Combine(service, "cache", "transcodes")],
             plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the transcoder's files."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>A service install's files belong to the service account, so removing them needs elevation.</summary>

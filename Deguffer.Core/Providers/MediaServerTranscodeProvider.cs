@@ -50,10 +50,7 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
     /// Where this server keeps its files, read once per planning pass (G4). Presence, planning and the
     /// §5.2 declarations all ask the same question of the same settings.
     /// </summary>
-    public MediaServerLayout Layout => _layout ??= FindLayout();
-
-    /// <summary>What this provider names. Exposed so tests can assert the declaration itself.</summary>
-    public IReadOnlyList<DeclaredRoot> Roots => Layout.Roots;
+    private MediaServerLayout Layout => _layout ??= FindLayout();
 
     public override IReadOnlyList<ToolRoot> ToolRoots => Layout.ToolRoots;
 

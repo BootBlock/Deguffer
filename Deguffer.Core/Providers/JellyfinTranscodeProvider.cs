@@ -43,7 +43,7 @@ public sealed class JellyfinTranscodeProvider : MediaServerTranscodeProvider
             + "until the server next starts or its daily clean-up runs.",
         Recommendation = "Deguffer removes the transcoder's leftovers, and nothing written in the last "
             + $"{QuietHours} hours, which is the rule Jellyfin's own clean-up follows. It removes nothing "
-            + "from a folder unless Jellyfin's own marker file shows the folder is Jellyfin's.",
+            + "from a folder unless Jellyfin's own marker files show the folder is Jellyfin's.",
     };
 
     protected override string NothingHere => "Jellyfin has left no transcoder files on this machine.";

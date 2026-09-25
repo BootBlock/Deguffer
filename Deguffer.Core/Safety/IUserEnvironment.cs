@@ -284,7 +284,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
     }
 
     /// <summary>
-    /// Not memoised: the one caller memoises the answer it derives for the life of a planning pass,
+    /// Not memoised: every caller memoises the answer it derives for the life of a planning pass,
     /// and a second cache here would be a second thing for <see cref="Invalidate"/> to get wrong.
     /// </summary>
     public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
@@ -309,7 +309,10 @@ public sealed partial class UserEnvironment : IUserEnvironment
         }
     }
 
-    /// <summary>Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> gives.</summary>
+    /// <summary>
+    /// Not memoised: the one caller memoises the layout it derives for the life of a planning pass, and
+    /// a second cache here would be a second thing for <see cref="Invalidate"/> to get wrong.
+    /// </summary>
     public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);

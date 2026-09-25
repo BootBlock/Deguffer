@@ -1994,7 +1994,7 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 When a player cannot play a file as it is, Plex converts it as it streams and writes the parts to
 `Transcode\Sessions`, one `plex-transcode-…` folder per stream. A stream that ends badly, or a
-server that crashes, leaves its parts there for good. `PhotoTranscoder` holds the posters and
+server that crashes, can leave its parts there for months: Plex's forums report sessions months old. `PhotoTranscoder` holds the posters and
 thumbnails Plex resized for its apps, which Plex makes again as they are shown.
 
 ### What Deguffer does
@@ -2017,9 +2017,9 @@ through. 24 hours is the rule Jellyfin's own clean-up follows. The cut-off is fi
 is made, so a segment written while the preview is on screen is left alone too.
 
 **It never offers the downloads folder.** A download waiting to go to a phone is not a cache. Where
-the transcoder's folder and the downloads folder overlap, Deguffer leaves the transcoder's folder
-alone and says so, because neither setting says what Plex keeps where. If the downloads setting is
-not a full path, Deguffer cannot rule out an overlap, and leaves every transcoder folder alone.
+one of these folders and the downloads folder overlap, Deguffer leaves that folder alone and says
+so, because neither setting says what Plex keeps where. If the downloads setting is not a full path,
+Deguffer cannot rule out an overlap, and leaves every folder alone.
 
 Plex's scheduled tasks clear old cache files, and an administrator's sign-in can start them over the
 network. Deguffer holds no sign-in, so this is the path-based case §5.2 governs rather than §5.1's
@@ -2065,7 +2065,7 @@ one is making it again.
 | | |
 | --- | --- |
 | **Location** | `cache\transcodes` in Jellyfin's data folder, or the folder `TranscodingTempPath` names |
-| **Method** | Empty that folder in place, taking nothing written in the last 24 hours, and only where Jellyfin's own marker shows the folder is Jellyfin's |
+| **Method** | Empty that folder in place, taking nothing written in the last 24 hours, and only where Jellyfin's own marker, or the cache tag above the default folder, shows the folder is Jellyfin's |
 | **Typical size** | Not measured: no media server was installed on the machine this was researched on |
 
 ### What it is
@@ -2090,6 +2090,11 @@ into** the folder it names.
 whichever folder it transcodes to. Deguffer empties a folder only where that file is there, or where
 the folder is the default `transcodes` folder and the cache folder above it carries the
 `CACHEDIR.TAG` Jellyfin writes. A folder with neither is named, checked afterwards, and left whole.
+
+A moved folder is trusted only through the settings of the install the installer still records. A
+marker outlives the server that wrote it, and a folder you once pointed Jellyfin at may be one you
+use again. Deguffer also leaves alone any transcoder folder that holds Jellyfin's data folder, or
+overlaps one of the folders in the table below.
 
 **It leaves anything written in the last 24 hours alone**, which is Jellyfin's own rule, so a film
 playing now keeps its files. Jellyfin's clean-up task is the route §5.1 prefers, but starting it
