@@ -1980,6 +1980,205 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 ---
 
+## Plex Media Server transcoder files
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `Cache\Transcode\Sessions` and `Cache\PhotoTranscoder` in `%LOCALAPPDATA%\Plex Media Server`, and `Transcode\Sessions` in the folder Plex's transcoder setting names |
+| **Method** | Empty those folders in place, taking nothing written in the last 24 hours |
+| **Typical size** | Not measured: no media server was installed on the machine this was researched on. Plex's forums report single sessions of 23 GB |
+
+### What it is
+
+When a player cannot play a file as it is, Plex converts it as it streams and writes the parts to
+`Transcode\Sessions`, one `plex-transcode-…` folder per stream. A stream that ends badly, or a
+server that crashes, leaves its parts there for good. `PhotoTranscoder` holds the posters and
+thumbnails Plex resized for its apps, which Plex makes again as they are shown.
+
+### What Deguffer does
+
+**It reads Plex's settings rather than assuming.** Plex on Windows keeps its settings in the registry
+under `HKEY_CURRENT_USER\Software\Plex, Inc.\Plex Media Server`, not in `Preferences.xml`:
+
+| Value | What it moves |
+| --- | --- |
+| `LocalAppDataPath` | The folder `Plex Media Server` is in |
+| `TranscoderTempDirectory` | The transcoder's folder. Plex writes into `Transcode\Sessions` inside it, never into the folder itself |
+| `DownloadsTempDirectory` | Where Plex prepares downloads for its apps |
+
+The default `Sessions` folder is still offered when the transcoder has moved, because Plex left its
+segments there until the setting changed.
+
+**It leaves anything written in the last 24 hours alone.** A stream playing now writes into the
+same folder its dead predecessors sit in, and deleting a live segment ends somebody's film part-way
+through. 24 hours is the rule Jellyfin's own clean-up follows. The cut-off is fixed when the preview
+is made, so a segment written while the preview is on screen is left alone too.
+
+**It never offers the downloads folder.** A download waiting to go to a phone is not a cache. Where
+the transcoder's folder and the downloads folder overlap, Deguffer leaves the transcoder's folder
+alone and says so, because neither setting says what Plex keeps where. If the downloads setting is
+not a full path, Deguffer cannot rule out an overlap, and leaves every transcoder folder alone.
+
+Plex's scheduled tasks clear old cache files, and an administrator's sign-in can start them over the
+network. Deguffer holds no sign-in, so this is the path-based case §5.2 governs rather than §5.1's
+command.
+
+### What is protected
+
+Everything else in Plex's folder. The Explore page may remove nothing from it, or from either folder
+the settings name, because Explore removes a folder whole and applies no cut-off. Deguffer asserts
+afterwards that these survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Cache\Transcode\Sync`, beside `Sessions` | Media Plex converted and is still waiting to send to a phone or tablet |
+| `Plug-in Support\Databases` | Plex's database: your libraries, watch history and ratings |
+| `Metadata` | The artwork and details Plex gathered, which take hours of processor time to gather again on a large library |
+| `Media` | What Plex worked out from your media files, such as chapter pictures and preview thumbnails |
+| The downloads folder | Where Plex prepares downloads for its apps |
+
+### What it costs you
+
+Plex converts a film or an episode again the next time a player that cannot play the original asks
+for it, and resizes posters and thumbnails again as they are shown.
+
+### Why Tier 1
+
+Every segment and every resized picture is derived from media still on disk, so the cost of losing
+one is making it again.
+
+### Sources
+
+- Plex's list of server settings, including `LocalAppDataPath` and `TranscoderTempDirectory`:
+  <https://support.plex.tv/articles/201105343-advanced-hidden-server-settings/>
+- Plex on the transcoder's temporary folder:
+  <https://support.plex.tv/articles/200250347-transcoder/>
+
+---
+
+## Jellyfin transcoder files
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `cache\transcodes` in Jellyfin's data folder, or the folder `TranscodingTempPath` names |
+| **Method** | Empty that folder in place, taking nothing written in the last 24 hours, and only where Jellyfin's own marker shows the folder is Jellyfin's |
+| **Typical size** | Not measured: no media server was installed on the machine this was researched on |
+
+### What it is
+
+The same thing as [Plex's](#plex-media-server-transcoder-files): the parts of films Jellyfin
+converted as it streamed, left behind by a stream that ended badly. Jellyfin empties the folder when
+it starts, and its daily clean-up task removes files older than a day.
+
+### What Deguffer does
+
+**It finds the data folder the way Jellyfin's tray program does.** The installer records the folder
+you chose as `DataFolder` under `HKEY_LOCAL_MACHINE\SOFTWARE\Jellyfin\Server`, in the 32-bit view of
+the registry. Deguffer also looks in the two defaults: `%LOCALAPPDATA%\jellyfin`, and
+`%PROGRAMDATA%\Jellyfin\Server` for a service install.
+
+**It reads Jellyfin's settings rather than assuming.** `CachePath` in `config\system.xml` moves the
+cache folder, and the `JELLYFIN_CACHE_DIR` variable moves it where the setting does not.
+`TranscodingTempPath` in `config\encoding.xml` moves the transcoder, which then writes **straight
+into** the folder it names.
+
+**So the folder has to prove it is Jellyfin's.** Jellyfin writes a `.jellyfin-transcode` file into
+whichever folder it transcodes to. Deguffer empties a folder only where that file is there, or where
+the folder is the default `transcodes` folder and the cache folder above it carries the
+`CACHEDIR.TAG` Jellyfin writes. A folder with neither is named, checked afterwards, and left whole.
+
+**It leaves anything written in the last 24 hours alone**, which is Jellyfin's own rule, so a film
+playing now keeps its files. Jellyfin's clean-up task is the route §5.1 prefers, but starting it
+needs an administrator's sign-in to the server, which Deguffer does not hold.
+
+A service install's files belong to the service's account, so Deguffer says that removing them needs
+administrator rights.
+
+### What is protected
+
+Everything else in Jellyfin's data folder, and Deguffer asserts afterwards that these survived. The
+Explore page may remove nothing from it, or from a moved transcoder folder.
+
+| Neighbour | What it really is |
+| --- | --- |
+| `config` | Jellyfin's settings, including where it keeps everything else |
+| `data` | Jellyfin's database: your libraries, users and watch history |
+| `data\backups` | The backups Jellyfin made of its own database and settings |
+| `metadata` | The artwork and details Jellyfin gathered |
+| `plugins` | The plugins you installed, and their settings |
+| `root` | How your libraries are defined |
+
+### What it costs you
+
+Jellyfin converts a film or an episode again the next time a player that cannot play the original
+asks for it.
+
+### Why Tier 1
+
+Every segment is derived from media still on disk.
+
+### Sources
+
+- Jellyfin's server, for the transcoder folder, its marker and the clean-up task:
+  <https://github.com/jellyfin/jellyfin>
+- Jellyfin's Windows installer and tray program, for the registry key:
+  <https://github.com/jellyfin/jellyfin-server-windows>
+- Jellyfin's server configuration: <https://jellyfin.org/docs/general/administration/configuration/>
+
+---
+
+## Emby Server transcoder files
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `transcoding-temp` in `%APPDATA%\Emby-Server\programdata`, and `transcoding-temp` in the folder `TranscodingTempPath` names |
+| **Method** | Empty those folders in place, taking nothing written in the last 24 hours |
+| **Typical size** | Not measured: no media server was installed on the machine this was researched on |
+
+### What it is
+
+The same thing as [Plex's](#plex-media-server-transcoder-files). Emby clears the folder when it
+starts, so the leftovers are those of a server that has run for a long time.
+
+### What Deguffer does
+
+**It empties only a folder called `transcoding-temp`.** `TranscodingTempPath` in
+`config\encoding.xml` moves the transcoder, and Emby then writes into a `transcoding-temp` folder it
+makes inside the folder the setting names. Emby's help warns that it deletes everything in the folder
+it transcodes to, so the folder the setting names is never a target. The default folder is still
+offered when the transcoder has moved, because Emby left its segments there until the setting
+changed, and goes back to it when it cannot write to the new one.
+
+**It leaves anything written in the last 24 hours alone**, so a film playing now keeps its files.
+
+### What is protected
+
+Everything else in Emby's program data folder, and Deguffer asserts afterwards that `config`, `data`,
+`metadata`, `plugins` and `root` survived. The Explore page may remove nothing from it, or from a
+moved `transcoding-temp` folder.
+
+### What it costs you
+
+Emby converts a film or an episode again the next time a player that cannot play the original asks
+for it.
+
+### Why Tier 1
+
+Every segment is derived from media still on disk.
+
+### Sources
+
+- Emby on transcoding and its temporary folder: <https://emby.media/support/articles/Transcoding.html>
+- Emby on its program data folder: <https://emby.media/support/articles/Server-Data-Folder.html>
+
+---
+
 ## Affinity machine-learning models
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
