@@ -218,6 +218,57 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The same for GeForce Experience's downloads: <c>latest</c>, or a long hexadecimal identifier,
+    /// and nothing that only resembles one.
+    /// </summary>
+    [Theory]
+    [InlineData("latest-old")]
+    [InlineData("3f0c2a9d8b7e4c1")]
+    [InlineData("3f0c2a9d8b7e4c1a9d2e6f5a4b3c2d1g")]
+    [InlineData("3f0c2a9d-8b7e-4c1a-9d2e-6f5a4b3c2d1e")]
+    public async Task ANameThatIsNotAGeForceExperienceDownloadIsLeftAlone(string name)
+    {
+        var folder = Populate(Path.Combine(Downloader, name));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A folder Windows cannot locate comes back as an empty string, and a folder named below it would
+    /// resolve against Deguffer's own working directory. Nothing is reached there, rather than a guess.
+    /// </summary>
+    [Fact]
+    public void AFolderWindowsCannotLocateReachesNothing()
+    {
+        var provider = new GraphicsDriverInstallerProvider(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            system: new UnlocatedSystemDrive(_system));
+
+        var root = Assert.Single(provider.ToolRoots);
+
+        Assert.Equal(Downloader, root.Path, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Everything as <see cref="FakeSystemDirectories"/> has it, except a drive Windows would not name.</summary>
+    private sealed class UnlocatedSystemDrive(FakeSystemDirectories located) : ISystemDirectories
+    {
+        public string WindowsDirectory => located.WindowsDirectory;
+
+        public string ProgramData => located.ProgramData;
+
+        public string ProgramFiles => located.ProgramFiles;
+
+        public string ProgramFilesX86 => located.ProgramFilesX86;
+
+        public string SystemDrive => string.Empty;
+    }
+
+    /// <summary>
     /// A junctioned <c>C:\NVIDIA</c> hands the listing the far side's folders, and a check on
     /// <c>DisplayDriver</c> alone would never see it. The walk down names it and goes no further.
     /// </summary>

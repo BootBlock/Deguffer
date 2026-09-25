@@ -22,7 +22,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>§5.1 has nothing to prefer.</b> None of the three vendors ships a command that removes
 /// its downloaded packages. AMD's installer clears its older payloads from <c>C:\AMD</c> itself from
-/// Adrenalin 24.1.1 on, which is AMD's own statement that nothing installed depends on them, and
+/// Adrenalin 24.1.1 on, to save space, so AMD's own installer treats them as disposable, and
 /// NVIDIA's installers from 576.80 on unpack into a temporary folder and remove it. What they leave
 /// from before then is what this reaches.</para>
 ///
@@ -46,11 +46,14 @@ namespace Deguffer.Core.Providers;
 /// AMD machine keeps <c>C:\AMD</c> for its chipset driver alone. A row for either would tell the user
 /// there is something to reclaim when there is not.</para>
 ///
-/// <para><b>No administrator rights, and that was measured rather than assumed.</b> Windows gives
-/// Authenticated Users modify rights on every folder created below the top of the system drive, and
-/// the NVIDIA folder under <c>%PROGRAMDATA%</c> was measured carrying full control for Everyone. See
-/// <see cref="EpicLauncherContentCacheProvider"/> for why declaring a need that is not there is the
-/// wrong way to be cautious.</para>
+/// <para><b>No administrator rights, measured for the parents and inferred for the folders
+/// themselves.</b> The top of the system drive was measured granting Authenticated Users inherited
+/// modify rights on every folder created below it, and another vendor's folder there was measured
+/// carrying them. <c>%PROGRAMDATA%\NVIDIA Corporation</c> was measured granting Everyone full
+/// control. None of the three payload folders was on the machine, so an installer that sets rights
+/// of its own on one is not ruled out. If one does, the removal is refused and reported, which is the
+/// direction <see cref="EpicLauncherContentCacheProvider"/> explains is the right one to be wrong
+/// in.</para>
 /// </summary>
 public sealed partial class GraphicsDriverInstallerProvider : CleanupProviderBase
 {
@@ -98,12 +101,6 @@ public sealed partial class GraphicsDriverInstallerProvider : CleanupProviderBas
             + "clears its older copies itself, and the only cost of removing them is downloading a "
             + "release again should you want to reinstall it.",
     };
-
-    /// <summary>
-    /// The folders this provider lists, and the rule for each. Exposed so tests can assert that no
-    /// root, container or named sibling is ever a target.
-    /// </summary>
-    public IReadOnlyList<DriverInstallerRoot> Roots => _roots;
 
     /// <summary>
     /// §5.3: AMD's installer unpacks into <c>AMD-Software-Installer</c> and removes it when it
@@ -341,7 +338,18 @@ public sealed partial class GraphicsDriverInstallerProvider : CleanupProviderBas
         return paths.Where(p => seen.Add(p.Path));
     }
 
+    /// <summary>
+    /// The three folders, keeping only those whose base is a full path. Windows answers an empty
+    /// string for a folder it cannot locate, and a folder named below an empty base would be a path
+    /// relative to Deguffer's own working directory, which is a directory nobody pointed at. §5.2's
+    /// direction is to reach nothing there, never to guess.
+    /// </summary>
     private static IReadOnlyList<DriverInstallerRoot> Declare(ISystemDirectories system) =>
+    [
+        .. Candidates(system).Where(root => Path.IsPathFullyQualified(root.Base)),
+    ];
+
+    private static IEnumerable<DriverInstallerRoot> Candidates(ISystemDirectories system) =>
     [
         new DriverInstallerRoot(
             @"NVIDIA\DisplayDriver",

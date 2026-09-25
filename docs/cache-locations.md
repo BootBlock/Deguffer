@@ -2422,14 +2422,15 @@ behind, one folder per release:
 | `C:\AMD\AMD-Software-Installer` | AMD's installer since 23.7.1. It removes the folder when it finishes, so one still here is from an installation that stopped part-way |
 | `C:\AMD\<release folder>` | AMD's installers before 23.7.1, one folder per release, under names that were never consistent |
 
-AMD's installer clears its older release folders itself from Adrenalin 24.1.1 on, which is AMD's
-own statement that nothing installed depends on them.
+AMD's installer clears its older release folders itself from Adrenalin 24.1.1 on, "to save space"
+in AMD's words, so AMD's own installer treats them as disposable.
 
 ### What Deguffer does
 
 **It never lists the top of the drive.** `C:\NVIDIA` and `C:\AMD` sit beside `Program Files`,
 `Users` and `Windows`, so Deguffer reaches each by name, checks every folder on the way down for
-being a link, and lists only the three folders in the table. Inside each one it recognises:
+being a link, and lists only `DisplayDriver`, `Downloader` and `C:\AMD`. Inside each one it
+recognises:
 
 - in `DisplayDriver`, a folder named as NVIDIA names a release: three digits, a point and two
   digits, such as `546.33`;
