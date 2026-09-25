@@ -7,10 +7,9 @@ namespace Deguffer.Core.Providers;
 /// per-game containers it keeps.
 ///
 /// <para><b>Its own type, because §5.2 hangs on it wherever Steam files things by game.</b>
-/// <c>steamapps\shadercache</c> is the container that uses it. Steam files its library artwork in
-/// <c>appcache\librarycache</c> the same way, which <see cref="SteamCacheProvider"/> leaves whole
-/// for now, and a provider that classifies that folder's children should ask this rather than write
-/// a second one. A child that passes is a folder Steam made for one game; a child that fails is
+/// <c>steamapps\shadercache</c> and <c>appcache\librarycache</c> are the containers that use it,
+/// through <see cref="SteamShaderCacheProvider"/> and <see cref="SteamLibraryArtworkProvider"/>. A
+/// child that passes is a folder Steam made for one game; a child that fails is
 /// something nobody established, and is Tier 4.</para>
 ///
 /// <para>Valve's ids are unsigned 32-bit integers written in decimal, so the name has to parse as one

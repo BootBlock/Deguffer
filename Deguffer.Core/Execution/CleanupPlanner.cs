@@ -133,6 +133,7 @@ public sealed class CleanupPlanner
         new EpicLauncherWebCacheProvider(environment),
         new EpicLauncherContentCacheProvider(environment),
         new SteamCacheProvider(environment, discovery: steam),
+        new SteamLibraryArtworkProvider(environment, discovery: steam),
         new SteamShaderCacheProvider(environment, discovery: steam),
         new UnrealDerivedDataCacheProvider(environment),
         new SpotifyCacheProvider(environment),
