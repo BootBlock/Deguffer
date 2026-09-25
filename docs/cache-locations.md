@@ -2122,7 +2122,8 @@ so and leaves the folder alone rather than guessing.
 
 **Before removing a staging directory it asks whether anything is running from inside it, and
 refuses the ones that are.** This is the collision the maintainer named, and it is a refusal rather
-than a warning.
+than a warning. It asks again when you press Clean, immediately before each directory is removed, so
+an install that starts after the scan keeps the directory it is running from.
 
 **In a `packages` folder it reads the application's own index.** `RELEASES` lists the packages the
 application still needs. Deguffer removes package files that index has stopped naming, and nothing
@@ -2288,7 +2289,9 @@ remove the build you are running.
 
 **An application that is running gives up nothing either.** This is a refusal, not a warning. The
 question it answers is whether the application is running at all, not whether the old folder itself
-is busy — the process holding it open runs from the build that replaced it.
+is busy — the process holding it open runs from the build that replaced it. It is asked again when you
+press Clean, immediately before each old build is removed, so an application you start after the scan
+keeps its old builds.
 
 ### What is protected
 
@@ -3004,7 +3007,9 @@ evidence rather than a guess:
   own folder, which is how a solution you have open is recognised.
 
 A held-back project is listed as something left alone, with what is using it named, so you can close
-it and scan again.
+it and scan again. The same question is asked again when you press Clean, immediately before each
+directory is removed, so a project you open or build after the scan keeps its build directory, and the
+result says what is using it.
 
 **The Unreal Editor is found by its log.** It works in the engine's folder rather than the
 project's, so the second and third signals do not see it. It does hold its log in the project's

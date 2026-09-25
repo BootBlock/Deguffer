@@ -213,7 +213,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         // replaces the list of process names this provider used to carry, which asked a question
         // that was wrong in both directions — one MSBuild anywhere on the machine warned about every
         // project on the disk, while the compiler server actually holding a directory open need not
-        // be called any of them.
+        // be called any of them. Each step asks again at the clean, because a build started after the
+        // preview is exactly the one a removal breaks.
         var live = LiveTreeVeto.Apply(
             _liveTrees,
             [.. targets.Select(t => new RecognisedBuildDirectory(
@@ -222,8 +223,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             [],
             ct);
 
-        var vetoed = live.Vetoed.Select(v => v.Directory).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        targets = [.. targets.Where(t => !vetoed.Contains(t.Path))];
+        var stillUnused = live.Cleared.ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
+        targets = [.. targets.Where(t => stillUnused.ContainsKey(t.Path))];
 
         var (steps, measured) = await PlanDeletionsAsync(
             [
@@ -232,7 +233,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                     $"Intermediate build output for {t.Project.ProjectName}",
                     DirectoryAge.Of(t.Path, ct),
                     Facets: [new ItemFacet("Project", t.Project.ProjectName)],
-                    Group: ApprovedRootHeading.For(ApprovedRoots, t.Path))),
+                    Group: ApprovedRootHeading.For(ApprovedRoots, t.Path),
+                    UseCheck: stillUnused[t.Path])),
             ],
             keep,
             ct).ConfigureAwait(false);
