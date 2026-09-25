@@ -70,13 +70,14 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        SteamDiscovery? discovery = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new SteamDiscovery(Environment);
+        => _discovery = discovery ?? new SteamDiscovery(Environment);
 
     public override string Id => "steam";
 
@@ -112,7 +113,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     public IReadOnlyList<DeclaredRoot> Roots => _roots ??= Declare();
 
     /// <summary>§5.3. The client and its browser process hold both caches open while Steam runs.</summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => ["steam", "steamwebhelper"];
+    protected override IReadOnlyList<string> ConflictingProcessNames => SteamDiscovery.ProcessNames;
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Three roots rather than two, because a
@@ -206,49 +207,11 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// The sentence owed about an install directory this machine gave no usable answer for, or null
-    /// when it was found — or when there is no Steam in this profile to be missing one.
-    ///
-    /// <para>Gated on the profile folder because the alternative is to tell somebody who has never
-    /// installed Steam that Deguffer could not find it. A profile folder Windows would not describe
-    /// passes the gate: it is no evidence that Steam was never installed, and the sentence it lets
-    /// through is true either way.</para>
-    ///
-    /// <para>A warning where Windows would not describe the recorded directory, because that is not
-    /// Deguffer's own decision, and information otherwise.</para>
+    /// The sentence owed about an install directory this machine gave no usable answer for. See
+    /// <see cref="SteamDiscovery.UnreachedInstallNote"/>.
     /// </summary>
-    private PlanNote? InstallUnreached()
-    {
-        if (_discovery.Install.Root is not null)
-        {
-            return null;
-        }
-
-        if (_discovery.Install.UnreachedRoot is { } refused)
-        {
-            return new PlanNote(
-                PlanNoteSeverity.Warning,
-                $"Windows records Steam as installed in '{refused}', and would not say what is there, so "
-                + "Deguffer could not check for the Steam program or look inside it. A link Windows will "
-                + "not follow, a folder this account may not read and a drive that is not connected all do "
-                + "that. The cache Steam keeps beside the program was neither cleared nor ruled out.");
-        }
-
-        if (!LongPath.DirectoryMayExist(_discovery.LocalRoot))
-        {
-            return null;
-        }
-
-        return new PlanNote(
-            PlanNoteSeverity.Information,
-            _discovery.Install.UnmarkedRoot is { } unmarked
-                ? $"Windows records Steam as installed in '{unmarked}', but the Steam program is not "
-                    + "there. Deguffer did not look inside it, so the cache Steam keeps beside the "
-                    + "program was neither cleared nor ruled out."
-                : "Deguffer could not work out where Steam is installed, so it did not look at the "
-                    + "cache Steam keeps beside the program. That cache was neither cleared nor ruled "
-                    + "out.");
-    }
+    private PlanNote? InstallUnreached() =>
+        _discovery.UnreachedInstallNote("the cache Steam keeps beside the program");
 
     /// <summary>
     /// The two locations, and everything beside them that §5.6 must assert survived.

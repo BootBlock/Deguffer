@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
-> shader caches, §6's crash dumps and servicing logs, §7's per-volume recycle bins and §12's
+> shader caches and Steam shader pre-cache, §6's crash dumps and servicing logs, §7's per-volume recycle bins and §12's
 > Squirrel staging and superseded builds have shipped; everything else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
@@ -991,6 +991,11 @@ machine could establish; Steam's `steamapps\shadercache`, which is per-game unde
 rather than under `%LOCALAPPDATA%`; and the extracted driver installers below, which are leftover
 installers rather than shader caches and want their own provider.
 
+The Steam shader cache has since shipped as a provider of its own, at Tier 2 rather than Tier 1:
+Valve distributes those pipelines, so removing them costs a download rather than a local rebuild. It
+reads every library from Steam's own `libraryfolders.vdf`, and `docs/cache-locations.md` records the
+rest.
+
 Compiled shader pipelines, keyed by driver version and discarded by the driver itself whenever that
 version changes. Regenerated transparently. The only cost of deleting one is a few seconds of
 stutter the first time a scene renders, and nothing can be lost.
@@ -1000,7 +1005,7 @@ stutter the first time a scene renders, and nothing can be lost.
 - `%LOCALAPPDATA%\D3DSCache` — the Direct3D system cache, 1 MB.
 - AMD `%LOCALAPPDATA%\AMD\DxCache` and Intel `ShaderCache` — the same shape from the other vendors.
 - Steam `steamapps\shadercache`, per game id — empty here, commonly several GB where pre-caching is
-  enabled.
+  enabled. Shipped since, at Tier 2 — see the note above this list.
 
 Adjacent, and worth the same provider's attention: `%PROGRAMDATA%\NVIDIA Corporation\Downloader` and
 `C:\NVIDIA` keep whole extracted driver installers after installation. Tier 1, and nothing removes
