@@ -44,9 +44,33 @@ internal static class RefusalCheck
         IReadOnlyList<string> recorded,
         MinimumAge keep,
         IFileSystem fs,
+        CancellationToken ct) =>
+        Of(step.Path, step as ClearDirectoryStep, recorded, keep, fs, ct);
+
+    /// <summary>
+    /// The same question about one index directory a step removes before its own path. See
+    /// <see cref="DeleteDirectoryStep.IndexedBy"/>.
+    /// </summary>
+    /// <param name="recorded">
+    /// The places <see cref="RefusalRecord"/> holds for <paramref name="index"/>, in display form.
+    /// </param>
+    public static RefusalFinding OfIndex(
+        string index,
+        IReadOnlyList<string> recorded,
+        MinimumAge keep,
+        IFileSystem fs,
+        CancellationToken ct) =>
+        Of(index, clear: null, recorded, keep, fs, ct);
+
+    private static RefusalFinding Of(
+        string path,
+        ClearDirectoryStep? clear,
+        IReadOnlyList<string> recorded,
+        MinimumAge keep,
+        IFileSystem fs,
         CancellationToken ct)
     {
-        if (LongPath.Configured(step.Path) is not { } root)
+        if (LongPath.Configured(path) is not { } root)
         {
             return Nothing;
         }
@@ -69,7 +93,7 @@ internal static class RefusalCheck
             return Nothing;
         }
 
-        var bounds = step is ClearDirectoryStep clear
+        var bounds = clear is not null
             ? new RemovalBounds(KeepRoot: false, clear.Spared, clear.OwnedElsewhere)
             : RemovalBounds.None;
 
@@ -86,7 +110,7 @@ internal static class RefusalCheck
         var standing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // A folder cleared in place stays whatever happens, and its own entry was never in the count.
-        var rootCounted = step is not ClearDirectoryStep;
+        var rootCounted = clear is null;
 
         foreach (var place in PlacesOf(root, recorded))
         {

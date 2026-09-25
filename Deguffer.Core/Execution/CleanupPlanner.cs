@@ -18,7 +18,7 @@ public sealed class CleanupPlanner
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, Maven, vcpkg, pnpm,
     /// conda, Playwright, the browser profiles test runners leave in the temporary folders, the GPU
     /// shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
@@ -138,6 +138,7 @@ public sealed class CleanupPlanner
             new CondaCacheProvider(environment),
             new CargoCacheProvider(environment),
             new GoCacheProvider(environment),
+            new ZigCacheProvider(environment),
             new MavenRepositoryProvider(environment),
             new VcpkgCacheProvider(environment),
             new GpuShaderCacheProvider(environment),

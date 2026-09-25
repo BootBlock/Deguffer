@@ -1336,6 +1336,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("pip", "pip.ini")]                           // private index URLs
     [InlineData("poetry", "virtualenvs")]                    // every environment on the machine
     [InlineData("go", "src")]                                // the user's own code
+    [InlineData("zig", "p")]                                 // packages, some the only copy
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("roslyn-cache", "something-unrecognised")]
@@ -1481,6 +1482,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new PipCacheProvider(_environment),
         new PoetryCacheProvider(_environment),
         new GoCacheProvider(_environment),
+        new ZigCacheProvider(_environment),
         new VsCodeCppToolsCacheProvider(_environment),
         new DartAnalysisServerProvider(_environment),
         new RoslynCacheProvider(_environment),

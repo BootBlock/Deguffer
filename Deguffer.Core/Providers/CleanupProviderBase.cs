@@ -466,30 +466,36 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MinimumAge keep,
         CancellationToken ct)
     {
-        var measured = await MeasureAllAsync([.. targets.Select(t => t.Path)], keep, ct).ConfigureAwait(false);
+        if (targets.FirstOrDefault(t => t.IndexedBy is { Count: > 0 } && t.Kind != TargetKind.Directory) is { Path: { } unindexable })
+        {
+            throw new ArgumentException($"Only a directory removed outright can carry an index: {unindexable}.", nameof(targets));
+        }
+
+        // An index is removed with the directory it indexes, so it is measured with it.
+        var (each, measured) = await MeasureGroupsAsync(
+            [.. targets.Select(t => (IReadOnlyList<string>)[t.Path, .. t.IndexedBy ?? []])], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
-        for (var i = 0; i < targets.Count; i++)
-        {
-            var target = targets[i];
 
+        foreach (var (target, group) in targets.Zip(each))
+        {
             DeleteStep step = target.Kind switch
             {
                 TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
                 TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
                 TargetKind.DirectoryContents => new ClearDirectoryStep(target.Path, target.Reason),
-                _ => new DeleteDirectoryStep(target.Path, target.Reason),
+                _ => new DeleteDirectoryStep(target.Path, target.Reason) { IndexedBy = target.IndexedBy ?? [] },
             };
 
             steps.Add(step with
             {
                 Estimated = target.Kind is TargetKind.DirectoryContents or TargetKind.RecycleBin
-                    ? WithoutItsOwnEntry(measured.Sizes[i])
-                    : measured.Sizes[i],
+                    ? WithoutItsOwnEntry(group.Size)
+                    : group.Size,
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
-                WithheldRecent = measured.WithheldRecent[i],
-                MailStores = measured.MailStores[i],
+                WithheldRecent = group.WithheldRecent,
+                MailStores = group.MailStores,
                 Identity = target.Identity,
                 IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],
@@ -520,33 +526,62 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MinimumAge keep,
         CancellationToken ct)
     {
-        var measured = await MeasureAllAsync(
-            [.. targets.SelectMany(t => (IEnumerable<string>)[t.Path, .. t.AlsoClears])], keep, ct).ConfigureAwait(false);
+        var (each, measured) = await MeasureGroupsAsync(
+            [.. targets.Select(t => (IReadOnlyList<string>)[t.Path, .. t.AlsoClears])], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
-        var next = 0;
 
-        foreach (var target in targets)
+        foreach (var (target, group) in targets.Zip(each))
         {
-            var count = 1 + target.AlsoClears.Count;
-            var span = Enumerable.Range(next, count).ToList();
-            next += count;
-
             steps.Add(new DiskCleanupStep(target.Path, target.Reason)
             {
                 Handler = target.Handler,
                 Volume = target.Volume,
                 AlsoClears = target.AlsoClears,
-                Estimated = span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
+                Estimated = group.Size,
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
-                WithheldRecent = span.Any(i => measured.WithheldRecent[i]),
-                MailStores = [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
+                WithheldRecent = group.WithheldRecent,
+                MailStores = group.MailStores,
             });
         }
 
         return (steps, measured);
     }
+
+    /// <summary>
+    /// Measure each group of paths one step destroys, and add each group up.
+    ///
+    /// <para>The one place a measurement is paired with the paths it measured. The batch is flat and the
+    /// pairing is positional, which is exactly the shape that silently attributes one directory's size
+    /// to another, so every step that is the sum of several paths comes through here.</para>
+    /// </summary>
+    private async Task<(IReadOnlyList<GroupMeasure> Each, ScanBatch Measured)> MeasureGroupsAsync(
+        IReadOnlyList<IReadOnlyList<string>> groups,
+        MinimumAge keep,
+        CancellationToken ct)
+    {
+        var measured = await MeasureAllAsync([.. groups.SelectMany(g => g)], keep, ct).ConfigureAwait(false);
+
+        var each = new List<GroupMeasure>(groups.Count);
+        var next = 0;
+
+        foreach (var group in groups)
+        {
+            var span = Enumerable.Range(next, group.Count).ToList();
+            next += group.Count;
+
+            each.Add(new GroupMeasure(
+                span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
+                span.Any(i => measured.WithheldRecent[i]),
+                [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)]));
+        }
+
+        return (each, measured);
+    }
+
+    /// <summary>What one step's paths hold together, as <see cref="MeasureGroupsAsync"/> adds them up.</summary>
+    private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores);
 
     /// <summary>
     /// A measurement of a folder emptied in place, which stays standing, so its own entry is not
@@ -580,6 +615,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// back.</b> Windows clears its directories whole and there is no direct route to fall back on,
     /// because the handler is chosen for what it does besides deleting. Where the guard holds nothing
     /// back it is satisfied, and the step stays.</para>
+    ///
+    /// <para><b>So is a directory that goes with its index</b>, for the reason that step gives: see
+    /// <see cref="DeleteDirectoryStep.IndexedBy"/>.</para>
     /// </summary>
     /// <param name="keep">
     /// The guard actually in force, which is the stricter of the user's and the provider's own.
@@ -604,12 +642,24 @@ public abstract class CleanupProviderBase : ICleanupProvider
             .Where(step => step.WithheldRecent)
             .ToList();
 
+        // A directory goes only once its whole index has, and a manifest the guard kept would name an
+        // output nobody could then promise is there. See DeleteDirectoryStep.IndexedBy.
+        var indexed = plan.Steps
+            .OfType<DeleteDirectoryStep>()
+            .Where(step => step.IndexedBy.Count > 0 && step.WithheldRecent)
+            .ToList();
+
         var notes = new List<PlanNote>(plan.Notes);
 
         notes.AddRange(whole.Select(step => new PlanNote(
             PlanNoteSeverity.Information,
             $"Leaving {LongPath.Display(step.Path)} alone: Windows clears it whole, and something in it "
             + $"{keep.DescribeChange()}.")));
+
+        notes.AddRange(indexed.Select(step => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Leaving {LongPath.Display(step.Path)} and its index alone: they go together and whole or not "
+            + $"at all, and something in them {keep.DescribeChange()}.")));
 
         // Only where there is something to say it about. Every plan comes through here, including
         // the empty one a provider returns for a toolchain that is not installed — and "the sizes
@@ -642,7 +692,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         return plan with
         {
             Keep = keep,
-            Steps = [.. plan.Steps.Except(files).Except(whole)],
+            Steps = [.. plan.Steps.Except(files).Except(whole).Except(indexed)],
             Notes = notes,
             ProtectedPaths =
             [
@@ -650,6 +700,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 .. files.Select(step => (Path: step.Path, Reason: $"Left alone because it {keep.DescribeChange()}."))
                     .Concat(whole.SelectMany(step => step.Destroys).Select(path => (Path: path, Reason:
                         $"Left alone because Windows clears it whole, and something it would clear {keep.DescribeChange()}.")))
+                    .Concat(indexed.SelectMany(step => step.Destroys).Select(path => (Path: path, Reason:
+                        $"Left alone because it goes whole with its index or not at all, and something there {keep.DescribeChange()}.")))
                     .Select(withheld => new ProtectedPath(
                         withheld.Path,
                         withheld.Reason,

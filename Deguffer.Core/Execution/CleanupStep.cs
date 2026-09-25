@@ -343,6 +343,34 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
     /// </summary>
     public bool IsAllOrNothing { get; init; }
 
+    /// <summary>
+    /// Directories holding the index of what <see cref="DeleteStep.Path"/> holds, which go with it: each
+    /// is removed first, and <see cref="DeleteStep.Path"/> is touched only once every one of them is
+    /// gone. Empty for every removal whose content nothing else points into.
+    ///
+    /// <para><b>Zig's global cache is the case.</b> A manifest in its index names an output by where it
+    /// is, and trusts that it is still there: an output removed from under a manifest that stayed is a
+    /// failed build, not a slower one, and it stays failed until somebody clears the cache by hand. An
+    /// index removed on its own is only a cache miss. So the order is the safety, and it is one step
+    /// because a part the user could leave out, or a folder Explore could take alone, would undo it.</para>
+    ///
+    /// <para><b>It is all or nothing by construction</b>, as <see cref="IsAllOrNothing"/> describes,
+    /// whether or not that is set: a manifest the guard on recently changed files kept would name an
+    /// output nobody can promise is still there. So a plan whose guard would hold anything back
+    /// withdraws the step, and the run looks at the disk again before it starts.</para>
+    /// </summary>
+    public IReadOnlyList<string> IndexedBy { get; init; } = [];
+
+    /// <summary>The index first, because that is the order the run removes them in.</summary>
+    public override IReadOnlyList<string> Destroys => [.. IndexedBy, Path];
+
+    /// <summary>
+    /// Whether the run looks at the whole of <see cref="Destroys"/> on the disk first, and removes nothing
+    /// if anything it finds would leave a part standing: a recent file, a folder that would not be
+    /// listed, or an Outlook data file. So a plan must not offer such a step while it holds a store.
+    /// </summary>
+    public bool GoesWholeOrNotAtAll => IsAllOrNothing || IndexedBy.Count > 0;
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 
