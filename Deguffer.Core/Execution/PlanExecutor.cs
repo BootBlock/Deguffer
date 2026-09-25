@@ -19,8 +19,12 @@ namespace Deguffer.Core.Execution;
 /// provider that plans one. Defaulted for the reason <paramref name="emptier"/> is.
 /// </param>
 /// <param name="handlers">
-/// How a <see cref="DiskCleanupStep"/> is carried out, for the one provider that plans one. Defaulted
-/// for the reason <paramref name="emptier"/> is.
+/// How a <see cref="DiskCleanupStep"/> is carried out. Defaulted for the reason
+/// <paramref name="emptier"/> is.
+/// </param>
+/// <param name="servicing">
+/// Asked again, with <paramref name="inspector"/>, immediately before a step that is
+/// <see cref="CleanupStep.HeldWhileUpdating"/>. Defaulted for the reason <paramref name="emptier"/> is.
 /// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
@@ -28,11 +32,15 @@ public sealed class PlanExecutor(
     RefusalRecord refusals,
     IRecycleBinEmptier? emptier = null,
     ICloudFiles? cloud = null,
-    IDiskCleanupHandlers? handlers = null)
+    IDiskCleanupHandlers? handlers = null,
+    IWindowsServicing? servicing = null,
+    IProcessInspector? inspector = null)
 {
     private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
     private readonly ICloudFiles _cloud = cloud ?? CloudFiles.Default;
     private readonly IDiskCleanupHandlers _handlers = handlers ?? DiskCleanupHandlers.Default;
+    private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
+    private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -71,6 +79,14 @@ public sealed class PlanExecutor(
             // Each step's own 0-to-1 becomes its slice of this plan's 0-to-1.
             var stepProgress = ScaledProgress.Within(progress, done / total, weights[i] / total);
 
+            if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
+            {
+                outcomes.Add(new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating));
+                done += weights[i];
+                progress?.Report(done / total);
+                continue;
+            }
+
             outcomes.Add(step switch
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
@@ -102,6 +118,25 @@ public sealed class PlanExecutor(
             // §5.6 is not a separate user action: acting and proving what survived are one step.
             Verification = PlanVerifier.Verify(plan, runReach, leftStanding, ct, _cloud),
         };
+    }
+
+    /// <summary>
+    /// Why <paramref name="step"/> must not run because Windows is now in the middle of an update, or
+    /// null where nothing says it is. The process table is read afresh rather than from the snapshot
+    /// the planning pass took, for the reason the step is asked about at all.
+    /// </summary>
+    private string? StillUpdating(CleanupStep step)
+    {
+        _inspector.Invalidate();
+
+        if (UnfinishedUpdate.HoldsEverything(_servicing, _inspector) is { } everything)
+        {
+            return $"Nothing was removed: {everything}";
+        }
+
+        return step is DeleteStep delete && delete.Destroys.FirstOrDefault(_servicing.HasPendingOperationsIn) is { } pending
+            ? UnfinishedUpdate.PendingNow(pending)
+            : null;
     }
 
     private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, CancellationToken ct)
@@ -146,7 +181,7 @@ public sealed class PlanExecutor(
         // planning and executing — Invalidate runs once, at the top of a planning pass — so an
         // ordinary measurement here would hand back the very figure it is about to be subtracted
         // from, and a clean that freed gigabytes would report nothing.
-        var after = await MeasureAllAsync(step.MeasuredPaths, ct).ConfigureAwait(false);
+        var after = (await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false)).Reclaimable;
         var reclaimed = before - after;
 
         // A negative delta means the tree grew between preview and clean — a build restoring
@@ -294,6 +329,16 @@ public sealed class PlanExecutor(
         IProgress<double>? progress,
         CancellationToken ct)
     {
+        // A directory whose parts only mean something together is looked at first, on the disk: anything
+        // the guard would keep, or a folder that would not be listed, and the removal below would leave a
+        // part of it standing. See DeleteDirectoryStep.IsAllOrNothing.
+        if (step.IsAllOrNothing
+            && (await WholeTreeLook.TakeAsync([step.Path], keep, ct).ConfigureAwait(false))
+                .WhyNot("Its parts only mean something together, so it goes whole or not at all", keep) is { } partial)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, partial);
+        }
+
         // §9, for a directory that goes whole or not at all: the walk below would step over a store that
         // arrived since the preview and take what belongs with it. Looked for on the disk, as it is before
         // Windows empties a bin. See DeleteDirectoryStep.IsIndivisible.
@@ -486,7 +531,15 @@ public sealed class PlanExecutor(
             EntriesRemoved: removal.Took ? 1 : 0);
     }
 
-    private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
+    /// <summary>
+    /// What <paramref name="paths"/> hold now, read from the disk rather than the volume snapshot:
+    /// nothing invalidates that snapshot between planning and executing, so an ordinary measurement
+    /// here would hand back the figure it is about to be subtracted from.
+    /// </summary>
+    internal static async Task<ScanSize> MeasureFromDiskAsync(
+        IDirectoryScanner scanner,
+        IReadOnlyList<string> paths,
+        CancellationToken ct)
     {
         var total = ScanSize.Zero;
 
@@ -496,6 +549,6 @@ public sealed class PlanExecutor(
             total += measured.Size;
         }
 
-        return total.Reclaimable;
+        return total;
     }
 }

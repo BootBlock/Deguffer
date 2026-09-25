@@ -217,13 +217,15 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The floor travels on the plan, so a file written between the preview and the clean is left
-    /// where it is rather than taken with the rest.
+    /// Whole or not at all holds when the clean runs as well as when the plan is made: a file written
+    /// since the preview means the update may be working in the folder again, so nothing in it is
+    /// removed, not the older half either, and the run says so.
     /// </summary>
     [Fact]
-    public async Task AFileWrittenAfterThePreviewIsLeftStanding()
+    public async Task AFileWrittenAfterThePreviewStopsTheWholeFolder()
     {
         var agent = Agent(Quiet);
+        var backup = Path.Combine(agent, "Backup", "winre.wim");
         var provider = CreateProvider();
 
         var plan = await provider.PlanAsync();
@@ -232,10 +234,55 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
         var arrived = Path.Combine(agent, "Scratch", "arrived.wim");
         File.WriteAllBytes(arrived, new byte[128]);
 
-        await provider.ExecuteAsync(plan);
+        var result = await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(arrived));
-        Assert.False(File.Exists(Path.Combine(agent, "Backup", "winre.wim")));
+        Assert.True(File.Exists(backup));
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.Contains("whole or not at all", step.Message, StringComparison.Ordinal);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A folder inside that Windows will not list could hold anything, so the removal that would leave
+    /// it standing and take the rest does not run.
+    /// </summary>
+    [Fact]
+    public void AFolderThatWillNotBeListedStopsTheWholeFolder()
+    {
+        var agent = Agent(Quiet);
+        var scratch = Path.Combine(agent, "Scratch");
+
+        var look = WholeTreeLook.Take(
+            [agent], MinimumAge.Off, new UnlistableFileSystem(WindowsFileSystem.Default, scratch), CancellationToken.None);
+
+        Assert.Equal([scratch], look.Unlisted);
+        Assert.Contains(scratch, look.WhyNot("It goes whole", MinimumAge.Off), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A restart owed since the preview means an update is unfinished again, and the plan's answer is
+    /// out of date. The run asks again and removes nothing.
+    /// </summary>
+    [Fact]
+    public async Task ARestartOwedSinceThePreviewStopsTheRemoval()
+    {
+        var agent = Agent(Quiet);
+        var servicing = FakeWindowsServicing.Settled;
+        var provider = CreateProvider(servicing);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        servicing.IsRestartPending = true;
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(Path.Combine(agent, "Backup", "winre.wim")));
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.Contains("waiting for a restart", step.Message, StringComparison.Ordinal);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>

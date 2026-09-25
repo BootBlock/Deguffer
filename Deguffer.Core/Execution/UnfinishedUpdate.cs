@@ -1,7 +1,7 @@
-using Deguffer.Core.Execution;
+
 using Deguffer.Core.Safety;
 
-namespace Deguffer.Core.Providers;
+namespace Deguffer.Core.Execution;
 
 /// <summary>
 /// Whether the update that left something behind is still going on, for the providers that remove
@@ -49,6 +49,11 @@ internal static class UnfinishedUpdate
     /// <summary>The sentence for one folder a restart will change something inside.</summary>
     public static string PendingIn(string path) =>
         $"Leaving {LongPath.Display(path)} alone: Windows will change something inside it at the next "
+        + "restart, so the update that wrote it has not finished.";
+
+    /// <summary>The same for a run that reached a folder a restart is now due to change.</summary>
+    public static string PendingNow(string path) =>
+        $"Nothing was removed: Windows will change something inside {LongPath.Display(path)} at the next "
         + "restart, so the update that wrote it has not finished.";
 
     /// <summary>

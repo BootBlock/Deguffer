@@ -22,28 +22,14 @@ internal static class DiskCleanupRun
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        // Windows clears these whole and cannot hold back a recent file, so a guard that would hold
-        // something back withdraws the step when the plan is made (CleanupProviderBase.Guarded).
-        // Asked again here for the reason EmptyRecycleBinStep's guard is: the cost of that one rule
-        // being edited wrongly is the files the user asked to keep, inside the target where §5.6 does
-        // not look.
-        if (keep.IsOn && step.WithheldRecent)
-        {
-            return NotRun(
-                step,
-                $"Nothing was removed: Windows clears this whole, and it holds files changed in the last "
-                + $"{keep.Describe()}, which this plan was asked to leave alone.");
-        }
+        // Asked of the disk immediately before Windows is, because Windows clears these whole and the
+        // plan's answers are minutes old: an Outlook data file, a file the guard would keep, or a folder
+        // Deguffer cannot look inside, arrived since or missed then, stops it. See WholeTreeLook.
+        var look = await WholeTreeLook.TakeAsync(step.Destroys, keep, ct).ConfigureAwait(false);
 
-        // §9, looked for on the disk immediately before Windows is asked, because the handler cannot be
-        // told to leave one file and a store can arrive between the preview and the clean.
-        if (await MailStoreSearch.InsideAsync(step.Destroys, ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        if (look.WhyNot("Windows clears this whole and cannot be told to leave anything", keep) is { } stopped)
         {
-            return NotRun(
-                step,
-                $"Nothing was removed: this holds an Outlook data file, at {MailStorePlan.Name(stores)}. "
-                + "Windows clears it whole, and Deguffer never removes one.",
-                stores.Count);
+            return NotRun(step, stopped, look.Stores.Count);
         }
 
         ct.ThrowIfCancellationRequested();
@@ -53,11 +39,7 @@ internal static class DiskCleanupRun
         // From the disk rather than the volume snapshot, for the reason a command step's second
         // reading is: nothing invalidates that snapshot between planning and executing, so it would
         // hand back the figure it is about to be subtracted from.
-        var after = ScanSize.Zero;
-        foreach (var path in step.Destroys)
-        {
-            after += (await scanner.MeasureFromDiskAsync(path, ct).ConfigureAwait(false)).Size;
-        }
+        var after = await PlanExecutor.MeasureFromDiskAsync(scanner, step.Destroys, ct).ConfigureAwait(false);
 
         var remaining = after.Reclaimable;
         var reclaimed = step.EstimatedBytes - remaining;
@@ -101,6 +83,6 @@ internal static class DiskCleanupRun
             EntriesRemoved: entriesRemoved);
     }
 
-    private static StepOutcome NotRun(DiskCleanupStep step, string why, int mailStores = 0) =>
+    private static StepOutcome NotRun(DiskCleanupStep step, string why, int mailStores) =>
         new(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, why, MailStores: mailStores);
 }

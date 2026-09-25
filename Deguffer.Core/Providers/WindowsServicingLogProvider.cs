@@ -179,6 +179,10 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         var (deletions, measured) = await PlanDeletionsAsync(byPath, keep, ct).ConfigureAwait(false);
         var steps = new List<CleanupStep>(deletions);
 
+        // The measurement that took the slower route is the one the plan reports, whichever of the
+        // two it was: the reset logs are measured apart from the logs removed by path.
+        var scanned = measured;
+
         var volume = LongPath.Display(_system.SystemDrive);
         var survey = resetLogs.Count == 0
             ? null
@@ -186,7 +190,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
         if (survey is { MayOffer: true })
         {
-            var (cleared, _) = await PlanDiskCleanupsAsync(
+            var (cleared, resetMeasured) = await PlanDiskCleanupsAsync(
                 [
                     new DiskCleanupTarget(
                         resetLogs[0].Path,
@@ -201,6 +205,11 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
                 ct).ConfigureAwait(false);
 
             steps.AddRange(cleared);
+
+            if (scanned.Fallback == FallbackReason.None)
+            {
+                scanned = resetMeasured;
+            }
         }
         else if (survey?.WhyLeftAlone(ResetLogsHandler, LongPath.Display(resetLogs[0].Path)) is { } why)
         {
@@ -211,7 +220,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
                 t.Path, "Left alone because Windows' own cleanup does not clear it.", PathPresence.Present)));
         }
 
-        if (measured.Note is { } scanNote)
+        if (scanned.Note is { } scanNote)
         {
             notes.Add(scanNote);
         }
@@ -238,7 +247,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = [.. Protect([.. scan.Protected]), .. held],
             Notes = notes,
-            Fallback = measured.Fallback,
+            Fallback = scanned.Fallback,
 
             // Logs whose cleanup is missing are logs Deguffer declined to act on, and a row holding
             // nothing else must not read "Already clear" above them.

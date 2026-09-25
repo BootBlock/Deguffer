@@ -77,9 +77,9 @@ internal interface IEmptyVolumeCache
 }
 
 /// <summary>
-/// A Disk Cleanup handler that is also told which registration it was created for, which is how one
-/// handler serves several: <c>setupcln.dll</c> is <em>Previous Installations</em>, <em>Temporary
-/// Setup Files</em> and four more.
+/// A Disk Cleanup handler that is also told the name of the registration it was created for. Asked
+/// for first, as Disk Cleanup asks. <c>setupcln.dll</c> was observed not to implement it, and tells
+/// its six registrations apart by the values on the key it is handed instead.
 /// </summary>
 [ComImport]
 [Guid("02b7e3ba-4db3-11d2-b2d9-00c04f8eec8c")]

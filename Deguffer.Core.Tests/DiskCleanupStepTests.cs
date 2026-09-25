@@ -118,8 +118,8 @@ public sealed class DiskCleanupStepTests : IDisposable
 
     /// <summary>
     /// Windows clears the directories whole, so a guard that holds anything back cannot be honoured by
-    /// doing less. The executor refuses the pairing itself rather than trusting the plan to have
-    /// withdrawn it, and Windows is never asked.
+    /// doing less. The executor looks on the disk itself rather than trusting the plan to have
+    /// withdrawn the step, and Windows is never asked.
     /// </summary>
     [Fact]
     public async Task TheRunRefusesAStepWhoseRecentFilesTheGuardWouldKeep()
@@ -131,7 +131,10 @@ public sealed class DiskCleanupStepTests : IDisposable
             RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
             handlers: handlers);
 
-        var plan = Planning(Installation() with { WithheldRecent = true }) with
+        Directory.CreateDirectory(Download);
+        File.WriteAllBytes(Path.Combine(Download, "recent.bin"), new byte[16]);
+
+        var plan = Planning(Installation()) with
         {
             Keep = MinimumAge.Within(TimeSpan.FromDays(7), DateTime.UtcNow),
         };
@@ -141,7 +144,7 @@ public sealed class DiskCleanupStepTests : IDisposable
         var outcome = Assert.Single(result.Steps);
         Assert.False(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);
-        Assert.Contains("Windows clears this whole", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains("changed in the last", outcome.Message, StringComparison.Ordinal);
         Assert.Empty(handlers.Calls);
     }
 }

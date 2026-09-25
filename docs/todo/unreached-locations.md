@@ -1195,7 +1195,7 @@ check before writing the provider.
 
 **Outcome:** shipped as two providers, `PreviousWindowsInstallationProvider` and
 `WindowsUpdateLeftoverProvider`, with a new step kind, `DiskCleanupStep`, that hands one of Windows'
-own Disk Cleanup handlers the volume. Six things the work settled that this entry did not anticipate:
+own Disk Cleanup handlers the volume. Seven things the work settled that this entry did not anticipate:
 
 - **Half of the family has a vendor route after all, so §5.1 decides the route.** Disk Cleanup's
   registrations under `VolumeCaches` name `Windows.old` (*Previous Installations*), `$Windows.~BT`

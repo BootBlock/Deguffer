@@ -568,4 +568,51 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         Assert.False(step.Succeeded);
         Assert.Contains("still there", step.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A restart owed since the preview means an update is unfinished again. The run asks before it
+    /// asks Windows, and Windows is never asked.
+    /// </summary>
+    [Fact]
+    public async Task ARestartOwedSinceThePreviewStopsTheHandler()
+    {
+        var old = Leftover("Windows.old", PastTheWindow);
+        var servicing = FakeWindowsServicing.Settled;
+        var handlers = FakeDiskCleanupHandlers.Windows();
+        var provider = CreateProvider(handlers, servicing);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        servicing.PendingFileOperations = [Path.Combine(old, "file.bin")];
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(Directory.Exists(old));
+        Assert.Contains("next restart", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A file the recent-files guard would keep, written since the preview, is found on the disk
+    /// before Windows is asked, because Windows clears the folder whole and the plan's answer is
+    /// minutes old.
+    /// </summary>
+    [Fact]
+    public async Task AFileTheGuardWouldKeepWrittenSinceThePreviewStopsTheHandler()
+    {
+        var old = Leftover("Windows.old", PastTheWindow);
+        var handlers = FakeDiskCleanupHandlers.Windows();
+        var provider = CreateProvider(handlers);
+
+        var plan = await provider.PlanAsync(MinimumAge.Within(TimeSpan.FromDays(7), DateTime.UtcNow));
+        Assert.Single(plan.Steps);
+
+        var arrived = Path.Combine(old, "arrived.txt");
+        File.WriteAllBytes(arrived, new byte[16]);
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(File.Exists(arrived));
+        Assert.Contains("changed in the last", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+    }
 }

@@ -11,9 +11,9 @@ namespace Deguffer.Core.Providers;
 /// <c>$GetCurrent</c>, the update assistant's working folder.
 ///
 /// <para><b>This is Deguffer's judgement, not Microsoft's, and every word the user sees says so.</b>
-/// No Disk Cleanup handler names either folder — every registration's full property set was
-/// searched — and Microsoft documents neither. Every disk cleaner deletes them, and nothing
-/// first-party says that is safe. So they are offered on terms that make the judgement a narrow
+/// No Disk Cleanup registration names either folder, nor do the folder names in
+/// <c>setupcln.dll</c>'s own strings, and Microsoft documents neither. Third-party cleaners delete
+/// them routinely, and nothing first-party says that is safe. So they are offered on terms that make the judgement a narrow
 /// one: nothing inside has been created or written for <see cref="QuietDays"/> days, no update is
 /// waiting for a restart or being installed, and no restart is due to change anything inside.</para>
 ///
@@ -25,7 +25,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Each folder goes whole or not at all.</b> A rollback manifest is meaningless without the
 /// image it restores, so a folder with anything recent inside it is withheld whole rather than
-/// having its older half removed, and a removal step never meets a newer file by surprise.</para>
+/// having its older half removed. The run looks again on the disk before removing it, and a file
+/// written since the preview, or a folder inside it that will not be listed, stops the removal (see
+/// <see cref="DeleteDirectoryStep.IsAllOrNothing"/>).</para>
 ///
 /// <para><c>$SysReset</c> is not here, though it is the third of the family. Windows' own
 /// <em>System recovery log files</em> cleanup names its logs, so §5.1 sends them through that, and
@@ -37,7 +39,6 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
     /// <summary>How long nothing inside a folder must have changed before it is offered.</summary>
     public const int QuietDays = 30;
 
-    private readonly IWindowsServicing _servicing;
     private readonly IReadOnlyList<DeclaredRoot> _roots;
 
     public WindowsUpdateLeftoverProvider(
@@ -51,9 +52,9 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            servicing: servicing)
     {
-        _servicing = servicing ?? WindowsServicing.Current;
         _roots =
         [
             SystemDriveRoot.Holding(
@@ -120,7 +121,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
 
         var candidates = new List<DeletionTarget>(scan.Targets.Count);
 
-        if (UnfinishedUpdate.HoldsEverything(_servicing, Inspector) is { } everything)
+        if (UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is { } everything)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, everything));
             held.AddRange(scan.Targets.Select(t => UnfinishedUpdate.Held(t.Path)));
@@ -129,7 +130,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
         {
             foreach (var target in scan.Targets)
             {
-                if (_servicing.HasPendingOperationsIn(target.Path))
+                if (Servicing.HasPendingOperationsIn(target.Path))
                 {
                     notes.Add(new PlanNote(PlanNoteSeverity.Information, UnfinishedUpdate.PendingIn(target.Path)));
                     held.Add(UnfinishedUpdate.Held(target.Path));
@@ -149,7 +150,8 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
         {
             if (!step.WithheldRecent)
             {
-                steps.Add(step with { IsIndivisible = true });
+                // Whole or not at all when the run reaches it, and only if no update has started since.
+                steps.Add(step with { IsIndivisible = true, IsAllOrNothing = true, HeldWhileUpdating = true });
                 continue;
             }
 

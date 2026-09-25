@@ -44,9 +44,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// acts on the cloud accounts of whoever runs the suite.
     /// </param>
     /// <param name="handlers">
-    /// How a <see cref="DiskCleanupStep"/> is carried out, for the one provider that plans one. Defaulted
+    /// How a <see cref="DiskCleanupStep"/> is carried out, for the providers that plan one. Defaulted
     /// and injected for the reason <paramref name="emptier"/> is: the real one deletes the previous
     /// Windows installation of whoever runs the suite.
+    /// </param>
+    /// <param name="servicing">
+    /// Where Windows is in servicing itself, asked when a plan is made and again before a step that is
+    /// <see cref="CleanupStep.HeldWhileUpdating"/> runs, by the same instance for the reason
+    /// <see cref="Emptier"/> is shared.
     /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
@@ -55,7 +60,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IDirectoryScanner scanner,
         IRecycleBinEmptier? emptier = null,
         ICloudFiles? cloud = null,
-        IDiskCleanupHandlers? handlers = null)
+        IDiskCleanupHandlers? handlers = null,
+        IWindowsServicing? servicing = null)
     {
         Environment = environment;
         Inspector = inspector;
@@ -64,7 +70,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Emptier = emptier ?? ShellRecycleBinEmptier.Default;
         Cloud = cloud ?? CloudFiles.Default;
         Handlers = handlers ?? DiskCleanupHandlers.Default;
-        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers);
+        Servicing = servicing ?? WindowsServicing.Current;
+        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector);
         Runner = runner;
     }
 
@@ -89,6 +96,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// the same instance that will run it, for the reason <see cref="Emptier"/> is shared.
     /// </summary>
     protected IDiskCleanupHandlers Handlers { get; }
+
+    /// <summary>Where Windows is in servicing itself. See the constructor's parameter.</summary>
+    protected IWindowsServicing Servicing { get; }
 
     protected IProcessRunner Runner { get; }
 

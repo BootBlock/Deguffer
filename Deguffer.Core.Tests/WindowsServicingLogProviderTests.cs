@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -635,5 +636,27 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
             root.Locations.Select(l => l.RelativePath));
         Assert.Equal(SystemDriveRoot.Survivors, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
+    }
+
+    /// <summary>
+    /// Where only the reset logs are there, their measurement is the plan's, so a slower route taken
+    /// to measure them is reported rather than the empty measurement of the logs removed by path.
+    /// </summary>
+    [Fact]
+    public async Task ReportsTheRouteTheResetLogsWereMeasuredBy()
+    {
+        AtTheTop(Path.Combine("$SysReset", "Logs"));
+        var provider = new WindowsServicingLogProvider(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)),
+            system: _system,
+            handlers: FakeDiskCleanupHandlers.Windows());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps);
+        Assert.Equal(FallbackReason.NotElevated, plan.Fallback);
     }
 }

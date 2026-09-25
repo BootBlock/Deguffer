@@ -3224,14 +3224,18 @@ Sometimes it does not, and then it stays until somebody notices.
 ### What Deguffer does
 
 It asks Windows to run its own cleanup for each of them, the same one Disk Cleanup's *Clean up
-system files* runs. It never deletes these folders itself. The previous-installation cleanup also
-takes down the record that lets Settings offer to go back, and a folder deleted by hand would leave
-that record behind, naming something that is gone.
+system files* runs. It never deletes these folders itself. Windows registers the previous-installation
+cleanup to remove the uninstall record as well, which is what Settings offers to go back from, and a
+folder deleted by hand would leave that record behind, naming something that is gone.
+
+Immediately before Windows is asked, Deguffer looks inside the folders once more. An Outlook data
+file, a file changed since the preview that your recent-files setting would keep, a subfolder Windows
+will not let Deguffer look inside, or an update that has started since, and nothing is removed.
 
 A folder is offered only when all of these are true:
 
-- **The upgrade can no longer be undone.** Nothing in it has been written for longer than the
-  uninstall window, which Deguffer reads from the machine rather than assuming ten days. Until then
+- **The upgrade can no longer be undone.** Neither the folder nor anything directly inside it has
+  been written for longer than the uninstall window, which Deguffer reads from the machine rather than assuming ten days. Until then
   the row says how many days are left.
 - **No update is unfinished.** No restart is owed for an update, neither the servicing stack nor
   Windows Setup is running, and no restart is due to move a file inside the folder. While any of
@@ -3297,7 +3301,9 @@ terms, and the row says that the judgement is Deguffer's own:
 - **No update is unfinished**, on the same three tests as the previous installation above.
 - **Each folder goes whole or not at all.** A rollback manifest means nothing without the image it
   restores, so a folder with anything recent inside it is held back whole rather than having its
-  older half removed.
+  older half removed. The clean looks again before removing it: a file written since the preview, a
+  subfolder Windows will not let Deguffer look inside, or an update that has started since, and
+  nothing in the folder is removed.
 
 Removing them needs administrator rights.
 

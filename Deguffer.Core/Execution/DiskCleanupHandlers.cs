@@ -1,4 +1,6 @@
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using Deguffer.Core.Safety;
 using Microsoft.Win32;
 
 namespace Deguffer.Core.Execution;
@@ -67,8 +69,8 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
             {
                 var measured = cache.GetSpaceUsed(out var used, callback);
 
-                // S_FALSE from here is an error working out the size rather than an empty cache, and
-                // the handler has already said it has something by starting, so it is offered.
+                // Any failure to work out the size, S_FALSE included, is not an empty cache, and the
+                // handler has already said it has something by starting, so it is offered.
                 return measured == DiskCleanupNative.S_OK && used == 0
                     ? new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear)
                     : new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
@@ -106,8 +108,8 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
                     return new DiskCleanupOutcome(Ran: false, "Stopped before Windows cleared anything.");
                 }
 
-                // Asked to purge everything where the size could not be worked out, which is what
-                // the value Windows documents for "unknown" means.
+                // Asked to purge everything where the size could not be worked out, for any reason,
+                // which is what the value Windows documents for "unknown" means.
                 var purged = cache.Purge(measured == DiskCleanupNative.S_OK ? used : ulong.MaxValue, callback);
 
                 return purged switch
@@ -128,9 +130,7 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
     /// it is given, so a value that names somewhere else sends Windows' cleanup there.
     /// </summary>
     private static string? NotADrive(string volume) =>
-        Path.IsPathFullyQualified(volume)
-        && string.Equals(Path.GetPathRoot(volume), volume, StringComparison.OrdinalIgnoreCase)
-        && !volume.StartsWith(@"\\", StringComparison.Ordinal)
+        VolumeRoot.IsDriveTop(volume)
             ? null
             : $"'{volume}' is not the top of a drive, so Windows was not asked to clear anything on it.";
 
@@ -168,15 +168,32 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
     /// The handler's apartment requirement, met on a thread of our own rather than by initialising
     /// whatever thread the caller arrived on, as <see cref="ShellRecycleBinEmptier"/> does and for the
     /// same reason: CoInitialize on a thread-pool thread outlives the call.
+    ///
+    /// <para>An exception thrown on that thread is handed back and thrown again here, on the
+    /// caller's: left where it was, it would end the process rather than fail one step.</para>
     /// </summary>
     private static T OnItsOwnThread<T>(Func<T> work)
     {
         T result = default!;
+        ExceptionDispatchInfo? failure = null;
 
-        var thread = new Thread(() => result = work());
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = work();
+            }
+            catch (Exception ex)
+            {
+                // Not swallowed: captured, and rethrown unchanged on the calling thread below.
+                failure = ExceptionDispatchInfo.Capture(ex);
+            }
+        });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
+
+        failure?.Throw();
 
         return result;
     }

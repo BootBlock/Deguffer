@@ -126,6 +126,16 @@ public abstract record CleanupStep
     /// has to be withheld, and only this list says which steps those are before anything runs.</para>
     /// </summary>
     public IReadOnlyList<string> MailStores { get; init; } = [];
+
+    /// <summary>
+    /// Whether this step removes something an unfinished Windows update may still need, so it runs
+    /// only if Windows is not in the middle of one when the run reaches it.
+    ///
+    /// <para>The plan asked when it was made, and a preview can sit on screen while an update starts
+    /// or a restart becomes owed. The run asks again immediately before the step, because a remembered
+    /// answer is wrong in the direction that deletes. See <see cref="UnfinishedUpdate"/>.</para>
+    /// </summary>
+    public bool HeldWhileUpdating { get; init; }
 }
 
 /// <summary>
@@ -314,6 +324,18 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
     /// </summary>
     public bool IsIndivisible { get; init; }
 
+    /// <summary>
+    /// Whether this directory is removed only when every part of it can be: nothing inside is newer
+    /// than the plan's guard, and every folder inside can be listed. Otherwise nothing is removed.
+    ///
+    /// <para>Stronger than <see cref="IsIndivisible"/>, which is about Outlook data files alone. The
+    /// ordinary removal keeps what the guard protects and what Windows refuses and takes the rest,
+    /// which is right for a cache and wrong for a folder such as <c>$WinREAgent</c>, where a rollback
+    /// manifest means nothing without the image it restores. Looked at on the disk immediately before
+    /// the removal, through <see cref="WholeTreeLook"/>.</para>
+    /// </summary>
+    public bool IsAllOrNothing { get; init; }
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 
@@ -406,10 +428,10 @@ public sealed record EmptyRecycleBinStep(string Path, string What) : DeleteStep(
 /// clears (§5.1).
 ///
 /// <para><b>Why the handler and never the path.</b> <c>Windows.old</c> is the case. Windows' own
-/// <em>Previous Installations</em> cleanup removes the tree and also takes down the record that lets
-/// Settings offer to go back, and a tree removed by path leaves that record naming a folder that is
-/// no longer there. The handler is Windows' statement of what goes with the folder, and Deguffer does
-/// not know it.</para>
+/// <em>Previous Installations</em> registration asks its handler to remove the uninstall record as
+/// well (<c>RemoveUninstall</c>), which is what Settings offers to go back from, and a tree removed by
+/// path would leave that record naming a folder that is no longer there. The handler is Windows'
+/// statement of what goes with the folder, and Deguffer does not know it.</para>
 ///
 /// <para><b>Why it is a <see cref="DeleteStep"/>, for the reason <see cref="EmptyRecycleBinStep"/>
 /// is one.</b> It destroys paths the plan named, sized and dated, so it belongs where §5.6's negative

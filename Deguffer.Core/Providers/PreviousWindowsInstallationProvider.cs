@@ -11,9 +11,9 @@ namespace Deguffer.Core.Providers;
 /// routinely tens of gigabytes, and on a recently upgraded machine it is the largest reclaim there is.
 ///
 /// <para><b>§5.1: Windows' own cleanup, never the path.</b> Each of these has a Disk Cleanup handler,
-/// and the handler is the route. <em>Previous Installations</em> also takes down the record that lets
-/// Settings offer to go back, and a tree removed by path leaves that record naming a folder that is
-/// gone. See <see cref="DiskCleanupStep"/>.</para>
+/// and the handler is the route. The <em>Previous Installations</em> registration asks its handler to
+/// remove the uninstall record too (<c>RemoveUninstall</c>), and a tree removed by path would leave
+/// that record naming a folder that is gone. See <see cref="DiskCleanupStep"/>.</para>
 ///
 /// <para><b>Tier 2.</b> None of it comes back except by upgrading again, and what deleting it costs is
 /// a named capability rather than a slower next use: going back to the previous version, and — by
@@ -22,8 +22,9 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Offered only once the upgrade can no longer be undone.</b> Windows keeps all of this for
 /// the uninstall window, ten days unless somebody has changed it, and removes it by itself at the end.
 /// Offering it inside that window would take away the way back for the sake of a few days' space. So a
-/// folder is offered once nothing in it has been written for longer than the window, and one Windows
-/// failed to remove when the window closed is exactly what this is for.</para>
+/// folder is offered once neither it nor anything directly inside it has been written for longer than
+/// the window (see <see cref="DirectoryAge"/>), and one Windows failed to remove when the window closed
+/// is exactly what this is for.</para>
 ///
 /// <para><b>Held back while an update is unfinished</b>, for the reasons
 /// <see cref="UnfinishedUpdate"/> gives. Setup's own handler refuses while Setup is running as well;
@@ -59,7 +60,6 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
     ];
 
     private readonly ISystemDirectories _system;
-    private readonly IWindowsServicing _servicing;
     private readonly IReadOnlyList<DeclaredRoot> _roots;
 
     public PreviousWindowsInstallationProvider(
@@ -75,10 +75,10 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default,
-            handlers: handlers)
+            handlers: handlers,
+            servicing: servicing)
     {
         _system = system ?? SystemDirectories.Current;
-        _servicing = servicing ?? WindowsServicing.Current;
         _roots =
         [
             SystemDriveRoot.Holding(
@@ -135,14 +135,14 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
         var offered = new List<DiskCleanupTarget>();
         var unclaimed = false;
 
-        var everything = UnfinishedUpdate.HoldsEverything(_servicing, Inspector);
+        var everything = UnfinishedUpdate.HoldsEverything(Servicing, Inspector);
 
         if (everything is not null)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, everything));
         }
 
-        var window = TimeSpan.FromDays(_servicing.UninstallWindowDays);
+        var window = TimeSpan.FromDays(Servicing.UninstallWindowDays);
         var now = DateTime.UtcNow;
 
         foreach (var cleanup in Cleanups)
@@ -162,7 +162,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
                 continue;
             }
 
-            if (paths.FirstOrDefault(_servicing.HasPendingOperationsIn) is { } pending)
+            if (paths.FirstOrDefault(Servicing.HasPendingOperationsIn) is { } pending)
             {
                 notes.Add(new PlanNote(PlanNoteSeverity.Information, UnfinishedUpdate.PendingIn(pending)));
                 held.AddRange(paths.Select(UnfinishedUpdate.Held));
@@ -208,7 +208,10 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
                 RequiresElevation: true));
         }
 
-        var (steps, measured) = await PlanDiskCleanupsAsync(offered, keep, ct).ConfigureAwait(false);
+        var (cleanups, measured) = await PlanDiskCleanupsAsync(offered, keep, ct).ConfigureAwait(false);
+
+        // Asked again when the run reaches each one: an update can start while the preview is open.
+        IReadOnlyList<CleanupStep> steps = [.. cleanups.Select(step => step with { HeldWhileUpdating = true })];
 
         if (measured.Note is { } scanNote)
         {
