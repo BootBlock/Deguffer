@@ -5,8 +5,8 @@ namespace Deguffer.Core.Execution;
 /// <summary>
 /// What a removal must leave behind, beyond the guard on recently changed files.
 ///
-/// <para>All three members exist for §5.3's scratch folders, and neither can be expressed as an age.
-/// <c>%TEMP%</c> is not a cache Deguffer may take away — every program on the machine expects the
+/// <para>All three members exist for §5.3's scratch folders, and none of them can be expressed as an
+/// age. <c>%TEMP%</c> is not a cache Deguffer may take away — every program on the machine expects the
 /// folder itself to be there, and Windows does not put it back — so its <em>contents</em> are the
 /// subject and the directory is not. And a folder a running program is working in is off limits
 /// however old its files are, because the process holding it may have opened nothing this minute.

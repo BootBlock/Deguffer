@@ -248,6 +248,46 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The two rows together, as the planner builds them: each byte is offered once, a live Roslyn
+    /// session that is old enough for this row's cut-off is still left alone, and both runs verify.
+    /// </summary>
+    [Fact]
+    public async Task WithTheToolRowEachEntryIsOfferedOnceAndALiveSessionSurvivesBoth()
+    {
+        const string live = "fedcba9876543210fedcba9876543210";
+        Abandoned(4096, "temp", "node-compile-cache", "v26.7.0-x64-8d7ad2ee", "0a1b2c3d");
+        Abandoned(2048, "temp", "Roslyn", "AnalyzerAssemblyLoader", live, "Analyzer.dll");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var tools = new TempToolCacheProvider(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            system: _system,
+            liveTrees: FakeLiveTreeInspector.NothingLive,
+            mutexes: new FakeNamedMutexes(live));
+        var temp = CreateProvider(tenants: [tools]);
+
+        var tempPlan = await temp.PlanAsync();
+        var toolPlan = await tools.PlanAsync();
+
+        Assert.Equal(1024, tempPlan.EstimatedBytes);
+        Assert.Equal(4096, toolPlan.EstimatedBytes);
+
+        var tempResult = await temp.ExecuteAsync(tempPlan);
+        var toolResult = await tools.ExecuteAsync(toolPlan);
+
+        Assert.True(
+            File.Exists(Path.Combine(UserTemp, "Roslyn", "AnalyzerAssemblyLoader", live, "Analyzer.dll")),
+            "a Roslyn session still in use was removed");
+        Assert.False(Directory.Exists(Path.Combine(UserTemp, "node-compile-cache")));
+        Assert.Equal(1024, tempResult.BytesReclaimed);
+        Assert.Equal(4096, toolResult.BytesReclaimed);
+        Assert.True(tempResult.Verification!.Passed, tempResult.Verification.Summary);
+        Assert.True(toolResult.Verification!.Passed, toolResult.Verification.Summary);
+    }
+
+    /// <summary>
     /// An entry that is both another row's and in use stays that row's. Protecting it here as well
     /// would make this plan assert its survival, and the owning row's run would then fail §5.6.
     /// </summary>

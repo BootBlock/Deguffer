@@ -24,6 +24,7 @@ public sealed class CleanupPlanner
     /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
+    /// caches, installer downloads and logs named tools leave in the temporary folders, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output, Unreal's included, inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
@@ -32,9 +33,9 @@ public sealed class CleanupPlanner
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, PlatformIO, Playwright, the Azure Functions Core Tools
-    /// releases, the graphics driver installer files, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
+    /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
-    /// launcher's logs, the VS Code logs, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
+    /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
     /// held to it.
@@ -109,55 +110,72 @@ public sealed class CleanupPlanner
         SteamDiscovery steam,
         ClaudeCodeSessionRegistry claudeSessions,
         ILiveTreeInspector liveTrees,
-        ICurrentPreferences preferences) =>
-    [
-        new NuGetCacheProvider(environment),
-        new GradleCacheProvider(environment),
-        new NpmCacheProvider(environment),
-        new PnpmStoreProvider(environment),
-        new VsCodeCppToolsCacheProvider(environment),
-        new DartAnalysisServerProvider(environment),
-        new RoslynCacheProvider(environment),
-        new UvCacheProvider(environment),
-        new PipCacheProvider(environment),
-        new PoetryCacheProvider(environment),
-        new CondaCacheProvider(environment),
-        new CargoCacheProvider(environment),
-        new GoCacheProvider(environment),
-        new MavenRepositoryProvider(environment),
-        new VcpkgCacheProvider(environment),
-        new GpuShaderCacheProvider(environment),
-        new ChromiumCacheProvider(environment),
-        new VsCodeCacheProvider(environment),
-        new FirefoxCacheProvider(environment),
-        new EpicLauncherWebCacheProvider(environment),
-        new EpicLauncherContentCacheProvider(environment),
-        new SteamCacheProvider(environment, discovery: steam),
-        new SteamLibraryArtworkProvider(environment, discovery: steam),
-        new SteamShaderCacheProvider(environment, discovery: steam),
-        new UnrealDerivedDataCacheProvider(environment),
-        new SpotifyCacheProvider(environment),
-        new AffinityModelCacheProvider(environment),
-        new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
-        new PlatformIoCacheProvider(environment),
-        new PlaywrightBrowsersProvider(environment),
-        new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
-        new AzureFunctionsToolsProvider(environment),
-        new GraphicsDriverInstallerProvider(environment),
-        new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
-        new RecycleBinProvider(environment, preferences: preferences),
-        new FileHistoryProvider(environment, preferences: preferences),
-        new CloudLocalCopiesProvider(environment),
-        new TempDirectoryProvider(environment, liveTrees: liveTrees, preferences: preferences),
-        new PreviousWindowsInstallationProvider(environment),
-        new WindowsUpdateLeftoverProvider(environment),
-        new CrashDumpProvider(environment),
-        new WindowsServicingLogProvider(environment),
-        new EpicLauncherLogProvider(environment),
-        new VsCodeLogProvider(environment),
-        new ClaudeCodeMcpLogProvider(environment),
-        new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions),
-    ];
+        ICurrentPreferences preferences)
+    {
+        // Every row that offers an entry of a temporary folder under the name of the tool that wrote
+        // it, built first so the "Temporary files" row can leave those entries to them.
+        var nuget = new NuGetCacheProvider(environment);
+        var toolCaches = new TempToolCacheProvider(environment, liveTrees: liveTrees);
+        var installerDownloads = new TempInstallerDownloadProvider(environment, liveTrees: liveTrees);
+        var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees);
+
+        return
+        [
+            nuget,
+            new GradleCacheProvider(environment),
+            new NpmCacheProvider(environment),
+            new PnpmStoreProvider(environment),
+            new VsCodeCppToolsCacheProvider(environment),
+            new DartAnalysisServerProvider(environment),
+            new RoslynCacheProvider(environment),
+            toolCaches,
+            new UvCacheProvider(environment),
+            new PipCacheProvider(environment),
+            new PoetryCacheProvider(environment),
+            new CondaCacheProvider(environment),
+            new CargoCacheProvider(environment),
+            new GoCacheProvider(environment),
+            new MavenRepositoryProvider(environment),
+            new VcpkgCacheProvider(environment),
+            new GpuShaderCacheProvider(environment),
+            new ChromiumCacheProvider(environment),
+            new VsCodeCacheProvider(environment),
+            new FirefoxCacheProvider(environment),
+            new EpicLauncherWebCacheProvider(environment),
+            new EpicLauncherContentCacheProvider(environment),
+            new SteamCacheProvider(environment, discovery: steam),
+            new SteamLibraryArtworkProvider(environment, discovery: steam),
+            new SteamShaderCacheProvider(environment, discovery: steam),
+            new UnrealDerivedDataCacheProvider(environment),
+            new SpotifyCacheProvider(environment),
+            new AffinityModelCacheProvider(environment),
+            new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
+            new PlatformIoCacheProvider(environment),
+            new PlaywrightBrowsersProvider(environment),
+            new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
+            new AzureFunctionsToolsProvider(environment),
+            new GraphicsDriverInstallerProvider(environment),
+            new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
+            new RecycleBinProvider(environment, preferences: preferences),
+            new FileHistoryProvider(environment, preferences: preferences),
+            new CloudLocalCopiesProvider(environment),
+            new TempDirectoryProvider(
+                environment,
+                liveTrees: liveTrees,
+                preferences: preferences,
+                tenants: [nuget, toolCaches, installerDownloads, toolLogs]),
+            installerDownloads,
+            new PreviousWindowsInstallationProvider(environment),
+            new WindowsUpdateLeftoverProvider(environment),
+            new CrashDumpProvider(environment),
+            new WindowsServicingLogProvider(environment),
+            new EpicLauncherLogProvider(environment),
+            new VsCodeLogProvider(environment),
+            new ClaudeCodeMcpLogProvider(environment),
+            toolLogs,
+            new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions),
+        ];
+    }
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
 
