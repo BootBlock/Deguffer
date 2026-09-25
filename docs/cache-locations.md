@@ -2114,20 +2114,28 @@ That has two limits, both stated here rather than left to be discovered:
 - **In a session, only the session's own folder is searched.** A folder of images elsewhere that the
   session lists as a favourite has a `CaptureOne` folder too, and is not reached.
 
-A catalog or session on a drive that is not connected is named in the scan, and nothing in it is
-examined. If a settings file cannot be read, the scan says so, because a catalog it lists was
-neither cleared nor ruled out.
+A catalog or session on a drive that is not connected is named in the scan, nothing in it is
+examined, and the row does not claim to be clear. If a settings file or folder cannot be read, the
+scan says so, because a catalog it lists was neither cleared nor ruled out.
 
 ### What Deguffer does
 
-A path in Capture One's list is not evidence on its own. **A catalog must hold its database**, a
-file ending in `.cocatalogdb`, and **a session's folder must hold its session file**, ending in
-`.cosessiondb`. A listed folder without one is left alone, and the scan says why.
+A path in Capture One's list is not evidence on its own. **A catalog must be a folder named
+`<Name>.cocatalog` holding its database**, a file ending in `.cocatalogdb`, and **a session's folder
+must hold its session file**, ending in `.cosessiondb`. A catalog database anywhere else does not make
+the folder around it a catalog, a session file at the root of a drive names no session, and a session
+folder that holds your profile or its application data is not searched. A listed folder that fails any of these is left
+alone, and the scan says why.
 
 Inside a catalog, and inside each `CaptureOne` folder of a session, **`Cache` is the only thing
 Deguffer will ever remove.** Everything else is Tier 4 by construction, whether or not Deguffer knows
-what it is. A folder called `Cache` anywhere else in a session is yours, and is not offered. A `Cache`
-that is a link to somewhere else is left alone and named.
+what it is. A folder called `CaptureOne` is recognised only with one of Capture One's settings folders,
+such as `Settings166`, beside its `Cache`, since the name alone is anybody's. A folder called `Cache`
+anywhere else in a session is yours, and is not offered. A link inside a session, or a `Cache` that is
+a link, is left alone and named.
+
+A session inside another session's folder is its own. Its `CaptureOne` folders are offered once,
+under it, and whether it is open is asked of its own session file.
 
 **A catalog or session Capture One has open is never offered.** Capture One writes previews while it
 works, so before anything is offered Deguffer asks Windows whether anything holds the catalog's

@@ -315,14 +315,16 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// </summary>
     private void CollectSession(string session, Examination examination, CancellationToken ct)
     {
-        // A session file left in the profile, or above it, would make everything the profile holds
-        // part of a session to walk, Capture One's own settings folders included.
-        if (LongPath.Contains(session, Environment.UserProfile))
+        // A session file left in the profile, above it, or in an application-data folder would make
+        // what those hold part of a session to walk, Capture One's own styles and presets included.
+        if (LongPath.Contains(session, Environment.UserProfile)
+            || LongPath.Contains(session, Environment.LocalAppData)
+            || LongPath.Contains(session, Environment.RoamingAppData))
         {
             examination.Decline(
                 session,
-                "Capture One lists a session here, but the folder holds your whole profile, so it is not "
-                + "searched and nothing in it is offered.");
+                "Capture One lists a session here, but the folder holds your profile or its application "
+                + "data, so it is not searched and nothing in it is offered.");
             return;
         }
 

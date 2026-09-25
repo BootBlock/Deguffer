@@ -312,20 +312,33 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
         Assert.True(LongPath.DirectoryExists(cache));
     }
 
-    /// <summary>A session file left in the profile would make the whole profile a session to search.</summary>
-    [Fact]
-    public async Task ASessionFolderHoldingTheProfileIsNotSearched()
+    /// <summary>
+    /// A session file left in the profile, or in an application-data folder, would make everything
+    /// there a session to search, Capture One's own styles and presets included.
+    /// </summary>
+    [Theory]
+    [InlineData("profile")]
+    [InlineData("local")]
+    [InlineData("roaming")]
+    public async Task ASessionFolderHoldingTheProfileOrItsDataIsNotSearched(string where)
     {
-        WriteFile(Path.Combine(_environment.UserProfile, "Stray.cosessiondb"));
-        var sidecar = Path.Combine(_environment.UserProfile, "Pictures", "CaptureOne");
+        var folder = where switch
+        {
+            "profile" => _environment.UserProfile,
+            "local" => _environment.LocalAppData,
+            _ => _environment.RoamingAppData,
+        };
+
+        WriteFile(Path.Combine(folder, "Stray.cosessiondb"));
+        var sidecar = Path.Combine(folder, "Pictures", "CaptureOne");
         Directory.CreateDirectory(Path.Combine(sidecar, "Settings166"));
         Populate(Path.Combine(sidecar, "Cache"));
-        List(Path.Combine(_environment.UserProfile, "Stray.cosessiondb"));
+        List(Path.Combine(folder, "Stray.cosessiondb"));
 
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Empty(plan.Steps);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(_environment.UserProfile, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
