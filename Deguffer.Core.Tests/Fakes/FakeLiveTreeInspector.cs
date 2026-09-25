@@ -14,7 +14,7 @@ namespace Deguffer.Core.Tests.Fakes;
 public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 {
     private readonly HashSet<string> _live;
-    private readonly bool _complete;
+    private bool _complete;
     private readonly List<RunningProgram> _programs = [];
 
     public FakeLiveTreeInspector(bool complete, params string[] live)
@@ -31,6 +31,16 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public static FakeLiveTreeInspector CannotTell => new(complete: false);
 
     public int InvalidateCount { get; private set; }
+
+    /// <summary>
+    /// Answer "could not tell" from now on, so a test can have the process table become unreadable
+    /// between the preview and the clean.
+    /// </summary>
+    public FakeLiveTreeInspector CannotTellFromNow()
+    {
+        _complete = false;
+        return this;
+    }
 
     /// <summary>What the provider asked about, so a test can assert the project folder was passed.</summary>
     public IReadOnlyList<LiveTreeQuery> Asked { get; private set; } = [];

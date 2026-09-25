@@ -12,23 +12,34 @@ namespace Deguffer.Core.Providers;
 /// removed under a live editor or a build in flight breaks the work in progress, which is why the
 /// veto refuses rather than warns, and a refusal made at the preview says nothing about the clean.</para>
 ///
-/// <para>A check that could not see every process's working directory lets the step run, because the
-/// plan offered it on the same partial answer and said so in a note. Holding it back here would refuse
-/// at the clean what the preview offered, for no new reason.</para>
+/// <para>An answer that could not be had in full is read as the plan read it. Where the plan offered
+/// the directory on the same partial answer and said so in a note, the step runs: holding it back
+/// here would refuse at the clean what the preview offered, for no new reason. Where the plan held
+/// every directory back on it instead, <c>unknown</c> says why, and the step is held back too.</para>
 /// </summary>
 /// <param name="query">What the veto asked about this directory when the plan was made.</param>
-internal sealed class LiveTreeCheck(ILiveTreeInspector inspector, LiveTreeQuery query) : IUseCheck
+/// <param name="unknown">
+/// Why the step is held back where the inspector could not tell, as an <see cref="InUseNow.Reason"/>,
+/// for a plan that refused on that answer. Null for one that offered on it.
+/// </param>
+internal sealed class LiveTreeCheck(ILiveTreeInspector inspector, LiveTreeQuery query, string? unknown = null) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         // The inspector keeps one process table for a planning pass. That table is the preview's.
         inspector.Invalidate();
 
-        return
+        var findings = inspector.FindLive([query], ct);
+
+        IReadOnlyList<InUseNow> live =
         [
-            .. inspector.FindLive([query], ct).Live
-                .Where(live => live.Directory.Equals(query.Directory, StringComparison.OrdinalIgnoreCase))
-                .Select(live => new InUseNow(step.Path, string.Join("; ", live.Holders))),
+            .. findings.Live
+                .Where(tree => tree.Directory.Equals(query.Directory, StringComparison.OrdinalIgnoreCase))
+                .Select(tree => new InUseNow(step.Path, string.Join("; ", tree.Holders))),
         ];
+
+        return live.Count == 0 && !findings.Complete && unknown is not null
+            ? [new InUseNow(step.Path, unknown)]
+            : live;
     }
 }

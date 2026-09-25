@@ -21,6 +21,10 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Each entry is this row's whether or not it is offered today</b> — see
 /// <see cref="ITemporaryFolderTenant"/> — so an entry a tool is still using is left alone here, said
 /// so, asserted to survive, and not handed to the "Temporary files" row to take on its age.</para>
+///
+/// <para><b>What the preview decided is asked again at the clean.</b> Every entry carries the rules
+/// its marker was offered under, and the run asks them immediately before removing it. See
+/// <see cref="TempMarkerSurvey"/>.</para>
 /// </summary>
 public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFolderTenant
 {
