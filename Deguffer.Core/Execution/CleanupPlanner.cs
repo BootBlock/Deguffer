@@ -153,6 +153,7 @@ public sealed class CleanupPlanner
             new UnrealDerivedDataCacheProvider(environment),
             new SpotifyCacheProvider(environment),
             new AffinityModelCacheProvider(environment),
+            new CaptureOneCacheProvider(environment, liveTrees: liveTrees),
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
             new PlatformIoCacheProvider(environment),
             new PlaywrightBrowsersProvider(environment),

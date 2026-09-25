@@ -408,7 +408,7 @@ public sealed class CleanupPlannerTests
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
-                "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
+                "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache", "capture-one-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
@@ -422,7 +422,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "affinity-model-cache", "platformio", "playwright",
+                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "platformio", "playwright",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
                 "windows-update-leftovers",
