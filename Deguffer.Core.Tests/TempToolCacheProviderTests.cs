@@ -174,7 +174,7 @@ public sealed class TempToolCacheProviderTests : IDisposable
         var outside = _temp.CreateDirectory("outside");
         var kept = _temp.CreateFile(4096, "outside", "precious.bin");
         var link = Path.Combine(UserTemp, "node-compile-cache");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -260,7 +260,7 @@ public sealed class TempToolCacheProviderTests : IDisposable
         var outside = _temp.CreateDirectory("elsewhere");
         var kept = _temp.CreateFile(4096, "elsewhere", "AnalyzerAssemblyLoader", Session, "Analyzer.dll");
         var link = Path.Combine(UserTemp, "Roslyn");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

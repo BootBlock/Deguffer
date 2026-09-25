@@ -142,7 +142,7 @@ public sealed class BattleNetCacheProviderTests : IDisposable
         var outside = BattleNetFixture.Populate(Path.Combine(_temp.Path, "elsewhere"), "irreplaceable.bin");
 
         Directory.CreateDirectory(_battleNet.Launcher);
-        Directory.CreateSymbolicLink(_battleNet.Cache, outside);
+        SymbolicLink.ToDirectory(_battleNet.Cache, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -163,7 +163,7 @@ public sealed class BattleNetCacheProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var cache = BattleNetFixture.Populate(Path.Combine(outside, "Cache", "0a"), "0a000000000000000000000000000001");
 
-        Directory.CreateSymbolicLink(_battleNet.Launcher, outside);
+        SymbolicLink.ToDirectory(_battleNet.Launcher, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

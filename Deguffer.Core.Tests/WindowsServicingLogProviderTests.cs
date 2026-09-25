@@ -399,7 +399,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         var bystander = Path.Combine(outside, "CBS", "irreplaceable.log");
         File.WriteAllBytes(bystander, new byte[4096]);
 
-        Directory.CreateSymbolicLink(Path.Combine(Windows, "Logs"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Windows, "Logs"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

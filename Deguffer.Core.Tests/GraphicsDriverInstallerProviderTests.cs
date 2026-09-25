@@ -210,7 +210,7 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
             Path.Combine(_temp.Path, "elsewhere", "Packages"),
             Path.Combine("Drivers", "Display", "WT6A_INF", "driver.inf"));
         var folder = Populate(Path.Combine(Amd, "Tools"), "irreplaceable.bin");
-        Directory.CreateSymbolicLink(Path.Combine(folder, "Packages"), elsewhere);
+        SymbolicLink.ToDirectory(Path.Combine(folder, "Packages"), elsewhere);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -303,7 +303,7 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = Populate(Path.Combine(outside, "DisplayDriver", "546.33"), "irreplaceable.bin");
 
-        Directory.CreateSymbolicLink(Path.Combine(Drive, "NVIDIA"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Drive, "NVIDIA"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

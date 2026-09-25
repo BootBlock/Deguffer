@@ -542,7 +542,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Directory.Delete(Path.Combine(root, "buildtrees"), recursive: true);
 
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
-        Directory.CreateSymbolicLink(Path.Combine(root, "buildtrees"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "buildtrees"), outside);
         _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);
 
         var plan = await CreateProvider().PlanAsync();
@@ -571,7 +571,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         foreach (var name in new[] { "buildtrees", "downloads", "packages" })
         {
             Directory.Delete(Path.Combine(root, name), recursive: true);
-            Directory.CreateSymbolicLink(Path.Combine(root, name), outside);
+            SymbolicLink.ToDirectory(Path.Combine(root, name), outside);
         }
 
         _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);

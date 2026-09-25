@@ -252,7 +252,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         var bystander = Path.Combine(outside, Sid, "irreplaceable.bin");
         File.WriteAllBytes(bystander, new byte[4096]);
 
-        Directory.CreateSymbolicLink(Path.Combine(volume, BinName), outside);
+        SymbolicLink.ToDirectory(Path.Combine(volume, BinName), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -281,7 +281,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(outside, "deleted.bin"), new byte[4096]);
 
         Directory.CreateDirectory(Path.Combine(volume, BinName));
-        Directory.CreateSymbolicLink(Path.Combine(volume, BinName, Sid), outside);
+        SymbolicLink.ToDirectory(Path.Combine(volume, BinName, Sid), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

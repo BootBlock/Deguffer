@@ -97,7 +97,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var real = _temp.CreateDirectory("cache", "content-v2");
         _temp.CreateFile(2048, "cache", "content-v2", "inside.bin");
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "shortcut"), real);
+        SymbolicLink.ToDirectory(Path.Combine(root, "shortcut"), real);
 
         var tree = WalkExploreReader.Read(root, onLevel: null, default);
         var byPath = ByPath(tree);
@@ -236,7 +236,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "big.bin");
 
         var link = Path.Combine(root, "shortcut");
-        Directory.CreateSymbolicLink(link, target);
+        SymbolicLink.ToDirectory(link, target);
         Directory.SetCreationTimeUtc(link, made);
 
         var tree = WalkExploreReader.Read(root, onLevel: null, default);

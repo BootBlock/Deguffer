@@ -408,7 +408,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         File.WriteAllBytes(outside, new byte[2048]);
 
         var link = Path.Combine(packages, "Chatterbox-1.0.9007-full.nupkg");
-        File.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToFile(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -485,7 +485,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     public async Task AJunctionedStagingFolderIsLeftAloneAndReported()
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "tempa"));
-        Directory.CreateSymbolicLink(StagingRoot, Path.Combine(_temp.Path, "elsewhere"));
+        SymbolicLink.ToDirectory(StagingRoot, Path.Combine(_temp.Path, "elsewhere"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

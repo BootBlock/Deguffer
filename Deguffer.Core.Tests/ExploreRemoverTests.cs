@@ -349,7 +349,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var store = _temp.CreateFile(64, "elsewhere", "mail", "archive.pst");
         var link = Path.Combine(_temp.CreateDirectory("profile", "Downloads"), "mail shortcut");
 
-        Directory.CreateSymbolicLink(link, target);
+        SymbolicLink.ToDirectory(link, target);
 
         var bin = new FakeRecycleBin(_ => new RecycleOutcome(Removed: true));
 

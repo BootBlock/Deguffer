@@ -501,7 +501,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         var outside = new ClaudeCodeFixture(Path.Combine(elsewhere.Path, "outside"));
         var bystander = outside.EditorLock(51234, processId: 4101);
 
-        Directory.CreateSymbolicLink(Path.Combine(environment.UserProfile, ".claude"), outside.Home);
+        SymbolicLink.ToDirectory(Path.Combine(environment.UserProfile, ".claude"), outside.Home);
 
         var provider = new ClaudeCodeDerivedStateProvider(
             environment, runner: new FakeProcessRunner(), inspector: FakeProcessInspector.NothingRunning);
@@ -522,7 +522,7 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     {
         var outside = Path.Combine(_temp.Path, "outside-ide");
         var bystander = _claude.CreateFile(Path.Combine(outside, "51234.lock"), 64);
-        Directory.CreateSymbolicLink(_claude.Ide, outside);
+        SymbolicLink.ToDirectory(_claude.Ide, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

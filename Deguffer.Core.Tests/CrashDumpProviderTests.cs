@@ -283,7 +283,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"), name: "irreplaceable.bin");
         var bystander = Path.Combine(outside, "irreplaceable.bin");
 
-        Directory.CreateSymbolicLink(Path.Combine(Windows, "Minidump"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Windows, "Minidump"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -311,7 +311,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var archive = Populate(Path.Combine(outside, "Windows", "WER", "ReportArchive"), name: "report.wer");
         var bystander = Path.Combine(archive, "report.wer");
 
-        Directory.CreateSymbolicLink(Path.Combine(ProgramData, "Microsoft"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(ProgramData, "Microsoft"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

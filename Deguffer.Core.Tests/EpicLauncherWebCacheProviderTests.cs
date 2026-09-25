@@ -335,7 +335,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
 
         var link = Path.Combine(_environment.LocalAppData, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
 
@@ -366,7 +366,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere", "Cache"));
 
         Directory.CreateDirectory(Saved);
-        Directory.CreateSymbolicLink(
+        SymbolicLink.ToDirectory(
             Path.Combine(Saved, "webcache_4430"), Path.GetDirectoryName(outside)!);
 
         var provider = CreateProvider();
@@ -397,7 +397,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         Directory.Delete(Path.Combine(fixture.Root, "Cache"), recursive: true);
-        Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "Cache"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(fixture.Root, "Cache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -431,7 +431,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
         var bystander = CreateDirectory(Path.Combine(outside, "CacheStorage"));
 
         Directory.Delete(fixture.ServiceWorker, recursive: true);
-        Directory.CreateSymbolicLink(fixture.ServiceWorker, outside);
+        SymbolicLink.ToDirectory(fixture.ServiceWorker, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

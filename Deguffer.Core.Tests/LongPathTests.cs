@@ -262,7 +262,7 @@ public class LongPathTests
 
         var directory = temp.CreateDirectory("cache");
         var link = Path.Combine(temp.Path, "link");
-        Directory.CreateSymbolicLink(link, directory);
+        SymbolicLink.ToDirectory(link, directory);
 
         Assert.Equal(PathPresence.Present, LongPath.ProbeDirectory(link, out var linkIsALink));
         Assert.True(linkIsALink);
@@ -314,7 +314,7 @@ public class LongPathTests
 
         var target = temp.CreateDirectory("gone");
         var dangling = Path.Combine(temp.Path, "dangling");
-        Directory.CreateSymbolicLink(dangling, target);
+        SymbolicLink.ToDirectory(dangling, target);
         Directory.Delete(target);
 
         foreach (var path in (string[])

@@ -118,7 +118,7 @@ public sealed class BoundedFileWalkTests : IDisposable
         var real = _temp.CreateDirectory("cache", "content-v2");
         _temp.CreateFile(32, "cache", "content-v2", "inside.bin");
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "shortcut"), real);
+        SymbolicLink.ToDirectory(Path.Combine(root, "shortcut"), real);
 
         var entries = new ConcurrentBag<string>();
         var links = new ConcurrentBag<string>();

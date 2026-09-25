@@ -132,7 +132,7 @@ public sealed class EntryCountTests : IDisposable
         _temp.CreateDirectory("elsewhere", "deep");
 
         var cache = _temp.CreateDirectory("cache");
-        Directory.CreateSymbolicLink(Path.Combine(cache, "linked"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(cache, "linked"), outside);
 
         var result = await Walk.MeasureAsync(cache);
 
@@ -149,7 +149,7 @@ public sealed class EntryCountTests : IDisposable
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var cache = _temp.CreateDirectory("cache");
-        Directory.CreateSymbolicLink(Path.Combine(cache, "linked"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(cache, "linked"), outside);
 
         var result = await Walk.MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow));
 

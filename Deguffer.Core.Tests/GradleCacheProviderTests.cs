@@ -144,7 +144,7 @@ public sealed class GradleCacheProviderTests : IDisposable
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, "caches", 4096);
-        Directory.CreateSymbolicLink(Path.Combine(_environment.UserProfile, ".gradle"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(_environment.UserProfile, ".gradle"), outside);
 
         var provider = CreateProvider();
 
@@ -176,8 +176,8 @@ public sealed class GradleCacheProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, "payload", 65536);
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "caches"), outside);
-        Directory.CreateSymbolicLink(Path.Combine(root, "wrapper"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "caches"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "wrapper"), outside);
 
         var provider = CreateProvider();
 

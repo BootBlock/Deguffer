@@ -53,7 +53,7 @@ public sealed class MailStoreSearchTests : IDisposable
         var elsewhere = _temp.CreateDirectory("elsewhere");
         _temp.CreateFile(16, "elsewhere", "archive.pst");
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "linked"), elsewhere);
+        SymbolicLink.ToDirectory(Path.Combine(root, "linked"), elsewhere);
 
         Assert.Empty(MailStoreSearch.Under(root, WindowsFileSystem.Default, default));
     }
@@ -70,7 +70,7 @@ public sealed class MailStoreSearchTests : IDisposable
         var target = _temp.CreateFile(16, "elsewhere", "archive.pst");
         var link = Path.Combine(root, "shortcut.pst");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
 
         Assert.Equal([link], MailStoreSearch.Under(root, WindowsFileSystem.Default, default));
     }

@@ -259,7 +259,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         File.WriteAllText(Path.Combine(outside, "LastKnownGood-v2167102"), "2.60.0");
 
         var tags = Path.Combine(Root, AzureFunctionsToolTags.DirectoryName);
-        Directory.CreateSymbolicLink(Path.Combine(tags, "v2"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(tags, "v2"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -305,7 +305,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(outside, "func.exe"), new byte[4096]);
 
         var link = Path.Combine(Releases, "2.60.0");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         string[] mustSurvive =
         [
@@ -365,7 +365,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "payload.bin"), new byte[4096]);
 
         Directory.CreateDirectory(_environment.LocalAppData);
-        Directory.CreateSymbolicLink(Root, outside);
+        SymbolicLink.ToDirectory(Root, outside);
 
         var provider = CreateProvider();
 
@@ -393,7 +393,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "payload.bin"), new byte[4096]);
 
         Directory.CreateDirectory(Root);
-        Directory.CreateSymbolicLink(Releases, outside);
+        SymbolicLink.ToDirectory(Releases, outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -416,7 +416,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         Directory.CreateDirectory(outside);
         File.WriteAllBytes(Path.Combine(outside, "func.exe"), new byte[65536]);
 
-        Directory.CreateSymbolicLink(Path.Combine(Releases, "4.18.1"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Releases, "4.18.1"), outside);
 
         var provider = CreateProvider();
 

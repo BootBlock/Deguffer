@@ -427,7 +427,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
         CreateCache(real);
 
         Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "pypoetry"));
-        Directory.CreateSymbolicLink(CacheRoot, real);
+        SymbolicLink.ToDirectory(CacheRoot, real);
 
         var plan = await CreateProvider(Poetry()).PlanAsync();
 
@@ -441,7 +441,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
     {
         CreateCache();
         Directory.Delete(Path.Combine(CacheRoot, "artifacts"), recursive: true);
-        Directory.CreateSymbolicLink(Path.Combine(CacheRoot, "artifacts"), _temp.CreateDirectory("far-side"));
+        SymbolicLink.ToDirectory(Path.Combine(CacheRoot, "artifacts"), _temp.CreateDirectory("far-side"));
 
         var plan = await CreateProvider(Poetry()).PlanAsync();
 

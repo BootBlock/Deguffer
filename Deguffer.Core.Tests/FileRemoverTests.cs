@@ -73,7 +73,7 @@ public sealed class FileRemoverTests : IDisposable
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
         var link = Path.Combine(_temp.CreateDirectory("dumps"), "MEMORY.DMP");
 
-        File.CreateSymbolicLink(link, bystander);
+        SymbolicLink.ToFile(link, bystander);
 
         var outcome = await FileRemover.RemoveAsync(link);
 
@@ -98,7 +98,7 @@ public sealed class FileRemoverTests : IDisposable
         var target = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
         var link = Path.Combine(_temp.CreateDirectory("dumps"), "MEMORY.DMP");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
         File.Delete(target);
 
         var outcome = await FileRemover.RemoveAsync(link);
@@ -321,7 +321,7 @@ public sealed class FileRemoverTests : IDisposable
         var target = _temp.CreateFile(4096, "elsewhere", "archive.pst");
         var link = Path.Combine(_temp.CreateDirectory("Downloads"), "shortcut.pst");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
 
         var outcome = await FileRemover.RemoveAsync(link);
 

@@ -39,7 +39,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
         // "caches" is a name the provider recognises. The reparse point is the only thing standing
         // between this plan and a deletion that escapes the profile entirely.
         var junction = Path.Combine(root, "caches");
-        Directory.CreateSymbolicLink(junction, outside);
+        SymbolicLink.ToDirectory(junction, outside);
 
         var provider = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
         var plan = await provider.PlanAsync();

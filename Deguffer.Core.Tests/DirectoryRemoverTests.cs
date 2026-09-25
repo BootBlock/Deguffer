@@ -136,7 +136,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
 
         var root = _temp.CreateDirectory("cache");
-        Directory.CreateSymbolicLink(Path.Combine(root, "linked"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "linked"), outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
@@ -151,7 +151,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
 
         var root = Path.Combine(_temp.Path, "cache");
-        Directory.CreateSymbolicLink(root, outside);
+        SymbolicLink.ToDirectory(root, outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
@@ -419,7 +419,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
 
         var link = Path.Combine(root, "link");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
         File.SetAttributes(link, File.GetAttributes(link) | FileAttributes.ReadOnly);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
@@ -483,7 +483,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var readOnly = _temp.CreateFile(512, "cache", "read-only.bin");
         File.SetAttributes(readOnly, FileAttributes.ReadOnly);
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "link"), _temp.CreateDirectory("outside"));
+        SymbolicLink.ToDirectory(Path.Combine(root, "link"), _temp.CreateDirectory("outside"));
 
         var deep = root;
         while (deep.Length < 400)
@@ -517,7 +517,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
 
         var junction = Path.Combine(_temp.Path, "cache");
-        Directory.CreateSymbolicLink(junction, outside);
+        SymbolicLink.ToDirectory(junction, outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(junction);
 
@@ -541,7 +541,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
 
         var junction = Path.Combine(root, "link");
-        Directory.CreateSymbolicLink(junction, outside);
+        SymbolicLink.ToDirectory(junction, outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
@@ -684,7 +684,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var abandoned = _temp.CreateFile(1024, "scratch", "abandoned.tmp");
         var link = Path.Combine(root, "shortcut.pst");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
@@ -812,7 +812,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         var target = _temp.CreateDirectory("elsewhere");
         var link = Path.Combine(root, "session");
 
-        Directory.CreateSymbolicLink(link, target);
+        SymbolicLink.ToDirectory(link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             root, bounds: new RemovalBounds(KeepRoot: true, [link]));
@@ -836,7 +836,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "payload.bin");
 
         var link = Path.Combine(_temp.Path, "scratch");
-        Directory.CreateSymbolicLink(link, target);
+        SymbolicLink.ToDirectory(link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             link, bounds: new RemovalBounds(KeepRoot: true, []));
@@ -873,7 +873,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "payload.bin");
 
         var link = Path.Combine(root, "just-made");
-        Directory.CreateSymbolicLink(link, target);
+        SymbolicLink.ToDirectory(link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             root, MinimumAge.WithinHours(8, DateTime.UtcNow), bounds: new RemovalBounds(KeepRoot: true, []));
@@ -903,7 +903,7 @@ public sealed class DirectoryRemoverTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "payload.bin");
 
         var link = Path.Combine(_temp.Path, "relocated-cache");
-        Directory.CreateSymbolicLink(link, target);
+        SymbolicLink.ToDirectory(link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(link, MinimumAge.WithinHours(8, DateTime.UtcNow));
 

@@ -301,7 +301,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         Directory.CreateDirectory(Home);
-        Directory.CreateSymbolicLink(DefaultRepository, outside);
+        SymbolicLink.ToDirectory(DefaultRepository, outside);
 
         var provider = CreateProvider();
 

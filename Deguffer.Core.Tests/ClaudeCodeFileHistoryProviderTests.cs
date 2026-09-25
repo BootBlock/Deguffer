@@ -410,7 +410,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
 
         Directory.CreateDirectory(_claude.FileHistory);
         var link = Path.Combine(_claude.FileHistory, SessionA);
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
         AgeFolder(link, Old);
 
         var provider = CreateProvider();
@@ -466,7 +466,7 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
         var outside = new ClaudeCodeFixture(Path.Combine(_temp.Path, "outside"));
         var bystander = outside.RewindSnapshots(SessionA, folderAge: Old, snapshotAge: Old);
 
-        Directory.CreateSymbolicLink(_claude.FileHistory, outside.FileHistory);
+        SymbolicLink.ToDirectory(_claude.FileHistory, outside.FileHistory);
 
         var provider = CreateProvider();
 

@@ -46,7 +46,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         File.WriteAllBytes(bystander, new byte[4096]);
 
         var link = Path.Combine(root, "ipch");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

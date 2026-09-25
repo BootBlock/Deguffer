@@ -146,7 +146,7 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         var store = _temp.CreateDirectory("store");
         _temp.CreateFile(4096, "store", "sole.bin");
         _temp.CreateFile(65536, "outside", "big.bin");
-        Directory.CreateSymbolicLink(Path.Combine(store, "linked"), Path.Combine(_temp.Path, "outside"));
+        SymbolicLink.ToDirectory(Path.Combine(store, "linked"), Path.Combine(_temp.Path, "outside"));
 
         var size = await MeasureAsync(store);
 
@@ -273,7 +273,7 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         var target = temp.CreateFile(8192, "elsewhere", "archive.pst");
         var link = Path.Combine(temp.CreateDirectory("store", "saved"), "shortcut.pst");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
 
         var result = await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(temp.Path, "store"));
 

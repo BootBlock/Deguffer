@@ -344,7 +344,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
         ArtworkFor("440");
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "570"));
         var link = Path.Combine(Container, "570");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -367,7 +367,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere", "librarycache");
         var far = Populate(Path.Combine(outside, "440"));
         Directory.CreateDirectory(Path.Combine(install, "appcache"));
-        Directory.CreateSymbolicLink(Container, outside);
+        SymbolicLink.ToDirectory(Container, outside);
 
         var provider = CreateProvider();
         Assert.True(await provider.IsPresentAsync());
@@ -464,7 +464,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
         Populate(Path.Combine(Container, "backup"));
         WriteFile(Path.Combine(Container, "570"));
         Populate(Path.Combine(Container, "570_header.jpg"));
-        Directory.CreateSymbolicLink(
+        SymbolicLink.ToDirectory(
             Path.Combine(Container, "730"), Populate(Path.Combine(_temp.Path, "elsewhere", "730")));
 
         var policy = new ExploreActionPolicy(

@@ -165,7 +165,7 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, ".analysis-driver", 4096);
-        Directory.CreateSymbolicLink(Path.Combine(_environment.LocalAppData, ".dartServer"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(_environment.LocalAppData, ".dartServer"), outside);
 
         var provider = CreateProvider();
 
@@ -198,8 +198,8 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, "payload", 65536);
 
-        Directory.CreateSymbolicLink(Path.Combine(root, ".analysis-driver"), outside);
-        Directory.CreateSymbolicLink(Path.Combine(root, ".pub-package-details-cache"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, ".analysis-driver"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, ".pub-package-details-cache"), outside);
 
         var provider = CreateProvider();
 

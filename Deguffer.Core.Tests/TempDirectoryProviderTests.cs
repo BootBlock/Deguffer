@@ -710,7 +710,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Abandoned(4096, "elsewhere", "payload.bin");
 
         var linked = Path.Combine(_temp.CreateDirectory("linked"), "Temp");
-        Directory.CreateSymbolicLink(linked, outside);
+        SymbolicLink.ToDirectory(linked, outside);
         _environment.WithEnvironmentVariable("TEMP", linked);
 
         var plan = await CreateProvider().PlanAsync();

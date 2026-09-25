@@ -259,7 +259,7 @@ public sealed class CloudFilesTests : IDisposable
     {
         _root.Folder("Real");
         var real = _root.LocalCopy(Path.Combine("Real", "file.bin"), Megabyte);
-        Directory.CreateSymbolicLink(_root.At("Linked"), _root.At("Real"));
+        SymbolicLink.ToDirectory(_root.At("Linked"), _root.At("Real"));
         var named = _root.At("Linked", "file.bin");
         _root.Disconnect();
 
