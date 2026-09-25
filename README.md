@@ -120,6 +120,7 @@ installed" cleanly on a machine without that toolchain.
 | Chromium application caches | |
 | Firefox caches | |
 | Steam web cache | |
+| Steam library artwork | One item per game; never Steam's index of it. A picture you replaced by hand is lost, so keep that game |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |

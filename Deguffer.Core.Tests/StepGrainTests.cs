@@ -46,6 +46,7 @@ public class StepGrainTests
             "python-venv",
             "roslyn-cache",
             "squirrel-superseded-versions",
+            "steam-library-artwork",
             "steam-shader-cache",
             "unity-library",
             "unreal-intermediate",
