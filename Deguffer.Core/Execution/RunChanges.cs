@@ -8,7 +8,7 @@ namespace Deguffer.Core.Execution;
 /// measures those and leaves every other row as it stands.
 ///
 /// <para><b>More than the rows that ran.</b> Providers are not disjoint. NuGet's own command empties
-/// <c>%TEMP%\NuGetScratch</c>, which the temporary files row also measures, and removing a project's
+/// <c>%TEMP%\NuGetScratch</c>, inside the folder the temporary files row empties, and removing a project's
 /// <c>node_modules</c> releases pnpm store files that were linked into it. A re-plan of the cleaned
 /// rows alone would leave the neighbours stating figures the run had changed, beside a Clean button
 /// that would act on them.</para>

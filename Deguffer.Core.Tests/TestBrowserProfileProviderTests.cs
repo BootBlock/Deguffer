@@ -56,6 +56,26 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Every profile is this row's, taken today or not: a recent one this row holds back is still left
+    /// out of the temporary files row, which would otherwise take it on its age. A near miss is not
+    /// this row's, and stays that row's to judge.
+    /// </summary>
+    [Fact]
+    public async Task ClaimsEveryProfileItRecognisesAndNothingElse()
+    {
+        var old = AbandonedProfile("playwright_chromiumdev_profile-a1B2c3");
+        var recent = Path.GetDirectoryName(Path.GetDirectoryName(
+            _temp.CreateFile(1024, "temp", "puppeteer_dev_chrome_profile-g7H8i9", "Default", "Preferences")))!;
+        _temp.CreateDirectory("temp", "playwright_chromiumdev_profile-toolong");
+
+        var claimed = await CreateProvider().ClaimedEntriesAsync([UserTemp, MachineTemp]);
+
+        Assert.Equal(
+            new[] { old, recent }.Order(StringComparer.Ordinal),
+            claimed.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// §5.2 in a folder that belongs to nobody: every name either tool writes is offered, and every
     /// sibling survives the clean — including the near misses a looser rule would take.
     /// </summary>

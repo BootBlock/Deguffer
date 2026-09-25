@@ -69,7 +69,9 @@ internal static class RefusalCheck
             return Nothing;
         }
 
-        var bounds = new RemovalBounds(KeepRoot: false, step is ClearDirectoryStep clear ? clear.Spared : []);
+        var bounds = step is ClearDirectoryStep clear
+            ? new RemovalBounds(KeepRoot: false, clear.Spared, clear.OwnedElsewhere)
+            : RemovalBounds.None;
 
         var options = new ParallelOptions
         {
@@ -93,7 +95,7 @@ internal static class RefusalCheck
             var extended = LongPath.Extended(place);
 
             // A spared entry is already out of the estimate, and the removal will not enter it.
-            if (bounds.SparedPaths.Contains(extended))
+            if (bounds.SparedPaths.Contains(extended) || bounds.OwnedElsewherePaths.Contains(extended))
             {
                 continue;
             }

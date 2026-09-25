@@ -47,10 +47,11 @@ namespace Deguffer.Core.Providers;
 /// <para>Playwright's WebKit never receives its profile unless the context is persistent, so a
 /// WebKit profile is normally empty. It is still a leftover, and is offered as one.</para>
 ///
-/// <para>This row and the temporary files row both reach these profiles, as NuGet's scratch folder
-/// is reached by two rows. See <see cref="RunChanges"/>.</para>
+/// <para><b>Each profile is this row's, whether or not it is offered today</b>, so the temporary
+/// files row leaves every one of them to it: a profile a running test holds, or one too recent to
+/// offer, is not taken there on its age. See <see cref="ITemporaryFolderTenant"/>.</para>
 /// </summary>
-public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
+public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, ITemporaryFolderTenant
 {
     /// <summary>
     /// A profile's name: its tool's prefix, then exactly the six characters <c>mkdtemp</c> adds.
@@ -336,6 +337,34 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase
                    name.StartsWith("playwright_", StringComparison.OrdinalIgnoreCase)
                    || name.StartsWith("puppeteer_", StringComparison.OrdinalIgnoreCase))),
     ];
+
+    /// <summary>
+    /// Every child of <paramref name="folders"/> named as a profile, a link among them included, in
+    /// the form the caller named its folder. The link is this row's to decline, not the other row's
+    /// to take.
+    /// </summary>
+    public Task<IReadOnlyList<string>> ClaimedEntriesAsync(
+        IReadOnlyList<string> folders,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(folders);
+
+        var asked = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var folder in folders)
+        {
+            asked.TryAdd(LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder)), folder);
+        }
+
+        return Task.FromResult<IReadOnlyList<string>>(
+        [
+            .. from scan in Scans
+               where asked.ContainsKey(LongPath.Unaliased(scan.Folder))
+               from directory in scan.Children.Directories.Concat(scan.Children.Links)
+               where RecognisedProfile().IsMatch(directory.Name)
+               select Path.Combine(asked[LongPath.Unaliased(scan.Folder)], directory.Name),
+        ]);
+    }
 
     private IReadOnlyList<Profile> Profiles() =>
     [

@@ -13,7 +13,7 @@ namespace Deguffer.Core.Providers;
 /// missed ~3 GB, so the plan calls the tool and lets it decide what to remove. The locations are
 /// read back from <c>--list</c> purely so the reclaim can be measured and reported.
 /// </summary>
-public sealed class NuGetCacheProvider : CleanupProviderBase
+public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTenant
 {
     private IReadOnlyList<string>? _resolvedLocals;
 
@@ -109,6 +109,44 @@ public sealed class NuGetCacheProvider : CleanupProviderBase
     {
         _resolvedLocals = null;
         base.InvalidateCaches();
+    }
+
+    /// <summary>
+    /// NuGet's scratch folder, <c>NuGetScratch</c>, which its own command clears and which sits in
+    /// the temporary folder.
+    ///
+    /// <para>Matched on the folder holding each local rather than on the name, because NuGet says
+    /// where its locals are and the answer is configuration. The comparison is between unaliased
+    /// forms: NuGet reports the temporary folder the way its own process sees it, which on a profile
+    /// with a long folder name is the 8.3 short form.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ClaimedEntriesAsync(
+        IReadOnlyList<string> folders,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(folders);
+
+        if (Environment.FindExecutable("dotnet") is not { } dotnet)
+        {
+            return [];
+        }
+
+        var locals = await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false);
+
+        return
+        [
+            .. from folder in folders
+               let canonical = LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder))
+               from local in locals
+               where Path.GetDirectoryName(LongPath.Unaliased(local)) is { } parent
+                   && parent.Equals(canonical, StringComparison.OrdinalIgnoreCase)
+               let entry = Path.Combine(folder, Path.GetFileName(local))
+
+               // NuGet names its scratch folder whether or not it has made it, and a claim on an
+               // entry that is not there would have the other row say it left something out.
+               where LongPath.ProbeDirectory(entry) is not PathPresence.Absent
+               select entry,
+        ];
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)

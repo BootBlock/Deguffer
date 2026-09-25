@@ -9,9 +9,15 @@ namespace Deguffer.Core.Providers;
 /// rather than dropped, because a redirected <c>%TEMP%</c> is the one case where the user can see a
 /// folder Deguffer will not touch and has no way to find out why.
 /// </param>
+/// <param name="AccountFolders">
+/// This account's own temporary folders among <paramref name="Roots"/>, without the one Windows and
+/// its services share. The folders a tool running as this account writes its scratch to, which is
+/// where the rows that recognise a tool's leftovers by name look.
+/// </param>
 public sealed record TempRootSet(
     IReadOnlyList<DeclaredRoot> Roots,
-    IReadOnlyList<(string Path, string Reason)> Refused);
+    IReadOnlyList<(string Path, string Reason)> Refused,
+    IReadOnlyList<string> AccountFolders);
 
 /// <summary>
 /// Where this machine's temporary folders are, and which of them Deguffer will reach into.
@@ -129,8 +135,11 @@ public static class TempRoots
                 + "instead."));
         }
 
-        var roots = standing
+        var account = standing
             .Where(a => !standing.Any(b => a != b && LongPath.Contains(a, b)))
+            .ToList();
+
+        var roots = account
 
             // Declared as its parent holding one named child, which is what every declared location
             // is. The parent then goes into §5.6's report as a survivor, so a run reaching into a
@@ -150,7 +159,7 @@ public static class TempRoots
             new DeclaredLocation(
                 FolderName, MachineReason, DeclaredLocationKind.DirectoryContents, ReportsNoUsefulAge)));
 
-        return new TempRootSet(roots, refused);
+        return new TempRootSet(roots, refused, account);
     }
 
     /// <summary>

@@ -203,6 +203,8 @@ public sealed class ProviderInvalidationTests : IDisposable
         // Never the real one: it would remove the previous Windows installation of whoever ran the suite.
         : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
         : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
+        : parameter == typeof(INamedMutexes) ? FakeNamedMutexes.None
+        : parameter == typeof(IReadOnlyList<ITemporaryFolderTenant>) ? Array.Empty<ITemporaryFolderTenant>()
         : throw new XunitException(
             $"{provider.Name} takes a {parameter.Name}, which this test cannot fabricate from a fake. " +
             "Extend Argument so the provider is still covered.");
