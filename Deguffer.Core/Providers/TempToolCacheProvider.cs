@@ -89,12 +89,50 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
     private static partial Regex RoslynSession();
 
     private readonly INamedMutexes _mutexes;
-    private readonly TempMarker[] _topLevel;
     private readonly TempMarker _roslynSession;
     private readonly TempMarker _compilerSession;
 
     private static readonly TempMarker NodeVersion = new(
         NodeTool, NodeVersionCache(), TargetKind.Directory, NodeReason);
+
+    private static readonly TempMarker[] TopLevel =
+    [
+        new(NodeTool, NodeCompileCache(), TargetKind.Directory, NodeReason),
+        new(
+            FlutterTool,
+            FlutterTools(),
+            TargetKind.Directory,
+            "A folder the Flutter tool made for one run and would have removed on exit. It was left "
+            + "because the run was killed, and nothing reads it again.")
+        {
+            // The tool runs in the Dart VM, and the tests it starts in the Flutter tester.
+            HeldBy = ["dart", "flutter_tester"],
+        },
+        new(
+            DartTestTool,
+            DartTest(),
+            TargetKind.Directory,
+            "A folder Dart's test runner made for one run and would have removed on exit. It was "
+            + "left because the run was killed, and nothing reads it again.")
+        {
+            HeldBy = ["dart"],
+        },
+        new(
+            FirefoxTool,
+            MozillaTempFiles(),
+            TargetKind.Directory,
+            "Firefox's own temporary files for media, printing and the clipboard. Firefox deletes "
+            + "this folder itself once it has been idle for a while, and makes it again when needed.")
+        {
+            // Gecko's code, which the other programs built on it share. Holding back for one that
+            // does not write here costs nothing; missing one that does costs a print job.
+            HeldBy =
+            [
+                "firefox", "thunderbird", "librewolf", "waterfox", "floorp", "zen", "palemoon", "seamonkey",
+                "basilisk",
+            ],
+        },
+    ];
 
     public TempToolCacheProvider(
         IUserEnvironment? environment = null,
@@ -110,41 +148,6 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
 
         _roslynSession = Session(RoslynTool);
         _compilerSession = Session(CompilerServerTool);
-
-        _topLevel =
-        [
-            new(NodeTool, NodeCompileCache(), TargetKind.Directory, NodeReason),
-            new(
-                FlutterTool,
-                FlutterTools(),
-                TargetKind.Directory,
-                "A folder the Flutter tool made for one run and would have removed on exit. It was left "
-                + "because the run was killed, and nothing reads it again.")
-            {
-                // The tool runs in the Dart VM, and the tests it starts in the Flutter tester.
-                HeldBy = ["dart", "flutter_tester"],
-            },
-            new(
-                DartTestTool,
-                DartTest(),
-                TargetKind.Directory,
-                "A folder Dart's test runner made for one run and would have removed on exit. It was "
-                + "left because the run was killed, and nothing reads it again.")
-            {
-                HeldBy = ["dart"],
-            },
-            new(
-                FirefoxTool,
-                MozillaTempFiles(),
-                TargetKind.Directory,
-                "Firefox's own temporary files for media, printing and the clipboard. Firefox deletes "
-                + "this folder itself once it has been idle for a while, and makes it again when needed.")
-            {
-                // Gecko's code, which the other browsers built on it share. Holding back for one that
-                // does not write here costs nothing; missing one that does costs a print job.
-                HeldBy = ["firefox", "thunderbird", "librewolf", "waterfox"],
-            },
-        ];
     }
 
     public override string Id => "temp-tool-caches";
@@ -181,12 +184,12 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
 
         foreach (var folder in accountFolders)
         {
-            places.Add(new TempMarkerPlace(folder, _topLevel));
+            places.Add(new TempMarkerPlace(folder, TopLevel));
             places.AddRange(SessionPlaces(folder, "Roslyn", RoslynTool, _roslynSession));
             places.AddRange(SessionPlaces(folder, "VBCSCompiler", CompilerServerTool, _compilerSession));
         }
 
-        if (ConfiguredNodeCache(accountFolders) is { } configured)
+        if (ConfiguredNodeCache(accountFolders) is { Folder: { } configured })
         {
             places.Add(new TempMarkerPlace(configured, [NodeVersion], Owner: "Node.js"));
         }
@@ -194,29 +197,75 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
         return places;
     }
 
+    protected override IEnumerable<PlanNote> NotesFor(IReadOnlyList<string> accountFolders) =>
+        ConfiguredNodeCache(accountFolders) is { Declined: { } reason } setting
+            ? [new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"{NodeCompileCacheVariable} points at '{LongPath.Display(setting.Value!)}', and Deguffer will not "
+                + $"treat that as Node's cache: {reason} Node's per-version folders there are left alone.")]
+            : [];
+
     /// <summary>
-    /// Where <see cref="NodeCompileCacheVariable"/> moves Node's cache, or null where it is not set,
-    /// is not a full path, or names the directory the temporary-folder marker already covers.
+    /// Where <see cref="NodeCompileCacheVariable"/> moves Node's cache: the folder to examine, or the
+    /// reason it is declined. Neither where the variable is not set, is not a full path, or names the
+    /// directory the temporary-folder marker already covers.
     ///
     /// <para>Examined as Node's folder rather than taken whole. The variable is something anything on
     /// the machine may have written, and pointing it at a folder that holds anything else would
-    /// otherwise offer that folder. Only the per-version directories Node makes are recognised in it,
-    /// so the worst a misdirected setting costs is nothing.</para>
+    /// otherwise offer that folder. Only the per-version directories Node makes are recognised in it.
+    /// </para>
+    ///
+    /// <para><b>Declined where it would make this row assert what it does not own.</b> Examining a
+    /// folder as Node's names everything else in it as a survivor (§5.6). A drive root, a folder
+    /// holding a temporary folder, or one holding a folder Windows is built out of is somewhere other
+    /// rows legitimately remove things, and each of those removals would then read as a failure of
+    /// this one — and in Explore the whole of it would read as Node's.</para>
     /// </summary>
-    private string? ConfiguredNodeCache(IReadOnlyList<string> accountFolders)
+    private NodeCacheSetting ConfiguredNodeCache(IReadOnlyList<string> accountFolders)
     {
         if (LongPath.Configured(Environment.GetEnvironmentVariable(NodeCompileCacheVariable)) is not { } configured)
         {
-            return null;
+            return default;
         }
 
-        var canonical = LongPath.Canonical(configured);
+        var unaliased = LongPath.Unaliased(configured);
 
-        return accountFolders.Any(folder => LongPath.Canonical(Path.Combine(folder, "node-compile-cache"))
-                .Equals(canonical, StringComparison.OrdinalIgnoreCase))
-            ? null
-            : configured;
+        if (accountFolders.Any(folder => LongPath.Unaliased(Path.Combine(folder, "node-compile-cache"))
+                .Equals(unaliased, StringComparison.OrdinalIgnoreCase)))
+        {
+            return default;
+        }
+
+        if (string.IsNullOrEmpty(Path.GetDirectoryName(unaliased)))
+        {
+            return new NodeCacheSetting(configured, null, "it is the root of a drive or a share.");
+        }
+
+        string[] mustNotHold =
+        [
+            .. accountFolders,
+            Path.Combine(Machine.WindowsDirectory, "Temp"),
+            Environment.UserProfile,
+            Environment.RoamingAppData,
+            Environment.LocalAppData,
+            Machine.WindowsDirectory,
+            Machine.ProgramData,
+            Machine.ProgramFiles,
+            Machine.ProgramFilesX86,
+        ];
+
+        return mustNotHold.Any(inside => inside.Length > 0 && LongPath.Contains(unaliased, LongPath.Unaliased(inside)))
+            ? new NodeCacheSetting(
+                configured,
+                null,
+                "it holds a temporary folder, or a folder Windows is built out of, where other rows remove things.")
+            : new NodeCacheSetting(configured, configured, null);
     }
+
+    /// <param name="Value">What the variable names, where it names a full path.</param>
+    /// <param name="Folder">The folder to examine as Node's, or null where it is declined.</param>
+    /// <param name="Declined">Why it is declined, as the end of a sentence, or null where it is not.</param>
+    private readonly record struct NodeCacheSetting(string? Value, string? Folder, string? Declined);
 
     /// <summary>
     /// A shadow-copy tool's folder and the two layouts it has kept sessions in: the one Visual Studio

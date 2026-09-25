@@ -116,7 +116,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// the temporary folder.
     ///
     /// <para>Matched on the folder holding each local rather than on the name, because NuGet says
-    /// where its locals are and the answer is configuration. The comparison is between canonical
+    /// where its locals are and the answer is configuration. The comparison is between unaliased
     /// forms: NuGet reports the temporary folder the way its own process sees it, which on a profile
     /// with a long folder name is the 8.3 short form.</para>
     /// </summary>
@@ -136,11 +136,16 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
         return
         [
             .. from folder in folders
-               let canonical = LongPath.Canonical(Path.TrimEndingDirectorySeparator(folder))
+               let canonical = LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder))
                from local in locals
-               where Path.GetDirectoryName(LongPath.Canonical(local)) is { } parent
+               where Path.GetDirectoryName(LongPath.Unaliased(local)) is { } parent
                    && parent.Equals(canonical, StringComparison.OrdinalIgnoreCase)
-               select Path.Combine(folder, Path.GetFileName(local)),
+               let entry = Path.Combine(folder, Path.GetFileName(local))
+
+               // NuGet names its scratch folder whether or not it has made it, and a claim on an
+               // entry that is not there would have the other row say it left something out.
+               where LongPath.ProbeDirectory(entry) is not PathPresence.Absent
+               select entry,
         ];
     }
 

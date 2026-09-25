@@ -378,6 +378,25 @@ public sealed class CleanupPlannerTests
     /// and so does a new one that arrives at Tier 3 without anybody deciding it should. Tier 3 is
     /// irreversible loss of user data, so arriving there is a decision, never a default.
     /// </summary>
+    /// <summary>
+    /// Every row that owns entries of a temporary folder is handed to the temporary-folder row. One
+    /// left out has its entries counted twice, and a file it keeps — Blender's unsaved work — taken
+    /// there on its age.
+    /// </summary>
+    [Fact]
+    public void TheTemporaryFolderRowLeavesEveryTenantsEntriesToIt()
+    {
+        var planner = CleanupPlanner.CreateDefault();
+        var temporary = Assert.Single(planner.Providers.OfType<TempDirectoryProvider>());
+        var tenants = planner.Providers.OfType<ITemporaryFolderTenant>().ToList();
+
+        Assert.NotEmpty(tenants);
+        Assert.Equal(
+            tenants.Select(t => t.Name).Order(StringComparer.Ordinal),
+            temporary.Tenants.Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.All(temporary.Tenants, t => Assert.Contains(t, tenants));
+    }
+
     [Fact]
     public void TheDefaultSetIsTheVerifiedSourcesAndEveryTierAboveOneIsNamed()
     {
@@ -391,7 +410,7 @@ public sealed class CleanupPlannerTests
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
                 "squirrel-staging",
-                "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
+                "platformio", "playwright", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "temp-installer-downloads", "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",

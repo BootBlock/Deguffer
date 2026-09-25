@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Fifty-three providers, each holding its own knowledge of one location. A provider reports "not
+Fifty-four providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -127,6 +127,7 @@ installed" cleanly on a machine without that toolchain.
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 | Tool caches in temporary folders | Node's compile cache, and what Flutter, Dart's test runner, Firefox and Roslyn left there, each recognised by its own name and left alone while its tool may be using it |
 | Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
+| Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one Deguffer can see a running browser using |
 
 **Tier 2 — regenerable, with cost.** Re-created by re-downloading or rebuilding.
 

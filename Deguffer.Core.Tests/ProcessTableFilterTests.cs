@@ -20,7 +20,7 @@ namespace Deguffer.Core.Tests;
 public class ProcessTableFilterTests
 {
     private static ProcessTable TableOf(params RunningProcess[] processes) =>
-        new(processes, CurrentDirectoriesReadable: true);
+        new(processes, CurrentDirectoriesReadable: true, CommandLinesReadable: true);
 
     /// <summary>
     /// The running process this test is part of is left out, which is the whole point of the filter.
@@ -29,7 +29,7 @@ public class ProcessTableFilterTests
     public void ThisProcessIsNotEvidence()
     {
         var table = TableOf(
-            new RunningProcess(Environment.ProcessId, "self", Environment.ProcessPath, @"C:\Users\testuser\src\app"));
+            new RunningProcess(Environment.ProcessId, "self", Environment.ProcessPath, @"C:\Users\testuser\src\app", []));
 
         Assert.Empty(LiveTreeInspector.Filtered(table).Processes);
     }
@@ -49,7 +49,8 @@ public class ProcessTableFilterTests
             Environment.ProcessId + 1,
             "dotnet",
             Environment.ProcessPath,
-            @"C:\Users\testuser\src\app");
+            @"C:\Users\testuser\src\app",
+            []);
 
         var filtered = LiveTreeInspector.Filtered(TableOf(other));
 
@@ -72,8 +73,8 @@ public class ProcessTableFilterTests
     public void ARowWithAFieldThatCouldNotBeReadIsStillEvidence()
     {
         var table = TableOf(
-            new RunningProcess(4321, "msbuild", null, @"C:\Users\testuser\src\app"),
-            new RunningProcess(4325, "python", @"C:\Users\testuser\src\app\.venv\Scripts\python.exe", null));
+            new RunningProcess(4321, "msbuild", null, @"C:\Users\testuser\src\app", []),
+            new RunningProcess(4325, "python", @"C:\Users\testuser\src\app\.venv\Scripts\python.exe", null, []));
 
         var filtered = LiveTreeInspector.Filtered(table);
 
@@ -83,21 +84,23 @@ public class ProcessTableFilterTests
     /// <summary>
     /// Everything else is passed through untouched, and the incompleteness flag with it — a filter
     /// that quietly turned an incomplete table into a complete one would claim the working
-    /// directories had been read when they had not.
+    /// directories or the command lines had been read when they had not.
     /// </summary>
     [Fact]
     public void EveryOtherProcessAndTheCompletenessOfTheTableSurvive()
     {
         var table = new ProcessTable(
             [
-                new RunningProcess(Environment.ProcessId, "self", Environment.ProcessPath, null),
-                new RunningProcess(4321, "devenv", @"C:\Program Files\editor\devenv.exe", @"C:\Users\testuser\src\app"),
+                new RunningProcess(Environment.ProcessId, "self", Environment.ProcessPath, null, []),
+                new RunningProcess(4321, "devenv", @"C:\Program Files\editor\devenv.exe", @"C:\Users\testuser\src\app", []),
             ],
-            CurrentDirectoriesReadable: false);
+            CurrentDirectoriesReadable: false,
+            CommandLinesReadable: false);
 
         var filtered = LiveTreeInspector.Filtered(table);
 
         Assert.Equal("devenv", Assert.Single(filtered.Processes).Name);
         Assert.False(filtered.CurrentDirectoriesReadable);
+        Assert.False(filtered.CommandLinesReadable);
     }
 }

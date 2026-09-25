@@ -13,7 +13,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Tier 2, because what goes is downloaded again, not rebuilt.</b> An updater that finds its
 /// download gone fetches it again, and the Visual Studio Installer reuses the folder it stages
-/// packages in for the next update — 1.46 GB of Windows SDK installers were kept there for exactly
+/// packages in for the next update — 1.39 GB of Windows SDK installers were kept there for exactly
 /// that. Nothing is lost, but the next update costs the download. A Blender session folder is
 /// dearer in a different way: a bake made for a file that was never saved points into the session's
 /// folder, so a recovered autosave can reach for it.</para>
@@ -180,13 +180,13 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
 
         foreach (var staging in VisualStudioStaging())
         {
-            var parent = Path.GetDirectoryName(LongPath.Canonical(staging));
+            var parent = Path.GetDirectoryName(LongPath.Unaliased(staging));
 
             // Recognised only directly inside one of this account's temporary folders, where the
             // installer puts it. A state file naming somewhere else is not followed: this row is about
             // the temporary folder, and a path read from a file is a path somebody else chose.
             if (accountFolders.FirstOrDefault(folder =>
-                    LongPath.Canonical(Path.TrimEndingDirectorySeparator(folder)).Equals(parent, StringComparison.OrdinalIgnoreCase))
+                    LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder)).Equals(parent, StringComparison.OrdinalIgnoreCase))
                 is { } folder)
             {
                 places.Add(new TempMarkerPlace(

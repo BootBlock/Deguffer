@@ -55,11 +55,11 @@ public sealed record TempMarkerFindings(
         foreach (var folder in folders)
         {
             var root = Path.TrimEndingDirectorySeparator(folder);
-            var canonical = LongPath.Canonical(root);
+            var canonical = LongPath.Unaliased(root);
 
             foreach (var path in Recognised)
             {
-                var relative = Path.GetRelativePath(canonical, LongPath.Canonical(path));
+                var relative = Path.GetRelativePath(canonical, LongPath.Unaliased(path));
 
                 if (relative == "." || relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
                 {
@@ -117,6 +117,7 @@ public static class TempMarkerSurvey
         private readonly List<(string Directory, string Owner)> _owned = [];
         private readonly Dictionary<TempMarker, IReadOnlyList<string>> _running = [];
         private readonly Dictionary<TempMarker, int> _heldByProcess = [];
+        private readonly Dictionary<string, bool> _reachable = new(StringComparer.OrdinalIgnoreCase);
         private int _declined;
         private bool _unreadable;
 
@@ -313,25 +314,46 @@ public static class TempMarkerSurvey
         {
             foreach (var directory in Chain(place))
             {
-                switch (LongPath.ProbeDirectory(directory, out var isLink))
+                if (!_reachable.TryGetValue(directory, out var reachable))
                 {
-                    case PathPresence.Absent:
-                        return false;
-
-                    case PathPresence.Refused:
-                        _notes.Add(UnreadableRoot.UnreachedNote(directory));
-                        _unreadable = true;
-                        return false;
+                    reachable = Judge(directory);
+                    _reachable[directory] = reachable;
                 }
 
-                if (isLink is true)
+                if (!reachable)
                 {
-                    _notes.Add(CacheLevelWalk.Note(directory));
-                    _survivors.Add((directory, CacheLevelWalk.LinkReason));
-                    _recognised.Add(directory);
-                    _declined++;
                     return false;
                 }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Whether one directory on the way to a place may be entered, saying why not where it may
+        /// not. Asked once per directory per survey, because several places share the folders above
+        /// them and a link there is one fact, not one per place below it.
+        /// </summary>
+        private bool Judge(string directory)
+        {
+            switch (LongPath.ProbeDirectory(directory, out var isLink))
+            {
+                case PathPresence.Absent:
+                    return false;
+
+                case PathPresence.Refused:
+                    _notes.Add(UnreadableRoot.UnreachedNote(directory));
+                    _unreadable = true;
+                    return false;
+            }
+
+            if (isLink is true)
+            {
+                _notes.Add(CacheLevelWalk.Note(directory));
+                _survivors.Add((directory, CacheLevelWalk.LinkReason));
+                _recognised.Add(directory);
+                _declined++;
+                return false;
             }
 
             return true;

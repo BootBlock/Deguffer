@@ -11,7 +11,16 @@ namespace Deguffer.Core.Safety;
 /// <param name="Name">The process name, for telling the user what to close.</param>
 /// <param name="ImagePath">Where its executable lives, or null where that could not be read.</param>
 /// <param name="CurrentDirectory">Its working directory, or null where that could not be read.</param>
-internal sealed record RunningProcess(int Id, string Name, string? ImagePath, string? CurrentDirectory);
+/// <param name="PathArguments">
+/// The full paths it was started with as arguments, empty where it was given none or its command
+/// line could not be read. See <see cref="CommandLinePaths"/> for which arguments count.
+/// </param>
+internal sealed record RunningProcess(
+    int Id,
+    string Name,
+    string? ImagePath,
+    string? CurrentDirectory,
+    IReadOnlyList<string> PathArguments);
 
 /// <param name="Processes">Every process this account was allowed to look at.</param>
 /// <param name="CurrentDirectoriesReadable">
@@ -19,10 +28,18 @@ internal sealed record RunningProcess(int Id, string Name, string? ImagePath, st
 /// every <see cref="RunningProcess.CurrentDirectory"/> is null because nothing could be read rather
 /// than because the processes have none.
 /// </param>
-internal sealed record ProcessTable(IReadOnlyList<RunningProcess> Processes, bool CurrentDirectoriesReadable);
+/// <param name="CommandLinesReadable">
+/// Whether command lines could be read at all. False means this process could not read its own, so
+/// every <see cref="RunningProcess.PathArguments"/> is empty because nothing could be read rather
+/// than because no process was started with a path.
+/// </param>
+internal sealed record ProcessTable(
+    IReadOnlyList<RunningProcess> Processes,
+    bool CurrentDirectoriesReadable,
+    bool CommandLinesReadable);
 
 /// <summary>
-/// One pass over the process table, answering the two questions that can be asked about a directory
+/// One pass over the process table, answering the three questions that can be asked about a directory
 /// rather than about a file.
 ///
 /// <list type="bullet">
@@ -31,11 +48,18 @@ internal sealed record ProcessTable(IReadOnlyList<RunningProcess> Processes, boo
 /// <item>Is a running program's <b>working directory</b> inside the project? That is a build in
 /// flight, a shell sitting in the project, or an editor with the solution open — Visual Studio's
 /// working directory is the solution's own folder, observed rather than assumed.</item>
+/// <item>Was a running program <b>started with a path</b> inside it? That is a test browser using
+/// a profile in <c>%TEMP%</c>, which it neither runs from nor works in: Playwright passes the
+/// profile as <c>--user-data-dir=</c> to Chromium and <c>-profile</c> to Firefox, observed on a
+/// real run.</item>
 /// </list>
 ///
-/// <para>Both are readable without elevation for every process this account owns, and one pass over
-/// roughly five hundred processes costs about thirty milliseconds — measured before this was
-/// written, on the machine <c>docs/todo/unreached-locations.md</c> §2 was written against.</para>
+/// <para>All three are readable without elevation for every process this account owns. One pass
+/// over roughly five hundred processes cost about thirty milliseconds for the first two, measured
+/// on the machine <c>docs/todo/unreached-locations.md</c> §2 was written against. Reading command
+/// lines as well took a pass over 332 processes from about 27 to about 55 milliseconds on another
+/// machine. It is read in the same pass because the test browser profiles row asks it on every
+/// preview, and a second pass would open every process again.</para>
 ///
 /// <para><b>The working directory has no documented accessor</b>, so it is read out of the process
 /// environment block at offsets Windows does not promise to keep. A layout that moved would produce
@@ -60,9 +84,18 @@ internal static partial class RunningProcessTable
     /// <summary>A working directory longer than this is not one — it is a misread.</summary>
     private const ushort MaximumPathBytes = 0x8000;
 
+    /// <summary>
+    /// <c>ProcessCommandLineInformation</c>. Unlike the working directory this needs no offsets: the
+    /// kernel copies the command line out itself, and asks only for limited query access.
+    /// </summary>
+    private const int CommandLineInformationClass = 60;
+
+    private const int StatusInfoLengthMismatch = unchecked((int)0xC0000004);
+
     public static ProcessTable Read(CancellationToken ct = default)
     {
         var readable = LayoutIsSound();
+        var commandLines = CommandLinesAreReadable();
         var processes = new List<RunningProcess>();
 
         foreach (var process in Process.GetProcesses())
@@ -99,8 +132,11 @@ internal static partial class RunningProcessTable
                     processes.Add(new RunningProcess(
                         id,
                         name,
-                        LongPath.Canonical(ImagePathOf(handle)),
-                        readable ? LongPath.Canonical(CurrentDirectoryOf(handle)) : null));
+                        LongPath.Unaliased(ImagePathOf(handle)),
+                        readable ? LongPath.Unaliased(CurrentDirectoryOf(handle)) : null,
+                        commandLines && CommandLineOf(handle) is { } line
+                            ? [.. CommandLinePaths.Of(line).Select(path => LongPath.Unaliased(path))]
+                            : []));
                 }
                 finally
                 {
@@ -109,7 +145,7 @@ internal static partial class RunningProcessTable
             }
         }
 
-        return new ProcessTable(processes, readable);
+        return new ProcessTable(processes, readable, commandLines);
     }
 
     private static nint Open(uint id, bool wantMemory)
@@ -157,6 +193,60 @@ internal static partial class RunningProcessTable
         finally
         {
             CloseHandle(handle);
+        }
+    }
+
+    /// <summary>
+    /// Whether this Windows answers <see cref="CommandLineInformationClass"/> at all, asked of this
+    /// process. It was added in Windows 8.1, and where it is refused every process would otherwise
+    /// read as having been started with no paths.
+    /// </summary>
+    private static bool CommandLinesAreReadable()
+    {
+        var handle = OpenProcess(QueryLimitedInformation, false, (uint)Environment.ProcessId);
+
+        if (handle == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            return CommandLineOf(handle) is not null;
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
+
+    private static string? CommandLineOf(nint handle)
+    {
+        if (NtQueryCommandLine(handle, CommandLineInformationClass, 0, 0, out var needed) != StatusInfoLengthMismatch
+            || needed < Marshal.SizeOf<UnicodeString>())
+        {
+            return null;
+        }
+
+        var buffer = Marshal.AllocHGlobal(needed);
+
+        try
+        {
+            if (NtQueryCommandLine(handle, CommandLineInformationClass, buffer, needed, out _) != 0)
+            {
+                return null;
+            }
+
+            // The string's own buffer is inside the one handed in, straight after its header.
+            var line = Marshal.PtrToStructure<UnicodeString>(buffer);
+
+            return line.Buffer == 0 || line.Length == 0 || line.Length % 2 != 0
+                ? null
+                : Marshal.PtrToStringUni(line.Buffer, line.Length / 2);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
         }
     }
 
@@ -279,6 +369,14 @@ internal static partial class RunningProcessTable
         nint process,
         int informationClass,
         out ProcessBasicInformation information,
+        int length,
+        out int returned);
+
+    [LibraryImport("ntdll.dll", EntryPoint = "NtQueryInformationProcess")]
+    private static partial int NtQueryCommandLine(
+        nint process,
+        int informationClass,
+        nint information,
         int length,
         out int returned);
 }

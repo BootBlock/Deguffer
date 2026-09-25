@@ -46,10 +46,18 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// from the first and confirms them with the second is then tested on the pair, which is the
     /// only thing that tells a program in a project's build directory from one merely below the
     /// project.</para>
+    ///
+    /// <para><paramref name="arguments"/> are the full paths it was started with, which
+    /// <see cref="FindLiveChildren"/> alone answers, as the real inspector does: the child of a
+    /// scratch folder an argument names, or names a path inside.</para>
     /// </summary>
-    public FakeLiveTreeInspector WithProgram(string name, string? executable = null, string? workingDirectory = null)
+    public FakeLiveTreeInspector WithProgram(
+        string name,
+        string? executable = null,
+        string? workingDirectory = null,
+        IReadOnlyList<string>? arguments = null)
     {
-        _programs.Add(new RunningProgram(name, executable, workingDirectory));
+        _programs.Add(new RunningProgram(name, executable, workingDirectory, arguments ?? []));
         return this;
     }
 
@@ -105,8 +113,8 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     /// <summary>
     /// The immediate children of <paramref name="directories"/> that are declared live, or that hold
-    /// a place a program added with <see cref="WithProgram"/> runs from or works in, which is how the
-    /// real inspector builds this answer.
+    /// a place a program added with <see cref="WithProgram"/> runs from, works in or was started
+    /// with, which is how the real inspector builds this answer.
     ///
     /// <para>Immediate, and never the root itself, because that is the contract
     /// <see cref="ILiveTreeInspector.FindLiveChildren"/> keeps: it names the child a plan can spare,
@@ -127,6 +135,11 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                         .Select(root => ChildHolding(root, place.Directory))
                         .OfType<string>()
                         .Select(child => new LiveTree(child, place.Holders))),
+                .. _programs
+                    .SelectMany(program => program.Arguments
+                        .SelectMany(argument => directories.Select(root => ChildHolding(root, argument)))
+                        .OfType<string>()
+                        .Select(child => new LiveTree(child, [$"{program.Name} was started with it"]))),
             ],
             _complete);
 
@@ -153,5 +166,9 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     public void Invalidate() => InvalidateCount++;
 
-    private sealed record RunningProgram(string Name, string? Executable, string? WorkingDirectory);
+    private sealed record RunningProgram(
+        string Name,
+        string? Executable,
+        string? WorkingDirectory,
+        IReadOnlyList<string> Arguments);
 }

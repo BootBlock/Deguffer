@@ -57,6 +57,15 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     /// </summary>
     protected abstract IReadOnlyList<TempMarkerPlace> PlacesIn(IReadOnlyList<string> accountFolders);
 
+    /// <summary>
+    /// What the row says about a setting that moved one of its places, given this account's
+    /// temporary folders. Nothing for a row with no such setting.
+    /// </summary>
+    protected virtual IEnumerable<PlanNote> NotesFor(IReadOnlyList<string> accountFolders) => [];
+
+    /// <summary>The machine's own directories, for a row that must keep a configured place out of them.</summary>
+    protected ISystemDirectories Machine => _system;
+
     /// <summary>This account's own temporary folders, resolved once per planning pass.</summary>
     protected IReadOnlyList<string> AccountFolders =>
         (_roots ??= TempRoots.Resolve(Environment, _system)).AccountFolders;
@@ -115,15 +124,20 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var findings = Examine(ct);
+        var settings = NotesFor(AccountFolders).ToList();
 
         if (findings.Targets.Count == 0 && findings.Declined == 0 && !findings.Unreadable)
         {
             var empty = EmptyPlan(NothingLeftBehind);
-            return empty with { ProtectedPaths = Protect([.. findings.Survivors]), Notes = [.. empty.Notes, .. findings.Notes] };
+            return empty with
+            {
+                ProtectedPaths = Protect([.. findings.Survivors]),
+                Notes = [.. empty.Notes, .. settings, .. findings.Notes],
+            };
         }
 
         var (steps, measured) = await PlanDeletionsAsync(findings.Targets, keep, ct).ConfigureAwait(false);
-        var notes = new List<PlanNote>(findings.Notes);
+        var notes = new List<PlanNote>([.. settings, .. findings.Notes]);
 
         if (measured.Note is { } scanNote)
         {

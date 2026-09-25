@@ -95,7 +95,8 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     /// <summary>
     /// <see cref="FindOccupiedDirectories"/> narrowed to the immediate children of
-    /// <paramref name="directories"/>, so the two can never disagree about where a program is.
+    /// <paramref name="directories"/>, so the two can never disagree about where a program is — and
+    /// widened by the paths each program was started with, which only a scratch folder needs.
     /// </summary>
     public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default)
     {
@@ -106,7 +107,11 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
+        // Each folder as asked, for naming its children, and without any 8.3 alias, for comparing
+        // them: every path read from the process table has had its alias expanded already.
+        var folders = directories.Select(asked => (Asked: asked, Compared: LongPath.Unaliased(asked))).ToList();
         var occupied = FindOccupiedDirectories(ct);
+        var table = Snapshot(ct);
 
         // Keyed by the child, because programs in two folders below one scratch entry are both
         // using that entry, and two rows naming it would be read as two entries.
@@ -114,7 +119,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         foreach (var place in occupied.Live)
         {
-            if (ChildHolding(directories, place.Directory) is not { } child)
+            if (ChildHolding(folders, place.Directory) is not { } child)
             {
                 continue;
             }
@@ -125,7 +130,17 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             }
         }
 
-        return Findings(holders, occupied.Complete);
+        foreach (var process in table.Processes)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            foreach (var argument in process.PathArguments)
+            {
+                Record(holders, ChildHolding(folders, argument), $"{process.Name} was started with it");
+            }
+        }
+
+        return Findings(holders, occupied.Complete && table.CommandLinesReadable);
     }
 
     /// <summary>
@@ -162,9 +177,9 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     /// the folder itself is never removed — so the honest answer is that this evidence names
     /// nothing, rather than the whole folder.</para>
     /// </summary>
-    private static string? ChildHolding(IReadOnlyList<string> directories, string inside)
+    private static string? ChildHolding(IReadOnlyList<(string Asked, string Compared)> directories, string inside)
     {
-        foreach (var directory in directories)
+        foreach (var (asked, directory) in directories)
         {
             if (!LongPath.Contains(directory, inside)
                 || Path.TrimEndingDirectorySeparator(inside).Length
@@ -179,7 +194,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             var relative = Path.GetRelativePath(directory, inside);
             var separator = relative.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
 
-            return Path.Combine(directory, separator < 0 ? relative : relative[..separator]);
+            return Path.Combine(asked, separator < 0 ? relative : relative[..separator]);
         }
 
         return null;

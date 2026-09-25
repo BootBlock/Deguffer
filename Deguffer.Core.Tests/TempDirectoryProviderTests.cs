@@ -288,6 +288,20 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// After a clean only the rows the run changed are planned again, so this row refreshes the
+    /// tenants it plans from rather than read their claims about the folder before the clean.
+    /// </summary>
+    [Fact]
+    public void RefreshesItsTenantsWhenItIsRefreshed()
+    {
+        var tenant = new FakeTemporaryFolderTenant("Tool cache", "tool-cache");
+
+        CreateProvider(tenants: [tenant]).InvalidateCaches();
+
+        Assert.Equal(1, tenant.InvalidateCount);
+    }
+
+    /// <summary>
     /// An entry that is both another row's and in use stays that row's. Protecting it here as well
     /// would make this plan assert its survival, and the owning row's run would then fail §5.6.
     /// </summary>
@@ -307,6 +321,9 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.Empty(step.Spared);
         Assert.Equal(0, step.EstimatedBytes);
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(owned, StringComparison.OrdinalIgnoreCase));
+
+        // Closing what holds it would not bring it back to this row, so this row does not say so.
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("tool-cache", StringComparison.Ordinal));
     }
 
     /// <summary>

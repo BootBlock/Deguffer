@@ -2431,6 +2431,90 @@ rather than a global install.
 
 ---
 
+## Test browser profiles
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Directly inside this account's temporary folder, ordinarily `%LOCALAPPDATA%\Temp`, and inside `C:\Windows\Temp` |
+| **Method** | Delete each recognised profile folder, taking only what nothing has touched for the number of days set for temporary files — seven by default, and 0 means no age limit |
+| **Typical size** | 6,750.9 MB across 1,862 profiles on one workstation, the oldest 70 days old |
+
+### What it is
+
+Each time a test starts a browser, Playwright and Puppeteer make a fresh profile for it in the
+temporary folder and delete it when the browser closes. That deletion runs inside the test runner as
+it exits. A test run that is stopped part way — a cancelled build, a debugger stopped mid-suite, a
+crashed runner — never gets to it, and nothing else ever collects the profile. A machine that runs
+browser tests every day collects them by the thousand.
+
+This is a different location from [Playwright browsers](#playwright-browsers), which are the browser
+builds themselves. `PLAYWRIGHT_BROWSERS_PATH` moves those and has no effect on these.
+
+### What Deguffer does
+
+It looks at the immediate children of each temporary folder and recognises a profile by its name
+alone. Each tool builds the name and hands it to Node's `mkdtemp`, which adds exactly six random
+letters and digits:
+
+| Name | Written by |
+| --- | --- |
+| `playwright_chromiumdev_profile-XXXXXX` | Playwright, for Chromium |
+| `playwright_firefoxdev_profile-XXXXXX` | Playwright, for Firefox |
+| `playwright_webkitdev_profile-XXXXXX` | Playwright, for WebKit |
+| `puppeteer_dev_chrome_profile-XXXXXX` | Puppeteer, for Chrome |
+| `puppeteer_dev_firefox_profile-XXXXXX` | Puppeteer, for Firefox |
+
+Anything else in the folder is left alone, including names that are nearly right: a different
+number of characters after the hyphen, a capital letter at the start, or a browser name neither tool
+uses. Playwright's `playwright-artifacts-XXXXXX` folders are not profiles, and are not offered here.
+A link with a profile's name is named and never followed.
+
+It does not need Playwright or Puppeteer to be installed. The name says which tool wrote the folder,
+and the machine with abandoned profiles is often one where the tool has since been removed.
+
+### What is protected
+
+Each temporary folder itself, and every sibling named like a profile but not in either tool's
+shape, are checked after the clean to prove they survived. Nothing else in the folder is touched.
+
+A profile a running browser is using is left alone. A test browser runs from its own install folder
+and works wherever the test runner does, so neither of those shows which profile it has open. Its
+command line does: Playwright starts Chromium with `--user-data-dir=` and Firefox with `-profile`,
+and Puppeteer uses `--user-data-dir=` and `--profile`, each naming the profile's path. Deguffer reads
+the command line of every running program it may inspect, and leaves alone any profile one was
+started with. It also leaves alone a profile a program is running from or working in.
+
+The age limit is the other half. A test that is running now has a profile it wrote to moments ago,
+so only profiles nothing has touched for the number of days set for temporary files are offered.
+The profile folder's own times count as well as its files', because an empty profile has no files.
+On the workstation measured, the default of seven days still offered 5,140.2 MB of the 6,750.9 MB.
+
+A browser that runs as another account or as administrator cannot be inspected from an ordinary
+Deguffer, so its profile is then protected by the age limit alone. With the limit set to 0 and no
+guard on recently changed files, nothing protects it, and the row says so in a warning.
+
+A running browser's profile is not checked after the clean, because its test runner deletes it as
+soon as the browser closes. Its going is not something Deguffer did.
+
+### What it costs you
+
+Nothing. The next test run makes a new profile for every browser it starts, and nothing reads an old
+one again. Playwright's WebKit is not given its profile at all unless a test asks for a persistent
+one, so a WebKit profile is normally an empty folder. It is still offered, because removing the
+leftover folder is the whole of what this row is for.
+
+### Why Tier 1
+
+A profile made for one launch holds nothing a later launch reads, and nothing of yours. There is no
+command to prefer under §5.1, because the only cleanup the tools have is the exit hook that never ran.
+
+The [Windows temporary folders](#windows-temporary-folders) row leaves every profile to this one,
+so each is offered once, here.
+
+---
+
 ## Azure Functions Core Tools releases
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
@@ -3658,8 +3742,8 @@ depends on age:
   cannot disagree.
 - **A Flutter or Dart test folder is left alone while Dart is running.** Its name is a random number,
   so nothing ties a folder to the run using it. The only safe answer is that no run is going on.
-- **Firefox's folder is left alone while Firefox is running**, and the same goes for the other
-  browsers built on its code.
+- **Firefox's folder is left alone while Firefox is running**, or Thunderbird, LibreWolf,
+  Waterfox, Floorp, Zen, Pale Moon, SeaMonkey or Basilisk, which are built on the same code.
 - **Node's cache needs no check.** Node reads a cache file whole when it loads a module and writes new
   entries only when it exits. A file that has gone is a cache miss, and the module is compiled again.
 
@@ -3668,7 +3752,9 @@ Any recognised folder a running program is working inside is left alone as well,
 `NODE_COMPILE_CACHE` moves Node's cache anywhere. Where it is set, Deguffer treats that folder as
 Node's and removes only the per-version folders Node makes inside it, named for the Node version,
 the architecture and a code-cache tag. Anything else in the folder stays, so a setting that points
-at the wrong folder costs nothing.
+at the wrong folder costs nothing. A setting that names a drive root, or a folder holding a
+temporary folder or one Windows is built out of, is declined outright, and the row says so: other
+rows remove things there, and this row would otherwise count each of those removals as a failure.
 
 ### What is protected
 

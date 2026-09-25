@@ -1,4 +1,9 @@
+using System.IO.Enumeration;
+
 namespace Deguffer.Core.Safety;
+
+/// <summary>Whether a child directory's name is one a caller wants.</summary>
+public delegate bool ChildName(ReadOnlySpan<char> name);
 
 /// <summary>
 /// What one root's directory children turned out to be.
@@ -36,6 +41,17 @@ public readonly record struct ChildDirectoryScan(
 public static class ChildDirectories
 {
     /// <summary>
+    /// What <see cref="DirectoryInfo.EnumerateDirectories()"/> uses: hidden and system children
+    /// included, and a refusal thrown rather than skipped, since a skipped child is a partial view.
+    /// </summary>
+    private static readonly EnumerationOptions AllChildren = new()
+    {
+        AttributesToSkip = 0,
+        IgnoreInaccessible = false,
+        RecurseSubdirectories = false,
+    };
+
+    /// <summary>
     /// The child directories of <paramref name="root"/>, with links separated out rather than
     /// followed.
     ///
@@ -50,15 +66,29 @@ public static class ChildDirectories
     /// <paramref name="root"/> may be given in either form. <see cref="LongPath.Extended"/> returns
     /// an already-prefixed path unchanged, so a walk that has extended once does not pay for it
     /// again per directory.
+    ///
+    /// <para><paramref name="named"/>, where given, keeps only the children it accepts, links
+    /// included. It is asked before a child becomes an object, for a caller that wants a few
+    /// children of a folder holding tens of thousands, such as a temporary folder.</para>
     /// </summary>
-    public static ChildDirectoryScan Under(string root)
+    public static ChildDirectoryScan Under(string root, ChildName? named = null)
     {
         var directories = new List<DirectoryInfo>();
         var links = new List<DirectoryInfo>();
 
         try
         {
-            foreach (var child in new DirectoryInfo(LongPath.Extended(root)).EnumerateDirectories())
+            // Constructed inside the try, because the enumerator opens the directory as it is built.
+            var children = new FileSystemEnumerable<DirectoryInfo>(
+                LongPath.Extended(root),
+                static (ref System.IO.Enumeration.FileSystemEntry entry) => (DirectoryInfo)entry.ToFileSystemInfo(),
+                AllChildren)
+            {
+                ShouldIncludePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) =>
+                    entry.IsDirectory && (named is null || named(entry.FileName)),
+            };
+
+            foreach (var child in children)
             {
                 if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 {

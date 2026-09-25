@@ -215,6 +215,84 @@ public sealed class TempToolCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A setting that names a temporary folder or a drive root is declined, with the reason on the
+    /// row. Examined as Node's, every entry beside the version folders would be a survivor, and the
+    /// entries this row and the temporary-folder row take there would read as failures (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeclinesANodeCacheSettingThatNamesATemporaryFolderOrADriveRoot(bool driveRoot)
+    {
+        var flutter = Path.GetDirectoryName(Entry(2048, "flutter_tools.1a2b3c", "app.dill"))!;
+        var setting = driveRoot ? Path.GetPathRoot(UserTemp)! : UserTemp;
+        _environment.WithEnvironmentVariable(TempToolCacheProvider.NodeCompileCacheVariable, setting);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([flutter], plan.Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path));
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(flutter, StringComparison.OrdinalIgnoreCase));
+        // The drive root is named as one. The containment rule would decline this one as well, but
+        // not a root that holds none of the folders it lists, such as a second drive's.
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains(TempToolCacheProvider.NodeCompileCacheVariable, StringComparison.Ordinal)
+            && (!driveRoot || n.Message.Contains("root of a drive", StringComparison.Ordinal)));
+        Assert.DoesNotContain(
+            await provider.DiscoverToolRootsAsync(),
+            r => r.Path.Equals(Path.TrimEndingDirectorySeparator(setting), StringComparison.OrdinalIgnoreCase)
+                || r.Path.Equals(setting, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A junction on the way down to a tool's folder is declined like one at the top: the sessions on
+    /// its far side were never classified, and the far side may be anywhere. Said once, however many
+    /// of the tool's places lie behind it.
+    /// </summary>
+    [Fact]
+    public async Task NeverFollowsALinkOnTheWayDownToAToolsFolder()
+    {
+        var outside = _temp.CreateDirectory("elsewhere");
+        var kept = _temp.CreateFile(4096, "elsewhere", "AnalyzerAssemblyLoader", Session, "Analyzer.dll");
+        var link = Path.Combine(UserTemp, "Roslyn");
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
+        Assert.Single(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(kept), "a session behind a link was removed");
+        Assert.Equal([link], await provider.ClaimedEntriesAsync([UserTemp]));
+    }
+
+    /// <summary>
+    /// Where the process table could not be read, nothing says a recognised folder is unused, so none
+    /// is offered — "could not tell" is not "nothing is using it".
+    /// </summary>
+    [Fact]
+    public async Task OffersNoFolderWhenItCannotTellWhatIsRunning()
+    {
+        var cache = Path.GetDirectoryName(Path.GetDirectoryName(Entry(4096, "node-compile-cache", "v1", "x")))!;
+
+        var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined, "a row holding everything back read as already clear");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+    }
+
+    /// <summary>
     /// What this row speaks for in a temporary folder: each recognised entry, and a tool's own folder
     /// whole — so the temporary-folder row never takes a live Roslyn session on its age.
     /// </summary>

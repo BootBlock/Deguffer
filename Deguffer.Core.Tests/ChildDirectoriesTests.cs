@@ -136,4 +136,44 @@ public sealed class ChildDirectoriesTests : IDisposable
         Assert.Equal("child", Assert.Single(scan.Directories).Name);
         Assert.False(scan.Unreadable);
     }
+
+    /// <summary>
+    /// A name filter keeps what it accepts and nothing else, links included, so a caller looking for
+    /// a few children of a crowded folder is not handed the rest of it as links to report.
+    /// </summary>
+    [Fact]
+    public void AFilterKeepsOnlyTheChildrenAndLinksItAccepts()
+    {
+        var root = _temp.CreateDirectory("root");
+        _temp.CreateDirectory("root", "wanted-1");
+        _temp.CreateDirectory("root", "unwanted");
+        var outside = _temp.CreateDirectory("outside");
+        Directory.CreateSymbolicLink(Path.Combine(root, "wanted-link"), outside);
+        Directory.CreateSymbolicLink(Path.Combine(root, "unwanted-link"), outside);
+
+        var scan = ChildDirectories.Under(root, static name => name.StartsWith("wanted", StringComparison.Ordinal));
+
+        Assert.Equal("wanted-1", Assert.Single(scan.Directories).Name);
+        Assert.Equal("wanted-link", Assert.Single(scan.Links).Name);
+        Assert.StartsWith(@"\\?\", scan.Directories[0].FullName, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Hidden and system children are children. Skipping them, which is what a default set of
+    /// enumeration options does, would leave a hidden directory out of every recognised-child
+    /// classification and every link report without a word.
+    /// </summary>
+    [Fact]
+    public void HiddenAndSystemChildrenAreListed()
+    {
+        var root = _temp.CreateDirectory("root");
+        var hidden = _temp.CreateDirectory("root", "hidden");
+        var system = _temp.CreateDirectory("root", "system");
+        File.SetAttributes(hidden, FileAttributes.Directory | FileAttributes.Hidden);
+        File.SetAttributes(system, FileAttributes.Directory | FileAttributes.System);
+
+        var scan = ChildDirectories.Under(root);
+
+        Assert.Equal(["hidden", "system"], scan.Directories.Select(d => d.Name).Order(StringComparer.Ordinal));
+    }
 }

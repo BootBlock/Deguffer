@@ -121,6 +121,9 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         _tenants = tenants ?? [];
     }
 
+    /// <summary>The rows this one leaves their entries to, so the planner's wiring can be held to all of them.</summary>
+    internal IReadOnlyList<ITemporaryFolderTenant> Tenants => _tenants;
+
     public override string Id => "temp-directories";
 
     public override string Name => "Temporary files";
@@ -160,7 +163,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             + "services share.",
         Recommendation = ConfiguredDays > 0
             ? "Live working files sit among abandoned ones and look identical, so Deguffer offers "
-                + $"only what nothing has touched for {Describe(ConfiguredDays)} and leaves alone "
+                + $"only what nothing has touched for {TemporaryAgeLimit.Describe(ConfiguredDays)} and leaves alone "
                 + "anything a running program is working in."
             : "Live working files sit among abandoned ones and look identical, and the age limit "
                 + "that told them apart is set to none. What a running program is working in, or "
@@ -169,16 +172,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     };
 
     /// <summary>
-    /// The age limit in force, in whole days, clamped because nothing validates
-    /// <c>preferences.json</c> on the way in.
-    ///
-    /// <para>Read at the moment it is needed rather than held from construction, so a change in
-    /// Settings takes effect from the next preview — and read through one property rather than at
-    /// each of the three places that quote it, because a row whose sentences disagreed about the
-    /// cut-off is the defect this replaced.</para>
+    /// The age limit in force, in whole days. Read through one property rather than at each of the
+    /// three places that quote it, because a row whose sentences disagreed about the cut-off is the
+    /// defect this replaced.
     /// </summary>
-    private int ConfiguredDays => Math.Clamp(
-        _preferences.Current.MinimumTemporaryFileAgeDays, MinimumStaleDays, MaximumStaleDays);
+    private int ConfiguredDays => TemporaryAgeLimit.Days(_preferences);
 
     /// <summary>
     /// The sentence naming what is offered, for the two places that both state it.
@@ -193,16 +191,9 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// work.</para>
     /// </summary>
     private static string OfferedPhrase(int days) => days > 0
-        ? $"Everything offered here was last touched more than {Describe(days)} ago."
+        ? $"Everything offered here was last touched more than {TemporaryAgeLimit.Describe(days)} ago."
         : "This location has no age limit of its own, so nothing here is held back for being "
             + "recent unless your guard on recently changed files holds it.";
-
-    /// <summary>
-    /// A whole number of days as the phrase a row prints. <see cref="MinimumAge.Describe"/> answers
-    /// for a window that is on; this one is asked before there is a window, and about a value that
-    /// may be zero.
-    /// </summary>
-    private static string Describe(int days) => days == 1 ? "a day" : $"{days} days";
 
     /// <summary>
     /// The folders this provider would reach into, and any that named themselves and were refused.
@@ -210,10 +201,24 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// </summary>
     private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system);
 
+    /// <summary>
+    /// Drops this row's answers and its tenants' with them.
+    ///
+    /// <para>The tenants' too, because this row plans from what they claim. After a clean only the
+    /// rows the run changed are planned again, and a tenant with nothing to take is not among them:
+    /// its claims would then describe the folder before the clean, and an entry its tool wrote since
+    /// — a Blender autosave — would be this row's to take on its age.</para>
+    /// </summary>
     public override void InvalidateCaches()
     {
         _liveTrees.Invalidate();
         _roots = null;
+
+        foreach (var tenant in _tenants)
+        {
+            tenant.InvalidateCaches();
+        }
+
         base.InvalidateCaches();
     }
 
@@ -343,8 +348,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         });
 
         // Named by the entry alone. LiveTreeVeto's default names a directory by the project folder
-        // holding it, which a scratch entry does not have.
-        if (LiveTreeVeto.NoteFor(live.Live, l => Path.GetFileName(Path.TrimEndingDirectorySeparator(l.Directory)))
+        // holding it, which a scratch entry does not have. An entry another row owns is left out:
+        // closing its program would not bring it back here, and its own row says what holds it.
+        if (LiveTreeVeto.NoteFor(
+                [.. live.Live.Where(l => !owned.Contains(l.Directory))],
+                l => Path.GetFileName(Path.TrimEndingDirectorySeparator(l.Directory)))
             is { } busy)
         {
             notes.Add(busy);

@@ -26,4 +26,11 @@ public interface ITemporaryFolderTenant
     /// </summary>
     /// <param name="folders">This machine's temporary folders, as <see cref="TempRoots"/> resolves them.</param>
     Task<IReadOnlyList<string>> ClaimedEntriesAsync(IReadOnlyList<string> folders, CancellationToken ct = default);
+
+    /// <summary>
+    /// Drops what the claim was worked out from, so the next one looks at the folder again. The
+    /// temporary-folder row calls it whenever it is itself planned again. See
+    /// <see cref="ICleanupProvider.InvalidateCaches"/>.
+    /// </summary>
+    void InvalidateCaches();
 }
