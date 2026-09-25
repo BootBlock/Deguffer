@@ -151,6 +151,9 @@ public sealed class ChromiumBrowserTests : IDisposable
         var farUserData = CreateUserData(Path.Combine(outside, "Edge", "User Data"));
         var bystander = CreateDirectory(Path.Combine(farUserData, "Default", "Code Cache"));
 
+        // A second channel behind the same link, so the link is named once rather than per browser.
+        CreateUserData(Path.Combine(outside, "Edge Beta", "User Data"));
+
         var link = Path.Combine(_environment.LocalAppData, "Microsoft");
         Directory.CreateSymbolicLink(link, outside);
 

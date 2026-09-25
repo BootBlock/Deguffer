@@ -276,11 +276,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             notes.Add(UnreadableRoot.Note(root));
         }
 
-        // Once per obstacle rather than once per browser. The release channels of one browser share
-        // a vendor directory, so a linked 'Microsoft' would otherwise be named four times.
-        foreach (var obstacle in _discovery.Obstructed
-                     .Select(o => o.Obstacle)
-                     .DistinctBy(o => o.Path, StringComparer.OrdinalIgnoreCase))
+        foreach (var obstacle in _discovery.Obstructed)
         {
             if (obstacle.IsLink)
             {

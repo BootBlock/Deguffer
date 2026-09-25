@@ -161,9 +161,12 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
 
         if (DerivedPath.FirstObstacleBetween(root, userData) is { } obstacle)
         {
-            if (LongPath.ProbeFile(marker) is not PathPresence.Absent)
+            // Once per obstacle rather than once per browser. The release channels of one browser
+            // share a vendor directory, so a linked 'Microsoft' would otherwise be named four times.
+            if (LongPath.ProbeFile(marker) is not PathPresence.Absent
+                && !Obstructed.Any(o => o.Path.Equals(obstacle.Path, StringComparison.OrdinalIgnoreCase)))
             {
-                Obstructed = [.. Obstructed, new ObstructedBrowser(browser, obstacle)];
+                Obstructed = [.. Obstructed, obstacle];
             }
 
             return null;
@@ -187,11 +190,11 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     public IReadOnlyList<string> UnreadableRoots { get; private set; } = [];
 
     /// <summary>
-    /// The declared browsers the last <see cref="Discover"/> did not look inside because a link, or
-    /// a segment Windows would not describe, stood between the application-data root and the
-    /// browser's folder. Empty on every ordinary machine.
+    /// What stood between an application-data root and a declared browser's folder in the last
+    /// <see cref="Discover"/> — a link, or a segment Windows would not describe — so the browser
+    /// behind it was not looked inside. Empty on every ordinary machine.
     /// </summary>
-    public IReadOnlyList<ObstructedBrowser> Obstructed { get; private set; } = [];
+    public IReadOnlyList<DerivedPathObstacle> Obstructed { get; private set; } = [];
 
     /// <summary>
     /// The user-data folder itself, then its named profiles. The folder is always included because
@@ -222,6 +225,3 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     private static bool IsProfile(string name) =>
         name.Equals("Default", StringComparison.OrdinalIgnoreCase) || NumberedProfile().IsMatch(name);
 }
-
-/// <summary>A declared browser whose folder was not looked inside, and what stood in the way.</summary>
-public sealed record ObstructedBrowser(ChromiumBrowser Browser, DerivedPathObstacle Obstacle);
