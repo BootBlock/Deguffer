@@ -301,6 +301,13 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
     /// chosen a group at a time. Nothing about a run depends on which group a step is in.</para>
     /// </summary>
     public string? Group { get; init; }
+
+    /// <summary>
+    /// The question this step was offered on the answer to, where a program starting could change
+    /// that answer before the clean. The run asks it again immediately before the step. Null for a
+    /// step whose offer rests on nothing a program can change. See <see cref="IUseCheck"/>.
+    /// </summary>
+    public IUseCheck? UseCheck { get; init; }
 }
 
 /// <summary>

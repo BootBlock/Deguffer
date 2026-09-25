@@ -144,7 +144,12 @@ internal static class ClaudeCodeSessionFolders
                 }
 
                 sorting.OfferFolderOnceOldEnough(
-                    sidecar.Path, SpilledOutputReason, evidence.RecentSinceUtc, isLeftover: true, ct);
+                    sidecar.Path,
+                    SpilledOutputReason,
+                    evidence.RecentSinceUtc,
+                    isLeftover: true,
+                    ClaudeCodeSessionCheck.Ended(evidence.Registry, sidecar.SessionId),
+                    ct);
             }
         }
 
@@ -214,7 +219,12 @@ internal static class ClaudeCodeSessionFolders
             else
             {
                 sorting.OfferFolderOnceOldEnough(
-                    path, EnvironmentReason, evidence.RecentSinceUtc, isLeftover: true, ct);
+                    path,
+                    EnvironmentReason,
+                    evidence.RecentSinceUtc,
+                    isLeftover: true,
+                    ClaudeCodeSessionCheck.Ended(evidence.Registry, entry.Name),
+                    ct);
             }
         }
 

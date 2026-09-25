@@ -104,12 +104,17 @@ public sealed partial class ClaudeCodeSessionRegistry
     /// when the list is read, so a session that ends during the pass is still listed — the direction
     /// that leaves its files alone.
     /// </summary>
-    public ClaudeCodeSessionList Read(CancellationToken ct = default) => _list ??= ReadNow(ct);
+    public ClaudeCodeSessionList Read(CancellationToken ct = default) => _list ??= ReadAfresh(ct);
 
     /// <summary>Drop the memoised list, so a session that started or ended is seen by the next pass.</summary>
     public void Invalidate() => _list = null;
 
-    private ClaudeCodeSessionList ReadNow(CancellationToken ct)
+    /// <summary>
+    /// The list as it is now, read and asked about without touching the planning pass's copy. For the
+    /// question a clean asks again, whose whole point is that the pass's answer may be out of date. See
+    /// <see cref="ClaudeCodeSessionCheck"/>.
+    /// </summary>
+    public ClaudeCodeSessionList ReadAfresh(CancellationToken ct = default)
     {
         if (ClaudeCodeHome.Resolve(_environment) is not { } home)
         {

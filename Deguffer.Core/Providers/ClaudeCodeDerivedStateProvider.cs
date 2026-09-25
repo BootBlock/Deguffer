@@ -37,6 +37,12 @@ namespace Deguffer.Core.Providers;
 /// days, and a version of Claude Code older than the list is invisible to it. A file naming a process
 /// needs no such floor, because the process it names has been asked about directly.</para>
 ///
+/// <para><b>The clean does not take the preview's word for any of it.</b> The removal keeps anything
+/// written after the evidence was read (<see cref="MinimumAge.Since"/>), which is what spares a handshake
+/// file an editor started during the preview wrote under a closed one's port. And the list of running
+/// sessions is read again immediately before anything named by a session is removed, so a session
+/// resumed in the meantime keeps what it left (<see cref="ClaudeCodeSessionCheck"/>).</para>
+///
 /// <para><b>§5.6, scoped to what no other provider removes.</b> A path this plan asserts and another
 /// provider in the same run legitimately deletes reads as a failure, not as an outside removal. So
 /// nothing a session provider could take — a conversation, or the output of a session that still has
@@ -242,7 +248,13 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                 "Claude Code has left nothing behind that Deguffer can show is no longer used."));
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+        // Every offer here is "whatever wrote this has ended", which says nothing about a file written after
+        // it was established. An editor that starts during the preview can take a closed one's port and
+        // write the same handshake file, so the removal keeps anything written since the evidence was read.
+        // CleanupProviderBase.PlanAsync will not loosen it.
+        var effective = MinimumAge.Stricter(keep, survey.Looked);
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, effective, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -271,6 +283,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                     item.Path, item.Reason, PresenceBefore: PathPresence.Present, Withheld: Withholding.TooRecent)),
             ],
             Notes = [.. notes.DistinctBy(note => note.Message, StringComparer.Ordinal)],
+            Keep = effective,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
             WasNotExamined = targets.Count == 0 && refused,
@@ -405,16 +418,21 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             return null;
         }
 
+        // Taken before any evidence is read, so everything written after the evidence is written after this.
+        var looked = DateTime.UtcNow;
+
         var evidence = new ClaudeCodeEvidence(
             home,
             _projects.Look(ct),
             _sessions.Read(ct),
-            DateTime.UtcNow - ClaudeCodeSessionRegistry.RecentWindow);
+            looked - ClaudeCodeSessionRegistry.RecentWindow,
+            _sessions);
 
         return new Survey(
             CacheLevelWalk.Under(HomeLevel, home, ct),
             FolderEntries.Of(home),
             evidence,
+            MinimumAge.Since(looked),
             [
                 ClaudeCodeSessionFolders.SpilledOutputs(evidence, ct),
                 ClaudeCodeSessionFolders.HookEnvironments(evidence, ct),
@@ -428,10 +446,15 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// <param name="Root">What Claude Code's folder holds one level down, classified against <see cref="HomeChildren"/>.</param>
     /// <param name="RootEntries">Everything at that level, for the files the walk does not see. Null where it refused to be listed.</param>
     /// <param name="Evidence">What every kind was judged against.</param>
+    /// <param name="Looked">
+    /// Keeps anything written once the evidence was being read, as a guard the removal applies. See
+    /// <see cref="MinimumAge.Since"/>.
+    /// </param>
     /// <param name="Kinds">One classification per kind of leftover.</param>
     private sealed record Survey(
         LevelWalk Root,
         IReadOnlyList<FileSystemInfo>? RootEntries,
         ClaudeCodeEvidence Evidence,
+        MinimumAge Looked,
         IReadOnlyList<ClaudeCodeClassification> Kinds);
 }

@@ -100,7 +100,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
             + $"so it cannot tell whether an Outlook data file is there. {how}.",
 
         { Recent: true } =>
-            $"Nothing was removed: something inside changed in the last {keep.Describe()}, which this plan "
+            $"Nothing was removed: something inside {keep.DescribeChange()}, which this plan "
             + $"was asked to leave alone. {how}.",
 
         _ => null,

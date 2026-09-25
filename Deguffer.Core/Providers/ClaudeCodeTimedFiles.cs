@@ -96,7 +96,8 @@ internal static partial class ClaudeCodeTimedFiles
             }
             else
             {
-                OfferOnceOldEnough(sorting, path, SnapshotReason, written, evidence);
+                OfferOnceOldEnough(
+                    sorting, path, SnapshotReason, written, evidence, ClaudeCodeSessionCheck.Predating(evidence.Registry, written));
             }
         }
 
@@ -143,7 +144,13 @@ internal static partial class ClaudeCodeTimedFiles
             }
             else
             {
-                OfferOnceOldEnough(sorting, path, FailedEventsReason, Written(entry), evidence);
+                OfferOnceOldEnough(
+                    sorting,
+                    path,
+                    FailedEventsReason,
+                    Written(entry),
+                    evidence,
+                    ClaudeCodeSessionCheck.Ended(evidence.Registry, match.Groups["session"].Value));
             }
         }
 
@@ -155,7 +162,8 @@ internal static partial class ClaudeCodeTimedFiles
         string path,
         string reason,
         DateTime written,
-        ClaudeCodeEvidence evidence)
+        ClaudeCodeEvidence evidence,
+        IUseCheck stillEnded)
     {
         if (written >= evidence.RecentSinceUtc)
         {
@@ -163,7 +171,7 @@ internal static partial class ClaudeCodeTimedFiles
         }
         else
         {
-            sorting.Offer(new DeletionTarget(path, reason, written, TargetKind.File, IsLeftover: true));
+            sorting.Offer(new DeletionTarget(path, reason, written, TargetKind.File, IsLeftover: true, UseCheck: stillEnded));
         }
     }
 

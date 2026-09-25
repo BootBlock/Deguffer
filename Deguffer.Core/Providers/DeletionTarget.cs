@@ -54,6 +54,9 @@ public enum TargetKind
 /// <see cref="Execution.ItemFacet"/>.
 /// </param>
 /// <param name="Group">The heading it is listed under. See <see cref="Execution.DeleteStep.Group"/>.</param>
+/// <param name="UseCheck">
+/// What the run asks again before removing it. See <see cref="Execution.DeleteStep.UseCheck"/>.
+/// </param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
@@ -63,4 +66,5 @@ public readonly record struct DeletionTarget(
     Execution.ItemIdentity? Identity = null,
     bool IsLeftover = false,
     IReadOnlyList<Execution.ItemFacet>? Facets = null,
-    string? Group = null);
+    string? Group = null,
+    Execution.IUseCheck? UseCheck = null);

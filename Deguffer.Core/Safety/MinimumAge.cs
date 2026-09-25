@@ -57,7 +57,7 @@ public readonly record struct MinimumAge
     /// <summary>
     /// What the user asked for, kept beside the instant it produced so that <see cref="Describe"/>
     /// can say "the last 8 hours" rather than quoting a timestamp back at them. Zero when the guard
-    /// is off.
+    /// is off, and for a guard made by <see cref="Since"/>, which no user asked for in hours.
     /// </summary>
     private TimeSpan Window { get; }
 
@@ -110,6 +110,23 @@ public readonly record struct MinimumAge
     /// </summary>
     public static MinimumAge WithinHours(int hours, DateTime nowUtc) =>
         hours <= 0 ? Off : Within(TimeSpan.FromHours(Math.Min(hours, MaximumWindow.TotalHours)), nowUtc);
+
+    /// <summary>
+    /// A guard that keeps anything written at or after <paramref name="lookedUtc"/>, the instant a
+    /// provider read the evidence its plan rests on. It has no window.
+    ///
+    /// <para><b>It is for a plan whose offer is "whatever wrote this has ended".</b> That is true of
+    /// the file when the plan is made and says nothing about a file written afterwards. An editor that
+    /// starts while the preview sits on screen can take the same port as one that closed and write
+    /// the same handshake file, and without this the clean deletes the live editor's copy. A window of
+    /// any length would be wrong there: it would also keep every file whose writer ended inside the
+    /// window, and those are exactly the files the preview offered.</para>
+    ///
+    /// <para><see cref="Within"/> cannot express it, because a window of zero is <see cref="Off"/>.
+    /// Anchoring at the evidence rather than at the end of planning keeps a file written while the
+    /// plan was being built, which is written after the evidence all the same.</para>
+    /// </summary>
+    public static MinimumAge Since(DateTime lookedUtc) => new(TimeSpan.Zero, lookedUtc.ToUniversalTime());
 
     /// <summary>
     /// The stricter of two guards: whichever of them protects more.
@@ -196,9 +213,19 @@ public readonly record struct MinimumAge
     }
 
     /// <summary>
+    /// What a file this guard keeps has done, as a phrase: "changed in the last 8 hours", or, for a
+    /// guard made by <see cref="Since"/>, "changed after Deguffer began this preview". Every sentence
+    /// that says why a file was kept asks this rather than <see cref="Describe"/>, which has no words
+    /// for a guard without a window and would say "the last 0 hours".
+    /// </summary>
+    public string DescribeChange() =>
+        Window > TimeSpan.Zero ? $"changed in the last {Describe()}" : "changed after Deguffer began this preview";
+
+    /// <summary>
     /// The window as a phrase, for the sentence a plan puts in front of the user. Whole hours up to
     /// two days, then whole days where the window divides into them — "36 hours" says more than
-    /// "1 day" does, and "7 days" says more than "168 hours".
+    /// "1 day" does, and "7 days" says more than "168 hours". Asked only of a guard with a window: a
+    /// floor a provider sets, or the user's own. See <see cref="DescribeChange"/> for the rest.
     /// </summary>
     public string Describe()
     {
