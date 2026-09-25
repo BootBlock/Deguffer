@@ -55,8 +55,8 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
 
     /// <summary>
     /// Steam's list of libraries in its current layout, with every backslash doubled as Steam's
-    /// writer doubles them — a reader that took the text literally would find no library at all on
-    /// a real machine while every test that wrote single backslashes passed.
+    /// writer doubles them, so the fixture is the file a real machine holds. Unescaping itself is
+    /// proved in <see cref="SteamKeyValuesTests"/>.
     /// </summary>
     private void WriteLibraryList(params string[] libraries)
     {
@@ -150,6 +150,67 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         Populate(Path.Combine(install, "steamapps", "shadercache", "backup"));
 
         Assert.False(await CreateProvider().IsPresentAsync());
+    }
+
+    /// <summary>
+    /// A game's cache moved to another drive with a link is the one a user most wants an answer
+    /// about. It is never followed, so it is presence for the sentence the plan owes about it, not
+    /// for a deletion.
+    /// </summary>
+    [Fact]
+    public async Task AGameFolderThatIsALinkIsPresenceAndIsSaidToBeLeftAlone()
+    {
+        var install = RegisterInstall();
+        var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "570"));
+        var link = Path.Combine(install, "steamapps", "shadercache", "570");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        Directory.CreateSymbolicLink(link, outside);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A game's folder Windows will not list may hold anything, so it is presence: a refusal is never
+    /// read as an empty folder, or the one cache on the machine could go without a row.
+    /// </summary>
+    [Fact]
+    public async Task AGameFolderWindowsWillNotListIsPresence()
+    {
+        var install = RegisterInstall();
+        var cache = CacheFor(install, "570");
+
+        using var denied = new DeniedDirectory(cache);
+
+        Assert.True(await CreateProvider().IsPresentAsync());
+    }
+
+    /// <summary>
+    /// A list naming a library Deguffer cannot place is said out loud, and the row is never called
+    /// clear: that library was never looked at.
+    /// </summary>
+    [Fact]
+    public async Task ALibraryTheListNamesWithoutAFullPathIsSaidAndTheRowIsNeverClear()
+    {
+        RegisterInstall();
+        WriteList("\"libraryfolders\" { \"1\" { \"path\" \"SteamLibrary\" } }");
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("names a library without a full path", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -280,7 +341,7 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("would not let Deguffer read Steam's list", StringComparison.Ordinal));
+            && n.Message.Contains("could not read Steam's list", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -343,6 +404,10 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         files.Add(Manifest(install, "440", "Team Fortress 2"));
         files.Add(Manifest(SecondLibrary, "570", "Dota 2"));
 
+        var marker = Path.Combine(SecondLibrary, "libraryfolder.vdf");
+        File.WriteAllText(marker, "\"libraryfolder\" { }");
+        files.Add(marker);
+
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
@@ -358,12 +423,21 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
             Path.Combine(SecondLibrary, "steamapps", "shadercache"),
         ];
 
+        // Each named neighbour itself, not only something inside it: the disk check below passes for
+        // anything the run did not target, so only this says the plan asserts them.
+        string[] neighbours =
+        [
+            .. new[] { install, SecondLibrary }.SelectMany(library =>
+                new[] { "common", "downloading", "temp", "workshop", "sourcemods" }
+                    .Select(name => Path.Combine(library, "steamapps", name))),
+        ];
+
         foreach (var path in directories.Concat(files).Concat(containers))
         {
             Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         }
 
-        foreach (var path in files.Concat(containers))
+        foreach (var path in files.Concat(containers).Concat(neighbours))
         {
             Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);

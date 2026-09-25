@@ -70,13 +70,14 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        SteamDiscovery? discovery = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new SteamDiscovery(Environment);
+        => _discovery = discovery ?? new SteamDiscovery(Environment);
 
     public override string Id => "steam";
 
@@ -112,7 +113,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     public IReadOnlyList<DeclaredRoot> Roots => _roots ??= Declare();
 
     /// <summary>§5.3. The client and its browser process hold both caches open while Steam runs.</summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => ["steam", "steamwebhelper"];
+    protected override IReadOnlyList<string> ConflictingProcessNames => SteamDiscovery.ProcessNames;
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Three roots rather than two, because a

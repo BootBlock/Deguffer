@@ -186,6 +186,7 @@ public sealed class ProviderInvalidationTests : IDisposable
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner(), new FakeVolumeInventory())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
+        : parameter == typeof(SteamDiscovery) ? new SteamDiscovery(_environment)
         : parameter == typeof(ClaudeCodeSessionRegistry)
             ? new ClaudeCodeSessionRegistry(_environment, FakeProcessInspector.NothingRunning)
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()

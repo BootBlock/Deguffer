@@ -85,6 +85,10 @@ public sealed class CleanupPlanner
         // about each running process twice per pass.
         var claudeSessions = new ClaudeCodeSessionRegistry(environment, ProcessInspector.Default);
 
+        // One finding of Steam for both providers inside its folders, on the same reasoning: each
+        // asks the registry and probes the install, and the shader cache also reads the library list.
+        var steam = new SteamDiscovery(environment);
+
         return new CleanupPlanner(
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees, environment),
@@ -93,13 +97,14 @@ public sealed class CleanupPlanner
             new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
             .. CacheProviders(
-                environment, squirrel, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
+                environment, squirrel, steam, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
         IUserEnvironment environment,
         SquirrelDiscovery squirrel,
+        SteamDiscovery steam,
         ClaudeCodeSessionRegistry claudeSessions,
         ILiveTreeInspector liveTrees,
         ICurrentPreferences preferences) =>
@@ -125,8 +130,8 @@ public sealed class CleanupPlanner
         new FirefoxCacheProvider(environment),
         new EpicLauncherWebCacheProvider(environment),
         new EpicLauncherContentCacheProvider(environment),
-        new SteamCacheProvider(environment),
-        new SteamShaderCacheProvider(environment),
+        new SteamCacheProvider(environment, discovery: steam),
+        new SteamShaderCacheProvider(environment, discovery: steam),
         new SpotifyCacheProvider(environment),
         new AffinityModelCacheProvider(environment),
         new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),

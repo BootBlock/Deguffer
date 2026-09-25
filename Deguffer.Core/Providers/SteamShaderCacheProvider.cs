@@ -73,13 +73,14 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        SteamDiscovery? discovery = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new SteamDiscovery(Environment);
+        => _discovery = discovery ?? new SteamDiscovery(Environment);
 
     public override string Id => "steam-shader-cache";
 
@@ -87,7 +88,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
 
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
-    public override StepGrain Grain => StepGrain.Parts;
+    public override StepGrain Grain => StepGrain.Items;
 
     public override string WhatHappensOnNextUse =>
         "While shader pre-caching is on, Steam downloads the shaders again from Valve for each game "
@@ -112,7 +113,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     /// §5.3. The client downloads and processes shader caches while it runs, so removing one during
     /// that download is the obvious hazard.
     /// </summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => ["steam", "steamwebhelper"];
+    protected override IReadOnlyList<string> ConflictingProcessNames => SteamDiscovery.ProcessNames;
 
     /// <summary>
     /// §5.2 as §7.1 reads it, per library: <c>steamapps</c> recognises nothing, and the container
@@ -204,10 +205,12 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
             Notes = examination.Notes,
             Fallback = measured.Fallback,
 
-            // A list that was read and not understood is Deguffer declining to guess, so it is the
-            // not-examined flag. A list or folder Windows would not describe is the other one.
+            // A list that was read and not understood, or that names a library Deguffer could not
+            // place, is Deguffer declining to guess, so it is the not-examined flag. A list or folder
+            // that was not read is the other one.
             WasNotExamined = examination.Targets.Count == 0
-                && (examination.Declined.Count > 0 || libraries.Listing is SteamLibraryListing.Malformed),
+                && (examination.Declined.Count > 0
+                    || libraries.Listing is SteamLibraryListing.Malformed or SteamLibraryListing.Unplaced),
             HasUnreadableRoot = examination.Unreadable || libraries.Listing is SteamLibraryListing.Unreadable,
         };
     }
@@ -240,14 +243,20 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     {
         SteamLibraryListing.Unreadable => new PlanNote(
             PlanNoteSeverity.Warning,
-            $"Windows would not let Deguffer read Steam's list of game libraries at "
-            + $"'{libraries.ListPath}', so only the library beside the Steam program was examined. A "
-            + "shader cache in any other library was neither cleared nor ruled out."),
+            $"Deguffer could not read Steam's list of game libraries at '{libraries.ListPath}', so only "
+            + "the library beside the Steam program was examined. Windows refusing it, a program holding "
+            + "it open and a list far larger than Steam writes all do that. A shader cache in any other "
+            + "library was neither cleared nor ruled out."),
         SteamLibraryListing.Malformed => new PlanNote(
             PlanNoteSeverity.Warning,
             $"Deguffer could not make sense of Steam's list of game libraries at "
             + $"'{libraries.ListPath}', so only the library beside the Steam program was examined. A "
             + "shader cache in any other library was neither cleared nor ruled out."),
+        SteamLibraryListing.Unplaced => new PlanNote(
+            PlanNoteSeverity.Warning,
+            $"Steam's list of game libraries at '{libraries.ListPath}' names a library without a full "
+            + "path, so Deguffer could not tell where it is. A shader cache in that library was neither "
+            + "cleared nor ruled out."),
         _ => null,
     };
 
@@ -280,9 +289,19 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
 
         var scan = ChildDirectories.Under(container);
 
+        // A game's folder that will not be listed, or that is a link, is presence: the plan has a
+        // sentence to say about each, and a row that never appears cannot say it.
         return scan.Unreadable
-            || scan.Directories.Any(child => SteamAppId.IsAppId(child.Name) && DirectoryContent.IsPresent(child.FullName));
+            || scan.Links.Any(link => SteamAppId.IsAppId(link.Name))
+            || scan.Directories.Any(child => SteamAppId.IsAppId(child.Name) && MayHoldContent(child.FullName));
     }
+
+    /// <summary>
+    /// Whether a game's folder holds content, or would not be listed and so may. An empty one is
+    /// Steam's own leftover and no reason for a row.
+    /// </summary>
+    private static bool MayHoldContent(string folder) =>
+        DirectoryContent.IsPresent(folder) || ChildDirectories.Under(folder).Unreadable;
 
     /// <summary>
     /// §5.2 for one library: reach its container through folders that are not links, classify every

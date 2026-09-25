@@ -17,16 +17,24 @@ public enum SteamLibraryListing
     Absent,
 
     /// <summary>
-    /// There, or possibly there, and Windows would not let it be read. Any library other than the one
-    /// beside the program is unknown.
+    /// There, or possibly there, and not read: Windows refused it, something held it open, or it is
+    /// larger than any list Steam writes. Any library other than the one beside the program is
+    /// unknown.
     /// </summary>
     Unreadable,
 
     /// <summary>
-    /// Read, and not understood: not well-formed, or larger than any list Steam writes. Any library
-    /// other than the one beside the program is unknown.
+    /// Read, and not understood: not well-formed, or not a list of libraries. Any library other than
+    /// the one beside the program is unknown.
     /// </summary>
     Malformed,
+
+    /// <summary>
+    /// Read and understood, and naming at least one library Deguffer could not place: an entry with
+    /// no path, or with one that is not a full path. The libraries it could place are known, and the
+    /// one it could not may hold anything.
+    /// </summary>
+    Unplaced,
 }
 
 /// <summary>Every Steam library this machine's Steam knows of, and how that was established.</summary>
@@ -107,20 +115,25 @@ public static class SteamLibraryFolders
         }
 
         var folders = new List<string> { install };
+        var unplaced = false;
 
         foreach (var entry in root.Children.Where(e => IsLibraryIndex(e.Key)))
         {
             // Configured refuses a relative path, which would otherwise resolve against Deguffer's own
             // working directory, and normalises the rest so a library written with a trailing
-            // separator is not counted twice.
-            if (LongPath.Configured(entry.Value ?? entry.Child("path")?.Value) is { } folder
-                && !folders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+            // separator is not counted twice. A refused entry is still a library Steam named, so the
+            // list stops being a claim about every library rather than losing one in silence.
+            if (LongPath.Configured(entry.Value ?? entry.Child("path")?.Value) is not { } folder)
+            {
+                unplaced = true;
+            }
+            else if (!folders.Contains(folder, StringComparer.OrdinalIgnoreCase))
             {
                 folders.Add(folder);
             }
         }
 
-        return new SteamLibraries(folders, SteamLibraryListing.Read, list);
+        return new SteamLibraries(folders, unplaced ? SteamLibraryListing.Unplaced : SteamLibraryListing.Read, list);
     }
 
     /// <summary>

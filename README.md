@@ -138,7 +138,7 @@ installed" cleanly on a machine without that toolchain.
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
-| Steam shader pre-cache | One row per game, in every library Steam's own list names; never the games beside it |
+| Steam shader pre-cache | One item per game, in every library Steam's own list names; never the games beside it |
 | Node.js project dependencies | `node_modules` under your own source trees |
 | Python virtual environments | |
 | Rust build output | `target` directories under your own source trees |

@@ -62,22 +62,46 @@ public sealed class SteamLibraryFoldersTests : IDisposable
 
     /// <summary>
     /// A relative path would resolve against Deguffer's own working directory, which no library is
-    /// in. It is dropped, and the libraries beside it are still read.
+    /// in, and an entry with no path names nowhere. Neither is followed, the libraries beside them are
+    /// still read, and the list stops claiming to be every library — a library Steam named is never
+    /// lost in silence.
     /// </summary>
-    [Fact]
-    public void ARelativeLibraryIsDroppedAndTheRestAreRead()
+    [Theory]
+    [InlineData("\"1\" { \"path\" \"SteamLibrary\" }")]
+    [InlineData("\"1\" { \"label\" \"\" }")]
+    public void ALibraryThatCannotBePlacedIsNotFollowedAndMakesTheListIncomplete(string entry)
     {
         var second = Path.Combine(_temp.Path, "Library");
 
         WriteList($$"""
             "libraryfolders"
             {
-                "1" { "path" "SteamLibrary" }
+                {{entry}}
                 "2" { "path" "{{Escaped(second)}}" }
             }
             """);
 
-        Assert.Equal(new[] { Install, second }, SteamLibraryFolders.Of(Install).Folders);
+        var libraries = SteamLibraryFolders.Of(Install);
+
+        Assert.Equal(new[] { Install, second }, libraries.Folders);
+        Assert.Equal(SteamLibraryListing.Unplaced, libraries.Listing);
+        Assert.False(libraries.IsComplete);
+    }
+
+    /// <summary>
+    /// A list past any size Steam writes is not read, and is not called absent either: something is
+    /// there and nothing established what it says.
+    /// </summary>
+    [Fact]
+    public void AListLargerThanSteamWritesIsUnreadAndIncomplete()
+    {
+        WriteList("\"libraryfolders\" {" + new string(' ', 3 * 1024 * 1024) + "}");
+
+        var libraries = SteamLibraryFolders.Of(Install);
+
+        Assert.Equal(new[] { Install }, libraries.Folders);
+        Assert.Equal(SteamLibraryListing.Unreadable, libraries.Listing);
+        Assert.False(libraries.IsComplete);
     }
 
     [Theory]

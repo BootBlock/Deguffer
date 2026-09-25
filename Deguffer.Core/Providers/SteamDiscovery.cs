@@ -62,6 +62,12 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     /// </summary>
     public const string RootMarker = "steam.exe";
 
+    /// <summary>
+    /// §5.3. The client and its browser process, which hold Steam's caches open and download into
+    /// them while Steam runs. One list for every Steam provider, so the warnings cannot drift apart.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ProcessNames = ["steam", "steamwebhelper"];
+
     private SteamInstall? _install;
     private SteamLibraries? _libraries;
 

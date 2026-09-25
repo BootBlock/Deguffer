@@ -1447,7 +1447,7 @@ acknowledgement.
 | | |
 | --- | --- |
 | **Location** | `steamapps\shadercache\<app id>` in every Steam library |
-| **Method** | Delete the folders for single games, one row each |
+| **Method** | Delete the folders for single games, one item each |
 | **Typical size** | Nothing measured here: pre-caching was off, and the folder was empty. Reports from machines with large libraries and pre-caching on run past 60 GB |
 
 ### What it is
@@ -1475,10 +1475,15 @@ program, and the plan says plainly that any other library was neither cleared no
 name is a Steam application id: digits only, and no larger than Steam allows. Anything else, such as
 `backup` or `440.old`, stays in Tier 4, and the plan names it.
 
-**Each game is its own row, named as Steam names it.** Deguffer reads the game's name from Steam's
-manifest for it, `appmanifest_<app id>.acf`, and says whether the game is still installed in any
-library. A cache for a game you have uninstalled costs nothing to remove. Where a manifest is missing,
-the row shows the app id instead.
+**Each game is its own item, named as Steam names it.** Deguffer lists the games in the row's items,
+so you can choose them one by one and keep one you want to hold on to. It reads each game's name from
+Steam's manifest for it, `appmanifest_<app id>.acf`, and says whether the game is still installed in
+any library. A cache for a game you have uninstalled costs nothing to remove. Where a manifest is
+missing, the item shows the app id instead. Where Deguffer could not look in every library, it says
+nothing about whether a game is installed rather than guess.
+
+**A library the list names but Deguffer cannot place**, an entry with no full path, is named on the
+plan as a warning, and a shader cache in it is neither cleared nor ruled out.
 
 **No row where there is nothing to reclaim.** An empty `shadercache`, or one holding only empty game
 folders, produces no row. Steam keeps the folder even with pre-caching switched off.
