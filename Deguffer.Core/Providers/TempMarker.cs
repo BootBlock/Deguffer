@@ -48,8 +48,12 @@ public sealed record TempMarker(string Tool, Regex Name, TargetKind Kind, string
     /// </summary>
     public Func<string, bool>? InUse { get; init; }
 
-    /// <summary>What a row says of an entry <see cref="InUse"/> held back.</summary>
-    public string InUseReason { get; init; } = "The tool that wrote this is still using it, so it is left alone.";
+    /// <summary>
+    /// Why <see cref="InUse"/> holds an entry back, as a lower-case clause with no full stop. One
+    /// sentence for both presses: it completes "Left alone because …" at the preview and "Nothing was
+    /// removed: …" at the clean, where the same question is asked again.
+    /// </summary>
+    public string InUseReason { get; init; } = "the tool that wrote this is still using it";
 
     /// <summary>
     /// Whether this marker names something to leave alone rather than to take. Recognised all the

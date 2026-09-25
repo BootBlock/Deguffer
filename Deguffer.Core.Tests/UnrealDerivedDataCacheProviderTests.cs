@@ -231,6 +231,73 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The stores were offered because no server was running, and the editor starts one. A server
+    /// started while the preview was on screen holds every store back at the clean, as it would have
+    /// at the preview, and §5.6 proves each one standing. The filesystem cache has no server, and
+    /// still goes.
+    /// </summary>
+    [Fact]
+    public async Task AZenServerStartedAfterThePreviewHoldsEveryStoreBack()
+    {
+        Populate(LegacyCache);
+        var current = Path.Combine(PopulateStore(CurrentStore), UnrealCacheLocations.StoreMarker);
+        var older = Path.Combine(PopulateStore(OlderStore), UnrealCacheLocations.StoreMarker);
+
+        var inspector = FakeProcessInspector.NothingRunning;
+        var provider = CreateProvider(inspector);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            new[] { LegacyCache, CurrentStore, OlderStore }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+
+        inspector.WithRunning("zenserver");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(current), "a store was removed under a server started after the preview");
+        Assert.True(File.Exists(older), "a store was removed under a server started after the preview");
+        Assert.False(Directory.Exists(LegacyCache), "the filesystem cache, which no server holds, was kept");
+        Assert.Equal(2, result.Steps.Count(step => step.Message == "Nothing was removed: zenserver is running now."));
+        AssertProvedStanding(result, CurrentStore);
+        AssertProvedStanding(result, OlderStore);
+    }
+
+    /// <summary>
+    /// A local cache path inside the filesystem cache puts a store there, so the cache is offered on
+    /// the same condition as a store, and a server started before the clean holds it back whole.
+    /// </summary>
+    [Fact]
+    public async Task AFilesystemCacheHoldingAStoreIsHeldBackByAServerStartedAfterThePreview()
+    {
+        Populate(Path.Combine(LegacyCache, "Buckets"));
+        var marker = Path.Combine(PopulateStore(Path.Combine(LegacyCache, "Zen")), UnrealCacheLocations.StoreMarker);
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", LegacyCache);
+
+        var inspector = FakeProcessInspector.NothingRunning;
+        var provider = CreateProvider(inspector);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([LegacyCache], plan.TargetedPaths);
+
+        inspector.WithRunning("zenserver");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(marker), "a store was removed with the cache around it under a server started after the preview");
+        Assert.Equal("Nothing was removed: zenserver is running now.", Assert.Single(result.Steps).Message);
+        AssertProvedStanding(result, LegacyCache);
+    }
+
+    private static void AssertProvedStanding(CleanupResult result, string path)
+    {
+        var check = Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(path, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(VerificationOutcome.Survived, check.Outcome);
+        Assert.True(result.Verification.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// A row whose only cache is a store held back offers nothing, and must not read "Already
     /// clear" about a store that is full.
     /// </summary>

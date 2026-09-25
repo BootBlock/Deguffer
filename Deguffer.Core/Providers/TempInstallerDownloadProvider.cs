@@ -21,7 +21,8 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Held back while its application runs</b>, because none of these names ties a folder to a
 /// process. VS Code applies a downloaded update from its folder when it restarts, and deleting the
 /// flag file beside the installer changes what the installer does; Docker's update behaviour is not
-/// published, so it is treated the same way.</para>
+/// published, so it is treated the same way. The clean asks again before removing each one, so an
+/// application started while the preview was on screen keeps its download.</para>
 ///
 /// <para><b>Blender's unsaved work is named here so that nothing takes it.</b> <c>quit.blend</c> and
 /// the autosave files sit loose in the temporary folder, where the "Temporary files" row would take

@@ -9,5 +9,15 @@ public sealed class FakeNamedMutexes(params string[] existing) : INamedMutexes
 
     public static FakeNamedMutexes None => new();
 
+    /// <summary>
+    /// Declare a mutex existing from now on, so a test can have a tool take one between the preview
+    /// and the clean and show the clean asking again.
+    /// </summary>
+    public FakeNamedMutexes WithExisting(string name)
+    {
+        _existing.Add(name);
+        return this;
+    }
+
     public bool Exists(string name) => _existing.Contains(name);
 }

@@ -33,8 +33,9 @@ namespace Deguffer.Core.Providers;
 /// <para><b>A running Zen server holds every store back (§5.3).</b> <c>zenserver</c> starts with
 /// the editor, and can be set to keep running after it closes. Removing a store's data under the
 /// server writing it is not provably safe, so while one runs every store is left alone, named as a
-/// survivor, and refused in Explore. The filesystem cache has no server: the editor holding files
-/// open there is a warning, and anything held open stays.</para>
+/// survivor, and refused in Explore. The clean asks again before removing each one, so a server the
+/// editor started while the preview was on screen holds its store back too. The filesystem cache has
+/// no server: the editor holding files open there is a warning, and anything held open stays.</para>
 ///
 /// <para><b>No administrator rights.</b> <c>%PROGRAMDATA%\Epic</c> carries the write access Epic's
 /// installer grants every user, which <see cref="EpicLauncherContentCacheProvider"/> measured. On a
@@ -45,6 +46,8 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
 {
     /// <summary>The Zen storage server's process name.</summary>
     private const string ZenServer = "zenserver";
+
+    private static readonly string[] ZenServerNames = [ZenServer];
 
     private const string HeldReason =
         "Unreal's Zen server is running, and removing a store's data under the server using it is "
@@ -187,6 +190,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
 
         var targets = new List<DeletionTarget>();
         var held = new List<string>();
+        var stillNoServer = new RunningProcessCheck(Inspector, ZenServerNames);
 
         foreach (var target in scan.Targets)
         {
@@ -197,13 +201,16 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            if (zenRunning && MayHoldAStore(target.Path, named))
+            var mayHoldAStore = MayHoldAStore(target.Path, named);
+
+            if (zenRunning && mayHoldAStore)
             {
                 held.Add(target.Path);
                 continue;
             }
 
-            targets.Add(target);
+            // Offered because no server is running, so the clean asks that again.
+            targets.Add(mayHoldAStore ? target with { UseCheck = stillNoServer } : target);
         }
 
         if (targets.Count == 0 && held.Count == 0 && scan.Declined.Count == 0 && !scan.CouldNotBeReached)
@@ -438,7 +445,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
             $"'{name}' sits beside Unreal's cache and is not recognised as part of it, so it is left alone."));
     }
 
-    private bool ZenServerIsRunning() => Inspector.FindRunning([ZenServer]).Count > 0;
+    private bool ZenServerIsRunning() => Inspector.FindRunning(ZenServerNames).Count > 0;
 
     /// <summary>
     /// Every place a default or a setting names for a Zen store, whether or not it is reached as a
