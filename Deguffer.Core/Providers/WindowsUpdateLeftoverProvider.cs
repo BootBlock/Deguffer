@@ -20,8 +20,8 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Why thirty days.</b> The rollback state in <c>$WinREAgent</c> is stale only once the
 /// servicing operation that wrote it has completed, and that cannot be asked of Windows without
 /// administrator rights: <c>reagentc /info</c> refuses, and <c>C:\Recovery</c> refuses to be listed.
-/// A month is several times the length of any servicing operation and short of the next month's
-/// update, and the nine-day-old copy on the audited machine is exactly what it keeps back.</para>
+/// So age stands in for the answer, and a long one: the nine-day-old copy on the audited machine is
+/// exactly what thirty days keeps back.</para>
 ///
 /// <para><b>Each folder goes whole or not at all.</b> A rollback manifest is meaningless without the
 /// image it restores, so a folder with anything recent inside it is withheld whole rather than

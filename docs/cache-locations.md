@@ -3029,8 +3029,8 @@ to type the words out.
 
 | | |
 | --- | --- |
-| **Location** | `C:\Windows\Logs\CBS`, `C:\Windows\Logs\WindowsUpdate`, `C:\Windows\Panther`, and `C:\Windows\System32\LogFiles\WMI\RtBackup` |
-| **Method** | Delete each of those four, one row each |
+| **Location** | `C:\Windows\Logs\CBS`, `C:\Windows\Logs\WindowsUpdate`, `C:\Windows\Panther`, and `C:\Windows\System32\LogFiles\WMI\RtBackup`; and the logs a reset leaves in `C:\$SysReset\Logs`, `C:\$SysReset\OldOSLogs` and `C:\Windows\Logs\PBR` |
+| **Method** | Delete each of the first four, one row each. The reset logs are one row, cleared by Windows' own *System recovery log files* cleanup |
 | **Typical size** | 64 MB was measured on one workstation. Machines with a long update history are regularly reported in the gigabytes |
 
 ### What it is
@@ -3043,10 +3043,15 @@ The trail Windows leaves while maintaining itself.
 | `Logs\WindowsUpdate` | Windows Update's own trace files |
 | `Panther` | Setup logs, from the original installation and from every in-place upgrade since |
 | `System32\LogFiles\WMI\RtBackup` | Backup trace files for the event sessions the WMI service runs |
+| `$SysReset\Logs`, `$SysReset\OldOSLogs`, `Logs\PBR` | Reset this PC, and the recovery environment's reset and refresh |
 
 ### What Deguffer does
 
-It removes those four, one row each. `C:\Windows`, `C:\Windows\Logs` and the three folders above
+It removes the first four, one row each. The reset logs are different, because Windows has a
+cleanup of its own for them: Disk Cleanup's *System recovery log files*. Its registration names no
+folder, but the handler behind it names these three, so Deguffer asks Windows to run that cleanup
+rather than deleting them itself (§5.1). Where Windows does not offer that cleanup, the reset logs
+are left where they are. `C:\Windows`, `C:\Windows\Logs` and the three folders above
 `RtBackup` are all left standing — Deguffer takes the folder it named, never the one holding it, and
 it never lists the Windows directory to find out what else is in there. The rule and the protections
 are the same ones described under **Crash dumps and error reports** above.
@@ -3062,7 +3067,9 @@ than a failure.
 ### What is protected
 
 The Windows directory, every folder passed through on the way down, `WinSxS` and
-`Windows\Installer` — all of those are named in the plan and checked after the run.
+`Windows\Installer` — all of those are named in the plan and checked after the run. For the reset
+logs, so are `C:\$SysReset` itself and what Windows keeps at the top of the drive: see
+[Previous Windows installation](#previous-windows-installation) below.
 
 Everything else in there is protected differently, and the difference is worth knowing: it is never
 reached, rather than reached and then spared. Deguffer holds a list of exact paths and never asks
@@ -3087,6 +3094,120 @@ operation that has finished, the operation does not run again on request, and wh
 is the next log rather than the ones that went. That is Tier 3's definition and not Tier 1's, so
 Deguffer offers them without ticking them, and confirms that the loss is permanent before it
 acts.
+
+---
+
+## Previous Windows installation
+
+**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+
+| | |
+| --- | --- |
+| **Location** | `C:\Windows.old`, `C:\$Windows.~BT`, and `C:\$Windows.~WS` with `C:\ESD\Windows` and `C:\ESD\Download` |
+| **Method** | Windows' own Disk Cleanup handlers — *Previous Installations*, *Temporary Setup Files* and *Windows ESD installation files* — one row each |
+| **Typical size** | `Windows.old` is an entire Windows installation: tens of gigabytes is normal. The other two range from almost nothing to several gigabytes |
+
+### What it is
+
+Upgrading Windows moves the previous installation aside into `Windows.old`, so the upgrade can be
+undone from Settings, and leaves Setup's working folder (`$Windows.~BT`) and the installation files
+it downloaded (`$Windows.~WS` and `ESD`) beside it. Windows keeps all of it for the *uninstall
+window*, ten days after the upgrade unless that has been changed, and then removes it by itself.
+Sometimes it does not, and then it stays until somebody notices.
+
+### What Deguffer does
+
+It asks Windows to run its own cleanup for each of them, the same one Disk Cleanup's *Clean up
+system files* runs. It never deletes these folders itself. The previous-installation cleanup also
+takes down the record that lets Settings offer to go back, and a folder deleted by hand would leave
+that record behind, naming something that is gone.
+
+A folder is offered only when all of these are true:
+
+- **The upgrade can no longer be undone.** Nothing in it has been written for longer than the
+  uninstall window, which Deguffer reads from the machine rather than assuming ten days. Until then
+  the row says how many days are left.
+- **No update is unfinished.** No restart is owed for an update, neither the servicing stack nor
+  Windows Setup is running, and no restart is due to move a file inside the folder. While any of
+  that is true the row reads *Update in progress*.
+- **Windows offers the cleanup.** Where it does not, the folder is left standing.
+
+Running the cleanup needs administrator rights. An Outlook data file inside any of these folders
+stops the row: Windows clears the folder whole and cannot be told to leave one file.
+
+### What is protected
+
+The top of the drive is never listed. Deguffer holds a list of exact names, so a folder you keep
+there is never a candidate. What Windows keeps there — `Windows`, `Program Files`,
+`Program Files (x86)`, `ProgramData`, `Users`, `Recovery` and `$Recycle.Bin` — is named in the plan
+and checked after the run, and so is the `ESD` folder.
+
+### What it costs you
+
+**You can no longer go back to the previous version of Windows**, and anything an upgrade left
+behind in the previous installation goes with it. If a file from before the upgrade is missing,
+look in `Windows.old\Users` first. Windows describes the downloaded installation files as needed to
+reset this PC, so a reset afterwards needs Windows downloaded again or installation media. Windows
+itself keeps working exactly as it is.
+
+### Why Tier 2
+
+Nothing here comes back except by upgrading again, and what you pay is a named capability — going
+back, and resetting from local files — rather than a slower next use. That is Tier 2's shape. It is
+not Tier 3, because none of it is a record of something you did.
+
+---
+
+## Leftover Windows update folders
+
+**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+
+| | |
+| --- | --- |
+| **Location** | `C:\$WinREAgent` and `C:\$GetCurrent` |
+| **Method** | Delete each of the two, whole or not at all, one row each |
+| **Typical size** | `$WinREAgent` measured 1.7 GB on one workstation, left by the most recent cumulative update. `$GetCurrent` is usually small |
+
+### What it is
+
+- **`$WinREAgent`** is where an update stages its work on the recovery environment: a new recovery
+  image, a backup of the old one, and the state it would roll back to.
+- **`$GetCurrent`** is the update assistant's working folder: its logs and the files it downloaded.
+
+Neither is cleared afterwards.
+
+### This one is Deguffer's judgement, not Microsoft's
+
+**Microsoft documents neither folder, and no Windows cleanup names either of them.** Every disk
+cleaner deletes them, and nothing first-party says that is safe. So Deguffer offers them on narrow
+terms, and the row says that the judgement is Deguffer's own:
+
+- **Nothing inside has been created or written for 30 days.** Whether the update that wrote the
+  rollback state has finished cannot be asked of Windows without administrator rights, so age stands
+  in for it. The copy on the audited machine was nine days old, and this keeps exactly that back.
+- **No update is unfinished**, on the same three tests as the previous installation above.
+- **Each folder goes whole or not at all.** A rollback manifest means nothing without the image it
+  restores, so a folder with anything recent inside it is held back whole rather than having its
+  older half removed.
+
+Removing them needs administrator rights.
+
+### What is protected
+
+The same as the previous installation above: the top of the drive is never listed, and what Windows
+keeps there is checked after the run.
+
+### What it costs you
+
+The files the last update staged for the recovery environment, and the rollback state beside them,
+are gone, as are the update assistant's logs and downloads. Windows creates the folders again the
+next time it needs them.
+
+### Why Tier 2, and why `$SysReset` is not here
+
+The folders come back only when Windows next services itself, which is Tier 2's shape. `$SysReset`
+is the third member of the family, but Windows does have a cleanup for its logs, so it is cleared
+through that and listed under [Windows servicing logs](#windows-servicing-logs) with the other logs.
 
 ---
 
