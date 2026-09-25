@@ -77,7 +77,10 @@ internal sealed class ExploreLayers
         layer.LastShown = ++_showings;
         _current = layer;
 
-        Release();
+        // A zoomed drawing keeps bitmaps no drawing is using yet, up to as many as the zoom keeps:
+        // the whole picture is painted under it next, and the zoom's next stop after that. Handed
+        // back and asked for again, all but one would go to the collector and be allocated anew.
+        Release(layer.Viewport.IsWhole ? 0 : 1 + ZoomedKept);
 
         return layer.Drawing!;
     }
@@ -123,7 +126,26 @@ internal sealed class ExploreLayers
     public void Clear()
     {
         Forget();
-        Release();
+        Release(0);
+    }
+
+    /// <summary>
+    /// Keep only the drawing on top, for a map leaving the screen. It is what the map shows when it
+    /// comes back, and the others are memory nothing shows until the picture moves again, which asks
+    /// for them afresh.
+    /// </summary>
+    public void Trim()
+    {
+        foreach (var layer in _layers)
+        {
+            if (layer != _current)
+            {
+                layer.Drawing = null;
+                layer.Image.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        Release(0);
     }
 
     /// <summary>
@@ -280,12 +302,12 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
-    /// Take out every layer no drawing is using, which is memory nothing will show, and hand its
-    /// bitmap back to the buffers for the next drawing.
+    /// Take out layers no drawing is using until no more than <paramref name="keep"/> are left in
+    /// all, and hand each one's bitmap back to the buffers for the next drawing.
     /// </summary>
-    private void Release()
+    private void Release(int keep)
     {
-        for (var i = _layers.Count - 1; i >= 0; i--)
+        for (var i = _layers.Count - 1; i >= 0 && _layers.Count > keep; i--)
         {
             var layer = _layers[i];
 

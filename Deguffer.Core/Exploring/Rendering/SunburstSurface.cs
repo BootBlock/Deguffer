@@ -35,6 +35,8 @@ public sealed class SunburstSurface : ExploreSurface
             ? new ExploreHit(_hits.Sunburst.Sectors[index].Node, _hits.Sunburst.Sectors[index].Bytes)
             : null;
 
+    public override bool HasVolumeBeside => false;
+
     /// <summary>Null throughout: a sunburst's shapes are sectors.</summary>
     public override ExploreTile? TileAt(float x, float y) => null;
 

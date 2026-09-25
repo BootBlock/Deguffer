@@ -25,7 +25,8 @@ namespace Deguffer.App.ViewModels;
 ///
 /// <para><b>Past G1's 500-line ceiling, and the reason is that what remains does not divide.</b>
 /// Every seam this page had has been cut and lives beside it: the row and crumb values, the wording
-/// of a row, the legend's bands, the drawing, and the scanning. What is left is one page's
+/// of a row, the legend's bands, the drawing, the scanning, and the rules of where a step leads
+/// (<see cref="ExplorePosition"/>). What is left is one page's
 /// controller, and its parts are not independently useful — the scan, the scope, the navigation and
 /// the view selection all read and write the same current tree and current node, so a second type
 /// over them would share that state rather than own any of it.</para>
@@ -44,7 +45,12 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     private readonly List<ExploreCrumb> _trail = [];
 
+    private readonly List<ExplorePosition> _steps = [];
+
     private readonly DriveList _drives;
+
+    /// <summary>Where the views are: see <see cref="ExplorePosition"/>. Written only by <see cref="Show"/>.</summary>
+    private ExplorePosition _position;
 
     /// <summary>
     /// What the app knows about well-known files and folders, resolved against this machine once
@@ -428,20 +434,24 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// blocks against sizes they no longer match. A removal from this page makes both stale
     /// together, and the stale note says so.</para>
     ///
-    /// <para>Replaced only with the tree it describes. A scan that fails leaves the last finished
-    /// tree on screen, and that tree keeps its own figures; the snapshots a running scan draws are
-    /// icicles, which have no blocks.</para>
+    /// <para>Replaced with every tree, because it belongs to the tree it describes: the snapshots a
+    /// running scan publishes have none, being partial, so a scan of a folder never runs with the
+    /// last drive's figures beside it, nor offers a way out onto that drive.</para>
     /// </summary>
     public VolumeSpace Volume { get; private set; } = VolumeSpace.None;
+
+    /// <summary>
+    /// The volume to draw beside what is on screen: <see cref="Volume"/> on the volume itself, and
+    /// nothing inside its root. See <see cref="ExplorePosition.Beside"/>.
+    /// </summary>
+    public VolumeSpace VolumeBeside => Tree is { } tree ? _position.Beside(tree, Volume) : VolumeSpace.None;
 
     /// <summary>
     /// Which node the views are drawing. The scan's root until the user descends, and then wherever
     /// they descended to — including across the partial trees a running scan publishes, which is
     /// <see cref="ExplorePlace"/>'s job to establish.
     /// </summary>
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
-    public partial int CurrentNode { get; set; }
+    public int CurrentNode => _position.Node;
 
     /// <summary>What is under the pointer, or the current node when nothing is.</summary>
     [ObservableProperty]
@@ -543,12 +553,11 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
 
-            // Before Show, which is what draws the map. Read afresh, because the space figures the
-            // drive picker holds are from whenever it last opened.
+            // Read afresh and handed to Show, which is what draws the map, because the space figures
+            // the drive picker holds are from whenever it last opened.
             _volumes.Invalidate();
-            Volume = VolumeSpace.Of(_volumes, target);
 
-            Show(scan.Tree, ExplorePlace.Carry(Tree, CurrentNode, scan.Tree));
+            Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), VolumeSpace.Of(_volumes, target));
 
             RouteNote = scan.RouteNote;
             OfferElevation(scan.Fallback);
@@ -752,33 +761,37 @@ public sealed partial class ExploreViewModel : ObservableObject
         OnPropertyChanged(nameof(ElevateLabel));
     }
 
-    /// <summary>Show what is inside <paramref name="node"/>. Ignored for anything with nothing in it.</summary>
+    /// <summary>
+    /// Show what is inside <paramref name="node"/>. Ignored for anything with nothing in it, and for
+    /// the root when the views are already inside it. See <see cref="ExplorePosition.Opening"/>.
+    /// </summary>
     public void Descend(int node)
     {
         if (Tree is not { } tree || Selection.WasRemoved(node) || !tree.IsDirectory(node)
-            || tree.ChildrenOf(node).Length == 0)
+            || tree.ChildrenOf(node).Length == 0
+            || _position.Opening(tree, node, Volume) is not { } opened)
         {
             return;
         }
 
-        Show(tree, node);
+        Show(tree, opened, Volume);
     }
 
     [RelayCommand(CanExecute = nameof(CanAscend))]
     private void Ascend()
     {
-        if (Tree is { } tree && CurrentNode != tree.RootNode)
+        if (Tree is { } tree && _position.Up(tree, Volume) is { } up)
         {
-            Show(tree, tree.ParentOf(CurrentNode));
+            Show(tree, up, Volume);
         }
     }
 
-    /// <summary>Jump straight to a node on the trail.</summary>
-    public void GoTo(int node)
+    /// <summary>Go straight to a step on the trail.</summary>
+    public void GoTo(ExplorePosition position)
     {
         if (Tree is { } tree)
         {
-            Show(tree, node);
+            Show(tree, position, Volume);
         }
     }
 
@@ -879,7 +892,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // it rather than being merged into it.
         if (progress.Snapshot is { } snapshot)
         {
-            Show(snapshot, ExplorePlace.Carry(Tree, CurrentNode, snapshot));
+            Show(snapshot, _position.CarriedTo(Tree, snapshot), VolumeSpace.None);
         }
     }
 
@@ -890,17 +903,29 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// together. Updating them from separate handlers is how a breadcrumb comes to name a directory
     /// the list below it is no longer showing.</para>
     /// </summary>
-    private void Show(ExploreTree tree, int node)
+    /// <param name="volume">The volume <paramref name="tree"/> is the whole of. See <see cref="Volume"/>.</param>
+    private void Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume)
     {
         var standing = Tree;
+        var node = position.Node;
 
         // Whether what is on screen is still about the same directory. A snapshot landing mid-scan
         // is: it measures again what the page is already standing in. Stepping into a folder is
         // not, and neither is a scan that came back rooted somewhere else.
-        var continuing = ExplorePlace.TryCarry(standing, CurrentNode, tree) == node;
+        var sameDirectory = ExplorePlace.TryCarry(standing, CurrentNode, tree) == node;
+
+        // Opening the root, or going back out of it onto the volume, is the same directory and the
+        // same rows, but it is a step like opening any folder, and a step starts with nothing
+        // picked: the first click of the double-click that opened the root picked the root.
+        var continuing = sameDirectory
+            && (!ReferenceEquals(standing, tree) || position.OnVolume == _position.OnVolume);
 
         Tree = tree;
-        CurrentNode = node;
+        Volume = volume;
+        _position = position;
+
+        OnPropertyChanged(nameof(CurrentNode));
+        AscendCommand.NotifyCanExecuteChanged();
 
         if (continuing)
         {
@@ -916,8 +941,8 @@ public sealed partial class ExploreViewModel : ObservableObject
         // snapshots delivered them in name order, and that is a different list rather than this one
         // changed — every row has moved, so reconciling it would be a move per entry, and the scroll
         // position it would preserve is a position in content that is no longer there.
-        ShowRows(tree, node, continuing && standing?.ChildOrder == tree.ChildOrder);
-        BuildTrail(tree, node);
+        ShowRows(tree, node, sameDirectory && standing?.ChildOrder == tree.ChildOrder);
+        BuildTrail(tree);
 
         // What the pointer is over is the map's to say, and it says it again for the drawing this
         // redraw is about to produce. Clearing it here left a reader who had not moved with the
@@ -1004,34 +1029,27 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The path back to the root, brought up to date rather than rebuilt: a crumb is a button a
+    /// The path back to the top, brought up to date rather than rebuilt: a crumb is a button a
     /// reader can put the keyboard on, and clearing the collection destroys it. A walked scan
     /// publishes a snapshot every few hundred milliseconds, and every one of those redraws this.
+    ///
+    /// <para>The steps are <see cref="ExplorePosition.Trail"/>'s. The volume's step is named for
+    /// the whole drive rather than by the root's name, because the root is the step after it.</para>
     /// </summary>
-    private void BuildTrail(ExploreTree tree, int node)
+    private void BuildTrail(ExploreTree tree)
     {
+        _position.Trail(tree, Volume, _steps);
         _trail.Clear();
 
-        for (var current = node; ; current = tree.ParentOf(current))
+        foreach (var step in _steps)
         {
-            _trail.Add(new ExploreCrumb(current, tree.NameOf(current)));
-
-            if (current == tree.RootNode)
-            {
-                break;
-            }
+            _trail.Add(new ExploreCrumb(
+                step,
+                step.IsVolume(tree, Volume) ? "Whole drive" : tree.NameOf(step.Node),
+                FollowsAnother: _trail.Count > 0));
         }
 
-        _trail.Reverse();
-
-        // Written once the trail is the right way round, because it is about where a step sits on
-        // the trail rather than about what the step is.
-        for (var at = 1; at < _trail.Count; at++)
-        {
-            _trail[at] = _trail[at] with { FollowsAnother = true };
-        }
-
-        LiveList.Show(Trail, _trail, crumb => crumb.Node);
+        LiveList.Show(Trail, _trail, crumb => crumb.Position);
     }
 
     /// <summary>
@@ -1134,5 +1152,5 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     private bool CanRun() => !IsBusy;
 
-    private bool CanAscend() => Tree is { } tree && CurrentNode != tree.RootNode;
+    private bool CanAscend() => Tree is { } tree && _position.Up(tree, Volume) is not null;
 }

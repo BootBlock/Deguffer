@@ -215,10 +215,11 @@ public abstract class ExploreSurface
     /// <param name="colours">What the colours are to say.</param>
     /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
     /// <param name="volume">
-    /// The volume <paramref name="tree"/> covers the whole of, or <see cref="VolumeSpace.None"/>.
-    /// Drawn only beside the tree's own root and only by the treemap: free space is in proportion to
-    /// a whole volume and to nothing inside it, so a folder the reader has opened is drawn without
-    /// it.
+    /// The volume to draw beside <paramref name="root"/>, or <see cref="VolumeSpace.None"/>. The caller
+    /// decides whether the reader is on the volume or inside its root (see
+    /// <see cref="ExplorePosition.Beside"/>); this only refuses it beside anything but the tree's own
+    /// root, and only the treemap draws it: free space is in proportion to a whole volume and to
+    /// nothing inside it, so a folder the reader has opened is drawn without it.
     /// </param>
     /// <param name="viewport">
     /// The part of the picture to show. Only the treemap can be zoomed, and every other drawing shows
@@ -265,7 +266,8 @@ public abstract class ExploreSurface
             _ => new TiledSurface(
                 tree, root, width, height, limits, colours,
                 TreemapLayout.Compute(tree, root, width, height, limits, beside, viewport),
-                viewport),
+                viewport,
+                TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits)),
         };
     }
 
@@ -274,6 +276,13 @@ public abstract class ExploreSurface
 
     /// <summary>What is at this canvas point, or null where the point is over nothing.</summary>
     public abstract ExploreHit? At(float x, float y);
+
+    /// <summary>
+    /// Whether anything is drawn beside the root: the volume's free space, or its use the scan did
+    /// not account for. Only a treemap of a whole volume draws either, and only where it has room.
+    /// Said of the whole picture, so a zoom that has left both off the canvas still answers yes.
+    /// </summary>
+    public abstract bool HasVolumeBeside { get; }
 
     /// <summary>
     /// The rectangle of the shape at this canvas point, or null where the point is over nothing or

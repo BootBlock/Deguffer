@@ -189,12 +189,16 @@ public sealed partial class ExploreRow : ObservableObject
 /// </summary>
 public readonly record struct ExploreRowKey(int Node, bool IsDirectory, bool IsLink, string Name);
 
-/// <summary>One step of the path back to the root.</summary>
+/// <summary>One step of the path back to the top.</summary>
+/// <param name="Position">
+/// Where the step leads. A position rather than a node, because the whole drive and its root are
+/// two steps on one node.
+/// </param>
 /// <param name="FollowsAnother">
 /// Whether a step comes before this one, which is where the separator between two steps goes. False
-/// on the root, which nothing precedes.
+/// on the first, which nothing precedes.
 /// </param>
-public sealed record ExploreCrumb(int Node, string Name, bool FollowsAnother = false);
+public sealed record ExploreCrumb(ExplorePosition Position, string Name, bool FollowsAnother = false);
 
 /// <summary>One band of the age legend, ready to draw.</summary>
 /// <param name="Swatch">

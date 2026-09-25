@@ -429,28 +429,16 @@ public static class TreemapLayout
     {
         var remaining = picture;
 
+        // Dropped before anything is laid, so the parts that are drawn share the whole canvas between
+        // them rather than leaving the dropped one's room empty.
+        var (unaccounted, free) = Kept(usedBytes, volume, canvas.Width, canvas.Height, limits);
+
         Span<(int Node, long Bytes)> parts =
         [
             (Root, usedBytes),
-            (ExploreTile.Unaccounted, volume.UnaccountedBytes(usedBytes)),
-            (ExploreTile.FreeSpace, volume.FreeBytes),
+            (ExploreTile.Unaccounted, unaccounted),
+            (ExploreTile.FreeSpace, free),
         ];
-
-        double whole = usedBytes + parts[1].Bytes + parts[2].Bytes;
-        // Measured against the canvas rather than the magnified picture, so what is dropped is the
-        // same at every zoom. Deciding it at each zoom would let a block appear partway into one and
-        // take its share from the root, moving every shape in the picture a few pixels times the zoom.
-        var longer = Math.Max(canvas.Width, canvas.Height);
-
-        // Dropped before anything is laid, so the parts that are drawn share the whole canvas between
-        // them rather than leaving the dropped one's room empty.
-        for (var i = 1; i < parts.Length; i++)
-        {
-            if (parts[i].Bytes > 0 && longer * (parts[i].Bytes / whole) < limits.MinimumTileSize)
-            {
-                parts[i].Bytes = 0;
-            }
-        }
 
         parts.Sort((a, b) => b.Bytes.CompareTo(a.Bytes));
 
@@ -504,6 +492,43 @@ public static class TreemapLayout
         }
 
         return root;
+    }
+
+    /// <summary>
+    /// Whether a treemap of a root holding <paramref name="usedBytes"/>, on a canvas of
+    /// <paramref name="width"/> by <paramref name="height"/>, draws anything of
+    /// <paramref name="volume"/> beside it. The same at every zoom, as what is dropped is.
+    /// </summary>
+    public static bool DrawsBeside(long usedBytes, VolumeSpace volume, float width, float height, LayoutLimits limits)
+    {
+        var (unaccounted, free) = Kept(usedBytes, volume, width, height, limits);
+
+        return unaccounted > 0 || free > 0;
+    }
+
+    /// <summary>
+    /// What of the volume's unaccounted use and free space is drawn beside the root: each as it is,
+    /// or zero where its slab would be thinner than the smallest tile.
+    ///
+    /// <para>Measured against the canvas rather than the magnified picture, so what is dropped is the
+    /// same at every zoom. Deciding it at each zoom would let a block appear partway into one and take
+    /// its share from the root, moving every shape in the picture a few pixels times the zoom.</para>
+    /// </summary>
+    private static (long Unaccounted, long Free) Kept(
+        long usedBytes,
+        VolumeSpace volume,
+        double width,
+        double height,
+        LayoutLimits limits)
+    {
+        var unaccounted = volume.UnaccountedBytes(usedBytes);
+        var free = volume.FreeBytes;
+        double whole = usedBytes + unaccounted + free;
+        var longer = Math.Max(width, height);
+
+        return (Thick(unaccounted), Thick(free));
+
+        long Thick(long bytes) => bytes > 0 && longer * (bytes / whole) >= limits.MinimumTileSize ? bytes : 0;
     }
 
     /// <summary>Stands for the root among the parts <see cref="BesideTheVolume"/> lays out.</summary>
