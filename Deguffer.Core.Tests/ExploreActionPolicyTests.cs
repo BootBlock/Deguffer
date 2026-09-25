@@ -944,7 +944,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// One folder, three owners. A VS Code user-data folder holds Chromium's seven engine caches, the
+    /// One folder, three owners. A VS Code user-data folder holds Chromium's ten engine caches, the
     /// editor's own caches, and the editor's logs, and each set is declared by the provider that
     /// knows it.
     ///
