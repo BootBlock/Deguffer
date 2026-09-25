@@ -142,7 +142,15 @@ public sealed class ScratchSyncRoot : IDisposable
         Marshal.ThrowExceptionForHR(CfSetPinState(handle, (int)state, 0, 0));
     }
 
-    /// <summary>Stop being the sync app, as closing it would.</summary>
+    /// <summary>
+    /// Stop being the sync app, as closing it would, and so see its placeholders as every other process
+    /// does.
+    ///
+    /// <para>Windows disguises a placeholder as an ordinary file to every process but the one connected
+    /// to its root, and a connected process sees it undisguised whatever its thread asks for, as a probe
+    /// showed. Deguffer is never the sync app, so a test of what Deguffer's own calls see disconnects
+    /// first. The placeholders keep every state they had.</para>
+    /// </summary>
     public void Disconnect()
     {
         if (_connection != 0)

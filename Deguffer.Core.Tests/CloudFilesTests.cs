@@ -8,6 +8,11 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// The real Cloud Files calls, against a sync root this suite registers and connects itself.
 ///
+/// <para>This process is that root's sync app while it is connected, and Windows shows a connected sync
+/// app what it hides from everyone else. A test of what Deguffer's own calls see therefore disconnects
+/// first (<see cref="ScratchSyncRoot.Disconnect"/>), which is how Deguffer's process always sees a root.
+/// </para>
+///
 /// <para>Every claim <see cref="ICloudFiles"/> makes is one the rest of the suite relies on through
 /// <see cref="FakeCloudFiles"/>, so each is observed here once: that a listing tells a placeholder from
 /// an ordinary file, that describing one downloads nothing, and that a release changes the one pin it
@@ -86,6 +91,7 @@ public sealed class CloudFilesTests : IDisposable
         var plain = _root.PlainFile("plain.bin", Megabyte);
         var folder = _root.Folder("Folder");
 
+        _root.Disconnect();
         var listed = _cloud.List(_root.Path, CancellationToken.None).ToDictionary(e => e.Path, StringComparer.OrdinalIgnoreCase);
 
         Assert.True(listed[local].IsPlaceholder);
@@ -127,6 +133,7 @@ public sealed class CloudFilesTests : IDisposable
     public void DescribingAnOnlineOnlyFileDownloadsNothing()
     {
         var online = _root.OnlineOnly("online.bin", 5 * Megabyte);
+        _root.Disconnect();
         var clock = Stopwatch.StartNew();
 
         var listed = Assert.Single(_cloud.List(_root.Path, CancellationToken.None));
@@ -142,6 +149,7 @@ public sealed class CloudFilesTests : IDisposable
     public void ReleaseUnpinsAnEligiblePlaceholderAndReportsWhatItHeld()
     {
         var local = _root.LocalCopy("local.bin", Megabyte);
+        _root.Disconnect();
 
         var answer = _cloud.Release(local, _ => true);
 
@@ -171,6 +179,7 @@ public sealed class CloudFilesTests : IDisposable
     public void ReleaseNeverUnpinsAnOrdinaryFile()
     {
         var plain = _root.PlainFile("plain.bin", Megabyte);
+        _root.Disconnect();
 
         var answer = _cloud.Release(plain, _ => true);
 
@@ -202,6 +211,7 @@ public sealed class CloudFilesTests : IDisposable
 
         Assert.Equal(PinState.Unspecified, _cloud.Read(_root.At("Kept", "inside.bin")).Placeholder!.Pin);
 
+        _root.Disconnect();
         var selection = PlaceholderWalk.Of(_cloud, _root.Path, MinimumAge.Off, CancellationToken.None);
 
         Assert.Equal([goes], selection.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
