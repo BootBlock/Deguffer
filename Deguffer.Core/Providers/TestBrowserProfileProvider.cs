@@ -38,7 +38,9 @@ namespace Deguffer.Core.Providers;
 /// <item>A profile a running browser was started with is never a target.
 /// <see cref="ILiveTreeInspector.FindLiveChildren"/> is what sees that: the browser runs from its
 /// own install and works wherever the test runner does, and names the profile only on its command
-/// line. Anything running from or working in a profile is excluded as well.</item>
+/// line. Anything running from or working in a profile is excluded as well. The clean asks again
+/// immediately before it removes each profile, and leaves one a browser has taken up since the
+/// preview. See <see cref="LiveChildrenCheck"/>.</item>
 /// </list>
 ///
 /// <para><b>Presence needs no toolchain</b>, and deliberately. The name identifies its tool, and
@@ -73,6 +75,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     };
 
     private readonly ILiveTreeInspector _liveTrees;
+    private readonly LiveChildrenCheck _stillUnused;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
     private IReadOnlyList<FolderScan>? _scans;
@@ -93,6 +96,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+        _stillUnused = new LiveChildrenCheck(_liveTrees);
         _preferences = preferences ?? DefaultPreferences.Instance;
     }
 
@@ -238,7 +242,11 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
                 // The path is the leftover. An empty WebKit profile frees no bytes, and removing it
                 // is still the whole of what this row is for.
                 IsLeftover: true,
-                Group: profile.Group));
+                Group: profile.Group,
+
+                // Asked of the profile's folder, as FindLive asked it, because a browser a test starts
+                // while the preview is on screen names its profile only on its command line.
+                UseCheck: _stillUnused));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, effective, ct).ConfigureAwait(false);
@@ -292,9 +300,10 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            // A profile held back as live or recent is deliberately absent. Its test runner deletes it
-            // the moment its browser closes, which is usually seconds, so asserting it survived
-            // would raise §5.6's alarm on an ordinary run and teach the reader to ignore it.
+            // A profile the preview held back as live or recent is deliberately absent. Its test
+            // runner deletes it the moment its browser closes, which is usually seconds, so asserting
+            // across an indefinite preview that it survived would raise §5.6's alarm on an ordinary
+            // run and teach the reader to ignore it. One the clean holds back is asserted by the run.
             ProtectedPaths = Protect(
             [
                 .. scans.Select(s => (s.Folder, "The temporary folder itself must survive — only the "
