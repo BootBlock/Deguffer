@@ -167,6 +167,8 @@ public class CrashLogTests
 
         public string? Videos => null;
 
+        public string? Documents => null;
+
         public string TempPath => string.Empty;
 
         public string? UserSecurityIdentifier => null;
