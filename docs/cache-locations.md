@@ -2049,6 +2049,210 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 ---
 
+## Plex Media Server transcoder files
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `Cache\Transcode\Sessions` and `Cache\PhotoTranscoder` in `%LOCALAPPDATA%\Plex Media Server`, and `Transcode\Sessions` in the folder Plex's transcoder setting names |
+| **Method** | Empty those folders in place, taking nothing written in the last 24 hours |
+| **Typical size** | Not measured: no media server was installed on the machine this was researched on. Plex's forums report single sessions of 23 GB |
+
+### What it is
+
+When a player cannot play a file as it is, Plex converts it as it streams and writes the parts to
+`Transcode\Sessions`, one `plex-transcode-…` folder per stream. A stream that ends badly, or a
+server that crashes, can leave its parts there for months. `PhotoTranscoder` holds the posters and
+thumbnails Plex resized for its apps, which Plex makes again as they are shown.
+
+### What Deguffer does
+
+**It reads Plex's settings rather than assuming.** Plex on Windows keeps its settings in the registry
+under `HKEY_CURRENT_USER\Software\Plex, Inc.\Plex Media Server`, not in `Preferences.xml`:
+
+| Value | What it moves |
+| --- | --- |
+| `LocalAppDataPath` | The folder `Plex Media Server` is in |
+| `TranscoderTempDirectory` | The transcoder's folder. Plex writes into `Transcode\Sessions` inside it, never into the folder itself |
+| `DownloadsTempDirectory` | Where Plex prepares downloads for its apps |
+
+The default `Sessions` folder is still offered when the transcoder has moved, because Plex left its
+segments there until the setting changed.
+
+**It leaves anything written in the last 24 hours alone.** A stream playing now writes into the
+same folder its dead predecessors sit in, and deleting a live segment ends somebody's film part-way
+through. 24 hours is the rule Jellyfin's own clean-up follows. The cut-off is fixed when the preview
+is made, so a segment written while the preview is on screen is left alone too.
+
+**It never offers the downloads folder.** A download waiting to go to a phone is not a cache. Where
+one of these folders and the downloads folder overlap, Deguffer leaves that folder alone and says
+so, because neither setting says what Plex keeps where. If the downloads setting is not a full path,
+Deguffer cannot rule out an overlap, and leaves every folder alone.
+
+Plex's scheduled tasks clear old cache files, and an administrator's sign-in can start them over the
+network. Deguffer holds no sign-in, so this is the path-based case §5.2 governs rather than §5.1's
+command.
+
+### What is protected
+
+Everything else in Plex's folder. The Explore page may remove nothing from it, or from either folder
+the settings name, because Explore removes a folder whole and applies no cut-off. Deguffer asserts
+afterwards that these survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Cache\Transcode\Sync`, beside `Sessions` | Media Plex converted and is still waiting to send to a phone or tablet |
+| `Plug-in Support\Databases` | Plex's database: your libraries, watch history and ratings |
+| `Metadata` | The artwork and details Plex gathered, which take hours of processor time to gather again on a large library |
+| `Media` | What Plex worked out from your media files, such as chapter pictures and preview thumbnails |
+| The downloads folder | Where Plex prepares downloads for its apps |
+
+### What it costs you
+
+Plex converts a film or an episode again the next time a player that cannot play the original asks
+for it, and resizes posters and thumbnails again as they are shown.
+
+### Why Tier 1
+
+Every segment and every resized picture is derived from media still on disk, so the cost of losing
+one is making it again.
+
+### Sources
+
+- Plex's list of server settings, including `LocalAppDataPath` and `TranscoderTempDirectory`:
+  <https://support.plex.tv/articles/201105343-advanced-hidden-server-settings/>
+- Plex on the transcoder's temporary folder:
+  <https://support.plex.tv/articles/200250347-transcoder/>
+
+---
+
+## Jellyfin transcoder files
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `cache\transcodes` in Jellyfin's data folder, or the folder `TranscodingTempPath` names |
+| **Method** | Empty that folder in place, taking nothing written in the last 24 hours, and only where Jellyfin's own marker, or the cache tag above the default folder, shows the folder is Jellyfin's |
+| **Typical size** | Not measured: no media server was installed on the machine this was researched on |
+
+### What it is
+
+The same thing as [Plex's](#plex-media-server-transcoder-files): the parts of films Jellyfin
+converted as it streamed, left behind by a stream that ended badly. Jellyfin empties the folder when
+it starts, and its daily clean-up task removes files older than a day.
+
+### What Deguffer does
+
+**It finds the data folder the way Jellyfin's tray program does.** The installer records the folder
+you chose as `DataFolder` under `HKEY_LOCAL_MACHINE\SOFTWARE\Jellyfin\Server`, in the 32-bit view of
+the registry. Deguffer also looks in the two defaults: `%LOCALAPPDATA%\jellyfin`, and
+`%PROGRAMDATA%\Jellyfin\Server` for a service install.
+
+**It reads Jellyfin's settings rather than assuming.** `CachePath` in `config\system.xml` moves the
+cache folder, and the `JELLYFIN_CACHE_DIR` variable moves it where the setting does not.
+`TranscodingTempPath` in `config\encoding.xml` moves the transcoder, which then writes **straight
+into** the folder it names.
+
+**So the folder has to prove it is Jellyfin's.** Jellyfin writes a `.jellyfin-transcode` file into
+whichever folder it transcodes to. Deguffer empties a folder only where that file is there, or where
+the folder is the default `transcodes` folder and the cache folder above it carries the
+`CACHEDIR.TAG` Jellyfin writes. A folder with neither is named, checked afterwards, and left whole.
+
+A moved folder is trusted only through the settings of the install the installer still records. A
+marker outlives the server that wrote it, and a folder you once pointed Jellyfin at may be one you
+use again. Deguffer also leaves alone any transcoder folder that holds Jellyfin's data folder, or
+overlaps one of the folders in the table below.
+
+**It leaves anything written in the last 24 hours alone**, which is Jellyfin's own rule, so a film
+playing now keeps its files. Jellyfin's clean-up task is the route §5.1 prefers, but starting it
+needs an administrator's sign-in to the server, which Deguffer does not hold.
+
+A service install's files belong to the service's account, so Deguffer says that removing them needs
+administrator rights.
+
+### What is protected
+
+Everything else in Jellyfin's data folder, and Deguffer asserts afterwards that these survived. The
+Explore page may remove nothing from it, or from a moved transcoder folder.
+
+| Neighbour | What it really is |
+| --- | --- |
+| `config` | Jellyfin's settings, including where it keeps everything else |
+| `data` | Jellyfin's database: your libraries, users and watch history |
+| `data\backups` | The backups Jellyfin made of its own database and settings |
+| `metadata` | The artwork and details Jellyfin gathered |
+| `plugins` | The plugins you installed, and their settings |
+| `root` | How your libraries are defined |
+
+### What it costs you
+
+Jellyfin converts a film or an episode again the next time a player that cannot play the original
+asks for it.
+
+### Why Tier 1
+
+Every segment is derived from media still on disk.
+
+### Sources
+
+- Jellyfin's server, for the transcoder folder, its marker and the clean-up task:
+  <https://github.com/jellyfin/jellyfin>
+- Jellyfin's Windows installer and tray program, for the registry key:
+  <https://github.com/jellyfin/jellyfin-server-windows>
+- Jellyfin's server configuration: <https://jellyfin.org/docs/general/administration/configuration/>
+
+---
+
+## Emby Server transcoder files
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `transcoding-temp` in `%APPDATA%\Emby-Server\programdata`, and `transcoding-temp` in the folder `TranscodingTempPath` names |
+| **Method** | Empty those folders in place, taking nothing written in the last 24 hours |
+| **Typical size** | Not measured: no media server was installed on the machine this was researched on |
+
+### What it is
+
+The same thing as [Plex's](#plex-media-server-transcoder-files). Emby clears the folder when it
+starts, so the leftovers are those of a server that has run for a long time.
+
+### What Deguffer does
+
+**It empties only a folder called `transcoding-temp`.** `TranscodingTempPath` in
+`config\encoding.xml` moves the transcoder, and Emby then writes into a `transcoding-temp` folder it
+makes inside the folder the setting names. Emby's help warns that it deletes everything in the folder
+it transcodes to, so the folder the setting names is never a target. The default folder is still
+offered when the transcoder has moved, because Emby left its segments there until the setting
+changed, and goes back to it when it cannot write to the new one.
+
+**It leaves anything written in the last 24 hours alone**, so a film playing now keeps its files.
+
+### What is protected
+
+Everything else in Emby's program data folder, and Deguffer asserts afterwards that `config`, `data`,
+`metadata`, `plugins` and `root` survived. The Explore page may remove nothing from it, or from a
+moved `transcoding-temp` folder.
+
+### What it costs you
+
+Emby converts a film or an episode again the next time a player that cannot play the original asks
+for it.
+
+### Why Tier 1
+
+Every segment is derived from media still on disk.
+
+### Sources
+
+- Emby on transcoding and its temporary folder: <https://emby.media/support/articles/Transcoding.html>
+- Emby on its program data folder: <https://emby.media/support/articles/Server-Data-Folder.html>
+
+---
+
 ## Affinity machine-learning models
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
@@ -2141,6 +2345,128 @@ Sources:
 
 - Affinity Photo 2 help — machine learning:
   <https://affinity.help/photo2/en-US.lproj/pages/Extras/machineLearning.html>
+
+---
+
+## Capture One previews and thumbnails
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `<Catalog>.cocatalog\Cache` in each catalog, and `CaptureOne\Cache` inside each folder of images in a session, wherever Capture One's own list says they are |
+| **Method** | Delete each `Cache` folder, and nothing else in the catalog or the `CaptureOne` folder |
+| **Typical size** | Not measured here: Capture One was not installed where this was written. Its user community reports 51.8 GB for 33,608 images at a 2,560-pixel preview size, and 1.66 GB for 451 images at 5,120 pixels |
+
+### What it is
+
+Capture One keeps a thumbnail and a preview of every image so that browsing does not wait on the raw
+files. A catalog keeps them in `Cache` inside the catalog's own folder, in `Thumbnails`, `Previews`
+or `Proxies`, and `Browser`. A session gives every folder of images it shows a `CaptureOne` folder,
+and keeps them in `Cache` inside that. On Windows a `.cocatalog` package is an ordinary folder.
+
+Capture One's own help says that anything in `Cache` can be deleted, and that it rebuilds the files
+the next time an image is viewed. The size of each preview follows the preview size set in its
+preferences, which is why the figures above vary so widely.
+
+### How Deguffer finds them
+
+**Through Capture One's own record, and nowhere else.** Catalogs and sessions live wherever you put
+them, which is often a shoot drive or an external disk rather than your profile, so a search of the
+profile would miss them and a search of every drive would find folders that only look like
+catalogs. Capture One keeps its settings in a `user.config` under `%LOCALAPPDATA%\Capture_One`, or
+under `%LOCALAPPDATA%\Phase_One` for versions older than 21, and lists the documents you opened in
+it. Deguffer reads every full path in that file that ends in `.cocatalog`, `.cocatalogdb` or
+`.cosessiondb`, and takes nothing else from it.
+
+That has two limits, both stated here rather than left to be discovered:
+
+- **A catalog or session that has dropped off Capture One's recent list is not found.** Open it once
+  in Capture One and it is listed again.
+- **In a session, only the session's own folder is searched.** A folder of images elsewhere that the
+  session lists as a favourite has a `CaptureOne` folder too, and is not reached.
+
+A catalog or session on a drive that is not connected is named in the scan, nothing in it is
+examined, and the row does not claim to be clear. One Capture One still lists after it was deleted
+from a drive that is connected holds nothing to examine, and the scan says it no longer exists. If a settings file or folder cannot be read, the
+scan says so, because a catalog it lists was neither cleared nor ruled out.
+
+### What Deguffer does
+
+A path in Capture One's list is not evidence on its own. **A catalog must be a folder named
+`<Name>.cocatalog` holding its database**, a file ending in `.cocatalogdb`, and **a session's folder
+must hold its session file**, ending in `.cosessiondb`. A catalog database anywhere else does not make
+the folder around it a catalog, a session file at the root of a drive names no session, and a session
+folder that holds your profile or its application data is not searched. A listed folder that fails any of these is left
+alone, and the scan says why.
+
+Inside a catalog, and inside each `CaptureOne` folder of a session, **`Cache` is the only thing
+Deguffer will ever remove.** Everything else is Tier 4 by construction, whether or not Deguffer knows
+what it is. A folder called `CaptureOne` is recognised only with one of Capture One's settings folders,
+such as `Settings166`, beside its `Cache`, since the name alone is anybody's. A folder called `Cache`
+anywhere else in a session is yours, and is not offered. A link inside a session, or a `Cache` that is
+a link, is left alone and named.
+
+A session inside another session's folder is its own. Its `CaptureOne` folders are offered once,
+under it, and whether it is open is asked of its own session file.
+
+**A catalog or session Capture One has open is never offered.** Capture One writes previews while it
+works, so before anything is offered Deguffer asks Windows whether anything holds the catalog's
+database or its `writelock` file, or the session file, open. One that is held is left alone and
+named, and the same question is asked again when you press Clean. A plan made while Capture One is
+running also says so by name.
+
+### What is protected
+
+**Everything beside each `Cache`, by name**, which is the point of this entry rather than a footnote
+to it. The worst case here is total:
+
+- **`Originals`**, in a catalog that imported its images: **your photographs**, inside the same
+  folder as the cache. For many of them it is the only copy.
+- **`Settings120`, `Settings166` and their kin**: **every adjustment you have made**. Capture One
+  never writes to a raw file, so these small files are the edits. Their number follows Capture One's
+  rendering engine and keeps changing, which is why the rule names `Cache` and nothing else rather
+  than listing what to avoid.
+- **`Adjustments`**, holding your masks, and the catalog's **`.cocatalogdb`** or the session's
+  **`.cosessiondb`**, holding every image's place, rating and keyword.
+- The catalog folder, the session folder, each folder of images and each `CaptureOne` folder.
+
+**Nothing under `%LOCALAPPDATA%\CaptureOne` or `%APPDATA%\Capture One` is touched.** Those hold your
+styles, presets and preferences, and no cache at all.
+
+### What it costs you
+
+**Every preview and thumbnail is rebuilt from the original the next time you view the image.** For a
+large catalog that is the re-rendering of thousands of raw files, which takes a long time.
+
+**A catalog whose originals are offline loses its offline browsing.** Capture One builds offline
+working on this cache on purpose: with the drive holding the originals disconnected, the catalog
+stays browsable and you can still adjust its images. With the cache gone, those images show as
+missing until you reconnect the drive. Your photographs and your adjustments are untouched either
+way.
+
+### Why Tier 2, not Tier 1
+
+A thumbnail cache would normally be Tier 1. This one is not, and the reason is a feature rather than a
+caveat. Previews can be rebuilt only from the original raw files, and **Deguffer cannot tell "the
+originals are on this disk" from "the originals are on a shelf"**: both look the same from the cache
+folder. Where the originals are online, rebuilding a large catalog's previews is also §3's
+"re-indexing for minutes". So the row is never pre-selected, and it states the offline cost.
+
+**Capture One has no command to empty its cache**, so §5.1 has no route to drive. Its documented
+route is **Regenerate Previews** on the images you select, a menu item in the running program. Since
+Capture One 16.3 previews take less space, so regenerating an older catalog's previews in a current
+version is a reclaim of its own, and keeps the previews.
+
+Sources:
+
+- The Cache folder in Capture One:
+  <https://support.captureone.com/hc/en-us/articles/30111725200413-The-Cache-folder-in-Capture-One>
+- Session sidecar files explained:
+  <https://support.captureone.com/hc/en-us/articles/360002862137-Session-sidecar-files-explained-What-s-inside-the-CaptureOne-folder>
+- Working with offline photos:
+  <https://support.captureone.com/hc/en-us/articles/8236352543005-Working-with-offline-photos>
 
 ---
 

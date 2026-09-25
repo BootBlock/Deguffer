@@ -122,6 +122,9 @@ installed" cleanly on a machine without that toolchain.
 | Firefox caches | |
 | Steam web cache | |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
+| Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue beside it, or the downloads folder |
+| Jellyfin transcoder files | Only a folder Jellyfin's own marker shows is Jellyfin's; never anything written in the last 24 hours |
+| Emby Server transcoder files | Only a `transcoding-temp` folder Emby made; never anything written in the last 24 hours |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
@@ -140,6 +143,7 @@ installed" cleanly on a machine without that toolchain.
 | vcpkg build caches | |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
+| Capture One previews and thumbnails | The `Cache` in each catalog and session Capture One lists, wherever it is; never the photographs or the adjustments beside it. A catalog whose originals are offline cannot be browsed until they are reconnected |
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
 | Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |

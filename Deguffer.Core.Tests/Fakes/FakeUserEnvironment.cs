@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Tests.Fakes;
 
@@ -11,6 +12,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _registry = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _machineRegistry = new(StringComparer.OrdinalIgnoreCase);
 
     public FakeUserEnvironment(string root)
     {
@@ -124,6 +126,17 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
+    /// <summary>
+    /// Pretend <paramref name="valueName"/> is recorded under <paramref name="keyPath"/> in the machine
+    /// hive's <paramref name="view"/>. Keyed by the view, so a provider that asks the wrong one is
+    /// told nothing, as it would be on a real machine.
+    /// </summary>
+    public FakeUserEnvironment WithMachineRegistryValue(string keyPath, string valueName, string value, RegistryView view)
+    {
+        _machineRegistry[MachineKey(keyPath, valueName, view)] = value;
+        return this;
+    }
+
     /// <summary>How many times a provider read the environment. Proves a discovery is memoised.</summary>
     public int EnvironmentReads { get; private set; }
 
@@ -136,6 +149,16 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
         return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value : null;
     }
+
+    public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view)
+    {
+        RegistryReads++;
+
+        return _machineRegistry.TryGetValue(MachineKey(keyPath, valueName, view), out var value) ? value : null;
+    }
+
+    private static string MachineKey(string keyPath, string valueName, RegistryView view) =>
+        $"{view}:{keyPath}\\{valueName}";
 
     public string? GetEnvironmentVariable(string name)
     {
