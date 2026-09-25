@@ -29,8 +29,26 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
     private string Windows => _system.WindowsDirectory;
 
-    private WindowsServicingLogProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system);
+    /// <summary>
+    /// With fake handlers always: the real <em>Windows Reset Log Files</em> cleanup would clear the
+    /// reset logs of whoever runs the suite.
+    /// </summary>
+    private WindowsServicingLogProvider CreateProvider(FakeDiskCleanupHandlers? handlers = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            system: _system,
+            handlers: handlers ?? FakeDiskCleanupHandlers.Windows());
+
+    /// <summary>A directory at the top of the system drive with one log in it.</summary>
+    private string AtTheTop(string relative, string file = "setupact.log")
+    {
+        var directory = Path.Combine(_system.SystemVolume, relative);
+        Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, file), new byte[4096]);
+        return directory;
+    }
 
     /// <summary>A log directory with a file in it, so it measures above zero and is selectable.</summary>
     private string Populate(string name, int bytes = 4096, string file = "log.log")
@@ -479,7 +497,8 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
             _environment,
             new FakeProcessRunner(),
             new FakeProcessInspector("TiWorker"),
-            system: _system);
+            system: _system,
+            handlers: FakeDiskCleanupHandlers.Windows());
 
         var plan = await provider.PlanAsync();
 
@@ -513,6 +532,86 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         Assert.All(root.Locations, l => Assert.Equal(DeclaredLocationKind.Directory, l.Kind));
         Assert.Equal(WindowsSystemRoot.Exclusions, root.ProtectedNames);
+        Assert.True(root.RequiresElevation);
+    }
+
+    /// <summary>
+    /// The logs a reset of this PC leaves are named by Windows' own <em>System recovery log files</em>
+    /// cleanup, so §5.1 sends them there: one row for the three directories it clears, and Windows,
+    /// not Deguffer, removes them. The <c>$SysReset</c> folder holding two of them is asserted to
+    /// survive, and so is the Windows directory holding the third.
+    /// </summary>
+    [Fact]
+    public async Task ClearsTheLogsAResetLeavesThroughWindowsOwnCleanup()
+    {
+        var logs = AtTheTop(Path.Combine("$SysReset", "Logs"));
+        var oldLogs = AtTheTop(Path.Combine("$SysReset", "OldOSLogs"));
+        var pbr = Populate(Path.Combine("Logs", "PBR"), file: "PBR.log");
+        var handlers = FakeDiskCleanupHandlers.Windows();
+        var provider = CreateProvider(handlers);
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps));
+        Assert.Equal(WindowsServicingLogProvider.ResetLogsHandler, step.Handler);
+        Assert.Equal(logs, step.Path);
+        Assert.Equal([oldLogs, pbr], step.AlsoClears);
+        Assert.Equal([logs, oldLogs, pbr], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        var (handler, volume) = Assert.Single(handlers.Calls);
+        Assert.Equal(WindowsServicingLogProvider.ResetLogsHandler, handler);
+        Assert.Equal(LongPath.Display(_system.SystemVolume), volume);
+        Assert.False(Directory.Exists(logs));
+        Assert.False(Directory.Exists(oldLogs));
+        Assert.False(Directory.Exists(pbr));
+        Assert.True(Directory.Exists(Path.Combine(_system.SystemVolume, "$SysReset")));
+        Assert.True(Directory.Exists(Path.Combine(Windows, "Logs")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Where Windows does not register that cleanup, the reset logs stay rather than being deleted by
+    /// hand, and the logs removed by path are still offered beside them.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheResetLogsStandingWhereWindowsOwnCleanupIsMissing()
+    {
+        var logs = AtTheTop(Path.Combine("$SysReset", "Logs"));
+        var cbs = Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+        var handlers = FakeDiskCleanupHandlers.NoneRegistered();
+        var provider = CreateProvider(handlers);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([cbs], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(logs, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(File.Exists(Path.Combine(logs, "setupact.log")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>The reset logs' declaration, pinned by name as the four removed by path are.</summary>
+    [Fact]
+    public void TheResetLogDeclarationIsTheThreeDirectoriesWindowsOwnCleanupNames()
+    {
+        var root = CreateProvider().ResetLogs;
+
+        Assert.Equal(_system.SystemVolume, root.Path);
+        Assert.Equal(
+            [
+                Path.Combine("$SysReset", "Logs"),
+                Path.Combine("$SysReset", "OldOSLogs"),
+                Path.Combine("Windows", "Logs", "PBR"),
+            ],
+            root.Locations.Select(l => l.RelativePath));
+        Assert.Equal(SystemVolumeRoot.Survivors, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
     }
 }

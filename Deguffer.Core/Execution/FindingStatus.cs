@@ -71,6 +71,12 @@ public enum FindingStatus
     /// </summary>
     MailStoresHeldBack,
 
+    /// <summary>
+    /// A location an update left behind that Deguffer holds back until the update has finished. It
+    /// measures zero and it is full, and it is offered once Windows has restarted and settled.
+    /// </summary>
+    UpdateInProgress,
+
     /// <summary>Examined, and there is genuinely nothing in it.</summary>
     AlreadyClear,
 
@@ -79,7 +85,7 @@ public enum FindingStatus
 
     /// <summary>
     /// There is space here, and no step of it can be carried out as Deguffer is currently running.
-    /// The Windows servicing logs are the whole row of this kind.
+    /// The rows under the Windows directory and at the top of the system drive are of this kind.
     /// </summary>
     NeedsElevation,
 }
@@ -89,11 +95,12 @@ public static class FindingStatusExtensions
     /// <summary>
     /// The two or three words the row states beside its size.
     ///
-    /// <para>"Already clear" is a claim about the folder, and the six states above it must not be
+    /// <para>"Already clear" is a claim about the folder, and the seven states above it must not be
     /// reported as that: a folder Windows would not let Deguffer list, a location Deguffer declined
     /// to look at, a cache held back by the guard window, a folder whose contents Windows would not
-    /// let a clean take, a location holding what the user keeps, and a location holding Outlook data
-    /// files. Each of the six measures zero and none of them is clear.</para>
+    /// let a clean take, a location holding what the user keeps, a location holding Outlook data
+    /// files, and a location an unfinished update is holding back. Each of the seven measures zero
+    /// and none of them is clear.</para>
     ///
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
@@ -115,6 +122,7 @@ public static class FindingStatusExtensions
         FindingStatus.RefusedByWindows => "Refused by Windows",
         FindingStatus.OnKeepList => "On your keep list",
         FindingStatus.MailStoresHeldBack => "Outlook data kept",
+        FindingStatus.UpdateInProgress => "Update in progress",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.

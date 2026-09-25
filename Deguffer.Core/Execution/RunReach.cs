@@ -29,12 +29,14 @@ namespace Deguffer.Core.Execution;
 /// explanation, whatever else the run holds.</para>
 /// </param>
 /// <param name="Unbounded">
-/// Whether any plan hands a tool its own eviction command, whose reach nothing here can state.
+/// Whether any plan hands a tool its own eviction command, or Windows one of its Disk Cleanup
+/// handlers, whose reach nothing here can state.
 ///
 /// <para>§5.1 keeps that command as the preferred route precisely because the tool knows about
 /// locations Deguffer does not — <c>dotnet nuget locals all --clear</c> cleared four, two of them
 /// outside <c>.nuget</c> — so a run holding one has no bounded reach at all, and every disappearance
-/// in it stays the run's to answer for.</para>
+/// in it stays the run's to answer for. A <see cref="DiskCleanupStep"/> is the same case: the handler
+/// is chosen because Windows knows what goes with <c>Windows.old</c>, and Deguffer does not.</para>
 ///
 /// <para>It never excuses an emptied folder. "The run could have done it" is what makes a missing
 /// path an alarm rather than an outside removal, and it makes an emptied folder an alarm for the same
@@ -61,6 +63,6 @@ public sealed record RunReach(
         return new RunReach(
             [.. plans.SelectMany(plan => plan.TargetedPaths)],
             [.. commands.SelectMany(command => command.MeasuredPaths)],
-            Unbounded: commands.Count > 0);
+            Unbounded: commands.Count > 0 || plans.Any(plan => plan.Steps.OfType<DiskCleanupStep>().Any()));
     }
 }

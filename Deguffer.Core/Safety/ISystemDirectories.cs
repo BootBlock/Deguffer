@@ -21,6 +21,18 @@ public interface ISystemDirectories
     /// <summary><c>%SystemRoot%</c>, ordinarily <c>C:\Windows</c>.</summary>
     string WindowsDirectory { get; }
 
+    /// <summary>
+    /// The top of the volume Windows is installed on, ordinarily <c>C:\</c>, with its trailing
+    /// separator.
+    ///
+    /// <para>A member rather than something each caller works out from
+    /// <see cref="WindowsDirectory"/>, because an upgrade leaves its scaffolding here —
+    /// <c>Windows.old</c>, <c>$WinREAgent</c> — and §5.2 at a volume root has to be provable. A
+    /// derivation from the Windows directory's own drive would put every test's fixture at the root
+    /// of the drive the suite runs on.</para>
+    /// </summary>
+    string SystemVolume { get; }
+
     /// <summary><c>%PROGRAMDATA%</c>, ordinarily <c>C:\ProgramData</c>.</summary>
     string ProgramData { get; }
 
@@ -51,6 +63,13 @@ public sealed class SystemDirectories : ISystemDirectories
     /// forgotten, for a value that never goes stale.
     /// </summary>
     public string WindowsDirectory { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+
+    /// <summary>
+    /// The root of the Windows directory's own path. Empty where that path has none, which leaves a
+    /// provider nothing to declare rather than a relative path to resolve against the current
+    /// directory.
+    /// </summary>
+    public string SystemVolume => Path.GetPathRoot(WindowsDirectory) ?? string.Empty;
 
     public string ProgramData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 

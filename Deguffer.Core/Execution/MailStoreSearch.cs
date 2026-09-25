@@ -5,7 +5,7 @@ namespace Deguffer.Core.Execution;
 /// <summary>
 /// The Outlook mail stores inside a folder, looked for on the disk immediately before a removal that
 /// cannot leave one behind: a tool's own command, a Recycle Bin emptied by Windows or removed whole by
-/// Deguffer, and Explore moving a folder to the Recycle Bin (§9).
+/// Deguffer, a Disk Cleanup handler's directories, and Explore moving a folder to the Recycle Bin (§9).
 ///
 /// <para><b>Asked again rather than trusted from the plan</b>, for the reason the guard on recently
 /// changed files is asked again inside <see cref="FileRemover"/>: a plan is made minutes before it
@@ -26,6 +26,19 @@ namespace Deguffer.Core.Execution;
 /// </summary>
 public static class MailStoreSearch
 {
+    /// <summary>
+    /// The stores inside any of <paramref name="paths"/> on the disk now, each named once, found off
+    /// the calling thread: the folders asked about can hold hundreds of thousands of entries, and the
+    /// caller may be resuming on the UI thread.
+    /// </summary>
+    public static Task<List<string>> InsideAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
+        Task.Run(
+            () => paths
+                .SelectMany(path => Under(path, WindowsFileSystem.Default, ct))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            ct);
+
     /// <returns>Every store found, in display form, in the order the walk met them.</returns>
     public static IReadOnlyList<string> Under(string path, IFileSystem fs, CancellationToken ct)
     {

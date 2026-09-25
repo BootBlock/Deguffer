@@ -18,15 +18,21 @@ namespace Deguffer.Core.Execution;
 /// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and its files proved standing, for the one
 /// provider that plans one. Defaulted for the reason <paramref name="emptier"/> is.
 /// </param>
+/// <param name="handlers">
+/// How a <see cref="DiskCleanupStep"/> is carried out, for the one provider that plans one. Defaulted
+/// for the reason <paramref name="emptier"/> is.
+/// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
     RefusalRecord refusals,
     IRecycleBinEmptier? emptier = null,
-    ICloudFiles? cloud = null)
+    ICloudFiles? cloud = null,
+    IDiskCleanupHandlers? handlers = null)
 {
     private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
     private readonly ICloudFiles _cloud = cloud ?? CloudFiles.Default;
+    private readonly IDiskCleanupHandlers _handlers = handlers ?? DiskCleanupHandlers.Default;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -72,6 +78,7 @@ public sealed class PlanExecutor(
                 DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers, scanner, handler, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud, release, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
@@ -121,7 +128,7 @@ public sealed class PlanExecutor(
         // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
         // told to leave one file and a store can arrive between the preview and the clean. See
         // MailStoreSearch for what the look costs and why it is paid here.
-        if (await StoresInsideAsync(step.MeasuredPaths, ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        if (await MailStoreSearch.InsideAsync(step.MeasuredPaths, ct).ConfigureAwait(false) is { Count: > 0 } stores)
         {
             return new StepOutcome(
                 step.Description,
@@ -212,7 +219,7 @@ public sealed class PlanExecutor(
         // §9, for the reason the guard is refused above: Windows empties the bin whole, and a store
         // deleted into it since the preview would go with everything else. Looked for on the disk,
         // because the plan was made before it arrived.
-        if (await StoresInsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        if (await MailStoreSearch.InsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } stores)
         {
             return new StepOutcome(
                 step.Description,
@@ -290,7 +297,7 @@ public sealed class PlanExecutor(
         // §9, for a directory that goes whole or not at all: the walk below would step over a store that
         // arrived since the preview and take what belongs with it. Looked for on the disk, as it is before
         // Windows empties a bin. See DeleteDirectoryStep.IsIndivisible.
-        if (step.IsIndivisible && await StoresInsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } arrived)
+        if (step.IsIndivisible && await MailStoreSearch.InsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } arrived)
         {
             return new StepOutcome(
                 step.Description,
@@ -478,18 +485,6 @@ public sealed class PlanExecutor(
             message,
             EntriesRemoved: removal.Took ? 1 : 0);
     }
-
-    /// <summary>
-    /// The stores inside <paramref name="paths"/> now, off the calling thread: the folders asked about
-    /// can hold hundreds of thousands of entries, and the caller may be resuming on the UI thread.
-    /// </summary>
-    private static Task<List<string>> StoresInsideAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
-        Task.Run(
-            () => paths
-                .SelectMany(path => MailStoreSearch.Under(path, WindowsFileSystem.Default, ct))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList(),
-            ct);
 
     private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {

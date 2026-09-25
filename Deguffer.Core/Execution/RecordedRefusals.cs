@@ -31,10 +31,11 @@ internal static class RecordedRefusals
 
         foreach (var step in plan.Steps)
         {
-            // A Recycle Bin is emptied by the shell rather than by Deguffer's removal, so no refusal
-            // was ever recorded against one, and nothing here knows how the shell refuses.
+            // A Recycle Bin is emptied by the shell and a Disk Cleanup handler's directories by
+            // Windows, rather than by Deguffer's removal, so no refusal was ever recorded against
+            // either, and nothing here knows how Windows refuses.
             if (step is not DeleteStep delete
-                || step is EmptyRecycleBinStep
+                || step is EmptyRecycleBinStep or DiskCleanupStep
                 || record.At(delete.Path) is not { Count: > 0 } recorded)
             {
                 steps.Add(step);
