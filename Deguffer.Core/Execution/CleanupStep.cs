@@ -364,6 +364,13 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
     /// <summary>The index first, because that is the order the run removes them in.</summary>
     public override IReadOnlyList<string> Destroys => [.. IndexedBy, Path];
 
+    /// <summary>
+    /// Whether the run looks at the whole of <see cref="Destroys"/> on the disk first, and removes nothing
+    /// if anything it finds would leave a part standing: a recent file, a folder that would not be
+    /// listed, or an Outlook data file. So a plan must not offer such a step while it holds a store.
+    /// </summary>
+    public bool GoesWholeOrNotAtAll => IsAllOrNothing || IndexedBy.Count > 0;
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 

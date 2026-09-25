@@ -162,8 +162,30 @@ public sealed class ZigCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Equal([Child("z")], plan.TargetedPaths);
-        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Leaving 'o' alone", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Leaving 'o' alone", StringComparison.Ordinal)
+            && n.Message.Contains("are missing", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Child("o"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The run looks at the outputs and their index whole before removing either, and stops on an Outlook
+    /// data file (§9). So the preview does not offer the pair while one is inside, rather than offer a
+    /// clean that removes nothing, and the store is asserted to survive.
+    /// </summary>
+    [Fact]
+    public async Task AnOutlookDataFileInsideWithholdsTheOutputsAndTheirIndex()
+    {
+        CreateFullCache();
+        var store = _temp.CreateFile(2048, "profile", "AppData", "Local", "zig", "o", "archive.pst");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(Child("o"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Child("h"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(Child("z"), plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("goes whole or not at all", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(store, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>An index with no outputs beside it is an ordinary cache, and goes on its own.</summary>
@@ -193,7 +215,8 @@ public sealed class ZigCacheProviderTests : IDisposable
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.StartsWith("Leaving 'h' alone: A link", StringComparison.Ordinal));
-        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Leaving 'o' alone", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Leaving 'o' alone", StringComparison.Ordinal)
+            && n.Message.Contains("through the link", StringComparison.Ordinal));
         Assert.True(plan.WasNotExamined);
     }
 

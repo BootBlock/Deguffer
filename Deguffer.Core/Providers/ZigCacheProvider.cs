@@ -239,7 +239,10 @@ public sealed class ZigCacheProvider : CleanupProviderBase
             }
         }
 
-        var targets = Targets(root, found, Decline);
+        var targets = Targets(
+            found,
+            indexIsLink: scan.Links.Any(link => link.Name.Equals(Index, StringComparison.OrdinalIgnoreCase)),
+            Decline);
 
         if (targets.Count == 0 && declined.Count == 0 && !scan.Unreadable)
         {
@@ -292,9 +295,10 @@ public sealed class ZigCacheProvider : CleanupProviderBase
     /// build between the preview and the clean would write an index the step knows nothing about, and
     /// the next preview, once Zig has built anything, offers both.</para>
     /// </summary>
+    /// <param name="indexIsLink">Whether the index was found as a link, which says which reason applies.</param>
     private List<DeletionTarget> Targets(
-        string root,
         Dictionary<string, string> found,
+        bool indexIsLink,
         Action<string, string, string> decline)
     {
         var targets = new List<DeletionTarget>(found.Count);
@@ -316,8 +320,12 @@ public sealed class ZigCacheProvider : CleanupProviderBase
                     decline(
                         path,
                         name,
-                        $"Zig's records of what it built, in '{Index}', are not an ordinary folder here, and the "
-                        + "build outputs go only together with them.");
+                        indexIsLink
+                            ? $"Zig reads its records of what it built through the link '{Index}', and the build "
+                              + "outputs go only together with those records."
+                            : $"Zig's records of what it built, in '{Index}', are missing. A build before the clean "
+                              + "would write new records that point into these outputs, so they are offered once "
+                              + "Zig has written its records again.");
                 }
 
                 continue;

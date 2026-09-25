@@ -358,7 +358,7 @@ public sealed class PlanExecutor(
         // the guard would keep, or a folder that would not be listed, and the removal below would leave a
         // part of it standing. A directory that goes with its index is one of these by construction. See
         // DeleteDirectoryStep.IsAllOrNothing and DeleteDirectoryStep.IndexedBy.
-        if ((step.IsAllOrNothing || step.IndexedBy.Count > 0)
+        if (step.GoesWholeOrNotAtAll
             && (await WholeTreeLook.TakeAsync(step.Destroys, keep, ct).ConfigureAwait(false))
                 .WhyNot("Its parts only mean something together, so it goes whole or not at all", keep) is { } partial)
         {

@@ -471,21 +471,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a directory removed outright can carry an index: {unindexable}.", nameof(targets));
         }
 
-        // An index is removed with the directory it indexes, so it is measured with it: one step's
-        // figure is the sum of several paths, and the pairing of sizes with paths is positional.
-        var measured = await MeasureAllAsync(
-            [.. targets.SelectMany(t => (IEnumerable<string>)[t.Path, .. t.IndexedBy ?? []])], keep, ct).ConfigureAwait(false);
+        // An index is removed with the directory it indexes, so it is measured with it.
+        var (each, measured) = await MeasureGroupsAsync(
+            [.. targets.Select(t => (IReadOnlyList<string>)[t.Path, .. t.IndexedBy ?? []])], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
-        var next = 0;
 
-        foreach (var target in targets)
+        foreach (var (target, group) in targets.Zip(each))
         {
-            var span = Enumerable.Range(next, 1 + (target.IndexedBy?.Count ?? 0)).ToList();
-            next += span.Count;
-
-            var size = span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]);
-
             DeleteStep step = target.Kind switch
             {
                 TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
@@ -497,12 +490,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
             steps.Add(step with
             {
                 Estimated = target.Kind is TargetKind.DirectoryContents or TargetKind.RecycleBin
-                    ? WithoutItsOwnEntry(size)
-                    : size,
+                    ? WithoutItsOwnEntry(group.Size)
+                    : group.Size,
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
-                WithheldRecent = span.Any(i => measured.WithheldRecent[i]),
-                MailStores = [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
+                WithheldRecent = group.WithheldRecent,
+                MailStores = group.MailStores,
                 Identity = target.Identity,
                 IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],
@@ -533,33 +526,62 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MinimumAge keep,
         CancellationToken ct)
     {
-        var measured = await MeasureAllAsync(
-            [.. targets.SelectMany(t => (IEnumerable<string>)[t.Path, .. t.AlsoClears])], keep, ct).ConfigureAwait(false);
+        var (each, measured) = await MeasureGroupsAsync(
+            [.. targets.Select(t => (IReadOnlyList<string>)[t.Path, .. t.AlsoClears])], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
-        var next = 0;
 
-        foreach (var target in targets)
+        foreach (var (target, group) in targets.Zip(each))
         {
-            var count = 1 + target.AlsoClears.Count;
-            var span = Enumerable.Range(next, count).ToList();
-            next += count;
-
             steps.Add(new DiskCleanupStep(target.Path, target.Reason)
             {
                 Handler = target.Handler,
                 Volume = target.Volume,
                 AlsoClears = target.AlsoClears,
-                Estimated = span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
+                Estimated = group.Size,
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
-                WithheldRecent = span.Any(i => measured.WithheldRecent[i]),
-                MailStores = [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
+                WithheldRecent = group.WithheldRecent,
+                MailStores = group.MailStores,
             });
         }
 
         return (steps, measured);
     }
+
+    /// <summary>
+    /// Measure each group of paths one step destroys, and add each group up.
+    ///
+    /// <para>The one place a measurement is paired with the paths it measured. The batch is flat and the
+    /// pairing is positional, which is exactly the shape that silently attributes one directory's size
+    /// to another, so every step that is the sum of several paths comes through here.</para>
+    /// </summary>
+    private async Task<(IReadOnlyList<GroupMeasure> Each, ScanBatch Measured)> MeasureGroupsAsync(
+        IReadOnlyList<IReadOnlyList<string>> groups,
+        MinimumAge keep,
+        CancellationToken ct)
+    {
+        var measured = await MeasureAllAsync([.. groups.SelectMany(g => g)], keep, ct).ConfigureAwait(false);
+
+        var each = new List<GroupMeasure>(groups.Count);
+        var next = 0;
+
+        foreach (var group in groups)
+        {
+            var span = Enumerable.Range(next, group.Count).ToList();
+            next += group.Count;
+
+            each.Add(new GroupMeasure(
+                span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
+                span.Any(i => measured.WithheldRecent[i]),
+                [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)]));
+        }
+
+        return (each, measured);
+    }
+
+    /// <summary>What one step's paths hold together, as <see cref="MeasureGroupsAsync"/> adds them up.</summary>
+    private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores);
 
     /// <summary>
     /// A measurement of a folder emptied in place, which stays standing, so its own entry is not

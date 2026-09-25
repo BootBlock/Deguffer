@@ -13,7 +13,9 @@ namespace Deguffer.Core.Execution;
 /// Windows empties a Recycle Bin whole and clears a Disk Cleanup handler's directories whole, and a
 /// removal whose subject goes whole or not at all
 /// (<see cref="DeleteDirectoryStep.IsIndivisible"/>) would keep the store and take what belongs with it.
-/// So is a step whose whole subject is one store.</para>
+/// A removal the run looks at whole first (<see cref="DeleteDirectoryStep.GoesWholeOrNotAtAll"/>) stops on
+/// a store, so offering it would promise a clean that removes nothing. So is a step whose whole subject
+/// is one store.</para>
 ///
 /// <para><b>Every store becomes a protection, whichever kind of step found it.</b> §5.6 then proves
 /// each one survived, and a run that lost one fails its verification — which is what an over-broad
@@ -69,7 +71,8 @@ public static class MailStorePlan
 
             notes.Add(new PlanNote(PlanNoteSeverity.Warning, why));
 
-            if (step is DeleteStep whole and (EmptyRecycleBinStep or DiskCleanupStep or DeleteDirectoryStep { IsIndivisible: true }))
+            if (step is DeleteStep whole and (EmptyRecycleBinStep or DiskCleanupStep
+                    or DeleteDirectoryStep { IsIndivisible: true } or DeleteDirectoryStep { GoesWholeOrNotAtAll: true }))
             {
                 // Each directory the step would have destroyed, and only those holding a store: the
                 // others were measured without one, and may have held nothing at all.
@@ -180,7 +183,7 @@ public static class MailStorePlan
             + "clears it whole and cannot be told to leave one file, and Deguffer never removes one. Move what "
             + "is named here out, and scan again.",
 
-        DeleteDirectoryStep { IsIndivisible: true } whole =>
+        DeleteDirectoryStep whole when whole.IsIndivisible || whole.GoesWholeOrNotAtAll =>
             $"Leaving {LongPath.Display(whole.Path)} as it is: it holds {Every(whole.MailStores)}. What is "
             + "inside it goes whole or not at all, and Deguffer never removes one. Move what is named here "
             + "out, or delete it yourself, and scan again.",
