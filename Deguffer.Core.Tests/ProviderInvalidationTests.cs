@@ -199,6 +199,10 @@ public sealed class ProviderInvalidationTests : IDisposable
 
         // Never the real one: it would walk and unpin the cloud accounts of whoever ran the suite.
         : parameter == typeof(ICloudFiles) ? new FakeCloudFiles()
+
+        // Never the real one: it would remove the previous Windows installation of whoever ran the suite.
+        : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
+        : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
         : throw new XunitException(
             $"{provider.Name} takes a {parameter.Name}, which this test cannot fabricate from a fake. " +
             "Extend Argument so the provider is still covered.");

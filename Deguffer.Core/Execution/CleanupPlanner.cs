@@ -149,6 +149,8 @@ public sealed class CleanupPlanner
         new FileHistoryProvider(environment, preferences: preferences),
         new CloudLocalCopiesProvider(environment),
         new TempDirectoryProvider(environment, liveTrees: liveTrees, preferences: preferences),
+        new PreviousWindowsInstallationProvider(environment),
+        new WindowsUpdateLeftoverProvider(environment),
         new CrashDumpProvider(environment),
         new WindowsServicingLogProvider(environment),
         new EpicLauncherLogProvider(environment),

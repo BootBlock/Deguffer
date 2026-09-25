@@ -3,11 +3,11 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
-> shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps and
-> servicing logs, §7's per-volume recycle bins, §8's Unreal Engine derived-data caches, §10's release
-> of OneDrive's local copies and §12's Squirrel staging and superseded builds have shipped; everything
-> else is unstarted.
-> **Open questions 1 and 2 are answered** — see the foot of this document.
+> shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
+> servicing logs and completed upgrade scaffolding, §7's per-volume recycle bins, §8's Unreal Engine
+> derived-data caches, §10's release of OneDrive's local copies and §12's Squirrel staging and
+> superseded builds have shipped; everything else is unstarted. **Open questions 1, 2 and 3 are
+> answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -1189,7 +1189,7 @@ the size of installed RAM — a single file of 32 or 64 GB after one bugcheck. T
 crash dumps also turned up inside a container tool's log directory, which suggests dumps are worth
 finding by shape as well as by location.
 
-### Completed upgrade scaffolding — Tier 2, measured at 1.74 GB
+### Completed upgrade scaffolding — Tier 2, measured at 1.74 GB ✅ done
 
 `C:\$WinREAgent` is the recovery-environment servicing folder, and 1.74 GB of it was still present.
 Disk Cleanup's *Windows Update Cleanup* pass does not remove it. Its siblings are `$GetCurrent`,
@@ -1200,6 +1200,55 @@ the update that created it has finished and no restart is pending. A provider mu
 assume it — getting it wrong interrupts a servicing operation mid-flight. **If that check cannot be
 made reliable, this entry belongs in §9 beside `WinSxS` rather than in the product.** Establish the
 check before writing the provider.
+
+**Outcome:** shipped as two providers, `PreviousWindowsInstallationProvider` and
+`WindowsUpdateLeftoverProvider`, with a new step kind, `DiskCleanupStep`, that hands one of Windows'
+own Disk Cleanup handlers the volume. Seven things the work settled that this entry did not anticipate:
+
+- **Half of the family has a vendor route after all, so §5.1 decides the route.** Disk Cleanup's
+  registrations under `VolumeCaches` name `Windows.old` (*Previous Installations*), `$Windows.~BT`
+  (*Temporary Setup Files*) and `$Windows.~WS` with `ESD\Windows` and `ESD\Download` (*Windows ESD
+  installation files*), all served by one class in `setupcln.dll` that reads its role from the key
+  it is initialised with. *Previous Installations* also takes down the uninstall registration, which
+  a removal by path would leave behind. So those three are never deleted by Deguffer: the handler
+  runs, and the disk afterwards says what it took.
+- **`$SysReset` has a route too, and it is a log.** The *Windows Reset Log Files* registration names
+  no directory, but `setupcln.dll`'s own strings name `$SysReset\Logs`, `$SysReset\OldOSLogs` and
+  `Windows\Logs\PBR`, and Disk Cleanup calls them system recovery log files. They joined the
+  Tier 3 servicing logs through that handler rather than shipping at Tier 2 by path.
+- **Only `$WinREAgent` and `$GetCurrent` are left without one, and "documented as safe" above was
+  not borne out.** Nothing first-party documents either folder or when it may go. They ship at the
+  maintainer's decision as Deguffer's own stated judgement, removed by path, whole or not at all,
+  once nothing inside has been created or written for thirty days — which keeps back exactly the
+  nine-day-old copy the issue measured.
+- **The pending-restart check is three questions, not one** — see open question 3. A restart owed
+  for an update, the servicing stack or Setup running, and a restart due to move a file *inside* the
+  folder each hold a row back, and the row says *Update in progress* rather than *Already clear*.
+  That needed a withholding and a finding status of its own.
+- **The uninstall window is the machine's, not a constant.** `DISM /Set-OSUninstallWindow`
+  documents 2 to 60 days and 10 otherwise. Its value is read from `HKLM\SYSTEM\Setup`, which is known
+  by convention rather than documented, so anything outside the documented range reads as the
+  default.
+- **The handler is asked before a row is offered, because it can decline.** On the audited machine
+  the *Windows ESD installation files* handler answered "nothing to delete", elevated, over a
+  `$Windows.~WS` holding 367 KB of setup sources, and a run sent to clear it cleared nothing. So a
+  plan now asks each handler with `Initialize` and `GetSpaceUsed`, never `Purge`, and offers only
+  what the handler claims. `setupcln.dll` answers "nothing to delete" to every process that is not
+  elevated, so an unelevated plan offers the row as needing elevation and the elevated plan asks.
+  It was also observed to implement only `IEmptyVolumeCache`, and to answer for `C:\` but not `C:`.
+  A real `Purge` that removes something has not been observed: nothing on the audited machine was
+  claimed by the three setup handlers, so whether *Previous Installations* shows its own
+  confirmation when driven outside Disk Cleanup is still open.
+- **Whether a handler leaves its containers standing is not documented.** `$SysReset` and `ESD` are
+  asserted to survive, as every container is. If Windows turns out to remove an emptied one, §5.6
+  will say so as a failure on the first run that meets it, and the assertion is what to revisit.
+
+**Still open, and found on the way:** the *Windows Upgrade Log Files* registration names
+`Windows\Panther`, which `WindowsServicingLogProvider` removes by path. That provider's own record
+said no handler names any of its four locations, which is corrected. Routing `Panther` through the
+handler is not the obvious fix it looks like, because the registration is marked valid only after
+an upgrade, and on a machine that was installed rather than upgraded it would stop clearing
+`Panther` at all.
 
 ### Servicing and update logs — Tier 3, measured at 64 MB ✅ done
 
@@ -1565,6 +1614,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration ✅ | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
 | Windows Search index | Service control, which Deguffer does not do today. Decide the policy before the provider | 2.2 GB |
+| Completed upgrade scaffolding ✅ | Expected one path-based provider behind a pending-restart check. Three of the five names had a Disk Cleanup handler, which needed a step kind of its own, and a fourth turned out to be logs — §6 records all of it | 1.7 GB |
 
 The last two rows are different in kind from the rest. Cloud-sync dehydration and service control
 are not new providers, they are new **capabilities**, and each widens what the safety model has to
@@ -1634,7 +1684,14 @@ written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
    would produce nonsense matching nothing, which reads as "dormant" — the dangerous direction. The
    offsets are therefore checked against Deguffer's own process, whose working directory is already
    known, and a mismatch turns the mechanism off and reports incomplete rather than empty.
-3. **Is the pending-reboot check reliable enough to ship?** It gates `C:\$WinREAgent` entirely.
+3. ~~**Is the pending-reboot check reliable enough to ship?**~~ **Answered, as three checks rather
+   than one.** Microsoft's own Configuration Manager treats `Component Based Servicing\RebootPending`
+   and `WindowsUpdate\Auto Update\RebootRequired` as a restart owed, and both are readable
+   unelevated. `RebootInProgress` and `PackagesPending` are convention rather than documentation, and
+   are asked as well, because asking them can only hold more back. `PendingFileRenameOperations` is
+   documented but routinely non-empty on a healthy machine, so it is asked per folder: an entry
+   inside the folder holds that folder back, and nothing else does. The servicing stack and Setup
+   running is the third check. Every unreadable answer reads as "not finished". See §6.
 4. **Should Deguffer control services at all?** It gates the search index, and possibly nothing else.
    If nothing else, the answer is probably no, and the index belongs in §9.
 5. **What does a non-deleting step look like in `CleanupPlan`?** Still open, and narrowed rather

@@ -25,7 +25,7 @@ public static class PreviewSummary
 {
     /// <summary>
     /// What a new state gets until somebody gives it words of its own, and what a mixture of causes
-    /// gets in any case. Naming two of seven causes would be less true than naming none.
+    /// gets in any case. Naming two of eight causes would be less true than naming none.
     /// </summary>
     private const string MixedCauses =
         "Nothing to reclaim, and not every location here is clear. Check what each row reports.";
@@ -77,7 +77,7 @@ public static class PreviewSummary
         }
 
         // Every row measures zero from here on, which is not the same as every row being clear.
-        // Seven states measure zero for a reason of their own and say so in their own words; what is
+        // Eight states measure zero for a reason of their own and say so in their own words; what is
         // left after removing the two that are genuinely nothing to act on is the reason the bar
         // has to agree with.
         present.Remove(FindingStatus.AlreadyClear);
@@ -117,6 +117,9 @@ public static class PreviewSummary
             "Nothing to reclaim, and some of these hold only items on your keep list.",
         FindingStatus.MailStoresHeldBack =>
             "Nothing to reclaim, and some of these hold Outlook data files, which Deguffer never removes.",
+        FindingStatus.UpdateInProgress =>
+            "Nothing to reclaim yet: some of these were left by a Windows update that has not finished, "
+            + "and are offered once it has.",
         FindingStatus.AwaitingSourceFolders =>
             "Nothing to reclaim, and some of these locations need a source folder before Deguffer "
             + "can look.",

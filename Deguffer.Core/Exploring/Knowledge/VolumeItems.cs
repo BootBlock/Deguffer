@@ -20,10 +20,10 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// to a question it cannot source.</para>
 ///
 /// <para>Where Microsoft documents the <em>component</em> and not the folder it leaves behind,
-/// <c>$WinREAgent</c> being the one here, the entry says which of the two is documented and stops.
-/// That is a narrower thing than an exception to the rule above: the reader is told what the name
-/// belongs to and told that nothing else about it is stated anywhere, rather than being handed a
-/// purpose somebody inferred.</para>
+/// <c>$WinREAgent</c> being the one here, the entry says which of the two is documented, and that
+/// the Storage page's offer to remove it is Deguffer's own judgement. That is a narrower thing than an
+/// exception to the rule above: the reader is told what the name belongs to and told that nothing
+/// else about it is stated anywhere, rather than being handed a purpose somebody inferred.</para>
 /// </summary>
 internal static class VolumeItems
 {
@@ -114,8 +114,9 @@ internal static class VolumeItems
             + "during an update. Microsoft documents the component but not this folder, so what is "
             + "inside it and when it is cleared away are not stated anywhere first-party.",
 
-            "Microsoft documents no way to clear it and says nothing about what removing it costs, "
-            + "so Deguffer will not guess either."),
+            "Microsoft documents no way to clear it and says nothing about what removing it costs. "
+            + "The Storage page offers it on Deguffer's own judgement, and says so, only once nothing "
+            + "inside has changed for 30 days and no update is waiting to finish."),
 
         new(
             KnownPlace.VolumeRoot,

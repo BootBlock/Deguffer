@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Fifty providers, each holding its own knowledge of one location. A provider reports "not
+Fifty-three providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -150,6 +150,8 @@ installed" cleanly on a machine without that toolchain.
 | Unreal project derived data cache | A project's own `DerivedDataCache` under your own source trees |
 | Superseded application versions | Older versions a Squirrel-updated app still keeps |
 | Temporary files | Emptied in place, taking only what nothing has touched for seven days |
+| Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
+| Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document: offered on Deguffer's own stated judgement, whole, once nothing inside has changed for 30 days |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 
 **Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.
@@ -159,7 +161,7 @@ installed" cleanly on a machine without that toolchain.
 | Recycle Bin | |
 | Windows File History | Windows' own command drops saved versions past an age you set; the backup drive itself is never touched |
 | Crash dumps and error reports | |
-| Windows servicing logs | |
+| Windows servicing logs | The logs a reset of this PC leaves are cleared by Windows' own cleanup for them, never by path |
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
 | Claude Code MCP server logs | |

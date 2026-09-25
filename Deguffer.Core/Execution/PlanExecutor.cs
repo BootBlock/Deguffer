@@ -18,15 +18,29 @@ namespace Deguffer.Core.Execution;
 /// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and its files proved standing, for the one
 /// provider that plans one. Defaulted for the reason <paramref name="emptier"/> is.
 /// </param>
+/// <param name="handlers">
+/// How a <see cref="DiskCleanupStep"/> is carried out. Defaulted for the reason
+/// <paramref name="emptier"/> is.
+/// </param>
+/// <param name="servicing">
+/// Asked again, with <paramref name="inspector"/>, immediately before a step that is
+/// <see cref="CleanupStep.HeldWhileUpdating"/>. Defaulted for the reason <paramref name="emptier"/> is.
+/// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
     RefusalRecord refusals,
     IRecycleBinEmptier? emptier = null,
-    ICloudFiles? cloud = null)
+    ICloudFiles? cloud = null,
+    IDiskCleanupHandlers? handlers = null,
+    IWindowsServicing? servicing = null,
+    IProcessInspector? inspector = null)
 {
     private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
     private readonly ICloudFiles _cloud = cloud ?? CloudFiles.Default;
+    private readonly IDiskCleanupHandlers _handlers = handlers ?? DiskCleanupHandlers.Default;
+    private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
+    private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -65,6 +79,14 @@ public sealed class PlanExecutor(
             // Each step's own 0-to-1 becomes its slice of this plan's 0-to-1.
             var stepProgress = ScaledProgress.Within(progress, done / total, weights[i] / total);
 
+            if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
+            {
+                outcomes.Add(new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating));
+                done += weights[i];
+                progress?.Report(done / total);
+                continue;
+            }
+
             outcomes.Add(step switch
             {
                 RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
@@ -72,6 +94,7 @@ public sealed class PlanExecutor(
                 DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers, scanner, handler, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud, release, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
@@ -95,6 +118,25 @@ public sealed class PlanExecutor(
             // §5.6 is not a separate user action: acting and proving what survived are one step.
             Verification = PlanVerifier.Verify(plan, runReach, leftStanding, ct, _cloud),
         };
+    }
+
+    /// <summary>
+    /// Why <paramref name="step"/> must not run because Windows is now in the middle of an update, or
+    /// null where nothing says it is. The process table is read afresh rather than from the snapshot
+    /// the planning pass took, for the reason the step is asked about at all.
+    /// </summary>
+    private string? StillUpdating(CleanupStep step)
+    {
+        _inspector.Invalidate();
+
+        if (UnfinishedUpdate.HoldsEverything(_servicing, _inspector) is { } everything)
+        {
+            return $"Nothing was removed: {everything}";
+        }
+
+        return step is DeleteStep delete && delete.Destroys.FirstOrDefault(_servicing.HasPendingOperationsIn) is { } pending
+            ? UnfinishedUpdate.PendingNow(pending)
+            : null;
     }
 
     private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, CancellationToken ct)
@@ -121,7 +163,7 @@ public sealed class PlanExecutor(
         // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
         // told to leave one file and a store can arrive between the preview and the clean. See
         // MailStoreSearch for what the look costs and why it is paid here.
-        if (await StoresInsideAsync(step.MeasuredPaths, ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        if (await MailStoreSearch.InsideAsync(step.MeasuredPaths, ct).ConfigureAwait(false) is { Count: > 0 } stores)
         {
             return new StepOutcome(
                 step.Description,
@@ -139,7 +181,7 @@ public sealed class PlanExecutor(
         // planning and executing — Invalidate runs once, at the top of a planning pass — so an
         // ordinary measurement here would hand back the very figure it is about to be subtracted
         // from, and a clean that freed gigabytes would report nothing.
-        var after = await MeasureAllAsync(step.MeasuredPaths, ct).ConfigureAwait(false);
+        var after = (await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false)).Reclaimable;
         var reclaimed = before - after;
 
         // A negative delta means the tree grew between preview and clean — a build restoring
@@ -212,7 +254,7 @@ public sealed class PlanExecutor(
         // §9, for the reason the guard is refused above: Windows empties the bin whole, and a store
         // deleted into it since the preview would go with everything else. Looked for on the disk,
         // because the plan was made before it arrived.
-        if (await StoresInsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        if (await MailStoreSearch.InsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } stores)
         {
             return new StepOutcome(
                 step.Description,
@@ -287,10 +329,20 @@ public sealed class PlanExecutor(
         IProgress<double>? progress,
         CancellationToken ct)
     {
+        // A directory whose parts only mean something together is looked at first, on the disk: anything
+        // the guard would keep, or a folder that would not be listed, and the removal below would leave a
+        // part of it standing. See DeleteDirectoryStep.IsAllOrNothing.
+        if (step.IsAllOrNothing
+            && (await WholeTreeLook.TakeAsync([step.Path], keep, ct).ConfigureAwait(false))
+                .WhyNot("Its parts only mean something together, so it goes whole or not at all", keep) is { } partial)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, partial);
+        }
+
         // §9, for a directory that goes whole or not at all: the walk below would step over a store that
         // arrived since the preview and take what belongs with it. Looked for on the disk, as it is before
         // Windows empties a bin. See DeleteDirectoryStep.IsIndivisible.
-        if (step.IsIndivisible && await StoresInsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } arrived)
+        if (step.IsIndivisible && await MailStoreSearch.InsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } arrived)
         {
             return new StepOutcome(
                 step.Description,
@@ -480,18 +532,14 @@ public sealed class PlanExecutor(
     }
 
     /// <summary>
-    /// The stores inside <paramref name="paths"/> now, off the calling thread: the folders asked about
-    /// can hold hundreds of thousands of entries, and the caller may be resuming on the UI thread.
+    /// What <paramref name="paths"/> hold now, read from the disk rather than the volume snapshot:
+    /// nothing invalidates that snapshot between planning and executing, so an ordinary measurement
+    /// here would hand back the figure it is about to be subtracted from.
     /// </summary>
-    private static Task<List<string>> StoresInsideAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
-        Task.Run(
-            () => paths
-                .SelectMany(path => MailStoreSearch.Under(path, WindowsFileSystem.Default, ct))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList(),
-            ct);
-
-    private async Task<long> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct)
+    internal static async Task<ScanSize> MeasureFromDiskAsync(
+        IDirectoryScanner scanner,
+        IReadOnlyList<string> paths,
+        CancellationToken ct)
     {
         var total = ScanSize.Zero;
 
@@ -501,6 +549,6 @@ public sealed class PlanExecutor(
             total += measured.Size;
         }
 
-        return total.Reclaimable;
+        return total;
     }
 }

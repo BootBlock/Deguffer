@@ -31,11 +31,19 @@ namespace Deguffer.Core.Providers;
 /// every directory passed through on the way down is checked for being a link and asserted to have
 /// survived.</para>
 ///
-/// <para><b>§5.1 does not apply, and it was checked rather than assumed.</b> Windows ships no
-/// eviction command for these. <c>DISM /StartComponentCleanup</c> addresses <c>WinSxS</c>, which §9
-/// excludes outright, and <c>wevtutil</c> addresses the <c>.evtx</c> event logs, which are a
-/// different location this provider does not touch. Disk Cleanup registers no handler for any of
-/// the four. Every published instruction is to delete the directory.</para>
+/// <para><b>§5.1, checked rather than assumed, and it applies to one subject here.</b> Windows ships
+/// no eviction command for the four locations removed by path. <c>DISM /StartComponentCleanup</c>
+/// addresses <c>WinSxS</c>, which §9 excludes outright, and <c>wevtutil</c> addresses the
+/// <c>.evtx</c> event logs, which are a different location this provider does not touch. The logs a
+/// reset of this PC leaves are the exception: Windows' own <em>System recovery log files</em>
+/// cleanup names <c>$SysReset\Logs</c>, <c>$SysReset\OldOSLogs</c> and <c>Windows\Logs\PBR</c>, so
+/// those are cleared through it (<see cref="ResetLogsHandler"/>).</para>
+///
+/// <para><b>One question is still open.</b> Windows' <em>Windows Upgrade Log Files</em> cleanup names
+/// <c>Panther</c> too, which the survey behind this provider missed. It registers itself as valid only
+/// after an upgrade, so sending <c>Panther</c> through it would stop clearing the setup logs of a
+/// machine that was installed rather than upgraded. Whether that trade is right is recorded in
+/// <c>docs/todo/unreached-locations.md</c> §6 rather than decided here.</para>
 ///
 /// <para><b>No age filter, for the reason <see cref="CrashDumpProvider"/> records, and the live
 /// case here is the sharper one.</b> Somebody diagnosing a failed update is reading exactly these
@@ -52,6 +60,14 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class WindowsServicingLogProvider : CleanupProviderBase
 {
+    /// <summary>
+    /// Windows' own cleanup for the logs a reset of this PC leaves, as <c>setupcln.dll</c> registers it.
+    /// Its registration names no directory, and the handler's own strings name the three in
+    /// <see cref="ResetLogs"/>.
+    /// </summary>
+    public const string ResetLogsHandler = "Windows Reset Log Files";
+
+    private readonly ISystemDirectories _system;
     private readonly IReadOnlyList<DeclaredRoot> _roots;
 
     public WindowsServicingLogProvider(
@@ -59,14 +75,28 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IDiskCleanupHandlers? handlers = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            handlers: handlers)
     {
-        _roots = Declare(system ?? SystemDirectories.Current);
+        _system = system ?? SystemDirectories.Current;
+        _roots = Declare(_system);
+        ResetLogs = SystemDriveRoot.Holding(
+            _system,
+            new DeclaredLocation(
+                Path.Combine("$SysReset", "Logs"),
+                "Logs from resetting or refreshing this PC, kept in case the reset went wrong."),
+            new DeclaredLocation(
+                Path.Combine("$SysReset", "OldOSLogs"),
+                "Logs the installation that was reset had kept, carried across the reset."),
+            new DeclaredLocation(
+                Path.Combine("Windows", "Logs", "PBR"),
+                "Logs from the recovery environment's reset and refresh."));
     }
 
     public override string Id => "windows-servicing-logs";
@@ -78,18 +108,18 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     public override StepGrain Grain => StepGrain.Parts;
 
     public override string WhatHappensOnNextUse =>
-        "The record of every update, repair and upgrade this machine has already carried out is "
-        + "destroyed, so none of it can be read afterwards to work out why one of them failed. "
+        "The record of every update, repair, reset and upgrade this machine has already carried out "
+        + "is destroyed, so none of it can be read afterwards to work out why one of them failed. "
         + "Windows writes a fresh log the next time it services itself, and updating still works "
         + "exactly as before.";
 
     public override ProviderDescription Description { get; } = new()
     {
-        Application = "Windows Update, component servicing, the system file checker, and the WMI "
-            + "service",
+        Application = "Windows Update, component servicing, the system file checker, Reset this PC, "
+            + "and the WMI service",
         Publisher = "Microsoft",
         Purpose = "Windows records what it did every time it serviced itself: installed an "
-            + "update, repaired a component, or ran sfc. Beside those it keeps backup trace files "
+            + "update, repaired a component, ran sfc, or reset this PC. Beside those it keeps backup trace files "
             + "for the event sessions the WMI service runs. On a machine with a long update "
             + "history the four together run to gigabytes.",
         Recommendation = "What gets re-created here is the next log, never the ones removed. "
@@ -98,10 +128,17 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     };
 
     /// <summary>
-    /// What this provider names, root by root. Exposed so tests can assert that the Windows
+    /// What this provider removes by path, root by root. Exposed so tests can assert that the Windows
     /// directory is never a target and that §9's exclusions are asserted rather than merely omitted.
     /// </summary>
     public IReadOnlyList<DeclaredRoot> Roots => _roots;
+
+    /// <summary>
+    /// What <see cref="ResetLogsHandler"/> clears, declared at the top of the system drive so each
+    /// directory is checked for being a link, dated and measured before Windows is asked, and so the
+    /// drive's own contents are asserted to have survived.
+    /// </summary>
+    public DeclaredRoot ResetLogs { get; }
 
     /// <summary>
     /// §5.3: the servicing stack writes <c>CBS.log</c> from <c>TiWorker</c> under
@@ -120,7 +157,9 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var scan = DeclaredLocations.Examine(_roots, ct);
+        // One examination of both declarations, so the drive's contents are asserted once and the
+        // sentence about administrator rights is said once.
+        var scan = DeclaredLocations.Examine([.. _roots, ResetLogs], ct);
 
         if (scan.FoundNothing)
         {
@@ -128,10 +167,60 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>(scan.Notes);
+        var held = new List<ProtectedPath>();
 
-        var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
+        var resetPaths = ResetLogs.Locations
+            .Select(location => Path.Combine(ResetLogs.Path, location.RelativePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        if (measured.Note is { } scanNote)
+        var byPath = scan.Targets.Where(t => !resetPaths.Contains(t.Path)).ToList();
+        var resetLogs = scan.Targets.Where(t => resetPaths.Contains(t.Path)).ToList();
+
+        var (deletions, measured) = await PlanDeletionsAsync(byPath, keep, ct).ConfigureAwait(false);
+        var steps = new List<CleanupStep>(deletions);
+
+        // The measurement that took the slower route is the one the plan reports, whichever of the
+        // two it was: the reset logs are measured apart from the logs removed by path.
+        var scanned = measured;
+
+        var volume = LongPath.Display(_system.SystemDrive);
+        var survey = resetLogs.Count == 0
+            ? null
+            : await Task.Run(() => Handlers.Survey(ResetLogsHandler, volume, ct), ct).ConfigureAwait(false);
+
+        if (survey is { MayOffer: true })
+        {
+            var (cleared, resetMeasured) = await PlanDiskCleanupsAsync(
+                [
+                    new DiskCleanupTarget(
+                        resetLogs[0].Path,
+                        "Logs from resetting or refreshing this PC, cleared by Windows' own cleanup for them.",
+                        ResetLogsHandler,
+                        volume,
+                        [.. resetLogs.Skip(1).Select(t => t.Path)],
+                        resetLogs.Any(t => t.LastWritten is null) ? null : resetLogs.Max(t => t.LastWritten),
+                        RequiresElevation: true),
+                ],
+                keep,
+                ct).ConfigureAwait(false);
+
+            steps.AddRange(cleared);
+
+            if (scanned.Fallback == FallbackReason.None)
+            {
+                scanned = resetMeasured;
+            }
+        }
+        else if (survey?.WhyLeftAlone(ResetLogsHandler, LongPath.Display(resetLogs[0].Path)) is { } why)
+        {
+            // Deleting them by hand is not the fallback: §5.1 prefers Windows' own route, and where
+            // that route will not clear them the logs are left where they are and §5.6 proves it.
+            notes.Add(new PlanNote(PlanNoteSeverity.Information, why));
+            held.AddRange(resetLogs.Select(t => new ProtectedPath(
+                t.Path, "Left alone because Windows' own cleanup does not clear it.", PathPresence.Present)));
+        }
+
+        if (scanned.Note is { } scanNote)
         {
             notes.Add(scanNote);
         }
@@ -156,10 +245,13 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected]),
+            ProtectedPaths = [.. Protect([.. scan.Protected]), .. held],
             Notes = notes,
-            Fallback = measured.Fallback,
-            WasNotExamined = scan.NothingWasExamined,
+            Fallback = scanned.Fallback,
+
+            // Logs whose cleanup is missing are logs Deguffer declined to act on, and a row holding
+            // nothing else must not read "Already clear" above them.
+            WasNotExamined = scan.NothingWasExamined || (steps.Count == 0 && held.Count > 0),
             HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }
@@ -196,7 +288,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     /// anything the table does not name.
     /// </summary>
     private IEnumerable<string> DeclaredPaths() =>
-        from root in _roots
+        from root in _roots.Append(ResetLogs)
         from location in root.Locations
         select Path.Combine(root.Path, location.RelativePath);
 }

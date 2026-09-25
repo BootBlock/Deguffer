@@ -10,7 +10,8 @@ namespace Deguffer.Core.Execution;
 /// removal Deguffer performs file by file steps over a store (see <see cref="RemovalWalk"/>), so its step
 /// stays and does less, and its figure already excludes the store. A step that cannot leave one file is
 /// withheld while a store is inside its reach: a tool's own command decides what it removes (§5.1),
-/// Windows empties a Recycle Bin whole, and a removal whose subject goes whole or not at all
+/// Windows empties a Recycle Bin whole and clears a Disk Cleanup handler's directories whole, and a
+/// removal whose subject goes whole or not at all
 /// (<see cref="DeleteDirectoryStep.IsIndivisible"/>) would keep the store and take what belongs with it.
 /// So is a step whose whole subject is one store.</para>
 ///
@@ -68,16 +69,21 @@ public static class MailStorePlan
 
             notes.Add(new PlanNote(PlanNoteSeverity.Warning, why));
 
-            if (step is DeleteStep whole and (EmptyRecycleBinStep or DeleteDirectoryStep { IsIndivisible: true }))
+            if (step is DeleteStep whole and (EmptyRecycleBinStep or DiskCleanupStep or DeleteDirectoryStep { IsIndivisible: true }))
             {
-                leftWhole.Add(new ProtectedPath(
-                    LongPath.Display(whole.Path),
-                    WholeReason,
-                    // Measured during planning, and a store was found inside it, so it was there and held
-                    // something when the plan was made. Its figure cannot say so, because the store is left
-                    // out of every figure.
-                    PresenceBefore: PathPresence.Present,
-                    HeldContentBefore: true));
+                // Each directory the step would have destroyed, and only those holding a store: the
+                // others were measured without one, and may have held nothing at all.
+                leftWhole.AddRange(whole.Destroys
+                    .Where(path => whole.MailStores.Any(store =>
+                        LongPath.Contains(LongPath.Display(path), LongPath.Display(store))))
+                    .Select(path => new ProtectedPath(
+                        LongPath.Display(path),
+                        WholeReason,
+                        // Measured during planning, and a store was found inside it, so it was there and
+                        // held something when the plan was made. Its figure cannot say so, because the
+                        // store is left out of every figure.
+                        PresenceBefore: PathPresence.Present,
+                        HeldContentBefore: true)));
             }
         }
 
@@ -168,6 +174,11 @@ public static class MailStorePlan
             $"Leaving the Recycle Bin at {LongPath.Display(bin.Path)} as it is: it holds "
             + $"{Every(bin.MailStores)}. Windows empties a bin whole, and Deguffer never removes one. "
             + "Restore what is named here, or delete it from the Recycle Bin yourself, and scan again.",
+
+        DiskCleanupStep handler =>
+            $"Leaving {LongPath.Display(handler.Path)} as it is: it holds {Every(handler.MailStores)}. Windows "
+            + "clears it whole and cannot be told to leave one file, and Deguffer never removes one. Move what "
+            + "is named here out, and scan again.",
 
         DeleteDirectoryStep { IsIndivisible: true } whole =>
             $"Leaving {LongPath.Display(whole.Path)} as it is: it holds {Every(whole.MailStores)}. What is "
