@@ -33,7 +33,8 @@ public sealed class TempDirectory : IDisposable
     }
 
     /// <summary>
-    /// Push a file's creation and last-write times back by <paramref name="by"/>, and return it.
+    /// Push a file's or a directory's creation and last-write times back by <paramref name="by"/>, and
+    /// return it.
     ///
     /// Both, because <see cref="Safety.MinimumAge"/> takes the newer of the two — a fixture that
     /// moved only the last-write time would leave every file it aged still protected by its
@@ -42,9 +43,20 @@ public sealed class TempDirectory : IDisposable
     public static string Age(string path, TimeSpan by)
     {
         var when = DateTime.UtcNow - by;
+        var extended = Safety.LongPath.Extended(path);
 
-        File.SetCreationTimeUtc(Safety.LongPath.Extended(path), when);
-        File.SetLastWriteTimeUtc(Safety.LongPath.Extended(path), when);
+        // A directory's own times matter to a provider that judges an empty folder by them, and
+        // the File calls refuse a directory.
+        if (Directory.Exists(extended))
+        {
+            Directory.SetCreationTimeUtc(extended, when);
+            Directory.SetLastWriteTimeUtc(extended, when);
+        }
+        else
+        {
+            File.SetCreationTimeUtc(extended, when);
+            File.SetLastWriteTimeUtc(extended, when);
+        }
 
         return path;
     }

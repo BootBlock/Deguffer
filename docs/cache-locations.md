@@ -2431,6 +2431,92 @@ rather than a global install.
 
 ---
 
+## Test browser profiles
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Directly inside this account's temporary folder, ordinarily `%LOCALAPPDATA%\Temp`, and inside `C:\Windows\Temp` |
+| **Method** | Delete each recognised profile folder, taking only what nothing has touched for the number of days set for temporary files — seven by default, and 0 means no age limit |
+| **Typical size** | 6,750.9 MB across 1,862 profiles on one workstation, the oldest 70 days old |
+
+### What it is
+
+Each time a test starts a browser, Playwright and Puppeteer make a fresh profile for it in the
+temporary folder and delete it when the browser closes. That deletion runs inside the test runner as
+it exits. A test run that is stopped part way — a cancelled build, a debugger stopped mid-suite, a
+crashed runner — never gets to it, and nothing else ever collects the profile. A machine that runs
+browser tests every day collects them by the thousand.
+
+This is a different location from [Playwright browsers](#playwright-browsers), which are the browser
+builds themselves. `PLAYWRIGHT_BROWSERS_PATH` moves those and has no effect on these.
+
+### What Deguffer does
+
+It looks at the immediate children of each temporary folder and recognises a profile by its name
+alone. Each tool builds the name and hands it to Node's `mkdtemp`, which adds exactly six random
+letters and digits:
+
+| Name | Written by |
+| --- | --- |
+| `playwright_chromiumdev_profile-XXXXXX` | Playwright, for Chromium |
+| `playwright_firefoxdev_profile-XXXXXX` | Playwright, for Firefox |
+| `playwright_webkitdev_profile-XXXXXX` | Playwright, for WebKit |
+| `puppeteer_dev_chrome_profile-XXXXXX` | Puppeteer, for Chrome |
+| `puppeteer_dev_firefox_profile-XXXXXX` | Puppeteer, for Firefox |
+
+Anything else in the folder is left alone, including names that are nearly right: a different
+number of characters after the hyphen, a capital letter at the start, or a browser name neither tool
+uses. Playwright's `playwright-artifacts-XXXXXX` folders are not profiles, and are not offered here.
+A link with a profile's name is named and never followed.
+
+It does not need Playwright or Puppeteer to be installed. The name says which tool wrote the folder,
+and the machine with abandoned profiles is often one where the tool has since been removed.
+
+### What is protected
+
+Each temporary folder itself, and every sibling named like a profile but not in either tool's
+shape, are checked after the clean to prove they survived. Nothing else in the folder is touched.
+
+A profile a running browser is using is left alone. A test browser runs from its own install folder
+and works wherever the test runner does, so neither of those shows which profile it has open. Its
+command line does: Playwright starts Chromium with `--user-data-dir=` and Firefox with `-profile`,
+and Puppeteer uses `--user-data-dir=` and `--profile`, each naming the profile's path. Deguffer reads
+the command line of every running program it may inspect, and leaves alone any profile one was
+started with. It also leaves alone a profile a program is running from or working in. The
+[Windows temporary folders](#windows-temporary-folders) row asks the same question, so it leaves
+these profiles alone too.
+
+The age limit is the other half. A test that is running now has a profile it wrote to moments ago,
+so only profiles nothing has touched for the number of days set for temporary files are offered.
+The profile folder's own times count as well as its files', because an empty profile has no files.
+On the workstation measured, the default of seven days still offered 5,140.2 MB of the 6,750.9 MB.
+
+A browser that runs as another account or as administrator cannot be inspected from an ordinary
+Deguffer, so its profile is then protected by the age limit alone. With the limit set to 0 and no
+guard on recently changed files, nothing protects it, and the row says so in a warning.
+
+A running browser's profile is not checked after the clean, because its test runner deletes it as
+soon as the browser closes. Its going is not something Deguffer did.
+
+### What it costs you
+
+Nothing. The next test run makes a new profile for every browser it starts, and nothing reads an old
+one again. Playwright's WebKit is not given its profile at all unless a test asks for a persistent
+one, so a WebKit profile is normally an empty folder. It is still offered, because removing the
+leftover folder is the whole of what this row is for.
+
+### Why Tier 1
+
+A profile made for one launch holds nothing a later launch reads, and nothing of yours. There is no
+command to prefer under §5.1, because the only cleanup the tools have is the exit hook that never ran.
+
+The Windows temporary folders row reaches these folders too, when they are old enough. Choosing
+both removes each profile once.
+
+---
+
 ## Azure Functions Core Tools releases
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
