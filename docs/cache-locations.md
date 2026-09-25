@@ -299,6 +299,75 @@ regular Go build as a risk.
 
 ---
 
+## Zig build cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\zig`, or wherever `ZIG_GLOBAL_CACHE_DIR` points |
+| **Method** | Delete `h` and `o` together, the records first, and `z`, `b` and `tmp` on their own |
+| **Typical size** | Unbounded: one reported cache held about 45 copies of a single dependency |
+
+### What it is
+
+Every Zig build on the machine shares one global cache, and Zig never removes anything from it. Each
+dependency version and each build configuration adds another copy. Six directories sit in it:
+
+- **`o`**: what Zig built. This is the language runtime and the C libraries for each target, and
+  programs built outside a project.
+- **`h`**: Zig's records of which inputs produced each output in `o`.
+- **`z`**: source files Zig has already parsed, kept in its own intermediate form.
+- **`b`**: generated files that describe each build's target.
+- **`tmp`**: scratch space Zig builds and downloads in before it moves the result into place.
+- **`p`**: packages Zig fetched for projects.
+
+A project's own `.zig-cache` and `zig-pkg` folders are inside your source tree. They are not part of
+this row.
+
+### What Deguffer does
+
+It removes `o`, `h`, `z`, `b` and `tmp`. Zig has no command that clears its cache, so Deguffer
+deletes the paths.
+
+**`o` and `h` are one item, and `h` goes first.** A record in `h` names an output in `o` by its path
+and trusts that the file is still there. If `o` went without `h`, every build that found one of
+those records would fail on a missing file until somebody cleared the whole cache by hand. So:
+
+- Deguffer removes `o` only after the whole of `h` is gone. If Windows keeps part of `h`, `o` stays.
+- The pair stays if a Zig build is running when the clean reaches it, because the build could
+  write a new record during the clean.
+- If you asked Deguffer to leave recently changed files alone and anything in the pair is recent,
+  the pair stays whole. A recent record could name an older output.
+- Explore can remove `h`, `z`, `b` or `tmp` on its own, but never `o`.
+
+Deguffer resolves the cache through `ZIG_GLOBAL_CACHE_DIR` before it falls back to the default. It
+offers nothing if that variable holds a relative path, is the root of a drive, or holds your profile,
+a temporary folder or a Windows folder. Names such as `tmp` are too short to prove that a folder
+belongs to Zig. If the cache folder is a link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`p`** is left alone. For some packages it is the only copy on your machine. A package fetched from
+a web address comes back only while that address still serves it, and one fetched from a local file
+is lost once that file is. Launchers such as anyzig also run whole Zig compilers from `p`. Deguffer
+asserts that `p` and the cache folder itself survived the run. Anything else in the folder stays in
+Tier 4 and is reported as left alone.
+
+### What it costs you
+
+The next Zig build compiles the language runtime and any C libraries it links again, and parses its
+source again, so it takes longer once. Your projects, the packages Zig fetched and the Zig compiler
+itself are untouched.
+
+### Why Tier 1
+
+Everything removed is compiled from source that is still on your disk, and Zig compiles it again
+the next time a build needs it. Keeping `p` is what makes that true: the one directory whose content
+could depend on somebody else's server is the one Deguffer does not touch.
+
+---
+
 ## pnpm store
 
 **Tier 1 — regenerable cache.** Pre-selected.

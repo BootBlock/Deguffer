@@ -28,9 +28,20 @@ internal static class RecordedRefusals
         var places = new List<(string Place, Refusals Refused)>();
         var undescribed = new List<string>();
         var steps = new List<CleanupStep>(plan.Steps.Count);
+        var withdrawn = new List<(DeleteDirectoryStep Step, string Place)>();
 
         foreach (var step in plan.Steps)
         {
+            // A directory whose index a previous clean could not remove entirely would be left alone
+            // again, index refusal and all, so offering it would promise what the run will not do. See
+            // DeleteDirectoryStep.IndexedBy.
+            if (step is DeleteDirectoryStep { IndexedBy.Count: > 0 } indexed
+                && StillRefusedIndex(indexed, record, plan.Keep, fs, undescribed, ct) is { } place)
+            {
+                withdrawn.Add((indexed, place));
+                continue;
+            }
+
             // A Recycle Bin is emptied by the shell and a Disk Cleanup handler's directories by
             // Windows, rather than by Deguffer's removal, so no refusal was ever recorded against
             // either, and nothing here knows how Windows refuses.
@@ -65,7 +76,7 @@ internal static class RecordedRefusals
             places.AddRange(found.Places);
         }
 
-        if (refused.IsEmpty && undescribed.Count == 0)
+        if (refused.IsEmpty && undescribed.Count == 0 && withdrawn.Count == 0)
         {
             return plan;
         }
@@ -73,9 +84,58 @@ internal static class RecordedRefusals
         return plan with
         {
             Steps = steps,
-            Notes = [.. plan.Notes, .. Notes(refused, places), .. Unasked(undescribed)],
+            Notes = [.. plan.Notes, .. Notes(refused, places), .. Unasked(undescribed), .. withdrawn.Select(Withdrawn)],
+            ProtectedPaths =
+            [
+                .. plan.ProtectedPaths,
+                .. withdrawn.SelectMany(w => w.Step.Destroys).Select(path => new ProtectedPath(
+                    path,
+                    "Left alone because Windows still refuses part of the index it goes with.",
+                    // Measured during planning, so it was there when the plan was made: the claim
+                    // CleanupPlan.NarrowedTo makes for a step the user declined.
+                    PresenceBefore: PathPresence.Present)),
+            ],
         };
     }
+
+    /// <summary>
+    /// The first index place of <paramref name="step"/> Windows still refuses, or null where none does.
+    /// A place Windows would not describe is added to <paramref name="undescribed"/> and is not a
+    /// refusal: whether it still refuses is unknown, and the run stops on its own if it does.
+    /// </summary>
+    private static string? StillRefusedIndex(
+        DeleteDirectoryStep step,
+        RefusalRecord record,
+        MinimumAge keep,
+        IFileSystem fs,
+        List<string> undescribed,
+        CancellationToken ct)
+    {
+        foreach (var index in step.IndexedBy)
+        {
+            if (record.At(index) is not { Count: > 0 } recorded)
+            {
+                continue;
+            }
+
+            var found = RefusalCheck.OfIndex(index, recorded, keep, fs, ct);
+            undescribed.AddRange(found.Undescribed);
+
+            if (!found.Refused.IsEmpty)
+            {
+                return found.Places.Count > 0 ? found.Places[0].Place : index;
+            }
+        }
+
+        return null;
+    }
+
+    private static PlanNote Withdrawn((DeleteDirectoryStep Step, string Place) withdrawn) => new(
+        PlanNoteSeverity.Warning,
+        $"Leaving {LongPath.Display(withdrawn.Step.Path)} alone: Windows would not let Deguffer remove part of "
+        + $"its index, at '{Path.GetFileName(Path.TrimEndingDirectorySeparator(withdrawn.Place))}', when it last "
+        + "cleaned, and still refuses. What is left of the index points into it, so it goes only once the "
+        + "index can go too.");
 
     /// <summary>
     /// The step paths and recorded places Windows would not describe this time, so whether what a
