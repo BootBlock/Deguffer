@@ -1,3 +1,4 @@
+using Deguffer.Core.Cloud;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
@@ -18,11 +19,16 @@ public static class PlanVerifier
     /// What the run's removals have left standing so far. Null means nothing was removed, which is
     /// true of a verification with no execution behind it.
     /// </param>
+    /// <param name="cloud">
+    /// What describes the files a <see cref="ReleaseLocalCopiesStep"/> named. Asked only of a plan that
+    /// holds one, and the machine's own where none is given.
+    /// </param>
     public static VerificationResult Verify(
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ICloudFiles? cloud = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -35,7 +41,55 @@ public static class PlanVerifier
             checks.Add(Check(protectedPath, reach, residue));
         }
 
+        foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
+        {
+            foreach (var file in release.Files)
+            {
+                ct.ThrowIfCancellationRequested();
+                checks.Add(CheckReleased(file.Path, release.SyncApp, cloud ?? CloudFiles.Default, reach, residue));
+            }
+        }
+
         return new VerificationResult { Checks = checks };
+    }
+
+    /// <summary>
+    /// §5.6 for a file whose local copy was to be released: it must still be there, and still be a file
+    /// the sync app can hand back.
+    ///
+    /// <para><b>The opposite of a deletion's negative, and the same alarm.</b> Releasing a local copy
+    /// destroys nothing, so a file this step named that has gone is exactly what an over-reaching rule
+    /// looks like here. A missing one is judged as any protected path is, so a file whose whole folder
+    /// was removed by something outside the run reads as that rather than as Deguffer's doing.</para>
+    ///
+    /// <para><b>Present and no longer a placeholder is still a survivor.</b> The sync app turned it back
+    /// into an ordinary file, which keeps every byte on this PC. That is its choice to make, and nothing
+    /// is lost by it.</para>
+    /// </summary>
+    private static VerificationCheck CheckReleased(
+        string path,
+        string syncApp,
+        ICloudFiles cloud,
+        RunReach reach,
+        RunResidue? residue)
+    {
+        var reason = $"A file {syncApp} was asked to keep only in the cloud. The file itself must stay.";
+        var reading = cloud.Read(path);
+
+        return reading switch
+        {
+            { Presence: PathPresence.Present, Placeholder: not null } =>
+                new VerificationCheck(path, reason, VerificationOutcome.Survived, "Still present, and still a cloud file."),
+
+            { Presence: PathPresence.Present } =>
+                new VerificationCheck(
+                    path, reason, VerificationOutcome.Survived,
+                    $"Still present. {syncApp} has turned it back into an ordinary file, so all of it is on this PC."),
+
+            // Measured while the plan was made, so it was there then: the claim NarrowedTo makes about a
+            // declined step, for the reason it gives.
+            _ => Check(new ProtectedPath(path, reason, PathPresence.Present), reach, residue),
+        };
     }
 
     private static VerificationCheck Check(ProtectedPath protectedPath, RunReach reach, RunResidue? residue)

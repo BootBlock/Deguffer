@@ -38,9 +38,9 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTh
             // theme applied to the window root — without this it renders dark over a light window.
             RequestedTheme = theme,
 
-            Title = $"Delete {requirement.ProviderName}?",
+            Title = $"{requirement.Verb} {requirement.ProviderName}?",
             Content = NewBody(requirement, typed),
-            PrimaryButtonText = "Delete",
+            PrimaryButtonText = requirement.Verb,
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
         };

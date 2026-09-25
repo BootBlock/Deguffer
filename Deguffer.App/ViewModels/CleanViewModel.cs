@@ -313,6 +313,17 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial string FreeSpaceChangeLabel { get; set; } = string.Empty;
 
     /// <summary>
+    /// A third number, for a run that had one: what sync apps were asked to release. Apart from both
+    /// above, because it is neither something Deguffer removed nor a change anybody measured. The
+    /// release happens after the run, so the free space change may not show it yet. See
+    /// <see cref="StepOutcome.BytesRequested"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial string RequestedLabel { get; set; } = string.Empty;
+
+    public bool HasRequested => !string.IsNullOrEmpty(RequestedLabel);
+
+    /// <summary>
     /// The run's own §5.6 verdict, beside its figures, for as long as those figures stand.
     ///
     /// <para>The info bar cannot be its home. The bar is a single line describing whatever happened
@@ -799,6 +810,10 @@ public sealed partial class CleanViewModel : ObservableObject
         var bytes = results.Sum(r => r.BytesReclaimed);
         RemovedLabel = FreeSpace.Format(new ScanSize(bytes, bytes, Entries: results.Sum(r => r.EntriesRemoved)));
 
+        var requested = results.Sum(r => r.BytesRequested);
+        RequestedLabel = requested > 0 ? FreeSpace.Format(requested) : string.Empty;
+        OnPropertyChanged(nameof(HasRequested));
+
         var freeAfter = FreeSpace.ForPath(_environment.UserProfile);
         FreeSpaceChangeLabel = freeBefore is { } before && freeAfter is { } after
             ? FreeSpace.Format(after - before)
@@ -911,6 +926,8 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         RemovedLabel = string.Empty;
         FreeSpaceChangeLabel = string.Empty;
+        RequestedLabel = string.Empty;
+        OnPropertyChanged(nameof(HasRequested));
         RunStatement = string.Empty;
         RunVerificationFailed = false;
         RunVerificationNotes.Clear();
