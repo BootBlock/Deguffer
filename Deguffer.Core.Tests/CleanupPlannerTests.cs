@@ -391,7 +391,7 @@ public sealed class CleanupPlannerTests
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
                 "squirrel-staging",
-                "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
+                "platformio", "playwright", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs",

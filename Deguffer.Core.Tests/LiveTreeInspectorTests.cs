@@ -402,6 +402,113 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A program started with a directory as the value of a switch is using it, the way Chromium is
+    /// started with <c>--user-data-dir=</c> naming its test profile. It neither runs from the profile
+    /// nor works in it, so the command line is the only place this can be seen.
+    /// </summary>
+    [Fact]
+    public void ADirectoryIsLiveWhileAProgramStartedWithItIsRunning()
+    {
+        var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-a1B2c3");
+
+        using var browser = StartLaunchedWith(profile, $"--user-data-dir={profile}");
+
+        var findings = new LiveTreeInspector().FindLaunchedWith([profile]);
+
+        Assert.True(findings.Complete);
+        Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(findings.Live[0].Holders, h => h.Contains("was started with it", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A path given as the argument after a switch counts, as Firefox is given <c>-profile</c> and
+    /// then its profile, and so does a path inside the directory. A directory whose name is a prefix
+    /// of the one named is a different directory, and is not live.
+    /// </summary>
+    [Fact]
+    public void ADirectoryIsLiveWhenAPathInsideItIsTheArgumentAfterASwitch()
+    {
+        var profile = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f6");
+        var inside = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f6", "storage");
+        var prefix = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f");
+
+        using var browser = StartLaunchedWith(profile, "-profile", inside);
+
+        var findings = new LiveTreeInspector().FindLaunchedWith([profile, prefix]);
+
+        Assert.True(findings.Complete);
+        Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Without this the tests above pass on a rule answering "live" to everything it is shown.
+    /// </summary>
+    [Fact]
+    public void ADirectoryNoProgramWasStartedWithIsNotLive()
+    {
+        var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-z9Y8x7");
+
+        var findings = new LiveTreeInspector().FindLaunchedWith([profile]);
+
+        Assert.True(findings.Complete);
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
+    /// A path named in its 8.3 form is compared in the form the filesystem stores. A test runner
+    /// builds its profile's path from <c>%TEMP%</c>, which Windows sets to the short form on a
+    /// profile whose folder name exceeds eight characters.
+    ///
+    /// <para>What discriminates is <c>Assert.Single</c>: without the expansion the short path is not
+    /// inside the long one, and nothing is found. <b>This proves nothing on a volume with 8.3 name
+    /// creation disabled</b>, where the fixture falls back to the ordinary path.</para>
+    /// </summary>
+    [Fact]
+    public void ADirectoryNamedInItsShortFormIsStillLive()
+    {
+        var profile = _temp.CreateDirectory("Temporary Folder", "Profile-Folder-Long");
+        var asNamed = ShortFormOf(profile) ?? profile;
+
+        using var browser = StartLaunchedWith(profile, $"--user-data-dir={asNamed}");
+
+        var findings = new LiveTreeInspector().FindLaunchedWith([profile]);
+
+        Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A program that waits for two minutes having been started with <paramref name="arguments"/>,
+    /// which it ignores: PowerShell joins everything after <c>-Command</c> into one command, and
+    /// the <c>#</c> turns the arguments into a comment. Waits until the inspector can see it
+    /// started with <paramref name="visibleFor"/>, for the reason <see cref="StartWaiting"/> gives.
+    /// </summary>
+    private static WaitingProcess StartLaunchedWith(string visibleFor, params string[] arguments)
+    {
+        var start = new ProcessStartInfo(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+        };
+
+        foreach (var argument in (string[])["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 120 #", .. arguments])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        var waiting = new WaitingProcess(Process.Start(start)!);
+
+        Assert.True(
+            SpinWait.SpinUntil(
+                () => new LiveTreeInspector().FindLaunchedWith([visibleFor]).IsLive(visibleFor),
+                TimeSpan.FromSeconds(20)),
+            "the helper process never became visible to the inspector, so the test below would prove nothing");
+
+        return waiting;
+    }
+
+    /// <summary>
     /// The 8.3 alias for <paramref name="path"/>, or null where this volume creates none.
     ///
     /// Asked of Windows rather than constructed, because whether short names exist at all is a

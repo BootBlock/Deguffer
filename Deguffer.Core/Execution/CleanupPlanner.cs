@@ -141,6 +141,7 @@ public sealed class CleanupPlanner
         new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
         new PlatformIoCacheProvider(environment),
         new PlaywrightBrowsersProvider(environment),
+        new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences),
         new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
         new AzureFunctionsToolsProvider(environment),
         new GraphicsDriverInstallerProvider(environment),

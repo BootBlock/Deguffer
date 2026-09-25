@@ -144,6 +144,26 @@ public interface ILiveTreeInspector
     LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default);
 
     /// <summary>
+    /// Which of <paramref name="directories"/> a running program was started with: named as one of
+    /// its arguments, or with a path inside it named.
+    ///
+    /// <para><b>This is the only one of the signals that sees a browser using its profile.</b> A
+    /// test browser runs from its own install folder and works wherever the test runner does, so
+    /// neither of those places is the profile Playwright made for it in <c>%TEMP%</c>. The profile
+    /// is on its command line instead, as <c>--user-data-dir=</c> for Chromium and <c>-profile</c>
+    /// for Firefox, and it stays there for as long as the browser runs.</para>
+    ///
+    /// <para>A path held in its 8.3 form is expanded before it is compared, because a test runner
+    /// builds the profile's path from <c>%TEMP%</c>, which Windows sets to the short form on a
+    /// profile whose folder name is longer than eight characters.</para>
+    ///
+    /// <para><see cref="LiveTreeFindings.Complete"/> is false where command lines could not be read
+    /// at all. The same limits apply as to <see cref="FindLive"/>: every entry is positive evidence,
+    /// and a program belonging to another account cannot be inspected at all.</para>
+    /// </summary>
+    LiveTreeFindings FindLaunchedWith(IReadOnlyList<string> directories, CancellationToken ct = default);
+
+    /// <summary>
     /// Discard any cached snapshot, so every provider in one planning pass sees the same machine.
     /// The same contract as <see cref="IProcessInspector.Invalidate"/>.
     /// </summary>

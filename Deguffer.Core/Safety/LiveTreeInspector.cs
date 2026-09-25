@@ -128,6 +128,50 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         return Findings(holders, occupied.Complete);
     }
 
+    public LiveTreeFindings FindLaunchedWith(IReadOnlyList<string> directories, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(directories);
+
+        if (directories.Count == 0)
+        {
+            return LiveTreeFindings.Nothing;
+        }
+
+        // Looked up by each argument's own folders, walking upwards, rather than by testing every
+        // argument against every candidate: a temporary folder can hold thousands of candidates.
+        var asked = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var directory in directories)
+        {
+            asked.TryAdd(Comparable(directory), directory);
+        }
+
+        var table = Snapshot(ct);
+        var holders = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var process in table.Processes)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            foreach (var argument in process.PathArguments)
+            {
+                for (var place = Comparable(argument); !string.IsNullOrEmpty(place); place = Path.GetDirectoryName(place))
+                {
+                    if (asked.TryGetValue(place, out var directory))
+                    {
+                        Record(holders, directory, $"{process.Name} was started with it");
+                        break;
+                    }
+                }
+            }
+        }
+
+        return Findings(holders, table.CommandLinesReadable);
+    }
+
+    /// <summary>A path in display form without a trailing separator, so both sides of a lookup agree.</summary>
+    private static string Comparable(string path) => Path.TrimEndingDirectorySeparator(LongPath.Display(path));
+
     /// <summary>
     /// Adds <paramref name="holder"/> under <paramref name="directory"/>, compared without a
     /// trailing separator: a working directory is read with one and an executable's folder without,

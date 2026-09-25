@@ -46,10 +46,18 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// from the first and confirms them with the second is then tested on the pair, which is the
     /// only thing that tells a program in a project's build directory from one merely below the
     /// project.</para>
+    ///
+    /// <para><paramref name="arguments"/> are the full paths it was started with, answered by
+    /// <see cref="FindLaunchedWith"/> under the real inspector's rule: a candidate is live where an
+    /// argument names it or a path inside it.</para>
     /// </summary>
-    public FakeLiveTreeInspector WithProgram(string name, string? executable = null, string? workingDirectory = null)
+    public FakeLiveTreeInspector WithProgram(
+        string name,
+        string? executable = null,
+        string? workingDirectory = null,
+        IReadOnlyList<string>? arguments = null)
     {
-        _programs.Add(new RunningProgram(name, executable, workingDirectory));
+        _programs.Add(new RunningProgram(name, executable, workingDirectory, arguments ?? []));
         return this;
     }
 
@@ -151,7 +159,31 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         && parent.Equals(
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The candidates declared live, and those a program added with <see cref="WithProgram"/> was
+    /// started with a path at or inside.
+    /// </summary>
+    public LiveTreeFindings FindLaunchedWith(IReadOnlyList<string> directories, CancellationToken ct = default) =>
+        new(
+            [
+                .. directories
+                    .Select(directory => new LiveTree(
+                        directory,
+                        [
+                            .. _live.Contains(directory) ? ["a test says something is using it"] : Array.Empty<string>(),
+                            .. _programs
+                                .Where(program => program.Arguments.Any(argument => LongPath.Contains(directory, argument)))
+                                .Select(program => $"{program.Name} was started with it"),
+                        ]))
+                    .Where(tree => tree.Holders.Count > 0),
+            ],
+            _complete);
+
     public void Invalidate() => InvalidateCount++;
 
-    private sealed record RunningProgram(string Name, string? Executable, string? WorkingDirectory);
+    private sealed record RunningProgram(
+        string Name,
+        string? Executable,
+        string? WorkingDirectory,
+        IReadOnlyList<string> Arguments);
 }
