@@ -14,7 +14,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para>Materialised rather than streamed, because a listing that fails partway must yield nothing.
 /// A caller that had already acted on the first half would describe a folder nobody fully read. The
-/// folders read this way hold hundreds of entries, not the hundreds of thousands G4 is about.</para>
+/// folders read this way hold at most a few thousand entries, one per game in Steam's library
+/// artwork, not the hundreds of thousands G4 is about.</para>
 /// </summary>
 internal static class FolderEntries
 {

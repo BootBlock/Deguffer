@@ -704,9 +704,9 @@ measured in seconds and there is no path by which anything is lost.
 
 | | |
 | --- | --- |
-| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%` |
+| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, and each Chromium-based browser's own user-data folder |
 | **Method** | Delete the six cache directories Chromium writes, per profile |
-| **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB |
+| **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB. One browser's `Code Cache` alone came to 194 MB on the same workstation |
 
 ### What it is
 
@@ -727,12 +727,26 @@ not need to know the application.
 | `DawnGraphiteCache`, `DawnWebGPUCache` | Compiled WebGPU pipelines |
 | `Service Worker\CacheStorage` | Responses a service worker stored for offline use |
 
+The browsers built on Chromium keep the same six directories, but further down: under a vendor
+folder and a product folder rather than directly in `%APPDATA%` or `%LOCALAPPDATA%`. Deguffer knows
+where each of these keeps its folder, including the beta, developer and nightly builds:
+
+| Browser | User-data folder |
+| --- | --- |
+| Google Chrome | `%LOCALAPPDATA%\Google\Chrome\User Data` (`Chrome Beta`, `Chrome Dev`, `Chrome SxS` and `Chrome for Testing` beside it) |
+| Chromium | `%LOCALAPPDATA%\Chromium\User Data` |
+| Microsoft Edge | `%LOCALAPPDATA%\Microsoft\Edge\User Data` (`Edge Beta`, `Edge Dev` and `Edge SxS` beside it) |
+| Brave | `%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data` (`-Beta` and `-Nightly` beside it) |
+| Vivaldi | `%LOCALAPPDATA%\Vivaldi\User Data` |
+| Opera, Opera GX | `%APPDATA%\Opera Software\Opera Stable`, `Opera GX Stable` |
+
 ### What Deguffer does
 
 **It identifies the folder before it looks inside it.** Any directory on your disk may happen to be
 called `GPUCache`, so a cache name is never on its own a reason to go in. Deguffer looks for
 `Local State`, the file Chromium writes into the user-data folder it owns, and only a folder holding
-that file is examined at all.
+that file is examined at all. The browser table above only says where to look: a browser's folder
+has to hold `Local State` too.
 
 Within such a folder it removes exactly the six directories above and nothing else, one step each,
 so you can clear one application and keep another. Where an application keeps several profiles —
@@ -765,7 +779,9 @@ survived, the ones that are files rather than folders included — those would o
 checked at all, because the rule that classifies a folder never sees a file.
 
 Deguffer also refuses to delete through a link. If you have redirected an application's cache to
-another drive with a junction, it removes nothing there and tells you why.
+another drive with a junction, it removes nothing there and tells you why. The same applies to a
+browser's folder and every folder above it: if you have moved `%LOCALAPPDATA%\Microsoft` onto
+another drive with a link, Deguffer names the link and leaves Edge alone.
 
 ### What it costs you
 
@@ -777,7 +793,8 @@ neighbouring directories, not in the six. An application that works offline need
 to refill what its service worker had stored.
 
 Close the applications first if you can. A running one keeps its cache files open, and anything held
-open is left in place rather than removed.
+open is left in place rather than removed. Edge can keep running in the background after its last
+window closes, so check the notification area for it.
 
 ### Why Tier 1
 
@@ -791,6 +808,16 @@ An application installed from the Microsoft Store does not write to `%APPDATA%`.
 it under `%LOCALAPPDATA%\Packages`, and reaching a Chromium cache there is a separate piece of work
 that is not done yet. If one of your Store applications embeds Chromium, Deguffer does not currently
 see its cache.
+
+### Not reached: what a browser keeps beside its profiles
+
+Edge keeps `component_crx_cache`, `extensions_crx_cache` and `GrShaderCache` in its user-data folder,
+beside the profiles, and on one workstation they came to about 210 MB together. None of them is one
+of the six, so all three stay in place until somebody classifies them deliberately.
+
+Opera keeps its web cache in `%LOCALAPPDATA%\Opera Software\Opera Stable`, apart from its settings.
+That folder holds no `Local State`, so Deguffer does not identify it, and Opera's web cache stays in
+place. Any of the six that Opera keeps beside its settings in `%APPDATA%` is reached.
 
 ---
 
@@ -1405,11 +1432,11 @@ covered by an assertion on the folder above them:
 | `appcache\appinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes, sitting in the same folder as the cache |
 | `local.vdf` | The Steam client's settings for this computer, sitting in the same folder as the browser cache |
 
-Three things are recognised and then deliberately left alone. `widevine` is a content-decryption
+Two things are recognised and then deliberately left alone. `widevine` is a content-decryption
 module Steam downloaded so protected video will play, which is downloaded software rather than a
 cache. `cefdata` is the embedded browser's working data, and nobody has established what removing it
-costs. `appcache\librarycache` is artwork Steam downloaded for your library — a cache, but one whose
-cost to fetch again was never established, so it is measured and not offered.
+costs. `appcache\librarycache`, the artwork Steam downloaded for your library, is not part of this
+row either: it has a row of its own, [Steam library artwork](#steam-library-artwork).
 
 Deguffer also refuses to delete through a link. If you have moved either cache onto another drive
 with a junction, it removes nothing there and tells you why.
@@ -1436,6 +1463,92 @@ again the next time it needs it, and nothing that only exists on your disk is in
 `steamapps\shadercache`, the shaders Steam downloads for each game, is not part of this row. Getting
 it back costs a download from Valve rather than a slower page, so it is Tier 2 and has a row of its
 own: see [Steam shader pre-cache](#steam-shader-pre-cache).
+
+---
+
+## Steam library artwork
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `appcache\librarycache\<app id>` under wherever Steam is installed |
+| **Method** | Delete the folders for single games, one item each |
+| **Typical size** | 1,675 MB across 3,911 games on the machine this was measured on |
+
+### What it is
+
+Steam downloads the pictures it shows for every game in your library: the capsule, the banner, the
+hero image behind the game's page and its logo. That includes games you own and have never
+installed. It keeps them per game, in a folder named by the game's Steam application id:
+
+```
+<Steam install>\appcache\librarycache\<app id>\library_600x900.jpg
+```
+
+**Steam keeps them for years.** On the machine this was measured on, the oldest files were years old
+and the newest were from that day. The folder grows with your library, and it sits with the Steam program, which is
+often on the system drive even when the games are on another one.
+
+### What Deguffer does
+
+**Only what belongs to a single game is offered.** Inside `librarycache`, a folder is removed only if
+its name is a Steam application id: digits only, and no larger than Steam allows. Older Steam clients
+wrote each picture straight into `librarycache` as `<app id>_<picture>.jpg` or `.png`, and those files
+are offered too, as part of their game. Anything else, such as `backup`, `440.old` or a file that is
+not a picture, stays in Tier 4, and the plan names it.
+
+**Each game is its own item.** Deguffer names a game from Steam's manifest for it where the game is
+installed, and shows the app id where it is not. Keeping a game keeps all of its artwork, in either
+layout.
+
+**Steam's index of the artwork, `assetcache.vdf`, is never removed.** Removing a game's folder does
+not need it to change: with the folders for three games removed and the index left listing them,
+Steam drew their artwork and downloaded the files again within seconds of showing the games.
+
+Steam's **Settings → Downloads → Clear Download Cache** is reported to clear `appcache`, but Valve
+has not said that it reaches this folder, and it is a button in a running client rather than a
+command Deguffer can run. So the folders are deleted directly.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `appcache\librarycache` itself | The container. Only what belongs to single games inside it goes |
+| `appcache\librarycache\assetcache.vdf` | Steam's index of the artwork it has saved |
+| `appcache\appinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes |
+| `steamapps`, `steamapps\common`, `steamapps\downloading` | Your games, and the half-downloaded part of an update |
+| `userdata` | Your settings, cloud saves, screenshots, and artwork you chose through Steam, per account |
+| `config` | Steam's own configuration, including who is signed in on this computer |
+
+Explore enforces the same rule: it refuses `librarycache`, the index and anything unrecognised in it,
+and allows only what belongs to a single game. It looks at what each entry is, not only at its name,
+so a file named like a game's folder, or a folder named like a picture, is refused there too.
+
+Deguffer also refuses to look through a link. If `librarycache` or a game's folder in it is a link to
+another drive, it removes nothing there and tells you why.
+
+### What it costs you
+
+Steam downloads a game's artwork again the next time it shows the game in your library. While you
+are offline, a game may show a blank picture until it can.
+
+**If you replaced any of these pictures by hand, that picture is lost.** Changing a game's artwork by
+overwriting the files in this folder is a long-standing trick, and Deguffer cannot tell such a file
+from one Steam downloaded. Keep that game, or set the picture through Steam's own **Manage → Set
+custom artwork**, which stores it under `userdata` where Deguffer never goes.
+
+### Why Tier 2
+
+Almost every file is a copy of a picture Valve's servers still have, and Steam fetches it again on
+demand. That was observed on a real client rather than assumed, and on that evidence alone this
+would be Tier 1.
+
+It is not, because of the pictures replaced by hand. Tier 1 is for what loses nothing, and it is
+ticked without asking. A replaced picture is lost for good, and Deguffer cannot tell it from a
+downloaded one. So the row is offered but never ticked for you, and you acknowledge it before it
+runs.
 
 ---
 

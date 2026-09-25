@@ -6,13 +6,16 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The Chromium caches inside desktop applications that embed the engine (~0.8 GB across ten
-/// applications on the audited machine, and a published 2 to 5 GB for one heavily used chat client).
+/// applications on the audited machine, and a published 2 to 5 GB for one heavily used chat client),
+/// and inside the Chromium-based browsers themselves (910 MB of user data for one browser on the
+/// same machine).
 ///
-/// <para>Cleaners handle browsers. Almost none handle the applications that ship Chromium inside
-/// themselves, each writing the same fixed set of cache directory names under its own vendor name.
-/// That is what makes this recognisable by shape rather than by name: the directory names belong to
-/// Chromium, not to the vendor, so one provider reaches an unbounded set of applications without
-/// knowing any of them.</para>
+/// <para>Almost no cleaner handles the applications that ship Chromium inside themselves, each
+/// writing the same fixed set of cache directory names under its own vendor name. That is what makes
+/// this recognisable by shape rather than by name: the directory names belong to Chromium, not to
+/// the vendor, so one provider reaches an unbounded set of applications without knowing any of
+/// them. A browser is the same shape in a place that has to be named, because it keeps its folder
+/// below a vendor directory and a product directory — see <see cref="ChromiumBrowser"/>.</para>
 ///
 /// <para><b>The signature is an exact allow-list of six names, and that is the whole safety
 /// argument.</b> What sits beside them is Tier 3 and looks identical: <c>Local Storage</c>,
@@ -36,9 +39,7 @@ namespace Deguffer.Core.Providers;
 /// <para>Packaged (MSIX) applications are out of reach here, deliberately. Windows redirects their
 /// <c>%APPDATA%</c> to <c>%LOCALAPPDATA%\Packages\&lt;family&gt;\LocalCache\Roaming</c>, and
 /// classifying that redirection is its own piece of work — see §3 of
-/// <c>docs/todo/unreached-locations.md</c>. Scanning one level under the two application-data roots
-/// also leaves the browsers themselves out, which is intended: Chrome and Edge keep their user data
-/// three levels down, and every general-purpose cleaner already reaches them.</para>
+/// <c>docs/todo/unreached-locations.md</c>.</para>
 /// </summary>
 public sealed class ChromiumCacheProvider : CleanupProviderBase
 {
@@ -158,14 +159,15 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
-        Application = "desktop applications that embed the Chromium engine — chat clients, "
-            + "editors and other Electron apps",
+        Application = "Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and "
+            + "the desktop applications that embed the same engine: chat clients, editors and other "
+            + "Electron apps",
         Publisher = "each application's own vendor; the cache format belongs to the Chromium "
             + "project",
-        Purpose = "An application built on Chromium caches web content, compiled scripts and GPU "
-            + "shaders exactly as a browser does, under its own folder in your profile. Almost no "
-            + "cleaner reaches these, so they grow unnoticed across every such application on the "
-            + "machine.",
+        Purpose = "A Chromium browser caches web content, compiled scripts and GPU shaders under its "
+            + "own folder in your profile, and an application built on Chromium does exactly the "
+            + "same under its own. Almost no cleaner reaches the applications, so their caches grow "
+            + "unnoticed across every such application on the machine.",
         Recommendation = "Deguffer removes six cache directories whose names belong to Chromium "
             + "itself, and leaves everything else in the folder alone — the sign-ins, saved "
             + "passwords, saved payment cards and offline data sit right beside them.",
@@ -174,7 +176,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// <summary>
     /// The applications whose folders hold at least one recognised cache, memoised for the life of
     /// a planning pass (G4). Presence and planning ask the same question of the same disk, and the
-    /// walk behind it covers every directory one level under both application-data roots.
+    /// walk behind it covers every directory one level under both application-data roots and every
+    /// declared browser's folder.
     ///
     /// Exposed so tests can assert that no user-data folder is ever a target.
     /// </summary>
@@ -234,15 +237,21 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// "Not installed" — a stronger claim than the "Already clear" the rest of this change exists
     /// to stop, and one made about a folder Deguffer never read. Answering true sends
     /// the pass into <see cref="PlanAsync"/>, which says so.</para>
+    ///
+    /// <para>A browser Deguffer did not look inside, because a link or a refused segment stood in
+    /// front of it, counts as present for the same reason: the plan is where that is said.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Applications(ct).Count > 0 || _discovery.UnreadableRoots.Count > 0);
+        Task.FromResult(
+            Applications(ct).Count > 0
+            || _discovery.UnreadableRoots.Count > 0
+            || _discovery.Obstructed.Count > 0);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var applications = Applications(ct);
 
-        if (applications.Count == 0)
+        if (applications.Count == 0 && _discovery.Obstructed.Count == 0)
         {
             // A refused application-data root leaves this walk with nothing found and nothing said,
             // which is not the same as having looked and found none.
@@ -260,14 +269,26 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         // Seeded rather than started at false. A root that refused to be listed is a fact about this
         // pass whether or not the *other* root turned up applications, and reading it only in the
         // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
-        // Seeded rather than started at false. A root that refused to be listed is a fact about this
-        // pass whether or not the *other* root turned up applications, and reading it only in the
-        // "found nothing" arm below left it dropped in exactly the case where a plan gets rendered.
         var unreadable = _discovery.UnreadableRoots.Count > 0;
 
         foreach (var root in _discovery.UnreadableRoots)
         {
             notes.Add(UnreadableRoot.Note(root));
+        }
+
+        foreach (var obstacle in _discovery.Obstructed)
+        {
+            if (obstacle.IsLink)
+            {
+                notes.Add(CacheLevelWalk.Note(obstacle.Path));
+                declined.Add((obstacle.Path, CacheLevelWalk.LinkReason));
+            }
+            else
+            {
+                notes.Add(UnreadableRoot.UnreachedNote(obstacle.Path));
+                survivors.Add((obstacle.Path, UnreadableRoot.UnreachedReason));
+                unreadable = true;
+            }
         }
 
         foreach (var application in applications)
@@ -351,11 +372,9 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             notes.Add(scanNote);
         }
 
-        // §5.3. The process names are not declared, because the applications are discovered rather
-        // than known — so the folder's name stands in for the process's, which is right far more
-        // often than not for an application that named its own data folder. It decides nothing: a
-        // miss costs one absent warning, and a hit names a process the user can actually see.
-        if (RunningProcessNotice.For(Inspector, [.. applications.Select(a => a.Name)]) is { } warning)
+        // §5.3. It decides nothing: a miss costs one absent warning, and a hit names a process the
+        // user can actually see.
+        if (RunningProcessNotice.For(Inspector, [.. applications.Select(a => a.ProcessName)]) is { } warning)
         {
             notes.Add(warning);
         }
