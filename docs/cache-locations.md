@@ -2115,7 +2115,8 @@ That has two limits, both stated here rather than left to be discovered:
   session lists as a favourite has a `CaptureOne` folder too, and is not reached.
 
 A catalog or session on a drive that is not connected is named in the scan, nothing in it is
-examined, and the row does not claim to be clear. If a settings file or folder cannot be read, the
+examined, and the row does not claim to be clear. One Capture One still lists after it was deleted
+from a drive that is connected holds nothing to examine, and the scan says it no longer exists. If a settings file or folder cannot be read, the
 scan says so, because a catalog it lists was neither cleared nor ruled out.
 
 ### What Deguffer does

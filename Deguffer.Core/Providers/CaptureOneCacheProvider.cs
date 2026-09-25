@@ -109,35 +109,27 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         Task.FromResult(Documents.Found);
 
     /// <summary>
-    /// §5.2 as §7.1 reads it: each catalog folder and each sidecar folder recognises its
-    /// <c>Cache</c> and nothing else. Found by reading Capture One's settings and walking each
-    /// session, so it is asked here rather than declared.
+    /// §5.2 as §7.1 reads it: each catalog and each sidecar recognises its <c>Cache</c> and nothing
+    /// else. Only folders the plan's own recognition proves are declared, by the same pass, so the
+    /// two can never disagree about what is Capture One's.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var roots = new List<ToolRoot>();
+        var examination = Examine(ct);
 
-        foreach (var catalog in Documents.Catalogs.Where(LongPath.DirectoryExists))
-        {
-            roots.Add(new ToolRoot(
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. examination.Catalogs.Select(catalog => new ToolRoot(
                 catalog,
                 "This is a Capture One catalog, holding its database and often your photographs. "
                 + "Deguffer removes only the Cache folder inside it.",
-                CaptureOneLayout.IsCache));
-        }
-
-        foreach (var session in Documents.Sessions.Where(LongPath.DirectoryExists))
-        {
-            ct.ThrowIfCancellationRequested();
-
-            roots.AddRange(CaptureOneLayout.WalkSession(session, ct).Sidecars.Select(sidecar => new ToolRoot(
+                CaptureOneLayout.IsCache)),
+            .. examination.Sidecars.Select(sidecar => new ToolRoot(
                 sidecar,
                 "This is Capture One's folder for the images beside it, holding your adjustments to them. "
                 + "Deguffer removes only the Cache folder inside it.",
-                CaptureOneLayout.IsCache)));
-        }
-
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
+                CaptureOneLayout.IsCache)),
+        ]);
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -149,23 +141,20 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             return EmptyPlan("Capture One has not been used by this user.");
         }
 
-        var examination = new CaptureOneExamination();
+        var examination = Examine(ct);
 
-        examination.Notes.AddRange(documents.Unread.Select(path => new PlanNote(
+        examination.Notes.InsertRange(0, documents.Unread.Select(path => new PlanNote(
             PlanNoteSeverity.Warning,
             $"Deguffer could not read Capture One's settings at '{path}', so a catalog or session only "
             + "they list was neither cleared nor ruled out.")));
 
-        foreach (var catalog in documents.Catalogs)
+        if (examination.Gone.Count > 0)
         {
-            ct.ThrowIfCancellationRequested();
-            CollectCatalog(catalog, examination);
-        }
-
-        foreach (var session in documents.Sessions)
-        {
-            ct.ThrowIfCancellationRequested();
-            CollectSession(session, examination, ct);
+            examination.Notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Capture One still lists {Count(examination.Gone.Count)} that no longer "
+                + $"{(examination.Gone.Count == 1 ? "exists" : "exist")}: "
+                + $"{string.Join(", ", examination.Gone.Select(g => $"'{g}'"))}."));
         }
 
         if (examination.Disconnected.Count > 0)
@@ -257,6 +246,29 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         };
     }
 
+    /// <summary>
+    /// Every catalog and session Capture One lists, recognised or declined. The one pass both the
+    /// plan and Explore's refusals are built from.
+    /// </summary>
+    private CaptureOneExamination Examine(CancellationToken ct)
+    {
+        var examination = new CaptureOneExamination();
+
+        foreach (var catalog in Documents.Catalogs)
+        {
+            ct.ThrowIfCancellationRequested();
+            CollectCatalog(catalog, examination);
+        }
+
+        foreach (var session in Documents.Sessions)
+        {
+            ct.ThrowIfCancellationRequested();
+            CollectSession(session, examination, ct);
+        }
+
+        return examination;
+    }
+
     private static bool Overlaps(string folder, string other) =>
         LongPath.Contains(folder, other) || LongPath.Contains(other, folder);
 
@@ -293,6 +305,8 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
                 + "recognised as one and is left alone.");
             return;
         }
+
+        examination.Catalogs.Add(catalog);
 
         if (examination.CacheIn(catalog, entries) is not { } cache)
         {
@@ -366,8 +380,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            if (examination.EntriesOf(sidecar) is not { } sidecarEntries
-                || examination.CacheIn(sidecar, sidecarEntries) is not { } cache)
+            if (examination.EntriesOf(sidecar) is not { } sidecarEntries)
             {
                 continue;
             }
@@ -376,8 +389,15 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             {
                 examination.Decline(
                     sidecar,
-                    "No Capture One settings folder is beside its Cache, so it was not recognised as "
-                    + "Capture One's and is left alone.");
+                    "No Capture One settings folder is inside it, so it was not recognised as Capture "
+                    + "One's and is left alone.");
+                continue;
+            }
+
+            examination.Sidecars.Add(sidecar);
+
+            if (examination.CacheIn(sidecar, sidecarEntries) is not { } cache)
+            {
                 continue;
             }
 

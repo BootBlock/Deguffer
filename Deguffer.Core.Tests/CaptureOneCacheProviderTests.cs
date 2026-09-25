@@ -101,6 +101,14 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
 
     private static string CacheOf(string folder) => Path.Combine(folder, "Cache");
 
+    /// <summary>
+    /// The root of a drive letter nothing is mounted on, so a folder on it reads as a drive that is not
+    /// connected rather than as a folder that was deleted.
+    /// </summary>
+    private static string UnmountedDrive() =>
+        Enumerable.Range('D', 'Z' - 'D' + 1).Select(letter => $"{(char)letter}:\\").Reverse()
+            .First(root => !Directory.Exists(root));
+
     [Fact]
     public async Task ReportsNotPresentWhereCaptureOneHasNeverRun()
     {
@@ -346,6 +354,56 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The profile check asks whether a session folder holds the profile, not whether it is inside
+    /// it: a session in the user's Pictures is where one normally lives, and one above the profile
+    /// would walk every user's folders.
+    /// </summary>
+    [Fact]
+    public async Task ASessionAboveTheProfileIsNotSearchedAndOneInsideItIs()
+    {
+        var above = Path.GetDirectoryName(_environment.UserProfile)!;
+        WriteFile(Path.Combine(above, "Above.cosessiondb"));
+        var inside = Path.Combine(_environment.UserProfile, "Pictures", "Shoot");
+        WriteFile(Path.Combine(inside, "Shoot.cosessiondb"));
+        WriteFile(Path.Combine(inside, "Capture", "CaptureOne", "Settings166", "IMG_0001.CR3.cos"));
+        var cache = Populate(Path.Combine(inside, "Capture", "CaptureOne", "Cache"));
+        List(Path.Combine(above, "Above.cosessiondb"), Path.Combine(inside, "Shoot.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([cache], plan.Steps.OfType<DeleteStep>().Select(s => s.Path));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(above, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §7.1 reads the plan's own recognition: a folder the plan declines is never declared to Explore
+    /// as Capture One's, and the profile is never walked to find one.
+    /// </summary>
+    [Fact]
+    public async Task ToolRootsAreOnlyWhatThePlanRecognises()
+    {
+        var loose = Path.Combine(ShootDrive, "Documents");
+        WriteFile(Path.Combine(loose, "Copy.cocatalogdb"));
+        Populate(CacheOf(loose));
+
+        WriteFile(Path.Combine(_environment.UserProfile, "Stray.cosessiondb"));
+        var profileSidecar = Path.Combine(_environment.UserProfile, "Pictures", "CaptureOne");
+        Directory.CreateDirectory(Path.Combine(profileSidecar, "Settings166"));
+        Populate(CacheOf(profileSidecar));
+
+        var plain = Path.Combine(ShootDrive, "Plain");
+        WriteFile(Path.Combine(plain, "Plain.cosessiondb"));
+        Populate(Path.Combine(plain, "Exports", "CaptureOne", "Cache"));
+
+        List(
+            Path.Combine(loose, "Copy.cocatalogdb"),
+            Path.Combine(_environment.UserProfile, "Stray.cosessiondb"),
+            Path.Combine(plain, "Plain.cosessiondb"));
+
+        Assert.Empty(await CreateProvider().DiscoverToolRootsAsync());
+    }
+
+    /// <summary>
     /// §5.2: a catalog database outside a <c>.cocatalog</c> package does not make the folder around it
     /// a catalog, so the <c>Cache</c> beside it is somebody else's.
     /// </summary>
@@ -471,7 +529,7 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     [Fact]
     public async Task OnlyADisconnectedCatalogIsNotClear()
     {
-        var missing = Path.Combine(_temp.Path, "unplugged", "Away.cocatalog");
+        var missing = Path.Combine(UnmountedDrive(), "Shoots", "Away.cocatalog");
         List(missing);
 
         var plan = await CreateProvider().PlanAsync();
@@ -489,13 +547,28 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     public async Task ACatalogOnADisconnectedDriveIsNamed()
     {
         var present = Catalog("Here");
-        var missing = Path.Combine(_temp.Path, "unplugged", "Away.cocatalog");
+        var missing = Path.Combine(UnmountedDrive(), "Shoots", "Away.cocatalog");
         List(present, missing);
 
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Single(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains(missing, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A catalog deleted from a drive that is connected holds nothing to examine. Capture One's recent
+    /// list goes on naming it, and it must not keep the row from ever reading clear.
+    /// </summary>
+    [Fact]
+    public async Task ADeletedCatalogOnAConnectedDriveLeavesTheRowClear()
+    {
+        List(Path.Combine(ShootDrive, "Deleted.cocatalog"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.False(plan.WasNotExamined);
     }
 
     /// <summary>Settings Deguffer could not read may list any catalog, so the plan cannot claim to be complete.</summary>

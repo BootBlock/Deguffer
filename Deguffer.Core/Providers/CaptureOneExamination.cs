@@ -21,7 +21,20 @@ internal sealed class CaptureOneExamination
 
     public List<(string Path, string Reason)> Survivors { get; } = [];
 
+    /// <summary>Listed folders on a drive or share that is not there now.</summary>
     public List<string> Disconnected { get; } = [];
+
+    /// <summary>
+    /// Listed folders that are gone from a drive that is there: a catalog or session deleted or moved
+    /// since Capture One opened it, which its recent list goes on naming.
+    /// </summary>
+    public List<string> Gone { get; } = [];
+
+    /// <summary>Every folder proved to be a catalog, whether or not its cache holds anything.</summary>
+    public List<string> Catalogs { get; } = [];
+
+    /// <summary>Every folder proved to be a session's sidecar, whether or not its cache holds anything.</summary>
+    public List<string> Sidecars { get; } = [];
 
     public List<PlanNote> Notes { get; } = [];
 
@@ -32,14 +45,20 @@ internal sealed class CaptureOneExamination
 
     /// <summary>
     /// Whether <paramref name="folder"/> is there to examine. A folder on a drive that is not
-    /// connected is recorded for one sentence; one Windows would not describe is a warning.
+    /// connected is recorded for one sentence, and so is one gone from a drive that is; one Windows
+    /// would not describe is a warning.
     /// </summary>
     public bool Reached(string folder)
     {
         switch (LongPath.ProbeDirectory(folder))
         {
+            // The drive or share is asked about in its turn, because the two absences mean different
+            // things: a disconnected drive leaves the folder unexamined, and a deleted folder holds
+            // nothing to examine.
             case PathPresence.Absent:
-                Disconnected.Add(folder);
+                (Path.GetPathRoot(folder) is { Length: > 0 } volume && LongPath.DirectoryExists(volume)
+                    ? Gone
+                    : Disconnected).Add(folder);
                 return false;
 
             case PathPresence.Refused:
