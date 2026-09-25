@@ -1221,6 +1221,16 @@ own Disk Cleanup handlers the volume. Six things the work settled that this entr
   documents 2 to 60 days and 10 otherwise. Its value is read from `HKLM\SYSTEM\Setup`, which is known
   by convention rather than documented, so anything outside the documented range reads as the
   default.
+- **The handler is asked before a row is offered, because it can decline.** On the audited machine
+  the *Windows ESD installation files* handler answered "nothing to delete", elevated, over a
+  `$Windows.~WS` holding 367 KB of setup sources, and a run sent to clear it cleared nothing. So a
+  plan now asks each handler with `Initialize` and `GetSpaceUsed`, never `Purge`, and offers only
+  what the handler claims. `setupcln.dll` answers "nothing to delete" to every process that is not
+  elevated, so an unelevated plan offers the row as needing elevation and the elevated plan asks.
+  It was also observed to implement only `IEmptyVolumeCache`, and to answer for `C:\` but not `C:`.
+  A real `Purge` that removes something has not been observed: nothing on the audited machine was
+  claimed by the three setup handlers, so whether *Previous Installations* shows its own
+  confirmation when driven outside Disk Cleanup is still open.
 - **Whether a handler leaves its containers standing is not documented.** `$SysReset` and `ESD` are
   asserted to survive, as every container is. If Windows turns out to remove an emptied one, §5.6
   will say so as a failure on the first run that meets it, and the assertion is what to revisit.

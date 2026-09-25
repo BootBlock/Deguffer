@@ -3236,7 +3236,10 @@ A folder is offered only when all of these are true:
 - **No update is unfinished.** No restart is owed for an update, neither the servicing stack nor
   Windows Setup is running, and no restart is due to move a file inside the folder. While any of
   that is true the row reads *Update in progress*.
-- **Windows offers the cleanup.** Where it does not, the folder is left standing.
+- **Windows' own cleanup says it has something to clear there.** Deguffer asks it first, the way
+  Disk Cleanup does, and a folder it does not count as its own is left standing. Windows answers
+  that question only for a program running as administrator, so until Deguffer is elevated the row
+  is shown as needing it.
 
 Running the cleanup needs administrator rights. An Outlook data file inside any of these folders
 stops the row: Windows clears the folder whole and cannot be told to leave one file.
