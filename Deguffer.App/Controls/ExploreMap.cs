@@ -740,22 +740,31 @@ public sealed class ExploreMap : UserControl
         _labels.Hide();
         Place();
 
-        if (_drawing is { } drawing)
-        {
-            ReportWhatThePointerIsOver(drawing);
-        }
+        // Not ReportWhatThePointerIsOver, which marks the shape out again whether or not it changed.
+        // That is right once per new drawing and wrong at every frame of a move over the same one:
+        // the outline is in the drawing's own pixels and moves with the placement, and redrawing it
+        // is a pass over every shape and two new geometries, sixty times a second.
+        FollowPointer();
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         _pointer = e.GetCurrentPoint(this).Position;
 
-        if (_drawing is not { } drawing)
+        FollowPointer();
+    }
+
+    /// <summary>
+    /// Say what is under the pointer, and mark it out, where that is not what was already under it.
+    /// </summary>
+    private void FollowPointer()
+    {
+        if (_drawing is not { } drawing || _pointer is not { } pointer)
         {
             return;
         }
 
-        var hit = At(drawing, _pointer.Value);
+        var hit = At(drawing, pointer);
 
         // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
         // shape for most of that, so reporting every move would rebuild the same string sixty times

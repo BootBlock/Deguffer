@@ -18,13 +18,14 @@ public readonly record struct MapViewport
     /// How far a picture can be magnified.
     ///
     /// <para>Sixty-four times is more detail than the picture can use: the smallest shape a treemap
-    /// draws is three pixels, so at this zoom a 4K canvas has room for a shape standing for about a
-    /// kilobyte of a terabyte volume. Past that the list view reads the same data better.</para>
+    /// draws is three pixels, so at this zoom a 4K canvas has room for a shape standing for a few
+    /// hundred bytes of a terabyte volume. Past that the list view reads the same data better.</para>
     ///
-    /// <para>It is also the precision limit. A shape is laid out in single precision relative to the
-    /// screen, and a shape that runs far off it has a visible edge computed from two large numbers. At
-    /// this zoom a 4K picture is a quarter of a million pixels across, where single precision is still
-    /// finer than a sixty-fourth of a pixel.</para>
+    /// <para>It is also the precision limit. A shape is laid out in double precision and handed over
+    /// in single precision, relative to the screen, and a shape that runs far off it has a visible edge
+    /// added up from two large numbers. At this zoom a 4K picture is a quarter of a million pixels
+    /// across, where a single-precision step is a sixty-fourth of a pixel, so an edge is out by a few
+    /// hundredths of a pixel at most. Much further and the error would start to show as seams.</para>
     /// </summary>
     public const double MaximumZoom = 64;
 

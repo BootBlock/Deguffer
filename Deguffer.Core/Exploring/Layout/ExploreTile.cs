@@ -108,6 +108,9 @@ public readonly record struct ExploreTile(
 /// <para>This governs the treemap and the sunburst, which are both bounded in every direction at
 /// once. It does not govern the icicle, whose levels are rows rather than nested frames: there the
 /// canvas runs out first, and a depth cap only leaves the panel blank.</para>
+///
+/// <para>It is the depth of the whole picture. A zoomed treemap goes one level further for each
+/// doubling of the zoom; see <see cref="TreemapDetail"/>.</para>
 /// </param>
 /// <param name="RowHeight">
 /// The smallest band a level can be drawn in, in device-independent pixels. It is exactly the

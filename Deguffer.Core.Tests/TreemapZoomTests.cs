@@ -53,6 +53,26 @@ public sealed class TreemapZoomTests
     }
 
     /// <summary>
+    /// Zoomed into the corner of a folder of a hundred thousand files, the layout stops at the edge of
+    /// the canvas rather than laying the rest of the folder to throw it away. Culling what comes back
+    /// does not show this: a layout that laid every row off the canvas returns the same shapes, and
+    /// costs a row per child on every redraw. So it is measured by how often the tree is asked a size.
+    /// </summary>
+    [Fact]
+    public void AZoomedLayoutStopsAtTheEdgeOfTheCanvas()
+    {
+        var tree = new CountingTree(FilesOf([.. Enumerable.Repeat(10L, 100_000)]));
+        var corner = MapViewport.Anchored(16, 0, 0, 0, 0);
+
+        var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: corner);
+
+        Assert.True(tiles.Count(tile => tile.IsNode) > 100, "the corner drew too little to prove anything");
+
+        // Laying the whole folder asks every size several times over, a few hundred thousand in all.
+        Assert.True(tree.Sizes < 50_000, $"the tree was asked {tree.Sizes} sizes for a corner of a picture");
+    }
+
+    /// <summary>
     /// The point of zooming. Files too small to draw across the whole picture are one aggregate block
     /// there, and zoomed into that block they are drawn one by one.
     /// </summary>
@@ -225,6 +245,33 @@ public sealed class TreemapZoomTests
         Assert.InRange(name.Y, 0, Height);
     }
 
+    /// <summary>
+    /// A folder's band cut to a sliver by the canvas's edge is not named. A name there would be
+    /// narrower than its own padding, and a label of negative width is one the shell cannot lay out.
+    /// </summary>
+    [Fact]
+    public void ABandCutToASliverByTheEdgeIsNotNamed()
+    {
+        var tree = ThreeFolders();
+        const double Zoom = 3;
+
+        // A folder that starts right of the canvas when the zoomed picture's left edge is on it, found
+        // in the whole picture, whose shapes the zoom only magnifies. The canvas is then moved until
+        // only the first few pixels of the folder show at its right.
+        var folder = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default)
+            .Where(tile => tile.Header > 0 && tile.Node != tree.RootNode && tile.X * Zoom > Width && tile.Y * Zoom < Height - 40)
+            .MinBy(tile => tile.X);
+
+        var sliver = MapViewport.Anchored(Zoom, ((folder.X * Zoom) + 4 - Width) / (Width * Zoom), 0, 0, 0);
+        var surface = Draw(tree, ExploreView.Treemap, sliver);
+        var cut = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: sliver)
+            .Single(tile => tile.Node == folder.Node);
+
+        Assert.True(cut.Header > 0 && cut.X is > Width - 8 and < Width, $"the folder starts at {cut.X}");
+        Assert.DoesNotContain(surface.Labels, label => label.Node == folder.Node);
+        Assert.All(surface.Labels, label => Assert.True(label.Width >= 0, $"a label {label.Width} wide"));
+    }
+
     /// <summary>A shape running off the canvas is labelled only where the part of it on the canvas has room.</summary>
     [Fact]
     public void EveryLabelOfAZoomedPictureIsOnTheCanvas()
@@ -374,6 +421,47 @@ public sealed class TreemapZoomTests
             {
                 folders.Enqueue((first + i, folder.Depth + 1));
             }
+        }
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>A tree that counts how often it is asked a size, to measure what a layout visits.</summary>
+    private sealed class CountingTree(ExploreTree tree) : ISizedTree
+    {
+        public int Sizes { get; private set; }
+
+        public int RootNode => tree.RootNode;
+
+        public ExploreChildOrder ChildOrder => tree.ChildOrder;
+
+        public long SizeOf(int node)
+        {
+            Sizes++;
+            return tree.SizeOf(node);
+        }
+
+        public ReadOnlySpan<int> ChildrenOf(int node) => tree.ChildrenOf(node);
+
+        public bool IsContainer(int node) => ((ISizedTree)tree).IsContainer(node);
+
+        public int ParentOf(int node) => tree.ParentOf(node);
+    }
+
+    /// <summary>Three folders of the same size side by side, each with files in it.</summary>
+    private static ExploreTree ThreeFolders()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+
+        var first = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            .. Enumerable.Range(0, 3).Select(i => new ExploreChild($"folder{i}", IsDirectory: true, IsLink: false, Size: 0)),
+        ]);
+
+        for (var i = 0; i < 3; i++)
+        {
+            builder.AddChildren(
+                first + i,
+                [.. Enumerable.Range(0, 10).Select(j => new ExploreChild($"part{j}.bin", IsDirectory: false, IsLink: false, Size: 100))]);
         }
 
         return builder.Build(ExploreChildOrder.BySize);

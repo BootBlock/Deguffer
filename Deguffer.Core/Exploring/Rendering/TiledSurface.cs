@@ -137,7 +137,10 @@ public sealed class TiledSurface : ExploreSurface
 
             if (tile.Header > 0)
             {
-                if (tile.Y + tile.Header > 0 && tile.Y < Height && shown.Width > 0)
+                // A name wide, as the layout asked of the whole band before it gave one. A band cut
+                // to a sliver by the canvas's edge is not named, and a name narrower than its own
+                // padding would come out with a negative width.
+                if (tile.Y + tile.Header > 0 && tile.Y < Height && shown.Width >= Limits.MinimumLabelWidth)
                 {
                     headers.Add(i);
                 }

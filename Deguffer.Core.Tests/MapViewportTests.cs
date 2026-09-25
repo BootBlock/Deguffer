@@ -99,19 +99,33 @@ public sealed class MapViewportTests
     }
 
     /// <summary>
-    /// Between two viewports held inside the picture, every step is inside it too, including a move
-    /// from one corner at one zoom to the opposite corner at another.
+    /// Between two viewports inside the picture, the path never leaves it, including a move from one
+    /// corner at one zoom to the opposite corner at another. Asked through the one point both ends
+    /// agree on, which every step must keep still: a step that went outside and was held back in would
+    /// move it. Checking the bounds instead would only prove that the result is held inside, which it
+    /// always is.
     /// </summary>
     [Fact]
-    public void EveryStepOfAMoveStaysInsideThePicture()
+    public void AMoveFromCornerToCornerNeverLeavesThePicture()
     {
         var from = MapViewport.Anchored(3, 0, 0, 0, 0);
         var to = MapViewport.Anchored(40, 1, 1, 1, 1);
 
+        // The screen point that shows the same part of the picture at both ends.
+        var still = (to.Left - from.Left) / ((1 / from.Zoom) - (1 / to.Zoom));
+        var (pictureX, pictureY) = from.PictureAt(still, still);
+
+        Assert.Equal(to.PictureAt(still, still).X, pictureX, Precision);
+
         for (var step = 0; step <= 50; step++)
         {
-            AssertInside(MapViewport.Between(from, to, step / 50.0));
-            AssertInside(MapViewport.Between(to, from, step / 50.0));
+            foreach (var (a, b) in new[] { (from, to), (to, from) })
+            {
+                var (x, y) = MapViewport.Between(a, b, step / 50.0).PictureAt(still, still);
+
+                Assert.Equal(pictureX, x, 1e-9);
+                Assert.Equal(pictureY, y, 1e-9);
+            }
         }
     }
 

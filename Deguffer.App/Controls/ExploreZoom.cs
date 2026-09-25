@@ -30,6 +30,12 @@ internal sealed class ExploreZoom
     private MapGlide? _glide;
 
     /// <summary>
+    /// Where the zoom is going. Each notch is measured from here rather than from what is on screen,
+    /// so a quick run of them adds up to as many notches rather than to one.
+    /// </summary>
+    private MapViewport _target;
+
+    /// <summary>
     /// Raised at each frame while the zoom is moving. A frame is the display's, so this is sixty or
     /// more times a second and must cost next to nothing to answer.
     /// </summary>
@@ -42,12 +48,6 @@ internal sealed class ExploreZoom
     public MapViewport Shown { get; private set; }
 
     /// <summary>
-    /// Where the zoom is going. Each notch is measured from here rather than from what is on screen,
-    /// so a quick run of them adds up to as many notches rather than to one.
-    /// </summary>
-    public MapViewport Target { get; private set; }
-
-    /// <summary>
     /// Zoom by <paramref name="delta"/> of the wheel, in its own units, at the screen point
     /// (<paramref name="x"/>, <paramref name="y"/>) given as fractions of the screen.
     ///
@@ -58,17 +58,17 @@ internal sealed class ExploreZoom
     public void Turn(int delta, double x, double y)
     {
         var (pictureX, pictureY) = Shown.PictureAt(x, y);
-        var zoom = Target.Zoom * Math.Pow(2, delta / Notch / NotchesPerDoubling);
+        var zoom = _target.Zoom * Math.Pow(2, delta / Notch / NotchesPerDoubling);
         var target = MapViewport.Anchored(zoom, pictureX, pictureY, x, y);
 
         // Already going there: at either end of the zoom a further notch asks for nothing, and
         // restarting the move would ease again over a distance of nothing.
-        if (target == Target)
+        if (target == _target)
         {
             return;
         }
 
-        Target = target;
+        _target = target;
 
         if (_glide is null)
         {
@@ -84,7 +84,7 @@ internal sealed class ExploreZoom
         Stop();
 
         Shown = MapViewport.Whole;
-        Target = MapViewport.Whole;
+        _target = MapViewport.Whole;
     }
 
     /// <summary>
@@ -101,7 +101,7 @@ internal sealed class ExploreZoom
 
         CompositionTarget.Rendering -= OnRendering;
         _glide = null;
-        Shown = Target;
+        Shown = _target;
     }
 
     /// <summary>
