@@ -214,7 +214,10 @@ public static class TempMarkerSurvey
                 .Select(c => new RecognisedBuildDirectory(c.Path, c.Holder))
                 .ToList();
 
-            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct);
+            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct, unknown: CannotTell);
+            var stillUnused = live.Cleared
+                .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
             var vetoed = new HashSet<string>(live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
 
             foreach (var held in live.Vetoed)
@@ -239,7 +242,7 @@ public static class TempMarkerSurvey
 
             var targets = new List<DeletionTarget>();
 
-            foreach (var (path, marker, lastWritten, holder) in _candidates)
+            foreach (var (path, marker, lastWritten, _) in _candidates)
             {
                 if (vetoed.Contains(path))
                 {
@@ -268,7 +271,7 @@ public static class TempMarkerSurvey
                     lastWritten,
                     marker.Kind,
                     Group: marker.Tool,
-                    UseCheck: Recheck(marker, path, holder, liveTrees)));
+                    UseCheck: Recheck(marker, stillUnused.GetValueOrDefault(path))));
             }
 
             return new TempMarkerFindings(
@@ -313,11 +316,12 @@ public static class TempMarkerSurvey
         /// The rules <see cref="Consider"/> and <see cref="Finish"/> offered <paramref name="path"/>
         /// under, in their order, for the clean to ask again. Null for an entry offered on none of them.
         ///
-        /// <para>A directory is asked about with the same query the veto used, and held back where the
-        /// answer is partial, because the survey refused every directory on a partial answer rather
+        /// <para>A directory carries the question the veto handed out with it, which holds it back where
+        /// the answer is partial, because the survey refused every directory on a partial answer rather
         /// than offering it with a note.</para>
         /// </summary>
-        private IUseCheck? Recheck(TempMarker marker, string path, string holder, ILiveTreeInspector liveTrees)
+        /// <param name="directoryCheck">The veto's question, or null for a file, which the veto was never asked about.</param>
+        private IUseCheck? Recheck(TempMarker marker, IUseCheck? directoryCheck)
         {
             if (!_entryRules.TryGetValue(marker, out var entryRules))
             {
@@ -337,9 +341,7 @@ public static class TempMarkerSurvey
                 _entryRules[marker] = entryRules;
             }
 
-            IReadOnlyList<IUseCheck> all = marker.Kind is TargetKind.File
-                ? entryRules
-                : [.. entryRules, new LiveTreeCheck(liveTrees, new RecognisedBuildDirectory(path, holder), static _ => [], CannotTell)];
+            IReadOnlyList<IUseCheck> all = directoryCheck is null ? entryRules : [.. entryRules, directoryCheck];
 
             return all.Count switch
             {

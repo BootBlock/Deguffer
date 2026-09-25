@@ -1831,8 +1831,9 @@ anything else in that folder, and the delete-only mode empties it anyway.
 **While `zenserver` is running, every Zen store is left alone.** The server can be set to keep
 running after the editor closes, and removing a store's data under the server writing it is not
 provably safe. The plan says so, Explore refuses the store too, and closing the editor and the server
-and scanning again includes it. A running editor is a warning beside the filesystem cache, and
-anything it holds open stays.
+and scanning again includes it. The question is asked again when you press Clean, immediately before
+each store is removed, so a server that starts after the scan keeps every store. A running editor is a
+warning beside the filesystem cache, and anything it holds open stays.
 
 ### What is protected
 
@@ -2627,8 +2628,10 @@ A browser that runs as another account or as administrator cannot be inspected f
 Deguffer, so its profile is then protected by the age limit alone. With the limit set to 0 and no
 guard on recently changed files, nothing protects it, and the row says so in a warning.
 
-A running browser's profile is not checked after the clean, because its test runner deletes it as
-soon as the browser closes. Its going is not something Deguffer did.
+The question is asked again when you press Clean, immediately before each profile is removed, so a
+profile a browser was started with after the scan stays, and is checked afterwards to prove it is
+still there. A profile the scan found in use is not checked after the clean, because its test runner
+deletes it as soon as the browser closes. Its going is not something Deguffer did.
 
 ### What it costs you
 
@@ -3716,7 +3719,8 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
   entry that answers is left alone whatever its age, is named on its row so you can see what is
   holding it, and is checked afterwards to prove it is still there. This catches the case the age
   filter cannot: a program that has been running for a month, working in a scratch directory whose
-  files are all older than the cut-off.
+  files are all older than the cut-off. The question is asked again when you press Clean, immediately
+  before each folder is emptied, so an entry a program took up after the scan is left alone too.
 
 **An entry a tool's own row offers is left to that row.** Where Deguffer knows what wrote an entry
 of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
@@ -3882,6 +3886,9 @@ depends on age:
   entries only when it exits. A file that has gone is a cache miss, and the module is compiled again.
 
 Any recognised folder a running program is working inside is left alone as well, whatever its tool.
+Each of these questions is asked again when you press Clean, immediately before each entry is
+removed, so a program that starts, or a session that takes its mutex, after the scan keeps what it
+uses.
 
 `NODE_COMPILE_CACHE` moves Node's cache anywhere. Where it is set, Deguffer treats that folder as
 Node's and removes only the per-version folders Node makes inside it, named for the Node version,
@@ -3955,6 +3962,8 @@ process using it, and VS Code applies a downloaded update from its folder when i
 deleting while it runs can change what the update does. Docker does not publish its update
 behaviour, so it gets the same treatment. The Visual Studio Installer waits for its installer and
 its background downloader. A folder any running program is working inside is left alone as well.
+Both questions are asked again when you press Clean, immediately before each entry is removed, so
+an application you open after the scan keeps its download.
 
 **Blender's recovery files are recognised so that nothing takes them.** `quit.blend` and the
 autosave files sit loose in the temporary folder, and hold work that may never have been saved

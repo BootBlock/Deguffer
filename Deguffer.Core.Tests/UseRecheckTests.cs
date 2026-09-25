@@ -143,6 +143,7 @@ public sealed class UseRecheckTests : IDisposable
 
         Assert.True(File.Exists(abandoned), "a clear the check held back went ahead");
         Assert.Equal("Nothing was removed: tool.exe is running from it.", Assert.Single(result.Steps).Message);
+        AssertProvedStanding(result, scratch);
     }
 
     private static void AssertProvedStanding(CleanupResult result, string path)

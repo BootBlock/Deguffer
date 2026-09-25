@@ -50,18 +50,25 @@ internal static class LiveTreeVeto
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         IReadOnlyList<string> lockFiles,
-        CancellationToken ct = default) =>
-        Apply(inspector, candidates, _ => lockFiles, ct);
+        CancellationToken ct = default,
+        string? unknown = null) =>
+        Apply(inspector, candidates, _ => lockFiles, ct, unknown);
 
     /// <param name="lockFilesOf">
     /// The files to ask about for each candidate, for a tool whose lock files are named by the
     /// project rather than in advance. See <see cref="BuildDirectoryKind.ProjectLockFiles"/>.
     /// </param>
+    /// <param name="unknown">
+    /// Why a cleared directory is held back at the clean where the inspector cannot tell then, for a
+    /// caller that refuses every directory on a partial answer rather than offering them with a note.
+    /// Null for one that offers. See <see cref="LiveTreeCheck"/>.
+    /// </param>
     public static LiveTreeVetoResult Apply(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? unknown = null)
     {
         if (candidates.Count == 0)
         {
@@ -79,7 +86,7 @@ internal static class LiveTreeVeto
                 .. candidates.Where(c => !findings.IsLive(c.Path)).Select(c => new ClearedBuildDirectory(
                     c.Path,
                     c.Project,
-                    new LiveTreeCheck(inspector, c, lockFilesOf))),
+                    new LiveTreeCheck(inspector, c, lockFilesOf, unknown))),
             ],
             findings.Live,
             findings.Complete);

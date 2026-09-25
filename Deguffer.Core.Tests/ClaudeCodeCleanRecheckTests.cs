@@ -94,6 +94,7 @@ public sealed class ClaudeCodeCleanRecheckTests : IDisposable
             "Nothing was removed: Deguffer could not read Claude Code's list of running sessions",
             Assert.Single(result.Steps).Message,
             StringComparison.Ordinal);
+        AssertProvedStanding(result, session);
     }
 
     /// <summary>
