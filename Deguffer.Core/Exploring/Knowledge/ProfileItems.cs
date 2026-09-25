@@ -243,6 +243,27 @@ internal static class ProfileItems
             + "there is no supported way to prune the older versions."),
 
         new(
+            KnownPlace.LocalAppData,
+            @"Autodesk\webdeploy",
+            "Autodesk Fusion itself. Fusion installs into this folder rather than into Program "
+            + "Files, one folder per version named by a long identifier, and runs from the newest. "
+            + "It is installed software rather than a download cache, and five gigabytes or more is "
+            + "normal.",
+
+            "Deleting it removes Fusion without unregistering it. An older version may be left "
+            + "here after an update, but nothing yet establishes which folder is safe to remove, "
+            + "so uninstall Fusion through Settings under Apps instead."),
+
+        new(
+            KnownPlace.LocalAppData,
+            @"Autodesk\Common\Material Library",
+            "The materials and textures Autodesk products share for rendering, installed with "
+            + "them rather than downloaded as they are needed. It is several hundred megabytes.",
+
+            "Nothing re-creates it: rendering in those products fails until it is put back by "
+            + "repairing the product that installed it."),
+
+        new(
             KnownPlace.UserProfile,
             "NTUSER.DAT",
             "The registry for this account: every per-user setting Windows and the programs on it "

@@ -166,6 +166,7 @@ public sealed class CleanupPlanner
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
             new AzureFunctionsToolsProvider(environment),
             new GraphicsDriverInstallerProvider(environment),
+            new AutodeskInstallerProvider(environment),
             new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
             new RecycleBinProvider(environment, preferences: preferences),
             new FileHistoryProvider(environment, preferences: preferences),
