@@ -704,8 +704,8 @@ measured in seconds and there is no path by which anything is lost.
 
 | | |
 | --- | --- |
-| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, and each Chromium-based browser's own user-data folder |
-| **Method** | Delete the six cache directories Chromium writes, per profile |
+| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, each Chromium-based browser's own user-data folder, and the Battle.net launcher's built-in browser |
+| **Method** | Delete the seven cache directories Chromium writes, per profile |
 | **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB. One browser's `Code Cache` alone came to 194 MB on the same workstation |
 
 ### What it is
@@ -715,7 +715,7 @@ around it — chat clients, editors, note-takers, package-manager front ends. Ea
 browser inside itself, and each one therefore keeps a full browser's caches: downloaded web content,
 compiled JavaScript, and compiled graphics pipelines.
 
-Because the engine is the same in all of them, the cache directories have the same six names in all
+Because the engine is the same in all of them, the cache directories have the same seven names in all
 of them, sitting in whatever data folder the vendor chose. That is what Deguffer recognises. It does
 not need to know the application.
 
@@ -725,9 +725,10 @@ not need to know the application.
 | `Code Cache` | JavaScript and WebAssembly compiled ahead of time |
 | `GPUCache` | Compiled graphics pipelines |
 | `DawnGraphiteCache`, `DawnWebGPUCache` | Compiled WebGPU pipelines |
+| `DawnCache` | Compiled WebGPU pipelines, under the name older builds of the engine gave that cache. Battle.net's engine still writes it |
 | `Service Worker\CacheStorage` | Responses a service worker stored for offline use |
 
-The browsers built on Chromium keep the same six directories, but further down: under a vendor
+The browsers built on Chromium keep the same seven directories, but further down: under a vendor
 folder and a product folder rather than directly in `%APPDATA%` or `%LOCALAPPDATA%`. Deguffer knows
 where each of these keeps its folder, including the beta, developer and nightly builds:
 
@@ -740,6 +741,14 @@ where each of these keeps its folder, including the beta, developer and nightly 
 | Vivaldi | `%LOCALAPPDATA%\Vivaldi\User Data` |
 | Opera, Opera GX | `%APPDATA%\Opera Software\Opera Stable`, `Opera GX Stable` |
 
+The Battle.net launcher is on the same list for the same reason. It embeds the engine through the
+Chromium Embedded Framework, and keeps that browser's folder a level below its own, in
+`%LOCALAPPDATA%\Battle.net\BrowserCaches`. Inside it the caches sit in a partition the launcher
+names itself (`common` on the machine this was measured on, 220 MB), rather than in `Default`. The
+launcher's own cache and logs beside that folder are two rows of their own:
+[Battle.net launcher cache](#battlenet-launcher-cache) and
+[Battle.net launcher logs](#battlenet-launcher-logs).
+
 ### What Deguffer does
 
 **It identifies the folder before it looks inside it.** Any directory on your disk may happen to be
@@ -748,7 +757,13 @@ called `GPUCache`, so a cache name is never on its own a reason to go in. Deguff
 that file is examined at all. The browser table above only says where to look: a browser's folder
 has to hold `Local State` too.
 
-Within such a folder it removes exactly the six directories above and nothing else, one step each,
+The framework Battle.net uses writes `LocalPrefs.json` instead, into the folder and into each
+partition inside it. Deguffer accepts that file only where Battle.net keeps its folder, because an
+application of any kind might give its settings that name. A partition is any directory in the
+folder that holds its own `LocalPrefs.json`, so the launcher's choice of name never has to be
+guessed, and a directory without the file is not looked inside.
+
+Within such a folder it removes exactly the seven directories above and nothing else, one step each,
 so you can clear one application and keep another. Where an application keeps several profiles —
 `Default`, `Profile 1` and so on — each profile's caches are their own steps too, so you can clear a
 dormant profile and leave the one you use signed in and warm.
@@ -771,9 +786,9 @@ beside the caches, in the same naming style, are:
 | `Cookies`, `Network\Cookies` | Your sign-in cookies |
 | `Login Data` | Saved usernames and passwords |
 | `Web Data` | Saved addresses and payment cards |
-| `Local State` | Application settings, and the key that decrypts the three above |
+| `Local State`, or `LocalPrefs.json` in Battle.net's folder and each of its partitions | Application settings, and the key that decrypts the three above |
 
-Nothing outside the six names is ever a candidate, whatever it is called — a directory named
+Nothing outside the seven names is ever a candidate, whatever it is called — a directory named
 `SuperCache` stays exactly where it is. Deguffer asserts afterwards that every one of these
 survived, the ones that are files rather than folders included — those would otherwise never be
 checked at all, because the rule that classifies a folder never sees a file.
@@ -789,7 +804,7 @@ Each application starts more slowly once. It fetches the web content it had cach
 scripts, and then behaves exactly as before.
 
 **You stay signed in.** Sign-ins, saved passwords, settings and offline data are all in the
-neighbouring directories, not in the six. An application that works offline needs to be online once
+neighbouring directories, not in the seven. An application that works offline needs to be online once
 to refill what its service worker had stored.
 
 Close the applications first if you can. A running one keeps its cache files open, and anything held
@@ -798,7 +813,7 @@ window closes, so check the notification area for it.
 
 ### Why Tier 1
 
-Every one of the six is derived content with an authoritative source elsewhere: web content the
+Every one of the seven is derived content with an authoritative source elsewhere: web content the
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
@@ -813,11 +828,11 @@ see its cache.
 
 Edge keeps `component_crx_cache`, `extensions_crx_cache` and `GrShaderCache` in its user-data folder,
 beside the profiles, and on one workstation they came to about 210 MB together. None of them is one
-of the six, so all three stay in place until somebody classifies them deliberately.
+of the seven, so all three stay in place until somebody classifies them deliberately.
 
 Opera keeps its web cache in `%LOCALAPPDATA%\Opera Software\Opera Stable`, apart from its settings.
 That folder holds no `Local State`, so Deguffer does not identify it, and Opera's web cache stays in
-place. Any of the six that Opera keeps beside its settings in `%APPDATA%` is reached.
+place. Any of the seven that Opera keeps beside its settings in `%APPDATA%` is reached.
 
 ---
 
@@ -834,9 +849,9 @@ place. Any of the six that Opera keeps beside its settings in `%APPDATA%` is rea
 ### What it is
 
 Visual Studio Code is a Chromium application, so [Chromium application
-caches](#chromium-application-caches) above already reaches the six engine cache directories inside
-its folder. Those six are the small part. The editor keeps four more caches of its own, under names
-that belong to VS Code rather than to Chromium. On the measured machine the six came to about
+caches](#chromium-application-caches) above already reaches the seven engine cache directories inside
+its folder. Those seven are the small part. The editor keeps four more caches of its own, under names
+that belong to VS Code rather than to Chromium. On the measured machine the engine caches came to about
 15 MB and these four to 2.0 GB.
 
 | Directory | What it holds |
@@ -1378,6 +1393,115 @@ Tier 1 requires that whatever produced the content re-creates it, so that nothin
 re-created here is the *next* log, never the ones removed: a crash report is the record of an event,
 and the event will not happen again to order. That is the property that puts logs and records in
 Tier 3, and the consequence column there says the loss is permanent — which is exactly right.
+
+---
+
+## Battle.net launcher cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Battle.net\Cache` |
+| **Method** | Delete that one folder, and nothing else in the launcher's folder |
+| **Typical size** | 40.4 MB on the machine this was measured on |
+
+### What it is
+
+Blizzard's desktop launcher keeps a cache of what it downloads in its own folder in your profile.
+Every file in it is named by 32 hexadecimal digits and filed under a folder named by the first two
+of them. That is the shape of a store of downloads looked up by a hash, which the launcher fills
+from Blizzard's servers.
+
+It is not the launcher's built-in browser cache, which is larger (220 MB on the same machine) and
+sits beside it in `BrowserCaches`. That one is reached by the
+[Chromium application caches](#chromium-application-caches) row.
+
+### What Deguffer does
+
+It removes `Cache` and nothing else. The launcher has no command that clears it, so there is nothing
+to prefer to deleting the path, and the folder is named outright rather than found by looking
+around. Nothing else in the launcher's folder is ever classified, so nothing there can become a
+candidate by being noticed.
+
+### What is protected
+
+Everything else in `%LOCALAPPDATA%\Battle.net`, and Deguffer asserts afterwards that it survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Account` | The launcher's data for each account that has signed in on this machine |
+| `CachedData.db` | A database the launcher keeps. Nobody has established what is in it, so it is left alone |
+| `BrowserCaches`, and the `LocalPrefs.json` in it | The built-in browser, with your sign-in to it and the key that decrypts it |
+| `Logs` | The launcher's logs, which have a [row of their own](#battlenet-launcher-logs) |
+
+Deguffer also refuses to delete through a link, and it checks the launcher's folder as well as the
+cache. If you have moved either onto another drive with a junction, it removes nothing there and
+tells you why.
+
+### What it costs you
+
+The launcher downloads what it had cached again the next time it needs it, so it may start more
+slowly once. **Your sign-in, your games and your settings are untouched.**
+
+Close the launcher first if you can. Anything it holds open is left in place rather than removed.
+
+### Why Tier 1
+
+The folder has the shape of a store of downloads looked up by a hash, and every file in it came
+from Blizzard's servers, which still hold it. The launcher downloads what it needs again, so the
+cost of clearing it is that download.
+
+### Not offered: the machine-wide folders
+
+Blizzard's support article
+([Deleting the Battle.net cache folder](https://us.support.blizzard.com/en/article/34721)) has
+players delete the `Blizzard Entertainment` folder under `%PROGRAMDATA%`. Deguffer does not offer
+that folder, and it does not offer the launcher's other machine-wide folder,
+`%PROGRAMDATA%\Battle.net` (25.9 MB on the same machine), either. That folder holds `Agent`, the
+update agent's live state, and nobody has established what removing either folder costs. Deguffer
+leaves both alone until somebody does.
+
+---
+
+## Battle.net launcher logs
+
+**Tier 3 — user data.** Never pre-selected, and confirmed before it runs.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Battle.net\Logs` |
+| **Method** | Delete that one folder, and nothing else in the launcher's folder |
+| **Typical size** | 1.0 MB on the machine this was measured on |
+
+### What it is
+
+The launcher writes a log every time it starts, and its built-in browser writes another beside it.
+Nothing removes the old ones.
+
+### What Deguffer does
+
+It removes `Logs` by name, and nothing else in the launcher's folder. It is a separate row from the
+[launcher cache](#battlenet-launcher-cache) because the two cost different things: you can clear the
+cache without touching the record of what the launcher did. The row is never ticked for you, and it
+shows how recently a log was written.
+
+### What is protected
+
+The same neighbours as the cache row: `Account`, `CachedData.db`, `BrowserCaches` and the
+`LocalPrefs.json` in it, and the launcher's `Cache`. Deguffer asserts afterwards that they survived.
+
+### What it costs you
+
+The record of every session the launcher has already had is destroyed, so none of it can be attached
+to a support ticket afterwards. **This is permanent.** The launcher writes a fresh log the next time
+it starts, and nothing about how it runs changes.
+
+### Why Tier 3, not Tier 1
+
+What is re-created here is the *next* log, never the ones removed. That is the reasoning the
+[Epic Games launcher logs](#epic-games-launcher-logs-and-crash-reports) row gives, and it applies
+unchanged.
 
 ---
 

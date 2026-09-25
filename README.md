@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Fifty-four providers, each holding its own knowledge of one location. A provider reports "not
+Fifty-six providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -117,12 +117,13 @@ installed" cleanly on a machine without that toolchain.
 | Roslyn solution index cache | One dated row per set of indexes, so the sets a program left behind when it moved folder can go; never the rest of Visual Studio's folder |
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
-| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, and every application that embeds the same engine |
+| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Battle.net launcher's built-in browser, and every application that embeds the same engine |
 | Firefox caches | |
 | Steam web cache | |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
+| Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 | Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
@@ -165,6 +166,7 @@ installed" cleanly on a machine without that toolchain.
 | Windows servicing logs | The logs a reset of this PC leaves are cleared by Windows' own cleanup for them, never by path |
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
+| Battle.net launcher logs | |
 | Claude Code MCP server logs | |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |
 
