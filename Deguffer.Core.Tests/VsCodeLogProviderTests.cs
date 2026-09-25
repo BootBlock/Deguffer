@@ -211,7 +211,7 @@ public sealed class VsCodeLogProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var editor = CreateEditor();
-        Directory.CreateSymbolicLink(Path.Combine(editor, "logs"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(editor, "logs"), outside);
 
         var provider = CreateProvider();
 

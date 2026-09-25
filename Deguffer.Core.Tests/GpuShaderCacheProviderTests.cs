@@ -166,7 +166,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         File.WriteAllBytes(bystander, new byte[4096]);
 
         var link = Path.Combine(_environment.LocalAppData, "D3DSCache");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -193,7 +193,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(outside, "DXCache", "pipeline.bin"), new byte[4096]);
 
         var link = Path.Combine(_environment.LocalAppData, "NVIDIA");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -227,7 +227,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "NVIDIA"));
         var link = Path.Combine(_environment.LocalAppData, "NVIDIA", "DXCache");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
 

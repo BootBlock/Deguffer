@@ -499,7 +499,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         var app = CreateApplication("Chatter");
         CreateDirectory(Path.Combine(app, "GPUCache"));
-        Directory.CreateSymbolicLink(Path.Combine(app, "Cache"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(app, "Cache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -531,7 +531,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         var app = CreateApplication("Chatter");
         CreateDirectory(Path.Combine(app, "GPUCache"));
-        Directory.CreateSymbolicLink(Path.Combine(app, "Cache"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(app, "Cache"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -551,7 +551,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var bystander = CreateDirectory(Path.Combine(outside, "Default", "Code Cache"));
         File.WriteAllText(Path.Combine(outside, "Local State"), "{}");
 
-        Directory.CreateSymbolicLink(Path.Combine(_environment.RoamingAppData, "Chatter"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(_environment.RoamingAppData, "Chatter"), outside);
 
         var provider = CreateProvider();
 
@@ -587,7 +587,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         var app = CreateApplication("Browserish");
         CreateDirectory(Path.Combine(app, "GPUCache"));
-        Directory.CreateSymbolicLink(Path.Combine(app, "Default"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(app, "Default"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -640,7 +640,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var app = CreateApplication("Chatter");
-        Directory.CreateSymbolicLink(Path.Combine(app, "GPUCache"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(app, "GPUCache"), outside);
 
         var provider = CreateProvider();
 

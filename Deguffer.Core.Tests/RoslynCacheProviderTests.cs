@@ -339,7 +339,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
         var outside = CreateHost(Path.Combine(_temp.Path, "elsewhere"), Host, Solution);
         Directory.CreateDirectory(Cache);
         var link = Path.Combine(Cache, OtherHost);
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -372,7 +372,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
 
         var link = Path.Combine(VisualStudio, level);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        Directory.CreateSymbolicLink(link, elsewhere);
+        SymbolicLink.ToDirectory(link, elsewhere);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -479,7 +479,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
 
             case "a link in place of a solution":
                 var outside = CreateHost(Path.Combine(_temp.Path, "elsewhere"), Host, OtherSolution);
-                Directory.CreateSymbolicLink(Path.Combine(host, OtherSolution), Path.Combine(outside, OtherSolution));
+                SymbolicLink.ToDirectory(Path.Combine(host, OtherSolution), Path.Combine(outside, OtherSolution));
                 break;
 
             default:

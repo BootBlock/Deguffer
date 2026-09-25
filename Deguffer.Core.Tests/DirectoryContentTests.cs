@@ -67,7 +67,7 @@ public sealed class DirectoryContentTests : IDisposable
     public void ALinkIsContentWhateverItPointsAt()
     {
         var holder = _temp.CreateDirectory("holder");
-        Directory.CreateSymbolicLink(Path.Combine(holder, "link"), _temp.CreateDirectory("outside-empty"));
+        SymbolicLink.ToDirectory(Path.Combine(holder, "link"), _temp.CreateDirectory("outside-empty"));
 
         Assert.True(DirectoryContent.IsPresent(holder));
     }

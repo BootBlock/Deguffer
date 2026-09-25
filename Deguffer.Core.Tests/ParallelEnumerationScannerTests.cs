@@ -281,7 +281,7 @@ public class ParallelEnumerationScannerTests
         var target = temp.CreateFile(1_000_000, "elsewhere", "archive.pst");
         var link = Path.Combine(temp.CreateDirectory("cache", "saved"), "shortcut.pst");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
 
         var result = await ParallelEnumerationScanner.Default.MeasureAsync(Path.Combine(temp.Path, "cache"));
 
@@ -300,7 +300,7 @@ public class ParallelEnumerationScannerTests
         var target = temp.CreateFile(8192, "elsewhere", "archive.pst");
         var link = Path.Combine(temp.CreateDirectory("Downloads"), "shortcut.pst");
 
-        File.CreateSymbolicLink(link, target);
+        SymbolicLink.ToFile(link, target);
 
         var result = await ParallelEnumerationScanner.Default.MeasureAsync(link);
 

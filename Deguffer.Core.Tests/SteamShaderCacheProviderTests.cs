@@ -164,7 +164,7 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "570"));
         var link = Path.Combine(install, "steamapps", "shadercache", "570");
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         Assert.True(await provider.IsPresentAsync());
@@ -525,7 +525,7 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         var install = RegisterInstall();
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var farCache = CacheFor(outside, "440");
-        Directory.CreateSymbolicLink(Path.Combine(install, "steamapps"), Path.Combine(outside, "steamapps"));
+        SymbolicLink.ToDirectory(Path.Combine(install, "steamapps"), Path.Combine(outside, "steamapps"));
 
         var provider = CreateProvider();
         Assert.True(await provider.IsPresentAsync());
@@ -548,7 +548,7 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         CacheFor(install, "440");
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "570"));
         var link = Path.Combine(install, "steamapps", "shadercache", "570");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

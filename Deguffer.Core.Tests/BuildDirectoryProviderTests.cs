@@ -838,7 +838,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var link = Path.Combine(project, "target");
 
         File.WriteAllText(Path.Combine(project, "Cargo.toml"), "[package]");
-        Directory.CreateSymbolicLink(link, real);
+        SymbolicLink.ToDirectory(link, real);
 
         Assert.Null(BuildDirectorySignature.TryRecognise(
             new BuildDirectoryKind

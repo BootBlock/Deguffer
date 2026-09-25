@@ -120,7 +120,7 @@ public sealed class BattleNetLogProviderTests : IDisposable
         var outside = BattleNetFixture.Populate(Path.Combine(_temp.Path, "elsewhere"), "irreplaceable.log");
 
         Directory.CreateDirectory(_battleNet.Launcher);
-        Directory.CreateSymbolicLink(_battleNet.Logs, outside);
+        SymbolicLink.ToDirectory(_battleNet.Logs, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

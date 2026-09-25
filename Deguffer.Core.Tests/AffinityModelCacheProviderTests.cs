@@ -385,7 +385,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Directory.CreateDirectory(stranger);
         File.WriteAllBytes(Path.Combine(stranger, "model.onnx"), new byte[65536]);
 
-        Directory.CreateSymbolicLink(RoamingRoot, outside);
+        SymbolicLink.ToDirectory(RoamingRoot, outside);
 
         var provider = CreateProvider();
 
@@ -413,7 +413,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "model.onnx"), new byte[65536]);
 
         Directory.CreateDirectory(RoamingRoot);
-        Directory.CreateSymbolicLink(Common(RoamingRoot), outside);
+        SymbolicLink.ToDirectory(Common(RoamingRoot), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -437,7 +437,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         var outside = _temp.CreateDirectory("elsewhere");
         File.WriteAllBytes(Path.Combine(outside, "model.onnx"), new byte[65536]);
 
-        Directory.CreateSymbolicLink(ModelCache(RoamingRoot, "3.0"), outside);
+        SymbolicLink.ToDirectory(ModelCache(RoamingRoot, "3.0"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -515,7 +515,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Directory.CreateDirectory(stranger);
         File.WriteAllBytes(Path.Combine(stranger, "model.onnx"), new byte[65536]);
 
-        Directory.CreateSymbolicLink(Version(RoamingRoot, "3.0"), outside);
+        SymbolicLink.ToDirectory(Version(RoamingRoot, "3.0"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 

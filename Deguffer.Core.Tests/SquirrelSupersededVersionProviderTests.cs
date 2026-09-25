@@ -237,7 +237,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
 
         // The newest build, and a link. Ordering has to see it, or app-3.6.3 becomes the newest and
         // the running build is the one offered.
-        Directory.CreateSymbolicLink(Path.Combine(root, "app-3.6.4"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "app-3.6.4"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -259,7 +259,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
 
         var link = Path.Combine(root, "app-3.6.3");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

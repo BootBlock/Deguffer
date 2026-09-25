@@ -156,7 +156,7 @@ public sealed class ChromiumHostTests : IDisposable
         CreateUserData(Path.Combine(outside, "Edge Beta", "User Data"));
 
         var link = Path.Combine(_environment.LocalAppData, "Microsoft");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
 
@@ -184,7 +184,7 @@ public sealed class ChromiumHostTests : IDisposable
     public async Task ALinkInFrontOfNoBrowserIsNotMentioned()
     {
         var outside = Directory.CreateDirectory(Path.Combine(_temp.Path, "elsewhere")).FullName;
-        Directory.CreateSymbolicLink(Path.Combine(_environment.LocalAppData, "Microsoft"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(_environment.LocalAppData, "Microsoft"), outside);
 
         var provider = CreateProvider();
 
@@ -477,7 +477,7 @@ public sealed class ChromiumHostTests : IDisposable
         File.WriteAllText(Path.Combine(outside, BattleNetFixture.Marker), "{}");
         var bystander = BattleNetFixture.Populate(Path.Combine(outside, "GPUCache"));
 
-        Directory.CreateSymbolicLink(battleNet.Common, outside);
+        SymbolicLink.ToDirectory(battleNet.Common, outside);
 
         var provider = CreateProvider();
 
@@ -508,7 +508,7 @@ public sealed class ChromiumHostTests : IDisposable
         File.WriteAllText(Path.Combine(partition, BattleNetFixture.Marker), "{}");
         var bystander = BattleNetFixture.Populate(Path.Combine(partition, "GPUCache"));
 
-        Directory.CreateSymbolicLink(battleNet.BrowserCaches, outside);
+        SymbolicLink.ToDirectory(battleNet.BrowserCaches, outside);
 
         var provider = CreateProvider();
 

@@ -189,7 +189,7 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         File.WriteAllBytes(bystander, new byte[64]);
 
         Directory.CreateDirectory(Project());
-        Directory.CreateSymbolicLink(Path.Combine(Project(), ClaudeCodeMcpLogProvider.LogFolderPrefix + "linked"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Project(), ClaudeCodeMcpLogProvider.LogFolderPrefix + "linked"), outside);
 
         var provider = CreateProvider();
 

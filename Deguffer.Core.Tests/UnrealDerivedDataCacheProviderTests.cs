@@ -591,7 +591,7 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"), name: "irreplaceable.bin");
         Directory.CreateDirectory(Common);
-        Directory.CreateSymbolicLink(LegacyCache, outside);
+        SymbolicLink.ToDirectory(LegacyCache, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

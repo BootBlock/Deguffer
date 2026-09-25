@@ -255,7 +255,7 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
 
         var link = Path.Combine(_environment.LocalAppData, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
 
@@ -285,7 +285,7 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         Directory.CreateDirectory(Saved);
-        Directory.CreateSymbolicLink(Path.Combine(Saved, "Logs"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Saved, "Logs"), outside);
 
         var provider = CreateProvider();
 

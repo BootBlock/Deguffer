@@ -506,7 +506,7 @@ public sealed class SpotifyCacheProviderTests : IDisposable
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         Directory.CreateDirectory(LocalFolder);
-        Directory.CreateSymbolicLink(Path.Combine(LocalFolder, "Data"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(LocalFolder, "Data"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

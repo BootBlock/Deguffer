@@ -306,7 +306,7 @@ public sealed class SteamCacheProviderTests : IDisposable
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         Directory.CreateDirectory(LocalRoot);
-        Directory.CreateSymbolicLink(Path.Combine(LocalRoot, "htmlcache"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(LocalRoot, "htmlcache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -331,7 +331,7 @@ public sealed class SteamCacheProviderTests : IDisposable
     {
         var install = RegisterInstall();
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "httpcache"));
-        Directory.CreateSymbolicLink(
+        SymbolicLink.ToDirectory(
             Path.Combine(install, "appcache"), Path.Combine(_temp.Path, "elsewhere"));
 
         var provider = CreateProvider();

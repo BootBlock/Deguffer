@@ -67,7 +67,7 @@ public sealed class DeclaredLocationsTests : IDisposable
         var outside = _temp.CreateDirectory("elsewhere", "CBS");
         File.WriteAllBytes(Path.Combine(outside, "irreplaceable.log"), new byte[4096]);
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "Logs"), Path.Combine(_temp.Path, "elsewhere"));
+        SymbolicLink.ToDirectory(Path.Combine(root, "Logs"), Path.Combine(_temp.Path, "elsewhere"));
 
         var scan = DeclaredLocations.Examine(
             [Root(root, new DeclaredLocation("Logs/CBS", "Servicing logs."))]);
@@ -87,7 +87,7 @@ public sealed class DeclaredLocationsTests : IDisposable
     {
         var root = _temp.CreateDirectory("root");
 
-        Directory.CreateSymbolicLink(
+        SymbolicLink.ToDirectory(
             Path.Combine(root, "Logs"), _temp.CreateDirectory("elsewhere"));
 
         var scan = DeclaredLocations.Examine(

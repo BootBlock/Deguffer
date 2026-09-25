@@ -290,7 +290,7 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
     public async Task LeavesALinkNamedLikeAProfileAlone()
     {
         var outside = TempDirectory.Age(_temp.CreateFile(256, "elsewhere", "precious.txt"), TimeSpan.FromDays(30));
-        Directory.CreateSymbolicLink(
+        SymbolicLink.ToDirectory(
             Path.Combine(_temp.CreateDirectory("temp"), "playwright_chromiumdev_profile-z7A8b9"),
             Path.GetDirectoryName(outside)!);
 

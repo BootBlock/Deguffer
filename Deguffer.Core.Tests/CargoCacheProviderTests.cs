@@ -228,7 +228,7 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         var link = Path.Combine(Home, "registry", "linked");
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -253,7 +253,7 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = Populate(Path.Combine(outside, "checkouts"));
-        Directory.CreateSymbolicLink(Path.Combine(Home, "git"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Home, "git"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -278,7 +278,7 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         var outside = Path.Combine(_temp.Path, "elsewhere");
         Populate(Path.Combine(outside, "checkouts"));
-        Directory.CreateSymbolicLink(Path.Combine(Home, "git"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(Home, "git"), outside);
 
         var provider = CreateProvider();
 
@@ -385,7 +385,7 @@ public sealed class CargoCacheProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = Populate(Path.Combine(outside, "registry", "cache"));
         Populate(Path.Combine(outside, "git", "checkouts"));
-        Directory.CreateSymbolicLink(Home, outside);
+        SymbolicLink.ToDirectory(Home, outside);
 
         var provider = CreateProvider();
 

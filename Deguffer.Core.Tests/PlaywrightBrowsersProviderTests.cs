@@ -53,7 +53,7 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "chrome.exe"), new byte[4096]);
 
         var linked = Path.Combine(_temp.Path, "linked-browsers");
-        Directory.CreateSymbolicLink(linked, outside);
+        SymbolicLink.ToDirectory(linked, outside);
         _environment.WithEnvironmentVariable(PlaywrightBrowsersProvider.LocationVariable, linked);
 
         var provider = CreateProvider();
@@ -89,7 +89,7 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Directory.CreateDirectory(outside);
         File.WriteAllBytes(Path.Combine(outside, "chrome.exe"), new byte[65536]);
 
-        Directory.CreateSymbolicLink(Path.Combine(root, "chromium-1228"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "chromium-1228"), outside);
 
         var provider = CreateProvider();
 

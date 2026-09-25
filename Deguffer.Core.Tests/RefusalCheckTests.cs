@@ -258,7 +258,7 @@ public sealed class RefusalCheckTests : IDisposable
         _temp.CreateFile(4096, "elsewhere", "profile", "Cookies");
 
         var root = Path.Combine(_temp.Path, "temp");
-        Directory.CreateSymbolicLink(root, elsewhere);
+        SymbolicLink.ToDirectory(root, elsewhere);
 
         var throughLink = Path.Combine(root, "profile", "Cookies");
         var recorder = new RecordingFileSystem(Refusing((throughLink, RefusalReason.Denied)));

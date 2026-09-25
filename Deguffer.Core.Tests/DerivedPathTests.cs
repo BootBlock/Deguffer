@@ -22,7 +22,7 @@ public sealed class DerivedPathTests : IDisposable
         _temp.CreateDirectory("elsewhere", "Cache");
 
         var logs = Path.Combine(root, "Logs");
-        Directory.CreateSymbolicLink(logs, Path.Combine(_temp.Path, "elsewhere"));
+        SymbolicLink.ToDirectory(logs, Path.Combine(_temp.Path, "elsewhere"));
 
         Assert.Equal(
             new DerivedPathObstacle(logs, IsLink: true),

@@ -269,7 +269,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         var bystander = Path.Combine(outside, "irreplaceable.bin");
 
         Directory.CreateDirectory(DataFolder);
-        Directory.CreateSymbolicLink(ContentCache, outside);
+        SymbolicLink.ToDirectory(ContentCache, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -299,7 +299,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         var bystander = Path.Combine(cache, "artwork.jpg");
 
         Directory.CreateDirectory(EpicRoot);
-        Directory.CreateSymbolicLink(LauncherRoot, outside);
+        SymbolicLink.ToDirectory(LauncherRoot, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

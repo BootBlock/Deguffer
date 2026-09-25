@@ -516,7 +516,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         var link = Path.Combine(_environment.LocalAppData, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        Directory.CreateSymbolicLink(link, outside);
+        SymbolicLink.ToDirectory(link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -545,7 +545,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         Directory.CreateDirectory(profile.Local);
-        Directory.CreateSymbolicLink(Path.Combine(profile.Local, "cache2"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(profile.Local, "cache2"), outside);
 
         var provider = CreateProvider();
 

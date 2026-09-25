@@ -385,7 +385,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         var editor = CreateEditor();
         CreateDirectory(Path.Combine(editor, "CachedData"));
-        Directory.CreateSymbolicLink(Path.Combine(editor, "WebStorage"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(editor, "WebStorage"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -423,7 +423,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         var editor = CreateEditor();
         CreateDirectory(Path.Combine(editor, "CachedData"));
         Directory.CreateDirectory(Path.Combine(editor, "WebStorage"));
-        Directory.CreateSymbolicLink(Path.Combine(editor, "WebStorage", "42"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(editor, "WebStorage", "42"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -457,7 +457,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         File.WriteAllText(Path.Combine(outside, "Local State"), "{}");
         CreateFile(Path.Combine(outside, "User", "globalStorage", "state.vscdb"));
 
-        Directory.CreateSymbolicLink(Path.Combine(_environment.RoamingAppData, "Code"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(_environment.RoamingAppData, "Code"), outside);
 
         var provider = CreateProvider();
 
@@ -486,7 +486,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var editor = CreateEditor();
-        Directory.CreateSymbolicLink(Path.Combine(editor, "CachedData"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(editor, "CachedData"), outside);
 
         var provider = CreateProvider();
 

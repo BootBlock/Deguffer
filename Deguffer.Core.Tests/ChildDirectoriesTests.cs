@@ -23,7 +23,7 @@ public sealed class ChildDirectoriesTests : IDisposable
         var root = _temp.CreateDirectory("root");
         _temp.CreateDirectory("root", "real");
         _temp.CreateDirectory("outside");
-        Directory.CreateSymbolicLink(Path.Combine(root, "link"), Path.Combine(_temp.Path, "outside"));
+        SymbolicLink.ToDirectory(Path.Combine(root, "link"), Path.Combine(_temp.Path, "outside"));
 
         var scan = ChildDirectories.Under(root);
 
@@ -106,7 +106,7 @@ public sealed class ChildDirectoriesTests : IDisposable
     {
         var root = _temp.CreateDirectory("root");
         _temp.CreateDirectory("root", "child");
-        Directory.CreateSymbolicLink(
+        SymbolicLink.ToDirectory(
             Path.Combine(root, "link"),
             _temp.CreateDirectory("outside"));
 
@@ -148,8 +148,8 @@ public sealed class ChildDirectoriesTests : IDisposable
         _temp.CreateDirectory("root", "wanted-1");
         _temp.CreateDirectory("root", "unwanted");
         var outside = _temp.CreateDirectory("outside");
-        Directory.CreateSymbolicLink(Path.Combine(root, "wanted-link"), outside);
-        Directory.CreateSymbolicLink(Path.Combine(root, "unwanted-link"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "wanted-link"), outside);
+        SymbolicLink.ToDirectory(Path.Combine(root, "unwanted-link"), outside);
 
         var scan = ChildDirectories.Under(root, static name => name.StartsWith("wanted", StringComparison.Ordinal));
 
