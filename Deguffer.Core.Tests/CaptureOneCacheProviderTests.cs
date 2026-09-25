@@ -349,6 +349,45 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
     }
 
+    /// <summary>
+    /// Settings that cannot be listed at all are not "Capture One was never used": the row is present
+    /// and says what it could not read.
+    /// </summary>
+    [Fact]
+    public async Task AnUnlistableSettingsFolderIsPresentAndAWarning()
+    {
+        var company = Path.Combine(_environment.LocalAppData, "Capture_One");
+        Directory.CreateDirectory(Path.Combine(company, "CaptureOne.exe_StrongName_abc"));
+
+        using var denied = new DeniedDirectory(company);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(company, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The shell makes one column per facet label, so a plan holding both a catalog and a session
+    /// must give every item the same label.
+    /// </summary>
+    [Fact]
+    public async Task CatalogsAndSessionsShareOneColumn()
+    {
+        var catalog = Catalog("Weddings");
+        var session = Session("Studio");
+        List(catalog, Path.Combine(session, "Studio.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal(3, plan.Steps.Count);
+        Assert.Single(plan.Steps.OfType<DeleteStep>().SelectMany(s => s.Facets).Select(f => f.Label).Distinct());
+    }
+
     /// <summary>An empty cache is no step: there is nothing to reclaim.</summary>
     [Fact]
     public async Task AnEmptyCacheIsNoStep()

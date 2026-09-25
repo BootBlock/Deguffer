@@ -156,7 +156,7 @@ public sealed class CaptureOneDocumentsTests : IDisposable
 
         Assert.True(documents.Found);
         Assert.False(documents.IsComplete);
-        Assert.Equal([file], documents.UnreadFiles);
+        Assert.Equal([file], documents.Unread);
         Assert.Empty(documents.Catalogs);
     }
 
@@ -172,7 +172,26 @@ public sealed class CaptureOneDocumentsTests : IDisposable
 
         var documents = CaptureOneDocuments.Read(LocalAppData);
 
-        Assert.Equal([file], documents.UnreadFiles);
+        Assert.Equal([file], documents.Unread);
         Assert.Empty(documents.Catalogs);
+    }
+
+    /// <summary>
+    /// A settings folder that will not be listed may hold settings, so Capture One is found and the
+    /// list is not complete, rather than "never used".
+    /// </summary>
+    [Fact]
+    public void ASettingsFolderThatWillNotBeListedIsFoundAndUnread()
+    {
+        var company = Path.Combine(LocalAppData, "Capture_One");
+        Directory.CreateDirectory(Path.Combine(company, "CaptureOne.exe_StrongName_abc"));
+
+        using var denied = new DeniedDirectory(company);
+
+        var documents = CaptureOneDocuments.Read(LocalAppData);
+
+        Assert.True(documents.Found);
+        Assert.False(documents.IsComplete);
+        Assert.Equal([company], documents.Unread);
     }
 }

@@ -2082,7 +2082,7 @@ acknowledgement.
 
 | | |
 | --- | --- |
-| **Location** | `<Catalog>.cocatalog\Cache` in each catalog, and `CaptureOne\Cache` beside each folder of images in a session, wherever Capture One's own list says they are |
+| **Location** | `<Catalog>.cocatalog\Cache` in each catalog, and `CaptureOne\Cache` inside each folder of images in a session, wherever Capture One's own list says they are |
 | **Method** | Delete each `Cache` folder, and nothing else in the catalog or the `CaptureOne` folder |
 | **Typical size** | Not measured here: Capture One was not installed where this was written. Its user community reports 51.8 GB for 33,608 images at a 2,560-pixel preview size, and 1.66 GB for 451 images at 5,120 pixels |
 

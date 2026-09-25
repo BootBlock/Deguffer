@@ -36,6 +36,12 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     private const string SessionReason =
         "A Capture One session, holding your images. Only the previews and thumbnails in it are removed.";
 
+    /// <summary>
+    /// The one column every item shares, as <see cref="ItemFacet"/> requires. The owner's own name
+    /// already says which it is: a catalog's ends in <c>.cocatalog</c>.
+    /// </summary>
+    private const string OwnerFacet = "Catalog or session";
+
     private readonly ILiveTreeInspector _liveTrees;
     private CaptureOneDocumentList? _documents;
 
@@ -145,9 +151,9 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
         var examination = new Examination();
 
-        examination.Notes.AddRange(documents.UnreadFiles.Select(file => new PlanNote(
+        examination.Notes.AddRange(documents.Unread.Select(path => new PlanNote(
             PlanNoteSeverity.Warning,
-            $"Deguffer could not read Capture One's settings at '{file}', so a catalog or session only "
+            $"Deguffer could not read Capture One's settings at '{path}', so a catalog or session only "
             + "they list was neither cleared nor ruled out.")));
 
         foreach (var catalog in documents.Catalogs)
@@ -199,7 +205,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
                         cleared.Path,
                         found.Reason,
                         DirectoryAge.Of(cleared.Path, ct),
-                        Facets: [new ItemFacet(found.Kind, Path.GetFileName(found.Owner))],
+                        Facets: [new ItemFacet(OwnerFacet, Path.GetFileName(found.Owner))],
                         Group: found.Owner,
                         UseCheck: cleared.StillUnused);
                 }),
@@ -286,7 +292,6 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         examination.Candidates.Add(new Candidate(
             cache,
             catalog,
-            "Catalog",
             $"Previews and thumbnails for the catalog {Path.GetFileNameWithoutExtension(catalog)}. Capture "
             + "One rebuilds them from the originals as you view each image."));
     }
@@ -353,7 +358,6 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             examination.Candidates.Add(new Candidate(
                 cache,
                 session,
-                "Session",
                 $"Previews and thumbnails for the images in '{Path.GetRelativePath(Path.GetDirectoryName(session) ?? session, images)}'. "
                 + "Capture One rebuilds them from the images beside them as you view each one."));
             offered = true;
@@ -372,9 +376,8 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// <summary>One <c>Cache</c> folder a plan may offer, before the live-tree check.</summary>
     /// <param name="Cache">The folder itself.</param>
     /// <param name="Owner">The catalog or session it belongs to, which must survive.</param>
-    /// <param name="Kind">Whether <paramref name="Owner"/> is a catalog or a session, as a facet label.</param>
     /// <param name="Reason">What the step says it removes.</param>
-    private sealed record Candidate(string Cache, string Owner, string Kind, string Reason);
+    private sealed record Candidate(string Cache, string Owner, string Reason);
 
     /// <summary>What one planning pass has found so far, across every catalog and session.</summary>
     private sealed class Examination

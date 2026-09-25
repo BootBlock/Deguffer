@@ -10,22 +10,26 @@ namespace Deguffer.Core.Providers;
 /// <param name="Catalogs">Each catalog's own folder, the <c>.cocatalog</c> package, with no repeats.</param>
 /// <param name="Sessions">Each session's folder, the one holding its <c>.cosessiondb</c>, with no repeats.</param>
 /// <param name="SettingsFiles">Every settings file found, read or not.</param>
-/// <param name="UnreadFiles">
+/// <param name="Unread">
 /// The settings files that were there and not understood: refused, held, far larger than Capture One
-/// writes, or not well-formed. A catalog named only in one of them is unknown, so the lists above
-/// stop being a claim about every catalog Capture One knows.
+/// writes, or not well-formed. Also every settings folder that would not be listed, since a file
+/// inside it may be there. A catalog named only in one of these is unknown, so the lists above stop
+/// being a claim about every catalog Capture One knows.
 /// </param>
 public sealed record CaptureOneDocumentList(
     IReadOnlyList<string> Catalogs,
     IReadOnlyList<string> Sessions,
     IReadOnlyList<string> SettingsFiles,
-    IReadOnlyList<string> UnreadFiles)
+    IReadOnlyList<string> Unread)
 {
-    /// <summary>Whether Capture One has kept settings for this user at all.</summary>
-    public bool Found => SettingsFiles.Count > 0;
+    /// <summary>
+    /// Whether Capture One may have kept settings for this user. A settings folder that would not be
+    /// listed counts: it may hold settings, and "not used" is a claim nothing established.
+    /// </summary>
+    public bool Found => SettingsFiles.Count > 0 || Unread.Count > 0;
 
-    /// <summary>Whether every settings file found was read.</summary>
-    public bool IsComplete => UnreadFiles.Count == 0;
+    /// <summary>Whether every settings file and folder found was read.</summary>
+    public bool IsComplete => Unread.Count == 0;
 }
 
 /// <summary>
@@ -155,15 +159,11 @@ public static partial class CaptureOneDocuments
                 {
                     var file = LongPath.Display(Path.Combine(version.FullName, SettingsFileName));
 
-                    switch (LongPath.ProbeFile(file))
+                    // A file Windows would not describe is still a settings file found. Reading it
+                    // fails, which is what reports it as unread.
+                    if (LongPath.ProbeFile(file) is not PathPresence.Absent)
                     {
-                        case PathPresence.Present:
-                            yield return file;
-                            break;
-
-                        case PathPresence.Refused:
-                            unread.Add(file);
-                            break;
+                        yield return file;
                     }
                 }
             }
