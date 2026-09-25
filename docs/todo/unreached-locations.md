@@ -3,8 +3,9 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
-> shader caches and Steam shader pre-cache, §6's crash dumps and servicing logs, §7's per-volume recycle bins and §12's
-> Squirrel staging and superseded builds have shipped; everything else is unstarted.
+> shader caches and Steam shader pre-cache, §6's crash dumps and servicing logs, §7's per-volume
+> recycle bins, §10's release of OneDrive's local copies and §12's Squirrel staging and superseded
+> builds have shipped; everything else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
@@ -1404,6 +1405,15 @@ path and a §5.6 negative that asserts survival instead of removal. What remains
 decision itself, which should still be taken deliberately rather than discovered while writing a
 provider.
 
+**Shipped for OneDrive** as `ReleaseLocalCopiesStep` and `CloudLocalCopiesProvider`, on the grounds
+recorded in issue #93. The step unpins each chosen placeholder with `CfSetPinState` and reports the
+bytes as requested, never reclaimed. Its §5.6 negative asserts that every file it named is still
+there and still a cloud file. A scratch sync root registered by the test suite showed the API unpin a
+file with unsynced edits, a pinned file and an ordinary file without complaint, so every rule is
+Deguffer's own, asked again through the handle that unpins. Google Drive and Dropbox, named above, do
+not qualify: Google Drive uses no placeholders, and Dropbox's mechanism is unestablished. Nextcloud and
+Proton Drive wait on a real install showing the name each registers under.
+
 ---
 
 ## 11. Virtual disks — §5.4, and why the picture got worse
@@ -1521,12 +1531,13 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Squirrel staging and superseded builds ✅ | Expected the survey's "old application builds" to stay out of scope, and one framework's own source moved it. Two providers rather than one, because the staging and the builds land at different tiers; and the `packages` folder had to be read through the application's own index rather than removed, because a shortcut reads the index in it — §12 records both | 1.3 GB |
 | Visual Studio `.vs` per solution | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at two nesting levels | 1.5 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
-| Cloud sync dehydration | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
+| Cloud sync dehydration ✅ | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
 | Windows Search index | Service control, which Deguffer does not do today. Decide the policy before the provider | 2.2 GB |
 
 The last two rows are different in kind from the rest. Cloud-sync dehydration and service control
 are not new providers, they are new **capabilities**, and each widens what the safety model has to
-reason about. The tier model handles them. The plan and execution types do not, yet.
+reason about. The tier model handles them. The plan and execution types did not when this was
+written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
 
 ---
 
@@ -1601,3 +1612,6 @@ reason about. The tier model handles them. The plan and execution types do not, 
    a sibling of that rather than a variety of it. Cloud-sync dehydration is still the only known
    subject, so building it now would be the speculative generality G3 bans — the question is whether
    a second subject exists.
+   **Answered for dehydration itself** by issue #93: it is `ReleaseLocalCopiesStep`, a sibling of
+   `DeleteStep` and `RunCommandStep` that targets nothing and whose §5.6 negative asserts survival.
+   Service control, question 4, would be the second subject.

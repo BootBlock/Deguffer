@@ -289,6 +289,23 @@ public sealed class ConfirmationRequirementTests
         Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p, requireTypedPhrase: false));
     }
 
+    /// <summary>
+    /// "Delete" is said about anything that deletes, including a plan that mixes a deletion with a
+    /// release, and "Release" only about a plan in which nothing is destroyed.
+    /// </summary>
+    [Fact]
+    public void TheVerbIsReleaseOnlyWhereNothingIsDestroyed()
+    {
+        var release = new ReleaseLocalCopiesStep(@"C:\Users\testuser\OneDrive", "OneDrive", "Local copies");
+        var plan = PlanFor(SafetyTier.RegenerableWithCost);
+        var deletion = WorkToDo(plan);
+
+        Assert.Equal("Release", ConfirmationRequirement.For(plan with { Steps = [release] }).Verb);
+        Assert.Equal("Delete", ConfirmationRequirement.For(deletion).Verb);
+        Assert.Equal("Delete", ConfirmationRequirement.For(deletion with { Steps = [.. deletion.Steps, release] }).Verb);
+        Assert.Equal("Delete", ConfirmationRequirement.For(plan).Verb);
+    }
+
     private static CleanupPlan PlanFor(SafetyTier tier) => new()
     {
         ProviderId = "subject",

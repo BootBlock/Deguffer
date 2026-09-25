@@ -2310,6 +2310,77 @@ what is left.
 
 ---
 
+## Local copies of cloud files
+
+**Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and confirmed with an
+acknowledgement. Nothing is deleted, here or in the cloud.
+
+| | |
+| --- | --- |
+| **Location** | The folder OneDrive keeps in step with the cloud, for each account and each SharePoint or Teams library its client syncs |
+| **Method** | Mark each chosen file as not needed on this PC, through Windows' own Cloud Files API. OneDrive then releases its local copy |
+| **Typical size** | Everything you have opened from OneDrive since it was last freed. On a machine syncing a large shared library, tens of gigabytes |
+
+### What it is
+
+OneDrive's Files On-Demand keeps every file listed on this PC, and downloads a file's contents the
+first time you open it. From then on the file is **locally available**: its contents stay on the
+disk as well as in the cloud, until something frees them. OneDrive's own *Free up space* command
+does that one file or folder at a time. This row does it for everything that qualifies.
+
+### What Deguffer does
+
+It marks each file as **online-only** with `CfSetPinState`, the call Microsoft opens to any
+application, and never with `CfDehydratePlaceholder`, which belongs to the sync app. OneDrive then
+releases the local copy in the background. Each file stays in its folder, keeps its name, and opens
+normally while the machine is online: opening it downloads it again.
+
+**The figure is a request, not a result.** Windows documents that unpinning a file gives "no
+guarantee" it is freed straight away, and on a test sync root unpinning alone freed nothing: the
+sync app does the freeing.
+So the preview shows what the files hold on this PC, and after a clean the result card shows it as
+*Asked to release*, apart from *Removed by Deguffer*. The free space change beside them shows what
+OneDrive had freed by then, which can be less.
+
+**OneDrive must be running.** A request made while it is closed releases nothing. The row says so,
+offers nothing, and asks you to start it and scan again. Deguffer asks again at the moment of the
+clean.
+
+### What is protected
+
+Every one of these stays exactly as it is, and each rule is Deguffer's own, because Windows' call
+refuses none of them:
+
+- **Files you chose to always keep on this device**, and everything inside a folder you chose that
+  for. Releasing one would undo that choice, and the only way back is a full download. A file inside
+  a pinned folder carries no pin of its own, so Deguffer reads each folder above it.
+- **Files with changes OneDrive has not uploaded yet.** A file is released only when OneDrive has
+  marked it as matching the cloud and it holds no bytes the cloud lacks.
+- **Files excluded from sync**, which the cloud may not hold.
+- **Ordinary files and links inside the folder.** Only a file Windows reports as a cloud file is
+  touched, and a junction or symbolic link is never followed.
+- **Anything changed inside your guard window**, if you set one.
+- **Sync apps Deguffer does not recognise.** Nextcloud and Proton Drive use the same mechanism, and
+  are added once a real install has shown how each registers. Until then their folders are named in
+  the row and left alone.
+
+Each file is judged again at the moment of the clean, through the handle that marks it. A file that
+gained an edit or a pinned folder while the preview was on screen is left alone. After the clean,
+Deguffer checks that every file it named is still there and still a cloud file (§5.6).
+
+### What it costs you
+
+A released file downloads again the next time you open it, which costs time and bandwidth. **While
+offline, a released file will not open until you reconnect.** Nothing is lost.
+
+### Why Tier 2
+
+§3's Tier 2 is "re-created only by re-downloading". That is exactly what opening a released file
+does, and offline it is a file you cannot open. So the row is never pre-selected, and is confirmed on
+its own.
+
+---
+
 ## Per-project build output
 
 **Tier 1 for .NET intermediate output, Tier 2 for the rest.** The only thing Deguffer looks for

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Deguffer.Core.Cloud;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -13,13 +14,19 @@ namespace Deguffer.Core.Execution;
 /// can leave out what is still refused. Required rather than defaulted: the default would be the
 /// signed-in user's own record, and a caller that forgot to pass one would write into it.
 /// </param>
+/// <param name="cloud">
+/// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and its files proved standing, for the one
+/// provider that plans one. Defaulted for the reason <paramref name="emptier"/> is.
+/// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
     RefusalRecord refusals,
-    IRecycleBinEmptier? emptier = null)
+    IRecycleBinEmptier? emptier = null,
+    ICloudFiles? cloud = null)
 {
     private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
+    private readonly ICloudFiles _cloud = cloud ?? CloudFiles.Default;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -65,6 +72,7 @@ public sealed class PlanExecutor(
                 DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud, release, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
@@ -85,7 +93,7 @@ public sealed class PlanExecutor(
             Duration = stopwatch.Elapsed,
 
             // §5.6 is not a separate user action: acting and proving what survived are one step.
-            Verification = PlanVerifier.Verify(plan, runReach, leftStanding, ct),
+            Verification = PlanVerifier.Verify(plan, runReach, leftStanding, ct, _cloud),
         };
     }
 

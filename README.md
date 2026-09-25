@@ -145,6 +145,7 @@ installed" cleanly on a machine without that toolchain.
 | Unity project library | |
 | Superseded application versions | Older versions a Squirrel-updated app still keeps |
 | Temporary files | Emptied in place, taking only what nothing has touched for seven days |
+| Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 
 **Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.
 
