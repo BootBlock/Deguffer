@@ -3,23 +3,6 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Which of the profile's application-data tiers a shader-cache root sits in.
-///
-/// Two values because NVIDIA writes two separate caches, one in each of two tiers, and a row that
-/// only named a directory could not tell them apart. A tier is named rather than a path held,
-/// because <see cref="ShaderCacheRoot"/> stays a static declaration and the paths come from
-/// <see cref="IUserEnvironment"/> at the moment they are needed.
-/// </summary>
-public enum ProfileArea
-{
-    /// <summary><c>%LOCALAPPDATA%</c>.</summary>
-    LocalAppData,
-
-    /// <summary><c>%USERPROFILE%\AppData\LocalLow</c>.</summary>
-    LocalLowAppData,
-}
-
-/// <summary>
 /// One graphics vendor's directory in one application-data tier, and the children of it that
 /// <see cref="GpuShaderCacheProvider"/> recognises.
 ///
@@ -76,22 +59,6 @@ public sealed record ShaderCacheRoot(
     /// could not be located — which only LocalLow can be, and which §5.2 says is not to be guessed
     /// at.
     /// </summary>
-    public string? PathIn(IUserEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(environment);
-
-        var area = Area switch
-        {
-            ProfileArea.LocalAppData => environment.LocalAppData,
-            ProfileArea.LocalLowAppData => environment.LocalLowAppData,
-
-            // A tier this method does not resolve yields no path, rather than falling back on the
-            // one it happens to know. §5.2's direction, one level up from a child: a row whose
-            // location is not established contributes nothing, where a fallback would quietly plan
-            // deletions in a real directory the row never named.
-            _ => null,
-        };
-
-        return area is null ? null : Path.Combine(area, DirectoryName);
-    }
+    public string? PathIn(IUserEnvironment environment) =>
+        Area.In(environment) is { } area ? Path.Combine(area, DirectoryName) : null;
 }
