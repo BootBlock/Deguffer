@@ -145,31 +145,47 @@
 
                     <StackPanel Grid.Column="1" Spacing="6">
 
-                        <!-- The longest name, the widest chip and the link together want more than
+                        <!-- The longest name, the widest chip and the links together want more than
                              this line has at the window's minimum width, so the slack column is
-                             the one in the middle. The name keeps its own width, as the compact
-                             row's does and for the same reason: it is what says which row this
-                             is. The link keeps its own width because a half-drawn control reads
-                             as a defect rather than as a shortage of room, and because it is the
-                             one thing on the line that has to be hit with a pointer. What is left
-                             over is the chip's, and it gives up its last letters before either of
+                             the chip's. The name keeps its own width, as the compact row's does
+                             and for the same reason: it is what says which row this is. Each link
+                             keeps its own width because a half-drawn control reads as a defect
+                             rather than as a shortage of room, and because the links are the
+                             things on the line that have to be hit with a pointer. What is left
+                             over is the chip's, and it gives up its last letters before any of
                              them gives up anything, after the tier is already legible. The label
                              in full stays on the chip's automation name, and the sentence saying
                              what the tier means stays on its tooltip and help text. -->
-                        <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto,Auto">
+                        <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto">
                             <TextBlock Text="{x:Bind Name}"
                                        Style="{StaticResource SectionHeading}"
                                        FontSize="15"
                                        VerticalAlignment="Center" />
+
+                            <!-- Beside the name, because for a row whose items are chosen one by one,
+                                 choosing them is what the row is for. It is not beside the chip, so
+                                 that the chip lands in the same place whether a row has one or not. -->
+                            <HyperlinkButton Grid.Column="1"
+                                             Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
+                                             Visibility="{x:Bind OffersItems, Mode=OneWay}"
+                                             VerticalAlignment="Center"
+                                             Padding="0,2"
+                                             Tag="{x:Bind}"
+                                             Click="OnItemsLinkClicked"
+                                             AutomationProperties.Name="{x:Bind Text.ItemsLinkName}" />
 
                             <!-- Tier is text on a tinted chip, never colour alone:
                                  the classification must survive a flat background
                                  and a high-contrast theme (§6.5). The chip carries
                                  the tier's own explanation, by pointer and by help
                                  text, because two words name it without saying what
-                                 it means. -->
-                            <ContentControl Grid.Column="1"
-                                            HorizontalAlignment="Left"
+                                 it means.
+
+                                 Right-aligned against the link after it, whose text is the same on
+                                 every row, so the chips form one straight column down the list
+                                 instead of starting wherever each row's name happens to end. -->
+                            <ContentControl Grid.Column="2"
+                                            HorizontalAlignment="Right"
                                             Content="{x:Bind TierLabel}"
                                             Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
                                             ToolTipService.ToolTip="{x:Bind TierExplanation}"
@@ -186,17 +202,6 @@
                                  so the row reads as prose from the name down to the figures with
                                  nothing after it, and the link is at a fixed place on every row
                                  instead of wherever that row's sentence happens to stop wrapping. -->
-                            <!-- Beside the explanation's link, and before it, because for a row whose
-                                 items are chosen one by one, choosing them is what the row is for. -->
-                            <HyperlinkButton Grid.Column="2"
-                                             Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
-                                             Visibility="{x:Bind OffersItems, Mode=OneWay}"
-                                             VerticalAlignment="Center"
-                                             Padding="0,2"
-                                             Tag="{x:Bind}"
-                                             Click="OnItemsLinkClicked"
-                                             AutomationProperties.Name="{x:Bind Text.ItemsLinkName}" />
-
                             <HyperlinkButton Grid.Column="3"
                                              Content="What is this?"
                                              VerticalAlignment="Center"
