@@ -29,7 +29,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private string Volume => _system.SystemVolume;
+    private string Volume => _system.SystemDrive;
 
     private PreviousWindowsInstallationProvider CreateProvider(
         FakeDiskCleanupHandlers? handlers = null,
@@ -122,7 +122,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
             ["Windows.old", "$Windows.~BT", "$Windows.~WS", Path.Combine("ESD", "Windows"), Path.Combine("ESD", "Download")],
             root.Locations.Select(l => l.RelativePath));
         Assert.All(root.Locations, l => Assert.Equal(DeclaredLocationKind.Directory, l.Kind));
-        Assert.Equal(SystemVolumeRoot.Survivors, root.ProtectedNames);
+        Assert.Equal(SystemDriveRoot.Survivors, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
     }
 

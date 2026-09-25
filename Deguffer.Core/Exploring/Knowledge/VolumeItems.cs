@@ -20,10 +20,10 @@ namespace Deguffer.Core.Exploring.Knowledge;
 /// to a question it cannot source.</para>
 ///
 /// <para>Where Microsoft documents the <em>component</em> and not the folder it leaves behind,
-/// <c>$WinREAgent</c> being the one here, the entry says which of the two is documented and stops.
-/// That is a narrower thing than an exception to the rule above: the reader is told what the name
-/// belongs to and told that nothing else about it is stated anywhere, rather than being handed a
-/// purpose somebody inferred.</para>
+/// <c>$WinREAgent</c> being the one here, the entry says which of the two is documented, and that
+/// the Storage page's offer to remove it is Deguffer's own judgement. That is a narrower thing than an
+/// exception to the rule above: the reader is told what the name belongs to and told that nothing
+/// else about it is stated anywhere, rather than being handed a purpose somebody inferred.</para>
 /// </summary>
 internal static class VolumeItems
 {
@@ -114,8 +114,9 @@ internal static class VolumeItems
             + "during an update. Microsoft documents the component but not this folder, so what is "
             + "inside it and when it is cleared away are not stated anywhere first-party.",
 
-            "Microsoft documents no way to clear it and says nothing about what removing it costs, "
-            + "so Deguffer will not guess either."),
+            "Microsoft documents no way to clear it and says nothing about what removing it costs. "
+            + "The Storage page offers it on Deguffer's own judgement, and says so, only once nothing "
+            + "inside has changed for 30 days and no update is waiting to finish."),
 
         new(
             KnownPlace.VolumeRoot,
@@ -184,13 +185,14 @@ internal static class VolumeItems
         new(
             KnownPlace.VolumeRoot,
             "AMD",
-            "Where an AMD driver installer unpacks itself before installing. AMD's own "
-            + "documentation says the installer removes it once it has finished, so one still here "
-            + "is from an installation that did not complete — unless somebody chose it as the "
-            + "place to install to.",
+            "Where AMD's installers unpack themselves before installing. The graphics driver "
+            + "installer removes its own copy when it finishes, and older releases left one folder "
+            + "each. The chipset driver keeps its install source here too, and Windows Installer "
+            + "reads that to repair, upgrade or remove the chipset driver.",
 
-            "AMD states that nothing installed depends on it, so removing it costs only the unpacked "
-            + "copy — unless it is where somebody chose to install to, which is what to check first."),
+            "The folder as a whole must stay, because the chipset driver's install source is in it. "
+            + "The graphics driver packages inside it can go, and the graphics driver installer "
+            + "files row removes those and nothing else."),
 
         new(
             KnownPlace.VolumeRoot,

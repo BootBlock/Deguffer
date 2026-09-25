@@ -76,7 +76,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
         _servicing = servicing ?? WindowsServicing.Current;
         _roots =
         [
-            SystemVolumeRoot.Holding(
+            SystemDriveRoot.Holding(
                 _system,
                 [.. Cleanups.SelectMany(cleanup => cleanup.Directories.Select(directory =>
                     new DeclaredLocation(directory, cleanup.Reason)))]),
@@ -198,7 +198,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
                 paths[0],
                 cleanup.Reason,
                 cleanup.Handler,
-                LongPath.Display(_system.SystemVolume),
+                LongPath.Display(_system.SystemDrive),
                 [.. paths.Skip(1)],
                 written,
                 RequiresElevation: true));
@@ -235,7 +235,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
     private IReadOnlyList<DeletionTarget> Present(SetupCleanup cleanup, IReadOnlyList<DeletionTarget> targets) =>
     [
         .. cleanup.Directories
-            .Select(directory => Path.Combine(_system.SystemVolume, directory))
+            .Select(directory => Path.Combine(_system.SystemDrive, directory))
             .SelectMany(path => targets.Where(t => t.Path.Equals(path, StringComparison.OrdinalIgnoreCase))),
     ];
 

@@ -44,7 +44,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     /// <summary>A directory at the top of the system drive with one log in it.</summary>
     private string AtTheTop(string relative, string file = "setupact.log")
     {
-        var directory = Path.Combine(_system.SystemVolume, relative);
+        var directory = Path.Combine(_system.SystemDrive, relative);
         Directory.CreateDirectory(directory);
         File.WriteAllBytes(Path.Combine(directory, file), new byte[4096]);
         return directory;
@@ -564,11 +564,11 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         var (handler, volume) = Assert.Single(handlers.Calls);
         Assert.Equal(WindowsServicingLogProvider.ResetLogsHandler, handler);
-        Assert.Equal(LongPath.Display(_system.SystemVolume), volume);
+        Assert.Equal(LongPath.Display(_system.SystemDrive), volume);
         Assert.False(Directory.Exists(logs));
         Assert.False(Directory.Exists(oldLogs));
         Assert.False(Directory.Exists(pbr));
-        Assert.True(Directory.Exists(Path.Combine(_system.SystemVolume, "$SysReset")));
+        Assert.True(Directory.Exists(Path.Combine(_system.SystemDrive, "$SysReset")));
         Assert.True(Directory.Exists(Path.Combine(Windows, "Logs")));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
@@ -603,7 +603,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     {
         var root = CreateProvider().ResetLogs;
 
-        Assert.Equal(_system.SystemVolume, root.Path);
+        Assert.Equal(_system.SystemDrive, root.Path);
         Assert.Equal(
             [
                 Path.Combine("$SysReset", "Logs"),
@@ -611,7 +611,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
                 Path.Combine("Windows", "Logs", "PBR"),
             ],
             root.Locations.Select(l => l.RelativePath));
-        Assert.Equal(SystemVolumeRoot.Survivors, root.ProtectedNames);
+        Assert.Equal(SystemDriveRoot.Survivors, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
     }
 }

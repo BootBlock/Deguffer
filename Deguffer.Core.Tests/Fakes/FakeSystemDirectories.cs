@@ -14,20 +14,17 @@ public sealed class FakeSystemDirectories : ISystemDirectories
 {
     public FakeSystemDirectories(string root)
     {
-        SystemVolume = root;
         WindowsDirectory = Path.Combine(root, "Windows");
         ProgramData = Path.Combine(root, "ProgramData");
         ProgramFiles = Path.Combine(root, "Program Files");
         ProgramFilesX86 = Path.Combine(root, "Program Files (x86)");
+        SystemDrive = root;
 
         Directory.CreateDirectory(WindowsDirectory);
         Directory.CreateDirectory(ProgramData);
         Directory.CreateDirectory(ProgramFiles);
         Directory.CreateDirectory(ProgramFilesX86);
     }
-
-    /// <summary>The temp tree itself, standing in for the top of the drive Windows is on.</summary>
-    public string SystemVolume { get; }
 
     public string WindowsDirectory { get; }
 
@@ -36,4 +33,7 @@ public sealed class FakeSystemDirectories : ISystemDirectories
     public string ProgramFiles { get; }
 
     public string ProgramFilesX86 { get; }
+
+    /// <summary>The temp tree itself, which the other four sit at the top of as they do on a drive.</summary>
+    public string SystemDrive { get; }
 }

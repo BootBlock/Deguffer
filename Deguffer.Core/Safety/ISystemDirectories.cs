@@ -21,18 +21,6 @@ public interface ISystemDirectories
     /// <summary><c>%SystemRoot%</c>, ordinarily <c>C:\Windows</c>.</summary>
     string WindowsDirectory { get; }
 
-    /// <summary>
-    /// The top of the volume Windows is installed on, ordinarily <c>C:\</c>, with its trailing
-    /// separator.
-    ///
-    /// <para>A member rather than something each caller works out from
-    /// <see cref="WindowsDirectory"/>, because an upgrade leaves its scaffolding here —
-    /// <c>Windows.old</c>, <c>$WinREAgent</c> — and §5.2 at a volume root has to be provable. A
-    /// derivation from the Windows directory's own drive would put every test's fixture at the root
-    /// of the drive the suite runs on.</para>
-    /// </summary>
-    string SystemVolume { get; }
-
     /// <summary><c>%PROGRAMDATA%</c>, ordinarily <c>C:\ProgramData</c>.</summary>
     string ProgramData { get; }
 
@@ -48,6 +36,17 @@ public interface ISystemDirectories
     /// allow the other half, which is the shape of hole nobody notices.
     /// </summary>
     string ProgramFilesX86 { get; }
+
+    /// <summary>
+    /// The top of the drive Windows is installed on, ordinarily <c>C:\</c>, with its trailing
+    /// separator.
+    ///
+    /// <para>Named because installers write there. A graphics driver's installer unpacks itself into
+    /// <c>C:\NVIDIA</c> or <c>C:\AMD</c>, beside <c>Program Files</c>, <c>Users</c> and
+    /// <c>Windows</c>, so a provider reaching one has to be handed the drive a test can build rather
+    /// than the real one, for the reason <see cref="WindowsDirectory"/> is.</para>
+    /// </summary>
+    string SystemDrive { get; }
 }
 
 /// <inheritdoc />
@@ -64,14 +63,14 @@ public sealed class SystemDirectories : ISystemDirectories
     /// </summary>
     public string WindowsDirectory { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-    /// <summary>
-    /// The root of the Windows directory's own path. Empty where that path has none, which leaves a
-    /// provider nothing to declare rather than a relative path to resolve against the current
-    /// directory.
-    /// </summary>
-    public string SystemVolume => Path.GetPathRoot(WindowsDirectory) ?? string.Empty;
-
     public string ProgramData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+    /// <summary>
+    /// Read off the Windows directory rather than from <c>%SystemDrive%</c>, which names the drive
+    /// without its separator, so <c>Path.Combine</c> would join a child onto it as a path relative to
+    /// that drive's current directory rather than to its root.
+    /// </summary>
+    public string SystemDrive => Path.GetPathRoot(WindowsDirectory) ?? string.Empty;
 
     /// <summary>
     /// The 64-bit program directory, from the environment rather than from

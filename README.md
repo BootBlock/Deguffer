@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Forty-nine sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Fifty sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Forty-nine providers, each holding its own knowledge of one location. A provider reports "not
+Fifty-two providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -138,6 +138,7 @@ installed" cleanly on a machine without that toolchain.
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
 | Playwright browsers | |
 | Azure Functions Core Tools releases | |
+| Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |
 | Steam shader pre-cache | One item per game, in every library Steam's own list names; never the games beside it |
 | Unreal Engine derived data cache | The cache every project shares, in both the older folder and each Zen store; a store is left alone while its server runs |
 | Node.js project dependencies | `node_modules` under your own source trees |
@@ -148,6 +149,8 @@ installed" cleanly on a machine without that toolchain.
 | Unreal project derived data cache | A project's own `DerivedDataCache` under your own source trees |
 | Superseded application versions | Older versions a Squirrel-updated app still keeps |
 | Temporary files | Emptied in place, taking only what nothing has touched for seven days |
+| Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
+| Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document: offered on Deguffer's own stated judgement, whole, once nothing inside has changed for 30 days |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 
 **Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.
@@ -157,7 +160,7 @@ installed" cleanly on a machine without that toolchain.
 | Recycle Bin | |
 | Windows File History | Windows' own command drops saved versions past an age you set; the backup drive itself is never touched |
 | Crash dumps and error reports | |
-| Windows servicing logs | |
+| Windows servicing logs | The logs a reset of this PC leaves are cleared by Windows' own cleanup for them, never by path |
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
 | Claude Code MCP server logs | |

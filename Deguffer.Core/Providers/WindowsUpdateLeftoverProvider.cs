@@ -56,7 +56,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
         _servicing = servicing ?? WindowsServicing.Current;
         _roots =
         [
-            SystemVolumeRoot.Holding(
+            SystemDriveRoot.Holding(
                 system ?? SystemDirectories.Current,
                 new DeclaredLocation(
                     "$WinREAgent",

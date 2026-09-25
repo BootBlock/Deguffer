@@ -61,7 +61,35 @@ public static class DirectoryContent
     /// Whether <paramref name="path"/> is a directory with content anywhere below it. False for a
     /// file, for a path that is not there, and for a directory that cannot be listed.
     /// </summary>
-    public static bool IsPresent(string path)
+    public static bool IsPresent(string path) => Walk(path) == Finding.Content;
+
+    /// <summary>
+    /// Whether <paramref name="path"/> may hold content: false only where Windows said nothing is
+    /// there, or where the whole tree was listed and held nothing but folders.
+    ///
+    /// <para><b>The form a presence probe asks in</b>, for a provider whose location is created
+    /// empty or left empty by something other than the tool it reclaims. Existence would report a
+    /// row for a folder holding nothing, which tells the user something false. A refusal still
+    /// reads as "may be there", for the reason <see cref="LongPath.DirectoryMayExist"/> gives: a row
+    /// that never appears cannot be corrected by anything downstream.</para>
+    /// </summary>
+    public static bool MayBePresent(string path) => LongPath.ProbeDirectory(path) switch
+    {
+        PathPresence.Absent => false,
+        PathPresence.Refused => true,
+        _ => Walk(path) != Finding.Empty,
+    };
+
+    private enum Finding
+    {
+        Content,
+        Empty,
+
+        /// <summary>The directory itself would not be listed, so nothing was seen either way.</summary>
+        Unlisted,
+    }
+
+    private static Finding Walk(string path)
     {
         var root = LongPath.Extended(path);
         var pending = new Queue<string>([root]);
@@ -74,7 +102,7 @@ public static class DirectoryContent
                 {
                     if (entry is not DirectoryInfo || entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                     {
-                        return true;
+                        return Finding.Content;
                     }
 
                     pending.Enqueue(entry.FullName);
@@ -91,11 +119,13 @@ public static class DirectoryContent
                 // something seen and not readable; at the root, nothing was seen.
                 if (directory != root)
                 {
-                    return true;
+                    return Finding.Content;
                 }
+
+                return Finding.Unlisted;
             }
         }
 
-        return false;
+        return Finding.Empty;
     }
 }

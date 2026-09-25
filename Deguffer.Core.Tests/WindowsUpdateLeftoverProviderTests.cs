@@ -26,7 +26,7 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private string Volume => _system.SystemVolume;
+    private string Volume => _system.SystemDrive;
 
     private WindowsUpdateLeftoverProvider CreateProvider(
         FakeWindowsServicing? servicing = null,
@@ -98,7 +98,7 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
         Assert.Equal(Volume, root.Path);
         Assert.Equal(["$WinREAgent", "$GetCurrent"], root.Locations.Select(l => l.RelativePath));
         Assert.All(root.Locations, l => Assert.Equal(DeclaredLocationKind.Directory, l.Kind));
-        Assert.Equal(SystemVolumeRoot.Survivors, root.ProtectedNames);
+        Assert.Equal(SystemDriveRoot.Survivors, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
     }
 

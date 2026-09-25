@@ -392,7 +392,7 @@ public sealed class CleanupPlannerTests
                 "epic-launcher-content-cache", "steam", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "squirrel-superseded-versions", "azure-functions-tools",
-                "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
+                "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs",
@@ -404,8 +404,8 @@ public sealed class CleanupPlannerTests
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "conda", "maven", "vcpkg", "steam-shader-cache", "unreal-ddc", "affinity-model-cache", "platformio", "playwright",
-                "squirrel-superseded-versions", "azure-functions-tools", "cloud-local-copies", "temp-directories",
-                "previous-windows-installation", "windows-update-leftovers",
+                "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers",
+                "cloud-local-copies", "temp-directories", "previous-windows-installation", "windows-update-leftovers",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 

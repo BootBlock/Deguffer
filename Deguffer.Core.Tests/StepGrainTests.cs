@@ -40,6 +40,7 @@ public class StepGrainTests
             "cargo-target",
             "claude-code-file-history",
             "dotnet-obj",
+            "graphics-driver-installers",
             "node-modules",
             "playwright",
             "python-venv",

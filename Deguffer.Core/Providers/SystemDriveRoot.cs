@@ -16,7 +16,7 @@ namespace Deguffer.Core.Providers;
 /// installation and everything on the machine that depends on it, and those are the siblings an
 /// over-broad rule here would do the most damage to.</para>
 /// </summary>
-public static class SystemVolumeRoot
+public static class SystemDriveRoot
 {
     /// <summary>
     /// What Windows keeps at the top of its own drive, every one of which §5.6 has to find standing.
@@ -42,7 +42,7 @@ public static class SystemVolumeRoot
         ArgumentNullException.ThrowIfNull(system);
 
         return new DeclaredRoot(
-            system.SystemVolume,
+            system.SystemDrive,
             "The top of the drive Windows is on must survive — it is never listed and never a target, "
             + "and only the names declared on it are removed.",
             RequiresElevation: true,

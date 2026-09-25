@@ -86,7 +86,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _roots = Declare(_system);
-        ResetLogs = SystemVolumeRoot.Holding(
+        ResetLogs = SystemDriveRoot.Holding(
             _system,
             new DeclaredLocation(
                 Path.Combine("$SysReset", "Logs"),
@@ -187,7 +187,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
                         resetLogs[0].Path,
                         "Logs from resetting or refreshing this PC, cleared by Windows' own cleanup for them.",
                         ResetLogsHandler,
-                        LongPath.Display(_system.SystemVolume),
+                        LongPath.Display(_system.SystemDrive),
                         [.. resetLogs.Skip(1).Select(t => t.Path)],
                         resetLogs.Any(t => t.LastWritten is null) ? null : resetLogs.Max(t => t.LastWritten),
                         RequiresElevation: true),
