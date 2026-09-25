@@ -1373,7 +1373,9 @@ Zen's default is `%LOCALAPPDATA%\UnrealEngine\Common\Zen\Data` only from 5.4; 5.
 at `%PROGRAMDATA%\Epic\Zen\Data`, which Epic's documentation still gives for 5.4, so both are
 probed. And a local cache path moves Zen to a `Zen` folder inside it, while Zen's own data path
 setting names the store outright; each setting is read, and a folder one names is reached only
-where Zen's `root_manifest` marks it. While `zenserver` runs every store is held back. `Saved`
+where Zen's `root_manifest` marks it and nothing but Zen's own entries is in it. While `zenserver`
+runs every store is held back, and an editor with a project open is found by the log it holds in
+`Saved`. `Saved`
 and `Binaries` are never targets: the first holds the autosaves, and the second cannot be rebuilt
 on a machine without a compiler. [../cache-locations.md](../cache-locations.md) records the rest.
 

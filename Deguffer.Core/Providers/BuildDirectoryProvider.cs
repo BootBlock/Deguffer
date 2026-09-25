@@ -131,8 +131,8 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             Kind.DirectoryNames,
-            candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct),
-            Kind.LockFiles,
+            candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct)?.Project,
+            candidate => Kind.LockFilesFor(candidate.Project),
             ct));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -145,15 +145,17 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         var discovered = await _discovery.FindAsync(ApprovedRoots, ct).ConfigureAwait(false);
 
         var recognised = new List<RecognisedBuildDirectory>();
+        var siblingFiles = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         var declined = new List<string>();
 
         foreach (var candidate in discovered.Named(Kind.DirectoryNames))
         {
             ct.ThrowIfCancellationRequested();
 
-            if (BuildDirectorySignature.TryRecognise(Kind, candidate, ct) is { } project)
+            if (BuildDirectorySignature.TryRecognise(Kind, candidate, ct) is { } recognition)
             {
-                recognised.Add(new RecognisedBuildDirectory(candidate, project));
+                recognised.Add(new RecognisedBuildDirectory(candidate, recognition.Project));
+                siblingFiles[recognition.Project] = recognition.SiblingFiles;
             }
             else
             {
@@ -161,7 +163,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             }
         }
 
-        var live = LiveTreeVeto.Apply(LiveTrees, recognised, Kind.LockFiles, ct);
+        var live = LiveTreeVeto.Apply(LiveTrees, recognised, candidate => Kind.LockFilesFor(candidate.Project), ct);
 
         var (steps, measured) = await PlanDeletionsAsync(
             [
@@ -182,7 +184,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(live, declined),
+            ProtectedPaths = BuildProtectedPaths(live, declined, siblingFiles),
             Notes = SourceTreePlanNotes.For(
                 discovered,
                 Kind.DisplayNames,
@@ -191,10 +193,10 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 live,
                 measured.Note,
 
-                // §5.3's warning as well as the veto, for a tool whose editor the veto cannot see:
-                // the Unreal editor works from the engine's folder rather than the project's, and
-                // holds no file the veto is told to ask about. Only where something is offered, as
-                // every cache provider says it.
+                // §5.3's warning as well as the veto, for a tool the veto can miss: the Unreal
+                // editor works from the engine's folder rather than the project's, and a switch on
+                // its command line can move the log the veto asks about out of the project. Only
+                // where something is offered, as every cache provider says it.
                 steps.Count > 0 && BuildRunningProcessNote() is { } running ? [running] : null),
             Fallback = measured.Fallback,
             HasUnreadableRoot =
@@ -222,12 +224,13 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         LiveTreeVetoResult live,
-        IReadOnlyList<string> declined) => Protect(
+        IReadOnlyList<string> declined,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> siblingFiles) => Protect(
     [
         .. live.Cleared.SelectMany(target => new[]
         {
             (target.Project, $"The project folder for {Path.GetFileName(target.Project)} — only its build output is removed."),
-        }.Concat(MarkersOf(target.Project).Select(marker =>
+        }.Concat(MarkersOf(siblingFiles[target.Project]).Select(marker =>
             (Path.Combine(target.Project, marker),
              // Not "source": Unreal's Saved sits here too, holding the editor's autosaves, and
              // what every entry named here shares is only that it is the project's own.
@@ -242,14 +245,14 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// included because §5.6 asserts survival of what exists, and only one of them will.
     ///
     /// <para>Per project, because a sibling recognised by its extension has the project's own name,
-    /// which only the folder can say.</para>
+    /// which only the folder can say. <paramref name="siblingFiles"/> is what the recognition found,
+    /// so the folder is not listed again.</para>
     /// </summary>
-    private IReadOnlyList<string> MarkersOf(string project) =>
+    private IReadOnlyList<string> MarkersOf(IReadOnlyList<string> siblingFiles) =>
     [
         .. Kind.RequiredSiblings,
         .. Kind.AnyOfSiblings,
-        .. Kind.RequiredSiblingExtensions.SelectMany(extension =>
-            BuildDirectorySignature.SiblingFiles(project, extension)),
+        .. siblingFiles,
         .. Kind.ProtectedSiblings,
     ];
 }

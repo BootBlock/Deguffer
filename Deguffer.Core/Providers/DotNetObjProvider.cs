@@ -145,7 +145,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             candidate => DotNetIntermediateSignature.TryRecognise(candidate, ct) is { } project
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
-            lockFiles: [],
+            static _ => [],
             ct));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)

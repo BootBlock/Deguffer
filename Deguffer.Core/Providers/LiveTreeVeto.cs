@@ -37,6 +37,17 @@ internal static class LiveTreeVeto
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         IReadOnlyList<string> lockFiles,
+        CancellationToken ct = default) =>
+        Apply(inspector, candidates, _ => lockFiles, ct);
+
+    /// <param name="lockFilesOf">
+    /// The files to ask about for each candidate, for a tool whose lock files are named by the
+    /// project rather than in advance. See <see cref="BuildDirectoryKind.ProjectLockFiles"/>.
+    /// </param>
+    public static LiveTreeVetoResult Apply(
+        ILiveTreeInspector inspector,
+        IReadOnlyList<RecognisedBuildDirectory> candidates,
+        Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
         CancellationToken ct = default)
     {
         if (candidates.Count == 0)
@@ -45,7 +56,7 @@ internal static class LiveTreeVeto
         }
 
         var findings = inspector.FindLive(
-            [.. candidates.Select(c => new LiveTreeQuery(c.Path, c.Project, lockFiles))],
+            [.. candidates.Select(c => new LiveTreeQuery(c.Path, c.Project, lockFilesOf(c)))],
             ct);
 
         return new LiveTreeVetoResult(

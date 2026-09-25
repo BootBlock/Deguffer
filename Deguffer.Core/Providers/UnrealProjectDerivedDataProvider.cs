@@ -65,5 +65,5 @@ public sealed class UnrealProjectDerivedDataProvider : BuildDirectoryProvider
         "No source folders have been added yet. Add them in Settings and Deguffer will look for "
         + "Unreal projects inside them, and nowhere else.";
 
-    protected override IReadOnlyList<string> ConflictingProcessNames => UnrealProjectLayout.EditorProcessNames;
+    protected override IReadOnlyList<string> ConflictingProcessNames => UnrealProjectLayout.ProcessNames;
 }

@@ -84,4 +84,19 @@ public sealed record BuildDirectoryKind
     /// for why they are declared rather than discovered.
     /// </summary>
     public IReadOnlyList<string> LockFiles { get; init; } = [];
+
+    /// <summary>
+    /// Files, by full path, that the tool may hold open while it has a given project open, found in
+    /// that project folder rather than named in advance. Null where the tool keeps no such file.
+    ///
+    /// <para>Unreal is the case: its editor works in the engine's folder and holds nothing in the
+    /// build directory, but it holds its log in the project's <c>Saved\Logs</c> open for the whole
+    /// session, under a name the project and the command line choose. The veto asks Windows which of
+    /// these are held, so one that is not held costs a question and never a refusal.</para>
+    /// </summary>
+    public Func<string, IReadOnlyList<string>>? ProjectLockFiles { get; init; }
+
+    /// <summary>Every file the veto asks about for a directory in <paramref name="project"/>.</summary>
+    public IReadOnlyList<string> LockFilesFor(string project) =>
+        ProjectLockFiles is null ? LockFiles : [.. LockFiles, .. ProjectLockFiles(project)];
 }

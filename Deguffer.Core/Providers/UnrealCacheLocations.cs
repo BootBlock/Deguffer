@@ -39,9 +39,11 @@ internal readonly record struct ZenStoreLocation(string Root, string RelativePat
 /// Which one wins depends on the engine version and on which are set, so every one of them is
 /// probed. A path given on one editor's command line is recorded nowhere and cannot be found.</para>
 ///
-/// <para><b>A folder a setting names is a store only where Zen marked it.</b> It is a folder
-/// somebody chose, so it is reached only where Zen's <c>root_manifest</c> is inside it, and a store
-/// at a volume's root is never reached at all. The filesystem cache an older engine wrote straight
+/// <para><b>A folder a setting names is a store only where Zen made it one.</b> It is a folder
+/// somebody chose, and Zen writes into whatever folder it is given, so the marker alone proves only
+/// that Zen has been there. The folder is reached only where Zen's <c>root_manifest</c> is in it and
+/// every entry at its top is one Zen writes (<see cref="ZenEntries"/>). One file of anybody else's
+/// and it is left alone, which is §5.2's direction. The filesystem cache an older engine wrote straight
 /// into a local cache path is not reached either: nothing classifies its entries apart from anything
 /// else in that folder, §5.2 leaves the unrecognised alone, and the delete-only mode empties it
 /// anyway.</para>
@@ -50,6 +52,21 @@ internal static class UnrealCacheLocations
 {
     /// <summary>The file Zen writes at the top of every store it creates.</summary>
     public const string StoreMarker = "root_manifest";
+
+    /// <summary>
+    /// Every entry Zen's storage server writes at the top of its data folder, read from Zen's own
+    /// source. An entry not named here is not known to be Zen's, so a folder holding one is not
+    /// treated as a store. A newer Zen that adds an entry makes its store unreached until the name
+    /// is added, which is the safe direction to be out of date in.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ZenEntries = new HashSet<string>(
+    [
+        ".lock", StoreMarker, StoreMarker + ".ignore_schema_mismatch", "state_marker", "zen_cfg.lua",
+        ".sentry-native", "cas", "cache", "projects", "builds", "builds_cas", "obj", "gc", "auth",
+        "sessions", "traces", "logs", "functions", "hub", "servers", "recordings", "orch", "horde",
+        "cloud",
+    ],
+    StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The variable, and the registry value, that set the local cache path.</summary>
     private const string LocalCachePath = "UE-LocalDataCachePath";
@@ -84,8 +101,10 @@ internal static class UnrealCacheLocations
 
     /// <summary>
     /// Every place a setting puts a Zen store, fully qualified and without duplicates. A value that
-    /// is not a full path, such as the <c>None</c> Unreal reads as "no local cache", is no location,
-    /// and neither is one naming a volume's root.
+    /// is not a full path, such as the <c>None</c> Unreal reads as "no local cache", is no location.
+    /// Neither is a Zen data path naming a volume's root, which would make the whole volume the
+    /// store. A local cache path may be a volume's root, because the store is the <c>Zen</c> folder
+    /// inside it.
     /// </summary>
     public static IReadOnlyList<ZenStoreLocation> ConfiguredStores(IUserEnvironment environment)
     {

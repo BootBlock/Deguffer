@@ -143,7 +143,7 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
         foreach (var named in new[]
         {
             EngineRoot, Common, Path.Combine(EngineRoot, "5.4"), settings, currentServer, EpicRoot, olderServer,
-            Path.Combine(EpicRoot, "EpicGamesLauncher"), installed,
+            Path.Combine(EpicRoot, "EpicGamesLauncher"), installed, unrecognised,
         })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
@@ -324,6 +324,7 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
     {
         var parent = _temp.CreateDirectory("Stores");
         var store = PopulateStore(Path.Combine(parent, "ZenData"));
+        var bystander = Populate(Path.Combine(parent, "Notes"), name: "mine.txt");
 
         if (variable is null)
         {
@@ -338,6 +339,13 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
 
         Assert.Equal([store], plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(parent, StringComparison.OrdinalIgnoreCase));
+
+        var provider = CreateProvider();
+        await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(store));
+        Assert.True(File.Exists(Path.Combine(bystander, "mine.txt")), "a folder beside the store was removed");
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>
@@ -386,17 +394,94 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// "None" is how Unreal is told to use no local cache at all, and it names no folder.
+    /// "None" is how Unreal is told to use no local cache at all, and it names no folder. A relative
+    /// value would resolve against Deguffer's own working folder, which nobody pointed at. Asked of
+    /// the settings reader, because a relative value's store could only be built in that folder.
     /// </summary>
     [Fact]
-    public async Task ASettingThatIsNotAFullPathNamesNoStore()
+    public void ASettingThatIsNotAFullPathNamesNoStore()
     {
+        var chosen = _temp.CreateDirectory("Caches");
         _environment.WithEnvironmentVariable("UE-LocalDataCachePath", "None");
         _environment.WithEnvironmentVariable("UE-ZenDataPath", @"Zen\Data");
+        _environment.WithRegistryValue(@"Software\Epic Games\Zen", "DataPath", Path.Combine(chosen, "Store"));
 
-        var plan = await CreateProvider().PlanAsync();
+        Assert.Equal(
+            [Path.Combine(chosen, "Store")],
+            UnrealCacheLocations.ConfiguredStores(_environment).Select(store => store.Path));
+    }
+
+    /// <summary>
+    /// A Zen data path naming a volume's root would make the whole volume the store, so it names
+    /// none. A local cache path at a volume's root still names the <c>Zen</c> folder inside it.
+    /// </summary>
+    [Fact]
+    public void AZenDataPathAtAVolumesRootNamesNoStore()
+    {
+        var volume = Path.GetPathRoot(_temp.Path)!;
+        _environment.WithEnvironmentVariable("UE-ZenDataPath", volume);
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", volume);
+
+        Assert.Equal(
+            [Path.Combine(volume, "Zen")],
+            UnrealCacheLocations.ConfiguredStores(_environment).Select(store => store.Path));
+    }
+
+    /// <summary>
+    /// Zen writes into whatever folder it is given, so its marker proves only that it has been
+    /// there. A folder a setting names that holds anything Zen does not write is somebody's own, and
+    /// neither it nor anything in it is removed (§5.2).
+    /// </summary>
+    [Fact]
+    public async Task ANamedStoreHoldingAnythingNotZensIsLeftAlone()
+    {
+        var work = PopulateStore(_temp.CreateDirectory("Work"));
+        var mine = Path.Combine(work, "report.docx");
+        File.WriteAllBytes(mine, new byte[32]);
+        _environment.WithEnvironmentVariable("UE-ZenDataPath", work);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(mine));
+    }
+
+    /// <summary>
+    /// A local cache path set to the filesystem cache itself would put a store inside a target, so a
+    /// store held back for a running server would go with the cache around it. The setting is not
+    /// followed, and the store survives.
+    /// </summary>
+    [Fact]
+    public async Task AStoreInsideTheFilesystemCacheIsNotFollowedAndSurvivesARunningServer()
+    {
+        var nested = PopulateStore(Path.Combine(LegacyCache, "Zen"));
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", LegacyCache);
+
+        var provider = CreateProvider(new FakeProcessInspector("zenserver"));
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.TargetedPaths, path => path.Equals(nested, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await provider.DiscoverToolRootsAsync());
+    }
+
+    /// <summary>
+    /// Two settings naming one folder, one as a local cache path and one as Zen's data path, would
+    /// make one store the survivor of the other's removal. Neither is followed.
+    /// </summary>
+    [Fact]
+    public async Task NamedStoresInsideOneAnotherAreNotFollowed()
+    {
+        var outer = _temp.CreateDirectory("Caches", "Unreal");
+        PopulateStore(outer);
+        PopulateStore(Path.Combine(outer, "cache", "Zen"));
+        _environment.WithEnvironmentVariable("UE-ZenDataPath", outer);
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", Path.Combine(outer, "cache"));
+
+        Assert.Empty((await CreateProvider().PlanAsync()).TargetedPaths);
     }
 
     /// <summary>

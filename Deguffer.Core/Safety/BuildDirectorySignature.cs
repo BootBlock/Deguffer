@@ -2,6 +2,15 @@ using Deguffer.Core.Providers;
 
 namespace Deguffer.Core.Safety;
 
+/// <summary>A build directory whose identity is established, and what established it.</summary>
+/// <param name="Project">The project folder the directory belongs to.</param>
+/// <param name="SiblingFiles">
+/// The files beside the directory that <see cref="BuildDirectoryKind.RequiredSiblingExtensions"/>
+/// matched, by name. Carried out of the recognition so that naming them as survivors does not list
+/// the project folder a second time (G4).
+/// </param>
+public sealed record BuildDirectoryRecognition(string Project, IReadOnlyList<string> SiblingFiles);
+
 /// <summary>
 /// Checks a candidate directory against a <see cref="BuildDirectoryKind"/>, on disk.
 ///
@@ -15,7 +24,7 @@ public static class BuildDirectorySignature
     /// The project folder <paramref name="directory"/> belongs to, or null if its identity cannot be
     /// established — in which case the caller must leave it alone.
     /// </summary>
-    public static string? TryRecognise(BuildDirectoryKind kind, string directory, CancellationToken ct = default)
+    public static BuildDirectoryRecognition? TryRecognise(BuildDirectoryKind kind, string directory, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(kind);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
@@ -58,15 +67,21 @@ public static class BuildDirectorySignature
             return null;
         }
 
+        var siblingFiles = new List<string>();
+
         foreach (var extension in kind.RequiredSiblingExtensions)
         {
-            if (SiblingFiles(project, extension).Count == 0)
+            var matched = SiblingFiles(project, extension);
+
+            if (matched.Count == 0)
             {
                 return null;
             }
+
+            siblingFiles.AddRange(matched);
         }
 
-        return project;
+        return new BuildDirectoryRecognition(project, siblingFiles);
     }
 
     /// <summary>
@@ -78,11 +93,8 @@ public static class BuildDirectorySignature
     /// wildcard, whose matching has rules of its own for dots and short names. A backup called
     /// <c>Game.uproject.bak</c> is not a descriptor.</para>
     /// </summary>
-    public static IReadOnlyList<string> SiblingFiles(string project, string extension)
+    private static IReadOnlyList<string> SiblingFiles(string project, string extension)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(project);
-        ArgumentException.ThrowIfNullOrWhiteSpace(extension);
-
         try
         {
             return

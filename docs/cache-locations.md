@@ -1581,9 +1581,11 @@ folder that holds nothing produces no row.
 **Each cache is deleted whole.** Epic documents no command that clears either one, and Epic's own
 advice for clearing one by hand is to delete the folder and let it fill again.
 
-**A folder a setting names is reached only where Zen marked it.** It is a folder somebody chose, so
-Deguffer removes the store in it only where Zen's own `root_manifest` file is there, and never where
-removing it would take a default store or Zen's installation with it. The filesystem cache an older
+**A folder a setting names is reached only where it is Zen's alone.** It is a folder somebody chose,
+and Zen writes into whatever folder it is given. So Deguffer removes the store only where Zen's own
+`root_manifest` file is there and every entry at its top is one Zen writes. A single file of anybody
+else's, and the folder is left alone. A store inside or around Unreal's own folders, or inside or
+around another store a setting names, is never followed either. The filesystem cache an older
 engine wrote straight into a local cache path is not removed: nothing tells its entries apart from
 anything else in that folder, and the delete-only mode empties it anyway.
 
@@ -1603,6 +1605,7 @@ anything it holds open stays.
 | `%PROGRAMDATA%\Epic`, `EpicGamesLauncher`, `EpicOnlineServices` | Epic's other machine-wide data |
 | `UnrealEngineLauncher\LauncherInstalled.dat` | The machine's record of where its Epic games and engines are installed |
 | A folder a setting names | Somebody's own folder. Only the store inside it goes |
+| Anything else beside a cache in `Common`, `Common\Zen` or `%PROGRAMDATA%\Epic\Zen` | Not recognised as part of the cache, so it is named and left alone |
 
 Explore enforces the same rule: it refuses Unreal's folder, `Common`, each default `Zen` folder and
 everything in them except the caches themselves. Deguffer also refuses to look through a link.
@@ -2505,9 +2508,13 @@ evidence rather than a guess:
 A held-back project is listed as something left alone, with what is using it named, so you can close
 it and scan again.
 
-**The Unreal Editor is a warning, not a veto.** It works in the engine's folder rather than the
-project's, and holds no file Deguffer knows to ask about, so none of the three signals sees it. A
-plan made while it runs says so. Close it before you remove a project's build output.
+**The Unreal Editor is found by its log.** It works in the engine's folder rather than the
+project's, so the second and third signals do not see it. It does hold its log in the project's
+`Saved\Logs` open for the whole session, and Deguffer asks about every log there, so a project the
+editor has open is held back like any other. A switch on the editor's command line can move the log
+out of the project, so a plan made while an Unreal editor, a commandlet or Unreal Build Tool runs
+also says so by name. Explore does not find a project by its log, as it does not find a Unity
+project by its lockfile.
 
 **It can miss, and it never fires wrongly.** Three things it does not see, all of them stated here
 because a safeguard whose limits are unwritten gets trusted past them:

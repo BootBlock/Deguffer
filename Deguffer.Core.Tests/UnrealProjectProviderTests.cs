@@ -141,8 +141,9 @@ public sealed class UnrealProjectProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.3. The editor works in the engine's folder, so the veto on a project in use cannot see it,
-    /// and a running editor is said out loud beside what is offered.
+    /// §5.3. The editor works in the engine's folder, and a switch on its command line can move its
+    /// log out of the project, so the veto can miss it. A running editor is said out loud beside
+    /// what is offered.
     /// </summary>
     [Fact]
     public async Task ARunningEditorIsAWarningBesideWhatIsOffered()
@@ -166,6 +167,64 @@ public sealed class UnrealProjectProviderTests : IDisposable
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("UnrealEditor", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// §5.3's veto, with Windows' own answer. The editor holds its log in the project's
+    /// <c>Saved\Logs</c> open for the whole session, sharing it for reading only, and works in the
+    /// engine's folder. So a held log is the evidence that the project is open, and the project's
+    /// build output is not offered at all, whatever the log is called. Explore's own declaration
+    /// does not find a directory whose only evidence is a held lock file, as for Unity's, which
+    /// <see cref="InUseBuildDirectories"/> records.
+    /// </summary>
+    [Theory]
+    [InlineData("Shooter.log")]
+    [InlineData("Shooter_2.log")]
+    [InlineData("Chosen-On-The-Command-Line.log")]
+    public async Task AProjectWhoseLogAnEditorHoldsOpenIsNotOffered(string log)
+    {
+        var project = Path.Combine(ApproveRoot(), "Shooter");
+        var intermediate = BuildDirectoryFixture.CreateUnrealProject(project, descriptor: "Shooter.uproject");
+        var path = Path.Combine(project, "Saved", "Logs", log);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "LogInit: Display: Running engine for game: Shooter");
+
+        using (File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+        {
+            var provider = Intermediate(live: new LiveTreeInspector());
+            var plan = await provider.PlanAsync();
+
+            Assert.Empty(plan.TargetedPaths);
+            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(intermediate, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.Notes, n =>
+                n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("Intermediate in Shooter", StringComparison.Ordinal));
+        }
+
+        // The same log, closed: the editor has exited, and the project is offered.
+        Assert.Equal([intermediate], (await Intermediate(live: new LiveTreeInspector()).PlanAsync()).TargetedPaths);
+    }
+
+    /// <summary>
+    /// The engine copies an old log aside when it starts and never holds the copy, so the copies are
+    /// not asked about. Every other log in the folder is.
+    /// </summary>
+    [Fact]
+    public async Task TheVetoIsAskedAboutEveryLogButTheEnginesBackupCopies()
+    {
+        var project = Path.Combine(ApproveRoot(), "Shooter");
+        BuildDirectoryFixture.CreateUnrealProject(project, descriptor: "Shooter.uproject");
+        var logs = Directory.CreateDirectory(Path.Combine(project, "Saved", "Logs")).FullName;
+        File.WriteAllText(Path.Combine(logs, "Shooter.log"), string.Empty);
+        File.WriteAllText(Path.Combine(logs, "Shooter_2.log"), string.Empty);
+        File.WriteAllText(Path.Combine(logs, "Shooter-backup-2026.09.25-10.00.00.log"), string.Empty);
+        File.WriteAllText(Path.Combine(logs, "notes.txt"), string.Empty);
+
+        var inspector = new FakeLiveTreeInspector();
+        await Intermediate(live: inspector).PlanAsync();
+
+        Assert.Equal(
+            new[] { Path.Combine(logs, "Shooter.log"), Path.Combine(logs, "Shooter_2.log") }.Order(StringComparer.OrdinalIgnoreCase),
+            Assert.Single(inspector.Asked).LockFileNames.Order(StringComparer.OrdinalIgnoreCase));
+    }
+
     private string ApproveRoot()
     {
         var root = _temp.CreateDirectory("src");
@@ -173,8 +232,8 @@ public sealed class UnrealProjectProviderTests : IDisposable
         return root;
     }
 
-    private UnrealIntermediateProvider Intermediate(IProcessInspector? inspector = null) =>
-        new(_roots, Discovery(), FakeLiveTreeInspector.NothingLive, _environment,
+    private UnrealIntermediateProvider Intermediate(IProcessInspector? inspector = null, ILiveTreeInspector? live = null) =>
+        new(_roots, Discovery(), live ?? FakeLiveTreeInspector.NothingLive, _environment,
             new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, new FakeDirectoryScanner());
 
     private UnrealProjectDerivedDataProvider DerivedData() =>

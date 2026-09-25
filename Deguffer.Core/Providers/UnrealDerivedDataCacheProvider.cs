@@ -102,7 +102,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     /// §5.3's warning names the editor. The Zen server is not named here, because while it runs the
     /// stores are held back rather than warned about, and the plan says so in its own words.
     /// </summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => UnrealProjectLayout.EditorProcessNames;
+    protected override IReadOnlyList<string> ConflictingProcessNames => UnrealProjectLayout.ProcessNames;
 
     /// <summary>
     /// §5.2 for Explore. Unreal's own folder recognises nothing, so every engine version's settings
@@ -272,6 +272,8 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                     (Path.Combine("Common", "Zen", "Install"),
                         "The Zen server Unreal Engine 5.4 and later start with the editor."),
                     .. EngineVersionFolders(engine),
+                    .. Neighbours(engine, "Common", "DerivedDataCache", "Zen"),
+                    .. Neighbours(engine, Path.Combine("Common", "Zen"), "Data", "Install"),
                 ]),
             new DeclaredRoot(
                 programData,
@@ -286,6 +288,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                     (Path.Combine("UnrealEngineLauncher", "LauncherInstalled.dat"),
                         "The machine's record of where its Epic games and engines are installed."),
                     ("EpicOnlineServices", "The services Epic games sign in and play online through."),
+                    .. Neighbours(programData, "Zen", "Data", "Install"),
                 ]),
             .. stores
                 .Where(store => store.IsConfigured)
@@ -309,37 +312,61 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// Every Zen store this provider may reach: the two defaults, and each store a setting names that
-    /// Zen marked as its own.
+    /// is Zen's alone.
     ///
-    /// <para>A named store is dropped where it would take a default store or a server's
-    /// installation with it, or sits inside a default store that is reached anyway. A local cache
-    /// path set to <c>Common</c> would otherwise make <c>Common\Zen</c> a store, and its
-    /// <c>Install</c> folder with it.</para>
+    /// <para><b>A named store inside or around Unreal's own folders is dropped.</b> Those are reached
+    /// by name only, through <see cref="Declare"/>. A local cache path set to <c>Common</c> would
+    /// otherwise make <c>Common\Zen</c> a store and take the server's <c>Install</c> folder with it,
+    /// and one set to <c>Common\DerivedDataCache</c> would put a store inside the filesystem cache,
+    /// where removing that cache would take a store held back for a running server.</para>
+    ///
+    /// <para><b>So is one inside or around another named store.</b> Each is removed whole, so one
+    /// inside another would be a survivor of one step and part of another's target.</para>
     /// </summary>
     private IReadOnlyList<ZenStoreLocation> Stores()
     {
-        var defaults = UnrealCacheLocations.DefaultStores(Environment, _system);
-
-        IReadOnlyList<string> spared =
+        IReadOnlyList<string> unrealsOwn =
         [
             UnrealCacheLocations.EngineRoot(Environment),
             Path.Combine(_system.ProgramData, "Epic"),
-            .. defaults.Select(store => store.Path),
-            .. defaults.Select(store => Path.Combine(Path.GetDirectoryName(store.Path)!, "Install")),
         ];
+
+        var named = UnrealCacheLocations.ConfiguredStores(Environment)
+            .Where(store => !unrealsOwn.Any(own => Overlap(own, store.Path)) && IsZensAlone(store.Path))
+            .ToList();
 
         return
         [
-            .. defaults,
-            .. UnrealCacheLocations.ConfiguredStores(Environment).Where(store =>
-                !spared.Any(path => LongPath.Contains(store.Path, path))
-                && !defaults.Any(d => LongPath.Contains(d.Path, store.Path))
-
-                // A classification, so a refusal is not evidence for it: only a marker that is
-                // there makes the folder a store.
-                && LongPath.ProbeFile(Path.Combine(store.Path, UnrealCacheLocations.StoreMarker))
-                    is PathPresence.Present),
+            .. UnrealCacheLocations.DefaultStores(Environment, _system),
+            .. named.Where(store => !named.Any(other => other != store && Overlap(other.Path, store.Path))),
         ];
+    }
+
+    private static bool Overlap(string one, string other) =>
+        LongPath.Contains(one, other) || LongPath.Contains(other, one);
+
+    /// <summary>
+    /// Whether <paramref name="store"/> carries Zen's marker and holds nothing at its top that Zen
+    /// does not write. A classification, so a refusal is not evidence for it: a marker Windows would
+    /// not describe, or a folder it would not list, is no store.
+    /// </summary>
+    private static bool IsZensAlone(string store)
+    {
+        if (LongPath.ProbeFile(Path.Combine(store, UnrealCacheLocations.StoreMarker)) is not PathPresence.Present)
+        {
+            return false;
+        }
+
+        try
+        {
+            return new DirectoryInfo(LongPath.Extended(store))
+                .EnumerateFileSystemInfos()
+                .All(entry => UnrealCacheLocations.ZenEntries.Contains(entry.Name));
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -361,6 +388,39 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                 (name, $"Unreal Engine {name}'s own folder, with its settings and crash reports."),
                 (Path.Combine(name, "Saved", "Config"), $"Your editor settings for Unreal Engine {name}."),
             });
+    }
+
+    /// <summary>
+    /// Every entry in <paramref name="folder"/> other than those <paramref name="named"/> elsewhere,
+    /// for §5.6: the unrecognised neighbours of a cache, which an over-broad rule would take with it.
+    /// Listed for the reason <see cref="EngineVersionFolders"/> is, and never targeted. A folder that
+    /// is not there, or will not be listed, names nothing.
+    /// </summary>
+    private static IEnumerable<(string RelativePath, string Reason)> Neighbours(
+        string root,
+        string folder,
+        params string[] named)
+    {
+        List<string> entries;
+
+        try
+        {
+            entries =
+            [
+                .. new DirectoryInfo(LongPath.Extended(Path.Combine(root, folder)))
+                    .EnumerateFileSystemInfos()
+                    .Select(entry => entry.Name)
+                    .Where(name => !named.Contains(name, StringComparer.OrdinalIgnoreCase)),
+            ];
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return [];
+        }
+
+        return entries.Select(name => (
+            Path.Combine(folder, name),
+            $"'{name}' sits beside Unreal's cache and is not recognised as part of it, so it is left alone."));
     }
 
     private bool ZenServerIsRunning() => Inspector.FindRunning([ZenServer]).Count > 0;
