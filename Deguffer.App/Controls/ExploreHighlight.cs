@@ -45,10 +45,9 @@ internal sealed class ExploreHighlight : Canvas
     /// must not read as the same claim — so they differ by colour, which a glance takes in, rather
     /// than by strength.
     ///
-    /// <para>It was a fainter, thinner copy of the picked outline, and at a third of the halo's
-    /// opacity it all but vanished along the edge of a shaded tile: the halo is what carries a line
-    /// across every hue, and a faint one carries nothing. The accent is the colour Windows marks
-    /// hover and focus with, so it needs no explaining.</para>
+    /// <para>The halo is nearly opaque because it is what carries a line across every hue: a faint
+    /// one all but vanishes along the dark edge of a shaded tile. The accent is the colour Windows
+    /// marks hover and focus with, so it needs no explaining.</para>
     /// </summary>
     private const double HoveredHaloWidth = 4.5;
 

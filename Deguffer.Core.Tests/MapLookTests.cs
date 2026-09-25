@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
 
@@ -39,6 +40,26 @@ public sealed class MapLookTests
         Assert.Equal(ExploreScheme.Vivid, look.Treemap);
         Assert.Equal(ExploreScheme.Vivid, look.SchemeFor(view));
         Assert.Equal(ExploreView.Treemap, MapLook.Drawn(view));
+    }
+
+    /// <summary>
+    /// A number no member names, which is what a hand-edited file gives: the store reads enums with
+    /// numbers allowed. It is drawn as the default rather than handed to a palette it indexes past.
+    /// </summary>
+    [Fact]
+    public void AValueNoMemberNamesIsReadAsTheDefault()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var directory = Directory.CreateDirectory(Path.Combine(environment.LocalAppData, "Deguffer"));
+
+        File.WriteAllText(
+            Path.Combine(directory.FullName, "preferences.json"),
+            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep" }""");
+
+        var look = MapLook.From(new PreferenceStore(environment).Load());
+
+        Assert.Equal(new MapLook(ExploreSpacing.Comfortable, ExploreScheme.Standard, ExploreScheme.Standard, ExploreScheme.Deep), look);
     }
 
     /// <summary>

@@ -133,9 +133,10 @@ public sealed class TileRenderingTests
     }
 
     /// <summary>
-    /// And the branch palette's own colours, round the whole circle and at every depth it
-    /// distinguishes, lifted and not. Its lightness starts high enough that every one of them takes
-    /// black, so this is the rule held over the palette rather than the rule itself.
+    /// And the branch palette's own colours, in every scheme, round the whole circle and at every
+    /// depth it distinguishes, lifted and not. The lighter schemes take black throughout and the
+    /// deep one takes white near the root, so this is the rule held over every palette rather than
+    /// the rule itself.
     /// </summary>
     public static TheoryData<ExploreScheme> Schemes => [.. Enum.GetValues<ExploreScheme>()];
 

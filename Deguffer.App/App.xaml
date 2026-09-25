@@ -107,8 +107,9 @@
             <!-- A line of secondary text nobody sees, laid in the same cell as a line that comes and
                  goes, so the cell is always one line high at the reader's own text size. A MinHeight
                  in pixels cannot do that: an empty TextBlock measures nothing, the line it reserved
-                 for was a pixel short at 100% text and five short at larger sizes, and naming a
-                 shape then resized the map above it. Text sets how many lines it holds open. -->
+                 for was a pixel short at 100% text and further short at every larger size, and
+                 naming a shape then resized the map above it. Text sets how many lines it holds
+                 open. -->
             <Style x:Key="LineStrut" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
                 <Setter Property="Text" Value="Ag" />
                 <Setter Property="TextWrapping" Value="NoWrap" />

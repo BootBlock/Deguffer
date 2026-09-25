@@ -1077,6 +1077,13 @@ public sealed partial class ExploreViewModel : ObservableObject
             OfferElevation(null);
         }
 
+        // A reading can change whether the chosen volume is refused without changing which row is
+        // chosen — the row is written over, not replaced — so the selection raises nothing and the
+        // two commands would go on answering for the last reading. §7.1: a button that scans a
+        // volume the status line has just refused is the page stating one thing and doing another.
+        ScanCommand.NotifyCanExecuteChanged();
+        ElevateAndRescanCommand.NotifyCanExecuteChanged();
+
         // After the guard, because the reading suppressed the selection's own handler. Without it
         // the page can open pointed at a refused volume, with the button dead and nothing said.
         ExplainRefusal();

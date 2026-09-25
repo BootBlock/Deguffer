@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
@@ -39,7 +38,7 @@ public static class ToolWindowPlacement
 
         _ = WindowLong.Set(toolHandle, GwlpHwndParent, ownerHandle);
 
-        var scale = GetDpiForWindow(ownerHandle) / 96.0;
+        var scale = owner.Content?.XamlRoot?.RasterizationScale ?? 1;
         var size = new SizeInt32((int)(width * scale), (int)(height * scale));
         var gap = (int)(Gap * scale);
 
@@ -61,9 +60,4 @@ public static class ToolWindowPlacement
 
         tool.AppWindow.MoveAndResize(new RectInt32(position.X, position.Y, size.Width, size.Height));
     }
-
-    // DllImport rather than LibraryImport, matching WindowSizing and HighContrast: the generator
-    // wants AllowUnsafeBlocks across the project for a single call.
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(nint hWnd);
 }

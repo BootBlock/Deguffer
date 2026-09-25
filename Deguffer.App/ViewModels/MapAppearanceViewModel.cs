@@ -18,7 +18,18 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 {
     private MapLook _look;
 
-    public MapAppearanceViewModel(MapLook look) => _look = look;
+    /// <summary>
+    /// The spacing the preferences held when this last heard from them. See <see cref="Follow"/>:
+    /// it is what tells a spacing chosen on the Settings page from one this window chose and could
+    /// not write.
+    /// </summary>
+    private ExploreSpacing _storedSpacing;
+
+    public MapAppearanceViewModel(MapLook look)
+    {
+        _look = look;
+        _storedSpacing = look.Spacing;
+    }
 
     /// <summary>The look changed. Whoever draws a map draws it again.</summary>
     public event EventHandler? Changed;
@@ -55,7 +66,12 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
             // A list with nothing selected reports -1 while it rebuilds, which is not a choice.
             if (value >= 0)
             {
-                Apply(_look.WithScheme(View, (ExploreScheme)value));
+                var view = View;
+                var scheme = (ExploreScheme)value;
+
+                Apply(
+                    _look.WithScheme(view, scheme),
+                    current => MapLook.From(current).WithScheme(view, scheme).Into(current));
             }
         }
     }
@@ -68,7 +84,12 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         {
             if (value >= 0)
             {
-                Apply(_look with { Spacing = (ExploreSpacing)value });
+                var spacing = (ExploreSpacing)value;
+
+                if (Apply(_look with { Spacing = spacing }, current => current with { TreemapSpacing = spacing }))
+                {
+                    _storedSpacing = spacing;
+                }
             }
         }
     }
@@ -76,25 +97,48 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     /// <summary>
     /// Take up a spacing chosen on the Settings page while the Explore page was away. Not written
     /// back, because the Settings page has already written it.
+    ///
+    /// <para>Only a spacing that moved in the preferences since this last heard from them. One this
+    /// window chose and could not write leaves the preferences where they were, and following them
+    /// back would undo the reader's choice on the next visit.</para>
     /// </summary>
-    public void Follow(ExploreSpacing spacing)
+    public void Follow(ExploreSpacing stored)
     {
-        if (spacing == _look.Spacing)
+        if (stored == _storedSpacing)
         {
             return;
         }
 
-        _look = _look with { Spacing = spacing };
+        _storedSpacing = stored;
+
+        if (stored == _look.Spacing)
+        {
+            return;
+        }
+
+        _look = _look with { Spacing = stored };
 
         OnPropertyChanged(nameof(SpacingIndex));
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private void Apply(MapLook look)
+    /// <summary>
+    /// Show <paramref name="look"/>, then write the one setting that changed through
+    /// <paramref name="write"/>.
+    ///
+    /// <para>Applied first and written second, as the Explore page's own boxes are. A file that could
+    /// not be written leaves the map in the colours the reader picked, for this session.</para>
+    ///
+    /// <para>The one setting rather than the whole look. The spacing is also chosen on the Settings
+    /// page while this window can stay open, and writing every field would put back whatever this
+    /// window last knew over what the reader has since chosen there.</para>
+    /// </summary>
+    /// <returns>Whether the change reached the preferences file.</returns>
+    private bool Apply(MapLook look, Func<AppPreferences, AppPreferences> write)
     {
         if (look == _look)
         {
-            return;
+            return true;
         }
 
         _look = look;
@@ -103,20 +147,21 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         OnPropertyChanged(nameof(SpacingIndex));
         Changed?.Invoke(this, EventArgs.Empty);
 
-        // Applied first and written second, as the Explore page's own boxes are. A file that could not
-        // be written leaves the map in the colours the reader picked, for this session.
-        App.Preferences.Update(look.Into);
+        return App.Preferences.Update(write);
     }
 }
 
 /// <summary>
 /// One scheme as the window offers it: a name, what it looks like in a sentence, and a strip of
 /// its colours, so the choice can be made by eye before it is made on the map.
+///
+/// <para>Which scheme an option is, is its place in <see cref="All"/>: the list is bound by index,
+/// as the other boxes indexed against an enum are, so <see cref="All"/> is in
+/// <see cref="ExploreScheme"/>'s order and built from it.</para>
 /// </summary>
 /// <param name="Branches">A few branch colours at the first level, as a treemap's largest folders are drawn.</param>
 /// <param name="Ages">The age bands, newest first, without the grey for an undated entry.</param>
 public sealed record MapSchemeOption(
-    ExploreScheme Scheme,
     string Name,
     string Description,
     IReadOnlyList<SolidColorBrush> Branches,
@@ -135,25 +180,29 @@ public sealed record MapSchemeOption(
         new(300, 30, true),
     ];
 
-    /// <summary>Every scheme, built once for the life of the app (G5).</summary>
+    /// <summary>Every scheme, in <see cref="ExploreScheme"/>'s order, built once for the life of the app (G5).</summary>
     public static IReadOnlyList<MapSchemeOption> All { get; } =
-    [
-        Option(ExploreScheme.Standard, "Standard", "Even colours. Ages run from yellow to purple."),
-        Option(ExploreScheme.Vivid, "Vivid", "Stronger colours. Ages run from yellow through orange to blue."),
-        Option(ExploreScheme.Soft, "Soft", "Pale colours. Ages run from pale yellow to lilac."),
-        Option(ExploreScheme.Deep, "Deep", "Darker colours. Ages run from cream through red to dark purple."),
-    ];
+        [.. Enum.GetValues<ExploreScheme>().Select(Option)];
 
     /// <summary>What a screen reader announces for the row, which has no text beside the swatches.</summary>
     public string Spoken => $"{Name}. {Description}";
 
-    private static MapSchemeOption Option(ExploreScheme scheme, string name, string description) =>
-        new(
-            scheme,
+    private static MapSchemeOption Option(ExploreScheme scheme)
+    {
+        var (name, description) = scheme switch
+        {
+            ExploreScheme.Vivid => ("Vivid", "Stronger colours. Ages run from yellow through orange to blue."),
+            ExploreScheme.Soft => ("Soft", "Pale colours. Ages run from pale yellow to lilac."),
+            ExploreScheme.Deep => ("Deep", "Darker colours. Ages run from cream through red to dark purple."),
+            _ => ("Standard", "Even colours. Ages run from yellow to purple."),
+        };
+
+        return new(
             name,
             description,
             [.. SampleHues.Select(hue => Brush(TilePalette.For(hue, 1, scheme)))],
             [.. AgePalette.Bands(scheme).SkipLast(1).Select(band => Brush(band.Colour))]);
+    }
 
     private static SolidColorBrush Brush(TileColour colour) =>
         new(Color.FromArgb(255, colour.Red, colour.Green, colour.Blue));

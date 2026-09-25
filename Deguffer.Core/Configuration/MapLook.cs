@@ -20,16 +20,24 @@ public sealed record MapLook(
     ExploreScheme Icicle,
     ExploreScheme Sunburst)
 {
-    /// <summary>The look <paramref name="preferences"/> ask for.</summary>
+    /// <summary>
+    /// The look <paramref name="preferences"/> ask for.
+    ///
+    /// <para>A value no member names is read as the default. The preferences file is read with
+    /// numbers allowed for an enum, so a hand-edited <c>"TreemapScheme": 9</c> arrives as a scheme
+    /// that indexes past every palette, and the map would throw on each paint.
+    /// <see cref="PreferenceStore.Load"/> holds that a stray value in a cosmetic setting must never
+    /// stop the app working.</para>
+    /// </summary>
     public static MapLook From(AppPreferences preferences)
     {
         ArgumentNullException.ThrowIfNull(preferences);
 
         return new(
-            preferences.TreemapSpacing,
-            preferences.TreemapScheme,
-            preferences.IcicleScheme,
-            preferences.SunburstScheme);
+            Defined(preferences.TreemapSpacing, ExploreSpacing.Comfortable),
+            Defined(preferences.TreemapScheme, ExploreScheme.Standard),
+            Defined(preferences.IcicleScheme, ExploreScheme.Standard),
+            Defined(preferences.SunburstScheme, ExploreScheme.Standard));
     }
 
     /// <summary>
@@ -55,6 +63,10 @@ public sealed record MapLook(
         ExploreView.Sunburst => this with { Sunburst = scheme },
         _ => this with { Treemap = scheme },
     };
+
+    private static T Defined<T>(T value, T fallback)
+        where T : struct, Enum =>
+        Enum.IsDefined(value) ? value : fallback;
 
     /// <summary><paramref name="preferences"/> with this look in place of theirs, and nothing else changed.</summary>
     public AppPreferences Into(AppPreferences preferences)
