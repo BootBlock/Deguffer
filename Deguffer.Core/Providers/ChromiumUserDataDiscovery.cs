@@ -16,6 +16,10 @@ namespace Deguffer.Core.Providers;
 /// application that named its own data folder.
 /// </param>
 /// <param name="Path">The folder, in display form — a plan never holds an extended-length path.</param>
+/// <param name="Layout">
+/// Which file identified the folder, and so which file must survive in it, and how its profiles
+/// were found.
+/// </param>
 /// <param name="Profiles">
 /// The directories under it that a profile's caches may sit in: the folder itself, plus any
 /// per-profile directory beside it. Both layouts are real. An application embedding the engine
@@ -33,13 +37,14 @@ public sealed record ChromiumUserData(
     string Name,
     string ProcessName,
     string Path,
+    ChromiumLayout Layout,
     IReadOnlyList<string> Profiles,
     bool ProfilesIncomplete = false);
 
 /// <summary>
 /// Finds the Chromium user-data folders on this machine: one level under <c>%APPDATA%</c> and
 /// <c>%LOCALAPPDATA%</c>, where an application embedding the engine keeps its folder, and at each
-/// place a <see cref="ChromiumBrowser"/> declares, where a browser keeps its own.
+/// place a <see cref="ChromiumHost"/> declares, where a browser or a launcher keeps its own.
 ///
 /// <para>Separate from <see cref="ChromiumCacheProvider"/> because the two answer different
 /// questions. This one answers "whose folder is this?", and the provider answers "what inside it
@@ -48,20 +53,13 @@ public sealed record ChromiumUserData(
 /// cause.</para>
 ///
 /// <para><b>Identification is a positive test, never a cache name.</b> A folder qualifies only if
-/// it holds <see cref="IdentifyingFile"/>, which Chromium writes into the user-data folder it owns
-/// and nothing else has reason to create. A folder that merely contains a directory called
+/// it holds its layout's <see cref="ChromiumLayout.IdentifyingFile"/>, which the engine writes into
+/// the user-data folder it owns and nothing else has reason to create. A folder that merely contains a directory called
 /// <c>GPUCache</c> does not qualify, and an application that has somehow never written the file is
 /// invisible here — reclaiming nothing being the safe direction to be wrong in.</para>
 /// </summary>
 public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environment)
 {
-    /// <summary>
-    /// Chromium's own marker for a user-data folder. It holds the browser-wide settings and, on
-    /// Windows, the DPAPI-wrapped key that decrypts the cookies and saved passwords beside it —
-    /// which is why <see cref="ChromiumCacheProvider"/> also asserts it survived.
-    /// </summary>
-    public const string IdentifyingFile = "Local State";
-
     /// <summary>
     /// A Chromium host's additional profiles. A known word <em>and</em> a number, on Playwright's
     /// pattern: <c>Profile 1</c> qualifies, and <c>Profile backup</c> is not a profile this looks
@@ -72,7 +70,7 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
 
     /// <summary>
     /// Every Chromium user-data folder under the two application-data roots, then every declared
-    /// browser's.
+    /// host's.
     ///
     /// <para>The roots hold hundreds of directories between them, so the order of the two checks is
     /// the performance design (G4): one file-existence check rejects almost every candidate, and
@@ -111,21 +109,25 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
 
                 var path = LongPath.Display(child.FullName);
 
-                if (!LongPath.FileExists(Path.Combine(path, IdentifyingFile)))
+                // Only the browser's marker. The framework's LocalPrefs.json is a name any
+                // application might give its own settings, so it identifies a folder only where a
+                // host row declares it.
+                if (!LongPath.FileExists(Path.Combine(path, ChromiumLayout.Browser.IdentifyingFile)))
                 {
                     continue;
                 }
 
-                var profiles = ProfilesUnder(path, out var incomplete);
-                found.Add(new ChromiumUserData(child.Name, child.Name, path, profiles, incomplete));
+                var profiles = ProfilesUnder(path, ChromiumLayout.Browser, out var incomplete);
+                found.Add(new ChromiumUserData(
+                    child.Name, child.Name, path, ChromiumLayout.Browser, profiles, incomplete));
             }
         }
 
-        foreach (var browser in ChromiumBrowser.Declared)
+        foreach (var host in ChromiumHost.Declared)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (Identify(browser) is { } userData)
+            if (Identify(host) is { } userData)
             {
                 found.Add(userData);
             }
@@ -135,8 +137,8 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     }
 
     /// <summary>
-    /// The declared browser's folder, if it holds <see cref="IdentifyingFile"/> and is reached
-    /// without passing through a link.
+    /// The declared host's folder, if it holds its layout's identifying file and is reached without
+    /// passing through a link.
     ///
     /// <para><b>A declared path is built, not enumerated, so no listing has filtered its links
     /// out.</b> The one-level walk above meets its only intermediate directory as a child of the
@@ -150,14 +152,14 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// would be a sentence about nothing. The marker is probed through the obstacle for that reason
     /// alone: it decides whether to say something, never whether to look inside.</para>
     /// </summary>
-    private ChromiumUserData? Identify(ChromiumBrowser browser)
+    private ChromiumUserData? Identify(ChromiumHost host)
     {
-        if (browser.PathIn(environment) is not (var root, var userData))
+        if (host.PathIn(environment) is not (var root, var userData))
         {
             return null;
         }
 
-        var marker = Path.Combine(userData, IdentifyingFile);
+        var marker = Path.Combine(userData, host.Layout.IdentifyingFile);
 
         if (DerivedPath.FirstObstacleBetween(root, userData) is { } obstacle)
         {
@@ -178,8 +180,8 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
         }
 
         var path = LongPath.Display(userData);
-        var profiles = ProfilesUnder(path, out var incomplete);
-        return new ChromiumUserData(browser.Name, browser.ProcessName, path, profiles, incomplete);
+        var profiles = ProfilesUnder(path, host.Layout, out var incomplete);
+        return new ChromiumUserData(host.Name, host.ProcessName, path, host.Layout, profiles, incomplete);
     }
 
     /// <summary>
@@ -190,16 +192,21 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     public IReadOnlyList<string> UnreadableRoots { get; private set; } = [];
 
     /// <summary>
-    /// What stood between an application-data root and a declared browser's folder in the last
-    /// <see cref="Discover"/> — a link, or a segment Windows would not describe — so the browser
+    /// What stood between an application-data root and a declared host's folder in the last
+    /// <see cref="Discover"/> — a link, or a segment Windows would not describe — so the host
     /// behind it was not looked inside. Empty on every ordinary machine.
     /// </summary>
     public IReadOnlyList<DerivedPathObstacle> Obstructed { get; private set; } = [];
 
     /// <summary>
-    /// The user-data folder itself, then its named profiles. The folder is always included because
-    /// a Chromium host writes <c>GPUCache</c> there as well as inside each profile, and an
-    /// application embedding the engine writes all of its caches there and has no profiles at all.
+    /// The user-data folder itself, then its profiles as <paramref name="layout"/> recognises them.
+    /// The folder is always included because a Chromium host writes <c>GPUCache</c> there as well
+    /// as inside each profile, and an application embedding the engine writes all of its caches
+    /// there and has no profiles at all.
+    ///
+    /// <para>A link among the children is never a profile, whatever its name or contents. The
+    /// listing sets links aside, so a marked partition's file is probed only in a real directory.
+    /// </para>
     /// </summary>
     /// <param name="incomplete">
     /// True where the user-data folder would not be listed. The folder itself is still returned,
@@ -208,7 +215,7 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// seen. Without this the answer is one path, which is exactly what a legitimate single-profile
     /// embedder returns, and no caller could tell the two apart.
     /// </param>
-    private static IReadOnlyList<string> ProfilesUnder(string userData, out bool incomplete)
+    private static IReadOnlyList<string> ProfilesUnder(string userData, ChromiumLayout layout, out bool incomplete)
     {
         List<string> profiles = [userData];
 
@@ -216,12 +223,21 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
         incomplete = scan.Unreadable;
 
         profiles.AddRange(scan.Directories
-            .Where(d => IsProfile(d.Name))
-            .Select(d => LongPath.Display(d.FullName)));
+            .Select(d => LongPath.Display(d.FullName))
+            .Where(path => IsProfile(path, layout)));
 
         return profiles;
     }
 
-    private static bool IsProfile(string name) =>
+    private static bool IsProfile(string path, ChromiumLayout layout) => layout.Profiles switch
+    {
+        ChromiumProfileRule.Named => IsNamedProfile(Path.GetFileName(path)),
+        ChromiumProfileRule.Marked => LongPath.FileExists(Path.Combine(path, layout.IdentifyingFile)),
+
+        // A rule this method does not know yields no profile, so nothing inside it is looked at.
+        _ => false,
+    };
+
+    private static bool IsNamedProfile(string name) =>
         name.Equals("Default", StringComparison.OrdinalIgnoreCase) || NumberedProfile().IsMatch(name);
 }

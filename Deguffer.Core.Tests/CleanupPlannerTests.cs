@@ -389,13 +389,13 @@ public sealed class CleanupPlannerTests
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
-                "epic-launcher-content-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
+                "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",
-                "windows-servicing-logs", "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs",
+                "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs",
                 "claude-code-file-history",
             ],
             planner.Providers.Select(p => p.Id));
@@ -412,7 +412,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
-                "epic-launcher-logs", "vscode-logs", "claude-code-mcp-logs", "claude-code-file-history",
+                "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "claude-code-file-history",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 
