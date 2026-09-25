@@ -31,6 +31,10 @@ public sealed class TiledSurface : ExploreSurface
     /// The part of the picture <paramref name="tiles"/> were laid out for, or null where their layout
     /// draws only the whole of it. See <see cref="ExploreSurface.Viewport"/>.
     /// </param>
+    /// <param name="volumeBeside">
+    /// Whether the layout draws anything of the volume beside the root, whether or not this
+    /// viewport shows it. See <see cref="ExploreSurface.HasVolumeBeside"/>.
+    /// </param>
     public TiledSurface(
         ISizedTree tree,
         int root,
@@ -39,18 +43,22 @@ public sealed class TiledSurface : ExploreSurface
         LayoutLimits limits,
         ShapeColours colours,
         IReadOnlyList<ExploreTile> tiles,
-        MapViewport? viewport = null)
+        MapViewport? viewport = null,
+        bool volumeBeside = false)
         : base(tree, root, width, height, limits, colours, viewport)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
+        HasVolumeBeside = volumeBeside;
 
         Labels = BuildLabels();
     }
 
     public override IReadOnlyList<ExploreLabel> Labels { get; }
+
+    public override bool HasVolumeBeside { get; }
 
     public override void Paint(byte[] pixels, TileColour background) =>
         TileRasteriser.Paint(pixels, _tiles, Width, Height, background, ColourFor);

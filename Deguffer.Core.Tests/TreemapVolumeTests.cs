@@ -135,6 +135,47 @@ public sealed class TreemapVolumeTests
     }
 
     /// <summary>
+    /// A drawing says whether anything is beside its root, which is what decides whether the root can
+    /// be opened out of it. Only a treemap of the root draws either block, and only where the block
+    /// has room.
+    /// </summary>
+    [Fact]
+    public void ADrawingSaysWhetherAnythingIsBesideTheRoot()
+    {
+        var tree = Folder();
+        var volume = new VolumeSpace(12_000, 6_000);
+
+        Assert.True(Treemap(tree, tree.RootNode, ExploreView.Treemap, volume).HasVolumeBeside);
+        Assert.False(Treemap(tree, tree.RootNode, ExploreView.Treemap, new VolumeSpace(3_001, 1)).HasVolumeBeside);
+        Assert.False(Treemap(tree, tree.RootNode, ExploreView.Treemap, VolumeSpace.None).HasVolumeBeside);
+        Assert.False(Treemap(tree, tree.ChildrenOf(tree.RootNode)[0], ExploreView.Treemap, volume).HasVolumeBeside);
+        Assert.False(Treemap(tree, tree.RootNode, ExploreView.Icicle, volume).HasVolumeBeside);
+        Assert.False(Treemap(tree, tree.RootNode, ExploreView.Sunburst, volume).HasVolumeBeside);
+    }
+
+    /// <summary>
+    /// Said of the whole picture, not of the canvas: a zoom into the root that leaves both blocks off
+    /// the screen is still of a root drawn beside its volume, and still opens out of it.
+    /// </summary>
+    [Fact]
+    public void AZoomThatLeavesTheBlocksOffTheCanvasStillSaysTheyAreBesideTheRoot()
+    {
+        var tree = Folder();
+        var volume = new VolumeSpace(12_000, 6_000);
+        var root = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, volume)
+            .Single(tile => tile.Node == tree.RootNode);
+        var viewport = MapViewport.Anchored(
+            16, (root.X + (root.Width / 2)) / Width, (root.Y + (root.Height / 2)) / Height, 0.5, 0.5);
+
+        var zoomed = ExploreSurface.Create(
+            tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume, viewport);
+
+        Assert.DoesNotContain(Hits(zoomed), hit => hit.IsFreeSpace || hit.IsUnaccounted);
+        Assert.True(zoomed.HasVolumeBeside);
+    }
+
+    /// <summary>
     /// §7.1: the map acts on what the user picked, and neither block is on the disk to be picked.
     /// The pointer finds each and says how much it is, and neither is a node.
     /// </summary>

@@ -137,7 +137,7 @@ public sealed class ExploreMap : UserControl
     private ExploreSpacing _spacing = ExploreSpacing.Comfortable;
 
     /// <summary>
-    /// The volume the tree covers the whole of, or <see cref="VolumeSpace.None"/>. See
+    /// The volume to draw beside the node, or <see cref="VolumeSpace.None"/>; the page decides. See
     /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport)"/>
     /// for where it is drawn.
     /// </summary>
@@ -279,6 +279,13 @@ public sealed class ExploreMap : UserControl
             _descent.Finish();
             EndDrag();
 
+            // The page is kept alive while it is away (NavigationCacheMode), so what it holds stays
+            // held: at 4K, 33 MB for each drawing kept, the spare bitmap and the paint buffer. Only
+            // the drawing on screen is needed to come back to, and the rest is asked for again when
+            // the picture next moves.
+            _pictures.Trim();
+            _buffers.Release();
+
             // The labels go back with it. Dropping the redraw drops the thing that would have put
             // them back, and Loaded only redraws where the size has actually moved — so without
             // this a map returned to at the size it was last drawn at comes back with no names on
@@ -377,8 +384,8 @@ public sealed class ExploreMap : UserControl
     /// labelled with a name and a size.
     /// </summary>
     /// <param name="volume">
-    /// The volume, where the scan covered the whole of one, and <see cref="VolumeSpace.None"/>
-    /// otherwise.
+    /// The volume to draw beside <paramref name="node"/>, where the reader is on a volume the scan
+    /// covered the whole of, and <see cref="VolumeSpace.None"/> otherwise.
     /// </param>
     public void Show(
         ExploreTree? tree,
@@ -407,7 +414,7 @@ public sealed class ExploreMap : UserControl
     /// <param name="colours">What the colours are to say, asked at each repaint.</param>
     /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
     /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
-    /// <param name="volume">The volume the tree covers the whole of, or <see cref="VolumeSpace.None"/>.</param>
+    /// <param name="volume">The volume to draw beside <paramref name="node"/>, or <see cref="VolumeSpace.None"/>.</param>
     public void Show(
         ISizedTree? tree,
         int node,
@@ -749,7 +756,13 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Underlay()
     {
-        if (IsLoaded && Visibility == Visibility.Visible && _drawing is not null && _pictures.Underlay(Draw, Ground()))
+        // Not while a resize is settling: painted at the new size, it would be thrown away with every
+        // other drawing when the settling redraws the picture.
+        if (IsLoaded
+            && Visibility == Visibility.Visible
+            && _drawing is not null
+            && !_settled.IsRunning
+            && _pictures.Underlay(Draw, Ground()))
         {
             Place();
         }
@@ -1183,11 +1196,14 @@ public sealed class ExploreMap : UserControl
         // Only a treemap nests: an icicle draws what a shape holds below it rather than in it.
         var shape = drawing.Viewport is null ? null : ShapeAt(drawing, point);
 
-        if (hit.IsNode)
+        // The shape the whole drawing is of opens only out of what is drawn beside it: the volume's
+        // free space, beside the root of a treemap of a whole drive. Anywhere else it is already
+        // open, and asking the page to open it again would be asking for the picture on screen.
+        if (hit.IsNode && (hit.Node != _node || drawing.HasVolumeBeside))
         {
             // Counted rather than compared by node: the root opened out of its volume is the same
             // node drawn as another picture.
-            var standing = _picturesHanded;
+            var handedBefore = _picturesHanded;
 
             _opening = shape is { } opening ? (hit.Node, opening) : null;
 
@@ -1200,7 +1216,7 @@ public sealed class ExploreMap : UserControl
                 _opening = null;
             }
 
-            if (_picturesHanded != standing)
+            if (_picturesHanded != handedBefore)
             {
                 return;
             }

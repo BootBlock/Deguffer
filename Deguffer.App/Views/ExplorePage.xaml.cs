@@ -486,9 +486,9 @@ public sealed partial class ExplorePage : Page
 
     private void OnCrumbClicked(object sender, RoutedEventArgs e)
     {
-        if (sender is HyperlinkButton { Tag: int node })
+        if (sender is HyperlinkButton { DataContext: ExploreCrumb crumb })
         {
-            ViewModel.GoTo(node);
+            ViewModel.GoTo(crumb.Position);
         }
     }
 

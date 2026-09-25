@@ -246,7 +246,6 @@
 
                             <HyperlinkButton Content="{x:Bind Name}"
                                              Padding="4,2"
-                                             Tag="{x:Bind Node}"
                                              Click="OnCrumbClicked" />
                         </StackPanel>
                     </DataTemplate>
