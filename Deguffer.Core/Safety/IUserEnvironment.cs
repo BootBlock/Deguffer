@@ -115,6 +115,24 @@ public interface IUserEnvironment
     string? ReadCurrentUserRegistryValue(string keyPath, string valueName);
 
     /// <summary>
+    /// Read a string value from under <c>HKEY_LOCAL_MACHINE</c> in the named registry view, or null
+    /// when the key, the value or the permission to read it is missing.
+    ///
+    /// <para>Exists because Jellyfin's installer records where the server keeps its data here and
+    /// nowhere else, and the user chooses that folder during the install. The installer is a 32-bit
+    /// program, so it writes the key in the 32-bit view, which a 64-bit process reads only by asking
+    /// for that view. <see cref="ReadCurrentUserRegistryValue"/> gives why the machine-wide hive is
+    /// otherwise avoided: here it is the only record there is.</para>
+    ///
+    /// <para>A <c>REG_EXPAND_SZ</c> value is expanded against this process's environment, which is
+    /// the environment of the account the installer ran as for the variables such a value names.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_LOCAL_MACHINE</c>.</param>
+    /// <param name="valueName">The value to read.</param>
+    /// <param name="view">The view the program that wrote the key writes to.</param>
+    string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view);
+
+    /// <summary>
     /// Discard what was read from the machine, so the next look sees the environment as it now
     /// stands. Called at the start of a planning pass, and implicit in the fresh instance each
     /// Explore policy build constructs, so a toolchain installed while the app was open is picked
@@ -287,6 +305,27 @@ public sealed partial class UserEnvironment : IUserEnvironment
             // A hive this account may not read, and a key already marked for deletion. Both are
             // ordinary on a long-lived machine, and both mean the same thing here: nothing said
             // where the tool is.
+            return null;
+        }
+    }
+
+    /// <summary>Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> gives.</summary>
+    public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
+
+        try
+        {
+            using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+            using var key = hive.OpenSubKey(keyPath);
+
+            return key?.GetValue(valueName) as string;
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // thing: nothing said where the tool is.
             return null;
         }
     }
