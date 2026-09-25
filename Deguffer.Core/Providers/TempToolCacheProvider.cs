@@ -21,7 +21,9 @@ namespace Deguffer.Core.Providers;
 /// own folders stale by that mutex's absence, so Deguffer asks the same question. A Flutter folder's
 /// name is a random number that nothing ties to a process, so every one of them is left alone while
 /// the Dart VM that runs the tool is running. Node reads its cache whole and writes it only on exit,
-/// and a missing file is a cache miss rather than a failure, so it needs no check.</para>
+/// and a missing file is a cache miss rather than a failure, so it needs no check. The clean asks
+/// each check again before removing anything, as it asks every folder whether a program is working
+/// in it.</para>
 ///
 /// <para><b>§5.1 has nothing to prefer.</b> None of these tools has a command that clears what it
 /// left in the temporary folder. Node's documentation names removing the directory as the way to
@@ -296,6 +298,6 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
         new(tool, RoslynSession(), TargetKind.Directory, RoslynReason)
         {
             InUse = _mutexes.Exists,
-            InUseReason = "An editing session is still using these analyzer copies, so they are left alone.",
+            InUseReason = "an editing session is still using these analyzer copies",
         };
 }

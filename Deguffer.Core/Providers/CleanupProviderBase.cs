@@ -494,6 +494,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 IsLeftover = target.IsLeftover,
                 Facets = target.Facets ?? [],
                 Group = target.Group,
+                UseCheck = target.UseCheck,
             });
         }
 
@@ -608,7 +609,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         notes.AddRange(whole.Select(step => new PlanNote(
             PlanNoteSeverity.Information,
             $"Leaving {LongPath.Display(step.Path)} alone: Windows clears it whole, and something in it "
-            + $"changed in the last {keep.Describe()}.")));
+            + $"{keep.DescribeChange()}.")));
 
         // Only where there is something to say it about. Every plan comes through here, including
         // the empty one a provider returns for a toolchain that is not installed — and "the sizes
@@ -646,9 +647,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
             ProtectedPaths =
             [
                 .. plan.ProtectedPaths,
-                .. files.Select(step => (Path: step.Path, Reason: $"Left alone because it changed in the last {keep.Describe()}."))
+                .. files.Select(step => (Path: step.Path, Reason: $"Left alone because it {keep.DescribeChange()}."))
                     .Concat(whole.SelectMany(step => step.Destroys).Select(path => (Path: path, Reason:
-                        $"Left alone because Windows clears it whole, and something it would clear changed in the last {keep.Describe()}.")))
+                        $"Left alone because Windows clears it whole, and something it would clear {keep.DescribeChange()}.")))
                     .Select(withheld => new ProtectedPath(
                         withheld.Path,
                         withheld.Reason,

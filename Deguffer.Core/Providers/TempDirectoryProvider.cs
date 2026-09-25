@@ -31,7 +31,9 @@ namespace Deguffer.Core.Providers;
 /// working in is never a target, however old its files are: the process holding it may have opened
 /// nothing this minute, so nothing is locked and the timestamps prove nothing.
 /// <see cref="ILiveTreeInspector.FindLiveChildren"/> answers that in one pass over the process
-/// table, and each entry it names is asserted to have survived (§5.6).</item>
+/// table, and each entry it names is asserted to have survived (§5.6). The clean asks again
+/// immediately before it empties each folder, and spares an entry a program has taken up since the
+/// preview in the same way. See <see cref="LiveChildrenCheck"/>.</item>
 /// <item><b>A refusal treated as ordinary.</b> A file Windows will not release is live state, or
 /// something guarding it, so <see cref="DirectoryRemover"/> leaves it and moves on. What it leaves is
 /// reported with its size and its reason, and the next preview leaves out whatever is still refused,
@@ -90,6 +92,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     public const int MaximumStaleDays = 365;
 
     private readonly ILiveTreeInspector _liveTrees;
+    private readonly LiveChildrenCheck _stillUnused;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
     private readonly IReadOnlyList<ITemporaryFolderTenant> _tenants;
@@ -117,6 +120,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+        _stillUnused = new LiveChildrenCheck(_liveTrees);
         _preferences = preferences ?? DefaultPreferences.Instance;
         _tenants = tenants ?? [];
     }
@@ -308,7 +312,12 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         IReadOnlyList<string> folders = [.. scan.Targets.Select(t => t.Path)];
         var live = _liveTrees.FindLiveChildren(folders, ct);
         var owned = await OwnedElsewhereAsync(folders, ct).ConfigureAwait(false);
-        var (planned, measured) = await PlanDeletionsAsync(scan.Targets, effective, ct).ConfigureAwait(false);
+        // The live entries above are the preview's. Each folder carries the same question to the
+        // clean, which spares whatever a program has taken up since.
+        var (planned, measured) = await PlanDeletionsAsync(
+            [.. scan.Targets.Select(target => target with { UseCheck = _stillUnused })],
+            effective,
+            ct).ConfigureAwait(false);
         var (steps, spared) = await SpareAsync(planned, live, owned, effective, ct).ConfigureAwait(false);
 
         if (OwnedElsewhereNote(owned) is { } elsewhere)

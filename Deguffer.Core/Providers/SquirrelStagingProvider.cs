@@ -21,7 +21,9 @@ namespace Deguffer.Core.Providers;
 /// the hazard here.</b> Squirrel's maintainer gave it as the reason the library cannot clear the
 /// folder itself: one application cannot know that another is using it right now. So this provider
 /// asks whether anything is running from inside a staging directory before it offers it, and refuses
-/// the ones that are, rather than warning about them (§5.3).</para>
+/// the ones that are, rather than warning about them (§5.3). The clean asks again immediately before
+/// each removal, because an install or an update may have started running from one since the
+/// preview.</para>
 ///
 /// <para><b>§5.1 does not apply.</b> <c>Update.exe</c> has no clean-up action — its whole command
 /// set is install, uninstall, download, update, releasify, shortcut, deshortcut, process-start,
@@ -462,7 +464,13 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         }
 
         return new Collected(
-            [.. live.Cleared.Select(c => new DeletionTarget(c.Path, StagingReason, DirectoryAge.Of(c.Path, ct)))],
+            [
+                .. live.Cleared.Select(c => new DeletionTarget(
+                    c.Path,
+                    StagingReason,
+                    DirectoryAge.Of(c.Path, ct),
+                    UseCheck: c.StillUnused)),
+            ],
             Unreadable: false,
             // A held-back directory counts here for the same reason a declined link does: something
             // real was left unexamined. Without it, a machine whose every staging directory is busy

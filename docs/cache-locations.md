@@ -1047,7 +1047,9 @@ It removes each session's folder, one step each, and shows when each was last wr
   older than their folder, some by five months. Dated by its files, a session in use this morning
   would look months old.
 - **A session Claude Code lists as running is left alone**, and each entry in that list is checked
-  against Windows. If the list cannot be read, no session is offered, and the row says so.
+  against Windows. If the list cannot be read, no session is offered, and the row says so. The list is
+  read again when you press Clean, immediately before each session's snapshots are removed, so a
+  session you resume after the scan keeps every snapshot it may rewind to.
 - **Nothing written in the last 7 days is offered**, whatever the list says, and whatever the guard on
   recently changed files is set to. A session can run for days. The same cut-off applies again when you
   press Clean, so a session you resume after the scan keeps the snapshots it has taken since.
@@ -1829,8 +1831,9 @@ anything else in that folder, and the delete-only mode empties it anyway.
 **While `zenserver` is running, every Zen store is left alone.** The server can be set to keep
 running after the editor closes, and removing a store's data under the server writing it is not
 provably safe. The plan says so, Explore refuses the store too, and closing the editor and the server
-and scanning again includes it. A running editor is a warning beside the filesystem cache, and
-anything it holds open stays.
+and scanning again includes it. The question is asked again when you press Clean, immediately before
+each store is removed, so a server that starts after the scan keeps every store. A running editor is a
+warning beside the filesystem cache, and anything it holds open stays.
 
 ### What is protected
 
@@ -2122,7 +2125,8 @@ so and leaves the folder alone rather than guessing.
 
 **Before removing a staging directory it asks whether anything is running from inside it, and
 refuses the ones that are.** This is the collision the maintainer named, and it is a refusal rather
-than a warning.
+than a warning. It asks again when you press Clean, immediately before each directory is removed, so
+an install that starts after the scan keeps the directory it is running from.
 
 **In a `packages` folder it reads the application's own index.** `RELEASES` lists the packages the
 application still needs. Deguffer removes package files that index has stopped naming, and nothing
@@ -2213,14 +2217,17 @@ to sessions that had ended, and every one of them was empty.
 - **Anything that names a session** is offered only where Claude Code's own list of running sessions
   (`sessions\<process>.json`) does not list it, and each entry in that list is checked against
   Windows too. If the list cannot be read, nothing that names a session is offered, and the row says
-  so.
+  so. The list is read again when you press Clean, immediately before each item is removed, so what a
+  session you resume after the scan left behind stays.
 - **Whether a session still has a conversation is asked of every project folder at once.** A session's
   folders can sit under a different project folder from its transcript. If any project folder cannot
   be listed, no session is called an orphan.
 - **Nothing that names a session, or no process at all, is offered if Claude Code wrote it in the last
   7 days**, whatever the list says. A session can run for days, and an older version of Claude Code
   does not keep the list at all. A file that names a process needs no such wait, because that process
-  has been asked about directly. A folder is dated
+  has been asked about directly. Anything written after the scan read its evidence is kept when you
+  press Clean, so a handshake file an editor started after the scan writes under the same port stays.
+  A folder is dated
   by its own timestamp and its immediate contents, never by the files deep inside it: a file copied
   into place keeps the date of the file it was copied from.
 - **A session folder holding anything besides spilled tool output**, such as a subagent's
@@ -2288,7 +2295,9 @@ remove the build you are running.
 
 **An application that is running gives up nothing either.** This is a refusal, not a warning. The
 question it answers is whether the application is running at all, not whether the old folder itself
-is busy — the process holding it open runs from the build that replaced it.
+is busy — the process holding it open runs from the build that replaced it. It is asked again when you
+press Clean, immediately before each old build is removed, so an application you start after the scan
+keeps its old builds.
 
 ### What is protected
 
@@ -2619,8 +2628,10 @@ A browser that runs as another account or as administrator cannot be inspected f
 Deguffer, so its profile is then protected by the age limit alone. With the limit set to 0 and no
 guard on recently changed files, nothing protects it, and the row says so in a warning.
 
-A running browser's profile is not checked after the clean, because its test runner deletes it as
-soon as the browser closes. Its going is not something Deguffer did.
+The question is asked again when you press Clean, immediately before each profile is removed, so a
+profile a browser was started with after the scan stays, and is checked afterwards to prove it is
+still there. A profile the scan found in use is not checked after the clean, because its test runner
+deletes it as soon as the browser closes. Its going is not something Deguffer did.
 
 ### What it costs you
 
@@ -3004,7 +3015,9 @@ evidence rather than a guess:
   own folder, which is how a solution you have open is recognised.
 
 A held-back project is listed as something left alone, with what is using it named, so you can close
-it and scan again.
+it and scan again. The same question is asked again when you press Clean, immediately before each
+directory is removed, so a project you open or build after the scan keeps its build directory, and the
+result says what is using it.
 
 **The Unreal Editor is found by its log.** It works in the engine's folder rather than the
 project's, so the second and third signals do not see it. It does hold its log in the project's
@@ -3706,7 +3719,8 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
   entry that answers is left alone whatever its age, is named on its row so you can see what is
   holding it, and is checked afterwards to prove it is still there. This catches the case the age
   filter cannot: a program that has been running for a month, working in a scratch directory whose
-  files are all older than the cut-off.
+  files are all older than the cut-off. The question is asked again when you press Clean, immediately
+  before each folder is emptied, so an entry a program took up after the scan is left alone too.
 
 **An entry a tool's own row offers is left to that row.** Where Deguffer knows what wrote an entry
 of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
@@ -3872,6 +3886,9 @@ depends on age:
   entries only when it exits. A file that has gone is a cache miss, and the module is compiled again.
 
 Any recognised folder a running program is working inside is left alone as well, whatever its tool.
+Each of these questions is asked again when you press Clean, immediately before each entry is
+removed, so a program that starts, or a session that takes its mutex, after the scan keeps what it
+uses.
 
 `NODE_COMPILE_CACHE` moves Node's cache anywhere. Where it is set, Deguffer treats that folder as
 Node's and removes only the per-version folders Node makes inside it, named for the Node version,
@@ -3945,6 +3962,8 @@ process using it, and VS Code applies a downloaded update from its folder when i
 deleting while it runs can change what the update does. Docker does not publish its update
 behaviour, so it gets the same treatment. The Visual Studio Installer waits for its installer and
 its background downloader. A folder any running program is working inside is left alone as well.
+Both questions are asked again when you press Clean, immediately before each entry is removed, so
+an application you open after the scan keeps its download.
 
 **Blender's recovery files are recognised so that nothing takes them.** `quit.blend` and the
 autosave files sit loose in the temporary folder, and hold work that may never have been saved

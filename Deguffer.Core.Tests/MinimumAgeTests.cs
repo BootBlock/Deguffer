@@ -193,5 +193,57 @@ public class MinimumAgeTests
         Assert.Equal("7 days", combined.Describe());
     }
 
+    /// <summary>
+    /// A guard anchored at the instant a plan read its evidence keeps everything written from then on,
+    /// however soon after, and nothing written before it, however recently. A window cannot say that:
+    /// a window of zero is off, and any longer one keeps files the preview offered.
+    /// </summary>
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(60 * 24 * 30, true)]
+    public void SinceKeepsWhatWasWrittenFromTheInstantOnAndNothingBefore(int minutesAfter, bool kept)
+    {
+        var guard = MinimumAge.Since(Now);
+
+        Assert.True(guard.IsOn);
+        Assert.Equal(kept, guard.Protects(Now.AddMinutes(minutesAfter).ToFileTimeUtc()));
+    }
+
+    [Fact]
+    public void SinceNormalisesALocalClock()
+    {
+        var local = Now.ToLocalTime();
+
+        Assert.Equal(Now, MinimumAge.Since(local).KeepFromUtc);
+    }
+
+    /// <summary>
+    /// Any window is stricter than an anchor at the evidence, because its cut-off is earlier. An anchor
+    /// is stricter than nothing.
+    /// </summary>
+    [Fact]
+    public void AnyWindowIsStricterThanSinceAndSinceIsStricterThanOff()
+    {
+        var since = MinimumAge.Since(Now);
+        var hour = MinimumAge.WithinHours(1, Now);
+
+        Assert.Equal(hour, MinimumAge.Stricter(since, hour));
+        Assert.Equal(hour, MinimumAge.Stricter(hour, since));
+        Assert.Equal(since, MinimumAge.Stricter(MinimumAge.Off, since));
+    }
+
+    /// <summary>
+    /// The sentence that says why a file was kept. A guard with no window has no hours to name, and
+    /// "changed in the last 0 hours" would be what the window's own phrase said about it.
+    /// </summary>
+    [Fact]
+    public void DescribesWhatAKeptFileDidForBothKindsOfGuard()
+    {
+        Assert.Equal("changed in the last 8 hours", MinimumAge.WithinHours(8, Now).DescribeChange());
+        Assert.Equal("changed after Deguffer began this preview", MinimumAge.Since(Now).DescribeChange());
+    }
+
     private static long FileTime(DateTime utc) => (utc - new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc)).Ticks;
 }

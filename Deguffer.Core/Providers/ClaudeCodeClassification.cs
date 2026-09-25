@@ -11,11 +11,16 @@ namespace Deguffer.Core.Providers;
 /// Anything written at or after this instant is held back. Fixed once, for the reason
 /// <see cref="MinimumAge"/> is an instant rather than a duration: the preview and the clean must agree.
 /// </param>
+/// <param name="Registry">
+/// Where <paramref name="Sessions"/> came from, for the question the clean asks again. See
+/// <see cref="ClaudeCodeSessionCheck"/>.
+/// </param>
 internal sealed record ClaudeCodeEvidence(
     string Home,
     ClaudeCodeProjects Projects,
     ClaudeCodeSessionList Sessions,
-    DateTime RecentSinceUtc);
+    DateTime RecentSinceUtc,
+    ClaudeCodeSessionRegistry Registry);
 
 /// <summary>What Deguffer decided about one kind of thing Claude Code leaves behind.</summary>
 /// <param name="Folders">
@@ -153,11 +158,13 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// </summary>
     /// <param name="recentSinceUtc">Anything written at or after this instant is held back.</param>
     /// <param name="isLeftover">Whether the folder is a leftover. See <see cref="DeleteStep.IsLeftover"/>.</param>
+    /// <param name="stillEnded">What the clean asks again before removing it. See <see cref="DeleteStep.UseCheck"/>.</param>
     public void OfferFolderOnceOldEnough(
         string path,
         string reason,
         DateTime recentSinceUtc,
         bool isLeftover,
+        IUseCheck stillEnded,
         CancellationToken ct)
     {
         switch (DirectoryAge.Of(path, ct))
@@ -171,7 +178,7 @@ internal sealed class ClaudeCodeClassificationBuilder
                 break;
 
             case DateTime written:
-                Offer(new DeletionTarget(path, reason, written, IsLeftover: isLeftover));
+                Offer(new DeletionTarget(path, reason, written, IsLeftover: isLeftover, UseCheck: stillEnded));
                 break;
         }
     }

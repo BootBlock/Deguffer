@@ -14,8 +14,9 @@ namespace Deguffer.Core.Tests.Fakes;
 public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 {
     private readonly HashSet<string> _live;
-    private readonly bool _complete;
+    private bool _complete;
     private readonly List<RunningProgram> _programs = [];
+    private readonly Dictionary<string, string> _heldFiles = new(StringComparer.OrdinalIgnoreCase);
 
     public FakeLiveTreeInspector(bool complete, params string[] live)
     {
@@ -31,6 +32,16 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public static FakeLiveTreeInspector CannotTell => new(complete: false);
 
     public int InvalidateCount { get; private set; }
+
+    /// <summary>
+    /// Answer "could not tell" from now on, so a test can have the process table become unreadable
+    /// between the preview and the clean.
+    /// </summary>
+    public FakeLiveTreeInspector CannotTellFromNow()
+    {
+        _complete = false;
+        return this;
+    }
 
     /// <summary>What the provider asked about, so a test can assert the project folder was passed.</summary>
     public IReadOnlyList<LiveTreeQuery> Asked { get; private set; } = [];
@@ -58,6 +69,18 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         IReadOnlyList<string>? arguments = null)
     {
         _programs.Add(new RunningProgram(name, executable, workingDirectory, arguments ?? []));
+        return this;
+    }
+
+    /// <summary>
+    /// Pretend <paramref name="holder"/> holds <paramref name="file"/> open, as the Restart Manager
+    /// would report it: counted against a candidate that names the file among its lock files, and
+    /// against nothing else, which is the real inspector's rule. A test can hold a file the plan never
+    /// asked about, to prove a check asks about the files there are now rather than the ones there were.
+    /// </summary>
+    public FakeLiveTreeInspector WithHeldFile(string file, string holder)
+    {
+        _heldFiles[file] = holder;
         return this;
     }
 
@@ -93,6 +116,16 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         if (_live.Contains(candidate.Directory))
         {
             holders.Add("a test says something is using it");
+        }
+
+        foreach (var name in candidate.LockFileNames)
+        {
+            // Relative to the directory, or taken as it stands where it is a full path, as the real
+            // inspector's Path.Combine does.
+            if (_heldFiles.TryGetValue(Path.Combine(candidate.Directory, name), out var holder))
+            {
+                holders.Add($"{holder} has it open");
+            }
         }
 
         foreach (var program in _programs)

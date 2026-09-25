@@ -23,7 +23,9 @@ namespace Deguffer.Core.Providers;
 /// Claude Code lists as running is refused and asserted. Where the list cannot be read in full, no
 /// session is offered. Nothing written in the last <see cref="ClaudeCodeSessionRegistry.RecentWindow"/> is
 /// offered either, whatever the guard on recently changed files is set to, and that floor travels on the
-/// plan: a snapshot written between the preview and the clean is spared by the removal itself.</para>
+/// plan: a snapshot written between the preview and the clean is spared by the removal itself. The list is
+/// read again immediately before each session's snapshots are removed, so a session resumed after the
+/// preview keeps the snapshots it may still rewind to. See <see cref="ClaudeCodeSessionCheck"/>.</para>
 ///
 /// <para><b>§5.2.</b> Claude Code's folder is declared recognising nothing, and inside
 /// <see cref="ClaudeCodeHome.FileHistory"/> only a folder named for a session is recognised. Anything else
@@ -321,12 +323,13 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             folder,
             sessions,
             MinimumAge.Within(ClaudeCodeSessionRegistry.RecentWindow, now),
-            Classify(folder, sessions, now - ClaudeCodeSessionRegistry.RecentWindow, ct));
+            Classify(folder, sessions, _sessions, now - ClaudeCodeSessionRegistry.RecentWindow, ct));
     }
 
     private static ClaudeCodeClassification Classify(
         string folder,
         ClaudeCodeSessionList sessions,
+        ClaudeCodeSessionRegistry registry,
         DateTime recentSinceUtc,
         CancellationToken ct)
     {
@@ -366,7 +369,13 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             {
                 // Not a leftover: a session's snapshots are the record of its files, offered for what they
                 // hold. An empty folder among them frees nothing, so it is shown and never chosen.
-                sorting.OfferFolderOnceOldEnough(path, SnapshotsReason, recentSinceUtc, isLeftover: false, ct);
+                sorting.OfferFolderOnceOldEnough(
+                    path,
+                    SnapshotsReason,
+                    recentSinceUtc,
+                    isLeftover: false,
+                    ClaudeCodeSessionCheck.Ended(registry, entry.Name),
+                    ct);
             }
         }
 

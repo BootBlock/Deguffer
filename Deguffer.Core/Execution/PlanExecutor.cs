@@ -62,6 +62,7 @@ public sealed class PlanExecutor(
         var leftStanding = residue ?? new RunResidue();
         var stopwatch = Stopwatch.StartNew();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
+        var heldAtClean = new List<ProtectedPath>();
 
         // The same weighting the planner applies to whole plans, for the same reason: one obj
         // directory of 4 GB and five of 20 MB are six steps, and splitting the bar six ways would
@@ -85,6 +86,24 @@ public sealed class PlanExecutor(
                 done += weights[i];
                 progress?.Report(done / total);
                 continue;
+            }
+
+            // §5.3 asked again: the plan's answer about what is in use is as old as the preview.
+            if (step is DeleteStep deletion)
+            {
+                var recheck = UseRecheck.Of(deletion, ct);
+                heldAtClean.AddRange(recheck.Survivors);
+
+                if (recheck.Step is null)
+                {
+                    outcomes.Add(new StepOutcome(
+                        step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Nothing was removed: {recheck.Withheld}."));
+                    done += weights[i];
+                    progress?.Report(done / total);
+                    continue;
+                }
+
+                step = recheck.Step;
             }
 
             outcomes.Add(step switch
@@ -115,8 +134,14 @@ public sealed class PlanExecutor(
             Steps = outcomes,
             Duration = stopwatch.Elapsed,
 
-            // §5.6 is not a separate user action: acting and proving what survived are one step.
-            Verification = PlanVerifier.Verify(plan, runReach, leftStanding, ct, _cloud),
+            // §5.6 is not a separate user action: acting and proving what survived are one step. What a
+            // use check held back is proved standing with everything the plan protected.
+            Verification = PlanVerifier.Verify(
+                heldAtClean.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. heldAtClean] },
+                runReach,
+                leftStanding,
+                ct,
+                _cloud),
         };
     }
 

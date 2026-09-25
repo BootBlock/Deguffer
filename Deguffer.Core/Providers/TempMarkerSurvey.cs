@@ -82,9 +82,17 @@ public sealed record TempMarkerFindings(
 /// <para>Shared by every row that recognises a tool's leftovers in a temporary folder, because the
 /// mechanics are the same and their getting it wrong is the same catastrophe. What each row
 /// recognises, and at which tier, is that row's own.</para>
+///
+/// <para><b>The clean asks again.</b> Each rule an entry was offered under — its tool not running,
+/// the tool's own word, no program working in the folder — is carried on the target as a
+/// <see cref="TempMarkerCheck"/> and asked afresh immediately before the removal, because a preview
+/// can sit on screen while a tool starts.</para>
 /// </summary>
 public static class TempMarkerSurvey
 {
+    /// <summary>Why a directory is held back where no program's working directory could be read.</summary>
+    private const string CannotTell = "Deguffer could not tell whether a running program is using this";
+
     public static TempMarkerFindings Examine(
         IReadOnlyList<TempMarkerPlace> places,
         IProcessInspector inspector,
@@ -109,6 +117,7 @@ public static class TempMarkerSurvey
     /// <summary>One examination's running state, kept together because every visit adds to all of it.</summary>
     private sealed class Survey(IProcessInspector inspector)
     {
+        private readonly Dictionary<TempMarker, IReadOnlyList<IUseCheck>> _entryRules = [];
         private readonly List<(string Path, TempMarker Marker, DateTime? LastWritten, string Holder)> _candidates = [];
         private readonly List<(string Path, string Reason)> _survivors = [];
         private readonly List<PlanNote> _notes = [];
@@ -205,7 +214,10 @@ public static class TempMarkerSurvey
                 .Select(c => new RecognisedBuildDirectory(c.Path, c.Holder))
                 .ToList();
 
-            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct);
+            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct, unknown: CannotTell);
+            var stillUnused = live.Cleared
+                .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
             var vetoed = new HashSet<string>(live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
 
             foreach (var held in live.Vetoed)
@@ -230,7 +242,7 @@ public static class TempMarkerSurvey
 
             var targets = new List<DeletionTarget>();
 
-            foreach (var (path, marker, lastWritten, holder) in _candidates)
+            foreach (var (path, marker, lastWritten, _) in _candidates)
             {
                 if (vetoed.Contains(path))
                 {
@@ -247,13 +259,19 @@ public static class TempMarkerSurvey
                 // unread, a directory is held back rather than offered.
                 if (!live.Complete && marker.Kind is not TargetKind.File)
                 {
-                    _survivors.Add((path, "Deguffer could not tell whether a running program is using this, so it is left alone."));
+                    _survivors.Add((path, $"{CannotTell}, so it is left alone."));
                     _heldBack.Add(path);
                     _declined++;
                     continue;
                 }
 
-                targets.Add(new DeletionTarget(path, marker.Reason, lastWritten, marker.Kind, Group: marker.Tool));
+                targets.Add(new DeletionTarget(
+                    path,
+                    marker.Reason,
+                    lastWritten,
+                    marker.Kind,
+                    Group: marker.Tool,
+                    UseCheck: Recheck(marker, stillUnused.GetValueOrDefault(path))));
             }
 
             return new TempMarkerFindings(
@@ -285,13 +303,52 @@ public static class TempMarkerSurvey
 
             if (marker.InUse is { } inUse && inUse(Path.GetFileName(path)))
             {
-                _survivors.Add((path, marker.InUseReason));
+                _survivors.Add((path, $"Left alone because {marker.InUseReason}."));
                 _heldBack.Add(path);
                 _declined++;
                 return;
             }
 
             _candidates.Add((path, marker, lastWritten, Path.GetDirectoryName(path) ?? path));
+        }
+
+        /// <summary>
+        /// The rules <see cref="Consider"/> and <see cref="Finish"/> offered <paramref name="path"/>
+        /// under, in their order, for the clean to ask again. Null for an entry offered on none of them.
+        ///
+        /// <para>A directory carries the question the veto handed out with it, which holds it back where
+        /// the answer is partial, because the survey refused every directory on a partial answer rather
+        /// than offering it with a note.</para>
+        /// </summary>
+        /// <param name="directoryCheck">The veto's question, or null for a file, which the veto was never asked about.</param>
+        private IUseCheck? Recheck(TempMarker marker, IUseCheck? directoryCheck)
+        {
+            if (!_entryRules.TryGetValue(marker, out var entryRules))
+            {
+                List<IUseCheck> rules = [];
+
+                if (marker.HeldBy.Count > 0)
+                {
+                    rules.Add(new RunningProcessCheck(inspector, marker.HeldBy));
+                }
+
+                if (marker.InUse is { } inUse)
+                {
+                    rules.Add(new TempMarkerEntryCheck(inUse, marker.InUseReason));
+                }
+
+                entryRules = rules;
+                _entryRules[marker] = entryRules;
+            }
+
+            IReadOnlyList<IUseCheck> all = directoryCheck is null ? entryRules : [.. entryRules, directoryCheck];
+
+            return all.Count switch
+            {
+                0 => null,
+                1 => all[0],
+                _ => new TempMarkerCheck(all),
+            };
         }
 
         /// <summary>Which of the marker's processes are running, asked once per marker per survey.</summary>
