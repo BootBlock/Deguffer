@@ -179,6 +179,8 @@ public class CrashLogTests
 
         public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
 
+        public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, Microsoft.Win32.RegistryView view) => null;
+
         public void Invalidate()
         {
         }
