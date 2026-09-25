@@ -50,11 +50,8 @@ public static class TreemapLayout
     /// The part of the picture the canvas shows. The layout is made across the whole picture
     /// magnified by its zoom, and the rectangles come back in the canvas's own coordinates, so one
     /// that runs off an edge comes back running off it. See <see cref="Visible"/> for what is left
-    /// out, and <see cref="DepthAt"/> for how much further down a zoomed picture goes.
-    ///
-    /// <para>The limits stay in canvas pixels rather than growing with the zoom, which is the point
-    /// of zooming: a shape too small to draw across the whole picture is a shape worth drawing once
-    /// it is magnified.</para>
+    /// out, and <see cref="Detail(LayoutLimits, MapViewport)"/> for how a zoomed picture shows more
+    /// than the whole one without moving anything the whole one showed.
     /// </param>
     public static IReadOnlyList<ExploreTile> Compute(
         ISizedTree tree,
@@ -95,30 +92,30 @@ public static class TreemapLayout
             height * viewport.Zoom);
 
         var used = BesideTheVolume(tree.SizeOf(root), volume, picture, canvas, limits, tiles);
-        var deepest = DepthAt(limits, viewport);
+        var detail = Detail(limits, viewport);
 
-        var pending = new Stack<(int Node, int Depth, Rectangle Frame)>();
-        pending.Push((root, 0, used));
+        var pending = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
+        pending.Push((root, 0, used, 0));
 
         while (pending.TryPop(out var next))
         {
-            var (node, depth, frame) = next;
+            var (node, depth, frame, from) = next;
 
             if (!Visible(frame, canvas))
             {
                 continue;
             }
 
-            var opens = depth < deepest && tree.IsContainer(node);
+            var level = OpeningLevel(tree, node, depth, frame, from, detail);
 
             // The frame is what makes nesting visible, and it is only affordable where there is room
             // for it. A rectangle too small to frame is drawn as one block, which is the honest
             // rendering of "there is more in here than fits".
-            var (header, gap) = opens ? FrameOf(frame.Width, frame.Height, limits) : (0f, 0f);
+            var (header, gap) = level >= 0 ? FrameOf(frame.Width, frame.Height, detail[level]) : (0f, 0f);
 
             tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, header));
 
-            if (!opens)
+            if (level < 0)
             {
                 continue;
             }
@@ -128,30 +125,83 @@ public static class TreemapLayout
                 frame.X + gap, frame.Y + top,
                 frame.Width - (gap * 2), frame.Height - top - gap);
 
-            if (area.Width < limits.MinimumTileSize || area.Height < limits.MinimumTileSize)
-            {
-                continue;
-            }
-
-            Place(tree, node, depth + 1, area, canvas, limits, tiles, pending);
+            Place(tree, node, depth + 1, area, level, detail, canvas, tiles, pending);
         }
 
         return tiles.ToArray();
     }
 
     /// <summary>
-    /// How many levels a picture at <paramref name="viewport"/> descends: the limit, and a level more
-    /// for each doubling of the zoom.
+    /// The limits at each level of detail the zoom has reached, in the magnified picture's pixels:
+    /// the first at the whole picture's scale, and one more for each doubling of the zoom.
     ///
-    /// <para>The limit is there because past it a whole volume is frames round frames, paid for on
-    /// every repaint. Neither half of that holds for a magnified part of one. Only what is on the
-    /// canvas is laid out, so the cost is bounded by the canvas rather than by the depth, and the
-    /// frames a level deeper are the ones the zoom has just made big enough to read. Without this a
-    /// zoom would magnify folders that stay shut however large they grow, and the detail it was for
-    /// would never appear.</para>
+    /// <para>This is what lets a zoom show more without moving what it already showed. Every folder,
+    /// and every run of files too small to draw, is laid out once, at the first level where it fits,
+    /// and from then on it is only magnified: its band, its gap and the rows inside it are the same
+    /// shapes at every zoom past that level, scaled with the picture. So a shape on screen when a zoom
+    /// begins is exactly where the magnified picture put it when the zoom ends, and what the zoom adds
+    /// is only what did not fit before: a folder that opens, or a run of small files drawn one by one.
+    /// Limits that stayed in canvas pixels instead would lay every folder out afresh at every zoom,
+    /// and its contents would shuffle under the pointer as the zoom settled.</para>
+    ///
+    /// <para>The depth limit is part of the same rule. Past it a whole volume is frames round frames,
+    /// paid for on every repaint, and neither half of that holds for a magnified part of one: only
+    /// what is on the canvas is laid out, and the frames a level further down are the ones the zoom
+    /// has just made big enough to read. So each level of detail allows one more.</para>
     /// </summary>
-    private static int DepthAt(LayoutLimits limits, MapViewport viewport) =>
-        limits.MaximumDepth + (int)Math.Floor(Math.Log2(viewport.Zoom));
+    private static DetailLevel[] Detail(LayoutLimits limits, MapViewport viewport)
+    {
+        var levels = new DetailLevel[(int)Math.Floor(Math.Log2(viewport.Zoom)) + 1];
+
+        for (var level = 0; level < levels.Length; level++)
+        {
+            var pixel = viewport.Zoom / Math.Pow(2, level);
+
+            levels[level] = new DetailLevel(
+                limits.At(pixel) with { MaximumDepth = limits.MaximumDepth + level },
+                pixel);
+        }
+
+        return levels;
+    }
+
+    /// <summary>
+    /// The first level of detail, from <paramref name="from"/>, at which <paramref name="node"/> opens
+    /// to show what it holds, or -1 where it stays one block at this zoom.
+    ///
+    /// <para>From the level of whatever placed it, because a folder cannot open before the rows it
+    /// sits in were laid; and the first level that will do rather than the zoom's own, because that is
+    /// what keeps the answer the same at every zoom that reaches it.</para>
+    /// </summary>
+    private static int OpeningLevel(
+        ISizedTree tree, int node, int depth, Rectangle frame, int from, DetailLevel[] detail)
+    {
+        if (!tree.IsContainer(node))
+        {
+            return -1;
+        }
+
+        for (var level = from; level < detail.Length; level++)
+        {
+            var limits = detail[level].Limits;
+
+            if (depth >= limits.MaximumDepth)
+            {
+                continue;
+            }
+
+            var (header, gap) = FrameOf(frame.Width, frame.Height, detail[level]);
+            var top = header > 0 ? header : gap;
+
+            if (frame.Width - (gap * 2) >= limits.MinimumTileSize
+                && frame.Height - top - gap >= limits.MinimumTileSize)
+            {
+                return level;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>
     /// Whether any of <paramref name="frame"/> is on <paramref name="canvas"/>.
@@ -185,16 +235,23 @@ public static class TreemapLayout
     /// is explicit that squarification only works on a decreasing sequence. The tree settles that
     /// order once at build time rather than per repaint, and <see cref="Compute"/> refuses a tree
     /// that settled on a different one.</para>
+    ///
+    /// <para>The rows are laid at <paramref name="level"/> of <paramref name="detail"/>, the level the
+    /// parent opened at. Where the rest will not fit at that level, the space left is tried at each
+    /// level of detail the zoom has reached beyond it, and the rows go on at the first that fits: the
+    /// rows already laid do not move, and the small files are drawn one by one in the space their
+    /// aggregate stood in. See <see cref="Detail(LayoutLimits, MapViewport)"/>.</para>
     /// </summary>
     private static void Place(
         ISizedTree tree,
         int parent,
         int depth,
         Rectangle area,
+        int level,
+        DetailLevel[] detail,
         Rectangle canvas,
-        LayoutLimits limits,
         List<ExploreTile> tiles,
-        Stack<(int Node, int Depth, Rectangle Frame)> pending)
+        Stack<(int Node, int Depth, Rectangle Frame, int Level)> pending)
     {
         var children = tree.ChildrenOf(parent);
         var total = tree.SizeOf(parent);
@@ -214,8 +271,9 @@ public static class TreemapLayout
 
         while (index < children.Length && remaining.Width > 0 && remaining.Height > 0)
         {
+            var floor = detail[level].Limits.MinimumTileSize;
             var side = Math.Min(remaining.Width, remaining.Height);
-            var row = TakeRow(tree, children, index, side, scale, limits.MinimumTileSize);
+            var row = TakeRow(tree, children, index, side, scale, floor);
 
             // Two ways to reach the end of what can be drawn, and both take the same exit: the next
             // child has no area at all, or the row it would form is thinner than the floor. Anything
@@ -227,15 +285,24 @@ public static class TreemapLayout
             // in the row fits. Checking again down in LayRow was the original bug — a child failing
             // there was skipped where it stood while `index` advanced past it, so its bytes were
             // drawn nowhere and counted in no aggregate.
-            if (row.Count == 0 || row.Area / side < limits.MinimumTileSize)
+            //
+            // At a finer level of detail the rest may fit where it does not at this one. Off the
+            // canvas it is not tried, because nothing of it would show.
+            if (row.Count == 0 || row.Area / side < floor)
             {
+                if (level + 1 < detail.Length && Visible(remaining, canvas))
+                {
+                    level++;
+                    continue;
+                }
+
                 Aggregate(tree, children[index..], remaining, canvas, depth, tiles);
                 return;
             }
 
             var thickness = row.Area / side;
 
-            LayRow(tree, children.Slice(index, row.Count), row.Area, thickness, ref remaining, depth, tiles, pending);
+            LayRow(tree, children.Slice(index, row.Count), row.Area, thickness, ref remaining, depth, level, pending);
             index += row.Count;
         }
     }
@@ -327,8 +394,8 @@ public static class TreemapLayout
         double thickness,
         ref Rectangle remaining,
         int depth,
-        List<ExploreTile> tiles,
-        Stack<(int Node, int Depth, Rectangle Frame)> pending)
+        int level,
+        Stack<(int Node, int Depth, Rectangle Frame, int Level)> pending)
     {
         var vertical = remaining.Width >= remaining.Height;
         var side = vertical ? remaining.Height : remaining.Width;
@@ -356,7 +423,7 @@ public static class TreemapLayout
             // fire on a rounding hair — and skipping a child at this point drops it from the
             // picture entirely, because the aggregate that should have stood for it was decided
             // one frame up.
-            pending.Push((child, depth, tile));
+            pending.Push((child, depth, tile, level));
         }
 
         remaining = vertical
@@ -528,8 +595,9 @@ public static class TreemapLayout
     /// two-stage layout (Graphics Interface 2008) is the correction, and it is a different
     /// algorithm.</para>
     /// </summary>
-    private static (float Header, float Gap) FrameOf(double width, double height, LayoutLimits limits)
+    private static (float Header, float Gap) FrameOf(double width, double height, DetailLevel detail)
     {
+        var limits = detail.Limits;
         var gap = limits.ContainerGap;
 
         if (width >= limits.MinimumLabelWidth && height >= (limits.HeaderHeight * 2) + gap)
@@ -545,11 +613,22 @@ public static class TreemapLayout
             return (0, gap);
         }
 
-        return shorter >= smallest ? (0, Math.Min(gap, 1f)) : (0, 0);
+        return shorter >= smallest ? (0, Math.Min(gap, (float)detail.Pixel)) : (0, 0);
     }
 
     /// <summary>Stands for the root among the parts <see cref="BesideTheVolume"/> lays out.</summary>
     private const int Root = int.MaxValue;
 
     private readonly record struct Rectangle(double X, double Y, double Width, double Height);
+
+    /// <summary>
+    /// One level of detail: the limits a region laid out at it is held to, and how wide one of its
+    /// pixels is in the magnified picture. See <see cref="Detail(LayoutLimits, MapViewport)"/>.
+    ///
+    /// <para>The pixel is carried beside the limits because the frame has one measure of its own that
+    /// is a pixel rather than a limit: the hairline round a folder too small for a gap. Left as a
+    /// constant, it was a pixel of the canvas at every level, so a folder framed by one was framed more
+    /// thinly the further the picture was zoomed, and what it held grew and moved.</para>
+    /// </summary>
+    private readonly record struct DetailLevel(LayoutLimits Limits, double Pixel);
 }

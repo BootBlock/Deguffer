@@ -156,7 +156,16 @@ public sealed class ExploreMap : UserControl
         // The outlines go over the picture and under the labels. A label is inset from its shape's
         // edge and an outline runs along it, so the two rarely meet — and where they do, the name
         // of the thing is worth more than the last pixel of the line round it.
-        _layers = new Grid { Children = { _surface, _highlight, _labels } };
+        //
+        // The ground is transparent rather than absent, so the whole control takes the pointer. While
+        // a zoom out is on its way the bitmap is shrunk inside the control, and without a ground the
+        // space around it is not hit-testable: the wheel turns that finish the zoom out, and the
+        // pointer's moves, went to whatever was behind the map instead.
+        _layers = new Grid
+        {
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            Children = { _surface, _highlight, _labels },
+        };
         Content = _layers;
 
         _zoom.Moved += OnZoomMoved;

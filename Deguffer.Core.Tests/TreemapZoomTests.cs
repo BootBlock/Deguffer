@@ -81,6 +81,45 @@ public sealed class TreemapZoomTests
     }
 
     /// <summary>
+    /// What a zoom already showed stays exactly where the magnified picture put it. Laid out afresh at
+    /// each zoom instead, a folder's contents would shuffle as the zoom settled, and the file under the
+    /// pointer when the wheel turned would not be the file under it when the picture stopped.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 4)]
+    [InlineData(2, 8)]
+    [InlineData(3, 40)]
+    [InlineData(1.5, 16)]
+    public void EveryShapeAZoomShowedKeepsItsPlaceInThePictureAtAGreaterZoom(double near, double far)
+    {
+        var tree = MixedTree();
+        var limits = LayoutLimits.Default;
+
+        var before = MapViewport.Anchored(near, 0.62, 0.41, 0.5, 0.5);
+        var after = MapViewport.Anchored(far, 0.62, 0.41, 0.5, 0.5);
+
+        var shown = InPicture(TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: before), before);
+        var zoomed = InPicture(TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: after), after);
+
+        var compared = 0;
+
+        foreach (var (node, place) in zoomed)
+        {
+            if (shown.TryGetValue(node, out var was))
+            {
+                Assert.Equal(was.X, place.X, 1e-5);
+                Assert.Equal(was.Y, place.Y, 1e-5);
+                Assert.Equal(was.Width, place.Width, 1e-5);
+                Assert.Equal(was.Height, place.Height, 1e-5);
+                compared++;
+            }
+        }
+
+        Assert.True(compared > 10, $"only {compared} shapes were drawn at both zooms, which proves little");
+        Assert.True(zoomed.Count > compared, "the greater zoom drew nothing the lesser one did not");
+    }
+
+    /// <summary>
     /// A folder past the depth limit stays shut however far it is magnified unless the limit grows with
     /// the zoom, and then the detail the zoom was for never appears.
     /// </summary>
@@ -91,6 +130,7 @@ public sealed class TreemapZoomTests
         var limits = LayoutLimits.Default with { MinimumTileSize = 1, MaximumDepth = 3 };
 
         var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
+
         // A folder the limit left shut, which is what a zoom into it has to open.
         var deepest = whole.Where(tile => tile.IsNode && ((ISizedTree)tree).IsContainer(tile.Node)).MaxBy(tile => tile.Depth);
 
@@ -281,6 +321,62 @@ public sealed class TreemapZoomTests
             [.. sizes.Select((size, i) => new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, size))]);
 
         return builder.Build(order);
+    }
+
+    /// <summary>
+    /// Where each node's shape falls in the whole picture, as fractions of it, which is what a zoom
+    /// must leave alone. Aggregates are left out: they stand for no node, and a zoom is meant to open
+    /// them.
+    /// </summary>
+    private static Dictionary<int, (double X, double Y, double Width, double Height)> InPicture(
+        IReadOnlyList<ExploreTile> tiles, MapViewport viewport)
+    {
+        var across = Width * viewport.Zoom;
+        var down = Height * viewport.Zoom;
+
+        return tiles
+            .Where(tile => tile.IsNode)
+            .ToDictionary(
+                tile => tile.Node,
+                tile => (
+                    viewport.Left + (tile.X / across),
+                    viewport.Top + (tile.Y / down),
+                    tile.Width / across,
+                    tile.Height / down));
+    }
+
+    /// <summary>
+    /// Folders of every size, several deep, with runs of files too small to draw at the whole
+    /// picture's scale: the shape a zoom is for. Sizes come from a fixed seed, so the tree is the same
+    /// every run.
+    /// </summary>
+    private static ExploreTree MixedTree()
+    {
+        var random = new Random(155);
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var folders = new Queue<(int Node, int Depth)>();
+
+        folders.Enqueue((ExploreTreeBuilder.RootNode, 0));
+
+        while (folders.TryDequeue(out var folder))
+        {
+            var subfolders = folder.Depth < 5 ? random.Next(2, 5) : 0;
+            var files = random.Next(5, 60);
+
+            var first = builder.AddChildren(folder.Node, [
+                .. Enumerable.Range(0, subfolders).Select(i =>
+                    new ExploreChild($"dir{folder.Depth}-{i}", IsDirectory: true, IsLink: false, Size: 0)),
+                .. Enumerable.Range(0, files).Select(i =>
+                    new ExploreChild($"file{i}.bin", IsDirectory: false, IsLink: false, (long)Math.Pow(10, random.NextDouble() * 6) + 1)),
+            ]);
+
+            for (var i = 0; i < subfolders; i++)
+            {
+                folders.Enqueue((first + i, folder.Depth + 1));
+            }
+        }
+
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     /// <summary>A folder holding most of the tree, with files in it, beside one small file.</summary>
