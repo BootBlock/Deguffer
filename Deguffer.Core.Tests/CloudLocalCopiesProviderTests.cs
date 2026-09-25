@@ -411,6 +411,23 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
         Assert.Equal(200, result.BytesRequested);
     }
 
+    /// <summary>
+    /// A root the user reaches through a link of their own resolves somewhere else as a whole, and the
+    /// files under it are still released: each is checked against its place under where the root is.
+    /// </summary>
+    [Fact]
+    public async Task ReleasesUnderARootReachedThroughALinkOfItsOwn()
+    {
+        var provider = CreateProvider();
+        _cloud.File(At("goes.txt"), onDisk: 200);
+        _cloud.Locate(_root, @"D:\Relocated\OneDrive");
+
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.Equal([At("goes.txt")], _cloud.Unpinned);
+        Assert.Equal(200, result.BytesRequested);
+    }
+
     /// <summary>A refusal to list the roots is never read as there being none.</summary>
     [Fact]
     public async Task SaysSoWhenWindowsWillNotListTheRoots()

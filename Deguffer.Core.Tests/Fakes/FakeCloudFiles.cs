@@ -20,6 +20,7 @@ public sealed class FakeCloudFiles : ICloudFiles
     private readonly Dictionary<string, SyncProviderState> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _redirected = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _rootLocations = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Set to make <see cref="SyncRoots"/> answer as Windows does when it will not list them.</summary>
     public bool RefusesToListRoots { get; set; }
@@ -116,11 +117,26 @@ public sealed class FakeCloudFiles : ICloudFiles
     /// </summary>
     public void Redirect(string path, string actually) => _redirected[path] = actually;
 
+    /// <summary>
+    /// Make a root really live at <paramref name="location"/>, as one the user reaches through a link of
+    /// their own does: every file under it then resolves under that location.
+    /// </summary>
+    public void Locate(string root, string location) => _rootLocations[root] = location;
+
     public Placeholder? PlaceholderAt(string path) => _entries.GetValueOrDefault(path)?.Placeholder;
 
     public IReadOnlyList<SyncRoot>? SyncRoots() => RefusesToListRoots ? null : [.. _roots];
 
-    public string? Resolve(string path) => _entries.ContainsKey(path) ? path : null;
+    public string? Resolve(string path) =>
+        _entries.ContainsKey(path) ? _rootLocations.GetValueOrDefault(path, path) : null;
+
+    /// <summary>Where a file's handle would resolve to: its own redirection, or its place under its root's location.</summary>
+    private string ResolvedFile(string path) =>
+        _redirected.GetValueOrDefault(path)
+        ?? _rootLocations
+            .Where(root => LongPath.Contains(root.Key, path))
+            .Select(root => Path.Join(root.Value, Path.GetRelativePath(root.Key, path)))
+            .FirstOrDefault(path);
 
     public SyncProviderState ProviderState(string syncRoot) =>
         _states.GetValueOrDefault(syncRoot, SyncProviderState.Unknown);
@@ -153,8 +169,7 @@ public sealed class FakeCloudFiles : ICloudFiles
             case null:
                 return new ReleaseAnswer(ReleaseResult.Gone);
 
-            case not null when !string.Equals(
-                _redirected.GetValueOrDefault(path, path), resolvedPath, StringComparison.OrdinalIgnoreCase):
+            case not null when !string.Equals(ResolvedFile(path), resolvedPath, StringComparison.OrdinalIgnoreCase):
                 return new ReleaseAnswer(ReleaseResult.NoLongerEligible);
 
             case { Refused: true }:
