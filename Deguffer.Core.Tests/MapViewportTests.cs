@@ -23,14 +23,21 @@ public sealed class MapViewportTests
         Assert.Equal((0.25, 0.75), unset.PictureAt(0.25, 0.75));
     }
 
-    [Fact]
-    public void ZoomingAtAPointKeepsWhatIsUnderItUnderIt()
+    /// <summary>
+    /// Including a zoom asked for past the maximum, as a run of wheel turns at the limit asks. The
+    /// position has to be worked out at the zoom that is kept, or the picture slides out from under the
+    /// pointer at the one moment nothing else is moving.
+    /// </summary>
+    [Theory]
+    [InlineData(4, 4)]
+    [InlineData(1000, MapViewport.MaximumZoom)]
+    public void ZoomingAtAPointKeepsWhatIsUnderItUnderIt(double asked, double kept)
     {
-        var viewport = MapViewport.Anchored(4, pictureX: 0.4, pictureY: 0.55, screenX: 0.3, screenY: 0.6);
+        var viewport = MapViewport.Anchored(asked, pictureX: 0.4, pictureY: 0.55, screenX: 0.3, screenY: 0.6);
 
         var (x, y) = viewport.PictureAt(0.3, 0.6);
 
-        Assert.Equal(4, viewport.Zoom, Precision);
+        Assert.Equal(kept, viewport.Zoom, Precision);
         Assert.Equal(0.4, x, Precision);
         Assert.Equal(0.55, y, Precision);
     }
