@@ -50,6 +50,19 @@ public sealed record BuildDirectoryKind
     public IReadOnlyList<string> AnyOfSiblings { get; init; } = [];
 
     /// <summary>
+    /// File extensions, with their dot, each of which must end the name of at least one file beside
+    /// the directory. Empty means no such requirement.
+    ///
+    /// <para>For a toolchain whose manifest is named after the project rather than after the tool.
+    /// Unreal is the case: a project is marked by <c>&lt;Name&gt;.uproject</c>, so no one name sits
+    /// beside every project, and a name list could not state the evidence at all.</para>
+    ///
+    /// <para>Every file that matches is named as a survivor too, as a named sibling is. It is the
+    /// project's own descriptor, and the one file a rule reaching one entry too far would take.</para>
+    /// </summary>
+    public IReadOnlyList<string> RequiredSiblingExtensions { get; init; } = [];
+
+    /// <summary>
     /// Entries that must all be inside the directory — the marker the tool writes into its own
     /// output, which is the strongest evidence available because nothing else writes it.
     /// </summary>
@@ -71,4 +84,19 @@ public sealed record BuildDirectoryKind
     /// for why they are declared rather than discovered.
     /// </summary>
     public IReadOnlyList<string> LockFiles { get; init; } = [];
+
+    /// <summary>
+    /// Files, by full path, that the tool may hold open while it has a given project open, found in
+    /// that project folder rather than named in advance. Null where the tool keeps no such file.
+    ///
+    /// <para>Unreal is the case: its editor works in the engine's folder and holds nothing in the
+    /// build directory, but it holds its log in the project's <c>Saved\Logs</c> open for the whole
+    /// session, under a name the project and the command line choose. The veto asks Windows which of
+    /// these are held, so one that is not held costs a question and never a refusal.</para>
+    /// </summary>
+    public Func<string, IReadOnlyList<string>>? ProjectLockFiles { get; init; }
+
+    /// <summary>Every file the veto asks about for a directory in <paramref name="project"/>.</summary>
+    public IReadOnlyList<string> LockFilesFor(string project) =>
+        ProjectLockFiles is null ? LockFiles : [.. LockFiles, .. ProjectLockFiles(project)];
 }

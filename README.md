@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Forty-five sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Fifty sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Forty-six providers, each holding its own knowledge of one location. A provider reports "not
+Fifty providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -140,10 +140,13 @@ installed" cleanly on a machine without that toolchain.
 | Azure Functions Core Tools releases | |
 | Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |
 | Steam shader pre-cache | One item per game, in every library Steam's own list names; never the games beside it |
+| Unreal Engine derived data cache | The cache every project shares, in both the older folder and each Zen store; a store is left alone while its server runs |
 | Node.js project dependencies | `node_modules` under your own source trees |
 | Python virtual environments | |
 | Rust build output | `target` directories under your own source trees |
 | Unity project library | |
+| Unreal project intermediate files | `Intermediate` beside a `.uproject` under your own source trees; never `Saved` or `Binaries` |
+| Unreal project derived data cache | A project's own `DerivedDataCache` under your own source trees |
 | Superseded application versions | Older versions a Squirrel-updated app still keeps |
 | Temporary files | Emptied in place, taking only what nothing has touched for seven days |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |

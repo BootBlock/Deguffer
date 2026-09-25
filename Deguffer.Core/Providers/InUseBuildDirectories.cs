@@ -41,14 +41,14 @@ internal static class InUseBuildDirectories
     /// The provider's identification of a candidate, answering with its project folder or null. The
     /// same call its plan makes, so a directory the plan declines is never declared as in use.
     /// </param>
-    /// <param name="lockFiles">The lock files the plan hands to the veto.</param>
+    /// <param name="lockFilesOf">The lock files the plan hands to the veto, for each directory.</param>
     public static IReadOnlyList<ToolRoot> Declare(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
         IReadOnlyList<SourceRoot> roots,
         IReadOnlyList<string> names,
         Func<string, string?> recognise,
-        IReadOnlyList<string> lockFiles,
+        Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
         CancellationToken ct)
     {
         if (roots.Count == 0)
@@ -95,7 +95,7 @@ internal static class InUseBuildDirectories
             }
         }
 
-        var live = LiveTreeVeto.Apply(inspector, recognised, lockFiles, ct);
+        var live = LiveTreeVeto.Apply(inspector, recognised, lockFilesOf, ct);
 
         return [.. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false))];
     }

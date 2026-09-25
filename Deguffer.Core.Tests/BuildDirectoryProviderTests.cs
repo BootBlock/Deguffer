@@ -9,14 +9,14 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The four providers that remove a whole build directory out of a user's own source folder.
+/// The providers that remove a whole build directory out of a user's own source folder.
 ///
 /// What they have in common is where the risk is. Every other provider deletes inside a directory a
 /// toolchain owns; these delete inside the developer's project, one folder away from work that
 /// exists nowhere else. So the questions are always the same three: does the evidence actually prove
 /// what the directory is, does the source beside it survive, and is anybody using it right now.
 ///
-/// Everything here runs through the fakes and a scratch tree. No Unity, Cargo, Node or Python is
+/// Everything here runs through the fakes and a scratch tree. No Unity, Unreal, Cargo, Node or Python is
 /// installed for any of it, which is the point — a rule that could only be proved on a machine with
 /// the toolchain would not be proving the safety rule at all.
 /// </summary>
@@ -552,6 +552,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Cargo,
         Node,
         Python,
+        Unreal,
     }
 
     /// <summary>
@@ -572,6 +573,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Cargo)]
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.Unreal)]
     public async Task ExploreRefusesABuildDirectoryAProgramIsWorkingInTheProjectOf(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -616,6 +618,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Cargo)]
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.Unreal)]
     public async Task ExploreRefusesABuildDirectoryAProgramIsRunningFromInside(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -641,6 +644,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Cargo)]
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.Unreal)]
     public async Task ExploreAllowsABuildDirectoryAProgramIsOnlyBelowTheProjectOf(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -667,6 +671,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Cargo)]
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.Unreal)]
     public async Task ExploreDeclaresNothingOutsideEveryApprovedRoot(Toolchain toolchain)
     {
         ApproveRootInProfile();
@@ -688,6 +693,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Cargo)]
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.Unreal)]
     public async Task ExploreDeclaresNothingTheRecogniserRejects(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -983,6 +989,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Cargo => Cargo(live: live),
         Toolchain.Node => Node(live: live),
         Toolchain.Python => Python(live: live),
+        Toolchain.Unreal => Unreal(live: live),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
 
@@ -993,6 +1000,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Cargo => BuildDirectoryFixture.CreateCargoProject(project),
         Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project),
         Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project),
+        Toolchain.Unreal => BuildDirectoryFixture.CreateUnrealProject(project),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
 
@@ -1006,6 +1014,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Cargo => BuildDirectoryFixture.CreateCargoProject(project, writeCacheTag: false),
         Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project, lockFile: null),
         Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project, writeConfig: false),
+        Toolchain.Unreal => BuildDirectoryFixture.CreateUnrealProject(project, descriptor: null),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
 
@@ -1051,6 +1060,16 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         scanner ??= new FakeDirectoryScanner();
 
         return new PythonVirtualEnvironmentProvider(
+            _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
+            new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    }
+
+    private BuildDirectoryProvider Unreal(
+        IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null, IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
+
+        return new UnrealIntermediateProvider(
             _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
             new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
     }

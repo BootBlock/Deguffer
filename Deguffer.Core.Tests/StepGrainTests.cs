@@ -48,6 +48,8 @@ public class StepGrainTests
             "squirrel-superseded-versions",
             "steam-shader-cache",
             "unity-library",
+            "unreal-intermediate",
+            "unreal-project-ddc",
             "vscode-cpptools",
         ];
 
