@@ -3286,6 +3286,9 @@ Anything else is left alone, and Deguffer says so.
 the files and can leave the folders that held them, and an AMD machine keeps `C:\AMD` for its
 chipset driver alone. Neither is shown as something to reclaim.
 
+**A package an installer is running from is left alone**, and so is one a program is working in,
+because it is then the installation in progress.
+
 **Each release is its own item**, so you can keep the one you might reinstall. None of these
 vendors offers a command that removes its downloaded packages, so this is the path-based case §5.2
 governs rather than §5.1's command.
@@ -3342,6 +3345,107 @@ location nobody has measured out of the default selection.
 - An NVIDIA forum thread reporting crashes after files in the NVIDIA app's update store were
   removed:
   <https://www.nvidia.com/en-us/geforce/forums/game-ready-drivers/13/569266/grd-post-processing-folder-in-nividia-corpapp-fi/>
+
+---
+
+## Autodesk installer files
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `C:\Autodesk`, where `C:` is the drive Windows is installed on |
+| **Method** | Delete the recognised installer folders one by one, never `C:\Autodesk` itself |
+| **Typical size** | Not measured: the folder was not on the machine this was researched on. Autodesk puts it at 5 to 30 GB |
+
+### What it is
+
+An Autodesk installer extracts the whole product onto the disk before it installs anything, and
+runs its setup from that copy. The installed product runs from `Program Files`, so the copy has no
+part to play once the installation has finished, and nothing removes it. Every release and every
+update adds its own:
+
+| Folder | What wrote it |
+| --- | --- |
+| `C:\Autodesk\<download>_dlm` | A product or an update downloaded in the browser, extracted into a folder named after the file it came from, such as `AutoCAD_2024_English_Win_64bit_dlm` |
+| `C:\Autodesk\WI` | Where the installers keep what they download. A product downloaded from 2025 on is extracted here as well |
+| `C:\Autodesk\IM` | Where the current installer keeps what it downloads |
+
+Autodesk's own guidance is that the folder "only contains installation files, not the programs",
+and that clearing it can free 5 to 30 GB.
+
+### What Deguffer does
+
+**It never lists the top of the drive.** `C:\Autodesk` sits beside `Program Files`, `Users` and
+`Windows`, so Deguffer reaches it by name, checks that it is not a link, and lists only
+`C:\Autodesk` itself. Inside it, it recognises `WI`, `IM`, and any folder whose name ends in
+`_dlm`. Anything else is left alone, and Deguffer says so.
+
+**A folder with nothing in it is not offered**, and neither is a `C:\Autodesk` that holds only
+the licence server described below.
+
+**Each folder is its own item**, so you can keep the product you expect to repair. Autodesk offers
+no command that removes these, so this is the path-based case §5.2 governs rather than §5.1's
+command.
+
+**It leaves a folder alone while an installer runs from it**, because an installer runs its setup
+from inside the folder it extracted, and that folder is then the installation in progress. It also
+warns while Autodesk's current installer is running, since that one runs from `Program Files` and
+writes into `WI` and `IM`.
+
+### What is protected
+
+Autodesk's advice in one article is to delete the whole folder. Its knowledge base says otherwise
+elsewhere, and Deguffer follows the more careful answer:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `C:\Autodesk\Network License Manager` | Where the network licence server installs by default and runs from. Autodesk: "Don't delete 'Network License Manager' folder." Removing it stops every seat it licenses |
+| `C:\Autodesk\Deployments` | Where Autodesk's own instructions suggest an administrator keeps the deployment images they build. Each one is their own work |
+| `C:\Autodesk\Access` | The updates Autodesk Access downloads and installs in the background. Deguffer cannot tell when it has finished with them |
+
+Each is refused by name whatever it holds, and checked after every clean. Deguffer also refuses to
+delete through a link: if `C:\Autodesk` or a folder in it is a junction to another drive, it removes
+nothing there and tells you why.
+
+### What it costs you
+
+**Your installed products keep working.** Repairing one, or installing some updates, asks for
+these files, and Autodesk's answer is to download and extract the product again first. Deguffer
+says so before you clean. A 2022 or later product can then fail to reinstall or uninstall with "The feature you are trying to use is on
+a network resource that is unavailable". Autodesk documents the fix, which is to remove that
+product's `SourceList` registry key.
+
+### Why Tier 2, not Tier 1
+
+The proposal for this location said Tier 1, because the installed products do not depend on these
+files. Tier 1 also asks that whatever wrote the content re-creates it on demand, and nothing
+re-creates an extracted installer: the next repair or update needs a download of several
+gigabytes. That is Tier 2's consequence. It also keeps a location nobody has measured out of the
+default selection.
+
+### Sources
+
+- Autodesk, "C drive space full due to Autodesk software", for deleting the folder and the 5 to
+  30 GB figure:
+  <https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/C-drive-space-issue-due-to-Autodesk-software.html>
+- Autodesk, "Can files in folder C:\Autodesk be deleted?", for the `Network License Manager`
+  exception:
+  <https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/C-Autodesk-contain-to-many-files.html>
+- Autodesk, on what `WI`, `IM` and `Access` hold:
+  <https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Purpose-of-C-Autodesk-IM-BackUps-folder.html>
+- Autodesk, "Finding downloaded files after installation", for the `_dlm` folders:
+  <https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Finding-downloaded-files-after-installation.html>
+- Autodesk, on installing a product downloaded in the browser from 2025 on, which extracts into `WI`:
+  <https://www.autodesk.com/support/download-install/individuals/configure/install-your-product>
+- Autodesk, on deploying from an Autodesk Account, which gives `C:\Autodesk\Deployments` as the
+  example image path:
+  <https://www.autodesk.com/support/download-install/admins/account-deploy/deploy-from-autodesk-account>
+- Autodesk, on installing updates once the folder has been deleted:
+  <https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/How-to-install-updates-after-deleting-the-C-Autodesk-folder.html>
+- Autodesk, on the "network resource that is unavailable" error and its fix:
+  <https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/The-feature-you-are-trying-to-use-is-on-a-network-resource-that-is-unavailable-when-installing-an-Autodesk-2022-product.html>
 
 ---
 
@@ -4693,6 +4797,34 @@ installer's own `--nocache` switch, run before the next repair or modify.
 `InstallCleanup.exe` turns up in search results for this and is not an answer. Microsoft documents it
 as a last resort after a repair or an uninstall has already failed, and warns that it can remove
 features belonging to other products.
+
+### Autodesk's folders in your profile — the running application, and data found nowhere else
+
+`C:\Autodesk` is offered, see [Autodesk installer files](#autodesk-installer-files). Autodesk's
+folder under `%LOCALAPPDATA%` is a different thing, and two of its children are large enough to
+look like the same kind of leftover. Neither is:
+
+| Location | Measured | What it really is |
+| --- | ---: | --- |
+| `%LOCALAPPDATA%\Autodesk\webdeploy` | 5.32 GB | **Fusion itself.** Fusion installs here rather than in `Program Files`, one folder per version named by a long hash, and one of those held 5.24 GB of the running application |
+| `%LOCALAPPDATA%\Autodesk\Common\Material Library` | 356.4 MB | The materials and textures Autodesk products share for rendering, installed with them. Rendering fails until a repair puts it back |
+
+**`webdeploy` may one day be reclaimable, and is not yet.** A launcher beside the version folders
+names the one it starts, in the `cmd =` line of `FusionLauncher.exe.ini`, so any other version
+folder could in principle be treated as stale. That was seen only on a machine with no stale
+folder, so the rule has never been seen to tell a stale folder from a live one. Autodesk documents
+no manual deletion. It stays refused until someone checks the rule against a machine that has a
+genuinely stale version.
+
+Beside them, and never offered at all:
+
+- **`Identity Services` and `Web Services`**, which hold your Autodesk sign-in.
+- **Fusion's upload queue**, in `Autodesk Fusion 360\<id>\W.login\Q`. Autodesk describes it as
+  "the directory where files waiting to be uploaded are stored": designs that exist nowhere else
+  yet.
+
+Explore describes `webdeploy` and `Material Library` when you point at them, so a reader who finds
+them while looking for space learns what they are before deleting either.
 
 ### .NET workload packs — the command that clears them cannot say what it would free
 

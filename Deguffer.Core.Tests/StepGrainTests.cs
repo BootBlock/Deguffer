@@ -36,6 +36,7 @@ public class StepGrainTests
         string[] items =
         [
             "affinity-model-cache",
+            "autodesk-installers",
             "azure-functions-tools",
             "capture-one-cache",
             "cargo-target",
