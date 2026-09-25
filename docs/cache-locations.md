@@ -2608,9 +2608,7 @@ and works wherever the test runner does, so neither of those shows which profile
 command line does: Playwright starts Chromium with `--user-data-dir=` and Firefox with `-profile`,
 and Puppeteer uses `--user-data-dir=` and `--profile`, each naming the profile's path. Deguffer reads
 the command line of every running program it may inspect, and leaves alone any profile one was
-started with. It also leaves alone a profile a program is running from or working in. The
-[Windows temporary folders](#windows-temporary-folders) row asks the same question, so it leaves
-these profiles alone too.
+started with. It also leaves alone a profile a program is running from or working in.
 
 The age limit is the other half. A test that is running now has a profile it wrote to moments ago,
 so only profiles nothing has touched for the number of days set for temporary files are offered.
@@ -2636,8 +2634,8 @@ leftover folder is the whole of what this row is for.
 A profile made for one launch holds nothing a later launch reads, and nothing of yours. There is no
 command to prefer under §5.1, because the only cleanup the tools have is the exit hook that never ran.
 
-The Windows temporary folders row reaches these folders too, when they are old enough. Choosing
-both removes each profile once.
+The [Windows temporary folders](#windows-temporary-folders) row leaves every profile to this one,
+so each is offered once, here.
 
 ---
 
@@ -3710,7 +3708,14 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
   filter cannot: a program that has been running for a month, working in a scratch directory whose
   files are all older than the cut-off.
 
-The size shown already has both of those taken out of it, so the number the scan reports is what the
+**An entry a tool's own row offers is left to that row.** Where Deguffer knows what wrote an entry
+of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
+scratch folder — the row for that tool offers it, under that tool's rules, and this row leaves it
+out and says which rows have it. So each entry is counted once, and an entry that row would keep is
+not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. See
+[Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the two sections after it.
+
+The size shown already has all of those taken out of it, so the number the scan reports is what the
 clean will actually take — with the one exception described next.
 
 **A file Windows will not release is left where it is, and the next scan stops offering it.**
@@ -3823,6 +3828,214 @@ this on a schedule, Storage Sense is the right answer and Settings is where to t
 
 ---
 
+## Tool caches in temporary folders
+
+**Tier 1 — regenerable cache.** Offered and pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Named entries in this account's temporary folders: `node-compile-cache`, `flutter_tools.<number>`, `dart_test.<number>`, `mozilla-temp-files`, and the session folders under `Roslyn` and `VBCSCompiler`. Also the folder `NODE_COMPILE_CACHE` names, where that is set |
+| **Method** | Delete what each tool's own name identifies, under the live check that tool allows |
+| **Typical size** | About 2 GB on one workstation, most of it Node's compile cache |
+
+### What it is
+
+A temporary folder belongs to nobody, so nothing in it can be attributed by where it sits. On the
+workstation this was measured on, a 1.39 GB folder with a random name held Visual Studio's staged
+update, and a 7.27 GB one was a running program's live scratch. An age rule on its own would have
+offered both. What makes an entry here offerable is a name that only one tool writes, taken from
+that tool's own source:
+
+| Entry | What wrote it |
+| --- | --- |
+| `node-compile-cache` | Node.js, when a program switches on its module compile cache. It has no size limit and nothing ever removes old entries, so it grows with every Node version used. It measured 1.5 GB across about 237,000 files |
+| `flutter_tools.<number>` | The Flutter tool, for one run. It removes the folder when it exits, and leaves it when the run is killed |
+| `dart_test.<number>` | Dart's test runner, on the same terms |
+| `mozilla-temp-files` | Firefox, for media, printing and the clipboard. Firefox deletes the folder itself once it has been idle for a while |
+| A 32-character folder under `Roslyn` or `VBCSCompiler` | Roslyn, the compiler behind C# and Visual Basic, for one editing or build session: copies of the analyzers it loaded, so the originals are not locked |
+
+### What Deguffer does
+
+It removes only entries these names identify, and leaves everything else in the temporary folder to
+the *Temporary files* row. Each tool gets the live check its own design allows, and none of them
+depends on age:
+
+- **Roslyn says which sessions are alive, and Deguffer asks it the same way.** Roslyn holds a mutex
+  named after each session folder for as long as the session runs, and when it starts it deletes
+  the folders whose mutex has gone. Deguffer removes exactly those folders and no others, so the two
+  cannot disagree.
+- **A Flutter or Dart test folder is left alone while Dart is running.** Its name is a random number,
+  so nothing ties a folder to the run using it. The only safe answer is that no run is going on.
+- **Firefox's folder is left alone while Firefox is running**, or Thunderbird, LibreWolf,
+  Waterfox, Floorp, Zen, Pale Moon, SeaMonkey or Basilisk, which are built on the same code.
+- **Node's cache needs no check.** Node reads a cache file whole when it loads a module and writes new
+  entries only when it exits. A file that has gone is a cache miss, and the module is compiled again.
+
+Any recognised folder a running program is working inside is left alone as well, whatever its tool.
+
+`NODE_COMPILE_CACHE` moves Node's cache anywhere. Where it is set, Deguffer treats that folder as
+Node's and removes only the per-version folders Node makes inside it, named for the Node version,
+the architecture and a code-cache tag. Anything else in the folder stays, so a setting that points
+at the wrong folder costs nothing. A setting that names a drive root, or a folder holding a
+temporary folder or one Windows is built out of, is declined outright, and the row says so: other
+rows remove things there, and this row would otherwise count each of those removals as a failure.
+
+### What is protected
+
+The temporary folder itself. `Roslyn` and `VBCSCompiler`, their `AnalyzerAssemblyLoader` and
+`AnalyzerPathResolver` folders, Roslyn's shared analyzer cache, and anything in them that is not a
+session folder. A session that is still open. The folder `NODE_COMPILE_CACHE` names, and everything
+in it that is not a per-version folder. Deguffer does not delete through a link, so a junction named
+like one of these entries is left alone.
+
+### What it costs you
+
+Nothing is lost. Node compiles the modules it loads again, a little more slowly the first time.
+Roslyn copies the analyzers it needs for the next session.
+
+### Why Tier 1
+
+Node's documentation says to clean its cache by removing the directory, and that it is recreated
+the next time it is used. A Flutter or test-runner folder belongs to a run that has ended. Firefox
+removes its own folder. A Roslyn session's copies are of analyzers that are still where they were
+copied from.
+
+### Sources
+
+- [Node.js: module compile cache](https://nodejs.org/api/module.html#module-compile-cache)
+- [Flutter tool: the temporary directory it makes for each run](https://github.com/flutter/flutter/blob/master/packages/flutter_tools/lib/src/base/file_system.dart)
+- [Firefox: the anonymous temporary files folder](https://github.com/mozilla-firefox/firefox/blob/main/xpcom/io/nsAnonymousTemporaryFile.cpp)
+- [Roslyn: shadow copies and the session mutex](https://github.com/dotnet/roslyn/blob/main/src/Compilers/Core/Portable/DiagnosticAnalyzer/ShadowCopyAnalyzerPathResolver.cs)
+
+---
+
+## Installer downloads in temporary folders
+
+**Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and it needs an extra
+acknowledgement before it runs.
+
+| | |
+| --- | --- |
+| **Location** | Named entries in this account's temporary folders: VS Code's updater folder, `DockerDesktopUpdates`, the packages the Visual Studio Installer stages, and Blender's session folders |
+| **Method** | Delete what each application's own name identifies, only while that application is not running |
+| **Typical size** | 1.9 GB on one workstation, most of it Visual Studio's staged Windows SDK |
+
+### What it is
+
+Applications that update themselves download the new installer into the temporary folder and keep
+it there:
+
+| Entry | What wrote it |
+| --- | --- |
+| `vscode-stable-user-x64` and the other forms of that name | VS Code's updater: the downloaded installer, and the files it uses to apply an update when VS Code restarts |
+| `DockerDesktopUpdates` | Docker Desktop's updater, when it downloads updates in the background |
+| The packages in the Visual Studio Installer's staging folder | The Visual Studio Installer. It downloads packages into a randomly named folder and keeps them for the next install or update |
+| `blender_<letter><five digits>` | Blender, for one session. It removes the folder on exit, and leaves it when Blender is killed |
+
+The Visual Studio Installer's folder has a random name that cannot be told from a thousand others.
+Deguffer finds it the only reliable way: each installed Visual Studio records it, as
+`temporaryCache`, in a state file under `%LOCALAPPDATA%\Microsoft\VisualStudio\Packages\_Instances`.
+Deguffer follows that only to a folder directly inside one of your temporary folders, and removes
+only the packages in it, named for the package and a 20-digit code.
+
+### What Deguffer does
+
+Everything here waits for its application to close. None of these names ties a folder to the
+process using it, and VS Code applies a downloaded update from its folder when it restarts, so
+deleting while it runs can change what the update does. Docker does not publish its update
+behaviour, so it gets the same treatment. The Visual Studio Installer waits for its installer and
+its background downloader. A folder any running program is working inside is left alone as well.
+
+**Blender's recovery files are recognised so that nothing takes them.** `quit.blend` and the
+autosave files sit loose in the temporary folder, and hold work that may never have been saved
+anywhere else. Before this row existed, the *Temporary files* row would take them once they were a
+week old. This row names them, keeps them, and checks afterwards that they are still there.
+
+### What is protected
+
+The temporary folder itself. The Visual Studio Installer's staging folder, and anything in it that
+is not a staged package. `quit.blend`, and every Blender autosave. Anything an application is using.
+Among VS Code's other folders, `vscode-typescript` is the TypeScript server's working folder while
+VS Code runs, and it does not match.
+
+### What it costs you
+
+The next update downloads what it needs again. For Visual Studio that can be more than a gigabyte:
+the installer keeps these packages so that its next update does not have to download them.
+
+A Blender session folder costs something different. A bake made for a file that was never saved is
+written into the session folder. If you recover that file later, the bake is gone and has to be
+made again.
+
+### Why Tier 2, not Tier 1
+
+Nothing re-creates an installer by itself. The application downloads it again when it next needs it,
+which is Tier 2's consequence exactly. The Visual Studio Installer keeps its packages on purpose, and
+the Blender case is a bake that has to be made again.
+
+### Sources
+
+- [VS Code: where the updater downloads](https://github.com/microsoft/vscode/blob/main/src/vs/platform/update/electron-main/updateService.win32.ts)
+- [Docker Desktop: downloading updates in the background](https://docs.docker.com/desktop/settings-and-maintenance/settings/)
+- [Visual Studio: downloading updates](https://learn.microsoft.com/en-us/visualstudio/install/update-visual-studio)
+- [Blender: the session folder and its recovery files](https://github.com/blender/blender/blob/main/source/blender/blenkernel/intern/appdir.cc)
+
+---
+
+## Tool logs in temporary folders
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and the confirmation says the loss is
+permanent.
+
+| | |
+| --- | --- |
+| **Location** | `DiagOutputDir\RdClientAutoTrace` and `DiagOutputDir\Windows365\Logs`, `servicehub\logs`, and `vscode-inno-updater-<time>.log`, in this account's temporary folders |
+| **Method** | Empty each log folder in place, and delete the updater's log files |
+| **Typical size** | 569 MB of Remote Desktop traces on one workstation. One report puts ServiceHub's logs past 6 GB |
+
+### What it is
+
+| Entry | What wrote it |
+| --- | --- |
+| `DiagOutputDir\RdClientAutoTrace` | The Remote Desktop client, which records traces of every connection automatically in case one has to be diagnosed |
+| `DiagOutputDir\Windows365\Logs` | The Windows App, on the same terms |
+| `servicehub\logs` | ServiceHub, the services behind Visual Studio and the C# tooling in VS Code |
+| `vscode-inno-updater-<time>.log` | The helper VS Code's updater runs to replace its files |
+
+None of these is read back by anything. Microsoft's troubleshooting pages send a person to them by
+hand, and nothing limits how much they keep.
+
+### What Deguffer does
+
+It empties the folders the logs are written into and leaves the folders, because the tools write
+into them again. `DiagOutputDir` is shared by more than one Microsoft client, so only the two log
+folders Deguffer knows inside it are emptied, and anything else in it stays. No application has to
+be closed: a log that is still being written is held open, Windows refuses to delete it, and it
+stays.
+
+### What is protected
+
+The temporary folder itself. `DiagOutputDir`, `servicehub`, and the log folders inside them.
+Everything in `DiagOutputDir` and `servicehub` that is not one of those log folders.
+
+### What it costs you
+
+The record of past connections, services and updates. Nothing depends on it, but it is what support
+asks for after something has gone wrong, and it cannot be had again.
+
+### Why Tier 3
+
+A log is a record, and nothing rebuilds it. This project treats every log that way, and these are no
+different for sitting in a temporary folder.
+
+### Sources
+
+- [Remote Desktop client: where its traces are](https://learn.microsoft.com/en-us/previous-versions/remote-desktop-client/troubleshoot-client-windows)
+- [Windows App: collecting its logs](https://learn.microsoft.com/en-us/windows-app/troubleshoot-collect-logs)
+- [Visual Studio: log collection, including ServiceHub's](https://devblogs.microsoft.com/setup/visual-studio-and-net-log-collection-utility/)
+
+---
+
 ## Locations deliberately not offered
 
 Being large is not a reason to clean something. These were investigated and left out, and the
@@ -3838,6 +4051,25 @@ for each subfolder.
 
 A provider here is viable, but only as a per-subfolder allow-list where each entry is researched on
 its own. Treating the folder as a unit is exactly the mistake §5.2 exists to prevent.
+
+### Other names in the temporary folder — not identified well enough, or live
+
+The three rows for named tools in temporary folders cover what could be tied to one tool by its
+own source. These were looked at and left to the *Temporary files* row, which offers only what is a
+week old and not in use:
+
+- **`VSTelem` and `VSTelem.Out`.** Visual Studio's responsiveness monitoring creates them, but nothing
+  published says what they hold or whether anything reads them back. They were empty when measured.
+- **`.net` and `_MEI<number>`.** Where .NET single-file applications and PyInstaller applications
+  unpack themselves. A running application loads its code from there, and the owning program can be
+  anything.
+- **`pip-<kind>-<random>`, `pub_<number>`, `MSBuildTemp<…>`.** Each tool's own name shape, but nothing
+  ties a folder to the run using it, and pip keeps some on purpose when asked to.
+- **`chocolatey` and `WinGet`.** Package-manager download caches. §5.1 prefers their own commands, and
+  WinGet's folder holds logs beside its downloads.
+- **Anything in `C:\Windows\Temp`.** The rows for named tools look in this account's temporary
+  folders only. Services running as the system write to the machine's folder, and the live checks
+  answer for this account: a Roslyn session a service holds would read as ended from here.
 
 ### Dart/Flutter pub cache — `clean` uninstalls your global tools
 

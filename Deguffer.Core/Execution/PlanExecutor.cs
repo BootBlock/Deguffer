@@ -433,7 +433,7 @@ public sealed class PlanExecutor(
             progress,
             ct,
             fileSystem: null,
-            new RemovalBounds(KeepRoot: true, step.Spared)).ConfigureAwait(false);
+            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere)).ConfigureAwait(false);
 
         refusals.Replace(step.Path, removal.RefusedAt);
         leftStanding.Record(step.Path, removal.LeftStanding);

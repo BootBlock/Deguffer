@@ -378,6 +378,25 @@ public sealed class CleanupPlannerTests
     /// and so does a new one that arrives at Tier 3 without anybody deciding it should. Tier 3 is
     /// irreversible loss of user data, so arriving there is a decision, never a default.
     /// </summary>
+    /// <summary>
+    /// Every row that owns entries of a temporary folder is handed to the temporary-folder row. One
+    /// left out has its entries counted twice, and a file it keeps — Blender's unsaved work — taken
+    /// there on its age.
+    /// </summary>
+    [Fact]
+    public void TheTemporaryFolderRowLeavesEveryTenantsEntriesToIt()
+    {
+        var planner = CleanupPlanner.CreateDefault();
+        var temporary = Assert.Single(planner.Providers.OfType<TempDirectoryProvider>());
+        var tenants = planner.Providers.OfType<ITemporaryFolderTenant>().ToList();
+
+        Assert.NotEmpty(tenants);
+        Assert.Equal(
+            tenants.Select(t => t.Name).Order(StringComparer.Ordinal),
+            temporary.Tenants.Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.All(temporary.Tenants, t => Assert.Contains(t, tenants));
+    }
+
     [Fact]
     public void TheDefaultSetIsTheVerifiedSourcesAndEveryTierAboveOneIsNamed()
     {
@@ -386,16 +405,16 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache",
+                "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "spotify", "affinity-model-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
-                "previous-windows-installation", "windows-update-leftovers",
+                "temp-installer-downloads", "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",
-                "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs",
+                "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
                 "claude-code-file-history",
             ],
             planner.Providers.Select(p => p.Id));
@@ -405,14 +424,15 @@ public sealed class CleanupPlannerTests
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "affinity-model-cache", "platformio", "playwright",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers",
-                "cloud-local-copies", "temp-directories", "previous-windows-installation", "windows-update-leftovers",
+                "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
+                "windows-update-leftovers",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(
             [
                 "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
-                "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "claude-code-file-history",
+                "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 

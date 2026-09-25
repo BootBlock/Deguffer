@@ -168,6 +168,79 @@ public sealed class NuGetCacheProviderTests : IDisposable
         return new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
     }
 
+    /// <summary>
+    /// NuGet's command clears its scratch folder, so the temporary-folder row must leave it to this
+    /// one — and only it: the caches NuGet keeps elsewhere are no entry of a temporary folder.
+    /// </summary>
+    [Fact]
+    public async Task ClaimsItsScratchFolderInATemporaryFolderAndNothingElse()
+    {
+        var packages = _temp.CreateDirectory("profile", ".nuget", "packages");
+        var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
+        var temporary = Path.GetDirectoryName(scratch)!;
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(
+            "locals all --list", $"global-packages: {packages}\\\ntemp: {scratch}\\");
+
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
+        Assert.Empty(await provider.ClaimedEntriesAsync([_temp.CreateDirectory("elsewhere")]));
+    }
+
+    /// <summary>
+    /// NuGet names its scratch folder whether or not it exists, and a claim on nothing would have the
+    /// temporary-folder row say it left an entry out.
+    /// </summary>
+    [Fact]
+    public async Task ClaimsNoScratchFolderThatIsNotThere()
+    {
+        var temporary = _temp.CreateDirectory("temp");
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(
+            "locals all --list", $"temp: {Path.Combine(temporary, "NuGetScratch")}\\");
+
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        Assert.Empty(await provider.ClaimedEntriesAsync([temporary]));
+    }
+
+    /// <summary>
+    /// NuGet reports the temporary folder as its own process sees it, which on a profile with a long
+    /// folder name is the 8.3 alias. The claim is still made, and in the caller's own form, which is
+    /// the form the temporary-folder row's removal compares against.
+    ///
+    /// <para>On a volume that creates no 8.3 aliases the fixture falls back to the long form, and the
+    /// test is then the one above. The folder name is longer than eight characters so that every
+    /// volume that does create them gives it one.</para>
+    /// </summary>
+    [Fact]
+    public async Task ClaimsItsScratchFolderWhenNuGetReportsTheShortForm()
+    {
+        var scratch = _temp.CreateDirectory("temporary-folder", "NuGetScratch");
+        var temporary = Path.GetDirectoryName(scratch)!;
+        var asReported = ShortPath.Of(temporary) ?? temporary;
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(
+            "locals all --list", $"temp: {Path.Combine(asReported, "NuGetScratch")}\\");
+
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
+    }
+
+    /// <summary>Without the SDK nothing offers the scratch folder here, so the temporary-folder row keeps it.</summary>
+    [Fact]
+    public async Task ClaimsNothingWithoutTheDotnetSdk()
+    {
+        var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
+        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+        Assert.Empty(await provider.ClaimedEntriesAsync([Path.GetDirectoryName(scratch)!]));
+    }
+
     private async Task<(CleanupPlan Plan, string[] Locations)> PlanWithLocals()
     {
         // Deliberately mirrors the audit: two locations under .nuget, two well outside it.

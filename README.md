@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Fifty sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Fifty-nine sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Fifty-six providers, each holding its own knowledge of one location. A provider reports "not
+Fifty-nine providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -126,6 +126,7 @@ installed" cleanly on a machine without that toolchain.
 | Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
+| Tool caches in temporary folders | Node's compile cache, and what Flutter, Dart's test runner, Firefox and Roslyn left there, each recognised by its own name and left alone while its tool may be using it |
 | Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
 | Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one Deguffer can see a running browser using |
 
@@ -151,7 +152,8 @@ installed" cleanly on a machine without that toolchain.
 | Unreal project intermediate files | `Intermediate` beside a `.uproject` under your own source trees; never `Saved` or `Binaries` |
 | Unreal project derived data cache | A project's own `DerivedDataCache` under your own source trees |
 | Superseded application versions | Older versions a Squirrel-updated app still keeps |
-| Temporary files | Emptied in place, taking only what nothing has touched for seven days |
+| Temporary files | Emptied in place, taking only what nothing has touched for seven days; what a tool's own row offers is left to that row |
+| Installer downloads in temporary folders | Updates VS Code, Docker Desktop and the Visual Studio Installer downloaded, and Blender's crashed sessions, only while the application is closed; never Blender's recovery files |
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
 | Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document: offered on Deguffer's own stated judgement, whole, once nothing inside has changed for 30 days |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
@@ -168,6 +170,7 @@ installed" cleanly on a machine without that toolchain.
 | Epic Games launcher logs and crash reports | |
 | Battle.net launcher logs | |
 | Claude Code MCP server logs | |
+| Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written into stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |
 
 **Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
