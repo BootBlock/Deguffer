@@ -1415,11 +1415,12 @@ The same shape appears in `%LOCALAPPDATA%\Adobe\CameraRaw\Cache`, in DaVinci Res
 optimised-media directories, and in Blender's temporary render directory. None appeared on the
 audited machine, so all of it is documentation rather than observation.
 
-**Outcome for DaVinci Resolve:** its render cache shipped at Tier 1 as
-`ResolveRenderCacheProvider`. The cache is found in a `CacheClip` folder at the root of each local
-drive and in the Videos folder, never derived from Resolve's settings, and only a project folder
-holding a `.dvcc` file is offered. Resolve's manual corrected this entry: optimised media is written
-inside `CacheClip`, not beside it, and it is refused by name. See
+**Outcome for DaVinci Resolve:** its render cache shipped at Tier 2 as
+`ResolveRenderCacheProvider`, not the Tier 1 this entry implies, because the refill is the render
+itself. The cache is found in a `CacheClip` folder at the root of each local drive and in the Videos
+folder, never derived from Resolve's settings, and only a project folder holding `.dvcc` files and
+nothing else is offered. Resolve's manual corrected this entry: optimised media is written inside
+`CacheClip`, not beside it, and it is refused by name. See
 [../cache-locations.md](../cache-locations.md).
 
 ### Game engine derived-data caches — Tier 2, present but empty ✅ done

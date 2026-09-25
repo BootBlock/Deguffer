@@ -24,7 +24,11 @@ internal sealed class ResolveCacheExamination
 
     public List<(string Path, string Reason)> Survivors { get; } = [];
 
-    /// <summary>Links met where a folder was expected, never followed.</summary>
+    /// <summary>
+    /// Folders left alone that may hold render cache: a link, never followed, and a project folder
+    /// holding something besides render files. A row that offers nothing must not read as clear
+    /// while one is there.
+    /// </summary>
     public List<string> Declined { get; } = [];
 
     public List<PlanNote> Notes { get; } = [];
@@ -101,36 +105,57 @@ internal sealed class ResolveCacheExamination
             {
                 Survivors.Add((path, reason));
             }
-            else if (ResolveCacheLayout.HoldsRenderFiles(path, ct))
-            {
-                recognised.Add(entry.Name);
-                RenderFolders.Add(new ResolveRenderFolder(path, cache));
-            }
             else
             {
-                Survivors.Add((path, $"'{entry.Name}' holds no Resolve render file, so it was not recognised as render cache and is left alone."));
+                Classify(entry.Name, path, cache, recognised, ct);
             }
         }
 
         Caches.Add(new ResolveCacheFolder(cache, recognised));
 
-        if (recognised.Count == 0)
-        {
-            return;
-        }
-
+        // Named whether or not anything here is offered, because Explore refuses what a provider names
+        // as protected (§7.1), and the neighbours hold the user's only copies.
         Survivors.Add((cache, "Resolve's cache folder itself. Only the render cache inside it is removed."));
         Survivors.AddRange(ResolveCacheLayout.Neighbours
             .Select(neighbour => (Path: Path.Combine(folder, neighbour.Name), neighbour.Reason))
             .Where(neighbour => LongPath.ProbeEntry(neighbour.Path) is not PathPresence.Absent));
     }
 
+    /// <summary>One project folder, offered only where it holds render files and nothing else.</summary>
+    private void Classify(string name, string path, string cache, HashSet<string> recognised, CancellationToken ct)
+    {
+        switch (ResolveCacheLayout.Read(path, ct))
+        {
+            case RenderFolderReading.RenderCache:
+                recognised.Add(name);
+                RenderFolders.Add(new ResolveRenderFolder(path, cache));
+                break;
+
+            case RenderFolderReading.NoRenderFile:
+                Survivors.Add((path, $"'{name}' holds no Resolve render file, so it was not recognised as render cache and is left alone."));
+                break;
+
+            case RenderFolderReading.Mixed:
+                Declined.Add(path);
+                Survivors.Add((path, $"'{name}' holds something other than Resolve render files, so it was not recognised as render cache and is left alone."));
+                Notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    $"Leaving '{path}' alone: it holds something other than Resolve's render files, and "
+                    + "Deguffer removes a project's render cache only where that is all it holds."));
+                break;
+
+            case RenderFolderReading.Unreadable:
+                Notes.Add(UnreadableRoot.Note(path));
+                Survivors.Add((path, UnreadableRoot.UnreachedReason));
+                Unreadable = true;
+                break;
+        }
+    }
+
     private void DeclineLink(string path)
     {
         Declined.Add(path);
-        Survivors.Add((path, "A link rather than a folder, so what it points at was never classified."));
-        Notes.Add(new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not look through a link."));
+        Survivors.Add((path, CacheLevelWalk.LinkReason));
+        Notes.Add(CacheLevelWalk.Note(path));
     }
 }

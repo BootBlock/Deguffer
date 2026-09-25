@@ -8,10 +8,13 @@ namespace Deguffer.Core.Providers;
 /// The render cache DaVinci Resolve keeps so a graded or effected timeline plays back in real time:
 /// one folder of <c>.dvcc</c> files per project, inside a hidden <c>CacheClip</c> folder.
 ///
-/// <para><b>Tier 1.</b> Resolve renders the cache again as the timeline is played or left idle, from
-/// the media and the grade, so losing it costs render time and nothing else. Its size follows the
-/// cache format the user chose: ProRes HQ at 1080p25 is about 27.5 MB a second, so a few hundred
-/// megabytes is seconds of timeline and a feature is hundreds of gigabytes.</para>
+/// <para><b>Tier 2.</b> Resolve renders the cache again as the timeline is played or left idle, from
+/// the media and the grade, so nothing is lost. The refill is the render itself, though: the cache
+/// exists because those sections play slower than real time, so each second of it costs at least a
+/// second of GPU work, and only while the media is online. That is §3's "re-indexing for minutes", as
+/// the Unreal shader cache is. Its size follows the cache format the user chose: ProRes 422 HQ at
+/// 1080p25 is about 23 MB a second, so a few hundred megabytes is seconds of timeline and a feature is
+/// hundreds of gigabytes.</para>
 ///
 /// <para><b>Found, never derived.</b> <see cref="ResolveCacheLayout"/> records where Resolve puts
 /// <c>CacheClip</c> without being told, and <see cref="ResolveCacheExamination"/> looks there. A
@@ -59,13 +62,14 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
 
     public override string Name => "DaVinci Resolve render cache";
 
-    public override SafetyTier Tier => SafetyTier.RegenerableCache;
+    public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
     public override StepGrain Grain => StepGrain.Parts;
 
     public override string WhatHappensOnNextUse =>
         "Resolve renders the cache again as you play each timeline, so graded and effected sections play "
-        + "back slowly until it has. Your projects, media, optimised media, proxies, backups and recordings "
+        + "back slowly until it has, which for a long graded timeline takes hours. It can do so only while "
+        + "the media is connected. Your projects, media, optimised media, proxies, backups and recordings "
         + "are untouched.";
 
     public override ProviderDescription Description { get; } = new()
@@ -103,7 +107,9 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// §5.2 as §7.1 reads it: each <c>CacheClip</c> recognises only the project folders this pass
-    /// proved to hold render files, and while Resolve runs, none.
+    /// proved to hold render files and nothing else, and while Resolve runs, none. Every other path
+    /// the plan names as protected, the neighbours beside <c>CacheClip</c> above all, is refused
+    /// outright.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
@@ -119,6 +125,9 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
                     "This is DaVinci Resolve's cache folder, which also holds its optimised media. Deguffer "
                     + "removes only the project folders in it that hold render cache.",
                     name => cache.RenderFolderNames.Contains(name))),
+            .. examination.Survivors
+                .Where(survivor => !examination.Caches.Any(cache => cache.Path.Equals(survivor.Path, StringComparison.OrdinalIgnoreCase)))
+                .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)),
         ]);
     }
 

@@ -9,10 +9,11 @@ namespace Deguffer.Core.Tests;
 /// DaVinci Resolve's render cache, found in a <c>CacheClip</c> folder at the root of a drive or in the
 /// Videos folder.
 ///
-/// <para>Three things have to hold. Only a project folder holding a render file is ever a target, and
-/// <c>OptimizedMedia</c> never is, although it holds the same files. Everything beside the cache
-/// survives a run, asserted by name, because beside it sit the user's backups, recordings, stills and
-/// proxies. And nothing is offered or removed while Resolve runs.</para>
+/// <para>Three things have to hold. Only a project folder holding render files and nothing else is
+/// ever a target, and <c>OptimizedMedia</c> never is, although it holds the same files. What Resolve
+/// writes beside the cache survives a run, asserted by name and refused in Explore, because it is the
+/// user's backups, recordings, stills and proxies. And nothing is offered or removed while Resolve
+/// runs.</para>
 /// </summary>
 public sealed class ResolveRenderCacheProviderTests : IDisposable
 {
@@ -65,18 +66,19 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public void IsTierOneAndItsPartsAreOneDecision()
+    public void IsTierTwoAndItsPartsAreOneDecision()
     {
         var provider = CreateProvider();
 
-        Assert.Equal(SafetyTier.RegenerableCache, provider.Tier);
+        Assert.Equal(SafetyTier.RegenerableWithCost, provider.Tier);
         Assert.Equal(StepGrain.Parts, provider.Grain);
     }
 
     /// <summary>
     /// §5.2 and §5.6: each project folder holding render files is a target, and everything else in the
-    /// cache folder and beside it survives the run, on the disk as in the report. Optimised media holds
-    /// the same <c>.dvcc</c> files, so only its name keeps it out, and that is asserted here.
+    /// cache folder, and what Resolve writes beside it, survives the run, on the disk as in the report.
+    /// Optimised media and proxies hold the same <c>.dvcc</c> files here, so only their names keep them
+    /// out, and that is asserted here.
     /// </summary>
     [Fact]
     public async Task OffersOnlyProjectRenderCachesAndEverythingBesideThemSurvives()
@@ -85,7 +87,8 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         var first = Project(cache, "8b1f0c2a4e");
         var second = Project(cache, "c93d7e5f10");
         var optimised = WriteFile(Path.Combine(cache, "OptimizedMedia", "a1b2c3", "0001.dvcc"));
-        var proxy = WriteFile(Path.Combine(cache, "ProxyMedia", "A001_C002.mov"));
+        var copied = WriteFile(Path.Combine(cache, "OptimizedMedia_old", "a1b2c3", "0001.dvcc"));
+        var proxy = WriteFile(Path.Combine(cache, "ProxyMedia", "a1b2c3", "0001.dvcc"));
         var stranger = WriteFile(Path.Combine(cache, "Notes", "readme.txt"));
         var index = WriteFile(Path.Combine(cache, "index.db"));
 
@@ -110,6 +113,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         {
             cache,
             Path.Combine(cache, "OptimizedMedia"),
+            Path.Combine(cache, "OptimizedMedia_old"),
             Path.Combine(cache, "ProxyMedia"),
             Path.GetDirectoryName(stranger)!,
             index,
@@ -128,7 +132,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         Assert.False(Directory.Exists(first));
         Assert.False(Directory.Exists(second));
 
-        foreach (var kept in new[] { optimised, proxy, stranger, index, backup, recording, live, stills, proxies, footage })
+        foreach (var kept in new[] { optimised, copied, proxy, stranger, index, backup, recording, live, stills, proxies, footage })
         {
             Assert.True(File.Exists(kept), $"'{kept}' did not survive the run");
         }
@@ -155,8 +159,94 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains("holds any render cache", StringComparison.Ordinal));
-        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync()).Recognises("Exports"));
+        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase)).Recognises("Exports"));
         Assert.True(File.Exists(unknown));
+    }
+
+    /// <summary>
+    /// A folder is removed whole, so one holding a file of the user's beside render files is not render
+    /// cache, and is named rather than taken with it.
+    /// </summary>
+    [Fact]
+    public async Task AFolderHoldingAnythingButRenderFilesIsNotRenderCache()
+    {
+        var cache = CacheIn(Drive);
+        var mixed = Project(cache, "8b1f0c2a4e");
+        var edit = WriteFile(Path.Combine(mixed, "clip-7", "Final cut.drp"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(mixed, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Message.Contains(mixed, StringComparison.Ordinal));
+        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), root => root.Path.Equals(cache, StringComparison.OrdinalIgnoreCase))
+            .Recognises("8b1f0c2a4e"));
+        Assert.True(File.Exists(edit));
+    }
+
+    /// <summary>
+    /// A link inside a project folder points at something never classified, and the folder is removed
+    /// whole, so the folder is not render cache and what the link points at is untouched.
+    /// </summary>
+    [Fact]
+    public async Task AProjectFolderHoldingALinkIsNotRenderCache()
+    {
+        var project = Project(CacheIn(Drive), "8b1f0c2a4e");
+        var elsewhere = Path.Combine(_temp.Path, "elsewhere");
+        var kept = WriteFile(Path.Combine(elsewhere, "Final cut.drp"));
+        SymbolicLink.ToDirectory(Path.Combine(project, "clip-7", "linked"), elsewhere);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(project, StringComparison.OrdinalIgnoreCase));
+        Assert.True(File.Exists(kept));
+    }
+
+    /// <summary>A project folder Windows will not list is a warning, never a folder with nothing in it.</summary>
+    [Fact]
+    public async Task AProjectFolderThatWillNotBeListedIsReportedAsUnread()
+    {
+        var project = Project(CacheIn(Drive), "8b1f0c2a4e");
+
+        using var denied = new DeniedDirectory(project);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(project, StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(project, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §7.1: Explore refuses every path a provider names as protected, so what Resolve writes beside
+    /// its cache is refused there, whole.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesWhatResolveWritesBesideItsCache()
+    {
+        Project(CacheIn(Drive), "8b1f0c2a4e");
+
+        foreach (var name in new[] { "ProjectBackup", "Capture", "Resolve Live", ".gallery", "ProxyMedia" })
+        {
+            Directory.CreateDirectory(Path.Combine(Drive, name));
+        }
+
+        var footage = Directory.CreateDirectory(Path.Combine(Drive, "Footage")).FullName;
+
+        var roots = await CreateProvider().DiscoverToolRootsAsync();
+
+        foreach (var name in new[] { "ProjectBackup", "Capture", "Resolve Live", ".gallery", "ProxyMedia" })
+        {
+            var root = Assert.Single(roots, r => r.Path.Equals(Path.Combine(Drive, name), StringComparison.OrdinalIgnoreCase));
+            Assert.False(root.Recognises("anything"));
+        }
+
+        Assert.DoesNotContain(roots, r => r.Path.Equals(footage, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -171,9 +261,10 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         WriteFile(Path.Combine(cache, "OptimizedMedia", "a1b2c3", "0001.dvcc"));
         WriteFile(Path.Combine(cache, "Notes", "readme.txt"));
 
-        var root = Assert.Single(await CreateProvider().DiscoverToolRootsAsync());
+        var root = Assert.Single(
+            await CreateProvider().DiscoverToolRootsAsync(),
+            r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(cache, root.Path, ignoreCase: true);
         Assert.True(root.Recognises("8b1f0c2a4e"));
         Assert.False(root.Recognises("OptimizedMedia"));
         Assert.False(root.Recognises("Notes"));
@@ -184,15 +275,37 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
     public async Task FindsTheCacheInTheVideosFolder()
     {
         var project = Project(CacheIn(_environment.Videos!), "8b1f0c2a4e");
+        _volumes.With(_environment.UserProfile);
 
         Assert.Equal([project], (await CreateProvider().PlanAsync()).TargetedPaths);
     }
 
     [Fact]
-    public async Task LooksNowhereWhenWindowsWillNotSayWhereTheVideosFolderIs()
+    public async Task SkipsTheVideosFolderWhenWindowsWillNotSayWhereItIs()
     {
         Project(CacheIn(_environment.Videos!), "8b1f0c2a4e");
+        _volumes.With(_environment.UserProfile);
         _environment.WithNoVideos();
+
+        Assert.False(await CreateProvider().IsPresentAsync());
+    }
+
+    /// <summary>
+    /// A Videos folder redirected to a share, which no volume holds, or onto a drive whose content is
+    /// stored elsewhere, is not this computer's disk, and a Resolve on another computer may be writing
+    /// to it, which the process table here cannot see (§5.3).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SkipsAVideosFolderThatIsNotOnALocalDisk(bool onCloudMount)
+    {
+        Project(CacheIn(_environment.Videos!), "8b1f0c2a4e");
+
+        if (onCloudMount)
+        {
+            _volumes.With(_environment.UserProfile, features: VolumeFeatures.RemoteStorage);
+        }
 
         Assert.False(await CreateProvider().IsPresentAsync());
     }
@@ -242,8 +355,12 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(cache, StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
-        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync()).Recognises("8b1f0c2a4e"));
+        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase))
+            .Recognises("8b1f0c2a4e"));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
         Assert.True(Directory.Exists(project));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>The clean asks again, so Resolve opened while the preview was on screen holds the cache back.</summary>
@@ -263,6 +380,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
 
         Assert.True(Directory.Exists(project), "a render cache was removed under a Resolve started after the preview");
         Assert.Equal("Nothing was removed: Resolve is running now.", Assert.Single(result.Steps).Message);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>A cache folder that is a link is declined and named, and nothing it points at is touched.</summary>
@@ -297,8 +415,10 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         Assert.Equal([real], plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
 
-        await provider.ExecuteAsync(plan);
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
 
+        Assert.False(Directory.Exists(real));
+        Assert.True(Directory.Exists(link));
         Assert.True(File.Exists(Path.Combine(elsewhere, "clip-7", "0001.dvcc")));
         Assert.True((await provider.VerifyAsync(plan)).Passed);
     }

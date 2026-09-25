@@ -423,7 +423,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "platformio", "playwright",
+                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "platformio", "playwright",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
                 "windows-update-leftovers",
