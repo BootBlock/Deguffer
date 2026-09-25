@@ -42,9 +42,10 @@ public sealed class ChromiumHostTests : IDisposable
     }
 
     /// <summary>
-    /// The layout the issue measured: Edge three levels down, with the user-data-level directories
-    /// that are not among the seven sitting beside the profile. Every one of those, the vendor
-    /// directory and the browser's own installation directory beside <c>User Data</c> must survive.
+    /// The layout the issue measured: Edge three levels down, with a recognised shader cache and
+    /// two unrecognised directories sitting beside the profile. The shader cache goes, because the
+    /// user-data folder is walked as a profile too. The other two, the vendor directory and the
+    /// browser's own installation directory beside <c>User Data</c> must survive.
     /// </summary>
     [Fact]
     public async Task ReachesANestedBrowserAndLeavesEverythingAroundItsCachesStanding()
@@ -53,11 +54,11 @@ public sealed class ChromiumHostTests : IDisposable
         var codeCache = CreateDirectory(Path.Combine(userData, "Default", "Code Cache"));
         var httpCache = CreateDirectory(Path.Combine(userData, "Default", "Cache", "Cache_Data"));
         var gpuCache = CreateDirectory(Path.Combine(userData, "Default", "GPUCache"));
+        var shaders = CreateDirectory(Path.Combine(userData, "GrShaderCache"));
 
         var localStorage = CreateDirectory(Path.Combine(userData, "Default", "Local Storage"));
         var components = CreateDirectory(Path.Combine(userData, "component_crx_cache"));
         var extensions = CreateDirectory(Path.Combine(userData, "extensions_crx_cache"));
-        var shaders = CreateDirectory(Path.Combine(userData, "GrShaderCache"));
         var installation = CreateDirectory(Path.Combine(_environment.LocalAppData, "Microsoft", "Edge", "Application"));
         var vendor = Path.Combine(_environment.LocalAppData, "Microsoft");
 
@@ -69,13 +70,13 @@ public sealed class ChromiumHostTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
-            new[] { codeCache, httpCache, gpuCache }.Order(StringComparer.OrdinalIgnoreCase),
+            new[] { codeCache, httpCache, gpuCache, shaders }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
-        Assert.All(
-            plan.Steps.OfType<DeleteStep>(),
-            step => Assert.Equal("Microsoft Edge — Default", step.Group));
+        Assert.Equal(
+            ["Microsoft Edge", "Microsoft Edge — Default", "Microsoft Edge — Default", "Microsoft Edge — Default"],
+            plan.Steps.OfType<DeleteStep>().Select(step => step.Group).Order(StringComparer.Ordinal));
 
-        foreach (var spared in new[] { userData, localStorage, components, extensions, shaders })
+        foreach (var spared in new[] { userData, localStorage, components, extensions })
         {
             Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
@@ -87,9 +88,10 @@ public sealed class ChromiumHostTests : IDisposable
         Assert.False(Directory.Exists(codeCache));
         Assert.False(Directory.Exists(httpCache));
         Assert.False(Directory.Exists(gpuCache));
+        Assert.False(Directory.Exists(shaders));
 
         Assert.All(
-            new[] { vendor, installation, userData, localStorage, components, extensions, shaders },
+            new[] { vendor, installation, userData, localStorage, components, extensions },
             path => Assert.True(Directory.Exists(path), $"{path} was removed alongside the caches."));
         Assert.True(File.Exists(Path.Combine(userData, "Local State")));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
