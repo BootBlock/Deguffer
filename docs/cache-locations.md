@@ -1456,7 +1456,7 @@ hero image behind the game's page and its logo. That includes games you own and 
 installed. It keeps them per game, in a folder named by the game's Steam application id:
 
 ```
-<Steam install>ppcache\librarycache\<app id>\library_600x900.jpg
+<Steam install>\appcache\librarycache\<app id>\library_600x900.jpg
 ```
 
 **Nothing removes them.** On the machine this was measured on, the oldest files were years old and
@@ -1488,8 +1488,8 @@ command Deguffer can run. So the folders are deleted directly.
 | Neighbour | What it really is |
 | --- | --- |
 | `appcache\librarycache` itself | The container. Only what belongs to single games inside it goes |
-| `appcache\librarycachessetcache.vdf` | Steam's index of the artwork it has saved |
-| `appcacheppinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes |
+| `appcache\librarycache\assetcache.vdf` | Steam's index of the artwork it has saved |
+| `appcache\appinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes |
 | `steamapps`, `steamapps\common`, `steamapps\downloading` | Your games, and the half-downloaded part of an update |
 | `userdata` | Your settings, cloud saves, screenshots, and artwork you chose through Steam, per account |
 | `config` | Steam's own configuration, including who is signed in on this computer |
