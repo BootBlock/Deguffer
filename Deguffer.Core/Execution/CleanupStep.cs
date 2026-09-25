@@ -191,8 +191,8 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 ///
 /// <para><b>What it frees is a request, never a result.</b> Windows' own documentation for
 /// <c>CF_PIN_STATE_UNPINNED</c> says there is "no guarantee that the placeholders to be unpinned will be
-/// fully dehydrated after the API call completes successfully", and a scratch sync root showed nothing
-/// released at all until the sync app acted. So <see cref="CleanupStep.Estimated"/> is what the files
+/// fully dehydrated after the API call completes successfully", and on a scratch sync root unpinning
+/// alone released nothing: releasing is the sync app's work. So <see cref="CleanupStep.Estimated"/> is what the files
 /// held when they were chosen, and a run reports it as requested
 /// (<see cref="StepOutcome.BytesRequested"/>), never as reclaimed.</para>
 ///

@@ -8,7 +8,7 @@ namespace Deguffer.Core.Cloud;
 ///
 /// <para><b>What it opens, and what it never does.</b> Each folder is listed from its own index, and only
 /// an entry that index calls a placeholder is opened, for its attributes. A file's data is never read, so
-/// the walk cannot start a download. Measured on a real profile at 0.2 µs an entry for the listing.</para>
+/// the walk cannot start a download.</para>
 ///
 /// <para><b>Links are neither entered nor offered.</b> A junction or symbolic link inside a sync root
 /// leads somewhere the sync app does not own, for the reason <see cref="Execution.DirectoryRemover"/>
@@ -89,7 +89,10 @@ public readonly record struct HeldTally(int Files, long Bytes)
 /// <summary>What <see cref="PlaceholderWalk"/> found in one sync root.</summary>
 /// <param name="Files">The placeholders that may be released.</param>
 /// <param name="Held">Those with something on this PC that the rules left as they are, by reason.</param>
-/// <param name="Unreadable">Placeholders Windows would not describe, which are left as they are.</param>
+/// <param name="Unreadable">
+/// Placeholders Windows would not describe, files and folders alike, which are left as they are with
+/// everything inside them.
+/// </param>
 public sealed record ReleaseSelection(
     IReadOnlyList<ReleasableFile> Files,
     IReadOnlyDictionary<HeldBack, HeldTally> Held,

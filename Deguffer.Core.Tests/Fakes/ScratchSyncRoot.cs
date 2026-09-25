@@ -11,9 +11,9 @@ namespace Deguffer.Core.Tests.Fakes;
 /// process as its sync app, so the Cloud Files calls <see cref="Cloud.CloudFiles"/> makes can be
 /// observed against real placeholders rather than assumed from the documentation.
 ///
-/// <para><b>It connects and answers nothing.</b> No callback is registered, so anything that tried to
-/// download a file's data would wait on this process and then fail. A read that returns promptly with
-/// an online-only file still online-only is the evidence that nothing was downloaded.</para>
+/// <para><b>It connects and answers nothing.</b> Its one callback counts requests to download a file's
+/// data and answers none, so anything that tried would wait on this process and then fail, and
+/// <see cref="FetchRequests"/> says whether anything tried.</para>
 ///
 /// <para><b>Registered under its own name, and removed again.</b> The identifier starts
 /// <c>DegufferTests!</c>, which no real sync app uses, and <see cref="Dispose"/> disconnects before it
@@ -32,15 +32,21 @@ public sealed class ScratchSyncRoot : IDisposable
     private const int ConvertMarkInSync = 0x0001;
     private const int CreateMarkInSync = 0x0002;
     private const uint CallbackTypeNone = 0xFFFF_FFFF;
+    private const uint CallbackTypeFetchData = 0;
 
+    private readonly CfCallback _onFetch;
     private long _connection;
+    private int _fetches;
 
     public ScratchSyncRoot(string path)
     {
         Path = path;
         Id = $"{ProviderName}!{WindowsIdentity.GetCurrent().User!.Value}!{Guid.NewGuid():N}";
+        _onFetch = (_, _) => Interlocked.Increment(ref _fetches);
 
         Directory.CreateDirectory(path);
+
+        var connected = false;
 
         StorageProviderSyncRootManager.Register(new StorageProviderSyncRootInfo
         {
@@ -56,12 +62,28 @@ public sealed class ScratchSyncRoot : IDisposable
             Version = "1.0",
         });
 
-        Connect();
+        // A root left registered outlives the suite, so a failure to connect takes the registration
+        // back with it.
+        try
+        {
+            Connect();
+            connected = true;
+        }
+        finally
+        {
+            if (!connected)
+            {
+                StorageProviderSyncRootManager.Unregister(Id);
+            }
+        }
     }
 
     public string Path { get; }
 
     public string Id { get; }
+
+    /// <summary>How many times Windows asked this sync app for a file's data while it was connected.</summary>
+    public int FetchRequests => Volatile.Read(ref _fetches);
 
     public string At(params string[] segments) => System.IO.Path.Combine([Path, .. segments]);
 
@@ -162,13 +184,23 @@ public sealed class ScratchSyncRoot : IDisposable
 
     public void Dispose()
     {
-        Disconnect();
-        StorageProviderSyncRootManager.Unregister(Id);
+        try
+        {
+            Disconnect();
+        }
+        finally
+        {
+            StorageProviderSyncRootManager.Unregister(Id);
+        }
     }
 
     private void Connect()
     {
-        var callbacks = new[] { new CallbackRegistration { Type = CallbackTypeNone } };
+        var callbacks = new[]
+        {
+            new CallbackRegistration { Type = CallbackTypeFetchData, Callback = Marshal.GetFunctionPointerForDelegate(_onFetch) },
+            new CallbackRegistration { Type = CallbackTypeNone },
+        };
         Marshal.ThrowExceptionForHR(CfConnectSyncRoot(Path, callbacks, 0, 0, out _connection));
     }
 
@@ -190,6 +222,9 @@ public sealed class ScratchSyncRoot : IDisposable
 
         return handle;
     }
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate void CfCallback(nint callbackInfo, nint callbackParameters);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct CallbackRegistration

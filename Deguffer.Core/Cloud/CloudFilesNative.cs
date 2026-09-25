@@ -51,8 +51,7 @@ internal static unsafe partial class CloudFilesNative
     private const uint OpenReparsePoint = 0x0020_0000;
     private const int FileBasicInfoClass = 0;
 
-    /// <summary><c>PHCM_DISGUISE_PLACEHOLDER</c> and <c>PHCM_EXPOSE_PLACEHOLDERS</c>.</summary>
-    public const sbyte DisguisePlaceholders = 1;
+    /// <summary><c>PHCM_EXPOSE_PLACEHOLDERS</c>.</summary>
     public const sbyte ExposePlaceholders = 2;
 
     public const int FindExInfoBasic = 1;
@@ -145,6 +144,38 @@ internal static unsafe partial class CloudFilesNative
         int informationClass,
         out FileBasicInfo information,
         int bufferSize);
+
+    /// <summary>
+    /// A handle that follows every link, for learning where a folder really is. Attributes only, like
+    /// <see cref="OpenForState"/>.
+    /// </summary>
+    public static SafeFileHandle OpenToResolve(string extendedPath) =>
+        CreateFile(extendedPath, FileReadAttributes, ShareAll, securityAttributes: 0, OpenExisting, BackupSemantics, templateFile: 0);
+
+    /// <summary>
+    /// The normalised path of whatever <paramref name="handle"/> is open on, with its drive letter, or
+    /// null where Windows would not say.
+    /// </summary>
+    public static string? FinalPath(SafeFileHandle handle)
+    {
+        var buffer = new char[LongestPath];
+
+        fixed (char* chars = buffer)
+        {
+            var length = GetFinalPathNameByHandle(handle, chars, LongestPath, FileNameNormalized);
+
+            return length is > 0 and < LongestPath ? new string(chars, 0, (int)length) : null;
+        }
+    }
+
+    /// <summary>The longest path Windows accepts in extended-length form.</summary>
+    private const int LongestPath = 32_768;
+
+    /// <summary><c>FILE_NAME_NORMALIZED | VOLUME_NAME_DOS</c>.</summary>
+    private const uint FileNameNormalized = 0;
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", SetLastError = true)]
+    private static partial uint GetFinalPathNameByHandle(SafeFileHandle file, char* path, uint length, uint flags);
 
     [LibraryImport("kernel32.dll", EntryPoint = "FindFirstFileExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial nint FindFirstFileEx(

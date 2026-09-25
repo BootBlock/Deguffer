@@ -392,6 +392,68 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
         Assert.Equal(VerificationOutcome.Survived, check.Outcome);
     }
 
+    /// <summary>
+    /// A folder above a planned file turned into a link since the preview: the file the name now leads
+    /// to is not the one planned, so it is left alone.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFileThatNoLongerResolvesWhereThePlanFoundIt()
+    {
+        var provider = CreateProvider();
+        _cloud.File(At("moved.txt"), onDisk: 100).File(At("goes.txt"), onDisk: 200);
+
+        var plan = await provider.PlanAsync();
+        _cloud.Redirect(At("moved.txt"), @"C:\Users\testuser\Elsewhere\moved.txt");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal([At("goes.txt")], _cloud.Unpinned);
+        Assert.Equal(200, result.BytesRequested);
+    }
+
+    /// <summary>A refusal to list the roots is never read as there being none.</summary>
+    [Fact]
+    public async Task SaysSoWhenWindowsWillNotListTheRoots()
+    {
+        _cloud.RefusesToListRoots = true;
+        var provider = CreateProvider();
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(await provider.IsPresentAsync());
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("would not list", StringComparison.Ordinal));
+    }
+
+    /// <summary>A folder nobody could read may hold local copies, so the row does not say it is clear.</summary>
+    [Fact]
+    public async Task ARootWithAFolderWindowsWillNotDescribeIsNotClear()
+    {
+        _cloud.Folder(At("Locked")).Refuse(At("Locked")).File(At("Locked", "inside.txt"), onDisk: 100);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("1 item(s)", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Every local copy held back by a rule is something the plan declined, not something that is not
+    /// there, so the row does not read as clear.
+    /// </summary>
+    [Fact]
+    public async Task ARootWhoseLocalCopiesAreAllHeldBackIsNotClear()
+    {
+        _cloud.File(At("pinned.txt"), onDisk: 100, pin: PinState.Pinned);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+    }
+
     /// <summary>The question put before a release does not say "Delete" about files nothing deletes.</summary>
     [Fact]
     public async Task IsConfirmedAsAReleaseRatherThanADeletion()

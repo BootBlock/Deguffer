@@ -2240,7 +2240,8 @@ releases the local copy in the background. Each file stays in its folder, keeps 
 normally while the machine is online: opening it downloads it again.
 
 **The figure is a request, not a result.** Windows documents that unpinning a file gives "no
-guarantee" it is freed straight away, and a test sync root freed nothing until its sync app acted.
+guarantee" it is freed straight away, and on a test sync root unpinning alone freed nothing: the
+sync app does the freeing.
 So the preview shows what the files hold on this PC, and after a clean the result card shows it as
 *Asked to release*, apart from *Removed by Deguffer*. The free space change beside them shows what
 OneDrive had freed by then, which can be less.

@@ -48,7 +48,19 @@ internal static class LocalCopyRelease
                 + "Start it and scan again.");
         }
 
-        var tally = await Task.Run(() => Request(cloud, step, keep, progress, ct), ct).ConfigureAwait(false);
+        // Once, so every file is checked against where the root really is, and a root reached through a
+        // link of the user's own still resolves.
+        if (cloud.Resolve(step.SyncRoot) is not { } resolvedRoot)
+        {
+            return new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"Nothing was asked: Windows would not open {LongPath.Display(step.SyncRoot)}.");
+        }
+
+        var tally = await Task.Run(() => Request(cloud, step, resolvedRoot, keep, progress, ct), ct).ConfigureAwait(false);
 
         progress?.Report(1.0);
 
@@ -84,6 +96,7 @@ internal static class LocalCopyRelease
     private static Dictionary<ReleaseResult, HeldTally> Request(
         ICloudFiles cloud,
         ReleaseLocalCopiesStep step,
+        string resolvedRoot,
         MinimumAge keep,
         IProgress<double>? progress,
         CancellationToken ct)
@@ -100,7 +113,9 @@ internal static class LocalCopyRelease
                 ? pins.For(folder)
                 : PinState.Pinned;
 
-            var answer = cloud.Release(file.Path, now => ReleaseRules.Hold(now, inherited, keep) is null);
+            var resolved = Path.Join(
+                resolvedRoot, Path.GetRelativePath(LongPath.Display(step.SyncRoot), LongPath.Display(file.Path)));
+            var answer = cloud.Release(file.Path, resolved, now => ReleaseRules.Hold(now, inherited, keep) is null);
 
             tally[answer.Result] = tally.GetValueOrDefault(answer.Result) + answer.RequestedBytes;
 

@@ -1526,12 +1526,13 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Squirrel staging and superseded builds ✅ | Expected the survey's "old application builds" to stay out of scope, and one framework's own source moved it. Two providers rather than one, because the staging and the builds land at different tiers; and the `packages` folder had to be read through the application's own index rather than removed, because a shortcut reads the index in it — §12 records both | 1.3 GB |
 | Visual Studio `.vs` per solution | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at two nesting levels | 1.5 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
-| Cloud sync dehydration | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
+| Cloud sync dehydration ✅ | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
 | Windows Search index | Service control, which Deguffer does not do today. Decide the policy before the provider | 2.2 GB |
 
 The last two rows are different in kind from the rest. Cloud-sync dehydration and service control
 are not new providers, they are new **capabilities**, and each widens what the safety model has to
-reason about. The tier model handles them. The plan and execution types do not, yet.
+reason about. The tier model handles them. The plan and execution types did not when this was
+written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
 
 ---
 
@@ -1606,3 +1607,6 @@ reason about. The tier model handles them. The plan and execution types do not, 
    a sibling of that rather than a variety of it. Cloud-sync dehydration is still the only known
    subject, so building it now would be the speculative generality G3 bans — the question is whether
    a second subject exists.
+   **Answered for dehydration itself** by issue #93: it is `ReleaseLocalCopiesStep`, a sibling of
+   `DeleteStep` and `RunCommandStep` that targets nothing and whose §5.6 negative asserts survival.
+   Service control, question 4, would be the second subject.

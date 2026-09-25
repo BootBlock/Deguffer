@@ -81,16 +81,36 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             + "this device, and files with changes not yet uploaded, are left as they are.",
     };
 
+    /// <summary>
+    /// A recognised root, or a list Windows would not give: a refusal is never read as absence, and the
+    /// plan then says what happened.
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Cloud.SyncRoots().Any(root => RecognisedApps.ContainsKey(root.ProviderName)));
+        Task.FromResult(Cloud.SyncRoots() is not { } roots
+            || roots.Any(root => RecognisedApps.ContainsKey(root.ProviderName)));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var roots = Cloud.SyncRoots();
+        if (Cloud.SyncRoots() is not { } roots)
+        {
+            return UnexaminedPlan("Windows would not list the folders kept in step with the cloud, so none of "
+                + "them was looked at.") with
+            {
+                Notes =
+                [
+                    new PlanNote(
+                        PlanNoteSeverity.Warning,
+                        "Windows would not list the folders kept in step with the cloud, so none of them was "
+                        + "looked at."),
+                ],
+            };
+        }
+
         var steps = new List<ReleaseLocalCopiesStep>();
         var notes = new List<PlanNote>();
         var protect = new List<(string Path, string Reason)>();
         var declined = false;
+        var unreadable = false;
         var recentOnly = new List<string>();
 
         foreach (var root in roots)
@@ -127,6 +147,11 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
                 .ConfigureAwait(false);
 
             notes.AddRange(NotesFor(selection, app, name));
+            unreadable |= selection.Unreadable > 0;
+
+            // Every candidate the rules left alone is one this plan declined, so a root that offers
+            // nothing because of them is not clear. See CleanupPlan.WasNotExamined.
+            declined |= selection.Held.Any(held => held.Key is not HeldBack.Recent && held.Value.Files > 0);
 
             var recent = selection.HeldFor(HeldBack.Recent);
 
@@ -168,6 +193,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             ProtectedPaths = [.. Protected(protect, recentOnly)],
             Notes = notes,
             WasNotExamined = declined && steps.Count == 0,
+            HasUnreadableRoot = unreadable,
         };
     }
 
@@ -221,7 +247,8 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Windows would not describe {selection.Unreadable:N0} file(s) in {name}, so they stay as they are.");
+                $"Windows would not describe {selection.Unreadable:N0} item(s) in {name}, so they and anything "
+                + "inside them stay as they are.");
         }
     }
 

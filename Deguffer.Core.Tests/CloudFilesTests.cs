@@ -29,12 +29,38 @@ public sealed class CloudFilesTests : IDisposable
     private readonly ScratchSyncRoot _root;
     private readonly ICloudFiles _cloud = CloudFiles.Default;
 
-    public CloudFilesTests() => _root = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
+    /// <summary>
+    /// xUnit disposes nothing whose constructor threw, so a root that cannot be registered takes the
+    /// scratch folder with it here.
+    /// </summary>
+    public CloudFilesTests()
+    {
+        var made = false;
+
+        try
+        {
+            _root = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
+            made = true;
+        }
+        finally
+        {
+            if (!made)
+            {
+                _temp.Dispose();
+            }
+        }
+    }
 
     public void Dispose()
     {
-        _root.Dispose();
-        _temp.Dispose();
+        try
+        {
+            _root.Dispose();
+        }
+        finally
+        {
+            _temp.Dispose();
+        }
     }
 
     /// <summary>
@@ -108,6 +134,7 @@ public sealed class CloudFilesTests : IDisposable
         File.AppendAllText(edited, "a local edit");
         var pinned = _root.LocalCopy("pinned.bin", Megabyte);
         _root.Pin(pinned, PinState.Pinned);
+        _root.Disconnect();
 
         Assert.Equal(new { OnDisk = (long)Megabyte, Modified = 0L, InSync = true, Pin = PinState.Unspecified }, Shape(local));
         Assert.True(_cloud.Read(edited).Placeholder is { InSync: false, ModifiedBytes: > 0 });
@@ -117,32 +144,50 @@ public sealed class CloudFilesTests : IDisposable
     [Fact]
     public void ReadsAnOrdinaryFileAsPresentAndNotAPlaceholder()
     {
-        var reading = _cloud.Read(_root.PlainFile("plain.bin", 10));
+        var plain = _root.PlainFile("plain.bin", 10);
+        _root.Disconnect();
+
+        var reading = _cloud.Read(plain);
 
         Assert.Equal(PathPresence.Present, reading.Presence);
         Assert.Null(reading.Placeholder);
         Assert.Equal(PathPresence.Absent, _cloud.Read(_root.At("missing.bin")).Presence);
     }
 
+    [Fact]
+    public void ListsAnOnlineOnlyFileAsAPlaceholder()
+    {
+        _root.OnlineOnly("online.bin", 5 * Megabyte);
+        _root.Disconnect();
+
+        Assert.True(Assert.Single(_cloud.List(_root.Path, CancellationToken.None)).IsPlaceholder);
+    }
+
     /// <summary>
-    /// Nothing answers a download request here, so a read that tried to fetch the data would wait for
-    /// the platform's own time-out, a minute or more, and then fail. Answering at once with nothing on
-    /// the disk is what shows the listing and the description read no data.
+    /// Asked while the scratch root is connected, because only a connected sync app is asked for data:
+    /// its count of requests is the evidence. The read that follows proves the count is live, since a
+    /// test whose counter could never move would pass whatever Deguffer did.
     /// </summary>
     [Fact]
-    public void DescribingAnOnlineOnlyFileDownloadsNothing()
+    public async Task DescribingAnOnlineOnlyFileDownloadsNothing()
     {
         var online = _root.OnlineOnly("online.bin", 5 * Megabyte);
-        _root.Disconnect();
+
+        var reading = _cloud.Read(online);
+        _cloud.Release(online, ResolvedAt(online), _ => false);
+
+        Assert.Equal(0, _root.FetchRequests);
+        Assert.Equal(0, reading.Placeholder!.OnDiskBytes);
+
+        _ = Task.Run(() => File.ReadAllBytes(online));
         var clock = Stopwatch.StartNew();
 
-        var listed = Assert.Single(_cloud.List(_root.Path, CancellationToken.None));
-        var reading = _cloud.Read(online);
+        while (_root.FetchRequests == 0 && clock.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(50);
+        }
 
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"Describing it took {clock.Elapsed}.");
-        Assert.True(listed.IsPlaceholder);
-        Assert.Equal(0, reading.Placeholder!.OnDiskBytes);
-        Assert.Equal(0, _cloud.Read(online).Placeholder!.OnDiskBytes);
+        Assert.True(_root.FetchRequests > 0, "Reading the file's data asked the sync app for nothing.");
     }
 
     [Fact]
@@ -151,11 +196,14 @@ public sealed class CloudFilesTests : IDisposable
         var local = _root.LocalCopy("local.bin", Megabyte);
         _root.Disconnect();
 
-        var answer = _cloud.Release(local, _ => true);
+        var answer = _cloud.Release(local, ResolvedAt(local), _ => true);
 
         Assert.Equal(new ReleaseAnswer(ReleaseResult.Requested, Megabyte), answer);
         Assert.Equal(PinState.Unpinned, _cloud.Read(local).Placeholder!.Pin);
         Assert.True(File.Exists(local));
+
+        // Unpinning alone frees nothing: releasing the data is the sync app's work.
+        Assert.Equal(Megabyte, _cloud.Read(local).Placeholder!.OnDiskBytes);
     }
 
     /// <summary>The rule is asked of the file as it is, through the handle that would unpin it.</summary>
@@ -164,9 +212,16 @@ public sealed class CloudFilesTests : IDisposable
     {
         var edited = _root.LocalCopy("edited.bin", Megabyte);
         File.AppendAllText(edited, "a local edit");
+        _root.Disconnect();
+        var asked = false;
 
-        var answer = _cloud.Release(edited, now => now.InSync && now.ModifiedBytes == 0);
+        var answer = _cloud.Release(edited, ResolvedAt(edited), now =>
+        {
+            asked = true;
+            return now.InSync && now.ModifiedBytes == 0;
+        });
 
+        Assert.True(asked, "The rule was never asked of the file.");
         Assert.Equal(ReleaseResult.NoLongerEligible, answer.Result);
         Assert.Equal(PinState.Unspecified, _cloud.Read(edited).Placeholder!.Pin);
     }
@@ -181,7 +236,7 @@ public sealed class CloudFilesTests : IDisposable
         var plain = _root.PlainFile("plain.bin", Megabyte);
         _root.Disconnect();
 
-        var answer = _cloud.Release(plain, _ => true);
+        var answer = _cloud.Release(plain, ResolvedAt(plain), _ => true);
 
         Assert.Equal(ReleaseResult.NoLongerEligible, answer.Result);
         Assert.False(File.GetAttributes(plain).HasFlag(Unpinned));
@@ -190,7 +245,28 @@ public sealed class CloudFilesTests : IDisposable
     [Fact]
     public void ReleaseOfAFileThatHasGoneSaysSo()
     {
-        Assert.Equal(ReleaseResult.Gone, _cloud.Release(_root.At("missing.bin"), _ => true).Result);
+        var missing = _root.At("missing.bin");
+
+        Assert.Equal(ReleaseResult.Gone, _cloud.Release(missing, missing, _ => true).Result);
+    }
+
+    /// <summary>
+    /// A folder above the file turned into a link since the preview: the name the plan holds now leads
+    /// to a different placeholder, and that one is left as it is however eligible it looks.
+    /// </summary>
+    [Fact]
+    public void ReleaseLeavesAFileReachedThroughALinkAboveIt()
+    {
+        _root.Folder("Real");
+        var real = _root.LocalCopy(Path.Combine("Real", "file.bin"), Megabyte);
+        Directory.CreateSymbolicLink(_root.At("Linked"), _root.At("Real"));
+        var named = _root.At("Linked", "file.bin");
+        _root.Disconnect();
+
+        var answer = _cloud.Release(named, ResolvedAt(named), _ => true);
+
+        Assert.Equal(ReleaseResult.NoLongerEligible, answer.Result);
+        Assert.Equal(PinState.Unspecified, _cloud.Read(real).Placeholder!.Pin);
     }
 
     /// <summary>
@@ -208,16 +284,24 @@ public sealed class CloudFilesTests : IDisposable
         var kept = _root.Folder("Kept");
         _root.LocalCopy(Path.Combine("Kept", "inside.bin"), Megabyte);
         _root.Pin(kept, PinState.Pinned);
+        _root.Disconnect();
 
         Assert.Equal(PinState.Unspecified, _cloud.Read(_root.At("Kept", "inside.bin")).Placeholder!.Pin);
 
-        _root.Disconnect();
         var selection = PlaceholderWalk.Of(_cloud, _root.Path, MinimumAge.Off, CancellationToken.None);
 
         Assert.Equal([goes], selection.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         Assert.Equal(1, selection.HeldFor(HeldBack.Pinned).Files);
         Assert.Equal(1, selection.HeldFor(HeldBack.NotInSync).Files);
     }
+
+    /// <summary>
+    /// Where <paramref name="path"/> must turn out to be, as a clean works it out: its place under the
+    /// root's resolved location. The scratch folder can be named in its short form, which Windows
+    /// resolves to the long one.
+    /// </summary>
+    private string ResolvedAt(string path) =>
+        Path.Join(_cloud.Resolve(_root.Path), Path.GetRelativePath(_root.Path, path));
 
     private object Shape(string path) => _cloud.Read(path).Placeholder is { } p
         ? new { OnDisk = p.OnDiskBytes, Modified = p.ModifiedBytes, p.InSync, p.Pin }

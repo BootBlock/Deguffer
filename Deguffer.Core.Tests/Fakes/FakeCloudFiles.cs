@@ -19,6 +19,10 @@ public sealed class FakeCloudFiles : ICloudFiles
     private readonly List<SyncRoot> _roots = [];
     private readonly Dictionary<string, SyncProviderState> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _redirected = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Set to make <see cref="SyncRoots"/> answer as Windows does when it will not list them.</summary>
+    public bool RefusesToListRoots { get; set; }
 
     /// <summary>Well before any guard window a test sets, so a file is old unless it says otherwise.</summary>
     public static readonly long LongAgo = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc();
@@ -106,9 +110,17 @@ public sealed class FakeCloudFiles : ICloudFiles
 
     public void Stop(string root) => _states[root] = SyncProviderState.NotRunning;
 
+    /// <summary>
+    /// Make a file open somewhere else, as a folder above it turned into a junction would: the handle
+    /// then resolves to <paramref name="actually"/> rather than to the file named.
+    /// </summary>
+    public void Redirect(string path, string actually) => _redirected[path] = actually;
+
     public Placeholder? PlaceholderAt(string path) => _entries.GetValueOrDefault(path)?.Placeholder;
 
-    public IReadOnlyList<SyncRoot> SyncRoots() => [.. _roots];
+    public IReadOnlyList<SyncRoot>? SyncRoots() => RefusesToListRoots ? null : [.. _roots];
+
+    public string? Resolve(string path) => _entries.ContainsKey(path) ? path : null;
 
     public SyncProviderState ProviderState(string syncRoot) =>
         _states.GetValueOrDefault(syncRoot, SyncProviderState.Unknown);
@@ -121,8 +133,7 @@ public sealed class FakeCloudFiles : ICloudFiles
                 entry.Path,
                 entry.IsDirectory,
                 IsPlaceholder: entry.Kind == EntryKind.Placeholder,
-                IsOtherLink: entry.Kind == EntryKind.OtherLink,
-                entry.Placeholder?.NewestFileTime ?? LongAgo))
+                IsOtherLink: entry.Kind == EntryKind.OtherLink))
             .ToList();
 
     public PlaceholderReading Read(string path) => _entries.GetValueOrDefault(path) switch
@@ -132,7 +143,7 @@ public sealed class FakeCloudFiles : ICloudFiles
         var entry => new PlaceholderReading(PathPresence.Present, entry.Placeholder),
     };
 
-    public ReleaseAnswer Release(string path, Func<Placeholder, bool> stillEligible)
+    public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
     {
         Asked.Add(path);
         BeforeRelease?.Invoke(path);
@@ -141,6 +152,10 @@ public sealed class FakeCloudFiles : ICloudFiles
         {
             case null:
                 return new ReleaseAnswer(ReleaseResult.Gone);
+
+            case not null when !string.Equals(
+                _redirected.GetValueOrDefault(path, path), resolvedPath, StringComparison.OrdinalIgnoreCase):
+                return new ReleaseAnswer(ReleaseResult.NoLongerEligible);
 
             case { Refused: true }:
                 return new ReleaseAnswer(ReleaseResult.Refused);

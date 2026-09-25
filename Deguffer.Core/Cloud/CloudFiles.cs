@@ -29,7 +29,7 @@ public sealed class CloudFiles : ICloudFiles
     /// itself leaves out a root registered under <c>AppData\Local</c>, as a scratch root there showed, and
     /// every sync app Deguffer recognises keeps its root elsewhere.</para>
     /// </summary>
-    public IReadOnlyList<SyncRoot> SyncRoots()
+    public IReadOnlyList<SyncRoot>? SyncRoots()
     {
         IReadOnlyList<StorageProviderSyncRootInfo> roots;
 
@@ -40,9 +40,9 @@ public sealed class CloudFiles : ICloudFiles
         catch (COMException)
         {
             // The manager answers through a COM server that a stripped-down or policy-locked
-            // Windows may not run. No list means no root Deguffer could act on, which is the
-            // truthful reading of a machine that cannot say.
-            return [];
+            // Windows may not run. That says nothing about whether a root is there, so it is
+            // answered as "could not say" and the provider says so.
+            return null;
         }
 
         var found = new List<SyncRoot>(roots.Count);
@@ -175,7 +175,14 @@ public sealed class CloudFiles : ICloudFiles
         };
     }
 
-    public ReleaseAnswer Release(string path, Func<Placeholder, bool> stillEligible)
+    public string? Resolve(string path)
+    {
+        using var handle = OpenToResolve(LongPath.Extended(path));
+
+        return handle.IsInvalid || FinalPath(handle) is not { } final ? null : Comparable(final);
+    }
+
+    public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
     {
         using var handle = OpenForState(LongPath.Extended(path));
 
@@ -183,6 +190,12 @@ public sealed class CloudFiles : ICloudFiles
         {
             return new ReleaseAnswer(
                 Unopened().Presence is PathPresence.Absent ? ReleaseResult.Gone : ReleaseResult.Refused);
+        }
+
+        if (FinalPath(handle) is not { } final
+            || !string.Equals(Comparable(final), Comparable(resolvedPath), StringComparison.OrdinalIgnoreCase))
+        {
+            return new ReleaseAnswer(ReleaseResult.NoLongerEligible);
         }
 
         var (result, placeholder) = Describe(handle);
@@ -234,8 +247,7 @@ public sealed class CloudFiles : ICloudFiles
             Path.Join(directory, name),
             IsDirectory: (data.FileAttributes & FileAttributeDirectory) != 0,
             isPlaceholder,
-            IsOtherLink: isReparse && !isPlaceholder,
-            MinimumAge.NewestFileTimeOf(data.CreationTime, data.LastWriteTime));
+            IsOtherLink: isReparse && !isPlaceholder);
     }
 
     /// <summary>The placeholder behind an open handle, or the HRESULT that says why there is none.</summary>
@@ -265,6 +277,9 @@ public sealed class CloudFiles : ICloudFiles
             Enum.IsDefined((PinState)info.PinState) ? (PinState)info.PinState : PinState.Pinned,
             MinimumAge.NewestFileTimeOf(basic.CreationTime, basic.LastWriteTime)));
     }
+
+    /// <summary>A path in the one form two resolved paths are compared in.</summary>
+    private static string Comparable(string path) => Path.TrimEndingDirectorySeparator(LongPath.Display(path));
 
     /// <summary>Why a handle would not open, in the probe's own three answers.</summary>
     private static PlaceholderReading Unopened() =>

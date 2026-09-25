@@ -18,8 +18,17 @@ namespace Deguffer.Core.Cloud;
 /// </summary>
 public interface ICloudFiles
 {
-    /// <summary>The sync roots registered for the signed-in user, in the order Windows lists them.</summary>
-    IReadOnlyList<SyncRoot> SyncRoots();
+    /// <summary>
+    /// The sync roots registered for the signed-in user, in the order Windows lists them, or null where
+    /// Windows would not list them. Null is not "none": a refusal never reads as absence.
+    /// </summary>
+    IReadOnlyList<SyncRoot>? SyncRoots();
+
+    /// <summary>
+    /// Where <paramref name="path"/> really is once every link on the way to it is followed, in display
+    /// form, or null where Windows would not open it.
+    /// </summary>
+    string? Resolve(string path);
 
     /// <summary>Whether the sync app behind <paramref name="syncRoot"/> is running and connected to it.</summary>
     SyncProviderState ProviderState(string syncRoot);
@@ -36,17 +45,30 @@ public interface ICloudFiles
 
     /// <summary>
     /// Mark one placeholder as not needed on this PC, so its sync app may release its local copy, and
-    /// only if <paramref name="stillEligible"/> holds of it at that moment.
+    /// only if <paramref name="stillEligible"/> holds of it at that moment and it is the file
+    /// <paramref name="resolvedPath"/> names.
     ///
     /// <para><b>One handle for both halves.</b> The file is described and unpinned through the same
     /// open handle, so a file that gained unsynced edits between the preview and the clean is read as
     /// it now is, not as it was.</para>
     ///
+    /// <para><b>The file opened must be the file named.</b> The handle opens a link at the file's own
+    /// name as the link, but Windows follows every folder above it, so a folder turned into a junction
+    /// since the preview would lead somewhere else: another account's root, or a sync app Deguffer does
+    /// not recognise. Where the open handle does not resolve to <paramref name="resolvedPath"/> the file
+    /// is left as it is.</para>
+    ///
     /// <para><b>Unpinning is all this does.</b> <c>CfSetPinState</c> is the call Microsoft opens to
     /// any application. <c>CfDehydratePlaceholder</c> is the sync app's own, and it carries a
     /// data-corruption warning for a caller without an exclusive handle, so it is never used.</para>
     /// </summary>
-    ReleaseAnswer Release(string path, Func<Placeholder, bool> stillEligible);
+    /// <param name="path">The file, as the plan named it.</param>
+    /// <param name="resolvedPath">
+    /// Where that file must turn out to be: its place under the sync root's own resolved location. The
+    /// root is resolved once, so a root the user reaches through a link of its own still works.
+    /// </param>
+    /// <param name="stillEligible">The rules, asked of the file as it is now.</param>
+    ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible);
 }
 
 /// <summary>One registered sync root.</summary>
@@ -58,11 +80,7 @@ public interface ICloudFiles
 /// <param name="DisplayName">What the sync app calls it, such as <c>OneDrive - Personal</c>.</param>
 public sealed record SyncRoot(string Id, string Path, string DisplayName)
 {
-    /// <summary>
-    /// The sync app that registered this root: the first part of <see cref="Id"/>. The Cloud Files API
-    /// reports the same name as the root's provider, which a scratch root registered as
-    /// <c>DegufferProbe!…</c> showed.
-    /// </summary>
+    /// <summary>The sync app that registered this root: the first part of <see cref="Id"/>.</summary>
     public string ProviderName => Id.Split('!', 2)[0];
 }
 
@@ -96,13 +114,11 @@ public enum SyncProviderState
 /// A junction, a symbolic link or any reparse point that is not a placeholder. Never entered and
 /// never acted on, for the reason <see cref="Execution.DirectoryRemover"/> does not follow one.
 /// </param>
-/// <param name="NewestFileTime">The newer of its creation and last-write FILETIMEs.</param>
 public readonly record struct CloudEntry(
     string Path,
     bool IsDirectory,
     bool IsPlaceholder,
-    bool IsOtherLink,
-    long NewestFileTime);
+    bool IsOtherLink);
 
 /// <summary>A placeholder's state, as <c>CfGetPlaceholderInfo</c> reports it.</summary>
 /// <param name="OnDiskBytes">The bytes of the file's data held on this PC, which is what releasing it gives back.</param>
