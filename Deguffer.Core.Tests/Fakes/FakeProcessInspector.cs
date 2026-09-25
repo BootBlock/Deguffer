@@ -6,6 +6,7 @@ namespace Deguffer.Core.Tests.Fakes;
 public sealed class FakeProcessInspector(params string[] running) : IProcessInspector
 {
     private readonly Dictionary<int, ProcessLiveness> _processes = [];
+    private readonly List<string> _running = [.. running];
 
     public static FakeProcessInspector NothingRunning => new();
 
@@ -22,8 +23,18 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         return this;
     }
 
+    /// <summary>
+    /// Declare a program running from now on, so a test can start one between the preview and the
+    /// clean and show the clean asking again.
+    /// </summary>
+    public FakeProcessInspector WithRunning(string name)
+    {
+        _running.Add(name);
+        return this;
+    }
+
     public IReadOnlyList<string> FindRunning(IEnumerable<string> names) =>
-        [.. names.Intersect(running, StringComparer.OrdinalIgnoreCase)];
+        [.. names.Intersect(_running, StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
     /// What <see cref="WithProcess"/> declared for the id, and otherwise
