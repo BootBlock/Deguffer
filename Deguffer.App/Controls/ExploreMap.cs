@@ -89,6 +89,12 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private (int Node, MapFrame Shape)? _opening;
 
+    /// <summary>
+    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, ExploreSpacing, VolumeSpace)"/>
+    /// has been handed, so a double-click can tell whether the page opened what it asked for.
+    /// </summary>
+    private int _picturesHanded;
+
     /// <summary>Whether the left button is dragging the picture. See <see cref="MapDrag"/>.</summary>
     private readonly MapDrag _drag = new();
 
@@ -414,17 +420,24 @@ public sealed class ExploreMap : UserControl
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
 
-        // A folder opened by a double-click on its shape, in the same tree and the same view, opens
-        // out of that shape. Anything else arriving here is not what the double-click asked for.
-        var opening = _opening is { } asked && asked.Node == node && ReferenceEquals(tree, _tree) && view == _view
+        // A zoom is into one picture. Another tree, another folder or another view is another
+        // picture, and the part of this one the reader had magnified means nothing in it. So is the
+        // same root with the volume beside it or without it, which is the root opened or closed. A
+        // new colouring, scheme or spacing is the same picture, so the zoom stays.
+        var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
+
+        // A shape opened by a double-click, in the same tree and the same view, opens out of that
+        // shape: a folder, or the root opened out of the volume beside it. Anything else arriving
+        // here is not what the double-click asked for, and nor is the same picture again, which
+        // has nothing to open into.
+        var opening = another && _opening is { } asked && asked.Node == node && ReferenceEquals(tree, _tree) && view == _view
             ? asked.Shape
             : (MapFrame?)null;
 
-        // A zoom is into one picture. Another tree, another folder or another view is another
-        // picture, and the part of this one the reader had magnified means nothing in it. A new
-        // colouring, scheme or spacing is the same picture, so the zoom stays.
-        if (!ReferenceEquals(tree, _tree) || node != _node || view != _view)
+        if (another)
         {
+            _picturesHanded++;
+
             _descent.Finish();
             EndDrag();
             _zoom.Reset();
@@ -1151,7 +1164,8 @@ public sealed class ExploreMap : UserControl
     /// a zoom into that shape, and it is animated as one: the shape grows from where it was until it
     /// fills the map, and the folder's own drawing grows in over it. The page is what decides whether
     /// a node opens, and it says so by showing it here before <see cref="Activated"/> returns, so the
-    /// shape is handed over for that moment and only for it.</para>
+    /// shape is handed over for that moment and only for it. The root of a scan of a whole volume
+    /// opens the same way, out of the volume drawn beside it.</para>
     ///
     /// <para>What does not open, a file, the block standing in for items too small to draw, or the
     /// block standing for free space, is zoomed to until it fills the map as far as its shape allows.
@@ -1171,7 +1185,9 @@ public sealed class ExploreMap : UserControl
 
         if (hit.IsNode)
         {
-            var standing = _node;
+            // Counted rather than compared by node: the root opened out of its volume is the same
+            // node drawn as another picture.
+            var standing = _picturesHanded;
 
             _opening = shape is { } opening ? (hit.Node, opening) : null;
 
@@ -1184,7 +1200,7 @@ public sealed class ExploreMap : UserControl
                 _opening = null;
             }
 
-            if (_node != standing)
+            if (_picturesHanded != standing)
             {
                 return;
             }

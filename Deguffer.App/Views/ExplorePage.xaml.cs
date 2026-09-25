@@ -303,7 +303,7 @@ public sealed partial class ExplorePage : Page
             ViewModel.SelectedColouring,
             ViewModel.SelectedScheme,
             _appearance.Look.Spacing,
-            ViewModel.Volume);
+            ViewModel.VolumeBeside);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the
