@@ -316,7 +316,9 @@
                  that never wraps, so naming a new shape cannot change the height of anything above
                  it. What the thing under the pointer *is* wraps, so it is the tooltip on the
                  picture instead. -->
-            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto" MinHeight="20">
+            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                <!-- Holds the line open while nothing is under the pointer. See LineStrut. -->
+                <TextBlock Grid.ColumnSpan="2" Style="{StaticResource LineStrut}" />
                 <TextBlock Grid.Column="0"
                            Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"

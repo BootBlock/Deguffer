@@ -109,7 +109,7 @@ public sealed class MemoryTreeLayoutTests
             [new ExploreChild("file", IsDirectory: false, IsLink: false, 1_000)]);
 
         var drive = builder.Build(ExploreChildOrder.BySize);
-        var dates = ShapeColours.For(drive, ExploreColouring.Age, new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
+        var dates = ShapeColours.For(drive, ExploreColouring.Age, ExploreScheme.Standard, new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
 
         Assert.Throws<ArgumentException>(() =>
             ExploreSurface.Create(Tree, Tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale: 1, dates, ExploreSpacing.Comfortable, VolumeSpace.None));
@@ -126,7 +126,7 @@ public sealed class MemoryTreeLayoutTests
     [InlineData(ExploreView.Icicle, Width / 2, 8)]
     public void EveryViewDrawsTheMemoryTreeAndFindsAPartUnderThePointer(ExploreView view, float x, float y)
     {
-        var surface = ExploreSurface.Create(Tree, Tree.RootNode, view, (int)Width, (int)Height, scale: 1, textScale: 1, ShapeColours.ByBranch, ExploreSpacing.Comfortable, VolumeSpace.None);
+        var surface = ExploreSurface.Create(Tree, Tree.RootNode, view, (int)Width, (int)Height, scale: 1, textScale: 1, ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
         var pixels = new byte[PixelBuffer.LengthFor((int)Width, (int)Height)];
 
         surface.Paint(pixels, new TileColour(32, 32, 32));

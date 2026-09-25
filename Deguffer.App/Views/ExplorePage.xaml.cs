@@ -65,8 +65,15 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private readonly Thickness _rowsMargin;
 
-    /// <summary>The treemap spacing the map was last told. See <see cref="FollowSpacing"/>.</summary>
-    private ExploreSpacing _spacing;
+    /// <summary>
+    /// How the maps look: each picture's colours and the treemap's spacing. Held for the page's
+    /// life, and shared with the appearance window whenever that is open, so the window changes the
+    /// same value the map is drawn from.
+    /// </summary>
+    private readonly MapAppearanceViewModel _appearance;
+
+    /// <summary>The appearance window while it is open, so the gear brings it forward rather than opening a second.</summary>
+    private MapAppearanceWindow? _appearanceWindow;
 
     public ExplorePage()
     {
@@ -75,6 +82,7 @@ public sealed partial class ExplorePage : Page
         ViewModel = new ExploreViewModel(
             ExploreScanner.Default,
             VolumeInventory.Current,
+            TimeProvider.System,
 
             // The dialog is built per ask, as the Storage page's is: a XamlRoot captured in this
             // constructor would be the one from before a theme change or a reparent.
@@ -173,7 +181,13 @@ public sealed partial class ExplorePage : Page
         var preferences = App.Preferences.Current;
 
         ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
-        _spacing = preferences.TreemapSpacing;
+
+        _appearance = new MapAppearanceViewModel(MapLook.From(preferences));
+        _appearance.Changed += (_, _) =>
+        {
+            ViewModel.SelectedScheme = _appearance.Look.SchemeFor(ViewModel.SelectedView);
+            ShowCurrentNode();
+        };
 
         // The spacing is chosen on the Settings page, so it can change while this page is away.
         Loaded += (_, _) => FollowSpacing();
@@ -205,21 +219,30 @@ public sealed partial class ExplorePage : Page
     /// <summary>
     /// Draw again if the treemap spacing changed while this page was away.
     ///
-    /// <para>Re-read on every visit, unlike the view and the colouring. Those are set on this page
-    /// and applied before they are persisted, so re-reading them would undo a choice whose write to
-    /// disk had failed. This one is set on the Settings page, which persists first and applies
-    /// second, so <see cref="Shell.PreferenceService.Current"/> is never anything but what took
-    /// effect.</para>
+    /// <para>Re-read on every visit, unlike the view, the colouring and the colour schemes. Those are
+    /// set on this page or in its appearance window and applied before they are persisted, so
+    /// re-reading them would undo a choice whose write to disk had failed. The spacing can also be
+    /// set on the Settings page, which persists first and applies second, so
+    /// <see cref="Shell.PreferenceService.Current"/> holds what took effect there.</para>
     /// </summary>
-    private void FollowSpacing()
-    {
-        var spacing = App.Preferences.Current.TreemapSpacing;
+    private void FollowSpacing() => _appearance.Follow(App.Preferences.Current.TreemapSpacing);
 
-        if (spacing != _spacing)
+    /// <summary>
+    /// Open the appearance window, or bring it forward where it is already open.
+    ///
+    /// <para>Its own window rather than a dialog on this page, because the reader has to see the map
+    /// change as they choose: a dialog covers the page it belongs to. See
+    /// <see cref="MapAppearanceWindow"/>.</para>
+    /// </summary>
+    private void OnAppearanceClicked(object sender, RoutedEventArgs e)
+    {
+        if (_appearanceWindow is null && App.MainWindow is { } owner)
         {
-            _spacing = spacing;
-            ShowCurrentNode();
+            _appearanceWindow = new MapAppearanceWindow(_appearance, owner);
+            _appearanceWindow.Closed += (_, _) => _appearanceWindow = null;
         }
+
+        _appearanceWindow?.Activate();
     }
 
     /// <summary>
@@ -234,6 +257,11 @@ public sealed partial class ExplorePage : Page
     {
         ViewModel.SelectedView = view;
         ViewSelector.SelectedIndex = (int)view;
+
+        // Each picture keeps its own colours, so a change of view is a change of scheme as well, and
+        // the appearance window's picker moves to speak for the new one.
+        _appearance.View = view;
+        ViewModel.SelectedScheme = _appearance.Look.SchemeFor(view);
 
         var listed = view == ExploreView.List;
 
@@ -273,7 +301,8 @@ public sealed partial class ExplorePage : Page
             ViewModel.CurrentNode,
             ViewModel.SelectedView,
             ViewModel.SelectedColouring,
-            _spacing,
+            ViewModel.SelectedScheme,
+            _appearance.Look.Spacing,
             ViewModel.Volume);
 
     /// <summary>
@@ -402,10 +431,22 @@ public sealed partial class ExplorePage : Page
     }
 
     /// <summary>
-    /// Read the volumes again as the picker opens, so its space figures describe the disk now
-    /// rather than when the app started. See <see cref="ExploreViewModel.RefreshDrives"/>.
+    /// Read the volumes again as the picker opens, where the last reading has gone stale, so its
+    /// space figures describe the disk now rather than when the page was first shown. See
+    /// <see cref="ExploreViewModel.RefreshDrives"/>.
     /// </summary>
     private void OnDriveListOpened(object sender, object e) => ViewModel.RefreshDrives();
+
+    /// <summary>
+    /// Read the volumes as the page is shown, on the same terms as the picker opening. The page is
+    /// kept alive by NavigationCacheMode, so its constructor's reading is the first visit's only.
+    /// </summary>
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+
+        ViewModel.RefreshDrives();
+    }
 
     /// <summary>Applied first and persisted second, for the reason above.</summary>
     private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e)

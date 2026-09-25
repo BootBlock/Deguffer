@@ -273,7 +273,7 @@ public sealed class TreemapVolumeTests
 
     private static ExploreSurface Treemap(ExploreTree tree, int root, ExploreView view, VolumeSpace volume) =>
         ExploreSurface.Create(
-            tree, root, view, Width, Height, scale: 1, textScale: 1, ShapeColours.ByBranch,
+            tree, root, view, Width, Height, scale: 1, textScale: 1, ShapeColours.ByBranch(ExploreScheme.Standard),
             ExploreSpacing.Comfortable, volume);
 
     private static double Area(ExploreTile tile) => (double)tile.Width * tile.Height;

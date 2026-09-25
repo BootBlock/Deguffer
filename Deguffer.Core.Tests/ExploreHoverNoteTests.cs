@@ -98,6 +98,7 @@ public sealed class ExploreHoverNoteTests : IDisposable
             Canvas,
             scale: 1, textScale: 1,
             ExploreColouring.Branch,
+            ExploreScheme.Standard,
             Now,
             ExploreSpacing.Comfortable,
             VolumeSpace.None));

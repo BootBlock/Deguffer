@@ -22,6 +22,9 @@ public class PreferenceStoreTests
             ExploreView.List,
             ExploreColouring.Age,
             ExploreSpacing.Spacious,
+            TreemapScheme: ExploreScheme.Vivid,
+            IcicleScheme: ExploreScheme.Soft,
+            SunburstScheme: ExploreScheme.Deep,
             ExploreNotesDismissed: true,
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
@@ -47,6 +50,12 @@ public class PreferenceStoreTests
 
         // Not the default, which is Comfortable, so the assertion fails with the preference gone.
         Assert.Equal(ExploreSpacing.Spacious, loaded.TreemapSpacing);
+
+        // Three different schemes, none of them the default, so a view whose scheme was read from
+        // another view's key fails here as well as one whose key was dropped.
+        Assert.Equal(ExploreScheme.Vivid, loaded.TreemapScheme);
+        Assert.Equal(ExploreScheme.Soft, loaded.IcicleScheme);
+        Assert.Equal(ExploreScheme.Deep, loaded.SunburstScheme);
 
         // Not the default, for the reason the two above give: false is what the record declares and
         // what a missing key deserialises to, so asserting false would pass with the preference

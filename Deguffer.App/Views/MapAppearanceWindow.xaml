@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="Deguffer.App.Views.MapAppearanceWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:media="using:Microsoft.UI.Xaml.Media">
+
+    <!--
+        A window of its own rather than a dialog on the page, because the point of it is to watch
+        the map change: a ContentDialog greys out and covers the page it belongs to, and a flyout
+        sits on the toolbar over the top of the picture. This one opens beside the main window where
+        the screen has room, and the reader can move it wherever it is out of the way.
+
+        On a solid ground rather than a backdrop, so it reads the same with the backdrop off (§6.5).
+    -->
+    <Grid x:Name="Root"
+          Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+          Padding="20,16,20,20"
+          RowSpacing="8"
+          RowDefinitions="Auto,*,Auto,Auto,Auto">
+
+        <!-- Which picture the list below changes. One list serves all three, so the heading is
+             what tells the reader that choosing here leaves the other two as they were. -->
+        <TextBlock Grid.Row="0"
+                   Text="{x:Bind ViewModel.SchemeHeading, Mode=OneWay}"
+                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+        <ListView x:Name="SchemeList"
+                  Grid.Row="1"
+                  SelectionMode="Single"
+                  ItemsSource="{x:Bind ViewModel.Schemes}"
+                  SelectedIndex="{x:Bind ViewModel.SchemeIndex, Mode=TwoWay}"
+                  AutomationProperties.Name="{x:Bind ViewModel.SchemeHeading, Mode=OneWay}">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:MapSchemeOption">
+                    <StackPanel Padding="0,8" Spacing="4" AutomationProperties.Name="{x:Bind Spoken}">
+                        <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind Description}" Style="{StaticResource SecondaryText}" />
+
+                        <!-- Two strips: a few folders as a treemap draws its largest, and the age
+                             bands newest first. Raw to a screen reader, which is given the
+                             description above instead. -->
+                        <ItemsControl ItemsSource="{x:Bind Branches}"
+                                      Margin="0,4,0,0"
+                                      AutomationProperties.AccessibilityView="Raw">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="media:SolidColorBrush">
+                                    <Border Width="36" Height="14" CornerRadius="2" Background="{x:Bind}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <ItemsControl ItemsSource="{x:Bind Ages}"
+                                      AutomationProperties.AccessibilityView="Raw">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="media:SolidColorBrush">
+                                    <Border Width="30" Height="8" CornerRadius="2" Background="{x:Bind}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Indexed against ExploreSpacing, like the same box on the Settings page. The two write
+             one setting, which the Memory page's treemap follows as well. -->
+        <ComboBox Grid.Row="2"
+                  Margin="0,8,0,0"
+                  MinWidth="200"
+                  Header="Room round each folder in the treemap"
+                  SelectedIndex="{x:Bind ViewModel.SpacingIndex, Mode=TwoWay}">
+            <ComboBoxItem Content="Dense" />
+            <ComboBoxItem Content="Comfortable" />
+            <ComboBoxItem Content="Spacious" />
+        </ComboBox>
+
+        <TextBlock Grid.Row="3"
+                   Margin="0,8,0,0"
+                   Text="Changes show on the map as you make them. Each view keeps its own colours, and the Memory page's map uses them too."
+                   Style="{StaticResource SecondaryText}" />
+
+        <Button Grid.Row="4"
+                Margin="0,8,0,0"
+                HorizontalAlignment="Right"
+                Content="Close"
+                Click="OnCloseClicked" />
+    </Grid>
+</Window>

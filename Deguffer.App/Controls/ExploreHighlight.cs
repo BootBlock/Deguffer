@@ -40,18 +40,24 @@ internal sealed class ExploreHighlight : Canvas
     private const double PickedEdgeWidth = 1.75;
 
     /// <summary>
-    /// Thinner and fainter than the picked outline, because it says something weaker. What the
+    /// The system accent colour over a dark halo, where the picked outline is white. What the
     /// pointer is over is about to be picked; what is picked is what Delete acts on, and the two
-    /// must not read as the same claim.
+    /// must not read as the same claim — so they differ by colour, which a glance takes in, rather
+    /// than by strength.
+    ///
+    /// <para>It was a fainter, thinner copy of the picked outline, and at a third of the halo's
+    /// opacity it all but vanished along the edge of a shaded tile: the halo is what carries a line
+    /// across every hue, and a faint one carries nothing. The accent is the colour Windows marks
+    /// hover and focus with, so it needs no explaining.</para>
     /// </summary>
-    private const double HoveredHaloWidth = 2.5;
+    private const double HoveredHaloWidth = 4.5;
 
-    private const double HoveredEdgeWidth = 1;
+    private const double HoveredEdgeWidth = 2;
 
     private readonly ScaleTransform _stretch = new();
 
-    private readonly Path _hoveredHalo = Stroke(Colors.Black, 0.35);
-    private readonly Path _hoveredEdge = Stroke(Colors.White, 0.85);
+    private readonly Path _hoveredHalo = Stroke(Colors.Black, 0.75);
+    private readonly Path _hoveredEdge = Stroke(Colors.White, 1);
     private readonly Path _pickedHalo = Stroke(Colors.Black, 0.6);
     private readonly Path _pickedEdge = Stroke(Colors.White, 1);
 
@@ -79,6 +85,13 @@ internal sealed class ExploreHighlight : Canvas
         _pickedHalo.Data = Trace(outlines);
         _pickedEdge.Data = Trace(outlines);
     }
+
+    /// <summary>
+    /// Draw what the pointer is over in <paramref name="accent"/>. Told rather than read here,
+    /// because the map already follows the system's settings and a second listener would be a
+    /// second copy of the same window onto them (G5).
+    /// </summary>
+    public void TintHovered(Color accent) => ((SolidColorBrush)_hoveredEdge.Stroke).Color = accent;
 
     /// <summary>Mark out what the pointer is over.</summary>
     public void ShowHovered(IReadOnlyList<ExploreOutline> outlines)

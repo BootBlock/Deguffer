@@ -20,8 +20,15 @@ public abstract class ShapeColours
     {
     }
 
-    /// <summary>A hue per folder inside its parent's, lighter by depth. What every tree can be coloured by.</summary>
-    public static ShapeColours ByBranch { get; } = new BranchColours();
+    /// <summary>One per <see cref="ExploreScheme"/>, because a branch colouring holds nothing but its scheme (G5).</summary>
+    private static readonly ShapeColours[] Branches =
+        [.. Enum.GetValues<ExploreScheme>().Select(scheme => new BranchColours(scheme))];
+
+    /// <summary>
+    /// A hue per folder inside its parent's, lighter by depth, in <paramref name="scheme"/>. What
+    /// every tree can be coloured by.
+    /// </summary>
+    public static ShapeColours ByBranch(ExploreScheme scheme) => Branches[(int)scheme];
 
     /// <summary>
     /// The colours <paramref name="colouring"/> asks for, for a drawing of <paramref name="tree"/>.
@@ -33,9 +40,11 @@ public abstract class ShapeColours
     /// <see cref="Layout.ISizedTree"/> and is handed a function to call for the colours, and only a
     /// caller that knows it has an <see cref="ExploreTree"/> can name these.</para>
     /// </summary>
+    /// <param name="scheme">Which set of colours either colouring is drawn in.</param>
     /// <param name="nowUtc">What "now" is, for the age bands.</param>
-    public static ShapeColours For(ExploreTree tree, ExploreColouring colouring, DateTime nowUtc) =>
-        colouring == ExploreColouring.Age ? new AgeColours(tree, nowUtc) : ByBranch;
+    public static ShapeColours For(
+        ExploreTree tree, ExploreColouring colouring, ExploreScheme scheme, DateTime nowUtc) =>
+        colouring == ExploreColouring.Age ? new AgeColours(tree, scheme, nowUtc) : ByBranch(scheme);
 
     internal abstract TileColour For(ExploreSurface surface, int node, int depth);
 
@@ -52,16 +61,16 @@ public abstract class ShapeColours
     {
     }
 
-    private sealed class BranchColours : ShapeColours
+    private sealed class BranchColours(ExploreScheme scheme) : ShapeColours
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
-            TilePalette.For(surface.HueOf(node), depth);
+            TilePalette.For(surface.HueOf(node), depth, scheme);
     }
 
-    private sealed class AgeColours(ExploreTree tree, DateTime nowUtc) : ShapeColours
+    private sealed class AgeColours(ExploreTree tree, ExploreScheme scheme, DateTime nowUtc) : ShapeColours
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
-            AgePalette.For(tree.ModifiedOf(node), nowUtc);
+            AgePalette.For(tree.ModifiedOf(node), nowUtc, scheme);
 
         internal override void EnsureDescribes(ISizedTree drawn)
         {

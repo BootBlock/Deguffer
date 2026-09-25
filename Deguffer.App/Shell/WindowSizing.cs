@@ -224,23 +224,10 @@ public sealed class WindowSizing
         public Point MaxTrackSize;
     }
 
-    /// <summary>
-    /// 32-bit user32 has no <c>SetWindowLongPtrW</c> — there it is a macro over
-    /// <c>SetWindowLongW</c>, and binding the Ptr name would fail to resolve at runtime. x86 is a
-    /// supported platform here (§6.3 ships per-architecture), so both are bound.
-    /// </summary>
-    private static nint SetWindowProc(nint hWnd, nint value) => nint.Size == 8
-        ? SetWindowLongPtr(hWnd, GwlpWndProc, value)
-        : SetWindowLong(hWnd, GwlpWndProc, value.ToInt32());
+    private static nint SetWindowProc(nint hWnd, nint value) => WindowLong.Set(hWnd, GwlpWndProc, value);
 
     // DllImport rather than LibraryImport, matching HighContrast: the generator wants
     // AllowUnsafeBlocks across the whole project, which is a large blast radius for these calls.
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-    private static extern nint SetWindowLongPtr(nint hWnd, int index, nint value);
-
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
-    private static extern nint SetWindowLong(nint hWnd, int index, int value);
-
     [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
     private static extern nint CallWindowProc(nint previous, nint hWnd, uint message, nint wParam, nint lParam);
 
