@@ -375,6 +375,81 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.1 is about whose knowledge decides. Where Windows' own cleanup finds nothing of its own in a
+    /// folder — observed over a <c>$Windows.~WS</c> holding only setup sources — the folder is not
+    /// offered, because the run would ask Windows to clear it and Windows would decline. The row does
+    /// not read "Already clear" over what is still there.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFolderWindowsOwnCleanupDoesNotCountAsItsOwn()
+    {
+        var staging = Leftover("$Windows.~WS", PastTheWindow);
+        var handlers = FakeDiskCleanupHandlers.FindingNothing();
+        var provider = CreateProvider(handlers);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Equal(["Windows ESD installation files"], handlers.Surveyed);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("finds nothing of its own", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(File.Exists(Path.Combine(staging, "file.bin")));
+    }
+
+    /// <summary>
+    /// Unelevated, Windows' setup handlers answer "nothing to delete" whatever is on the disk, so the
+    /// answer cannot be had. The row is offered as needing administrator rights, which it does in any
+    /// case, and the plan made after elevating asks again.
+    /// </summary>
+    [Fact]
+    public async Task OffersAFolderWhoseHandlerCannotBeAskedUntilElevated()
+    {
+        var old = Leftover("Windows.old", PastTheWindow);
+
+        var plan = await CreateProvider(FakeDiskCleanupHandlers.Unasked()).PlanAsync();
+
+        Assert.Equal([old], plan.TargetedPaths);
+        Assert.True(plan.RequiresElevation);
+    }
+
+    /// <summary>
+    /// The handler is asked last, because asking it can take as long as measuring an entire Windows
+    /// installation, and a folder another rule already holds back is never asked about.
+    /// </summary>
+    [Fact]
+    public async Task NeverAsksTheHandlerAboutAFolderAnotherRuleHoldsBack()
+    {
+        Leftover("Windows.old", TimeSpan.FromDays(3));
+        var handlers = FakeDiskCleanupHandlers.Windows();
+
+        await CreateProvider(handlers).PlanAsync();
+
+        Assert.Empty(handlers.Surveyed);
+    }
+
+    /// <summary>
+    /// A handler that finds nothing of its own at the moment it runs says so, and the run reports what
+    /// the disk still holds rather than a cleanup that did not happen.
+    /// </summary>
+    [Fact]
+    public async Task AHandlerThatFindsNothingWhenItRunsSaysSo()
+    {
+        Leftover("Windows.old", PastTheWindow);
+        var provider = CreateProvider(new FakeDiskCleanupHandlers(
+            (_, _) => new DiskCleanupOutcome(Ran: true, "Windows found nothing of this to clear.")));
+
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.StartsWith("Windows found nothing of this to clear.", step.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// §9: an Outlook data file left in the previous installation's profile is exactly the kind of
     /// thing somebody goes back into <c>Windows.old</c> for. Windows clears the folder whole, so the
     /// row is withheld and the file proved standing.

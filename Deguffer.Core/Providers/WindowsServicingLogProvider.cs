@@ -179,7 +179,12 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         var (deletions, measured) = await PlanDeletionsAsync(byPath, keep, ct).ConfigureAwait(false);
         var steps = new List<CleanupStep>(deletions);
 
-        if (resetLogs.Count > 0 && Handlers.Serves(ResetLogsHandler))
+        var volume = LongPath.Display(_system.SystemDrive);
+        var survey = resetLogs.Count == 0
+            ? null
+            : await Task.Run(() => Handlers.Survey(ResetLogsHandler, volume, ct), ct).ConfigureAwait(false);
+
+        if (survey is { MayOffer: true })
         {
             var (cleared, _) = await PlanDiskCleanupsAsync(
                 [
@@ -187,7 +192,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
                         resetLogs[0].Path,
                         "Logs from resetting or refreshing this PC, cleared by Windows' own cleanup for them.",
                         ResetLogsHandler,
-                        LongPath.Display(_system.SystemDrive),
+                        volume,
                         [.. resetLogs.Skip(1).Select(t => t.Path)],
                         resetLogs.Any(t => t.LastWritten is null) ? null : resetLogs.Max(t => t.LastWritten),
                         RequiresElevation: true),
@@ -197,16 +202,13 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
             steps.AddRange(cleared);
         }
-        else if (resetLogs.Count > 0)
+        else if (survey?.WhyLeftAlone(ResetLogsHandler, LongPath.Display(resetLogs[0].Path)) is { } why)
         {
             // Deleting them by hand is not the fallback: §5.1 prefers Windows' own route, and where
-            // that route is missing the logs are left where they are and §5.6 proves it.
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                "Leaving the logs from resetting this PC alone: Windows' own cleanup for them is not "
-                + "available to Deguffer here."));
+            // that route will not clear them the logs are left where they are and §5.6 proves it.
+            notes.Add(new PlanNote(PlanNoteSeverity.Information, why));
             held.AddRange(resetLogs.Select(t => new ProtectedPath(
-                t.Path, "Left alone because Windows' own cleanup for it is not available.", PathPresence.Present)));
+                t.Path, "Left alone because Windows' own cleanup does not clear it.", PathPresence.Present)));
         }
 
         if (measured.Note is { } scanNote)

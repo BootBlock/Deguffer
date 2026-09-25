@@ -28,6 +28,11 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Held back while an update is unfinished</b>, for the reasons
 /// <see cref="UnfinishedUpdate"/> gives. Setup's own handler refuses while Setup is running as well;
 /// this is Deguffer not offering what it would then refuse.</para>
+///
+/// <para><b>Offered only where the handler says it has something to clear.</b> A folder can hold
+/// files the handler does not count as its own, and then Windows' cleanup declines it: see
+/// <see cref="IDiskCleanupHandlers.Survey"/>. Unelevated, the handler cannot be asked, so the row is
+/// offered as needing administrator rights and the plan made after elevating asks.</para>
 /// </summary>
 public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
 {
@@ -128,7 +133,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
         var notes = new List<PlanNote>(scan.Notes);
         var held = new List<ProtectedPath>();
         var offered = new List<DiskCleanupTarget>();
-        var unserved = false;
+        var unclaimed = false;
 
         var everything = UnfinishedUpdate.HoldsEverything(_servicing, Inspector);
 
@@ -150,21 +155,6 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
             }
 
             var paths = present.Select(t => t.Path).ToList();
-
-            if (!Handlers.Serves(cleanup.Handler))
-            {
-                // Deleting the folders instead is not the fallback: the handler is chosen for what it
-                // does besides deleting. They stay, and §5.6 proves it.
-                unserved = true;
-                notes.Add(new PlanNote(
-                    PlanNoteSeverity.Information,
-                    $"Leaving {LongPath.Display(paths[0])} alone: Windows' own '{cleanup.Handler}' cleanup "
-                    + "is not available to Deguffer here, and removing the folder by hand would leave "
-                    + "behind what that cleanup also takes away."));
-                held.AddRange(paths.Select(path => new ProtectedPath(
-                    path, "Left alone because Windows' own cleanup for it is not available.", PathPresence.Present)));
-                continue;
-            }
 
             if (everything is not null)
             {
@@ -194,11 +184,25 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
                 continue;
             }
 
+            // Asked last, because it is the one question that can take a while: the handler measures
+            // what it would clear, and Windows.old is an entire installation.
+            var volume = LongPath.Display(_system.SystemDrive);
+            var survey = await Task.Run(() => Handlers.Survey(cleanup.Handler, volume, ct), ct).ConfigureAwait(false);
+
+            if (survey.WhyLeftAlone(cleanup.Handler, LongPath.Display(paths[0])) is { } why)
+            {
+                unclaimed = true;
+                notes.Add(new PlanNote(PlanNoteSeverity.Information, why));
+                held.AddRange(paths.Select(path => new ProtectedPath(
+                    path, "Left alone because Windows' own cleanup does not clear it.", PathPresence.Present)));
+                continue;
+            }
+
             offered.Add(new DiskCleanupTarget(
                 paths[0],
                 cleanup.Reason,
                 cleanup.Handler,
-                LongPath.Display(_system.SystemDrive),
+                volume,
                 [.. paths.Skip(1)],
                 written,
                 RequiresElevation: true));
@@ -221,9 +225,9 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
             ProtectedPaths = [.. Protect([.. scan.Protected]), .. held],
             Notes = notes,
             Fallback = measured.Fallback,
-            // A folder whose handler is missing is one Deguffer declined to act on, and a row holding
-            // nothing else must not read "Already clear" above it.
-            WasNotExamined = scan.NothingWasExamined || (unserved && steps.Count == 0),
+            // A folder Windows' own cleanup will not clear is one Deguffer declined to act on, and a row
+            // holding nothing else must not read "Already clear" above it.
+            WasNotExamined = scan.NothingWasExamined || (unclaimed && steps.Count == 0),
             HasUnreadableRoot = scan.CouldNotBeReached,
         };
     }

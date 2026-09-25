@@ -74,7 +74,7 @@ internal static class DiskCleanupRun
 
         var message = (succeeded, outcome) switch
         {
-            (false, { Ran: false, Message: var why }) => $"{why} Everything in it is still there.",
+            (false, { Message: { } why }) => $"{why} Everything in it is still there.",
 
             (false, _) =>
                 $"Nothing was removed: Windows reported its cleanup finished, and {FreeSpace.Format(remaining)} "

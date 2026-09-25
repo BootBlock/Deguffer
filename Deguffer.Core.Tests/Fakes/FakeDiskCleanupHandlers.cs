@@ -17,7 +17,7 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
 {
     private readonly Func<string, string, DiskCleanupOutcome> _behaviour;
 
-    private Func<string, bool> ServesHandler { get; init; } = _ => true;
+    private Func<string, DiskCleanupSurvey> Answer { get; init; } = _ => new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
 
     /// <summary>
     /// Clears, for each handler, the directories its registration names under the volume it is given,
@@ -80,9 +80,34 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     });
 
     /// <summary>Handlers of which Windows registers none on this machine.</summary>
-    public static FakeDiskCleanupHandlers NoneRegistered() => new(Windows()._behaviour) { ServesHandler = _ => false };
+    public static FakeDiskCleanupHandlers NoneRegistered() => new(Windows()._behaviour)
+    {
+        Answer = handler => new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, $"Windows no longer registers its '{handler}' cleanup."),
+    };
 
-    public bool Serves(string handler) => ServesHandler(handler);
+    /// <summary>
+    /// Handlers that find nothing of their own to clear, whatever the folders hold — what Windows' ESD
+    /// cleanup was observed to answer over a folder of setup sources it does not count as its own.
+    /// </summary>
+    public static FakeDiskCleanupHandlers FindingNothing() => new(Windows()._behaviour)
+    {
+        Answer = _ => new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear),
+    };
+
+    /// <summary>Handlers this process cannot ask, as Windows' setup handlers are to one that is not elevated.</summary>
+    public static FakeDiskCleanupHandlers Unasked() => new(Windows()._behaviour)
+    {
+        Answer = _ => new DiskCleanupSurvey(DiskCleanupAnswer.NeedsElevation),
+    };
+
+    /// <summary>Every handler asked about before a plan offered it.</summary>
+    public List<string> Surveyed { get; } = [];
+
+    public DiskCleanupSurvey Survey(string handler, string volume, CancellationToken ct)
+    {
+        Surveyed.Add(handler);
+        return Answer(handler);
+    }
 
     public DiskCleanupOutcome Run(string handler, string volume, CancellationToken ct)
     {

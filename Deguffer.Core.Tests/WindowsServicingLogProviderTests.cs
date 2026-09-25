@@ -597,6 +597,28 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// Where Windows' own cleanup finds nothing of its own in the reset logs, they stay: the run would
+    /// otherwise ask Windows to clear them and report a failure over a folder exactly as full.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheResetLogsStandingWhereWindowsOwnCleanupFindsNothing()
+    {
+        var logs = AtTheTop(Path.Combine("$SysReset", "Logs"));
+        var handlers = FakeDiskCleanupHandlers.FindingNothing();
+        var provider = CreateProvider(handlers);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(File.Exists(Path.Combine(logs, "setupact.log")));
+    }
+
     /// <summary>The reset logs' declaration, pinned by name as the four removed by path are.</summary>
     [Fact]
     public void TheResetLogDeclarationIsTheThreeDirectoriesWindowsOwnCleanupNames()

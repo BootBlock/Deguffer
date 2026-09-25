@@ -58,9 +58,16 @@ public sealed class WindowsServicingTests
         Assert.Contains("not the top of a drive", outcome.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A handler Windows does not register is unavailable, which a plan reads as "leave the folder",
+    /// never as something elevating would reveal.
+    /// </summary>
     [Fact]
-    public void TheRealHostServesNoHandlerWindowsDoesNotRegister()
+    public void TheRealHostCallsAHandlerWindowsDoesNotRegisterUnavailable()
     {
-        Assert.False(DiskCleanupHandlers.Default.Serves(NeverRegistered));
+        var survey = DiskCleanupHandlers.Default.Survey(NeverRegistered, @"C:\", CancellationToken.None);
+
+        Assert.Equal(DiskCleanupAnswer.Unavailable, survey.Answer);
+        Assert.False(survey.MayOffer);
     }
 }
