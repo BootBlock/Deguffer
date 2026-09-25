@@ -19,7 +19,8 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
-    /// conda, Playwright, the GPU shader caches, the Chromium application caches, the Firefox
+    /// conda, Playwright, the browser profiles test runners leave in the temporary folders, the GPU
+    /// shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
     /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
