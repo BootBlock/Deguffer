@@ -1047,7 +1047,9 @@ It removes each session's folder, one step each, and shows when each was last wr
   older than their folder, some by five months. Dated by its files, a session in use this morning
   would look months old.
 - **A session Claude Code lists as running is left alone**, and each entry in that list is checked
-  against Windows. If the list cannot be read, no session is offered, and the row says so.
+  against Windows. If the list cannot be read, no session is offered, and the row says so. The list is
+  read again when you press Clean, immediately before each session's snapshots are removed, so a
+  session you resume after the scan keeps every snapshot it may rewind to.
 - **Nothing written in the last 7 days is offered**, whatever the list says, and whatever the guard on
   recently changed files is set to. A session can run for days. The same cut-off applies again when you
   press Clean, so a session you resume after the scan keeps the snapshots it has taken since.
@@ -2213,14 +2215,17 @@ to sessions that had ended, and every one of them was empty.
 - **Anything that names a session** is offered only where Claude Code's own list of running sessions
   (`sessions\<process>.json`) does not list it, and each entry in that list is checked against
   Windows too. If the list cannot be read, nothing that names a session is offered, and the row says
-  so.
+  so. The list is read again when you press Clean, immediately before each item is removed, so what a
+  session you resume after the scan left behind stays.
 - **Whether a session still has a conversation is asked of every project folder at once.** A session's
   folders can sit under a different project folder from its transcript. If any project folder cannot
   be listed, no session is called an orphan.
 - **Nothing that names a session, or no process at all, is offered if Claude Code wrote it in the last
   7 days**, whatever the list says. A session can run for days, and an older version of Claude Code
   does not keep the list at all. A file that names a process needs no such wait, because that process
-  has been asked about directly. A folder is dated
+  has been asked about directly. Anything written after the scan read its evidence is kept when you
+  press Clean, so a handshake file an editor started after the scan writes under the same port stays.
+  A folder is dated
   by its own timestamp and its immediate contents, never by the files deep inside it: a file copied
   into place keeps the date of the file it was copied from.
 - **A session folder holding anything besides spilled tool output**, such as a subagent's
