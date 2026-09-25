@@ -62,6 +62,29 @@ public static class CaptureOneLayout
 
     public static bool IsSidecar(string name) => name.Equals(SidecarFolderName, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether <paramref name="name"/> is one of a sidecar's settings folders: <c>Settings</c> and the
+    /// rendering engine's number. One of them beside the <c>Cache</c> is what proves a folder called
+    /// <c>CaptureOne</c> is Capture One's, since the name alone is anybody's.
+    /// </summary>
+    public static bool IsSettingsFolder(string name) =>
+        name.Length > SettingsPrefix.Length
+        && name.StartsWith(SettingsPrefix, StringComparison.OrdinalIgnoreCase)
+        && !name.AsSpan(SettingsPrefix.Length).ContainsAnyExceptInRange('0', '9');
+
+    /// <summary>
+    /// Whether <paramref name="path"/> can be a catalog: a folder named <c>&lt;Name&gt;.cocatalog</c>,
+    /// and never a volume's root. A catalog database found anywhere else is not the layout Capture
+    /// One writes, and the folder around it may be a drive or the profile.
+    /// </summary>
+    public static bool IsCatalogFolder(string path) =>
+        path.EndsWith(CatalogExtension, StringComparison.OrdinalIgnoreCase)
+        && Path.GetDirectoryName(path) is not null;
+
+    private const string SettingsPrefix = "Settings";
+
+    private const string CatalogExtension = ".cocatalog";
+
     /// <summary>The files in <paramref name="entries"/> whose extension is <paramref name="extension"/>.</summary>
     public static IReadOnlyList<string> Databases(IReadOnlyList<FileSystemInfo> entries, string extension) =>
     [
@@ -106,7 +129,10 @@ public static class CaptureOneLayout
     /// A link is never followed, because it points at a tree the session does not own.</para>
     ///
     /// <para>Only the session's own folder is walked. A folder of images elsewhere that the session
-    /// lists as a favourite has a sidecar too, and is not reached.</para>
+    /// lists as a favourite has a sidecar too, and is not reached. A folder below it holding a
+    /// session file of its own is another session and is not entered: its sidecars are that
+    /// session's, and whether they are in use is a question about that session's file. Walking into
+    /// it would offer one folder twice, under two owners, with only one of them asked about.</para>
     /// </summary>
     public static CaptureOneSessionWalk WalkSession(string session, CancellationToken ct = default)
     {
@@ -136,7 +162,11 @@ public static class CaptureOneLayout
                 {
                     sidecars.Add(LongPath.Display(child.FullName));
                 }
-                else
+                else if (FolderEntries.Of(child.FullName) is not { } entries)
+                {
+                    unreadable.Add(LongPath.Display(child.FullName));
+                }
+                else if (Databases(entries, SessionDatabaseExtension).Count == 0)
                 {
                     pending.Push(child.FullName);
                 }

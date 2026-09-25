@@ -130,6 +130,46 @@ public sealed class CaptureOneDocumentsTests : IDisposable
         Assert.Empty(documents.Sessions);
     }
 
+    /// <summary>
+    /// A path after another in the same value, or after a URI's scheme, is found whole: no colon can
+    /// follow a drive, so the match cannot start at the earlier one.
+    /// </summary>
+    [Fact]
+    public void AnEarlierDriveInTheSameValueDoesNotSwallowThePath()
+    {
+        WriteSettings("Capture_One", "CaptureOne.exe_StrongName_abc", "16.4.0.0", Settings(
+            @"C:\Pictures;E:\Shoots\Weddings.cocatalog",
+            "file:///F:/Archive/Old.cocatalog"));
+
+        var documents = CaptureOneDocuments.Read(LocalAppData);
+
+        Assert.Equal([@"E:\Shoots\Weddings.cocatalog", @"F:\Archive\Old.cocatalog"], documents.Catalogs);
+    }
+
+    /// <summary>A session file at a drive's root would make the whole drive a session to walk.</summary>
+    [Fact]
+    public void ASessionFileAtAVolumeRootNamesNoSession()
+    {
+        WriteSettings("Capture_One", "CaptureOne.exe_StrongName_abc", "16.4.0.0", Settings(@"E:\Stray.cosessiondb"));
+
+        Assert.Empty(CaptureOneDocuments.Read(LocalAppData).Sessions);
+    }
+
+    /// <summary>A settings folder that is a link is read through, as Capture One itself reads it.</summary>
+    [Fact]
+    public void ASettingsFolderThatIsALinkIsRead()
+    {
+        var real = Path.Combine(_temp.Path, "moved", "16.4.0.0");
+        Directory.CreateDirectory(real);
+        File.WriteAllText(Path.Combine(real, CaptureOneDocuments.SettingsFileName), Settings(@"E:\Shoots\Weddings.cocatalog"));
+
+        var program = Path.Combine(LocalAppData, "Capture_One", "CaptureOne.exe_StrongName_abc");
+        Directory.CreateDirectory(program);
+        SymbolicLink.ToDirectory(Path.Combine(program, "16.4.0.0"), real);
+
+        Assert.Equal([@"E:\Shoots\Weddings.cocatalog"], CaptureOneDocuments.Read(LocalAppData).Catalogs);
+    }
+
     /// <summary>Another program under the same publisher's folder is none of this reader's business.</summary>
     [Fact]
     public void ReadsOnlyCaptureOnesOwnSettings()

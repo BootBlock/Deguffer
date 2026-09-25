@@ -116,7 +116,11 @@ public static partial class CaptureOneDocuments
                         AddOnce(catalogs, catalog);
                         break;
 
-                    case ".cosessiondb" when Path.GetDirectoryName(path) is { } session:
+                    // A session's folder must be inside a volume rather than the volume itself: a
+                    // session file found at a drive's root would otherwise make the whole drive a
+                    // session to walk (§5.2).
+                    case ".cosessiondb" when Path.GetDirectoryName(path) is { } session
+                        && Path.GetDirectoryName(session) is not null:
                         AddOnce(sessions, session);
                         break;
                 }
@@ -145,7 +149,9 @@ public static partial class CaptureOneDocuments
                 continue;
             }
 
-            foreach (var program in programs.Directories)
+            // A folder that is a link is read through, as the program reading its own settings
+            // would. Only a file is read here, and nothing reached through it is ever a target.
+            foreach (var program in programs.Directories.Concat(programs.Links))
             {
                 var versions = ChildDirectories.Under(program.FullName);
 
@@ -155,7 +161,7 @@ public static partial class CaptureOneDocuments
                     continue;
                 }
 
-                foreach (var version in versions.Directories)
+                foreach (var version in versions.Directories.Concat(versions.Links))
                 {
                     var file = LongPath.Display(Path.Combine(version.FullName, SettingsFileName));
 
@@ -252,10 +258,12 @@ public static partial class CaptureOneDocuments
     /// <summary>
     /// A full path, on a drive or a share, that ends in one of Capture One's document extensions.
     /// The shortest such run is taken, so a value listing several paths yields each; the extension
-    /// must not continue into a longer word, so <c>.cocatalogs</c> is no match.
+    /// must not continue into a longer word, so <c>.cocatalogs</c> is no match. No colon may follow
+    /// the drive, where Windows allows none, so a run cannot begin at an earlier path in the same
+    /// value, or at a URI's scheme, and swallow the path that ends in the extension.
     /// </summary>
     [GeneratedRegex(
-        @"(?:[A-Za-z]:[\\/]|\\\\)[^<>""|?*\r\n\t]*?\.(?<extension>cocatalogdb|cocatalog|cosessiondb)(?![A-Za-z0-9_])",
+        @"(?:[A-Za-z]:[\\/]|\\\\)[^<>""|?*:\r\n\t]*?\.(?<extension>cocatalogdb|cocatalog|cosessiondb)(?![A-Za-z0-9_])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DocumentPath();
 }

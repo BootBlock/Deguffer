@@ -85,7 +85,7 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     private string Session(string name)
     {
         var session = Path.Combine(ShootDrive, name);
-        WriteFile(Path.Combine(session, $"{name}.cosessiondb"));
+        WriteFile(Path.Combine(session, $"{Path.GetFileName(name)}.cosessiondb"));
 
         foreach (var images in new[] { "Capture", "Selects" })
         {
@@ -209,6 +209,8 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
             Path.Combine(session, "Capture"),
             Path.Combine(session, "Capture", "CaptureOne"),
             Path.Combine(session, "Capture", "CaptureOne", "Settings166"),
+            Path.Combine(session, "Selects"),
+            Path.Combine(session, "Selects", "CaptureOne"),
             Path.Combine(session, "Selects", "CaptureOne", "Settings166"),
         })
         {
@@ -225,7 +227,124 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
         }
 
         Assert.True(LongPath.FileExists(Path.Combine(session, "2024-06-01.cosessiondb")));
+        Assert.True(LongPath.DirectoryExists(Path.Combine(session, "Output")));
+        Assert.True(LongPath.DirectoryExists(Path.Combine(session, "Trash")));
         Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// A session inside another is its own: its sidecars are offered once, under it, and whether it
+    /// is open is asked of its own file. Walking into it from the outer session would offer the same
+    /// folder twice, and ask the outer session's file about it.
+    /// </summary>
+    [Fact]
+    public async Task ASessionInsideAnotherIsItsOwn()
+    {
+        var outer = Session("Outer");
+        var inner = Session(Path.Combine("Outer", "Output", "Inner"));
+        List(Path.Combine(outer, "Outer.cosessiondb"), Path.Combine(inner, "Inner.cosessiondb"));
+
+        var liveTrees = new FakeLiveTreeInspector().WithHeldFile(Path.Combine(inner, "Inner.cosessiondb"), "CaptureOne");
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Equal(
+            [
+                CacheOf(Path.Combine(outer, "Capture", "CaptureOne")),
+                CacheOf(Path.Combine(outer, "Selects", "CaptureOne")),
+            ],
+            plan.Steps.OfType<DeleteStep>().Select(s => s.Path).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(CacheOf(Path.Combine(inner, "Capture", "CaptureOne")), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>§5.3 for a session: one whose file Capture One holds open keeps every cache in it.</summary>
+    [Fact]
+    public async Task ASessionCaptureOneHasOpenIsLeftAlone()
+    {
+        var session = Session("Studio");
+        List(Path.Combine(session, "Studio.cosessiondb"));
+
+        var liveTrees = new FakeLiveTreeInspector().WithHeldFile(Path.Combine(session, "Studio.cosessiondb"), "CaptureOne");
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(CacheOf(Path.Combine(session, "Capture", "CaptureOne")), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A session whose only folder of images is a link is not "Already clear": nothing behind the link
+    /// was examined.
+    /// </summary>
+    [Fact]
+    public async Task ASessionWhoseImagesAreBehindALinkIsNotClear()
+    {
+        var session = Path.Combine(ShootDrive, "Linked");
+        WriteFile(Path.Combine(session, "Linked.cosessiondb"));
+        var elsewhere = Path.Combine(_temp.Path, "elsewhere", "Capture");
+        WriteFile(Path.Combine(elsewhere, "CaptureOne", "Settings166", "IMG_0001.CR3.cos"));
+        Populate(Path.Combine(elsewhere, "CaptureOne", "Cache", "Proxies"));
+        SymbolicLink.ToDirectory(Path.Combine(session, "Capture"), elsewhere);
+        List(Path.Combine(session, "Linked.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(session, "Capture"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.2: a folder called <c>CaptureOne</c> is anybody's. Without one of Capture One's settings
+    /// folders beside its <c>Cache</c>, it is not recognised.
+    /// </summary>
+    [Fact]
+    public async Task ACaptureOneFolderWithNoSettingsIsNotOffered()
+    {
+        var session = Path.Combine(ShootDrive, "Plain");
+        WriteFile(Path.Combine(session, "Plain.cosessiondb"));
+        var cache = Populate(Path.Combine(session, "Exports", "CaptureOne", "Cache"));
+        Directory.CreateDirectory(Path.Combine(session, "Exports", "CaptureOne", "SettingsBackup"));
+        List(Path.Combine(session, "Plain.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.True(LongPath.DirectoryExists(cache));
+    }
+
+    /// <summary>A session file left in the profile would make the whole profile a session to search.</summary>
+    [Fact]
+    public async Task ASessionFolderHoldingTheProfileIsNotSearched()
+    {
+        WriteFile(Path.Combine(_environment.UserProfile, "Stray.cosessiondb"));
+        var sidecar = Path.Combine(_environment.UserProfile, "Pictures", "CaptureOne");
+        Directory.CreateDirectory(Path.Combine(sidecar, "Settings166"));
+        Populate(Path.Combine(sidecar, "Cache"));
+        List(Path.Combine(_environment.UserProfile, "Stray.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(_environment.UserProfile, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.2: a catalog database outside a <c>.cocatalog</c> package does not make the folder around it
+    /// a catalog, so the <c>Cache</c> beside it is somebody else's.
+    /// </summary>
+    [Fact]
+    public async Task ALooseCatalogDatabaseDoesNotMakeItsFolderACatalog()
+    {
+        var folder = Path.Combine(ShootDrive, "Documents");
+        WriteFile(Path.Combine(folder, "Copy.cocatalogdb"));
+        var cache = Populate(CacheOf(folder));
+        List(Path.Combine(folder, "Copy.cocatalogdb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase));
+        Assert.True(LongPath.DirectoryExists(cache));
     }
 
     /// <summary>
@@ -312,6 +431,37 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(LongPath.DirectoryExists(CacheOf(catalog)));
+    }
+
+    /// <summary>The catalog's <c>writelock</c> is asked about too, as Capture One's own mark that it is open.</summary>
+    [Fact]
+    public async Task AHeldWriteLockKeepsTheCatalogsCache()
+    {
+        var catalog = Catalog("Locked");
+        WriteFile(Path.Combine(catalog, "writelock"));
+        List(catalog);
+
+        var liveTrees = new FakeLiveTreeInspector().WithHeldFile(Path.Combine(catalog, "writelock"), "CaptureOne");
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+    }
+
+    /// <summary>
+    /// A catalog Capture One lists only on a drive that is not connected was never looked in, so the
+    /// row is not "Already clear".
+    /// </summary>
+    [Fact]
+    public async Task OnlyADisconnectedCatalogIsNotClear()
+    {
+        var missing = Path.Combine(_temp.Path, "unplugged", "Away.cocatalog");
+        List(missing);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(missing, StringComparison.Ordinal));
     }
 
     /// <summary>

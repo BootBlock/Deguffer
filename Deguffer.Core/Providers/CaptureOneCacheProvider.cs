@@ -215,6 +215,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
         if (steps.Count == 0
             && examination.Declined.Count == 0
+            && examination.Disconnected.Count == 0
             && live.Vetoed.Count == 0
             && !examination.Unreadable
             && documents.IsComplete)
@@ -248,7 +249,10 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             ]),
             Notes = examination.Notes,
             Fallback = measured.Fallback,
-            WasNotExamined = steps.Count == 0 && examination.Declined.Count > 0,
+            // A catalog on a drive that is not connected was listed and never looked in, which is
+            // a zero nobody can vouch for, as a declined one is.
+            WasNotExamined = steps.Count == 0
+                && (examination.Declined.Count > 0 || examination.Disconnected.Count > 0),
             HasUnreadableRoot = examination.Unreadable || !documents.IsComplete,
         };
     }
@@ -262,6 +266,15 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// </summary>
     private static void CollectCatalog(string catalog, Examination examination)
     {
+        if (!CaptureOneLayout.IsCatalogFolder(catalog))
+        {
+            examination.Decline(
+                catalog,
+                "Capture One's settings name a catalog database here, but the folder is not a Capture One "
+                + "catalog, so nothing in it is offered.");
+            return;
+        }
+
         if (!examination.Reached(catalog) || examination.EntriesOf(catalog) is not { } entries)
         {
             return;
@@ -300,8 +313,19 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// One session: prove it by its database, then walk it for the <c>CaptureOne</c> folder beside
     /// each folder of images, and offer the <c>Cache</c> in each.
     /// </summary>
-    private static void CollectSession(string session, Examination examination, CancellationToken ct)
+    private void CollectSession(string session, Examination examination, CancellationToken ct)
     {
+        // A session file left in the profile, or above it, would make everything the profile holds
+        // part of a session to walk, Capture One's own settings folders included.
+        if (LongPath.Contains(session, Environment.UserProfile))
+        {
+            examination.Decline(
+                session,
+                "Capture One lists a session here, but the folder holds your whole profile, so it is not "
+                + "searched and nothing in it is offered.");
+            return;
+        }
+
         if (!examination.Reached(session) || examination.EntriesOf(session) is not { } entries)
         {
             return;
@@ -329,10 +353,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
         foreach (var link in walk.Links)
         {
-            examination.Notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving '{link}' alone: it is a link to somewhere else, and Deguffer does not look "
-                + "through a link."));
+            examination.DeclineLink(link);
         }
 
         foreach (var sidecar in walk.Sidecars)
@@ -342,6 +363,15 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             if (examination.EntriesOf(sidecar) is not { } sidecarEntries
                 || examination.CacheIn(sidecar, sidecarEntries) is not { } cache)
             {
+                continue;
+            }
+
+            if (!sidecarEntries.Any(entry => entry is DirectoryInfo && CaptureOneLayout.IsSettingsFolder(entry.Name)))
+            {
+                examination.Decline(
+                    sidecar,
+                    "No Capture One settings folder is beside its Cache, so it was not recognised as "
+                    + "Capture One's and is left alone.");
                 continue;
             }
 
@@ -450,7 +480,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
             if (cache.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
-                Decline(path, "A link rather than a folder, so what it points at was never classified.");
+                DeclineLink(path);
                 return null;
             }
 
@@ -460,7 +490,14 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         public void Decline(string path, string reason)
         {
             Declined.Add((path, reason));
-            Notes.Add(new PlanNote(PlanNoteSeverity.Information, $"Leaving '{path}' alone: {reason}"));
+            Notes.Add(new PlanNote(PlanNoteSeverity.Information, $"Leaving '{path}' alone. {reason}"));
+        }
+
+        /// <summary>A link, in the wording every provider uses for one it will not follow.</summary>
+        public void DeclineLink(string path)
+        {
+            Declined.Add((path, CacheLevelWalk.LinkReason));
+            Notes.Add(CacheLevelWalk.Note(path));
         }
     }
 }
