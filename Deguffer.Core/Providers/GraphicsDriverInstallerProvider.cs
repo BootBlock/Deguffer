@@ -428,9 +428,14 @@ public sealed partial class GraphicsDriverInstallerProvider : CleanupProviderBas
                 + "so one still here is from an installation that stopped part-way.");
         }
 
-        // Asked in two states: a refusal is not evidence that this folder is a driver package.
-        return LongPath.ProbeDirectory(Path.Combine(root, name, "Packages", "Drivers", "Display"))
-            is PathPresence.Present
+        // Asked in two states: a refusal is not evidence that this folder is a driver package. Walked
+        // segment by segment as well, because a probe resolves through a link on the way down, and a
+        // package found through one says nothing about what the folder itself holds.
+        var folder = Path.Combine(root, name);
+        var marker = Path.Combine(folder, "Packages", "Drivers", "Display");
+
+        return DerivedPath.FirstObstacleBetween(folder, marker) is null
+            && LongPath.ProbeDirectory(marker) is PathPresence.Present
             ? new ChildClassification(
                 name,
                 SafetyTier.RegenerableWithCost,

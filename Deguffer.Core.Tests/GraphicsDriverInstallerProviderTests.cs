@@ -199,6 +199,31 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An AMD folder is recognised by what it holds, so what it holds has to be its own. A driver
+    /// package reached through a link inside the folder says nothing about the folder, and taking the
+    /// folder on that evidence would remove everything else in it unexamined.
+    /// </summary>
+    [Fact]
+    public async Task ADriverPackageReachedThroughALinkDoesNotMakeAFolderAPayload()
+    {
+        var elsewhere = Populate(
+            Path.Combine(_temp.Path, "elsewhere", "Packages"),
+            Path.Combine("Drivers", "Display", "WT6A_INF", "driver.inf"));
+        var folder = Populate(Path.Combine(Amd, "Tools"), "irreplaceable.bin");
+        Directory.CreateSymbolicLink(Path.Combine(folder, "Packages"), elsewhere);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(Path.Combine(folder, "irreplaceable.bin")), "a folder was taken on a package found through a link");
+    }
+
+    /// <summary>
     /// NVIDIA names a release folder three digits, a point and two digits, and nothing else in that
     /// folder is its installer's. A near miss is Tier 4.
     /// </summary>
