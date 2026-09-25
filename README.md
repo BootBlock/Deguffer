@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Fifty sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Fifty-nine sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Fifty-four providers, each holding its own knowledge of one location. A provider reports "not
+Fifty-nine providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -117,12 +117,13 @@ installed" cleanly on a machine without that toolchain.
 | Roslyn solution index cache | One dated row per set of indexes, so the sets a program left behind when it moved folder can go; never the rest of Visual Studio's folder |
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
-| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, and every application that embeds the same engine |
+| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Battle.net launcher's built-in browser, and every application that embeds the same engine |
 | Firefox caches | |
 | Steam web cache | |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
+| Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
 | GPU shader caches | |
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 | Tool caches in temporary folders | Node's compile cache, and what Flutter, Dart's test runner, Firefox and Roslyn left there, each recognised by its own name and left alone while its tool may be using it |
@@ -167,6 +168,7 @@ installed" cleanly on a machine without that toolchain.
 | Windows servicing logs | The logs a reset of this PC leaves are cleared by Windows' own cleanup for them, never by path |
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
+| Battle.net launcher logs | |
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written into stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |

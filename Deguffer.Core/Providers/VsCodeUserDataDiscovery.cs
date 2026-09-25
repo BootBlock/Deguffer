@@ -22,7 +22,7 @@ public sealed record VsCodeUserData(string Name, string Path);
 /// reason: <c>CachedData</c> is a name any directory anywhere may carry.</para>
 ///
 /// <para><b>Identification is two positive tests, and neither of them is a cache name.</b> A folder
-/// qualifies only if it holds Chromium's own <see cref="ChromiumUserDataDiscovery.IdentifyingFile"/>
+/// qualifies only if it holds Chromium's own <c>Local State</c>
 /// <em>and</em> <see cref="IdentifyingFile"/>. The first says the folder is an Electron
 /// application's user-data folder, which is the identification
 /// <see cref="ChromiumCacheProvider"/> already acts on; the second says that application is a
@@ -126,7 +126,7 @@ public sealed class VsCodeUserDataDiscovery(IUserEnvironment environment)
 
             var path = LongPath.Display(child.FullName);
 
-            if (LongPath.FileExists(Path.Combine(path, ChromiumUserDataDiscovery.IdentifyingFile))
+            if (LongPath.FileExists(Path.Combine(path, ChromiumLayout.Browser.IdentifyingFile))
                 && LongPath.FileExists(Path.Combine(path, IdentifyingFile)))
             {
                 found.Add(new VsCodeUserData(child.Name, path));

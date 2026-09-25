@@ -6,12 +6,12 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The caches a Code - OSS editor manages itself, which are the ones no Chromium rule reaches
-/// (2.0 GB on the measured machine, against about 15 MB for the six Chromium names in the same
+/// (2.0 GB on the measured machine, against about 15 MB for the Chromium names in the same
 /// folder).
 ///
 /// <para><b>Why this is not the Chromium provider.</b> A VS Code user-data folder holds
-/// <c>Local State</c>, so <see cref="ChromiumCacheProvider"/> already reaches the six engine caches
-/// inside it. Those six are the small part. <c>CachedData</c>, <c>CachedExtensionVSIXs</c>,
+/// <c>Local State</c>, so <see cref="ChromiumCacheProvider"/> already reaches the seven engine caches
+/// inside it. Those seven are the small part. <c>CachedData</c>, <c>CachedExtensionVSIXs</c>,
 /// <c>CachedExtensions</c>, <c>CachedProfilesData</c> and <c>WebStorage</c> are the editor's own,
 /// under names that belong to Code - OSS rather than to Chromium, and a rule about Chromium has no
 /// business knowing them. So they are a second declaration over the same folder, and the two
@@ -194,7 +194,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     /// the reason this declaration exists.</para>
     ///
     /// <para><b>This folder is declared twice, by two providers, and that is correct.</b>
-    /// <see cref="ChromiumCacheProvider"/> declares the same path with the six engine cache names,
+    /// <see cref="ChromiumCacheProvider"/> declares the same path with the seven engine cache names,
     /// and this one declares it with the editor's own. §7.1 reads the union of every declaration
     /// covering a path, so each provider states only what it knows and neither has to carry the
     /// other's table.</para>

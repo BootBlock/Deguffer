@@ -6,7 +6,7 @@ namespace Deguffer.Core.Providers;
 /// Which of the profile's application-data tiers a declared location sits in.
 ///
 /// A tier is named rather than a path held, because a declaration such as <see cref="ShaderCacheRoot"/>
-/// or <see cref="ChromiumBrowser"/> stays static and the paths come from
+/// or <see cref="ChromiumHost"/> stays static and the paths come from
 /// <see cref="IUserEnvironment"/> at the moment they are needed.
 /// </summary>
 public enum ProfileArea

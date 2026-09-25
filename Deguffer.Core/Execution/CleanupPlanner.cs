@@ -21,7 +21,8 @@ public sealed class CleanupPlanner
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Maven, vcpkg, pnpm,
     /// conda, Playwright, the browser profiles test runners leave in the temporary folders, the GPU
     /// shader caches, the Chromium application caches, the Firefox
-    /// profile caches, the Epic Games launcher's store cache and its own logs, the Steam client's
+    /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
+    /// launcher's cache and its logs, the Steam client's
     /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
@@ -145,6 +146,7 @@ public sealed class CleanupPlanner
             new FirefoxCacheProvider(environment),
             new EpicLauncherWebCacheProvider(environment),
             new EpicLauncherContentCacheProvider(environment),
+            new BattleNetCacheProvider(environment),
             new SteamCacheProvider(environment, discovery: steam),
             new SteamLibraryArtworkProvider(environment, discovery: steam),
             new SteamShaderCacheProvider(environment, discovery: steam),
@@ -173,6 +175,7 @@ public sealed class CleanupPlanner
             new CrashDumpProvider(environment),
             new WindowsServicingLogProvider(environment),
             new EpicLauncherLogProvider(environment),
+            new BattleNetLogProvider(environment),
             new VsCodeLogProvider(environment),
             new ClaudeCodeMcpLogProvider(environment),
             toolLogs,

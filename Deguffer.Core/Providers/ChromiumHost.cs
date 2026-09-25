@@ -3,15 +3,17 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Where one Chromium-based browser keeps its user-data folder, as its vendor documents it.
+/// Where one application that hosts the Chromium engine keeps its user-data folder, as its vendor
+/// documents it or as it was measured: a Chromium-based browser, or a launcher built on the Chromium
+/// Embedded Framework.
 ///
-/// <para>A declaration rather than a deeper walk. Every browser keeps that folder under a vendor
-/// directory and a product directory, two or three levels below an application-data root, where the
+/// <para>A declaration rather than a deeper walk. Every such host keeps that folder two or three
+/// levels below an application-data root, under a vendor or product directory, where the
 /// one-level walk in <see cref="ChromiumUserDataDiscovery"/> never looks. Walking two levels of both
 /// roots would multiply the candidates that walk's one file-existence check exists to keep few, and
-/// a recursive search for <c>Local State</c> would identify folders nobody declared. So each browser
-/// is named here, and a row only says <em>where</em> to look: the folder still has to hold
-/// <see cref="ChromiumUserDataDiscovery.IdentifyingFile"/> before anything inside it is examined.
+/// a recursive search for <c>Local State</c> would identify folders nobody declared. So each host
+/// is named here, and a row only says <em>where</em> to look: the folder still has to hold its
+/// <see cref="ChromiumLayout.IdentifyingFile"/> before anything inside it is examined.
 /// </para>
 ///
 /// <para>A wrong row therefore identifies nothing, which is the safe direction to be wrong in.</para>
@@ -20,22 +22,34 @@ namespace Deguffer.Core.Providers;
 /// <param name="Area">The application-data tier the folder sits in.</param>
 /// <param name="RelativePath">The folder below that tier, vendor directory first.</param>
 /// <param name="ProcessName">
-/// The browser's process, for §5.3's warning. Declared because the folder's own name is
+/// The host's process, for §5.3's warning. Declared because the folder's own name is
 /// <c>User Data</c> for almost every browser, which is nobody's process.
 /// </param>
-public sealed record ChromiumBrowser(
+public sealed record ChromiumHost(
     string Name,
     ProfileArea Area,
     string RelativePath,
     string ProcessName)
 {
     /// <summary>
-    /// The browsers Deguffer looks for, with every release channel that keeps a folder of its own.
-    /// Chromium's own documentation gives the Google rows. The others follow the same
+    /// Which file identifies the folder and how its profiles are found. A browser's, unless the row
+    /// says otherwise.
+    /// </summary>
+    public ChromiumLayout Layout { get; init; } = ChromiumLayout.Browser;
+
+    /// <summary>
+    /// The hosts Deguffer looks for, with every release channel that keeps a folder of its own.
+    /// Chromium's own documentation gives the Google rows. The other browsers follow the same
     /// vendor-then-product shape, except Opera, which keeps its settings in the roaming tier and the
     /// folder itself as its only profile.
+    ///
+    /// <para>Battle.net keeps its engine's folder a level below its own, beside the launcher's
+    /// account data, and marks it with the framework's <c>LocalPrefs.json</c> rather than
+    /// <c>Local State</c>. Its <c>Cache</c> and <c>Logs</c> are the launcher's own, not the
+    /// engine's, and are <see cref="BattleNetCacheProvider"/>'s and
+    /// <see cref="BattleNetLogProvider"/>'s.</para>
     /// </summary>
-    public static readonly IReadOnlyList<ChromiumBrowser> Declared =
+    public static readonly IReadOnlyList<ChromiumHost> Declared =
     [
         new("Google Chrome", ProfileArea.LocalAppData, @"Google\Chrome\User Data", "chrome"),
         new("Google Chrome Beta", ProfileArea.LocalAppData, @"Google\Chrome Beta\User Data", "chrome"),
@@ -53,6 +67,10 @@ public sealed record ChromiumBrowser(
         new("Vivaldi", ProfileArea.LocalAppData, @"Vivaldi\User Data", "vivaldi"),
         new("Opera", ProfileArea.RoamingAppData, @"Opera Software\Opera Stable", "opera"),
         new("Opera GX", ProfileArea.RoamingAppData, @"Opera Software\Opera GX Stable", "opera"),
+        new("Battle.net", ProfileArea.LocalAppData, @"Battle.net\BrowserCaches", "Battle.net")
+        {
+            Layout = ChromiumLayout.EmbeddedFramework,
+        },
     ];
 
     /// <summary>

@@ -6,10 +6,10 @@ using Deguffer.Core.Tests.Fakes;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A Chromium user-data folder is the most dangerous neighbourhood any provider works in: the six
+/// A Chromium user-data folder is the most dangerous neighbourhood any provider works in: the seven
 /// disposable directories sit among sign-in tokens, saved passwords, drafts and offline data, in
 /// the same folder and in the same naming style. So these are mostly negative tests. The positive
-/// ones only establish that the six are reached at all.
+/// ones only establish that the seven are reached at all.
 /// </summary>
 public sealed class ChromiumCacheProviderTests : IDisposable
 {
@@ -176,7 +176,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task PlansAllSixCacheNamesIncludingTheTwoThatAreGrandchildren()
+    public async Task PlansAllSevenCacheNamesIncludingTheTwoThatAreGrandchildren()
     {
         var app = CreateApplication("Chatter");
 
@@ -184,6 +184,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var gpuCache = CreateDirectory(Path.Combine(app, "GPUCache"));
         var graphite = CreateDirectory(Path.Combine(app, "DawnGraphiteCache"));
         var webGpu = CreateDirectory(Path.Combine(app, "DawnWebGPUCache"));
+        var dawn = CreateDirectory(Path.Combine(app, "DawnCache"));
         var httpCache = CreateDirectory(Path.Combine(app, "Cache", "Cache_Data"));
         var cacheStorage = CreateDirectory(Path.Combine(app, "Service Worker", "CacheStorage"));
 
@@ -193,7 +194,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
-            new[] { cacheStorage, codeCache, graphite, webGpu, gpuCache, httpCache }
+            new[] { cacheStorage, codeCache, graphite, webGpu, dawn, gpuCache, httpCache }
                 .Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.True(plan.EstimatedBytes > 0);
@@ -247,7 +248,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.2's dangerous direction, and the whole reason this provider is an exact allow-list. Every
-    /// one of these sits in the same folder in the same naming style as the six, two of them with
+    /// one of these sits in the same folder in the same naming style as the seven, two of them with
     /// the word "Cache" in the name, and every one of them is user data or live state.
     /// </summary>
     [Theory]
@@ -468,7 +469,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §7 scopes the age column to per-workspace and per-project data. Each of these is one whole
-    /// cache for one profile, so a timestamp on it would be a number with nothing to mean — and six
+    /// cache for one profile, so a timestamp on it would be a number with nothing to mean — and seven
     /// different dates for one application would invite the user to read a difference between them.
     /// </summary>
     [Fact]
@@ -602,7 +603,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Two of the six sit inside a directory that is kept, so a user who sees that directory still
+    /// Two of the seven sit inside a directory that is kept, so a user who sees that directory still
     /// standing has no way to tell the cache inside it went. The sentence is said only when it
     /// happened, so a plan that emptied no container must not carry it.
     /// </summary>
@@ -684,14 +685,14 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The six names, and only the six. A seventh appearing in the table without the reasoning that
-    /// belongs to it is exactly how a signature stops being a signature.
+    /// The seven names, and only the seven. An eighth appearing in the table without the reasoning
+    /// that belongs to it is exactly how a signature stops being a signature.
     /// </summary>
     [Fact]
-    public void TheTableDeclaresTheSixChromiumCacheNamesAndNoOthers()
+    public void TheTableDeclaresTheSevenChromiumCacheNamesAndNoOthers()
     {
         Assert.Equal(
-            ["CacheStorage", "Cache_Data", "Code Cache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache"],
+            ["CacheStorage", "Cache_Data", "Code Cache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache"],
             ChromiumCacheProvider.Levels
                 .SelectMany(l => l.Children.DisposableNames)
                 .Order(StringComparer.Ordinal));

@@ -15,9 +15,9 @@ namespace Deguffer.Core.Providers;
 /// this recognisable by shape rather than by name: the directory names belong to Chromium, not to
 /// the vendor, so one provider reaches an unbounded set of applications without knowing any of
 /// them. A browser is the same shape in a place that has to be named, because it keeps its folder
-/// below a vendor directory and a product directory — see <see cref="ChromiumBrowser"/>.</para>
+/// below a vendor directory and a product directory — see <see cref="ChromiumHost"/>.</para>
 ///
-/// <para><b>The signature is an exact allow-list of six names, and that is the whole safety
+/// <para><b>The signature is an exact allow-list of seven names, and that is the whole safety
 /// argument.</b> What sits beside them is Tier 3 and looks identical: <c>Local Storage</c>,
 /// <c>Session Storage</c> and <c>IndexedDB</c> are directories in the same folder in the same
 /// naming style, and <c>Local State</c>, <c>Cookies</c>, <c>Login Data</c> and <c>Web Data</c> are
@@ -29,9 +29,10 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>A cache name is not on its own a licence to look inside a folder.</b> Any directory
 /// anywhere may be called <c>GPUCache</c>, so identification is a separate and positive judgement:
-/// <see cref="ChromiumUserDataDiscovery"/> requires the folder to hold Chromium's own
-/// <c>Local State</c> file before this provider is ever asked what may go inside it. The six names
-/// then say what may be deleted; they never say whose folder this is.</para>
+/// <see cref="ChromiumUserDataDiscovery"/> requires the folder to hold the engine's own
+/// <c>Local State</c> file, or the <c>LocalPrefs.json</c> a declared framework host writes instead,
+/// before this provider is ever asked what may go inside it. The seven names then say what may be
+/// deleted; they never say whose folder this is.</para>
 ///
 /// <para>§5.1 does not apply. No embedding application exposes a cache-eviction command, and the
 /// engine's own clear-browsing-data surface is reachable only from inside the running process.</para>
@@ -44,7 +45,7 @@ namespace Deguffer.Core.Providers;
 public sealed class ChromiumCacheProvider : CleanupProviderBase
 {
     /// <summary>
-    /// Chromium's six cache directories, grouped by the directory each sits in. Anything not named
+    /// Chromium's seven cache directories, grouped by the directory each sits in. Anything not named
     /// here is Tier 4 by construction — which is what makes "we did not recognise that" fail closed
     /// beside data that would be gone for good.
     ///
@@ -73,6 +74,14 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                 "DawnWebGPUCache",
                 SafetyTier.RegenerableCache,
                 "Compiled WebGPU pipelines. The application rebuilds them on demand."),
+
+            // Dawn is the engine's WebGPU implementation, and this is the name older builds gave its
+            // pipeline cache. Battle.net's launcher still writes it, in the same disk-cache format as
+            // GPUCache: an index and its data files.
+            new ChildClassification(
+                "DawnCache",
+                SafetyTier.RegenerableCache,
+                "Compiled WebGPU pipelines, from an older build of the engine. The application rebuilds them on demand."),
             new ChildClassification(
                 "Cache",
                 SafetyTier.DoNotTouch,
@@ -100,16 +109,20 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
-    /// Files in the user-data folder that §5.6 must assert survived. Named separately because a
-    /// <see cref="DisposableChildSet"/> only ever classifies a directory, so a file beside the
-    /// caches is never enumerated, never classified, and never asserted unless it is named here —
-    /// the lesson NVIDIA's <c>accounts</c> taught, in a folder with a great deal more to lose.
+    /// Why the file that identified the user-data folder must survive. §5.6 asserts it by name
+    /// because a <see cref="DisposableChildSet"/> only ever classifies a directory, so a file beside
+    /// the caches is never enumerated, never classified, and never asserted unless it is named —
+    /// the lesson NVIDIA's <c>accounts</c> taught, in a folder with a great deal more to lose. Which
+    /// file that is belongs to the folder's <see cref="ChromiumLayout"/>.
     /// </summary>
-    private static readonly (string Name, string Reason)[] ProtectedRootFiles =
-    [
-        (ChromiumUserDataDiscovery.IdentifyingFile,
-            "The application's own settings, and the key that decrypts its saved cookies and passwords."),
-    ];
+    private const string IdentifyingFileReason =
+        "The application's own settings, and the key that decrypts its saved cookies and passwords.";
+
+    /// <summary>
+    /// Why a framework host's partition keeps its own copy of the identifying file. It is what
+    /// made the directory a profile, and it holds that partition's settings.
+    /// </summary>
+    private const string PartitionFileReason = "The settings of this part of the application's browser.";
 
     /// <summary>
     /// The same, per profile: the credential surface, named in full rather than sampled. Anything
@@ -160,15 +173,15 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     public override ProviderDescription Description { get; } = new()
     {
         Application = "Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and "
-            + "the desktop applications that embed the same engine: chat clients, editors and other "
-            + "Electron apps",
+            + "the desktop applications that embed the same engine: chat clients, editors and "
+            + "other Electron apps, and the Battle.net launcher",
         Publisher = "each application's own vendor; the cache format belongs to the Chromium "
             + "project",
         Purpose = "A Chromium browser caches web content, compiled scripts and GPU shaders under its "
             + "own folder in your profile, and an application built on Chromium does exactly the "
             + "same under its own. Almost no cleaner reaches the applications, so their caches grow "
             + "unnoticed across every such application on the machine.",
-        Recommendation = "Deguffer removes six cache directories whose names belong to Chromium "
+        Recommendation = "Deguffer removes seven cache directories whose names belong to Chromium "
             + "itself, and leaves everything else in the folder alone — the sign-ins, saved "
             + "passwords, saved payment cards and offline data sit right beside them.",
     };
@@ -304,7 +317,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             survivors.Add((
                 application.Path,
                 $"The '{application.Name}' data folder itself must survive — only recognised cache directories inside it are removed."));
-            survivors.AddRange(ProtectedRootFiles.Select(f => (Path.Combine(application.Path, f.Name), f.Reason)));
+            survivors.Add((Path.Combine(application.Path, application.Layout.IdentifyingFile), IdentifyingFileReason));
 
             var spared = 0;
             var emptiedAContainer = false;
@@ -315,6 +328,12 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                     profile,
                     "The profile directory itself must survive — only recognised cache directories inside it are removed."));
                 survivors.AddRange(ProtectedProfileFiles.Select(f => (Path.Combine(profile, f.Name), f.Reason)));
+
+                if (application.Layout.Profiles is ChromiumProfileRule.Marked
+                    && !profile.Equals(application.Path, StringComparison.OrdinalIgnoreCase))
+                {
+                    survivors.Add((Path.Combine(profile, application.Layout.IdentifyingFile), PartitionFileReason));
+                }
 
                 var walk = CacheLevelWalk.Under(Levels, profile, ct);
 
@@ -339,7 +358,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             // plan nobody reads — and a note nobody reads protects nothing. Each of them is still
             // asserted individually by §5.6, and this is the sentence that says so.
             //
-            // The second sentence is not decoration. Two of the six caches sit inside a directory
+            // The second sentence is not decoration. Two of the seven caches sit inside a directory
             // that is itself kept, so a user who sees that directory still standing after a clean
             // has no way to tell that anything inside it went. It is said only when it happened.
             if (spared > 0)
@@ -399,8 +418,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Whether any of the six declared names is on disk for this application, by probing the table
-    /// rather than by enumerating (G4). Six existence checks per profile, and not one of them can
+    /// Whether any of the seven declared names is on disk for this application, by probing the table
+    /// rather than by enumerating (G4). Seven existence checks per profile, and not one of them can
     /// reach a path the table does not name.
     ///
     /// <para><b>A presence probe, not a safety gate.</b> It answers through a junction, so an

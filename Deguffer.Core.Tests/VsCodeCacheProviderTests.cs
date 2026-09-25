@@ -347,7 +347,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The same folder is reached by <see cref="ChromiumCacheProvider"/>, which knows the six engine
+    /// The same folder is reached by <see cref="ChromiumCacheProvider"/>, which knows the seven engine
     /// cache names, and by this one, which knows the editor's own. Neither may reach the other's
     /// children: a Chromium rule that took <c>CachedData</c> would be acting on a name it has no
     /// knowledge of, and this provider taking <c>Code Cache</c> would be the same mistake mirrored.
