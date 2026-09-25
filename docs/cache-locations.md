@@ -3283,6 +3283,9 @@ Anything else is left alone, and Deguffer says so.
 the files and can leave the folders that held them, and an AMD machine keeps `C:\AMD` for its
 chipset driver alone. Neither is shown as something to reclaim.
 
+**A package an installer is running from is left alone**, and so is one a program is working in,
+because it is then the installation in progress.
+
 **Each release is its own item**, so you can keep the one you might reinstall. None of these
 vendors offers a command that removes its downloaded packages, so this is the path-based case §5.2
 governs rather than §5.1's command.
@@ -3383,8 +3386,10 @@ the licence server described below.
 no command that removes these, so this is the path-based case §5.2 governs rather than §5.1's
 command.
 
-**It warns while Autodesk's installer is running**, because the folder it extracts into is then the
-installation in progress.
+**It leaves a folder alone while an installer runs from it**, because an installer runs its setup
+from inside the folder it extracted, and that folder is then the installation in progress. It also
+warns while Autodesk's current installer is running, since that one runs from `Program Files` and
+writes into `WI` and `IM`.
 
 ### What is protected
 
@@ -3404,8 +3409,8 @@ nothing there and tells you why.
 ### What it costs you
 
 **Your installed products keep working.** Repairing one, or installing some updates, asks for
-these files, and Autodesk's answer is to download and extract the product again first. A 2022 or
-later product can then fail to reinstall or uninstall with "The feature you are trying to use is on
+these files, and Autodesk's answer is to download and extract the product again first. Deguffer
+says so before you clean. A 2022 or later product can then fail to reinstall or uninstall with "The feature you are trying to use is on
 a network resource that is unavailable". Autodesk documents the fix, which is to remove that
 product's `SourceList` registry key.
 

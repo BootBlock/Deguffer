@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -62,12 +61,14 @@ public sealed partial class GraphicsDriverInstallerProvider : InstallerPayloadPr
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
+        ILiveTreeInspector? liveTrees = null,
         ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default,
+            liveTrees ?? LiveTreeInspector.Default,
             Candidates(system ?? SystemDirectories.Current))
     {
     }

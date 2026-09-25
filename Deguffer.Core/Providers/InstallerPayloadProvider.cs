@@ -25,8 +25,19 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
-    private readonly IReadOnlyList<InstallerPayloadRoot> _roots;
+    private const string InUseReason =
+        "An installer is running from this folder right now, so removing it would break the "
+        + "installation in progress. It can go once that has finished.";
 
+    private readonly IReadOnlyList<InstallerPayloadRoot> _roots;
+    private readonly ILiveTreeInspector _liveTrees;
+
+    /// <param name="liveTrees">
+    /// §5.3: an installer runs its setup from inside the folder it unpacked, so a payload a program
+    /// was started from, or is working in, is the installation in progress and is never a target. A
+    /// warning by process name cannot say this: the setup program's name is the same as a thousand
+    /// others', and only where it runs from ties it to a payload.
+    /// </param>
     /// <param name="candidates">
     /// The rows this provider declares. Only those whose base is a full path are kept: Windows
     /// answers an empty string for a folder it cannot locate, and a folder named below an empty base
@@ -38,10 +49,18 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
         IProcessRunner runner,
         IProcessInspector inspector,
         IDirectoryScanner scanner,
+        ILiveTreeInspector liveTrees,
         IEnumerable<InstallerPayloadRoot> candidates)
         : base(environment, runner, inspector, scanner)
     {
+        _liveTrees = liveTrees;
         _roots = [.. candidates.Where(root => Path.IsPathFullyQualified(root.Base))];
+    }
+
+    public override void InvalidateCaches()
+    {
+        _liveTrees.Invalidate();
+        base.InvalidateCaches();
     }
 
     public override StepGrain Grain => StepGrain.Items;
@@ -97,7 +116,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();
-        var targets = new List<DeletionTarget>();
+        var found = new List<Payload>();
         var survivors = new List<(string Path, string Reason)>();
         var links = 0;
         var declined = 0;
@@ -169,17 +188,47 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
                     continue;
                 }
 
-                targets.Add(new DeletionTarget(
-                    path,
-                    classification.Reason,
-                    DirectoryAge.Of(path, ct),
-                    Identity: new ItemIdentity($"{root.Label}\\{child.Name}", $"{root.Vendor} {child.Name}"),
-                    Facets: [new ItemFacet("Vendor", root.Vendor)],
-                    Group: root.Vendor));
+                found.Add(new Payload(root, child.Name, path, classification.Reason));
             }
         }
 
-        if (targets.Count == 0 && links == 0 && declined == 0 && !unreadable)
+        var live = Veto(found, ct);
+
+        // Counted as a link is: a payload held back is something real left out, and a plan whose only
+        // payload is in use would otherwise read "Already clear" beside a warning saying it is not.
+        var held = live.Vetoed.Count;
+        survivors.AddRange(live.Vetoed.Select(vetoed => (vetoed.Directory, InUseReason)));
+
+        var payloads = found.ToDictionary(p => p.Path, StringComparer.OrdinalIgnoreCase);
+
+        if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"'{payloads[vetoed.Directory].Key}'") is { } inUse)
+        {
+            notes.Add(inUse);
+        }
+
+        if (LiveTreeVeto.IncompleteNote(live.Complete, "Finish any installation before you clean.") is { } incomplete)
+        {
+            notes.Add(incomplete);
+        }
+
+        List<DeletionTarget> targets =
+        [
+            .. live.Cleared.Select(cleared =>
+            {
+                var payload = payloads[cleared.Path];
+
+                return new DeletionTarget(
+                    cleared.Path,
+                    payload.Reason,
+                    DirectoryAge.Of(cleared.Path, ct),
+                    Identity: new ItemIdentity(payload.Key, $"{payload.Root.Vendor} {payload.Name}"),
+                    Facets: [new ItemFacet("Vendor", payload.Root.Vendor)],
+                    Group: payload.Root.Vendor,
+                    UseCheck: cleared.StillUnused);
+            }),
+        ];
+
+        if (targets.Count == 0 && links == 0 && held == 0 && declined == 0 && !unreadable)
         {
             return EmptyPlan(NothingFound);
         }
@@ -207,7 +256,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            WasNotExamined = targets.Count == 0 && links > 0,
+            WasNotExamined = targets.Count == 0 && (links > 0 || held > 0),
         };
     }
 
@@ -272,6 +321,59 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
 
         return Reached.Present;
     }
+
+    /// <summary>
+    /// §7.1: Explore refuses a payload the plan holds back as in use, with the same reason. Found
+    /// exactly as the plan finds them, walk and link rule included, so the two cannot disagree about
+    /// which folders are payloads.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        var found = new List<Payload>();
+
+        foreach (var root in _roots)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (Reach(root, [], []) is not Reached.Present)
+            {
+                continue;
+            }
+
+            var scan = ChildDirectories.Under(root.Path);
+
+            found.AddRange(scan.Directories
+                .Where(child => root.Recognises(child.Name))
+                .Select(child => new Payload(root, child.Name, LongPath.Display(child.FullName), string.Empty)));
+        }
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. Veto(found, ct).Vetoed.Select(vetoed => new ToolRoot(
+                vetoed.Directory,
+                InUseReason + (vetoed.Holders.Count > 0 ? $" ({string.Join("; ", vetoed.Holders)})" : string.Empty),
+                static _ => false)),
+        ]);
+    }
+
+    /// <summary>A recognised payload, before the veto has said whether it may be offered.</summary>
+    private sealed record Payload(InstallerPayloadRoot Root, string Name, string Path, string Reason)
+    {
+        /// <summary>The item's identity: two vendors' children of the same name stay apart.</summary>
+        public string Key => $"{Root.Label}\\{Name}";
+    }
+
+    /// <summary>
+    /// Asks once, for every payload, whether a program is running from inside it or working in it.
+    /// Each payload is its own project: a program working elsewhere in the vendor's folder is using
+    /// that folder, not the payloads beside it.
+    /// </summary>
+    private LiveTreeVetoResult Veto(IReadOnlyList<Payload> found, CancellationToken ct) =>
+        LiveTreeVeto.Apply(
+            _liveTrees,
+            [.. found.Select(p => new RecognisedBuildDirectory(p.Path, p.Path))],
+            lockFiles: [],
+            ct);
 
     /// <summary>One entry per path, keeping the first reason. Two roots can share the drive they sit on.</summary>
     private static IEnumerable<(string Path, string Reason)> Deduplicate(

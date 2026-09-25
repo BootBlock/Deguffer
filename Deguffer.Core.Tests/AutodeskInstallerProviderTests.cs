@@ -29,8 +29,15 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
 
     private string Autodesk => Path.Combine(Drive, "Autodesk");
 
-    private AutodeskInstallerProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, system: _system);
+    private AutodeskInstallerProvider CreateProvider(
+        FakeProcessInspector? inspector = null,
+        FakeLiveTreeInspector? liveTrees = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
+            system: _system);
 
     /// <summary>A directory with a file at <paramref name="file"/> below it, so it measures above zero.</summary>
     private static string Populate(string directory, string file = "Setup.exe", int bytes = 4096)
@@ -84,7 +91,7 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         var product = Extracted("AutoCAD_2024_English_Win_64bit_dlm");
         var revision = Extracted("Revit_2020_G1_Win_64bit_r1_dlm");
         var update = Extracted("Autodesk_Maya_2023_2_Update_Windows_64bit_dlm");
-        var webInstaller = Populate(Path.Combine(Autodesk, "WI", "ACD_2026_english_us_win_db_002_002"));
+        Populate(Path.Combine(Autodesk, "WI", "ACD_2026_english_us_win_db_002_002"));
         var odis = Populate(Path.Combine(Autodesk, "IM"), Path.Combine("packages", "payload.7z"));
 
         var provider = CreateProvider();
@@ -105,7 +112,6 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         Assert.All(identities, Assert.NotNull);
         Assert.Equal(identities.Count, identities.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Contains(@"Autodesk\WI", identities);
-        Assert.True(Directory.Exists(webInstaller));
     }
 
     /// <summary>
@@ -282,6 +288,102 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         var plan = await CreateProvider(new FakeProcessInspector(process)).PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+    }
+
+    /// <summary>
+    /// §5.3: a classic installer runs its setup from inside the folder it extracted, so while it runs
+    /// that folder is the installation in progress. It is held back and asserted to survive, and the
+    /// payloads beside it are still offered.
+    /// </summary>
+    [Fact]
+    public async Task APayloadAnInstallerIsRunningFromIsLeftAlone()
+    {
+        var running = Extracted("Revit_2020_G1_Win_64bit_r1_dlm");
+        var idle = Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+        var liveTrees = FakeLiveTreeInspector.NothingLive.WithProgram("Setup", executable: Path.Combine(running, "Setup.exe"));
+
+        var provider = CreateProvider(liveTrees: liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([idle], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(running, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("Revit_2020_G1_Win_64bit_r1_dlm", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(running), "a payload an installer was running from was removed");
+        Assert.False(Directory.Exists(idle));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A payload held back is something real left out, so a plan whose only payload is in use is not
+    /// "Already clear".
+    /// </summary>
+    [Fact]
+    public async Task APlanWhoseOnlyPayloadIsInUseIsNotCalledClear()
+    {
+        var running = Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+
+        var plan = await CreateProvider(liveTrees: new FakeLiveTreeInspector(running)).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(running, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// An installer that starts after the preview is caught at the clean: each step carries the
+    /// question the plan asked, and asks it again.
+    /// </summary>
+    [Fact]
+    public async Task AnInstallerStartedAfterThePreviewStopsTheRemoval()
+    {
+        var product = Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+        var liveTrees = FakeLiveTreeInspector.NothingLive;
+
+        var provider = CreateProvider(liveTrees: liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([product], plan.TargetedPaths);
+
+        liveTrees.WithProgram("Setup", executable: Path.Combine(product, "Setup.exe"));
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(product), "a payload an installer started running from was removed");
+    }
+
+    /// <summary>
+    /// Where Deguffer cannot tell whether anything is running from a payload, the user is told so
+    /// rather than the plan implying it checked.
+    /// </summary>
+    [Fact]
+    public async Task SaysSoWhenItCannotTellWhetherAnInstallerIsRunning()
+    {
+        Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+
+        var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("could not check", StringComparison.Ordinal));
+    }
+
+    /// <summary>§7.1: Explore refuses a payload the plan holds back as in use, and allows the rest.</summary>
+    [Fact]
+    public async Task ExploreRefusesAPayloadInUse()
+    {
+        var running = Extracted("Revit_2020_G1_Win_64bit_r1_dlm");
+        Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+
+        var provider = CreateProvider(liveTrees: new FakeLiveTreeInspector(running));
+
+        var refused = Assert.Single(await provider.DiscoverToolRootsAsync());
+
+        Assert.Equal(running, refused.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.False(refused.Recognises("Setup.exe"));
     }
 
     /// <summary>A system drive Windows cannot locate reaches nothing, rather than a folder below the working directory.</summary>

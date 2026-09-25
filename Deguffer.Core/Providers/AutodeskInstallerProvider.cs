@@ -1,4 +1,3 @@
-using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -23,8 +22,8 @@ namespace Deguffer.Core.Providers;
 /// The same knowledge base names <c>Network License Manager</c> as a licensing service running from
 /// this folder, and gives <c>Deployments</c> as where an administrator keeps the deployment images
 /// they built. So §5.2 holds here as it does for a tool's cache: the folder is never a target, only
-/// the children named below are, and each of those two is named on the root and asserted to have
-/// survived.</para>
+/// the children recognised below are, and those two, with Autodesk Access's update store, are named
+/// on the root and asserted to have survived.</para>
 ///
 /// <para><b>No administrator rights, inferred rather than measured.</b> A folder created at the top
 /// of the system drive inherits modify rights for Authenticated Users, which is what
@@ -42,12 +41,14 @@ public sealed class AutodeskInstallerProvider : InstallerPayloadProvider
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
+        ILiveTreeInspector? liveTrees = null,
         ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default,
+            liveTrees ?? LiveTreeInspector.Default,
             Candidates(system ?? SystemDirectories.Current))
     {
     }
@@ -61,7 +62,9 @@ public sealed class AutodeskInstallerProvider : InstallerPayloadProvider
     public override string WhatHappensOnNextUse =>
         "Your installed Autodesk products keep working. Repairing one, or installing some updates, "
         + "asks for these files, so download and extract that product again from your Autodesk "
-        + "Account first.";
+        + "Account first. A 2022 or later product can then refuse to reinstall or uninstall, saying "
+        + "a network resource is unavailable, until the product's installation source is cleared "
+        + "from the registry as Autodesk describes.";
 
     public override ProviderDescription Description { get; } = new()
     {
