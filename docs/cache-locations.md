@@ -1537,6 +1537,90 @@ by definition.
 
 ---
 
+## Unreal Engine derived data cache
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache`, `%LOCALAPPDATA%\UnrealEngine\Common\Zen\Data`, `%PROGRAMDATA%\Epic\Zen\Data`, and any Zen store a setting moves |
+| **Method** | Delete each cache folder as a whole |
+| **Typical size** | Nothing measured here: the machine held Unreal's settings and no cache. Community reports put an active project's cache at 16 to 100 GB, growing by 1.5 to 2 GB each working day |
+
+### What it is
+
+Unreal Engine compiles shaders and prepares every asset in a form the editor can use, and it keeps
+the results in a *derived data cache* so it does not have to do that work again each time a project
+opens. One cache is shared by every project on the machine, in one of two forms:
+
+- **The filesystem cache**, used by Unreal Engine 5.3 and earlier, at
+  `%LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache`. Later versions put it into a mode that only
+  deletes, and expire anything nothing has used for eight days.
+- **A Zen store**, used by Unreal Engine 5.1 and later and run by a small server, `zenserver`, that
+  the editor starts. Its default moved at 5.4: 5.1 to 5.3 keep it at `%PROGRAMDATA%\Epic\Zen\Data`,
+  and 5.4 and later at `%LOCALAPPDATA%\UnrealEngine\Common\Zen\Data`. Epic's documentation still
+  gives the first for 5.4, which is out of date. A machine that ran both can hold both.
+
+A setting can move the Zen store:
+
+| Setting | Where the store goes |
+| --- | --- |
+| `UE-LocalDataCachePath`, as an environment variable or the editor's **Global Local DDC Path** preference | A `Zen` folder inside the path |
+| `UE-ZenDataPath` or `UE-ZenSubprocessDataPath`, as an environment variable, or `DataPath` under `HKEY_CURRENT_USER\Software\Epic Games\Zen` | The path itself |
+
+Deguffer reads every one of these. A path given on one editor's command line is recorded nowhere, and
+cannot be found.
+
+### What Deguffer does
+
+**It looks for content, not for folders.** `%LOCALAPPDATA%\UnrealEngine` exists on any machine that
+has run the Epic launcher, and on the machine this was measured on it held only settings. A cache
+folder that holds nothing produces no row.
+
+**Each cache is deleted whole.** Epic documents no command that clears either one, and Epic's own
+advice for clearing one by hand is to delete the folder and let it fill again.
+
+**A folder a setting names is reached only where Zen marked it.** It is a folder somebody chose, so
+Deguffer removes the store in it only where Zen's own `root_manifest` file is there, and never where
+removing it would take a default store or Zen's installation with it. The filesystem cache an older
+engine wrote straight into a local cache path is not removed: nothing tells its entries apart from
+anything else in that folder, and the delete-only mode empties it anyway.
+
+**While `zenserver` is running, every Zen store is left alone.** The server can be set to keep
+running after the editor closes, and removing a store's data under the server writing it is not
+provably safe. The plan says so, Explore refuses the store too, and closing the editor and the server
+and scanning again includes it. A running editor is a warning beside the filesystem cache, and
+anything it holds open stays.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `%LOCALAPPDATA%\UnrealEngine` and `Common` | Unreal's own folders. Only the caches inside them go |
+| Every engine version's folder beside `Common`, and its `Saved\Config` | That version's editor settings and crash reports |
+| `Common\Zen\Install` and `%PROGRAMDATA%\Epic\Zen\Install` | The Zen server itself |
+| `%PROGRAMDATA%\Epic`, `EpicGamesLauncher`, `EpicOnlineServices` | Epic's other machine-wide data |
+| `UnrealEngineLauncher\LauncherInstalled.dat` | The machine's record of where its Epic games and engines are installed |
+| A folder a setting names | Somebody's own folder. Only the store inside it goes |
+
+Explore enforces the same rule: it refuses Unreal's folder, `Common`, each default `Zen` folder and
+everything in them except the caches themselves. Deguffer also refuses to look through a link.
+
+### What it costs you
+
+**The next time you open a project, Unreal compiles its shaders and prepares its assets again.** On a
+large project that can take tens of minutes. Your projects, your engine settings and your installed
+engines are untouched.
+
+### Why Tier 2, not Tier 1
+
+Nothing in the cache is anyone's only copy, so it is not Tier 3. But the refill is a shader compile
+measured in tens of minutes on a real project, which is §3's definition of the second tier: re-created,
+but only by re-indexing for minutes.
+
+---
+
 ## Spotify streaming cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -2319,6 +2403,8 @@ inside your own folders, and the only thing it will not look for anywhere else.
 | --- | --- | --- |
 | `obj` | .NET intermediate build output | 1 |
 | `Library` | A Unity project's imported assets and caches | 2 |
+| `Intermediate` | An Unreal project's intermediate build files | 2 |
+| `DerivedDataCache` | An Unreal project's own derived data cache | 2 |
 | `target` | Rust build output | 2 |
 | `node_modules` | Installed Node.js dependencies | 2 |
 | `.venv`, `venv` | A Python virtual environment | 2 |
@@ -2370,6 +2456,7 @@ the tool itself writes inside it.
 | --- | --- | --- |
 | `obj` | A project file the restore manifest names | `project.assets.json`, and the generated NuGet imports for that same project |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
+| `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
 | `target` | `Cargo.toml` | `CACHEDIR.TAG`, which Cargo writes |
 | `node_modules` | `package.json`, **and a lock file** | — |
 | `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
@@ -2418,6 +2505,10 @@ evidence rather than a guess:
 A held-back project is listed as something left alone, with what is using it named, so you can close
 it and scan again.
 
+**The Unreal Editor is a warning, not a veto.** It works in the engine's folder rather than the
+project's, and holds no file Deguffer knows to ask about, so none of the three signals sees it. A
+plan made while it runs says so. Close it before you remove a project's build output.
+
 **It can miss, and it never fires wrongly.** Three things it does not see, all of them stated here
 because a safeguard whose limits are unwritten gets trusted past them:
 
@@ -2444,6 +2535,11 @@ Everything except the one directory in each row, asserted by name after the dele
   `Cargo.toml`; `package.json` and the lock file; the Python manifest; `pubspec.yaml` and
   `.dart_tool`. These are what make the directory regenerable, so losing one would falsify the whole
   claim.
+- **For Unreal, the `.uproject` descriptor, `Source`, `Content`, `Config` and `Plugins`, and `Saved`
+  and `Binaries`.** `Saved` holds the editor's autosaves, which are the only copy of work nobody
+  saved, and your editor settings. `Binaries` is compiled output, but on a team an artist often
+  receives the compiled game from source control and has no compiler to rebuild it, so on that
+  machine it is the only copy. Neither is ever offered.
 - **`bin`, for .NET, and `src` and `Cargo.lock` for Rust.** None of them identifies the directory
   being removed; each is named because it is what a rule reaching one level too far would take.
   `bin` in particular looks equivalent to `obj` and is not — it can hold hand-placed native
@@ -2458,6 +2554,8 @@ Everything except the one directory in each row, asserted by name after the dele
 | --- | --- |
 | `obj` | The next build regenerates it, so that build is slower. Nothing here is unique. |
 | `Library` | Unity reimports every asset when you next open the project. On a large one that is tens of minutes, and packages it had downloaded are fetched again. |
+| `Intermediate` | A C++ project's next build compiles its code from the start, and its Visual Studio solution shows the projects as unavailable until you choose **Generate Visual Studio project files** on the `.uproject`. A Blueprint-only project opens as before. |
+| `DerivedDataCache` | Unreal compiles the project's shaders again the next time it opens, which on a large project can take tens of minutes. |
 | `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. |
 | `node_modules` | The project will not build or run until dependencies are installed again. The lock file pins the versions, so what comes back is what was there. |
 | `.venv` / `venv` | The environment has to be created again and the install re-run from the manifest. **A manifest only lists what somebody wrote down** — check it covers what you had before removing an environment you still use. |
@@ -2466,18 +2564,21 @@ Where a package manager's own cache still holds the downloads, most of this is o
 cache in the same run is what makes it a download — so a run that takes both the npm cache and a
 `node_modules` needs the network afterwards.
 
-### Why `obj` is Tier 1 and the other four are Tier 2
+### Why `obj` is Tier 1 and the others are Tier 2
 
 Tier 1 means the tool re-creates it on demand and you lose only time. That is `obj`: a missing one
 makes the next build slower and nothing else.
 
-The other four cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
+The others cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
 only by re-downloading gigabytes or re-indexing for minutes" — is met by each of them differently:
 
 - **Unity** is the re-indexing case exactly. Nothing in `Library` is anyone's only copy; all of it is
   built from `Assets`, `Packages` and `ProjectSettings`, which is why every Unity `.gitignore`
   excludes it. What makes it Tier 2 is the reimport, plus the packages in `Library\PackageCache` that
   are fetched again.
+- **Unreal's `Intermediate` and `DerivedDataCache`** are the same two cases in one project: a
+  C++ recompile, and a shader compile. They are separate rows because they cost different things,
+  and a row that took both would state one price for two.
 - **Rust `target`** is Tier 2 rather than the Tier 1 it might look like, and the reason is worth
   being clear about: restoring it is not a slower build, it *is* the build. Every dependency is
   compiled from source, per profile and per feature set, which is where the five to twenty gigabytes

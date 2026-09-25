@@ -3,7 +3,8 @@
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
-> shader caches and Steam shader pre-cache, §6's crash dumps and servicing logs, §7's per-volume recycle bins and §12's
+> shader caches and Steam shader pre-cache, §6's crash dumps and servicing logs, §7's per-volume recycle bins, §8's Unreal Engine derived-data
+> caches and §12's
 > Squirrel staging and superseded builds have shipped; everything else is unstarted.
 > **Open questions 1 and 2 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
@@ -1352,7 +1353,7 @@ The same shape appears in `%LOCALAPPDATA%\Adobe\CameraRaw\Cache`, in DaVinci Res
 optimised-media directories, and in Blender's temporary render directory. None appeared on the
 audited machine, so all of it is documentation rather than observation.
 
-### Game engine derived-data caches — Tier 2, present but empty
+### Game engine derived-data caches — Tier 2, present but empty ✅ done
 
 Unreal's local derived-data cache at `%LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache` is
 reported by Epic's own forums at 16 GB to 100 GB, growing 1.5 to 2 GB per day of active work. Unreal
@@ -1363,6 +1364,23 @@ to handle both layouts — and the legacy one is stale by definition.
 The directory exists on the audited machine at zero bytes, which is the useful negative result:
 **presence of the directory is not evidence of a working install**, so `IsPresentAsync` must test for
 content, not existence.
+
+**Outcome:** three providers shipped, all at Tier 2. `UnrealDerivedDataCacheProvider` takes the
+shared cache, and `UnrealIntermediateProvider` and `UnrealProjectDerivedDataProvider` take a
+project's own `Intermediate` and `DerivedDataCache` inside the approved source folders, recognised
+by the `.uproject` beside them. Reading the engine's source corrected this entry in two places.
+Zen's default is `%LOCALAPPDATA%\UnrealEngine\Common\Zen\Data` only from 5.4; 5.1 to 5.3 keep it
+at `%PROGRAMDATA%\Epic\Zen\Data`, which Epic's documentation still gives for 5.4, so both are
+probed. And a local cache path moves Zen to a `Zen` folder inside it, while Zen's own data path
+setting names the store outright; each setting is read, and a folder one names is reached only
+where Zen's `root_manifest` marks it. While `zenserver` runs every store is held back. `Saved`
+and `Binaries` are never targets: the first holds the autosaves, and the second cannot be rebuilt
+on a machine without a compiler. [../cache-locations.md](../cache-locations.md) records the rest.
+
+**Not reached:** the filesystem cache an older engine wrote straight into a local cache path,
+which nothing classifies apart from the folder's other contents; a source-built engine's own
+`Engine\DerivedDataCache`, which has no `.uproject` beside it; and a per-project local cache path
+set in a project's editor preferences.
 
 ---
 
