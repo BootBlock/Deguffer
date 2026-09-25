@@ -43,6 +43,13 @@ internal sealed class ExploreLayers
     /// </summary>
     private const int ZoomedKept = 2;
 
+    /// <summary>
+    /// Where the drawing on top is stacked: above the finest any other can be (see
+    /// <see cref="Fineness"/>). Not <see cref="int.MaxValue"/>, which the framework refuses with an
+    /// argument error, because a z-index runs to a million at most.
+    /// </summary>
+    private const int Uppermost = (int)(MapViewport.MaximumZoom * 1000) + 1;
+
     private readonly Grid _panel = new() { IsHitTestVisible = false };
 
     /// <summary>Where the whole panel is carried to while an opened folder grows over it. Kept (G5).</summary>
@@ -141,8 +148,7 @@ internal sealed class ExploreLayers
             layer.Placed.TranslateX = placement.X * width;
             layer.Placed.TranslateY = placement.Y * height;
 
-            // The zoom stands for fineness: at most 64, so a thousand steps apart is room to spare.
-            Canvas.SetZIndex(layer.Image, layer == _current ? int.MaxValue : (int)(layer.Viewport.Zoom * 1000));
+            Canvas.SetZIndex(layer.Image, layer == _current ? Uppermost : Fineness(layer.Viewport));
         }
     }
 
@@ -158,6 +164,13 @@ internal sealed class ExploreLayers
         _carried.TranslateY = screen.Y * height;
         _panel.Opacity = opacity;
     }
+
+    /// <summary>
+    /// Where a drawing at <paramref name="viewport"/> is stacked among the others: finer higher. The
+    /// zoom runs to <see cref="MapViewport.MaximumZoom"/>, and a thousand steps a doubling keeps two
+    /// zooms a rounding error apart in order.
+    /// </summary>
+    private static int Fineness(MapViewport viewport) => (int)(viewport.Zoom * 1000);
 
     /// <summary>The drawing already made of <paramref name="viewport"/>, or null.</summary>
     private Layer? Kept(MapViewport viewport)
