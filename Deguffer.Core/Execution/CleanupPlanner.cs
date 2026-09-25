@@ -157,6 +157,7 @@ public sealed class CleanupPlanner
             new EmbyTranscodeProvider(environment),
             new AffinityModelCacheProvider(environment),
             new CaptureOneCacheProvider(environment, liveTrees: liveTrees),
+            new ResolveRenderCacheProvider(environment),
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
             new PlatformIoCacheProvider(environment),
             new PlaywrightBrowsersProvider(environment),

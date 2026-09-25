@@ -20,6 +20,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         LocalAppData = Path.Combine(root, "profile", "AppData", "Local");
         RoamingAppData = Path.Combine(root, "profile", "AppData", "Roaming");
         LocalLowAppData = Path.Combine(root, "profile", "AppData", "LocalLow");
+        Videos = Path.Combine(root, "profile", "Videos");
         TempPath = Path.Combine(root, "temp");
 
         Directory.CreateDirectory(UserProfile);
@@ -36,6 +37,12 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public string RoamingAppData { get; }
 
     public string? LocalLowAppData { get; private set; }
+
+    /// <summary>
+    /// Named but not created: a Videos folder is not on every profile, and a provider that reaches into
+    /// it must find it absent as easily as present.
+    /// </summary>
+    public string? Videos { get; private set; }
 
     public string TempPath { get; private set; }
 
@@ -102,6 +109,13 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public FakeUserEnvironment WithNoLocalLow()
     {
         LocalLowAppData = null;
+        return this;
+    }
+
+    /// <summary>Pretend Windows would not say where the Videos folder is.</summary>
+    public FakeUserEnvironment WithNoVideos()
+    {
+        Videos = null;
         return this;
     }
 

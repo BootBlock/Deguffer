@@ -37,6 +37,15 @@ public interface IUserEnvironment
     /// </summary>
     string? LocalLowAppData { get; }
 
+    /// <summary>
+    /// The user's Videos folder, wherever it has been moved to, or null when Windows will not say.
+    ///
+    /// <para>DaVinci Resolve writes its render cache here when no Media Storage location is set. It is
+    /// read from the known folder rather than composed from <see cref="UserProfile"/>, because Windows
+    /// and OneDrive both move it, and a composed path would look in a folder Resolve never wrote to.</para>
+    /// </summary>
+    string? Videos { get; }
+
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
 
@@ -225,6 +234,9 @@ public sealed partial class UserEnvironment : IUserEnvironment
     public string RoamingAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
     public string? LocalLowAppData { get; } = ResolveLocalLow();
+
+    public string? Videos { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.MyVideos) is { Length: > 0 } videos ? videos : null;
 
     /// <summary>
     /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever
