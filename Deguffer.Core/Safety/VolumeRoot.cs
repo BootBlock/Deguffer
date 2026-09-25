@@ -31,6 +31,22 @@ public static class VolumeRoot
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
     /// <summary>
+    /// Whether <paramref name="path"/> is the top of a drive in display form, <c>C:\</c>, and nothing
+    /// else: not <c>C:</c>, which is drive-relative and means a different directory in every process;
+    /// not <c>\?\C:\</c>, which the shell and Windows' Disk Cleanup handlers refuse; not a share, and
+    /// not a folder a volume is mounted at.
+    ///
+    /// <para>For a call that hands Windows a whole volume and lets it decide what goes, which is where
+    /// the value that crosses decides what is destroyed. Both such calls ask it here, so the two
+    /// cannot come to disagree about what the top of a drive is.</para>
+    /// </summary>
+    public static bool IsDriveTop(string? path) =>
+        !string.IsNullOrWhiteSpace(path)
+        && Path.IsPathFullyQualified(path)
+        && !path.StartsWith(@"\\", StringComparison.Ordinal)
+        && string.Equals(Path.GetPathRoot(path), path, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Where <paramref name="path"/> sits below the top of the volume it is on, or null where it
     /// has no top to sit below — which is a relative path, a drive-relative one such as
     /// <c>C:file</c>, and a volume root itself, including a folder a volume is mounted at.

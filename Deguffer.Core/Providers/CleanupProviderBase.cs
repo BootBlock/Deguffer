@@ -43,13 +43,25 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// that plans one. Defaulted and injected for the reason <paramref name="emptier"/> is: the real one
     /// acts on the cloud accounts of whoever runs the suite.
     /// </param>
+    /// <param name="handlers">
+    /// How a <see cref="DiskCleanupStep"/> is carried out, for the providers that plan one. Defaulted
+    /// and injected for the reason <paramref name="emptier"/> is: the real one deletes the previous
+    /// Windows installation of whoever runs the suite.
+    /// </param>
+    /// <param name="servicing">
+    /// Where Windows is in servicing itself, asked when a plan is made and again before a step that is
+    /// <see cref="CleanupStep.HeldWhileUpdating"/> runs, by the same instance for the reason
+    /// <see cref="Emptier"/> is shared.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
         IDirectoryScanner scanner,
         IRecycleBinEmptier? emptier = null,
-        ICloudFiles? cloud = null)
+        ICloudFiles? cloud = null,
+        IDiskCleanupHandlers? handlers = null,
+        IWindowsServicing? servicing = null)
     {
         Environment = environment;
         Inspector = inspector;
@@ -57,7 +69,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
         _refusals = RefusalRecord.For(environment);
         Emptier = emptier ?? ShellRecycleBinEmptier.Default;
         Cloud = cloud ?? CloudFiles.Default;
-        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud);
+        Handlers = handlers ?? DiskCleanupHandlers.Default;
+        Servicing = servicing ?? WindowsServicing.Current;
+        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector);
         Runner = runner;
     }
 
@@ -76,6 +90,15 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// is carried out and proved through, for the reason <see cref="Emptier"/> is shared.
     /// </summary>
     protected ICloudFiles Cloud { get; }
+
+    /// <summary>
+    /// The handlers a <see cref="DiskCleanupStep"/> is carried out by, asked whether each is there by
+    /// the same instance that will run it, for the reason <see cref="Emptier"/> is shared.
+    /// </summary>
+    protected IDiskCleanupHandlers Handlers { get; }
+
+    /// <summary>Where Windows is in servicing itself. See the constructor's parameter.</summary>
+    protected IWindowsServicing Servicing { get; }
 
     protected IProcessRunner Runner { get; }
 
@@ -478,6 +501,53 @@ public abstract class CleanupProviderBase : ICleanupProvider
     }
 
     /// <summary>
+    /// Measure every directory each Disk Cleanup handler would clear, and turn each handler into the
+    /// step that will run it.
+    ///
+    /// <para><b>Measured under the guard, although the handler cannot honour it.</b> What the guard
+    /// is needed for here is the answer, not the figure: a handler clears its directories whole, so
+    /// a step whose measurement held anything back would take what the user asked to keep, and
+    /// <see cref="Guarded"/> withdraws it. Where nothing is held back the two measurements are the
+    /// same number.</para>
+    ///
+    /// <para>Here rather than in the provider for the reason <see cref="PlanDeletionsAsync"/> is: one
+    /// step's figure is the sum of several paths, and the pairing of sizes with paths is positional.
+    /// </para>
+    /// </summary>
+    protected async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured)> PlanDiskCleanupsAsync(
+        IReadOnlyList<DiskCleanupTarget> targets,
+        MinimumAge keep,
+        CancellationToken ct)
+    {
+        var measured = await MeasureAllAsync(
+            [.. targets.SelectMany(t => (IEnumerable<string>)[t.Path, .. t.AlsoClears])], keep, ct).ConfigureAwait(false);
+
+        var steps = new List<CleanupStep>(targets.Count);
+        var next = 0;
+
+        foreach (var target in targets)
+        {
+            var count = 1 + target.AlsoClears.Count;
+            var span = Enumerable.Range(next, count).ToList();
+            next += count;
+
+            steps.Add(new DiskCleanupStep(target.Path, target.Reason)
+            {
+                Handler = target.Handler,
+                Volume = target.Volume,
+                AlsoClears = target.AlsoClears,
+                Estimated = span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
+                LastWritten = target.LastWritten,
+                RequiresElevation = target.RequiresElevation,
+                WithheldRecent = span.Any(i => measured.WithheldRecent[i]),
+                MailStores = [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
+            });
+        }
+
+        return (steps, measured);
+    }
+
+    /// <summary>
     /// A measurement of a folder emptied in place, which stays standing, so its own entry is not
     /// among what the step takes.
     ///
@@ -504,6 +574,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// that state — <see cref="Providers.RecycleBinProvider"/> takes the direct route whenever the
     /// guard is on — and <see cref="PlanExecutor"/> refuses the pairing outright rather than
     /// leaving that to one expression in one provider.</para>
+    ///
+    /// <para><b>A <see cref="DiskCleanupStep"/> is withdrawn where the guard would hold anything
+    /// back.</b> Windows clears its directories whole and there is no direct route to fall back on,
+    /// because the handler is chosen for what it does besides deleting. Where the guard holds nothing
+    /// back it is satisfied, and the step stays.</para>
     /// </summary>
     /// <param name="keep">
     /// The guard actually in force, which is the stricter of the user's and the provider's own.
@@ -516,12 +591,24 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </param>
     private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep, MinimumAge asked)
     {
-        var withdrawn = plan.Steps
+        var files = plan.Steps
             .OfType<DeleteFileStep>()
             .Where(step => keep.ProtectsFile(step.Path))
             .ToList();
 
+        // Windows clears a handler's directories whole, so one holding anything the guard would keep
+        // cannot do less: it would do all of it. See PlanDiskCleanupsAsync.
+        var whole = plan.Steps
+            .OfType<DiskCleanupStep>()
+            .Where(step => step.WithheldRecent)
+            .ToList();
+
         var notes = new List<PlanNote>(plan.Notes);
+
+        notes.AddRange(whole.Select(step => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Leaving {LongPath.Display(step.Path)} alone: Windows clears it whole, and something in it "
+            + $"changed in the last {keep.Describe()}.")));
 
         // Only where there is something to say it about. Every plan comes through here, including
         // the empty one a provider returns for a toolchain that is not installed — and "the sizes
@@ -554,22 +641,25 @@ public abstract class CleanupProviderBase : ICleanupProvider
         return plan with
         {
             Keep = keep,
-            Steps = [.. plan.Steps.Except(withdrawn)],
+            Steps = [.. plan.Steps.Except(files).Except(whole)],
             Notes = notes,
             ProtectedPaths =
             [
                 .. plan.ProtectedPaths,
-                .. withdrawn.Select(step => new ProtectedPath(
-                    step.Path,
-                    $"Left alone because it changed in the last {keep.Describe()}.",
-                    // Measured during planning, so it was there when the plan was made — the same
-                    // claim, and the same reasoning, as CleanupPlan.NarrowedTo makes for a step the
-                    // user declined.
-                    PresenceBefore: PathPresence.Present,
+                .. files.Select(step => (Path: step.Path, Reason: $"Left alone because it changed in the last {keep.Describe()}."))
+                    .Concat(whole.SelectMany(step => step.Destroys).Select(path => (Path: path, Reason:
+                        $"Left alone because Windows clears it whole, and something it would clear changed in the last {keep.Describe()}.")))
+                    .Select(withheld => new ProtectedPath(
+                        withheld.Path,
+                        withheld.Reason,
+                        // Measured during planning, so it was there when the plan was made — the same
+                        // claim, and the same reasoning, as CleanupPlan.NarrowedTo makes for a step the
+                        // user declined.
+                        PresenceBefore: PathPresence.Present,
 
-                    // The row's zero now excludes a real file, and this is the only place left on
-                    // the plan to say so. See CleanupPlan.HasRecentContentHeldBack.
-                    Withheld: Withholding.TooRecent)),
+                        // The row's zero now excludes a real file, and this is the only place left on
+                        // the plan to say so. See CleanupPlan.HasRecentContentHeldBack.
+                        Withheld: Withholding.TooRecent)),
             ],
         };
     }

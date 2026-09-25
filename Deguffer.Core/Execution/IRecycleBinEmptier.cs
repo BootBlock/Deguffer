@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
 
@@ -99,10 +100,7 @@ public sealed class ShellRecycleBinEmptier : IRecycleBinEmptier
     /// every process and not one anybody named. Only the trailing separator distinguishes it from
     /// the root itself.</para>
     /// </summary>
-    public bool Serves(string volumeRoot) =>
-        !string.IsNullOrWhiteSpace(volumeRoot)
-        && Path.IsPathFullyQualified(volumeRoot)
-        && string.Equals(Path.GetPathRoot(volumeRoot), volumeRoot, StringComparison.OrdinalIgnoreCase);
+    public bool Serves(string volumeRoot) => VolumeRoot.IsDriveTop(volumeRoot);
 
     public RecycleBinEmptyOutcome Empty(string volumeRoot)
     {

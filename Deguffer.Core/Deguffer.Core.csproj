@@ -58,6 +58,10 @@
       have. Reached through the public Volumes it is satisfied by whatever the machine happens to
       have, which on a machine with no folder-mounted volume is every ordering at once.
 
+      WindowsServicing.Operations reads what a restart will move out of the registry value Windows
+      keeps it in. The only way to hand it a case through the public seam is to write that value,
+      which schedules real file operations for the machine's next restart.
+
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.
     -->

@@ -81,6 +81,13 @@ public enum Withholding
     /// <see cref="MailStorePlan"/>.
     /// </summary>
     MailStore,
+
+    /// <summary>
+    /// Something an update left behind, held back because that update has not finished: Windows is
+    /// waiting for a restart, is installing something now, or will move a file inside it at the next
+    /// restart. See <see cref="Safety.IWindowsServicing"/>.
+    /// </summary>
+    UpdateInProgress,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -304,6 +311,13 @@ public sealed record CleanupPlan
     public bool HoldsMailStores => ProtectedPaths.Any(p => p.Withheld == Withholding.MailStore);
 
     /// <summary>
+    /// Whether this plan is holding something back until an update finishes. The same shape as
+    /// <see cref="HoldsMailStores"/>, for the same reason: the row measures zero, and "Already clear"
+    /// would be a claim about a folder that is full and will be offered after the next restart.
+    /// </summary>
+    public bool WaitsForAnUpdate => ProtectedPaths.Any(p => p.Withheld == Withholding.UpdateInProgress);
+
+    /// <summary>
     /// Every path this plan would destroy, for display and for tests.
     ///
     /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
@@ -317,7 +331,7 @@ public sealed record CleanupPlan
     /// tests assert against, which makes it the last place a stale value is acceptable. Steps
     /// number in the low single digits, so recomputing costs nothing.
     /// </summary>
-    public IReadOnlyList<string> TargetedPaths => [.. Steps.OfType<DeleteStep>().Select(s => s.Path)];
+    public IReadOnlyList<string> TargetedPaths => [.. Steps.OfType<DeleteStep>().SelectMany(s => s.Destroys)];
 
     /// <summary>
     /// This plan narrowed to the steps the user actually chose.
@@ -351,8 +365,9 @@ public sealed record CleanupPlan
         var declined = Steps
             .Except(selected)
             .OfType<DeleteStep>()
-            .Select(s => new ProtectedPath(
-                s.Path,
+            .SelectMany(s => s.Destroys)
+            .Select(path => new ProtectedPath(
+                path,
                 "Left alone because it was not selected for this run.",
                 // It was measured during planning, so it was there when the plan was made. That is
                 // the only claim PresenceBefore makes, and re-probing the disk here would let a
@@ -370,7 +385,7 @@ public sealed record CleanupPlan
                 // This is the site the declined Recycle Bin depends on. A bin the user unticked is
                 // still standing after a call that emptied it anyway, so existence proves nothing
                 // and this is the whole of what §5.6 has left to compare.
-                DirectoryContent.IsPresent(s.Path)));
+                DirectoryContent.IsPresent(path)));
 
         return this with
         {
