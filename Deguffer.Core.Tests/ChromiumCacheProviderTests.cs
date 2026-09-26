@@ -21,7 +21,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     private ChromiumCacheProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive);
 
     /// <summary>
     /// A folder holding Chromium's <c>Local State</c> marker, which is what identifies it as a

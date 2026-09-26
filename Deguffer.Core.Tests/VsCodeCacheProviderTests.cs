@@ -362,7 +362,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         var mine = await CreateProvider().PlanAsync();
         var chromium = await new ChromiumCacheProvider(
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning).PlanAsync();
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive).PlanAsync();
 
         Assert.Contains(editorCache, mine.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(engineCache, mine.TargetedPaths, StringComparer.OrdinalIgnoreCase);

@@ -35,12 +35,19 @@ namespace Deguffer.Core.Providers;
 /// deleted; they never say whose folder this is.</para>
 ///
 /// <para>§5.1 does not apply. No embedding application exposes a cache-eviction command, and the
-/// engine's own clear-browsing-data surface is reachable only from inside the running process.</para>
+/// engine's own clear-browsing-data surface is reachable only from inside the running process.
+/// WebView2 documents one, <c>CoreWebView2Profile.ClearBrowsingDataAsync</c>, and only the host
+/// application can call it.</para>
 ///
-/// <para>Packaged (MSIX) applications are out of reach here, deliberately. Windows redirects their
-/// <c>%APPDATA%</c> to <c>%LOCALAPPDATA%\Packages\&lt;family&gt;\LocalCache\Roaming</c>, and
-/// classifying that redirection is its own piece of work — see §3 of
-/// <c>docs/todo/unreached-locations.md</c>.</para>
+/// <para>§5.3 is a veto here as well as a warning. A folder a running program is using is left
+/// alone whole, and the clean asks again before each removal. See
+/// <see cref="ChromiumFolderInUse"/>.</para>
+///
+/// <para>A packaged (MSIX) application's WebView2 folder is reached like any other, because it is
+/// found by its own name wherever it sits. An Electron application packaged the same way is not:
+/// Windows redirects its <c>%APPDATA%</c> to
+/// <c>%LOCALAPPDATA%\Packages\&lt;family&gt;\LocalCache\Roaming</c>, below where a folder is
+/// identified by <c>Local State</c> alone. See §3 of <c>docs/todo/unreached-locations.md</c>.</para>
 /// </summary>
 public sealed class ChromiumCacheProvider : CleanupProviderBase
 {
@@ -160,7 +167,12 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         ("Web Data", "Saved addresses and payment cards."),
     ];
 
+    /// <summary>Why a folder a running program is using is asserted to survive whole.</summary>
+    private const string InUseReason =
+        "A running program is using this folder, so nothing inside it is removed.";
+
     private readonly ChromiumUserDataDiscovery _discovery;
+    private readonly ILiveTreeInspector _liveTrees;
     private IReadOnlyList<ChromiumUserData>? _applications;
     private IReadOnlyList<ChromiumUserData>? _userData;
     private IReadOnlyList<ToolRoot>? _toolRoots;
@@ -169,13 +181,17 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ILiveTreeInspector? liveTrees = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new ChromiumUserDataDiscovery(Environment);
+    {
+        _discovery = new ChromiumUserDataDiscovery(Environment);
+        _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+    }
 
     public override string Id => "chromium-app-cache";
 
@@ -194,7 +210,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     {
         Application = "Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and "
             + "the desktop applications that embed the same engine: chat clients, editors and "
-            + "other Electron apps, and the Battle.net launcher",
+            + "other Electron apps, the applications that show web content through Microsoft's "
+            + "WebView2, and the Battle.net launcher",
         Publisher = "each application's own vendor; the cache format belongs to the Chromium "
             + "project",
         Purpose = "A Chromium browser caches web content, compiled scripts and GPU shaders under its "
@@ -209,8 +226,8 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
     /// <summary>
     /// The applications whose folders hold at least one recognised cache, memoised for the life of
     /// a planning pass (G4). Presence and planning ask the same question of the same disk, and the
-    /// walk behind it covers every directory one level under both application-data roots and every
-    /// declared browser's folder.
+    /// walk behind it lists every directory <see cref="ChromiumUserDataWalk"/> enters below both
+    /// application-data roots, and probes every declared browser's folder.
     ///
     /// Exposed so tests can assert that no user-data folder is ever a target.
     /// </summary>
@@ -255,6 +272,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         _applications = null;
         _userData = null;
         _toolRoots = null;
+        _liveTrees.Invalidate();
         base.InvalidateCaches();
     }
 
@@ -324,9 +342,19 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             }
         }
 
+        var live = ChromiumFolderInUse.Find(_liveTrees, [.. applications.Select(a => a.Path)], ct);
+
         foreach (var application in applications)
         {
             ct.ThrowIfCancellationRequested();
+
+            if (live.IsLive(application.Path))
+            {
+                survivors.Add((application.Path, InUseReason));
+                continue;
+            }
+
+            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path);
 
             if (application.ProfilesIncomplete)
             {
@@ -363,7 +391,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
                     ? application.Name
                     : $"{application.Name} — {Path.GetFileName(profile)}";
 
-                targets.AddRange(walk.Targets.Select(target => target with { Group = heading }));
+                targets.AddRange(walk.Targets.Select(target => target with { Group = heading, UseCheck = stillUnused }));
                 declined.AddRange(walk.Declined);
                 survivors.AddRange(walk.Survivors);
                 notes.AddRange(walk.Notes);
@@ -398,10 +426,22 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
 
         // Reaching here means HasRecognisedCache already found a cache directory on disk by full
         // name, and a full path resolves through a directory the account may not list. So the
-        // sentence below would deny what this same provider established one method earlier.
-        if (targets.Count == 0 && declined.Count == 0 && !unreadable)
+        // sentence below would deny what this same provider established one method earlier. A folder
+        // held back as in use has its caches too.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable && live.Live.Count == 0)
         {
             return EmptyPlan("No application on this machine keeps a Chromium cache in its data folder.");
+        }
+
+        if (LiveTreeVeto.NoteFor(live.Live, held => $"'{applications.First(a => a.Path.Equals(held.Directory, StringComparison.OrdinalIgnoreCase)).Name}'")
+            is { } inUse)
+        {
+            notes.Add(inUse);
+        }
+
+        if (LiveTreeVeto.IncompleteNote(live.Complete, "Close the applications before you clean.") is { } incomplete)
+        {
+            notes.Add(incomplete);
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -433,7 +473,9 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            WasNotExamined = targets.Count == 0 && declined.Count > 0,
+            // A folder held back as in use and a cache behind a link are both something real left
+            // unexamined, so a row with no steps must not read as clear.
+            WasNotExamined = targets.Count == 0 && (declined.Count > 0 || live.Live.Count > 0),
         };
     }
 
