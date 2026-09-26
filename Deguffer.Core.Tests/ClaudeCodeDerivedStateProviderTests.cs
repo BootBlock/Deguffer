@@ -492,6 +492,31 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains(ClaudeCodeHome.ConfigDirectoryVariable, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A variable naming the profile or one of the account's own folders as Claude Code's folder. Read
+    /// as Claude Code's, every entry there would be asserted as a Claude Code survivor and refused in
+    /// Explore as Claude Code's own, and a removal there by any other row would read as a failure.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("Downloads")]
+    public async Task LeavesEverythingAloneWhereTheConfigDirectoryVariableNamesOneOfTheAccountsOwnFolders(string name)
+    {
+        var folder = Path.Combine(_environment.UserProfile, name);
+        var mine = Path.Combine(folder, "notes.txt");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(mine, "mine");
+        _environment.WithEnvironmentVariable(ClaudeCodeHome.ConfigDirectoryVariable, folder);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(mine, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("will not treat that as Claude Code's folder", StringComparison.Ordinal));
+        Assert.Empty(await provider.DiscoverToolRootsAsync());
+    }
+
     [Fact]
     public async Task AFolderThatIsALinkIsNeverLookedThrough()
     {

@@ -3,13 +3,18 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Whether a folder an environment variable names may be examined as one tool's own.
+/// Whether a folder a setting names may be examined as one tool's own.
 ///
-/// <para>The variable is something anything on the machine may have written. Examining a folder as a
+/// <para>The setting is something anything on the machine may have written. Examining a folder as a
 /// tool's names everything else in it as a survivor (§5.6), and offers whatever in it carries one of the
-/// tool's names. A drive root, a folder holding a temporary folder, or one holding a folder Windows is
-/// built out of is somewhere other rows legitimately remove things, and each of those removals would
-/// then read as a failure of this one — and in Explore the whole of it would read as the tool's.</para>
+/// tool's names. A drive root, one of the account's own folders, a folder holding a temporary folder,
+/// or one holding a folder Windows is built out of is somewhere other rows legitimately remove things,
+/// or somewhere the user keeps their files, and each of those removals would then read as a failure of
+/// this one — and in Explore the whole of it would read as the tool's.</para>
+///
+/// <para>Every provider that is handed a folder by a setting asks this, rather than keeping a variant
+/// of its own. It says only that the folder is not somewhere nothing may be. Whether what is in it is
+/// the tool's is the provider's own evidence to establish.</para>
 /// </summary>
 internal static class ConfiguredFolder
 {
@@ -25,28 +30,17 @@ internal static class ConfiguredFolder
         ISystemDirectories machine,
         IReadOnlyList<string> accountTempFolders)
     {
-        var unaliased = LongPath.Unaliased(configured);
-
-        if (string.IsNullOrEmpty(Path.GetDirectoryName(unaliased)))
+        if (StandingFolders.WhyNotTaken(configured, environment, machine) is { } standing)
         {
-            return "it is the root of a drive or a share.";
+            return standing;
         }
 
-        string[] mustNotHold =
-        [
-            .. accountTempFolders,
-            Path.Combine(machine.WindowsDirectory, "Temp"),
-            environment.UserProfile,
-            environment.RoamingAppData,
-            environment.LocalAppData,
-            machine.WindowsDirectory,
-            machine.ProgramData,
-            machine.ProgramFiles,
-            machine.ProgramFilesX86,
-        ];
+        var unaliased = LongPath.Unaliased(configured);
 
-        return mustNotHold.Any(inside => inside.Length > 0 && LongPath.Contains(unaliased, LongPath.Unaliased(inside)))
-            ? "it holds a temporary folder, or a folder Windows is built out of, where other rows remove things."
+        return accountTempFolders
+            .Append(Path.Combine(machine.WindowsDirectory, "Temp"))
+            .Any(temp => temp.Length > 0 && LongPath.Contains(unaliased, LongPath.Unaliased(temp)))
+            ? "it holds a temporary folder, where other rows remove things."
             : null;
     }
 }

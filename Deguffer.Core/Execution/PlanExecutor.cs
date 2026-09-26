@@ -33,6 +33,11 @@ namespace Deguffer.Core.Execution;
 /// <see cref="ScheduledRemoval"/>. Defaulted to the system clock, and injected so a test of a tool
 /// that never marks anything does not wait out the real interval.
 /// </param>
+/// <param name="environment">
+/// The account whose own folders no step may destroy. See <see cref="StandingFolders"/>. Defaulted
+/// to the signed-in account, which is the one a provider's plan was made for.
+/// </param>
+/// <param name="system">The directories Windows is built out of, for the same check.</param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
@@ -42,7 +47,9 @@ public sealed class PlanExecutor(
     IDiskCleanupHandlers? handlers = null,
     IWindowsServicing? servicing = null,
     IProcessInspector? inspector = null,
-    TimeProvider? time = null)
+    TimeProvider? time = null,
+    IUserEnvironment? environment = null,
+    ISystemDirectories? system = null)
 {
     /// <summary>
     /// How long a command's tool is given to mark the item it will remove later. LM Studio answers
@@ -60,6 +67,8 @@ public sealed class PlanExecutor(
     private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
     private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private readonly IUserEnvironment _environment = environment ?? UserEnvironment.Current;
+    private readonly ISystemDirectories _system = system ?? SystemDirectories.Current;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -102,6 +111,14 @@ public sealed class PlanExecutor(
             if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
             {
                 outcomes.Add(new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating));
+                done += weights[i];
+                progress?.Report(done / total);
+                continue;
+            }
+
+            if (step is DeleteStep standing && WhyNotTaken(standing) is { } refused)
+            {
+                outcomes.Add(new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, refused));
                 done += weights[i];
                 progress?.Report(done / total);
                 continue;
@@ -182,6 +199,19 @@ public sealed class PlanExecutor(
             ? UnfinishedUpdate.PendingNow(pending)
             : null;
     }
+
+    /// <summary>
+    /// Why <paramref name="step"/> must not run because it would destroy a folder nothing may take,
+    /// or null where it would not. The last check before a removal, for a path a provider should
+    /// never have planned: every provider asks <see cref="StandingFolders"/> of a folder a setting
+    /// names, and this is what holds if one did not.
+    /// </summary>
+    private string? WhyNotTaken(DeleteStep step) =>
+        step.Destroys
+            .Select(path => (Path: path, Why: StandingFolders.WhyNotTaken(path, _environment, _system)))
+            .FirstOrDefault(refused => refused.Why is not null) is { Why: { } why } found
+                ? $"Nothing was removed: '{LongPath.Display(found.Path)}' is never removed, because {why}"
+                : null;
 
     private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, CancellationToken ct)
     {

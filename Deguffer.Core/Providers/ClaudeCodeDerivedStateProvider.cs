@@ -219,8 +219,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         if (ClaudeCodeHome.Resolve(Environment) is not { } home)
         {
             return EmptyPlan(
-                $"{ClaudeCodeHome.ConfigDirectoryVariable} is set to '{ClaudeCodeHome.ConfiguredValue(Environment)}', "
-                + "which is not a full path. Deguffer cannot tell which folder that means, so it is leaving it alone.");
+                $"{ClaudeCodeHome.WhyUnusable(Environment)} Deguffer is leaving Claude Code's leftovers alone.");
         }
 
         if (NothingToPlanFor(

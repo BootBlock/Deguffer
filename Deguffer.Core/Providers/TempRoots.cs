@@ -50,7 +50,7 @@ public sealed record TempRootSet(
 /// kind of thing §5.2 refuses to trust. So the rule is the one §5.2 states: a candidate Deguffer
 /// does not <em>recognise</em> as a temporary folder is declined, with the reason on screen, rather
 /// than accepted because nothing on a list of forbidden paths happened to match it. See
-/// <see cref="Refuse"/> for the four tests and what each of them catches.</para>
+/// <see cref="Refuse"/> for the five tests and what each of them catches.</para>
 ///
 /// <para><b><c>C:\Windows\SystemTemp</c> is deliberately not among them.</b> Windows 11 writes
 /// servicing work there rather than in <c>C:\Windows\Temp</c>, and §9 keeps Deguffer out of
@@ -222,7 +222,10 @@ public static class TempRoots
     /// everything on the volume.</item>
     /// <item><b>A candidate that <em>contains</em> a directory the machine is built out of</b> —
     /// the profile, the Windows directory, either program directory, or the machine-wide
-    /// application data. Emptying it would take that with it.</item>
+    /// application data — or that is or holds one of the account's own folders. Emptying it would
+    /// take that with it. <see cref="StandingFolders"/> answers this for every setting.</item>
+    /// <item><b>A candidate inside one of the account's own folders</b>, which only this row refuses,
+    /// because only this row empties a folder of whatever is in it.</item>
     /// <item><b>A candidate that is not recognisably a temporary folder.</b> This is §5.2's
     /// "unrecognised is Tier 4" applied to the root rather than to a child, and it is the rule that
     /// does the work: the containment test above accepts <c>C:\Users\&lt;user&gt;\Documents</c> and
@@ -254,30 +257,21 @@ public static class TempRoots
         ISystemDirectories system,
         string machineTemp)
     {
-        if (string.IsNullOrEmpty(Path.GetDirectoryName(candidate)))
-        {
-            return "It is the root of a drive or a share rather than a folder inside one, and "
-                + "emptying it would take everything on the volume.";
-        }
-
-        string[] mustNotHold =
-        [
-            environment.UserProfile,
-            environment.RoamingAppData,
-            environment.LocalAppData,
-            system.WindowsDirectory,
-            system.ProgramData,
-            system.ProgramFiles,
-            system.ProgramFilesX86,
-        ];
-
         // Asked before the name test, because it is the more specific answer where both apply: a
         // folder holding the profile is worth saying so about, where "we did not recognise it"
         // would be true and much less use.
-        if (mustNotHold.Any(inside => inside.Length > 0 && LongPath.Contains(candidate, inside)))
+        if (StandingFolders.WhyNotTaken(candidate, environment, system) is { } standing)
         {
-            return "It holds a directory Windows is built out of, so emptying it would take far "
-                + "more than temporary files.";
+            return $"Emptying it would take far more than temporary files, because {standing}";
+        }
+
+        // Further than any other setting is held to, because this row empties whatever is in the
+        // folder rather than what a tool recognises there. A 'Tmp' inside Documents passes the name
+        // test below and is still somewhere the user keeps their files.
+        if (StandingFolders.PersonalFolderHolding(candidate, environment) is { } personal)
+        {
+            return $"It is inside '{LongPath.Display(personal)}', one of your own folders, and emptying "
+                + "it would delete your files rather than a program's scratch.";
         }
 
         if (!IsNamedAsTemporary(candidate))

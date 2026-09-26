@@ -68,6 +68,8 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     private string? _localRepository;
 
+    private (string Repository, string? Why)? _vetted;
+
     public MavenRepositoryProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
@@ -157,6 +159,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _localRepository = null;
+        _vetted = null;
         base.InvalidateCaches();
     }
 
@@ -241,7 +244,15 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
         if (WhyLeftAlone(repository) is { } reason)
         {
-            return UnexaminedPlan(reason);
+            // Protected as well as left alone, because the folder is somebody's: a user folder, or one
+            // holding more than Maven put there.
+            return UnexaminedPlan(reason) with
+            {
+                ProtectedPaths = Protect((
+                    repository,
+                    "Your Maven settings name this folder as the local repository, and it is not one Deguffer removes, "
+                    + "so it must survive.")),
+            };
         }
 
         if (Declare(repository) is not { } roots)
@@ -290,9 +301,51 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// <summary>
     /// Why the plan leaves a configured repository unexamined, or null where it may go on to look.
     /// Read by the plan and by <see cref="DiscoverToolRootsAsync"/> alike, because a setting the plan
-    /// declines protects nothing, and so leaves nothing for Explore to refuse.
+    /// declines protects nothing Explore needs to refuse. Memoised for the pass (G4), because the
+    /// evidence is read from the disk.
     /// </summary>
     private string? WhyLeftAlone(string repository)
+    {
+        if (_vetted is { } vetted && vetted.Repository == repository)
+        {
+            return vetted.Why;
+        }
+
+        var why = WhyMavensOwn(repository) ?? WhyNotARepository(repository);
+        _vetted = (repository, why);
+
+        return why;
+    }
+
+    /// <summary>
+    /// Why a configured repository that is not the default one is not shown to be a repository, or
+    /// null where it is. The repository is removed whole, so it has to be somewhere nothing forbids
+    /// and hold what Maven writes there — see <see cref="MavenRepositoryEvidence"/>. A folder that is
+    /// not there holds nothing to remove, so its contents are not asked about.
+    /// </summary>
+    private string? WhyNotARepository(string repository)
+    {
+        if (repository.Equals(DefaultLocalRepository, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var system = SystemDirectories.Current;
+
+        var why = ConfiguredFolder.WhyNotOwned(repository, Environment, system, TempRoots.Resolve(Environment, system).AccountFolders)
+            ?? (LongPath.DirectoryMayExist(repository) ? MavenRepositoryEvidence.WhyNotARepository(repository) : null);
+
+        return why is null
+            ? null
+            : $"Your Maven settings.xml points the local repository at {repository}, and Deguffer removes the "
+                + $"repository whole, so it will not take this folder because {why}";
+    }
+
+    /// <summary>
+    /// Why a configured repository is Maven's own home or something in it rather than a repository,
+    /// or null where it is neither.
+    /// </summary>
+    private string? WhyMavensOwn(string repository)
     {
         // §5.2, and the reason this check is here rather than trusted to the declaration. A
         // configured value naming the Maven home, or anything above it, would make the tool root the

@@ -13,6 +13,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _registry = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _machineRegistry = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _movedPersonalFolders = [];
 
     public FakeUserEnvironment(string root)
     {
@@ -46,6 +47,19 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public string? Videos { get; private set; }
 
     public string? Documents { get; private set; }
+
+    /// <summary>
+    /// The account's own folders at their default places in the profile, with whatever
+    /// <see cref="WithPersonalFolderAt"/> has moved one to. Named but not created, as
+    /// <see cref="Videos"/> is.
+    /// </summary>
+    public IReadOnlyList<string> PersonalFolders =>
+    [
+        .. new[] { "Desktop", "Downloads", "Music", "Pictures", "Saved Games", "OneDrive" }
+            .Select(name => Path.Combine(UserProfile, name)),
+        .. new[] { Documents, Videos }.OfType<string>(),
+        .. _movedPersonalFolders,
+    ];
 
     public string TempPath { get; private set; }
 
@@ -119,6 +133,16 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public FakeUserEnvironment WithNoVideos()
     {
         Videos = null;
+        return this;
+    }
+
+    /// <summary>
+    /// Pretend Windows has moved one of the account's own folders to <paramref name="path"/>, as a
+    /// redirection or OneDrive's folder backup does. Not created, so a test decides what is there.
+    /// </summary>
+    public FakeUserEnvironment WithPersonalFolderAt(string path)
+    {
+        _movedPersonalFolders.Add(path);
         return this;
     }
 

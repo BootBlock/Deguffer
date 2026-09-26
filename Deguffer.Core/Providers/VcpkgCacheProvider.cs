@@ -92,7 +92,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new VcpkgDiscovery(Environment);
+        => _discovery = new VcpkgDiscovery(Environment, SystemDirectories.Current);
 
     public override string Id => "vcpkg";
 
@@ -245,7 +245,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
         if (scan.FoundNothing)
         {
-            var why = refused.Count > 0 ? RefusedSentence(refused[0])
+            var why = refused.Count > 0 ? refused[0]
                 : located.UnmarkedRoot is { } nothingFound ? UnmarkedRootSentence(nothingFound)
                 : null;
 
@@ -270,8 +270,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         // A refusal is said out loud, for the reason the unmarked root is: the user pointed a
         // variable at a directory and it is not in the plan, and a number with nothing explaining it
         // is how a user concludes Deguffer is broken rather than careful.
-        notes.AddRange(refused.Select(path =>
-            new PlanNote(PlanNoteSeverity.Information, RefusedSentence(path))));
+        notes.AddRange(refused.Select(sentence => new PlanNote(PlanNoteSeverity.Information, sentence)));
 
         if (located.Root is null)
         {
@@ -319,7 +318,14 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected]),
+            ProtectedPaths = Protect(
+            [
+                .. scan.Protected,
+
+                // A folder a variable named and Deguffer declined is somebody's, and §5.6 says so after
+                // a run that reached into the clone beside it.
+                .. located.Declined.Select(declined => (declined.Path, DeclinedReason)),
+            ]),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
@@ -327,13 +333,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         };
     }
 
+    private const string DeclinedReason =
+        "A vcpkg variable names this folder as a cache, and it is not one Deguffer removes, so it must survive.";
+
     /// <summary>
-    /// What the user is told when something named a clone and Deguffer declined it. It names the
-    /// directory and the marker, because "could not find it" would be untrue and the advice that
-    /// sentence goes on to give has already been taken.
-    /// </summary>
-    /// <summary>
-    /// What the user is told when a variable named something that is not a cache to remove.
+    /// What the user is told when a variable named vcpkg's own directory, or something in it, rather
+    /// than a cache.
     /// </summary>
     private static string RefusedSentence(string path) =>
         $"Leaving '{path}' alone: that is vcpkg's own directory, or something inside it Deguffer "
@@ -353,6 +358,11 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         + "buildtrees, downloads and packages directories of a vcpkg clone were neither cleared nor "
         + "ruled out.");
 
+    /// <summary>
+    /// What the user is told when something named a clone and Deguffer declined it. It names the
+    /// directory and the marker, because "could not find it" would be untrue and the advice that
+    /// sentence goes on to give has already been taken.
+    /// </summary>
     private static string UnmarkedRootSentence(string declined) =>
         $"Deguffer found {declined} but it does not hold vcpkg's own '{VcpkgDiscovery.RootMarker}' "
         + "marker, so it did not look inside it. The buildtrees, downloads and packages directories of "
@@ -449,7 +459,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
         if (ContainerOf(path, located) is not { } container)
         {
-            refused?.Add(path);
+            // vcpkg's own directory first, because it is the more specific answer: a clone named as a
+            // cache fails the evidence too, and "nothing in it is a package" would send the user
+            // looking in the wrong place.
+            refused?.Add(IsToolsOwn(path, located)
+                ? RefusedSentence(path)
+                : located.Declined.FirstOrDefault(d => d.Path == path).Sentence ?? RefusedSentence(path));
 
             return null;
         }
@@ -500,11 +515,13 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// The directory holding a configured cache, or null where there is none to name or the path is
-    /// not a cache at all: a cache at a volume root has no container, and one pointed at the clone or
-    /// at something the plan protects is vcpkg's own.
+    /// not a cache at all: a cache at a volume root has no container, one pointed at the clone or at
+    /// something the plan protects is vcpkg's own, and one discovery declined is somebody else's.
     /// </summary>
     private string? ContainerOf(string path, VcpkgLocations located) =>
-        Path.GetDirectoryName(path) is { Length: > 0 } container && !IsToolsOwn(path, located)
+        Path.GetDirectoryName(path) is { Length: > 0 } container
+        && !IsToolsOwn(path, located)
+        && !located.Declined.Any(declined => declined.Path == path)
             ? container
             : null;
 

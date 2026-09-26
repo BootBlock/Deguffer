@@ -645,6 +645,33 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A 'Tmp' inside Documents passes the name test, and this row empties whatever is in the folder
+    /// rather than what a tool recognises there. Inside one of the account's own folders, that is the
+    /// user's files.
+    /// </summary>
+    [Fact]
+    public async Task RefusesATemporaryFolderInsideOneOfTheAccountsOwnFolders()
+    {
+        var inside = Path.Combine(_environment.Documents!, "Tmp");
+        var letter = Abandoned(4096, "profile", "Documents", "Tmp", "letter.docx");
+        _environment.WithEnvironmentVariable("TMP", inside);
+        Abandoned(1024, "temp", "old.tmp");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(inside, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains(inside, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("one of your own folders", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(letter));
+    }
+
+    /// <summary>
     /// The same refusal for a redirection that holds the machine rather than being it. A variable
     /// pointing one level above the profile satisfies no name check and every containment one.
     /// </summary>
