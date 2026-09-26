@@ -92,21 +92,18 @@ public static class ResolveCacheLayout
     public static IReadOnlyList<string> CandidateFolders(IVolumeInventory volumes, IUserEnvironment environment)
     {
         var folders = volumes.Volumes
-            .Where(IsLocalDisk)
+            .Where(volume => volume.IsLocalDisk)
             .Select(volume => volume.RootPath)
             .ToList();
 
         // A redirected Videos folder can be on a share, which no volume holds, or on a cloud mount.
-        if (environment.Videos is { } videos && HostVolume.For(volumes, videos) is { } host && IsLocalDisk(host))
+        if (environment.Videos is { } videos && HostVolume.For(volumes, videos) is { IsLocalDisk: true })
         {
             folders.Add(videos);
         }
 
         return [.. folders.Distinct(StringComparer.OrdinalIgnoreCase)];
     }
-
-    private static bool IsLocalDisk(LocalVolume volume) =>
-        volume is { IsReady: true, Kind: DriveType.Fixed or DriveType.Removable } && !volume.StoresContentRemotely;
 
     /// <summary>
     /// What <paramref name="folder"/> holds, at every depth. Links are not followed: one met anywhere

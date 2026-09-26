@@ -2916,6 +2916,125 @@ Sources:
 
 ---
 
+## Adobe media cache
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `Media Cache Files`, `Peak Files` and `Media Cache` in `%APPDATA%\Adobe\Common`, and `Media Cache Files` and `Media Cache` in each folder Adobe's settings name |
+| **Method** | Delete what is inside each of those folders, and nothing beside them |
+| **Typical size** | Not measured here: Adobe was not installed on the machine this was written on. Adobe keeps the cache until you delete it, and community reports of tens of gigabytes are common |
+
+### What it is
+
+Premiere Pro, After Effects, Audition and Media Encoder share one media cache. When you import a
+clip, they convert its audio to a `.cfa` file and draw its waveform into a `.pek` file, so that it
+plays and shows at once, and they record what they read from the file so that a project loads
+faster. Adobe's documentation calls these the media cache files, and keeps them in a folder called
+`Media Cache Files`. A database that indexes them is in a folder called `Media Cache`. Adobe keeps
+all of it until you delete it.
+
+### How Deguffer finds it
+
+**Where Adobe puts it by default:** `%APPDATA%\Adobe\Common`, which is where Adobe's own
+instructions for deleting the cache by hand send you. Adobe's automatic clean-up also names a
+`Peak Files` folder there, beside `Media Cache Files`, which holds waveforms.
+
+**Where your settings put it.** You can move the cache under **Preferences → Media Cache**, and
+Adobe records the new place in the registry, under
+`HKEY_CURRENT_USER\Software\Adobe\Common <version>\Media Cache`: `FolderPath` for the cache files
+and `DatabasePath` for the database. The version in the key's name changes between releases, so
+Deguffer reads every `Common` key it finds there. Each value names the folder Adobe writes its own
+folder *into*. Adobe's default reads `...\AppData\Roaming\Adobe\Common\` for both, while the files
+are in `Media Cache Files` inside it. So in a folder a setting names, only `Media Cache Files` or
+`Media Cache` is reached, and nothing else there, which is your own folder, ever is.
+
+**The default folder is looked at even after you move the cache.** Adobe moves only the converted
+audio and the waveforms. What it read from each file stays in `%APPDATA%\Adobe\Common\Media Cache
+Files` wherever the cache is set.
+
+Some limits are stated here rather than left to be discovered:
+
+- **A cache on a network share, or on a drive whose files are stored in the cloud, is left alone and
+  named.** An Adobe application on another computer may be using it, and Deguffer can see only what
+  runs on this one. This includes the default folder, where a roaming profile puts it on a share.
+- **A setting that is not a full path is named, and nothing is removed for it**, because Deguffer
+  cannot tell where Adobe puts the cache.
+- **Some users find a second cache in `Public\Documents`.** Why Adobe writes one there is not
+  established, so Deguffer does not look there.
+
+### What Deguffer does
+
+Deguffer **removes what is inside each cache folder, and the folder itself stays.** A cache folder
+that is a link is left alone and named. A folder that Windows will not list is named, and the row
+does not claim to be clear.
+
+**Nothing is offered while an Adobe application is running.** Adobe says to close the application
+before you delete its cache, and the database is open while it runs. While Premiere Pro, After
+Effects, Audition, Media Encoder or the Dynamic Link server that Premiere Pro and After Effects share
+is running, every cache folder is left alone and named, and Explore will not remove anything in it.
+The same question is asked again before each folder is emptied.
+
+### What is protected
+
+`%APPDATA%\Adobe\Common` is never a target, and nothing in it is listed. The cache folders are named
+outright, and **what you keep beside them is named, checked after the run, and refused in
+Explore**:
+
+- **`Team Projects Local Hub`**: Team Projects' local copies, with their auto-save history.
+- **`LUTs`**: the look-up tables you installed for Premiere Pro and Media Encoder.
+- **`Motion Graphics Templates`**: the templates you installed.
+
+Anything else in `%APPDATA%\Adobe\Common` is refused in Explore in the same way, whether or not
+Deguffer knows what it is. What else Adobe keeps there has not been established.
+
+**Never your auto-save folders.** Premiere Pro's `Adobe Premiere Pro Auto-Save` folder in your
+Documents holds copies of your projects for crash recovery. It is not a cache, and this row does not
+reach it.
+
+### What it costs you
+
+**Adobe converts the audio and draws the waveforms of your footage again as each project opens**,
+so a large project opens slowly once. Premiere Pro keeps its analysis for media search in the same
+cache, so it analyses your footage again too. Footage on a drive that is not connected is converted
+once the drive is back. Your projects, footage, LUTs, templates and Team Projects are untouched.
+
+### Why Tier 2, not Tier 1
+
+Every file in the cache is made from footage that is still on disk, and Adobe makes each one again
+by itself, so nothing is lost. The refill is converting and analysing every clip of every project
+again as it opens, and Adobe's own page warns of the delay. That is §3's "re-indexing for minutes",
+the same reason the DaVinci Resolve render cache is Tier 2.
+
+**Adobe has its own ways to delete the cache, and Deguffer cannot drive any of them.** Premiere Pro's
+**Edit → Preferences → Media Cache** has a **Delete** button, which removes unused cache files or all
+of them. A preference can delete files older than a number of days, 90 by default, or the oldest
+once the cache passes a share of the drive, 10% by default. It is off by default, and when it is on
+it runs ten minutes after the application starts and then weekly. All of these are inside the
+running application.
+
+Sources:
+
+- Adobe, delete media cache files manually:
+  <https://helpx.adobe.com/premiere/desktop/troubleshooting/media-issues/delete-media-cache-files-manually.html>
+- Adobe, manage the media cache:
+  <https://helpx.adobe.com/premiere/desktop/troubleshooting/media-issues/manage-media-cache.html>
+- Adobe, managing the media cache database:
+  <https://helpx.adobe.com/media-encoder/using/media-cache-database.html>
+- Adobe, clearing the media cache in Premiere Pro: <https://helpx.adobe.com/premiere-pro/kb/clear-cache.html>
+- The registry values, and which files stay on the system drive, from Adobe's community forums:
+  <https://community.adobe.com/t5/premiere-pro-discussions/premiere-pro-preferences-media-cache-settings-for-all-users-in-active-directory/m-p/10048268>
+  and
+  <https://community.adobe.com/t5/premiere-pro-discussions/premiere-media-cache-location-has-a-mind-of-its-own/td-p/9928211>
+- Team Projects' local hub:
+  <https://community.adobe.com/t5/team-projects-discussions/is-there-a-way-to-keep-a-copy-of-a-team-project-saved-locally/m-p/9456123>
+- Media search analysis kept in the media cache:
+  <https://dev.larryjordan.com/articles/ai-powered-media-intelligence-search-in-premiere-pro-2025/>
+
+---
+
 ## Squirrel updater leftovers
 
 | **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |

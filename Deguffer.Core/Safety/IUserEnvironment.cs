@@ -133,6 +133,18 @@ public interface IUserEnvironment
     string? ReadCurrentUserRegistryValue(string keyPath, string valueName);
 
     /// <summary>
+    /// The names of the keys directly under a key in <c>HKEY_CURRENT_USER</c>, or none when the key
+    /// or the permission to read it is missing.
+    ///
+    /// <para>Exists because Adobe files its media cache settings under a key whose name carries a
+    /// version, such as <c>Common 13.0</c>, and the version moves between releases. Guessing at the
+    /// names would miss a release nobody listed, and a location that is missed is a cache that is
+    /// never found rather than a wrong deletion, so the names are read instead.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
+    IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath);
+
+    /// <summary>
     /// Read a string value from under <c>HKEY_LOCAL_MACHINE</c> in the named registry view, or null
     /// when the key, the value or the permission to read it is missing.
     ///
@@ -330,6 +342,27 @@ public sealed partial class UserEnvironment : IUserEnvironment
             // ordinary on a long-lived machine, and both mean the same thing here: nothing said
             // where the tool is.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
+    /// </summary>
+    public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+
+            return key?.GetSubKeyNames() ?? [];
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // thing: nothing said where the tool is.
+            return [];
         }
     }
 
