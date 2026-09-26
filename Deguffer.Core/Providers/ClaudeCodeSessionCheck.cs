@@ -48,12 +48,12 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
     /// conversation written to after the preview, and a session folder is a separate step it does not
     /// spare. Asked of both parts, the question holds the folder back with the conversation.</para>
     /// </summary>
-    /// <param name="transcripts">Every conversation's path, by its session's id, as the preview found them.</param>
+    /// <param name="starts">Where each session's conversation says it started, shared by every check of a plan.</param>
     /// <param name="conversation">The session's conversation.</param>
     /// <param name="lastWrittenUtc">When the preview found the conversation last written.</param>
     public static ClaudeCodeSessionCheck Untouched(
         ClaudeCodeSessionRegistry sessions,
-        ILookup<string, string> transcripts,
+        ClaudeCodeSessionStarts starts,
         string sessionId,
         string project,
         string conversation,
@@ -61,11 +61,27 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
         new(sessions, (list, ct) =>
             list.Lists(sessionId)
                 ? "the Claude Code session it belongs to is running again"
-                : ClaudeCodeOccupancy.Of(list, transcripts, ct).Occupies(project)
+                : ClaudeCodeOccupancy.Of(list, starts, ct).Occupies(project)
                     ? "Claude Code is running in the project this conversation belongs to, and could resume it"
-                    : File.GetLastWriteTimeUtc(LongPath.Extended(conversation)) > lastWrittenUtc
-                        ? "Claude Code has written to this conversation since the scan"
-                        : null);
+                    : WrittenSince(conversation, lastWrittenUtc));
+
+    /// <summary>
+    /// Why the session is held back where its conversation was written after <paramref name="lastWrittenUtc"/>,
+    /// or where Windows would not say when it was. A date nobody could read is not a date that has not moved.
+    /// </summary>
+    private static string? WrittenSince(string conversation, DateTime lastWrittenUtc)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(LongPath.Extended(conversation)) > lastWrittenUtc
+                ? "Claude Code has written to this conversation since the scan"
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "Deguffer could not tell whether Claude Code has written to this conversation since the scan";
+        }
+    }
 
     /// <summary>
     /// For something that names no session: held while any running session could have written it,

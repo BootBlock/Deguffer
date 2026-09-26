@@ -192,7 +192,8 @@ internal static class ClaudeCodeConversations
         }
 
         var described = Describe(candidates, ct);
-        var occupancy = ClaudeCodeOccupancy.Of(evidence.Sessions, transcripts, ct);
+        var starts = new ClaudeCodeSessionStarts(transcripts);
+        var occupancy = ClaudeCodeOccupancy.Of(evidence.Sessions, starts, ct);
         var unplaced = 0;
         var occupied = 0;
 
@@ -210,7 +211,7 @@ internal static class ClaudeCodeConversations
             }
             else
             {
-                Offer(sorting, candidate, conversation, evidence, transcripts);
+                Offer(sorting, candidate, conversation, evidence, starts);
             }
         }
 
@@ -224,12 +225,12 @@ internal static class ClaudeCodeConversations
         Candidate candidate,
         ClaudeCodeConversation conversation,
         ClaudeCodeConversationEvidence evidence,
-        ILookup<string, string> transcripts)
+        ClaudeCodeSessionStarts starts)
     {
         var transcript = candidate.Session.Transcript;
         var identity = new ItemIdentity(transcript.SessionId, Name(conversation));
         var check = ClaudeCodeSessionCheck.Untouched(
-            evidence.Registry, transcripts, transcript.SessionId, conversation.Project, transcript.Path, transcript.LastWrittenUtc);
+            evidence.Registry, starts, transcript.SessionId, conversation.Project, transcript.Path, transcript.LastWrittenUtc);
 
         IReadOnlyList<ItemFacet> facets =
         [

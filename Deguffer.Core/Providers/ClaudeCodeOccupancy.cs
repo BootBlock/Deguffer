@@ -30,10 +30,10 @@ internal sealed class ClaudeCodeOccupancy
     }
 
     /// <param name="sessions">What the list of running sessions said.</param>
-    /// <param name="transcripts">Every conversation's path, by its session's id.</param>
+    /// <param name="starts">Where each session's conversation says it started.</param>
     public static ClaudeCodeOccupancy Of(
         ClaudeCodeSessionList sessions,
-        ILookup<string, string> transcripts,
+        ClaudeCodeSessionStarts starts,
         CancellationToken ct)
     {
         if (!sessions.Complete)
@@ -53,9 +53,9 @@ internal sealed class ClaudeCodeOccupancy
             folders.Add(current);
 
             // A session new enough to have written no conversation yet started where it is now.
-            foreach (var transcript in transcripts[session.SessionId])
+            foreach (var start in starts.Of(session.SessionId, ct))
             {
-                if (ClaudeCodeTranscriptReader.Read(transcript, ct)?.Project is not { } started)
+                if (start is not { } started)
                 {
                     return Everywhere;
                 }
