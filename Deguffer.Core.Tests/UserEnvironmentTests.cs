@@ -1,5 +1,5 @@
 using Deguffer.Core.Safety;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 using Microsoft.Win32;
 
 namespace Deguffer.Core.Tests;

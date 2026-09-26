@@ -1,7 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Memory.Acting;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

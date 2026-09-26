@@ -1,7 +1,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Deguffer.Core.Exploring;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

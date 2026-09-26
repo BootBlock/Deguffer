@@ -2,7 +2,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 using Microsoft.Win32;
 
 namespace Deguffer.Core.Tests;

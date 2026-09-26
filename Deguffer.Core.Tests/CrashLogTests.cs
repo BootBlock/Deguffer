@@ -1,6 +1,6 @@
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Safety;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

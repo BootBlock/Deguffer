@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 using Xunit.Sdk;
 
 namespace Deguffer.Core.Tests;
@@ -79,19 +79,24 @@ public sealed partial class SymbolicLinkTests : IDisposable
     /// The fixture only helps where it is used, and a link made directly fails the old way: a bare
     /// assertion against production code that is correct. The fixture's own file is expected to
     /// match, which also proves the sweep still reads the source.
+    ///
+    /// <para>Every project that holds tests or their fixtures is swept, since a link made in one of
+    /// the App's tests fails the same way.</para>
     /// </summary>
     [Fact]
     public void NoTestCreatesALinkWithoutTheFixture()
     {
-        var project = Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core.Tests");
+        string[] projects = ["Deguffer.Core.Tests", "Deguffer.App.Tests", "Deguffer.Testing"];
 
-        var creating = Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories)
+        var creating = projects
+            .SelectMany(project => Directory.EnumerateFiles(
+                Path.Combine(MarkdownGuide.RepositoryRoot, project), "*.cs", SearchOption.AllDirectories))
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
             .Where(file => LinkCreation().IsMatch(File.ReadAllText(file)))
-            .Select(file => Path.GetRelativePath(project, file));
+            .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file));
 
-        Assert.Equal([Path.Combine("Fakes", "SymbolicLink.cs")], creating);
+        Assert.Equal([Path.Combine("Deguffer.Testing", "SymbolicLink.cs")], creating);
     }
 
     [GeneratedRegex(@"\bCreateSymbolicLink\s*\(|\bCreateAsSymbolicLink\s*\(")]

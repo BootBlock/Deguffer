@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The view-models' wiring: construction order, what one click raises, and how a row follows a
+    plan or a keep list that changed under it. A decision belongs in Core and is tested in
+    Deguffer.Core.Tests; what is tested here is how the shell holds those decisions together.
+
+    Built for the App's own platforms, because the App is a self-contained executable with no
+    AnyCPU build, and a project that references one has to share its runtime identifier.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deguffer.App\Deguffer.App.csproj" />
+    <ProjectReference Include="..\Deguffer.Testing\Deguffer.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

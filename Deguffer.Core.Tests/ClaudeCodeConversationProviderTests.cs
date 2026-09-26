@@ -2,8 +2,8 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
-using Deguffer.Core.Tests.Fakes;
-using static Deguffer.Core.Tests.Fakes.ClaudeCodeFixture;
+using Deguffer.Testing;
+using static Deguffer.Testing.ClaudeCodeFixture;
 
 namespace Deguffer.Core.Tests;
 

@@ -1,6 +1,6 @@
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
