@@ -344,9 +344,10 @@ public sealed record CleanupPlan
     /// filtering <see cref="Steps"/> itself would silently drop that guarantee, so the only
     /// narrowing available adds it.
     ///
-    /// A dropped <see cref="RunCommandStep"/> contributes no protection: its
-    /// <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1), and
-    /// asserting the tool left them alone would be asserting something this plan never controlled.
+    /// A dropped <see cref="RunCommandStep"/> contributes no protection unless it names the one item it
+    /// removes: its <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1),
+    /// and asserting the tool left them alone would be asserting something this plan never
+    /// controlled. See <see cref="CleanupStep.Subjects"/>.
     /// </summary>
     public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> chosen)
     {
@@ -364,8 +365,7 @@ public sealed record CleanupPlan
 
         var declined = Steps
             .Except(selected)
-            .OfType<DeleteStep>()
-            .SelectMany(s => s.Destroys)
+            .SelectMany(s => s.Subjects)
             .Select(path => new ProtectedPath(
                 path,
                 "Left alone because it was not selected for this run.",
@@ -397,7 +397,7 @@ public sealed record CleanupPlan
     /// <summary>
     /// This plan with every item on the keep list taken out of it, and each of those protected instead.
     ///
-    /// <para><b>Matched on <see cref="DeleteStep.Identity"/>, never on the path.</b> A path changes
+    /// <para><b>Matched on <see cref="CleanupStep.Identity"/>, never on the path.</b> A path changes
     /// when a cache is relocated or a project is moved, and the item does not. A keep entry matched on
     /// the path would silently stop matching, and the item would be offered again, which is the one
     /// direction a protection must not fail in. A step with no identity is never kept.</para>
@@ -424,7 +424,6 @@ public sealed record CleanupPlan
         ArgumentNullException.ThrowIfNull(keys);
 
         var kept = Steps
-            .OfType<DeleteStep>()
             .Where(step => step.Identity is { } identity && keys.Contains(identity.Key))
             .ToList();
 
@@ -439,8 +438,8 @@ public sealed record CleanupPlan
             ProtectedPaths =
             [
                 .. ProtectedPaths,
-                .. kept.Select(step => new ProtectedPath(
-                    step.Path,
+                .. kept.SelectMany(step => step.Subjects).Select(path => new ProtectedPath(
+                    path,
                     "On your keep list, so Deguffer left it alone.",
                     // Measured during planning, so it was there when the plan was made: the claim
                     // NarrowedTo makes, for the reason it gives.

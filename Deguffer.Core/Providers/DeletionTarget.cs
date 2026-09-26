@@ -53,7 +53,7 @@ public enum TargetKind
 /// What a reader choosing between items is told about this one. Null for none. See
 /// <see cref="Execution.ItemFacet"/>.
 /// </param>
-/// <param name="Group">The heading it is listed under. See <see cref="Execution.DeleteStep.Group"/>.</param>
+/// <param name="Group">The heading it is listed under. See <see cref="Execution.CleanupStep.Group"/>.</param>
 /// <param name="UseCheck">
 /// What the run asks again before removing it. See <see cref="Execution.DeleteStep.UseCheck"/>.
 /// </param>

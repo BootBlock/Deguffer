@@ -3182,6 +3182,72 @@ rather than a global install.
 
 ---
 
+## LM Studio superseded runtimes
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.lmstudio\extensionsackends\llama.cpp-win-<arch>-<accelerator>-<version>` |
+| **Method** | LM Studio's own `lms runtime remove --yes <name>@<version>`, one runtime at a time, while LM Studio is open |
+| **Typical size** | 1.26 GB on one workstation, beside the 3.3 GB `extensions` folder |
+
+### What it is
+
+LM Studio runs language models with llama.cpp, and downloads a build of it for each kind of hardware
+it supports: CUDA 12, an older CUDA line, Vulkan, and the processor alone. Each is a *runtime line*,
+and LM Studio keeps every version of a line it has downloaded. It uses one.
+
+LM Studio has a clean-up of its own, and it does not reach most of them. After a line downloads a new
+version, LM Studio keeps the five versions of that line used most recently and removes the rest. A
+line that never updates keeps every version it has, and a line that does keeps five.
+
+### What Deguffer does
+
+It asks LM Studio. `lms runtime ls` lists every runtime LM Studio has installed and marks the ones it
+uses, so Deguffer never works out which runtime is live from a folder name. Of each line it keeps the
+newest version and any LM Studio marks as used, and offers the rest, one item per runtime, grouped by
+line.
+
+A runtime is offered only if its line is a llama.cpp build for Windows, its version is plain dotted
+numbers, and its folder is where LM Studio keeps runtimes, is not a link, and is not already marked
+for removal. If LM Studio's listing cannot be read, or marks no runtime as used, nothing is offered.
+
+**LM Studio must be open.** `lms` starts LM Studio when it finds it closed, and a preview must not
+open a program. So with LM Studio closed the row says to open it, and asks nothing. The question is
+asked again when you press Clean: a runtime is not removed if LM Studio was closed in the meantime.
+
+**The space comes back when LM Studio next starts.** On Windows, `lms runtime remove` does not
+delete a runtime. It writes a `MARKED_FOR_DELETION` file into its folder, and LM Studio deletes the
+folder at its next start, because a loaded runtime holds its files open. Deguffer checks for that
+file after each command, since the command reports success before LM Studio has written it, and
+reports the runtime's size as *removed at next start* rather than as removed.
+
+LM Studio's command also removes the shared CUDA and Vulkan libraries in `backendsendor` that only
+the removed runtime used. That is LM Studio's judgement, not Deguffer's, and is the reason to use its
+command rather than delete the folders.
+
+### What is protected
+
+The runtime LM Studio uses, the newest version of each line, `.lmstudio` itself, `extensionsackends`,
+`backendsendor`, `models` and `.internal` are checked after the clean to prove they survived.
+Everything else under `.lmstudio` is Tier 4: models, chats, settings, credentials, plugins and the
+rest. Explore refuses `.lmstudio` and every runtime folder directly, for the same reason.
+
+### What it costs you
+
+Nothing, until you go back to a removed version. Selecting it in LM Studio downloads it again, a few
+hundred megabytes, and a specific old version may no longer be offered. Your models, chats and
+settings are untouched.
+
+### Why Tier 2, not Tier 1
+
+Nothing recreates a removed runtime on its own. Getting it back is a deliberate download, of a
+version that may not stay published, so it is offered and never ticked on your behalf.
+
+---
+
 ## Test browser profiles
 
 **Tier 1 — regenerable cache.** Pre-selected.

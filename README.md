@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Sixty-seven sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Sixty-eight sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Sixty-seven providers, each holding its own knowledge of one location. A provider reports "not
+Sixty-eight providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -146,6 +146,7 @@ installed" cleanly on a machine without that toolchain.
 | DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders it again only while your media is connected |
 | Capture One previews and thumbnails | The `Cache` in each catalog and session Capture One lists, wherever it is; never the photographs or the adjustments beside it. A catalog whose originals are offline cannot be browsed until they are reconnected |
 | Playwright browsers | |
+| LM Studio superseded runtimes | Every llama.cpp build LM Studio has downloaded except the one it uses and the newest for each kind of hardware, removed by LM Studio's own command. LM Studio must be open, and it frees the space the next time it starts |
 | Azure Functions Core Tools releases | |
 | Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |
 | Autodesk installer files | What Autodesk's installers extracted into `C:\Autodesk` and left behind; never the network licence server, an administrator's deployment images or Autodesk Access's updates. A repair or an update then downloads the product again |
