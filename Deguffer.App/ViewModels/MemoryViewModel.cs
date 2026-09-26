@@ -207,9 +207,9 @@ public sealed partial class MemoryViewModel : ObservableObject
     /// <summary>Show what is inside <paramref name="node"/>, where anything is.</summary>
     public void Descend(int node)
     {
-        if (Tree is { } tree && node >= 0 && node < tree.NodeCount && tree.IsContainer(node))
+        if (Tree is { } tree && MemoryPlace.Inside(tree, node) is { } inside)
         {
-            Show(tree, node, navigated: true);
+            Show(tree, inside, MemoryViewChange.Navigation);
         }
     }
 
@@ -217,7 +217,7 @@ public sealed partial class MemoryViewModel : ObservableObject
     {
         if (Tree is { } tree && CurrentNode != tree.RootNode)
         {
-            Show(tree, tree.ParentOf(CurrentNode), navigated: true);
+            Show(tree, tree.ParentOf(CurrentNode), MemoryViewChange.Navigation);
         }
     }
 
@@ -233,7 +233,7 @@ public sealed partial class MemoryViewModel : ObservableObject
 
         if (Tree is { } tree && tree.Find(crumb.Key) is { } node)
         {
-            Show(tree, node, navigated: true);
+            Show(tree, node, MemoryViewChange.Navigation);
         }
     }
 
@@ -248,7 +248,7 @@ public sealed partial class MemoryViewModel : ObservableObject
             (_, { IsAggregate: true } aggregate) => (
                 "Parts too small to draw separately", Core.Scanning.FreeSpace.Format(aggregate.Bytes), string.Empty),
 
-            ({ } tree, { IsNode: true, Node: var over }) when over < tree.NodeCount => (
+            ({ } tree, { IsNode: true, Node: var over }) when tree.Holds(over) => (
                 MemoryText.Name(tree, over),
                 MemoryText.Figures(tree, over),
                 MemoryPartGuide.Describe(tree, over)),
@@ -259,28 +259,24 @@ public sealed partial class MemoryViewModel : ObservableObject
 
     /// <summary>What to write on a shape of the tree on screen.</summary>
     public string LabelFor(int node) =>
-        Tree is { } tree && node >= 0 && node < tree.NodeCount ? MemoryText.Label(tree, node) : string.Empty;
+        Tree is { } tree && tree.Holds(node) ? MemoryText.Label(tree, node) : string.Empty;
 
     /// <summary>
     /// Take a new reading: keep the reader where they were, and rebuild everything on screen from it.
     /// </summary>
     private void Show(MemoryTree tree) =>
-        Show(tree, MemoryPlace.Carry(Tree, CurrentNode, tree), navigated: false);
+        Show(tree, MemoryPlace.Carry(Tree, CurrentNode, tree), MemoryViewChange.Reading);
 
-    /// <param name="navigated">
-    /// Whether the reader moved, rather than a reading arriving. It decides what happens to the
-    /// selection: a program picked in one part is not picked in the next, and a reading is the same
-    /// subject measured again, so dropping the selection on every one of those would make a program
-    /// impossible to pick at all on a page that reads twice a second.
+    /// <param name="change">
+    /// Whether the reader moved or a reading arrived, which decides what happens to the selection.
+    /// See <see cref="Core.Memory.Acting.MemoryPick.After"/>.
     /// </param>
-    private void Show(MemoryTree tree, int node, bool navigated)
+    private void Show(MemoryTree tree, int node, MemoryViewChange change)
     {
-        var standing = Tree;
-
-        // Read before the assignment below, and not after it. TryCarry reads a node number of the
+        // Read before the assignment below, and not after it. The rule reads a node number of the
         // tree on screen, and once CurrentNode holds a number of the arriving tree that same number
         // means something else entirely.
-        var sameThing = standing is not null && MemoryPlace.TryCarry(standing, CurrentNode, tree) == node;
+        var sameThing = MemoryPlace.Continues(Tree, CurrentNode, tree, node);
 
         Tree = tree;
         CurrentNode = node;
@@ -298,14 +294,7 @@ public sealed partial class MemoryViewModel : ObservableObject
 
         // After the rows, because the page puts the list's highlight back on whatever this says is
         // selected, and before the event, because that is what redraws the picture with its outline.
-        if (navigated)
-        {
-            Selection.Show(tree);
-        }
-        else
-        {
-            Selection.Carry(tree);
-        }
+        Selection.Follow(tree, change);
 
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
