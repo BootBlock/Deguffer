@@ -27,8 +27,8 @@ public static class WindowsSystemRoot
     public static readonly IReadOnlyList<(string RelativePath, string Reason)> Exclusions =
     [
         ("WinSxS",
-            "The Windows component store. §9 excludes it outright — it is never safe to delete by "
-            + "hand, and only DISM may touch it."),
+            "The Windows component store. §9 excludes it from every removal by path — it is never "
+            + "safe to delete by hand, and only DISM's own cleanup may touch it."),
         ("Installer",
             "Cached installer packages. §9 excludes them — removing the wrong one breaks repair and "
             + "uninstall permanently."),

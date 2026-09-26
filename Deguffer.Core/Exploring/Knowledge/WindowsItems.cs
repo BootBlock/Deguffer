@@ -46,7 +46,8 @@ internal static class WindowsItems
 
             "It must never be deleted — a machine without it may not start and cannot be updated — "
             + "and 'Dism.exe /Online /Cleanup-Image /StartComponentCleanup' is the supported way to "
-            + "drop the superseded versions."),
+            + "drop the superseded versions. Deguffer's clean list runs that command, as "
+            + "'Superseded Windows components', when it runs as administrator."),
 
         new(
             KnownPlace.WindowsDirectory,

@@ -77,8 +77,9 @@ in a few minutes, without touching a single piece of user data.
   folder the user has picked out of the picture, because that is the action a size view leads to.
   It does not browse, move, rename or copy, and it does not aim to replace Explorer.
 - No automatic/scheduled deletion in v1. Nothing is removed without explicit confirmation.
-- Not a Windows component cleaner — `WinSxS` and `Windows\Installer` are deliberately out of scope
-  (see §9).
+- Not a Windows component cleaner by path. Nothing is ever deleted from `WinSxS` or
+  `Windows\Installer`. The component store is reclaimed only through DISM's own cleanup, and the
+  installer caches not at all (see §9).
 - Not a RAM cleaner, in any form. The memory view never trims a working set, never purges or
   flushes the standby list or any other memory list, and never offers any other way to push pages
   out of memory while the programs using them go on running. Windows reclaims those pages when it
@@ -99,7 +100,7 @@ sizes are easy to compute, the classification is the part that takes knowledge.
 | --- | --- | --- | --- |
 | **1 — Regenerable cache** | Content that whatever produced it re-creates on demand, byte-for-byte or equivalently. | A slower next use. Nothing is lost. | Offered, pre-selected |
 | **2 — Regenerable, with cost** | Re-created, but only by re-downloading gigabytes or re-indexing for minutes. | Time and bandwidth. | Offered, not pre-selected |
-| **3 — User data** | Logs, histories, saved sessions. Looks like cache, *is not*. | **Gone permanently.** | Shown, never pre-selected, explicit warning |
+| **3 — User data** | Logs, histories, saved sessions. Looks like cache, *is not*. Also anything else whose loss is permanent, such as the means to uninstall updates. | **Gone permanently.** | Shown, never pre-selected, explicit warning |
 | **4 — Do not touch** | Config, credentials, live application state, anything the tool cannot prove is idle. | Breakage. | Excluded from the UI entirely |
 
 ### The mistake this model exists to prevent
@@ -156,7 +157,7 @@ the single most useful signal here.
 
 | Source | Observed | Why excluded |
 | --- | --- | --- |
-| `C:\Windows\WinSxS` | 16.1 GB | Never safe to delete manually. Only `DISM /StartComponentCleanup` may touch it, and `/ResetBase` blocks update rollback |
+| `C:\Windows\WinSxS` | 16.1 GB | Never safe to delete manually, so no path in it is ever a target. Reclaimed only through `DISM /StartComponentCleanup` (Tier 2), and `/ResetBase`, which blocks uninstalling every existing update, is a Tier 3 row of its own. See §9 |
 | `C:\Windows\Installer` | 12.5 GB | Orphaned MSI patches. Deleting the wrong file breaks repair *and* uninstall, permanently |
 | `C:\ProgramData\Package Cache` | 6.7 GB | Visual Studio installer cache; removing breaks repair/modify |
 | `C:\ProgramData\Microsoft\VisualStudio\Packages` | 7.7 GB | The installer's payload cache, and a different directory from the row above — a machine has both. Removing it breaks an offline repair or modify, and there is no allow-list to be had: the children are one per payload, and the installer's own record of each installed product sits among them. See §9 |
@@ -375,7 +376,7 @@ Deliberate points, and the traps that come with them:
   rather than deliberation, and a gate the user resents is a gate they learn to get past without
   reading it, so the typed phrase is a preference and it is off by default. Switching it off retires
   Tier 3's *own* question rather than the question: the row falls to the blanket confirmation, which
-  names it, quotes the same "user data, permanent, cannot be undone" sentence the typed dialog would
+  names it, quotes the same "permanent, cannot be undone" sentence the typed dialog would
   have carried, and totals what is going. Switching that off as well is a second, separate choice,
   and what then stands between the user and the deletion is the preview below and Tier 3 never being
   pre-selected. **No preference reaches Tier 4**, which stays excluded however the settings are left.
@@ -776,6 +777,18 @@ large and tempting — ~35 GB on the audited machine — but the failure modes a
 uninstall, unbootable rollback) and the safe operations are already exposed by `DISM` and the
 vendors' own tooling. A tool that is trusted to clear caches should not stake that trust on Windows
 servicing internals.
+
+**The component store is the one exception, and only through Windows' own command.** Microsoft
+ships `DISM /Online /Cleanup-Image /StartComponentCleanup` as the supported way to remove superseded
+components, so §5.1 applies: Deguffer runs it, as a Tier 2 row that needs administrator rights, and
+never deletes from the store. It is DISM run directly, not Windows' scheduled task, because the task
+waits 30 days per component and stops after an hour, so a run through it can free nothing and not
+say so. `/ResetBase` removes the means to uninstall every update installed so far, so it is a
+Tier 3 row of its own rather than a switch on the first. Both are sized by DISM's
+`/AnalyzeComponentStore`, whose actual size counts the store's hard links into Windows once, and
+what a clean freed is DISM's figure immediately before and after the command. Neither is planned or
+run while an update is unfinished. Deleting from the store by path, and everything else in this
+section, stays excluded.
 
 **The installer package caches are two directories, and both are named here rather than implied.**
 `C:\ProgramData\Package Cache` and `C:\ProgramData\Microsoft\VisualStudio\Packages` sit apart, hold

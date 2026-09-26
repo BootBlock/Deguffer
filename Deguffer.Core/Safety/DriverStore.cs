@@ -23,14 +23,8 @@ public sealed partial class DriverStore : IDriverStore
         _pnpUtil = PnpUtil(system);
     }
 
-    /// <summary>
-    /// Where <c>pnputil</c> is. A 32-bit process on 64-bit Windows is redirected from
-    /// <c>System32</c> to <c>SysWOW64</c>, which has none, so it asks through <c>Sysnative</c>.
-    /// </summary>
-    public static string PnpUtil(ISystemDirectories system) => Path.Combine(
-        system.WindowsDirectory,
-        Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess ? "Sysnative" : "System32",
-        "pnputil.exe");
+    /// <summary>Where <c>pnputil</c> is, which has no 32-bit build. See <see cref="NativeSystemTool"/>.</summary>
+    public static string PnpUtil(ISystemDirectories system) => NativeSystemTool.In(system, "pnputil.exe");
 
     public async Task<DriverStoreListing> ListAsync(CancellationToken ct)
     {

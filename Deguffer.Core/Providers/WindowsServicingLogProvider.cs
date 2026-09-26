@@ -33,7 +33,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>§5.1, checked rather than assumed, and it applies to one subject here.</b> Windows ships
 /// no eviction command for the four locations removed by path. <c>DISM /StartComponentCleanup</c>
-/// addresses <c>WinSxS</c>, which §9 excludes outright, and <c>wevtutil</c> addresses the
+/// addresses <c>WinSxS</c>, which <see cref="ComponentStoreCleanupProvider"/> runs it for and no
+/// removal by path may touch, and <c>wevtutil</c> addresses the
 /// <c>.evtx</c> event logs, which are a different location this provider does not touch. The logs a
 /// reset of this PC leaves are the exception: Windows' own <em>System recovery log files</em>
 /// cleanup names <c>$SysReset\Logs</c>, <c>$SysReset\OldOSLogs</c> and <c>Windows\Logs\PBR</c>, so

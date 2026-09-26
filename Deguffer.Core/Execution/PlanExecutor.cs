@@ -242,6 +242,13 @@ public sealed class PlanExecutor(
                 MailStores: stores.Count);
         }
 
+        // A tool that states its own figure is asked for it immediately before the command as well as
+        // after, rather than trusted from the plan. What it describes can change without Deguffer:
+        // Windows cleans its component store on a schedule, and another row in the same clean can run a
+        // command over the same store. The plan's figure would then credit this command with a reclaim
+        // it did not make.
+        var measuredBefore = step.MeasuredBy is { } asked ? await asked.MeasureAsync(ct).ConfigureAwait(false) : before;
+
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
         if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
@@ -283,18 +290,19 @@ public sealed class PlanExecutor(
 
         // Nothing is counted rather than the whole estimate: a figure nobody checked is the one this
         // subtraction exists to avoid reporting.
-        if (measured is not { } after)
+        if (measured is not { } after || measuredBefore is not { } start)
         {
             return new StepOutcome(
                 step.Description,
                 outcome.Succeeded,
                 BytesReclaimed: 0,
                 Refusals.None,
-                $"{outcome.Message} (the tool did not say what its cache holds now, so nothing is "
-                + "counted as reclaimed)");
+                $"{outcome.Message} (the tool did not say what its cache held "
+                + (measuredBefore is null ? "before the command" : "afterwards")
+                + ", so nothing is counted as reclaimed)");
         }
 
-        var reclaimed = before - after;
+        var reclaimed = start - after;
 
         // A negative delta means the tree grew between preview and clean — a build restoring
         // packages in the background, most likely. Report what is actually still there rather

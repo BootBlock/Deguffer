@@ -1043,7 +1043,8 @@ re-creates an installer payload, so reinstalling a release means downloading it 
 ## 6. Windows leftovers that are not Windows servicing
 
 §9 excludes `WinSxS`, `Windows\Installer` and the installer package caches, and that exclusion
-should hold. Everything below is a log, a crash artefact or a completed upgrade's scaffolding — a
+should hold. (§9 has since admitted one route into `WinSxS`, and only one: DISM's own component
+cleanup, as a command step. Nothing is deleted from the store by path.) Everything below is a log, a crash artefact or a completed upgrade's scaffolding — a
 different kind of thing with a different failure mode.
 
 **The installer package caches were re-examined and the exclusion held**, which is worth recording

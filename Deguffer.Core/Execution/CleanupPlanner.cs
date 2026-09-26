@@ -28,15 +28,15 @@ public sealed class CleanupPlanner
     /// Claude Code's sessions leave behind, its conversations, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
-    /// dumps, the Windows servicing logs and the per-project build output, Unreal's included, inside the user's own
+    /// dumps, the Windows servicing logs, the Windows component store's own cleanup and its reset, and the per-project build output, Unreal's included, inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
     /// terms before being added. Their reasoning and their rejected alternatives are in
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, Puppeteer, the Azure Functions Core Tools
-    /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
-    /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
+    /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files and the component store's cleanup, which are Tier 2, and the
+    /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
@@ -134,6 +134,10 @@ public sealed class CleanupPlanner
         var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences);
         var afterEffects = new AfterEffectsDiskCacheProvider(environment);
 
+        // One analysis of the component store for both its rows: the analysis takes a minute or more,
+        // and the cleanup and the reset ask it the same question.
+        var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default);
+
         return
         [
             nuget,
@@ -200,6 +204,8 @@ public sealed class CleanupPlanner
             new PreviousWindowsInstallationProvider(environment),
             new WindowsUpdateLeftoverProvider(environment),
             new DriverStoreProvider(environment),
+            new ComponentStoreCleanupProvider(environment, analysis: componentStore),
+            new ComponentStoreResetBaseProvider(environment, analysis: componentStore),
             new CrashDumpProvider(environment),
             new WindowsServicingLogProvider(environment),
             new EpicLauncherLogProvider(environment),

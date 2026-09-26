@@ -19,8 +19,9 @@ internal static class ProtectedRegions
             RegionScope.PathAndBelow,
             "This is inside the Windows directory. Deguffer never removes anything there from "
             + "Explore, and §9 of its specification excludes the component store and the installer "
-            + "cache from every route, because a wrong removal there breaks uninstall or leaves the "
-            + "machine unable to roll an update back.");
+            + "cache from every removal by path, because a wrong removal there breaks uninstall or "
+            + "leaves the machine unable to roll an update back. The component store is cleaned only "
+            + "by Windows' own command, from the clean list.");
 
         foreach (var programs in new[] { system.ProgramFiles, system.ProgramFilesX86 })
         {
