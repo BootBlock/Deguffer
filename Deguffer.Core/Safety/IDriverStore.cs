@@ -53,4 +53,11 @@ public interface IDriverStore
     /// be made before elevating and only acting needs it.
     /// </summary>
     Task<DriverStoreListing> ListAsync(CancellationToken ct);
+
+    /// <summary>
+    /// The folder the package Windows now calls <paramref name="publishedName"/> is in, or null where no
+    /// package has that name. Asked afresh, because Windows gives a freed name to the next package it
+    /// stages.
+    /// </summary>
+    string? FolderOf(string publishedName);
 }

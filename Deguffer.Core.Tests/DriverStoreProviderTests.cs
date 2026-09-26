@@ -111,7 +111,6 @@ public sealed class DriverStoreProviderTests : IDisposable
 
         Assert.Equal("driver-store", provider.Id);
         Assert.Equal(SafetyTier.RegenerableWithCost, provider.Tier);
-        Assert.Equal(_store, provider.Repository);
     }
 
     /// <summary>
@@ -198,6 +197,54 @@ public sealed class DriverStoreProviderTests : IDisposable
 
         Assert.False(result.Verification!.Passed);
         Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(windows, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.6 on Windows' cleanup: a package a device is using is checked afterwards whether or not it
+    /// has an older version, because Windows never removes one.
+    /// </summary>
+    [Fact]
+    public async Task ACleanupThatTakesAPackageADeviceIsUsingFailsVerification()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var used = Staged("oem3.inf", "2023-01-01", original: "bt.inf", inUse: true);
+        var provider = CreateProvider(new FakeDriverStore(older, newest, used), Removing(older.Folder!, used.Folder!));
+
+        var plan = await provider.PlanAsync();
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(used.Folder, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(used.Folder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A package Windows would not name a folder for leaves a folder the listing cannot account for, so
+    /// no unlisted folder is called Windows' own, and Windows' cleanup taking that package's folder is
+    /// not reported as an over-reach.
+    /// </summary>
+    [Fact]
+    public async Task CallsNoFolderWindowsOwnWhereAPackageCouldNotBeMatchedToItsFolder()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var unmatched = Staged("oem3.inf", "2021-01-01");
+        var provider = CreateProvider(
+            new FakeDriverStore(older, newest, unmatched with { Folder = null }),
+            Removing(older.Folder!, unmatched.Folder!));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(unmatched.Folder, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.TargetedPaths, p => p.Equals(unmatched.Folder, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("could not match every driver package", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(Survived(result, newest.Folder!));
     }
 
     [Fact]
@@ -310,6 +357,31 @@ public sealed class DriverStoreProviderTests : IDisposable
         Assert.True(Survived(result, newest.Folder!));
         Assert.True(Survived(result, alone.Folder!));
         Assert.True(Survived(result, windows));
+    }
+
+    /// <summary>
+    /// Windows gives a freed <c>oem&lt;N&gt;.inf</c> name to the next package it stages. A name that has
+    /// changed hands since the preview stops the removal, and the package now holding it is untouched.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunPnpUtilOnANameThatNowBelongsToAnotherPackage()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var store = new FakeDriverStore(older, newest);
+        var runner = PnpUtil([older]);
+        var provider = CreateProvider(store, FakeDiskCleanupHandlers.NoneRegistered(), runner);
+
+        var plan = await provider.PlanAsync();
+        var arrived = Staged("oem9.inf", "2025-01-01", original: "gpu.inf");
+        store.Rename("oem1.inf", arrived.Folder);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(runner.Invocations, i => i.Arguments.Contains("/delete-driver", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(arrived.Folder));
+        Assert.True(Directory.Exists(older.Folder));
+        Assert.Contains(result.Steps, s => !s.Succeeded && s.Message!.Contains("different driver package", StringComparison.Ordinal));
     }
 
     /// <summary>§5.6 on the pnputil route: Deguffer names exactly what goes, so any other package taken fails the run.</summary>

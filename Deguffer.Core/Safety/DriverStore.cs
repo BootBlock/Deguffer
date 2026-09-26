@@ -41,14 +41,13 @@ public sealed partial class DriverStore : IDriverStore
             return DriverStoreListing.Failed($"pnputil did not list the driver store ({outcome.Message}).");
         }
 
-        return PnpUtilDriverList.Parse(outcome.StandardOutput, Locate) is var (packages, unread)
+        return PnpUtilDriverList.Parse(outcome.StandardOutput, FolderOf) is var (packages, unread)
             ? new DriverStoreListing(packages, unread)
             : DriverStoreListing.Failed(
                 "this version of pnputil cannot list the driver store in a form Deguffer can read.");
     }
 
-    /// <summary>The package's folder, or null where Windows would not say.</summary>
-    private static string? Locate(string publishedName)
+    public string? FolderOf(string publishedName)
     {
         var buffer = new char[LocationCapacity];
 
@@ -62,7 +61,6 @@ public sealed partial class DriverStore : IDriverStore
     [LibraryImport(
         "setupapi.dll",
         EntryPoint = "SetupGetInfDriverStoreLocationW",
-        SetLastError = true,
         StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetupGetInfDriverStoreLocation(

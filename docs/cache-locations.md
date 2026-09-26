@@ -4735,8 +4735,10 @@ Nothing is offered:
 - **while an update is unfinished**, on the same tests as the previous installation above, because
   Windows Update installs drivers too.
 - **for a package a device is using**, whatever its age.
-- **where your recent-files setting would keep any of it**, because Windows' cleanup takes every
-  older package at once and cannot be told to leave one.
+- **where your recent-files setting would keep any of it**, when Windows' cleanup does the work,
+  because it takes every older package at once and cannot be told to leave one. Where `pnputil`
+  does the work instead, the row says that your recent-files setting does not protect anything from
+  it, as it does for every tool Deguffer asks to clear its own files.
 
 Removing a package needs administrator rights.
 
@@ -4744,7 +4746,10 @@ Removing a package needs administrator rights.
 
 `FileRepository` itself is never a target. The run checks afterwards that the store, the newest
 version of each driver, every package a device is using and every driver that is part of Windows
-are still there. Where `pnputil` does the work, every other third-party package is checked as well.
+are still there. Where `pnputil` does the work, every other third-party package is checked as well,
+and immediately before each removal Deguffer asks Windows again whether the package's name still
+belongs to the folder it planned to remove. Windows gives a freed name to the next package it
+stages, so a name that has changed hands stops that removal.
 
 ### What it costs you
 

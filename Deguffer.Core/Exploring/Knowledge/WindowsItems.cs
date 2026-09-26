@@ -172,9 +172,10 @@ internal static class WindowsItems
             + "accumulate. On a machine with a discrete graphics card this is often the largest "
             + "folder in Windows.",
 
-            "Deleting a package by hand leaves Windows behaving unpredictably, and Disk Cleanup's "
-            + "'Device driver packages' is the supported way to remove the older versions, keeping "
-            + "the newest of every driver and every driver a device is using."),
+            "Deguffer offers the older versions on the Storage page and has Windows' own driver "
+            + "package cleanup remove them, keeping the newest of every driver and every driver a "
+            + "device is using, while deleting a package by hand leaves Windows behaving "
+            + "unpredictably."),
 
         new(
             KnownPlace.WindowsDirectory,
@@ -290,9 +291,9 @@ internal static class WindowsItems
             + "Windows writes while installing hardware. The instruction files are the other half "
             + "of what is in the driver store, and are small.",
 
-            "They go with their driver package, which 'pnputil /delete-driver <name>.inf "
-            + "/uninstall' removes properly, and deleting one by hand leaves a package Windows can "
-            + "no longer make sense of."),
+            "They go with their driver package, which 'pnputil /delete-driver <name>.inf' removes "
+            + "properly, and deleting one by hand leaves a package Windows can no longer make sense "
+            + "of."),
 
         new(
             KnownPlace.WindowsDirectory,

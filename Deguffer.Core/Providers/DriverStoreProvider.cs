@@ -96,9 +96,6 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             + "is using are never removed.",
     };
 
-    /// <summary>The store's own folder, which is never a target.</summary>
-    public string Repository => _repository;
-
     public override void InvalidateCaches()
     {
         _listing = null;
@@ -144,7 +141,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>(Considered(listing, drivers));
-        var kept = Protect([.. KeptPaths([.. drivers.Newest, .. drivers.InUse]), .. PartOfWindows(listing, notes)]);
+        var kept = Protect([.. KeptPaths(drivers.Newest, listing), .. PartOfWindows(listing, notes)]);
 
         if (drivers.Superseded.Count == 0)
         {
@@ -200,7 +197,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             Handler,
             volume,
             [.. folders.Skip(1)],
-            Newest(folders),
+            Newest(folders, ct),
             RequiresElevation: true);
 
         var (steps, measured) = await PlanDiskCleanupsAsync([target], keep, ct).ConfigureAwait(false);
@@ -254,13 +251,15 @@ public sealed class DriverStoreProvider : CleanupProviderBase
                 LastWritten = DirectoryAge.Of(superseded.Package.Folder!, ct),
                 RequiresElevation = true,
                 HeldWhileUpdating = true,
+                TargetCheck = new DriverPackageName(_store, superseded.Package.PublishedName),
             }),
         ];
 
         notes.Add(new PlanNote(
             PlanNoteSeverity.Information,
-            $"Windows' own driver package cleanup is not available to Deguffer here ({survey.Message?.TrimEnd('.')}), "
-            + "so each older package is removed with pnputil, which refuses to remove one a device is using."));
+            "Windows' own driver package cleanup is not available to Deguffer here"
+            + (survey.Message is { } why ? $" ({why.TrimEnd('.')})" : string.Empty)
+            + ", so each older package is removed with pnputil, which refuses to remove one a device is using."));
 
         if (measured.Note is { } scanNote)
         {
@@ -288,12 +287,20 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         Notes = notes,
     };
 
-    /// <summary>The store itself, and the folder of every package that stays because it is newest or in use.</summary>
-    private IEnumerable<(string Path, string Reason)> KeptPaths(IReadOnlyList<DriverPackage> kept)
+    /// <summary>
+    /// The store itself, and the folder of every package that stays on either route: the newest of each
+    /// driver that has an older version, and every package a device is using, which Windows' cleanup
+    /// does not remove and <c>pnputil</c> refuses to.
+    /// </summary>
+    private IEnumerable<(string Path, string Reason)> KeptPaths(IReadOnlyList<DriverPackage> newest, DriverStoreListing listing)
     {
         yield return (_repository, "Windows' driver store, which holds every driver installed on this machine.");
 
-        foreach (var package in kept.Where(p => p.Folder is not null))
+        var kept = newest.Concat(listing.Packages.Where(p => p.InUse))
+            .Where(p => p.Folder is not null)
+            .DistinctBy(p => p.Folder, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var package in kept)
         {
             yield return (package.Folder!, package.InUse
                 ? $"{Described(package)}, which a device is installed with."
@@ -309,6 +316,18 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// </summary>
     private IReadOnlyList<(string Path, string Reason)> PartOfWindows(DriverStoreListing listing, List<PlanNote> notes)
     {
+        // A third-party package that did not read, or whose folder Windows would not name, is also a
+        // folder the listing does not account for, so no unlisted folder can then be called Windows' own.
+        if (listing.Unread > 0 || listing.Packages.Any(p => p.Folder is null))
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                "Deguffer could not match every driver package Windows listed to its folder, so it cannot "
+                + "tell which folders in the store hold drivers that are part of Windows, and the clean "
+                + "cannot check afterwards that they are still there."));
+            return [];
+        }
+
         var listed = new HashSet<string>(
             listing.Packages.Select(p => p.Folder).OfType<string>().Select(Path.TrimEndingDirectorySeparator),
             StringComparer.OrdinalIgnoreCase);
@@ -368,9 +387,9 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     private static string Count(int count, string what) => count == 1 ? $"1 {what}" : $"{count} {what}s";
 
     /// <summary>The newest write among <paramref name="folders"/>, or null where any could not be dated.</summary>
-    private static DateTime? Newest(IReadOnlyList<string> folders)
+    private static DateTime? Newest(IReadOnlyList<string> folders, CancellationToken ct)
     {
-        var dates = folders.Select(folder => DirectoryAge.Of(folder)).ToList();
+        var dates = folders.Select(folder => DirectoryAge.Of(folder, ct)).ToList();
 
         return dates.Any(d => d is null) ? null : dates.Max();
     }
