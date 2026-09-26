@@ -27,7 +27,7 @@ internal static class DiskCleanupRun
         // Deguffer cannot look inside, arrived since or missed then, stops it. See WholeTreeLook.
         var look = await WholeTreeLook.TakeAsync(step.Destroys, keep, ct).ConfigureAwait(false);
 
-        if (look.WhyNot("Windows clears this whole and cannot be told to leave anything", keep) is { } stopped)
+        if (look.WhyNot("Nothing was removed", "Windows clears this whole and cannot be told to leave anything", keep) is { } stopped)
         {
             return NotRun(step, stopped, look.Stores.Count);
         }

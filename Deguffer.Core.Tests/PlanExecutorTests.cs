@@ -259,6 +259,99 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains(store, outcome.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// §9 against §5.3 for a tool's own command. The tool clears what it was sent to whole, so a folder
+    /// inside that Windows will not let Deguffer list could hold a store nobody saw, and the command
+    /// does not run. The look used to skip that folder and answer "no store".
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunAToolsCommandWhenAFolderInsideWhatItClearsWillNotBeListed()
+    {
+        var cache = _temp.CreateDirectory("npm-cache");
+        _temp.CreateFile(4096, "npm-cache", "_cacache", "blob");
+        var locked = _temp.CreateDirectory("npm-cache", "saved");
+        var archive = _temp.CreateFile(8192, "npm-cache", "saved", "archive.pst");
+
+        var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
+        {
+            Estimated = new ScanSize(4096, 4096),
+            MeasuredPaths = [cache],
+        };
+
+        var runner = new FakeProcessRunner();
+        var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
+
+        StepOutcome step;
+        using (new DeniedDirectory(locked))
+        {
+            step = Assert.Single(
+                (await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default)).Steps);
+        }
+
+        Assert.Empty(runner.Invocations);
+        Assert.False(step.Succeeded);
+        Assert.Equal(0, step.MailStores);
+        Assert.StartsWith($"Not run: Windows would not let Deguffer look inside {locked},", step.Message!, StringComparison.Ordinal);
+        Assert.True(File.Exists(archive));
+    }
+
+    /// <summary>The same for a Recycle Bin Windows would empty whole: a deleted folder it will not list.</summary>
+    [Fact]
+    public async Task DoesNotEmptyABinWhenAFolderInItWillNotBeListed()
+    {
+        var volume = _temp.CreateDirectory("volumes", "D");
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+        var locked = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456");
+        var store = _temp.CreateFile(
+            8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456", "archive.pst");
+
+        var emptier = new FakeRecycleBinEmptier();
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, emptier);
+
+        StepOutcome step;
+        using (new DeniedDirectory(locked))
+        {
+            step = Assert.Single((await executor.ExecuteAsync(
+                PlanDeleting(new EmptyRecycleBinStep(bin, "A bin")), runReach: null, residue: null, progress: null, default)).Steps);
+        }
+
+        Assert.Empty(emptier.VolumeRoots);
+        Assert.False(step.Succeeded);
+        Assert.Contains(locked, step.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(store));
+        Assert.True(Directory.Exists(volume));
+    }
+
+    /// <summary>
+    /// The same for a Recycle Bin removed file by file. The walk would leave the folder it cannot list
+    /// and take the record that restores it, so a store inside would stay with nothing able to put it
+    /// back. The step is refused whole.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRemoveAnIndivisibleFolderWhenAFolderInItWillNotBeListed()
+    {
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+        var locked = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456");
+        var store = _temp.CreateFile(
+            8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456", "archive.pst");
+        var record = _temp.CreateFile(544, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$IDEF456");
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+
+        StepOutcome outcome;
+        using (new DeniedDirectory(locked))
+        {
+            outcome = Assert.Single((await executor.ExecuteAsync(
+                PlanDeleting(new DeleteDirectoryStep(bin, "A bin") { IsIndivisible = true }),
+                runReach: null, residue: null, progress: null, default)).Steps);
+        }
+
+        Assert.True(File.Exists(store), "a store was removed");
+        Assert.True(File.Exists(record), "the record that restores a folder nobody could list was removed");
+        Assert.False(outcome.Succeeded);
+        Assert.Contains(locked, outcome.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

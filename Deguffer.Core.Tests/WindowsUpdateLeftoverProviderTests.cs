@@ -258,7 +258,7 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
             [agent], MinimumAge.Off, new UnlistableFileSystem(WindowsFileSystem.Default, scratch), CancellationToken.None);
 
         Assert.Equal([scratch], look.Unlisted);
-        Assert.Contains(scratch, look.WhyNot("It goes whole", MinimumAge.Off), StringComparison.Ordinal);
+        Assert.Contains(scratch, look.WhyNot("Nothing was removed", "It goes whole", MinimumAge.Off), StringComparison.Ordinal);
     }
 
     /// <summary>
