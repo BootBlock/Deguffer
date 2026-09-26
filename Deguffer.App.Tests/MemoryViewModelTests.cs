@@ -128,16 +128,19 @@ public sealed class MemoryViewModelTests : IDisposable
         var watching = page.WatchAsync(leave.Token);
         await shown;
 
-        page.Descend(page.Tree!.Find(Applications)!.Value);
-        var alphaRow = page.Rows.Single(row => row.Key == Alpha);
+        // Alpha, whose number the next reading moves, so standing on it by number would not carry.
+        var standing = page.Tree!.Find(Alpha)!.Value;
+        page.Descend(standing);
+        var betaRow = page.Rows.Single(row => row.Key == Beta);
         var told = Watch(page.Rows);
 
         await NextReadingAsync(page);
 
-        Assert.Equal(page.Tree.Find(Applications), page.CurrentNode);
+        Assert.NotEqual(standing, page.Tree.Find(Alpha));
+        Assert.Equal(page.Tree.Find(Alpha), page.CurrentNode);
         Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, told);
-        Assert.Same(alphaRow, page.Rows.Single(row => row.Key == Alpha));
-        Assert.Equal(page.Tree.Find(Alpha), alphaRow.Node);
+        Assert.Same(betaRow, page.Rows.Single(row => row.Key == Beta));
+        Assert.Equal(page.Tree.Find(Beta), betaRow.Node);
 
         await leave.CancelAsync();
         await watching;
