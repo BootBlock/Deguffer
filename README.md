@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Seventy-five sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Seventy-six sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Seventy-five providers, each holding its own knowledge of one location. A provider reports "not
+Seventy-six providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -145,6 +145,7 @@ installed" cleanly on a machine without that toolchain.
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
 | DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders it again only while your media is connected |
+| After Effects disk cache | Each version's cache named for this computer, only in the folder After Effects' own preferences name; never anything beside it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview |
 | Adobe media cache | The converted audio, waveforms and database Premiere Pro, After Effects, Audition and Media Encoder share, wherever Adobe's settings put them; never your LUTs, templates or Team Projects' auto-saves, and nothing while an Adobe application is running. Each project opens slowly once while Adobe converts its audio again |
 | Capture One previews and thumbnails | The `Cache` in each catalog and session Capture One lists, wherever it is; never the photographs or the adjustments beside it. A catalog whose originals are offline cannot be browsed until they are reconnected |
 | Playwright browsers | |

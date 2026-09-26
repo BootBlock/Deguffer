@@ -3039,6 +3039,108 @@ Sources:
 
 ---
 
+## After Effects disk cache
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `<folder>\Adobe\After Effects\<version>\Disk Cache - <computer>.noindex`, where `<folder>` is the one chosen under **Preferences → Media & Disk Cache**, read from After Effects' own preferences |
+| **Method** | Delete the cache folder named for this computer, one per version, and nothing beside it or above it |
+| **Typical size** | Not measured here: After Effects is not installed on the machine this was written on. Adobe's default maximum is 10% of the volume, up to 100 GB, for each version |
+
+### What it is
+
+After Effects keeps the frames it renders from your compositions on disk, so that a frame it has
+already rendered does not have to be rendered again. The cache persists between sessions, holds
+frames from every project you have opened, and each version of After Effects keeps its own. Adobe
+notes that purging one version's disk cache does not purge any other version's, so the caches older
+versions left behind stay on the disk until something removes them.
+
+It is **not the media cache**. The media cache holds conformed audio and peak files derived from
+your source media, and is shared by Adobe's video and audio applications. The disk cache holds
+frames rendered from compositions.
+
+### How Deguffer finds it
+
+**Only where After Effects' own preferences say.** Adobe's documentation describes the location
+through a **Choose Folder** button and publishes no default path, so Deguffer never guesses one: a
+wrong guess would be a deletion in a folder you chose for something else. After Effects records the
+folder in the preferences it keeps for each version under `%APPDATA%\Adobe\After Effects\<version>`,
+as `"Folder 7"` in the `["Disk Cache Controls"]` section (`"Folder 6"` in version 11). The file's
+name is translated with the program, so Deguffer reads every text file in the version's folder and
+takes the one that has that section.
+
+After Effects never writes into the chosen folder directly. It makes
+`Adobe\After Effects\<version>\Disk Cache - <computer>.noindex` inside it, and that folder, named for
+this computer, is the only thing Deguffer removes. On Windows the chosen folder is often your
+temporary folder.
+
+A version whose preferences name no folder, or whose preferences Deguffer could not read, is named
+on the row, and the row does not claim to be clear.
+
+### What Deguffer does
+
+Deguffer removes each version's cache folder named for this computer, whole. A cache folder named
+for another computer is left alone and named: a cache on a shared drive can be in use by an After
+Effects that Deguffer cannot see. A link where the cache or a folder above it was expected is left
+alone and named, and never followed.
+
+**Nothing is offered while After Effects is running**, or while its command-line renderer,
+`aerender`, is. After Effects writes the cache while it is open. While either runs, every cache is
+left alone and named, and Explore will not remove it. The same question is asked again when you
+press Clean.
+
+**In the temporary folder, the cache is offered on this row only.** The **Temporary files** row
+leaves it out, and still takes whatever else in that folder is old enough, including anything else
+After Effects left there.
+
+### What is protected
+
+The chosen folder is often one you keep other things in, so it is yours, and nothing in it is
+reached except what After Effects made. **The `Adobe\After Effects` folder inside it, each version's
+folder, and everything beside each cache are named, checked after the run, and refused in
+Explore.** Inside a temporary folder, the Temporary files row's own rules apply to everything except
+the cache, so nothing there is named or checked by this row.
+
+Your projects, your media and After Effects' auto-save folder, which holds the only copy of unsaved
+work, are never inside the cache folder, which is the only thing removed.
+
+### What it costs you
+
+**After Effects renders each frame again the next time you preview it**, so previews start slowly
+until it has, which for a heavy composition takes a long time. Your projects, media, auto-saves and
+settings are untouched.
+
+### Why Tier 2, not Tier 1
+
+The cache is produced from your compositions and their media, and After Effects re-creates it by
+itself as you preview, so nothing is lost. The refill is the render itself, though. After Effects
+caches a frame to disk only where reading it back is faster than rendering it again, so each frame
+removed costs a render, and a full cache is up to 100 GB of them. That is §3's "re-indexing for
+minutes", the same reason the DaVinci Resolve render cache is Tier 2.
+
+**After Effects has its own ways to empty the cache, and Deguffer cannot drive them.** They are
+**Empty Disk Cache** under **Preferences → Media & Disk Cache**, and **Edit → Purge → All Memory &
+Disk Cache**. Both are inside the running program, and each empties only the running version's
+cache.
+
+Sources:
+
+- Memory and storage in After Effects:
+  <https://helpx.adobe.com/after-effects/using/memory-storage.html> (read from the Internet Archive's
+  copy of 16 November 2022, because Adobe's site refused the request)
+- Preferences files from After Effects 13.0 on Windows and 22.6 on macOS, and translated 22.6 files,
+  published in open-source projects that read them:
+  <https://github.com/jadamburke/abxStudio>, <https://github.com/rendertom/Prefs>
+- Scripts that read `"Folder 7"` and build the cache path from it:
+  <https://github.com/alxkocic/afterbox>, <https://github.com/0ather/AFX-PerformanceMonitor>
+- A user's report of `Disk Cache - <computer>.noindex` below the chosen folder:
+  <https://community.adobe.com/t5/after-effects/disk-cache-piling-up/td-p/4371720>
+
+---
+
 ## Squirrel updater leftovers
 
 | **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |

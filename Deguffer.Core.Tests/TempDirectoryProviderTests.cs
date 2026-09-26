@@ -248,6 +248,62 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An entry another row owns may be several folders down, as After Effects' disk cache is. It is
+    /// neither taken nor counted, everything around it is, and the folders above it stay standing
+    /// because they still hold it.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAnEntryAnotherRowOwnsAtAnyDepthToThatRow()
+    {
+        string[] nested = ["Adobe", "After Effects", "24.6", "Disk Cache - TESTMACHINE.noindex"];
+        var owned = Path.Combine([UserTemp, .. nested]);
+        Abandoned(8192, ["temp", .. nested, "frame.bin"]);
+        Abandoned(2048, "temp", "Adobe", "After Effects", "24.6", "beside.tmp");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var tenant = new FakeTemporaryFolderTenant("After Effects disk cache", Path.Combine(nested));
+        var provider = CreateProvider(tenants: [tenant]);
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([owned], step.OwnedElsewhere);
+        Assert.Equal(2048 + 1024, step.EstimatedBytes);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(Path.Combine(owned, "frame.bin")), "the temporary-folder row took another row's entry");
+        Assert.False(File.Exists(Path.Combine(UserTemp, "Adobe", "After Effects", "24.6", "beside.tmp")));
+        Assert.False(File.Exists(Path.Combine(UserTemp, "abandoned.tmp")));
+        Assert.Equal(2048 + 1024, result.BytesReclaimed);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// An entry a running program is using can hold another row's entry further down. Its bytes are
+    /// taken out of the estimate once, with the entry holding it, and not a second time on their own.
+    /// </summary>
+    [Fact]
+    public async Task TakesAnOwnedEntryInsideALiveOneOutOfTheEstimateOnce()
+    {
+        string[] nested = ["Adobe", "After Effects", "24.6", "Disk Cache - TESTMACHINE.noindex"];
+        Abandoned(8192, ["temp", .. nested, "frame.bin"]);
+        Abandoned(2048, "temp", "Adobe", "installer.tmp");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var tenant = new FakeTemporaryFolderTenant("After Effects disk cache", Path.Combine(nested));
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector(Path.Combine(UserTemp, "Adobe")),
+            tenants: [tenant]);
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([Path.Combine(UserTemp, "Adobe")], step.Spared);
+        Assert.Equal(1024, step.EstimatedBytes);
+    }
+
+    /// <summary>
     /// The two rows together, as the planner builds them: each byte is offered once, a live Roslyn
     /// session that is old enough for this row's cut-off is still left alone, and both runs verify.
     /// </summary>

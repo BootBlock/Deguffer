@@ -132,6 +132,7 @@ public sealed class CleanupPlanner
         var installerDownloads = new TempInstallerDownloadProvider(environment, liveTrees: liveTrees);
         var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees);
         var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences);
+        var afterEffects = new AfterEffectsDiskCacheProvider(environment);
 
         return
         [
@@ -173,6 +174,7 @@ public sealed class CleanupPlanner
             new AffinityModelCacheProvider(environment),
             new CaptureOneCacheProvider(environment, liveTrees: liveTrees),
             new ResolveRenderCacheProvider(environment),
+            afterEffects,
             new AdobeMediaCacheProvider(environment),
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
             new PlatformIoCacheProvider(environment),
@@ -192,7 +194,7 @@ public sealed class CleanupPlanner
                 environment,
                 liveTrees: liveTrees,
                 preferences: preferences,
-                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers]),
+                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects]),
             installerDownloads,
             new DeliveryOptimizationProvider(environment),
             new PreviousWindowsInstallationProvider(environment),
