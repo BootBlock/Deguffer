@@ -46,11 +46,16 @@ internal sealed class EmulatorCacheExamination
     /// a folder that holds the profile or Windows itself, is never one tool's to answer for, whatever
     /// file sits in it.
     /// </param>
+    /// <param name="claimedElsewhere">
+    /// Whether another row answers for a declared folder none of <paramref name="layouts"/> proved, so
+    /// the plan does not tell the user their RetroArch folder holds no emulator.
+    /// </param>
     public static EmulatorCacheExamination Of(
         IReadOnlyList<EmulatorLayout> layouts,
         IReadOnlyList<string> declaredFolders,
         IUserEnvironment environment,
         Func<string, string?> whyNotOwned,
+        Func<string, bool> claimedElsewhere,
         CancellationToken ct)
     {
         var examination = new EmulatorCacheExamination();
@@ -88,12 +93,12 @@ internal sealed class EmulatorCacheExamination
             }
         }
 
-        foreach (var folder in declaredFolders.Where(folder => !provenFrom.Contains(folder)))
+        foreach (var folder in declaredFolders.Where(folder => !provenFrom.Contains(folder) && !claimedElsewhere(folder)))
         {
             examination.Notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
                 $"'{folder}' is one of your emulator folders, but Deguffer found no {Names(layouts)} "
-                + "settings file in it, so nothing in it was looked at."));
+                + "settings file and no RetroArch in it, so nothing in it was looked at."));
         }
 
         for (var i = 0; i < examination.Roots.Count; i++)

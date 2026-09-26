@@ -92,6 +92,10 @@ public sealed class CleanupPlanner
         // asks the registry and probes the install, and the shader cache also reads the library list.
         var steam = new SteamDiscovery(environment);
 
+        // One finding of RetroArch for both its rows, on the same reasoning: each reads the same settings
+        // file, and a copy installed through Steam is found through the discovery above.
+        var retroArch = new RetroArchDiscovery(environment, steam);
+
         return new CleanupPlanner(
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees, environment),
@@ -102,7 +106,7 @@ public sealed class CleanupPlanner
             new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
             .. CacheProviders(
-                environment, squirrel, steam, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
+                environment, squirrel, steam, retroArch, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
@@ -110,6 +114,7 @@ public sealed class CleanupPlanner
         IUserEnvironment environment,
         SquirrelDiscovery squirrel,
         SteamDiscovery steam,
+        RetroArchDiscovery retroArch,
         ClaudeCodeSessionRegistry claudeSessions,
         ILiveTreeInspector liveTrees,
         ICurrentPreferences preferences)
@@ -152,6 +157,8 @@ public sealed class CleanupPlanner
             new SteamLibraryArtworkProvider(environment, discovery: steam),
             new SteamShaderCacheProvider(environment, discovery: steam),
             new EmulatorShaderCacheProvider(environment),
+            new RetroArchDownloadProvider(environment, discovery: retroArch),
+            new RetroArchThumbnailProvider(environment, discovery: retroArch),
             new UnrealDerivedDataCacheProvider(environment),
             new SpotifyCacheProvider(environment),
             new PlexTranscodeProvider(environment),
