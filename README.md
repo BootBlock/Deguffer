@@ -168,6 +168,7 @@ installed" cleanly on a machine without that toolchain.
 | Installer downloads in temporary folders | Updates VS Code, Docker Desktop and the Visual Studio Installer downloaded, and Blender's crashed sessions, only while the application is closed; never Blender's recovery files |
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
 | Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document: offered on Deguffer's own stated judgement, whole, once nothing inside has changed for 30 days |
+| Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one a device is using, or one that is part of Windows |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 
 **Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.

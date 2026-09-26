@@ -271,6 +271,13 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// </summary>
     public IToolMeasurement? MeasuredBy { get; init; }
 
+    /// <summary>
+    /// Asked immediately before the command runs, where the tool names <see cref="Removes"/> by a
+    /// handle it can give to something else in the meantime. Null for a command whose arguments cannot
+    /// come to name a different item. See <see cref="ICommandTargetCheck"/>.
+    /// </summary>
+    public ICommandTargetCheck? TargetCheck { get; init; }
+
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 
     /// <summary>

@@ -103,6 +103,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         field.FieldType == typeof(string) ? "sentinel"
         : field.FieldType.IsAssignableFrom(typeof(string[])) ? new[] { "sentinel" }
         : EmptyOfElementType(field.FieldType)
+        ?? Completed(field.FieldType)
         ?? Constructed(field.FieldType)
         ?? throw new XunitException(
             $"{field.DeclaringType?.Name}.{field.Name} is a {field.FieldType.Name}, which this test " +
@@ -129,6 +130,18 @@ public sealed class ProviderInvalidationTests : IDisposable
             ? Array.CreateInstance(element, 0)
             : null;
     }
+
+    /// <summary>
+    /// A finished task, for a provider that memoises the question it asked rather than the answer, so
+    /// that the callers of one planning pass share a single subprocess — the driver store's listing
+    /// being the first.
+    /// </summary>
+    private static object? Completed(Type fieldType) =>
+        fieldType.IsGenericType && fieldType.GetGenericTypeDefinition() == typeof(Task<>)
+            ? typeof(Task).GetMethod(nameof(Task.FromResult))!
+                .MakeGenericMethod(fieldType.GetGenericArguments()[0])
+                .Invoke(null, [null])
+            : null;
 
     /// <summary>
     /// An instance of the record a provider memoises when the answer it remembers is several values
@@ -208,6 +221,9 @@ public sealed class ProviderInvalidationTests : IDisposable
         // Never the real one: it would remove the previous Windows installation of whoever ran the suite.
         : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
         : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
+
+        // Never the real one: it would list the driver store of whoever ran the suite.
+        : parameter == typeof(IDriverStore) ? new FakeDriverStore()
         : parameter == typeof(INamedMutexes) ? FakeNamedMutexes.None
         : parameter == typeof(IReadOnlyList<ITemporaryFolderTenant>) ? Array.Empty<ITemporaryFolderTenant>()
         : throw new XunitException(
