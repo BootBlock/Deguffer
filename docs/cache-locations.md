@@ -1848,6 +1848,114 @@ by definition.
 
 ---
 
+## Emulator shader caches
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's shader files in its cache folder. Each inside that emulator's own folder, found as the table below describes |
+| **Method** | Delete the recognised folders, or for PCSX2 the recognised files, one item each |
+| **Typical size** | Nothing measured: the machine this was written on has no emulator that has compiled a shader. Community reports for a real library run to many gigabytes |
+
+### What it is
+
+A console emulator translates each game's shaders for your graphics card as the game draws, and
+the game stutters while it does. Every emulator here keeps the result, so the next session loads it
+rather than translating again. RPCS3 also keeps each game's PPU and SPU code, compiled from the
+PlayStation 3 program into code for your processor.
+
+### What Deguffer does
+
+**It looks where each emulator keeps its data, and nowhere else.**
+
+| Emulator | Where Deguffer looks | What proves it is that emulator's |
+| --- | --- | --- |
+| Cemu | `%APPDATA%\Cemu`, and in each emulator folder you add: `portable` inside it, or the folder itself | `settings.xml` |
+| RPCS3 | The folder `RPCS3_CONFIG_DIR` names, read as RPCS3 reads it, and in each emulator folder you add: `portable` inside it, or the folder itself | `config\config.yml`, or `config.yml` from an older version |
+| Dolphin | The folder in Dolphin's `UserConfigPath` registry value, `Documents\Dolphin Emulator`, `%APPDATA%\Dolphin Emulator`, and in each emulator folder you add: `User` inside it, or the folder itself | `Config\Dolphin.ini` |
+| PCSX2 | `Documents\PCSX2`, and in each emulator folder you add: the folder `portable.txt` names, or the folder itself | `inis\PCSX2.ini` |
+
+**Add an emulator folder in Settings for a portable install, and for every RPCS3 install.** RPCS3
+keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin or PCSX2
+does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
+not search your drives for them. A folder you add is looked in only for the settings file in the
+table. A folder with none in it gets a note on the plan, and nothing in it is touched.
+
+**A folder counts only where the emulator's own settings file is in it.** A folder that merely holds
+a `cache` directory is not an emulator's. A folder that holds your whole profile, or a drive's root,
+is never treated as an emulator's folder, whatever file is in it.
+
+**Only the paths in the Location row are offered, found by their path from that folder.** This is
+what keeps Dolphin safe: `Shaders` in Dolphin's folder holds post-processing shaders you installed,
+and `Cache\Shaders` is the compiled cache. Only the second is offered. In RPCS3's `cache`, only a
+folder named by a game's serial, such as `BLUS30443`, is offered, which is the folder RPCS3's own
+**Remove All Caches** removes. In PCSX2's cache folder, only the shader and pipeline files each
+renderer writes are offered, as files, because the same folder holds other things.
+
+**PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
+move it anywhere, and Deguffer reads it rather than assuming the default.
+
+**Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
+one is running its caches are not offered, the plan says why, and Explore refuses them. The clean
+asks again before it removes each item, so an emulator started while the preview is on screen holds
+its cache back too.
+
+No emulator here offers a command Deguffer could run to clear its own cache. RPCS3's and Cemu's are
+menu items inside the running program, and Cemu's also removes the transferable cache, which Deguffer
+keeps.
+
+### What is protected
+
+**Everything in an emulator's folder except the items in the Location row.** Anything Deguffer does
+not recognise, at any level between the emulator's folder and the cache, is left alone, and these
+are asserted by name after a clean:
+
+| Emulator | Neighbour | What it really is |
+| --- | --- | --- |
+| Cemu | `shaderCache\transferable` | Every shader each game has used, built over hours of play or downloaded. The other two caches are compiled from it, and a downloaded one may not be obtainable again |
+| Cemu | `mlc01` | The emulated Wii U storage: your saves, installed games, updates and DLC |
+| Cemu | `graphicPacks`, `gameProfiles`, `controllerProfiles`, `settings.xml` | What you installed and chose |
+| Cemu | `keys.txt`, `otp.bin`, `seeprom.bin` | Keys and console data you dumped |
+| RPCS3 | `cache\playlists` | Custom soundtracks you built in games that support them |
+| RPCS3 | `dev_hdd0` | The emulated hard drive: your saves, installed games, updates and DLC |
+| RPCS3 | `dev_flash` | The firmware you installed |
+| RPCS3 | `savestates`, `captures`, `config` | Your save states, recordings and settings |
+| Dolphin | `Shaders` | Post-processing shaders you installed. Same name as the cache, and not it |
+| Dolphin | `GC`, `Wii`, `GBA` | Memory cards, the emulated Wii's storage, and Game Boy Advance saves and BIOS |
+| Dolphin | `StateSaves`, `Load`, `Config`, `GameSettings`, `ResourcePacks`, `ScreenShots` | Save states, the virtual SD card, and what you set, installed and took |
+| Dolphin | The rest of `Cache` | The game list, covers, downloads and the `.uidcache` lists Dolphin precompiles from |
+| PCSX2 | `bios` | The BIOS you dumped. It cannot be downloaded |
+| PCSX2 | `memcards`, `sstates` | Your memory cards and save states |
+| PCSX2 | `inis`, `cheats`, `patches`, `textures`, `covers` | What you set and added |
+| PCSX2 | Everything else in the cache folder | The game list, achievement badges, and the fonts you downloaded |
+
+Explore enforces the same rule. In each emulator's folder it allows only the way to the cache, and
+in the cache folder only what the plan recognised.
+
+Deguffer also refuses to look through a link. If an emulator's folder, its cache folder or one
+game's cache is a link to somewhere else, it removes nothing there and tells you why.
+
+### What it costs you
+
+**Each emulator compiles its shaders again, so each game stutters until it has been played for a
+while**, or waits longer before it starts if the emulator is set to compile ahead. **RPCS3 also
+compiles each game's code again the next time the game boots**, a pass that can take minutes and is
+often mistaken for a hang.
+
+**Your saves, memory cards, save states, firmware, games and settings are untouched**, and so is
+Cemu's transferable cache.
+
+### Why Tier 2, not Tier 1
+
+A [GPU shader cache](#gpu-shader-caches) costs a few seconds of stutter. These cost minutes before a
+game starts, or stutter through a whole play session, which Dolphin's own settings describe: shader
+compilation causes stuttering, and compiling ahead costs a longer delay before the game starts. That
+is a cost in time rather than a slower next use, so it is the second tier.
+
+---
+
 ## Unreal Engine derived data cache
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an

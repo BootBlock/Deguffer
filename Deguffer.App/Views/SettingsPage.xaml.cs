@@ -13,7 +13,7 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         ViewModel = new SettingsViewModel(
-            App.Preferences, App.SourceRoots, App.Keeps, VolumeInventory.Current);
+            App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
         InitializeComponent();
     }
 
@@ -29,24 +29,12 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async void OnAddSourceRoot(object sender, RoutedEventArgs e)
     {
-        if (App.MainWindow is not { } window)
+        if (await PickFolderAsync() is not { } folder)
         {
             return;
         }
 
-        var picker = new FolderPicker();
-        picker.FileTypeFilter.Add("*");
-
-        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
-        WinRT.Interop.InitializeWithWindow.Initialize(
-            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-
-        if (await picker.PickSingleFolderAsync() is not { } folder)
-        {
-            return;
-        }
-
-        var approval = ViewModel.ApprovalFor(folder.Path);
+        var approval = ViewModel.ApprovalFor(folder);
 
         if (approval.NeedsConfirming && !await AcceptsAsync(approval))
         {
@@ -88,6 +76,45 @@ public sealed partial class SettingsPage : Page
         };
 
         return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
+    }
+
+    /// <summary>
+    /// An emulator folder goes through the picker for the reason a source folder does. No warning is
+    /// needed first: Deguffer looks in it only for the settings file each emulator writes, and takes
+    /// nothing from it unless one is there.
+    /// </summary>
+    private async void OnAddEmulatorFolder(object sender, RoutedEventArgs e)
+    {
+        if (await PickFolderAsync() is { } folder)
+        {
+            ViewModel.AddEmulatorFolder(folder);
+        }
+    }
+
+    private void OnRemoveEmulatorFolder(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string folder })
+        {
+            ViewModel.RemoveEmulatorFolder(folder);
+        }
+    }
+
+    /// <summary>The folder the user picked, or null if they cancelled or there is no window to own the picker.</summary>
+    private static async Task<string?> PickFolderAsync()
+    {
+        if (App.MainWindow is not { } window)
+        {
+            return null;
+        }
+
+        var picker = new FolderPicker();
+        picker.FileTypeFilter.Add("*");
+
+        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+
+        return (await picker.PickSingleFolderAsync())?.Path;
     }
 
     private void OnRemoveSourceRoot(object sender, RoutedEventArgs e)

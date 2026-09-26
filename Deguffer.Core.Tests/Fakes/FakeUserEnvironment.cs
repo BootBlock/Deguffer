@@ -21,6 +21,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         RoamingAppData = Path.Combine(root, "profile", "AppData", "Roaming");
         LocalLowAppData = Path.Combine(root, "profile", "AppData", "LocalLow");
         Videos = Path.Combine(root, "profile", "Videos");
+        Documents = Path.Combine(root, "profile", "Documents");
         TempPath = Path.Combine(root, "temp");
 
         Directory.CreateDirectory(UserProfile);
@@ -43,6 +44,8 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     /// it must find it absent as easily as present.
     /// </summary>
     public string? Videos { get; private set; }
+
+    public string? Documents { get; private set; }
 
     public string TempPath { get; private set; }
 
@@ -116,6 +119,12 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public FakeUserEnvironment WithNoVideos()
     {
         Videos = null;
+        return this;
+    }
+
+    public FakeUserEnvironment WithNoDocuments()
+    {
+        Documents = null;
         return this;
     }
 

@@ -151,6 +151,7 @@ public sealed class CleanupPlanner
             new SteamCacheProvider(environment, discovery: steam),
             new SteamLibraryArtworkProvider(environment, discovery: steam),
             new SteamShaderCacheProvider(environment, discovery: steam),
+            new EmulatorShaderCacheProvider(environment),
             new UnrealDerivedDataCacheProvider(environment),
             new SpotifyCacheProvider(environment),
             new PlexTranscodeProvider(environment),

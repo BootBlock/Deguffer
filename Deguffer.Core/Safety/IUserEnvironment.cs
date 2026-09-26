@@ -46,6 +46,15 @@ public interface IUserEnvironment
     /// </summary>
     string? Videos { get; }
 
+    /// <summary>
+    /// The user's Documents folder, wherever it has been moved to, or null when Windows will not say.
+    ///
+    /// <para>PCSX2 keeps its data here, and older Dolphin installs do too. Read from the known folder
+    /// rather than composed from <see cref="UserProfile"/> for the reason <see cref="Videos"/> is:
+    /// Windows and OneDrive both move it, and each emulator asks Windows for it.</para>
+    /// </summary>
+    string? Documents { get; }
+
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
 
@@ -237,6 +246,9 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string? Videos { get; } =
         Environment.GetFolderPath(Environment.SpecialFolder.MyVideos) is { Length: > 0 } videos ? videos : null;
+
+    public string? Documents { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) is { Length: > 0 } documents ? documents : null;
 
     /// <summary>
     /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever

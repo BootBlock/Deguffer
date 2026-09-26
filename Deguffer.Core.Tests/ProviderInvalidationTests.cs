@@ -183,6 +183,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(IDirectoryScanner)
             ? new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated))
         : parameter == typeof(SourceRootStore) ? new SourceRootStore(_environment)
+        : parameter == typeof(EmulatorFolderStore) ? new EmulatorFolderStore(_environment)
         : parameter == typeof(SourceDirectoryDiscovery)
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner(), new FakeVolumeInventory())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
