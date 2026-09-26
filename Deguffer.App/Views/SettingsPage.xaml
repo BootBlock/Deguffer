@@ -262,12 +262,13 @@
 
             <!-- The second list that widens where Deguffer looks. An emulator run from its own folder
                  records that folder nowhere Deguffer may rely on, so the user is the only source.
-                 Nothing is taken from a folder here unless the emulator's own settings file is in it. -->
+                 Nothing is taken from a folder here unless the emulator's own settings file, or RetroArch's
+                 program, is in it. -->
             <TextBlock Text="Emulator folders" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
 
             <views:SettingsRow Glyph="&#xE7FC;"
                                Title="Where your emulators are installed"
-                               Description="Deguffer finds Cemu, Dolphin and PCSX2 where each keeps its data by default. Add the folder of a portable install here, and the folder of every RPCS3 install, which keeps everything beside the program. Deguffer looks in each folder only for the emulator's own settings file, and removes only that emulator's shader cache, never saves, memory cards, firmware or games.">
+                               Description="Deguffer finds Cemu, Dolphin and PCSX2 where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, and removes only shader caches and RetroArch's downloads, never saves, memory cards, firmware or games.">
                 <views:SettingsRow.Control>
                     <Button Content="Add folder…"
                             Click="OnAddEmulatorFolder"

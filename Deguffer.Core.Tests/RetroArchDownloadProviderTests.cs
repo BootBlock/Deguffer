@@ -136,6 +136,25 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// The finding is kept for a pass and shared by both rows, so a rescan must look again: a folder
+    /// declared, or a set downloaded, while the app is open is seen.
+    /// </summary>
+    [Fact]
+    public async Task ARescanSeesWhatChangedSinceTheLastOne()
+    {
+        _retroArch.Install();
+        _retroArch.ShaderSet("shaders_slang");
+
+        var provider = CreateProvider();
+        Assert.Empty((await provider.PlanAsync()).Steps);
+
+        _retroArch.Declare();
+        provider.InvalidateCaches();
+
+        Assert.Single((await provider.PlanAsync()).Steps);
+    }
+
     /// <summary>A folder shaped like RetroArch's is not a copy of it without the program.</summary>
     [Fact]
     public async Task AFolderWithoutTheProgramIsNotRetroArch()

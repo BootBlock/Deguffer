@@ -9,10 +9,11 @@ namespace Deguffer.Core.Configuration;
 ///
 /// <para><b>Declared, because nothing else can say.</b> RPCS3 keeps everything beside its own
 /// executable wherever the archive was unpacked, and the portable layouts of Cemu, Dolphin and PCSX2
-/// do the same. Windows records none of those places anywhere Deguffer may rely on, so §5.2's "never
-/// assume a location" leaves the user as the only source. A folder listed here is never trusted on
-/// its own word: an emulator's root inside it is recognised only by the file that emulator writes
-/// there, see <see cref="Providers.EmulatorLayout"/>.</para>
+/// do the same, as does every RetroArch. Windows records none of those places anywhere Deguffer may
+/// rely on, so §5.2's "never assume a location" leaves the user as the only source. A folder listed
+/// here is never trusted on its own word: an emulator's root inside it is recognised only by the file
+/// that emulator writes there, see <see cref="Providers.EmulatorLayout"/>, and RetroArch only by its
+/// program, see <see cref="Providers.RetroArchDiscovery"/>.</para>
 /// </summary>
 public sealed class EmulatorFolderStore
 {

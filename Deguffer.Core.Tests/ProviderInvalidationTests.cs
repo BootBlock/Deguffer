@@ -189,6 +189,8 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(SteamDiscovery) ? new SteamDiscovery(_environment)
+        : parameter == typeof(RetroArchDiscovery)
+            ? new RetroArchDiscovery(_environment, system: new FakeSystemDirectories(_temp.Path))
         : parameter == typeof(ClaudeCodeSessionRegistry)
             ? new ClaudeCodeSessionRegistry(_environment, FakeProcessInspector.NothingRunning)
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
