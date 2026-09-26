@@ -26,13 +26,13 @@ namespace Deguffer.Core.Providers;
 /// else. <see cref="AfterEffectsDiskCacheLayout"/> holds what is recognised and why nothing else
 /// is.</para>
 ///
-/// <para><b>§5.1 has no route Deguffer can take.</b> After Effects' own routes, Empty Disk Cache under
+/// <para><b>§5.1 has no route Deguffer can take.</b> The routes Adobe documents, Empty Disk Cache under
 /// Preferences and Edit, Purge, All Memory &amp; Disk Cache, are inside the running program, and each
-/// empties only the running version's cache. Its command-line renderer has no option that does.</para>
+/// empties only the running version's cache.</para>
 ///
 /// <para><b>Nothing while After Effects runs (§5.3).</b> It writes the cache while it is open, so while
-/// it or its renderer is in the process table every cache is left alone and refused in Explore. The
-/// clean asks again before it removes each one.</para>
+/// it, or its command-line renderer, is in the process table every cache is left alone and refused in
+/// Explore. The clean asks again before it removes each one.</para>
 /// </summary>
 public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITemporaryFolderTenant
 {
@@ -96,7 +96,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
         _examination ??= AfterEffectsDiskCacheExamination.Of(
             Settings.Folders,
             Environment.MachineName,
-            TempRoots.Resolve(Environment, _system).AccountFolders,
+            TempRoots.Resolve(Environment, _system).Folders,
             ct);
 
     public override void InvalidateCaches()
@@ -234,13 +234,11 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            // Held first, so a held cache's folder is named for why it was held rather than as the
-            // folder only the cache inside is taken from.
+            // A held cache is never a survivor otherwise, so the two sets cannot name one path twice.
             ProtectedPaths = Protect(
             [
-                .. held.Select(cache => (Path: cache.Path, Reason: HeldReason))
-                    .Concat(examination.Survivors)
-                    .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase),
+                .. held.Select(cache => (Path: cache.Path, Reason: HeldReason)),
+                .. examination.Survivors,
             ]),
             Notes = notes,
             Fallback = measured.Fallback,

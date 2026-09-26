@@ -128,9 +128,14 @@ public static class AfterEffectsCacheSettingsReader
 
             // Unaliased, because After Effects records the temporary folder as the environment gives
             // it, which on a profile with a long folder name is the 8.3 short form.
-            found.AddRange(values
+            found.AddRange(values.Found
                 .Select(value => LongPath.Unaliased(LongPath.Configured(value.Value)))
                 .OfType<string>());
+
+            if (values.HasUnreadable)
+            {
+                unread.Add(path);
+            }
         }
 
         return found;

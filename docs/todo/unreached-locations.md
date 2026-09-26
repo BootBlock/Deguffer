@@ -5,7 +5,7 @@
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins, §8's Unreal Engine
-> derived-data caches and DaVinci Resolve render cache, §10's release of OneDrive's local copies
+> derived-data caches, DaVinci Resolve render cache and After Effects disk cache, §10's release of OneDrive's local copies
 > and §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
 > **Open questions 1, 2 and 3 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a

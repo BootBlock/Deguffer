@@ -280,6 +280,30 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An entry a running program is using can hold another row's entry further down. Its bytes are
+    /// taken out of the estimate once, with the entry holding it, and not a second time on their own.
+    /// </summary>
+    [Fact]
+    public async Task TakesAnOwnedEntryInsideALiveOneOutOfTheEstimateOnce()
+    {
+        string[] nested = ["Adobe", "After Effects", "24.6", "Disk Cache - TESTMACHINE.noindex"];
+        Abandoned(8192, ["temp", .. nested, "frame.bin"]);
+        Abandoned(2048, "temp", "Adobe", "installer.tmp");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var tenant = new FakeTemporaryFolderTenant("After Effects disk cache", Path.Combine(nested));
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector(Path.Combine(UserTemp, "Adobe")),
+            tenants: [tenant]);
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([Path.Combine(UserTemp, "Adobe")], step.Spared);
+        Assert.Equal(1024, step.EstimatedBytes);
+    }
+
+    /// <summary>
     /// The two rows together, as the planner builds them: each byte is offered once, a live Roslyn
     /// session that is old enough for this row's cut-off is still left alone, and both runs verify.
     /// </summary>

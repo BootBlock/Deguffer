@@ -133,7 +133,6 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
 
         foreach (var survivor in new[]
         {
-            Chosen,
             AfterEffectsDiskCacheLayout.VersionsUnder(Chosen),
             Path.GetDirectoryName(current)!,
             Path.GetDirectoryName(older)!,
@@ -143,6 +142,9 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         {
             Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase));
         }
+
+        // The chosen folder is the user's, and naming it would refuse everything in it in Explore.
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(Chosen, StringComparison.OrdinalIgnoreCase));
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -243,7 +245,43 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         var version = Assert.Single(roots, r => r.Path == Path.GetDirectoryName(cache));
         Assert.True(version.Recognises(CacheName));
         Assert.False(version.Recognises(Path.GetFileName(otherComputer)));
-        Assert.Contains(roots, r => r.Path == Chosen && !r.Recognises("Adobe"));
+        Assert.Contains(roots, r => r.Path == AfterEffectsDiskCacheLayout.VersionsUnder(Chosen) && !r.Recognises(Version));
+        Assert.DoesNotContain(roots, r => r.Path == Chosen);
+    }
+
+    /// <summary>§5.3 at the clean: After Effects started after the preview, so the cache is asked about again and kept.</summary>
+    [Fact]
+    public async Task AsksAgainAtTheCleanAndKeepsTheCacheIfAfterEffectsHasStarted()
+    {
+        Preferences(Version, Chosen);
+        var cache = Cache(Chosen, Version, CacheName);
+        var inspector = new FakeProcessInspector();
+
+        var provider = CreateProvider(inspector);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([cache], plan.TargetedPaths);
+
+        inspector.WithRunning("AfterFX");
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(Path.Combine(cache, "0a", "frame-000123.bin")), "the cache was removed while After Effects ran");
+    }
+
+    /// <summary>
+    /// A folder value that is there but cannot be read is reported as unread, never as a version that
+    /// names no folder, which would tell the user something untrue.
+    /// </summary>
+    [Fact]
+    public async Task AFolderValueItCannotReadIsReportedAsUnread()
+    {
+        var preferences = Preferences(Version, "D:\\Jos\"C3\"");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(preferences, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("name no disk cache folder", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -288,24 +326,29 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
 
     /// <summary>
     /// Where the cache is in the temporary folder, it is claimed from the temporary-files row at its
-    /// depth, and nothing else in that folder is named as this row's survivor.
+    /// depth, and nothing else in that folder is named as this row's survivor. The machine's temporary
+    /// folder too, which the temporary-files row also empties.
     /// </summary>
-    [Fact]
-    public async Task ClaimsItsCacheFromTheTemporaryFolderAndNamesNothingElseThere()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ClaimsItsCacheFromTheTemporaryFolderAndNamesNothingElseThere(bool machineWide)
     {
-        Preferences(Version, _environment.TempPath);
-        var cache = Cache(_environment.TempPath, Version, CacheName);
+        var folder = machineWide ? Path.Combine(_system.WindowsDirectory, "Temp") : _environment.TempPath;
+        Directory.CreateDirectory(folder);
+        Preferences(Version, folder);
+        var cache = Cache(folder, Version, CacheName);
         WriteFile(Path.Combine(Path.GetDirectoryName(cache)!, "notes.txt"));
 
         var provider = CreateProvider();
 
-        Assert.Equal([cache], await provider.ClaimedEntriesAsync([_environment.TempPath]));
+        Assert.Equal([cache], await provider.ClaimedEntriesAsync([folder]));
         Assert.Empty(await provider.ClaimedEntriesAsync([Path.Combine(_temp.Path, "unrelated")]));
 
         var plan = await provider.PlanAsync();
 
         Assert.Equal([cache], plan.TargetedPaths);
-        Assert.DoesNotContain(plan.ProtectedPaths, p => LongPath.Contains(_environment.TempPath, p.Path));
+        Assert.DoesNotContain(plan.ProtectedPaths, p => LongPath.Contains(folder, p.Path));
     }
 
     /// <summary>

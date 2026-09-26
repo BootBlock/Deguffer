@@ -30,7 +30,7 @@ public sealed class AfterEffectsPreferenceTextTests
         "");
 
     private static IReadOnlyList<string> Folders(string text) =>
-        [.. AfterEffectsPreferenceText.Values(text, Section, AfterEffectsDiskCacheLayout.IsFolderKey).Select(v => v.Value)];
+        [.. AfterEffectsPreferenceText.Values(text, Section, AfterEffectsDiskCacheLayout.IsFolderKey).Found.Select(v => v.Value)];
 
     /// <summary>A Windows install writes line feeds, and a macOS one a carriage return alone.</summary>
     [Theory]
@@ -73,7 +73,7 @@ public sealed class AfterEffectsPreferenceTextTests
 
         Assert.Equal([@"D:\"], Folders(text));
         Assert.Contains(
-            AfterEffectsPreferenceText.Values(text, Section, key => true),
+            AfterEffectsPreferenceText.Values(text, Section, key => true).Found,
             value => value is { Key: "Max Size 3", Value: "23" });
     }
 
@@ -82,9 +82,21 @@ public sealed class AfterEffectsPreferenceTextTests
     [InlineData("\t\"Folder 7\" = \"D:\\Cache", "a quote that never closes")]
     [InlineData("\t\"Folder 7\" = D:\\Cache", "text outside the quotes")]
     [InlineData("\t\"Folder 7\" = \"D:\\Cach\u00e9\"", "a byte past ASCII inside the quotes")]
-    public void GivesNoValueForOneItCannotRead(string line, string because)
+    public void GivesNoValueForOneItCannotReadAndSaysSo(string line, string because)
     {
-        Assert.True(Folders(File(line)).Count == 0, because);
+        var values = AfterEffectsPreferenceText.Values(File(line), Section, AfterEffectsDiskCacheLayout.IsFolderKey);
+
+        Assert.True(values.Found.Count == 0, because);
+        Assert.True(values.HasUnreadable, because);
+    }
+
+    /// <summary>A line outside the section it was asked about says nothing about that section.</summary>
+    [Fact]
+    public void AnUnreadableLineElsewhereLeavesTheSectionComplete()
+    {
+        var text = File("\t\"Folder 7\" = \"D:\\Cache\"") + "[\"Later\"]\n\t\"Broken\" = \"unclosed\n";
+
+        Assert.False(AfterEffectsPreferenceText.Values(text, Section, AfterEffectsDiskCacheLayout.IsFolderKey).HasUnreadable);
     }
 
     [Fact]

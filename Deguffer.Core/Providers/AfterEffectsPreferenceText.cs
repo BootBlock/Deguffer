@@ -21,19 +21,26 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public static class AfterEffectsPreferenceText
 {
+    /// <summary>What <see cref="Values"/> found in one section.</summary>
+    /// <param name="Found">Each wanted key and its value.</param>
+    /// <param name="HasUnreadable">Whether a line in the section could not be read.</param>
+    public sealed record PreferenceValues(IReadOnlyList<(string Key, string Value)> Found, bool HasUnreadable);
+
     private const char Quote = '"';
     private const char Continuation = '\\';
 
     /// <summary>
     /// Every value in <paramref name="section"/> whose key <paramref name="wanted"/> accepts, with its
-    /// key, in the order the file gives them. A key or value that cannot be read is left out.
+    /// key, in the order the file gives them, and whether the section held a line that could not be
+    /// read. Such a line may be a wanted value, so a caller must not read the values as complete.
     /// </summary>
-    public static IReadOnlyList<(string Key, string Value)> Values(string text, string section, Func<string, bool> wanted)
+    public static PreferenceValues Values(string text, string section, Func<string, bool> wanted)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(wanted);
 
         var found = new List<(string, string)>();
+        var unreadable = false;
         var inSection = false;
 
         foreach (var line in LogicalLines(text))
@@ -46,13 +53,22 @@ public static class AfterEffectsPreferenceText
                 continue;
             }
 
-            if (inSection && Entry(trimmed) is { } entry && wanted(entry.Key))
+            if (!inSection || trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            if (Entry(trimmed) is not { } entry)
+            {
+                unreadable = true;
+            }
+            else if (wanted(entry.Key))
             {
                 found.Add(entry);
             }
         }
 
-        return found;
+        return new PreferenceValues(found, unreadable);
     }
 
     /// <summary>

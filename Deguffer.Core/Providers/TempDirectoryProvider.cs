@@ -448,7 +448,12 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             }
 
             var paths = held.Select(h => h.Directory).ToList();
-            var measured = await MeasureSparedAsync([.. paths, .. others], keep, ct).ConfigureAwait(false);
+
+            // A claim can sit inside a held entry, whose measurement already counts it.
+            var measured = await MeasureSparedAsync(
+                [.. paths, .. others.Where(other => !paths.Any(path => LongPath.Contains(path, other)))],
+                keep,
+                ct).ConfigureAwait(false);
 
             steps.Add(clear with
             {
@@ -510,8 +515,5 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         public bool Contains(string path) => Paths.Contains(Path.TrimEndingDirectorySeparator(path));
     }
 
-    private IEnumerable<string> DeclaredPaths() =>
-        from root in Roots.Roots
-        from location in root.Locations
-        select Path.Combine(root.Path, location.RelativePath);
+    private IEnumerable<string> DeclaredPaths() => Roots.Folders;
 }

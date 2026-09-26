@@ -34,8 +34,8 @@ public static class AfterEffectsDiskCacheLayout
     private const string CacheNameSuffix = ".noindex";
 
     /// <summary>
-    /// The program, and the command-line renderer, which uses the same cache, as the process table
-    /// names them.
+    /// The program, and its command-line renderer, as the process table names them. The renderer runs
+    /// After Effects' own rendering without its window, so a cache is not taken while either runs.
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames = ["AfterFX", "aerender"];
 

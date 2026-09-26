@@ -14,11 +14,16 @@ internal sealed record AfterEffectsDiskCache(string Path, string VersionFolder);
 /// the temporary-folder row's claim are all built from, so none of them can disagree about what is
 /// After Effects' cache.
 ///
-/// <para><b>Nothing inside a temporary folder is named as a survivor.</b> After Effects caches in
-/// <c>%TEMP%</c> unless told otherwise, and the temporary-files row may remove whatever else is there
-/// once nothing has touched it for long enough, the folders above the cache included. Asserting here
-/// that they survive would report that row's ordinary run as this one's failure (§5.6), so this row
-/// takes only its cache there, and leaves everything else to that row's rules.</para>
+/// <para><b>Nothing inside a temporary folder is named as a survivor.</b> After Effects often caches
+/// in <c>%TEMP%</c>, and the temporary-files row may remove whatever else is there once nothing has
+/// touched it for long enough, the folders above the cache included. Asserting here that they survive
+/// would report that row's ordinary run as this one's failure (§5.6), so this row takes only its cache
+/// there, and leaves everything else to that row's rules. The cost is that §5.6 has nothing of this
+/// row's to check there.</para>
+///
+/// <para><b>The chosen folder is never named.</b> It is the user's, often one they keep other things
+/// in, and naming it would refuse everything in it in Explore. What After Effects made inside it,
+/// <c>Adobe\After Effects</c> and below, is named.</para>
 /// </summary>
 internal sealed class AfterEffectsDiskCacheExamination
 {
@@ -42,7 +47,7 @@ internal sealed class AfterEffectsDiskCacheExamination
     public string CacheName { get; private set; } = "";
 
     /// <param name="folders">Each folder After Effects' preferences name for the disk cache.</param>
-    /// <param name="temporaryFolders">This account's temporary folders, where the survivors are not this row's to name.</param>
+    /// <param name="temporaryFolders">The folders the temporary-files row empties, where the survivors are not this row's to name.</param>
     public static AfterEffectsDiskCacheExamination Of(
         IReadOnlyList<string> folders,
         string machineName,
@@ -121,7 +126,6 @@ internal sealed class AfterEffectsDiskCacheExamination
 
         if (offered)
         {
-            Survive(folder, "The folder After Effects was told to keep its disk cache in. Only the cache it made inside it is removed.");
             Survive(versions, "After Effects' folder for its disk cache. Only this computer's cache inside it is removed.");
         }
     }
