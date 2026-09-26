@@ -19,7 +19,7 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, Maven, vcpkg, pnpm,
-    /// conda, Playwright, the browser profiles test runners leave in the temporary folders, the GPU
+    /// conda, Playwright, Puppeteer, the browser profiles test runners leave in the temporary folders, the GPU
     /// shader caches, the Chromium application caches, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
@@ -34,7 +34,7 @@ public sealed class CleanupPlanner
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, the Azure Functions Core Tools
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, Puppeteer, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -177,6 +177,7 @@ public sealed class CleanupPlanner
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
             new PlatformIoCacheProvider(environment),
             new PlaywrightBrowsersProvider(environment),
+            new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees),
             new LmStudioRuntimeProvider(environment),
             testBrowsers,
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),

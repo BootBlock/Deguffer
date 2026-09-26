@@ -3529,6 +3529,86 @@ rather than a global install.
 
 ---
 
+## Puppeteer browsers
+
+**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.cache\puppeteer`, or wherever `PUPPETEER_CACHE_DIR` points |
+| **Method** | Delete recognised browser builds (`chrome\win64-127.0.6533.88`, `firefox\win64-stable_129.0`, …) |
+| **Typical size** | A few hundred megabytes per build, and one build per browser for each Puppeteer version you have used |
+
+### What it is
+
+Puppeteer is Google's browser-automation library for Node.js, and Playwright's opposite number. Like
+Playwright, it does not drive the browsers already installed on your machine. It downloads its own
+builds of Chrome, Chrome's headless shell, ChromeDriver, Chromium or Firefox, pins each Puppeteer
+release to one of them, and keeps every build it has installed. Since Puppeteer 19 the builds go
+into your profile rather than into each project's `node_modules`, so every project on the machine
+shares them.
+
+The folder has two levels: one folder per browser, and inside it one folder per build, named for the
+platform and the build — `chrome\win64-127.0.6533.88`, `chromium\win64-1108766`,
+`firefox\win64-stable_129.0`.
+
+**This is why the folder grows.** Upgrading Puppeteer installs a new build and leaves the old one
+where it was.
+
+### What Deguffer does
+
+It resolves the location through `PUPPETEER_CACHE_DIR` before falling back to the default. A
+relative value is left alone rather than guessed at: Puppeteer reads it against the folder a script
+runs in, which Deguffer cannot know. A project can also move the cache with `cacheDirectory` in its
+`.puppeteerrc` file, and Deguffer cannot see that either, because the file belongs to one project.
+The default folder is still examined.
+
+Within the folder, a browser folder is recognised only if Puppeteer names that browser: `chrome`,
+`chrome-headless-shell`, `chromedriver`, `chromium` or `firefox`. Within a browser folder, a build is
+removed only if its name is a platform Puppeteer names followed by a build **in that browser's own
+shape**: four dotted numbers for Chrome's builds, a revision number for Chromium (and for `chrome`
+under Puppeteer 19 and 20, which kept Chromium there), and a Firefox version with its release
+channel in front. A Firefox version under `chromedriver`, `chrome\win64-127.0.6533.88-backup`, a
+`webkit` folder and anything you created yourself do not qualify. They stay in Tier 4 and Deguffer
+tells you it is leaving them alone.
+
+A build a running program is using, such as a browser a script launched, is left alone and named,
+and the clean asks again before each removal. Deleting a build under a running browser fails part of
+the way through and leaves a build Puppeteer can neither launch nor download again.
+
+### What is protected
+
+The cache root, each browser folder, and the **`.metadata`** file in each browser folder. That file
+maps an alias such as `stable` to a build and records where each build's executable is, and
+Puppeteer resolves a launch through it. Every folder Deguffer declined is checked after the clean
+to prove it survived.
+
+When the cache is in its default place, `%USERPROFILE%\.cache` itself is checked as well. Deguffer
+never lists that folder, and the models other tools keep beside Puppeteer's folder are never
+touched.
+
+### What it costs you
+
+**Puppeteer scripts and tests that launch a removed browser stop running until you reinstall.** The
+launch fails with `Could not find Chrome` until somebody runs `npx puppeteer browsers install` or
+installs the Puppeteer package again, which downloads the build again.
+
+Your scripts, configuration and projects are untouched.
+
+### Why Tier 2, not Tier 1
+
+For the reason [Playwright's browsers](#playwright-browsers) give: Puppeteer does not download a
+missing build on its own, so the next run fails rather than running slowly, and recovery needs a
+command from you.
+
+Deguffer does **not** use `@puppeteer/browsers clear` or `uninstall`, despite §5.1's preference for a
+tool's own command. `clear` removes the whole cache folder, which is the tool root §5.2 forbids, and
+the metadata with it. Both are reached through `npx`, which downloads the package where no project
+has it installed.
+
+---
+
 ## LM Studio superseded runtimes
 
 **Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
@@ -5338,6 +5418,9 @@ for each subfolder.
 
 A provider here is viable, but only as a per-subfolder allow-list where each entry is researched on
 its own. Treating the folder as a unit is exactly the mistake §5.2 exists to prevent.
+
+One subfolder has since been taken on those terms: [Puppeteer's browsers](#puppeteer-browsers) in
+`.cache\puppeteer`. The folder as a whole is still declined, and that provider never lists it.
 
 ### Other names in the temporary folder — not identified well enough, or live
 

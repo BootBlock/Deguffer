@@ -737,6 +737,38 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same rule over Puppeteer, where each browser folder keeps <c>.metadata</c> beside its builds
+    /// and Puppeteer resolves a launch through it. The cache root recognises nothing, and each browser
+    /// folder recognises only the builds Puppeteer publishes for that browser, so a Firefox version is
+    /// refused where only Chrome for Testing builds are written.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                                             // the cache folder
+    [InlineData("chrome", false)]                                       // a browser folder, never a target
+    [InlineData(@"chrome\.metadata", false)]                            // how Puppeteer resolves a build
+    [InlineData(@"chrome\win64-127.0.6533.88", true)]                   // one Chrome for Testing build
+    [InlineData(@"chrome\win64-127.0.6533.88\chrome-win64", true)]      // inside a recognised build
+    [InlineData(@"chrome\win64-1108766", true)]                         // Puppeteer 19's Chromium under chrome
+    [InlineData(@"chrome-headless-shell\win64-127.0.6533.88", true)]
+    [InlineData(@"chromium\win64-1108766", true)]
+    [InlineData(@"firefox\win64-stable_129.0", true)]
+    [InlineData(@"chromedriver\win64-stable_129.0", false)]             // a Firefox version where none is written
+    [InlineData(@"chrome\win64-127.0.6533.88-backup", false)]           // something a person made
+    [InlineData(@"chrome
+otes", false)]
+    [InlineData("webkit", false)]                                       // not a browser Puppeteer downloads
+    public void PuppeteersCacheRecognisesOnlyEachBrowsersOwnBuilds(string relative, bool allowed)
+    {
+        var provider = new PuppeteerBrowsersProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+        var root = provider.DefaultRoot;
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// The same rule over Affinity, where what sits beside the cache is the user's whole asset
     /// library and the records that keep the product activated. Three levels declare it: the profile
     /// root and the shared folder recognise nothing at all, and only a version folder lets one child
