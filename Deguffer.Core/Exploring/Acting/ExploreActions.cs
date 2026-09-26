@@ -49,7 +49,6 @@ public sealed class ExploreActions
     private readonly Func<IExploreConfirmationPrompt> _prompt;
     private readonly CrashLog _faults;
     private readonly IRecycleBin? _recycleBin;
-    private readonly IFileSystem? _fileSystem;
 
     private Task<ExploreActionPolicy>? _policy;
 
@@ -64,19 +63,16 @@ public sealed class ExploreActions
     /// otherwise write into the developer's profile.
     /// </param>
     /// <param name="recycleBin">Handed to <see cref="ExploreRemover"/>; the shell's own bin where null.</param>
-    /// <param name="fileSystem">Handed to <see cref="ExploreRemover"/>; the real one where null.</param>
     public ExploreActions(
         Func<CancellationToken, Task<ExploreActionPolicy>> build,
         Func<IExploreConfirmationPrompt> prompt,
         CrashLog faults,
-        IRecycleBin? recycleBin = null,
-        IFileSystem? fileSystem = null)
+        IRecycleBin? recycleBin = null)
     {
         _build = build;
         _prompt = prompt;
         _faults = faults;
         _recycleBin = recycleBin;
-        _fileSystem = fileSystem;
     }
 
     /// <summary>
@@ -208,7 +204,7 @@ public sealed class ExploreActions
         // Everything goes back in, refusals included: the remover partitions again and reports what
         // it would not take, so the user is told about each one rather than seeing it silently
         // dropped from the count.
-        return await ExploreRemover.RemoveAsync(items, mode, policy, _recycleBin, _fileSystem, ct)
+        return await ExploreRemover.RemoveAsync(items, mode, policy, _recycleBin, ct: ct)
             .ConfigureAwait(true);
     }
 

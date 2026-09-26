@@ -129,7 +129,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// Whether this node has gone since the scan, so nothing on screen may offer it.
     ///
     /// <para>The list stops showing such a node; the map cannot, because the tree behind the
-    /// picture is not rebuilt for a deletion — see <see cref="_removed"/> — so the shape stays where
+    /// picture is not rebuilt for a deletion — see <see cref="_removals"/> — so the shape stays where
     /// it was. What both must stop doing is <em>acting</em> on it, and the map must stop marking it
     /// out under the pointer, which reads as an offer to pick something that can only select
     /// nothing (§7.1). Asked of the tree on screen: see <see cref="ExploreRemovals.WasRemoved"/>.</para>

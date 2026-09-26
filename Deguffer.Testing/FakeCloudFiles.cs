@@ -7,7 +7,7 @@ namespace Deguffer.Testing;
 /// Sync roots and placeholders held in memory, for the rules that decide which local copies go.
 ///
 /// <para><b>Injected everywhere, never defaulted.</b> The real <see cref="CloudFiles"/> walks and unpins
-/// the cloud accounts of whoever runs the suite. <see cref="CloudFilesTests"/> covers the real calls
+/// the cloud accounts of whoever runs the suite. <c>CloudFilesTests</c> covers the real calls
 /// against a scratch sync root of its own.</para>
 ///
 /// <para><b>It behaves as the API was observed to, not as the rules would like.</b>

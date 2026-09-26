@@ -107,7 +107,7 @@ public sealed partial class FindingViewModel : ObservableObject
             // its checkbox is disabled, so ticking it would leave the user a selection they have
             // no way to clear, and the row-level toggle skips it for the same reason.
             //
-            // The condition is StepViewModel's own rather than a copy of it. Written out here it
+            // The condition is StepChoice's rather than a copy of it. Written out here it
             // was a copy, and it went stale the moment a second reason to disable a checkbox
             // arrived — a step needing administrator rights would have started ticked, rendered
             // disabled, and been skipped by the loop that clears the row.

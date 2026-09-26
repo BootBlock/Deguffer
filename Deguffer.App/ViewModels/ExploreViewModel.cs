@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
@@ -191,7 +190,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private ExploreTarget Target => new(SelectedDrive?.RootPath, ScopeFolder);
 
-    public bool IsScopedToFolder => ScopeFolder is not null;
+    public bool IsScopedToFolder => Target.IsScopedToFolder;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
