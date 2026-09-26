@@ -14,7 +14,8 @@ namespace Deguffer.Core.Providers;
 /// <c>Media Cache Files</c> and the database in <c>Media Cache</c> inside it. So the folder a value
 /// names is the user's own, and only Adobe's folder inside it is recognised.</para>
 ///
-/// <para><b>The default folder is always examined, whatever the settings say.</b> Adobe keeps each
+/// <para><b>The default folder is examined whatever the settings say</b>, unless a roaming profile put
+/// it on a share, where it is withheld for the reason a moved one on a share is. Adobe keeps each
 /// file's importer state (<c>.ims</c>) on the system drive when the cache is moved, and only the
 /// converted audio and the waveforms follow the setting, so a moved cache leaves part of itself
 /// behind.</para>
@@ -60,11 +61,12 @@ public sealed record AdobeMediaCacheLayout(
     public const string PeakFolder = "Peak Files";
 
     /// <summary>
-    /// §5.3. The four applications that share the cache, and the Dynamic Link server Premiere Pro and
-    /// After Effects share footage through, which can outlive both.
+    /// §5.3. The four applications that share the cache, After Effects' command-line renderer, which
+    /// runs its engine with no window, and the Dynamic Link server Premiere Pro and After Effects share
+    /// footage through, which can outlive both.
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames =
-        ["Adobe Premiere Pro", "AfterFX", "Adobe Audition", "Adobe Media Encoder", "dynamiclinkmanager"];
+        ["Adobe Premiere Pro", "AfterFX", "aerender", "Adobe Audition", "Adobe Media Encoder", "dynamiclinkmanager"];
 
     private const string CommonReason =
         "Adobe's shared folder, which also holds your LUTs, your motion graphics templates and Team "
@@ -119,14 +121,25 @@ public sealed record AdobeMediaCacheLayout(
             Setting(key, DatabaseValue, DatabaseFolder, "media cache database");
         }
 
+        // A setting can name a folder inside another cache folder, such as the old default one. Emptying
+        // the outer folder takes the inner one with it, so the inner one is left out: declared as well,
+        // it would be asserted to survive a run that is bound to remove it.
+        var cacheFolders = folders.SelectMany(folder => folder.Value.Select(name => Path.Combine(folder.Key, name))).ToList();
+
+        bool InsideAnother(string path) =>
+            cacheFolders.Any(other => !other.Equals(path, StringComparison.OrdinalIgnoreCase) && LongPath.Contains(other, path));
+
         return new AdobeMediaCacheLayout(
             [
-                .. folders.Select(folder => new DeclaredRoot(
-                    folder.Key,
-                    folder.Key.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonReason : ChosenReason,
-                    RequiresElevation: false,
-                    [.. folder.Value.Select(name => new DeclaredLocation(name, ReasonFor(name), DeclaredLocationKind.DirectoryContents))],
-                    folder.Key.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonSurvivors : [])),
+                .. folders
+                    .Select(folder => (folder.Key, Names: folder.Value.Where(name => !InsideAnother(Path.Combine(folder.Key, name))).ToList()))
+                    .Where(folder => folder.Names.Count > 0)
+                    .Select(folder => new DeclaredRoot(
+                        folder.Key,
+                        folder.Key.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonReason : ChosenReason,
+                        RequiresElevation: false,
+                        [.. folder.Names.Select(name => new DeclaredLocation(name, ReasonFor(name), DeclaredLocationKind.DirectoryContents))],
+                        folder.Key.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonSurvivors : [])),
             ],
             notes,
             withheld);

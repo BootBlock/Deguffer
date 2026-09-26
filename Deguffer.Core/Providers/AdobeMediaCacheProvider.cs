@@ -8,7 +8,7 @@ namespace Deguffer.Core.Providers;
 /// The media cache Premiere Pro, After Effects, Audition and Media Encoder share: the audio they
 /// converted from each clip they imported (<c>.cfa</c>), the waveforms they drew (<c>.pek</c>), what
 /// they read from each file, and the database that indexes them. Adobe keeps all of it until the user
-/// deletes it, and a community report puts one machine's at 52.5 GB.
+/// deletes it.
 ///
 /// <para><b>Tier 2, not the Tier 1 the files' nature suggests.</b> Every file is derived from footage
 /// still on disk, and Adobe re-creates each as the footage is next used. The refill is converting and
@@ -116,12 +116,22 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// §5.2 as §7.1 reads it. Adobe's shared folder recognises only its cache folders, and while an
-    /// Adobe application runs, none, and nothing inside any cache folder may go either.
+    /// Adobe application runs, none, and nothing inside any cache folder may go either. Every other
+    /// path the plan names as protected is refused outright: the folder a setting names, which is the
+    /// user's own, the user's data beside the cache, and a cache folder that turned out to be a link.
+    ///
+    /// <para><b>A folder a setting names is refused, and what the user keeps in it is not.</b> The
+    /// setting can name a whole working folder or a drive, and the plan protects only that folder
+    /// itself, so refusing everything in it would take the user's own footage away from Explore for
+    /// one setting.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var common = AdobeMediaCacheLayout.DefaultFolder(Environment);
         var running = AdobeIsRunning();
+        var scan = Scan(ct);
+        var targets = scan.Targets.Select(target => target.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var chosen = Layout.Roots.Select(root => root.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var recognised = Layout.Roots
             .Where(root => root.Path.Equals(common, StringComparison.OrdinalIgnoreCase))
             .SelectMany(root => root.Locations)
@@ -136,6 +146,12 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             .. CacheFolders()
                 .Where(_ => running)
                 .Select(folder => new ToolRoot(folder, HeldReason, static _ => false)),
+            .. scan.Protected
+                .Where(survivor => !targets.Contains(survivor.Path) && !survivor.Path.Equals(common, StringComparison.OrdinalIgnoreCase))
+                .Select(survivor => new ToolRoot(
+                    survivor.Path,
+                    survivor.Reason,
+                    chosen.Contains(survivor.Path) ? static _ => true : static _ => false)),
         ]);
     }
 

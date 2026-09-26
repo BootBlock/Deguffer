@@ -2925,7 +2925,7 @@ acknowledgement.
 | --- | --- |
 | **Location** | `Media Cache Files`, `Peak Files` and `Media Cache` in `%APPDATA%\Adobe\Common`, and `Media Cache Files` and `Media Cache` in each folder Adobe's settings name |
 | **Method** | Delete what is inside each of those folders, and nothing beside them |
-| **Typical size** | Not measured here: Adobe was not installed on the machine this was written on. Adobe keeps the cache until you delete it, and community reports of tens of gigabytes are common |
+| **Typical size** | Not measured here: Adobe was not installed on the machine this was written on. Adobe keeps the cache until you delete it, so it grows with every clip you import |
 
 ### What it is
 
@@ -2973,8 +2973,8 @@ does not claim to be clear.
 
 **Nothing is offered while an Adobe application is running.** Adobe says to close the application
 before you delete its cache, and the database is open while it runs. While Premiere Pro, After
-Effects, Audition, Media Encoder or the Dynamic Link server that Premiere Pro and After Effects share
-is running, every cache folder is left alone and named, and Explore will not remove anything in it.
+Effects or its command-line renderer, Audition, Media Encoder, or the Dynamic Link server that
+Premiere Pro and After Effects share is running, every cache folder is left alone and named, and Explore will not remove anything in it.
 The same question is asked again before each folder is emptied.
 
 ### What is protected
@@ -2989,6 +2989,10 @@ Explore**:
 
 Anything else in `%APPDATA%\Adobe\Common` is refused in Explore in the same way, whether or not
 Deguffer knows what it is. What else Adobe keeps there has not been established.
+
+**A folder your settings name is refused in Explore, and what you keep in it is not.** A setting can
+name a whole working folder or a drive, so Explore refuses only that folder itself, and leaves your
+own folders inside it to you.
 
 **Never your auto-save folders.** Premiere Pro's `Adobe Premiere Pro Auto-Save` folder in your
 Documents holds copies of your projects for crash recovery. It is not a cache, and this row does not

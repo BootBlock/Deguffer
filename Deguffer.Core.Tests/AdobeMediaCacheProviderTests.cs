@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
@@ -302,6 +303,7 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
     [Theory]
     [InlineData("Adobe Premiere Pro")]
     [InlineData("AfterFX")]
+    [InlineData("aerender")]
     [InlineData("Adobe Audition")]
     [InlineData("Adobe Media Encoder")]
     [InlineData("dynamiclinkmanager")]
@@ -315,7 +317,12 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Files, StringComparison.OrdinalIgnoreCase));
+        // Each cache folder is protected whatever runs, because only its contents are ever removed, so
+        // the reason is what shows it was held rather than merely kept standing.
+        Assert.All([Files, Peaks, Database], folder => Assert.Contains(
+            "is running",
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase)).Reason,
+            StringComparison.Ordinal));
 
         var roots = await provider.DiscoverToolRootsAsync();
 
@@ -386,6 +393,74 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
             r => r.Path.Equals(Common, StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(recognised, root.Recognises(child));
+    }
+
+    /// <summary>
+    /// §7.1, through the policy Explore asks. Everything the plan names as protected is refused: Adobe's
+    /// shared folder, the user's data in it, and the folder a setting names. What the user keeps in that
+    /// folder is theirs to remove, and so is each cache folder, which is all the plan would take.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesWhatThePlanProtectsAndNothingOfTheUsersInTheFolderASettingNames()
+    {
+        CreateLayout();
+        var chosen = Path.Combine(_temp.Path, "work");
+        var movedCache = Path.Combine(chosen, AdobeMediaCacheLayout.FilesFolder);
+        Write(Path.Combine(movedCache, "a.cfa"));
+        Write(Path.Combine(chosen, "Footage", "A001_C002.mov"));
+        _environment.WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, chosen);
+
+        var policy = new ExploreActionPolicy(
+            [], [], new FakeVolumeInventory(), probedRoots: await CreateProvider().DiscoverToolRootsAsync());
+
+        Assert.False(policy.MayRemove(Common).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(Common, "LUTs")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(Common, "LUTs", "Input")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(Common, "Unrecognised")).IsAllowed);
+        Assert.False(policy.MayRemove(chosen).IsAllowed);
+        Assert.True(policy.MayRemove(Files).IsAllowed);
+        Assert.True(policy.MayRemove(movedCache).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(chosen, "Footage")).IsAllowed);
+    }
+
+    /// <summary>A cache folder the plan declined because it is a link is refused in Explore too.</summary>
+    [Fact]
+    public async Task ExploreRefusesACacheFolderThatIsALink()
+    {
+        Directory.CreateDirectory(Common);
+        Directory.CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
+        SymbolicLink.ToDirectory(Files, Path.Combine(_temp.Path, "elsewhere"));
+
+        var policy = new ExploreActionPolicy(
+            [], [], new FakeVolumeInventory(), probedRoots: await CreateProvider().DiscoverToolRootsAsync());
+
+        Assert.False(policy.MayRemove(Files).IsAllowed);
+    }
+
+    /// <summary>
+    /// A setting that names a folder inside another cache folder, such as the old default one, adds
+    /// nothing: emptying the outer folder takes the inner one, and declaring it too would assert that it
+    /// survived a run bound to remove it (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task ASettingInsideAnotherCacheFolderIsNotDeclaredTwice()
+    {
+        var (cached, kept) = CreateLayout();
+        _environment.WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, Files);
+        var nested = Write(Path.Combine(Files, AdobeMediaCacheLayout.FilesFolder, "nested.cfa"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([Files, Peaks, Database], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(File.Exists(nested));
+        Assert.All(cached, path => Assert.False(File.Exists(path)));
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the media cache."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>G4: presence, the plan and Explore read Adobe's settings once between them.</summary>
