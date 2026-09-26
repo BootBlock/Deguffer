@@ -86,13 +86,19 @@ public sealed class ExploreViewModelTests : IDisposable
 
         var page = _explore.Page();
         var tree = Drive(ExploreFixture.Folder("kept"), ExploreFixture.Folder("loose"));
+        var raised = new List<string?>();
 
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
+        page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         page.Selection.Select([Child(tree, "kept")]);
 
         Assert.Equal("Kept for a reason.", page.Selection.Note);
         Assert.True(page.ShowsNotes);
+
+        // The notes are the selection's as much as the page's, and the card follows the page.
+        Assert.Contains(nameof(ExploreViewModel.ShowsNotes), raised);
+        Assert.Contains(nameof(ExploreViewModel.ShowsNotesButton), raised);
     });
 
     /// <summary>
@@ -221,6 +227,32 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
         Assert.False(page.CanElevate);
         Assert.Equal(ElevationOffer.Label(hasScanned: true), page.ElevateLabel);
+    });
+
+    /// <summary>
+    /// A page restored to a folder before any drive was listed has the box filled in by the first
+    /// reading. That is not a move: the scan was never pointed at a drive, so the folder and the
+    /// offer its scan made both stay.
+    /// </summary>
+    [Fact]
+    public void AReadingThatGivesTheBoxItsFirstDriveKeepsTheFolderAndTheOffer() => UiThread.Run(async () =>
+    {
+        var page = _explore.Page();
+
+        Assert.True(page.PointAt(null, @"C:\Users\testuser"));
+        Assert.Null(page.SelectedDrive);
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(new ExploreTreeBuilder(@"C:\Users\testuser").Build(ExploreChildOrder.BySize)));
+
+        Assert.False(page.CanElevate);
+
+        _explore.Volumes.With(@"C:\");
+        _explore.Time.Advance(DriveList.FreshFor);
+        page.RefreshDrives();
+
+        Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
+        Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
+        Assert.False(page.CanElevate);
     });
 
     /// <summary>§7.1: a total that is a lower bound says so, on the status line as well as on the row.</summary>
