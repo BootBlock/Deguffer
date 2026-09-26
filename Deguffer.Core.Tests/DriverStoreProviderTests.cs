@@ -384,6 +384,50 @@ public sealed class DriverStoreProviderTests : IDisposable
         Assert.Contains(result.Steps, s => !s.Succeeded && s.Message!.Contains("different driver package", StringComparison.Ordinal));
     }
 
+    /// <summary>A package removed since the preview leaves its name unused, and nothing is asked of pnputil.</summary>
+    [Fact]
+    public async Task DoesNotRunPnpUtilOnANameNoPackageHoldsAnyMore()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var store = new FakeDriverStore(older, Staged("oem2.inf", "2024-01-01"));
+        var runner = PnpUtil([older]);
+        var provider = CreateProvider(store, FakeDiskCleanupHandlers.NoneRegistered(), runner);
+
+        var plan = await provider.PlanAsync();
+        store.Rename("oem1.inf", null);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(runner.Invocations, i => i.Arguments.Contains("/delete-driver", StringComparison.Ordinal));
+        Assert.Contains(result.Steps, s => !s.Succeeded && s.Message!.Contains("no longer has", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// On the pnputil route Deguffer names exactly what goes, so a package it could not match to its
+    /// folder changes nothing: every folder the listing does not account for is still checked afterwards.
+    /// </summary>
+    [Fact]
+    public async Task PnpUtilTakingAnUnlistedFolderFailsVerificationEvenWhereAPackageWasUnmatched()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var unmatched = Staged("oem3.inf", "2020-01-01", original: "bt.inf");
+        var windows = PartOfWindows();
+        var provider = CreateProvider(
+            new FakeDriverStore(older, newest, unmatched with { Folder = null }),
+            FakeDiskCleanupHandlers.NoneRegistered(),
+            PnpUtil([older], windows));
+
+        var plan = await provider.PlanAsync();
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(windows, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(unmatched.Folder, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(windows, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>§5.6 on the pnputil route: Deguffer names exactly what goes, so any other package taken fails the run.</summary>
     [Fact]
     public async Task PnpUtilTakingAPackageItWasNotNamedFailsVerification()

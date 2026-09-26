@@ -141,7 +141,17 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>(Considered(listing, drivers));
-        var kept = Protect([.. KeptPaths(drivers.Newest, listing), .. PartOfWindows(listing, notes)]);
+        var unlisted = Unlisted(listing, notes);
+
+        // A third-party package that did not read, or whose folder Windows would not name, is also a
+        // folder the listing does not account for, so an unlisted folder is Windows' own only where
+        // every listed package was matched to its folder.
+        var matched = listing.Unread == 0 && listing.Packages.All(p => p.Folder is not null);
+        var kept = Protect(
+        [
+            .. KeptPaths(drivers.Newest, listing),
+            .. matched ? unlisted.Select(folder => (folder, "A driver that is part of Windows, which pnputil does not list as third-party.")) : [],
+        ]);
 
         if (drivers.Superseded.Count == 0)
         {
@@ -163,8 +173,9 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
         return survey.Answer switch
         {
-            DiskCleanupAnswer.Unavailable => await ByPackageAsync(drivers, listing, survey, notes, kept, ct).ConfigureAwait(false),
-            _ when survey.MayOffer => await ByHandlerAsync(folders, volume, keep, notes, kept, ct).ConfigureAwait(false),
+            DiskCleanupAnswer.Unavailable => await ByPackageAsync(
+                drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, NotAsked))])], ct).ConfigureAwait(false),
+            _ when survey.MayOffer => await ByHandlerAsync(folders, volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
             _ => Plan(
                 [],
                 [.. notes, new PlanNote(PlanNoteSeverity.Information, survey.WhyLeftAlone("Device driver packages", LongPath.Display(_repository))!)],
@@ -186,10 +197,16 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         IReadOnlyList<string> folders,
         string volume,
         MinimumAge keep,
+        bool matched,
         List<PlanNote> notes,
         IReadOnlyList<ProtectedPath> kept,
         CancellationToken ct)
     {
+        if (!matched)
+        {
+            notes.Add(Unmatched);
+        }
+
         var target = new DiskCleanupTarget(
             folders[0],
             "Older versions of drivers that have a newer version beside them, removed by Windows' own "
@@ -271,7 +288,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .Select(p => p.Folder)
             .OfType<string>()
             .Where(folder => accounted.Add(folder) && SupersededDrivers.IsChildOf(folder, _repository))
-            .Select(folder => (folder, "A driver package pnputil was not asked to remove."));
+            .Select(folder => (folder, NotAsked));
 
         return Plan(steps, notes, [.. kept, .. Protect([.. others])]) with { Fallback = measured.Fallback };
     }
@@ -308,26 +325,29 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
     }
 
-    /// <summary>
-    /// Every folder in the store that <c>pnputil</c> does not list: the drivers that are part of Windows,
-    /// which neither route removes, so the run checks each is still there. Windows' own cleanup decides
-    /// among the third-party packages, which is why those not offered are asserted only where the plan
-    /// names exactly what goes.
-    /// </summary>
-    private IReadOnlyList<(string Path, string Reason)> PartOfWindows(DriverStoreListing listing, List<PlanNote> notes)
-    {
-        // A third-party package that did not read, or whose folder Windows would not name, is also a
-        // folder the listing does not account for, so no unlisted folder can then be called Windows' own.
-        if (listing.Unread > 0 || listing.Packages.Any(p => p.Folder is null))
-        {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                "Deguffer could not match every driver package Windows listed to its folder, so it cannot "
-                + "tell which folders in the store hold drivers that are part of Windows, and the clean "
-                + "cannot check afterwards that they are still there."));
-            return [];
-        }
+    /// <summary>Why a folder stays where the plan names exactly what <c>pnputil</c> removes.</summary>
+    private const string NotAsked = "A driver package pnputil was not asked to remove.";
 
+    /// <summary>
+    /// Said where Windows' cleanup does the work and a listed package could not be matched to its
+    /// folder: that cleanup may rightly take the unmatched package, so no unlisted folder can be
+    /// asserted afterwards. Where <c>pnputil</c> does the work, Deguffer names exactly what goes and
+    /// every unlisted folder is asserted regardless.
+    /// </summary>
+    private static readonly PlanNote Unmatched = new(
+        PlanNoteSeverity.Information,
+        "Deguffer could not match every driver package Windows listed to its folder, so it cannot tell "
+        + "which folders in the store hold drivers that are part of Windows, and the clean cannot check "
+        + "afterwards that they are still there.");
+
+    /// <summary>
+    /// Every folder in the store that no listed package was matched to: where every package was
+    /// matched, the drivers that are part of Windows, which neither route removes. Windows' own cleanup
+    /// decides among the third-party packages, which is why those not offered are asserted only where
+    /// the plan names exactly what goes.
+    /// </summary>
+    private IReadOnlyList<string> Unlisted(DriverStoreListing listing, List<PlanNote> notes)
+    {
         var listed = new HashSet<string>(
             listing.Packages.Select(p => p.Folder).OfType<string>().Select(Path.TrimEndingDirectorySeparator),
             StringComparer.OrdinalIgnoreCase);
@@ -346,8 +366,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         [
             .. children.Directories
             .Select(child => LongPath.Display(child.FullName))
-            .Where(child => !listed.Contains(child))
-            .Select(child => (child, "A driver that is part of Windows, which pnputil does not list as third-party.")),
+            .Where(child => !listed.Contains(child)),
         ];
     }
 
