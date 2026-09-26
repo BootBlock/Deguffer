@@ -167,7 +167,7 @@ public class FindingViewModelTests
             Rows.Found(Cache, Rows.Folder("a", 10), Rows.Folder("b", 20, requiresElevation: true), Rows.Folder("c", 40, key: "c")),
             keeps: Keeping("c"));
 
-        Assert.Equal(10, row.SelectableSize.Reclaimable);
+        Assert.Equal([10L], row.SelectableSteps.Select(step => step.Step.Reclaim.Reclaimable));
         Assert.Equal(10, row.SelectedSize.Reclaimable);
     }
 
