@@ -193,6 +193,7 @@ public sealed class ProviderInvalidationTests : IDisposable
             ? new RetroArchDiscovery(_environment, system: new FakeSystemDirectories(_temp.Path))
         : parameter == typeof(ClaudeCodeSessionRegistry)
             ? new ClaudeCodeSessionRegistry(_environment, FakeProcessInspector.NothingRunning)
+        : parameter == typeof(ClaudeCodeProjectsDiscovery) ? new ClaudeCodeProjectsDiscovery(_environment)
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)

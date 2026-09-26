@@ -14,7 +14,12 @@ namespace Deguffer.Core.Providers;
 /// never "long ago": <see cref="ClaudeCodeSessionList.Predates"/> reads it as a start that could be
 /// the earliest of all.
 /// </param>
-public sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? StartedAt);
+/// <param name="Project">
+/// The folder the process is working in, as Claude Code last recorded it, or null where the entry
+/// records none. Null is never "no project": <see cref="ClaudeCodeOccupancy"/> reads it as a process
+/// that could be in any of them.
+/// </param>
+public sealed record ClaudeCodeLiveSession(string SessionId, DateTimeOffset? StartedAt, string? Project = null);
 
 /// <summary>What Claude Code's list of running sessions said, and whether it could be read in full.</summary>
 /// <param name="Live">Every session still running, or that nothing could establish had stopped.</param>
@@ -55,8 +60,10 @@ public sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> 
 /// <see cref="ProcessState.NotRunning"/> takes a session off the list. An entry this machine cannot
 /// ask about stays on it.</para>
 ///
-/// <para><b>Only the process and the session are read.</b> An entry also records the project's folder
-/// and the name the user gave the session, and neither is taken.</para>
+/// <para><b>Only the process, the session and the project's folder are read.</b> An entry also
+/// records the name the user gave the session, and that is not taken. The folder is read so that a
+/// conversation is never offered from a project a running process is in. See
+/// <see cref="ClaudeCodeOccupancy"/>.</para>
 ///
 /// <para><b>Every kind of process registers.</b> Claude Code's own reader of the list knows four kinds
 /// of entry — an interactive session, a background one, a daemon and a daemon's worker — so the list
@@ -191,6 +198,22 @@ public sealed partial class ClaudeCodeSessionRegistry
     {
         running = null;
 
+        try
+        {
+            return TryReadEntry(path, processId, out running);
+        }
+        catch (InvalidOperationException)
+        {
+            // A field holding an unpaired surrogate, which parses and cannot be read as a string. Not an
+            // entry this can read, and an entry that cannot be read may be the one session still running.
+            return false;
+        }
+    }
+
+    private bool TryReadEntry(string path, int processId, out ClaudeCodeLiveSession? running)
+    {
+        running = null;
+
         using var document = BoundedJsonFile.Read(path, MaximumEntryBytes);
 
         if (document is null
@@ -213,12 +236,15 @@ public sealed partial class ClaudeCodeSessionRegistry
                 BoundedJsonFile.StringProperty(document.RootElement, "pidDomain"), _environment))
         {
             // Another system's process, which nothing here can ask about. Listed as running with no
-            // known start, which is the answer that protects everything it might have written.
+            // known start and no known project, which is the answer that protects everything it might
+            // have written: its folder is a path in that system, which a folder recorded on this one
+            // need not match even where both name the same project.
             running = new ClaudeCodeLiveSession(sessionId, StartedAt: null);
             return true;
         }
 
         var recordedStart = ClaudeCodeProcessRecord.RecordedStart(document.RootElement);
+        var project = BoundedJsonFile.StringProperty(document.RootElement, "cwd") is { Length: > 0 } cwd ? cwd : null;
         var liveness = _inspector.Probe(processId);
 
         running = ClaudeCodeProcessRecord.StateOf(liveness, recordedStart) switch
@@ -227,12 +253,12 @@ public sealed partial class ClaudeCodeSessionRegistry
 
             // The recorded start matched Windows' own to the tick where there was one. Where there was
             // not, Windows' answer is the only one there is, and it may be null.
-            ProcessState.Running => new ClaudeCodeLiveSession(sessionId, recordedStart ?? liveness.StartedAt),
+            ProcessState.Running => new ClaudeCodeLiveSession(sessionId, recordedStart ?? liveness.StartedAt, project),
 
             // No start at all, not the recorded one. Undetermined includes a process created before
             // the record says, and a recorded start later than the real one would let a file the
             // session wrote read as older than the session.
-            _ => new ClaudeCodeLiveSession(sessionId, StartedAt: null),
+            _ => new ClaudeCodeLiveSession(sessionId, StartedAt: null, project),
         };
 
         return true;

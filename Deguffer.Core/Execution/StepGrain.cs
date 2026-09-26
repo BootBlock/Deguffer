@@ -27,7 +27,8 @@ public enum StepGrain
     /// <summary>
     /// Each step is a thing the user recognises on its own: a project's build output, a browser build,
     /// an application's superseded version. Each is listed and chosen separately, including when there
-    /// is only one.
+    /// is only one. An item removed in more than one step, such as a Claude Code conversation and its
+    /// session folder, lists each step, and the steps share one <see cref="ItemIdentity"/>.
     /// </summary>
     Items,
 }

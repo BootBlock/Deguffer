@@ -40,6 +40,7 @@ public class StepGrainTests
             "azure-functions-tools",
             "capture-one-cache",
             "cargo-target",
+            "claude-code-conversations",
             "claude-code-file-history",
             "dotnet-obj",
             "graphics-driver-installers",

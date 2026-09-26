@@ -24,6 +24,15 @@ public sealed class ClaudeCodeFixture
     public const string ProjectFolder = "C--Users-testuser-src-example";
     public const string OtherProjectFolder = "C--Users-testuser-src-another";
 
+    /// <summary>The folder a session in <see cref="ProjectFolder"/> records it was started in.</summary>
+    public const string ProjectPath = @"C:\Users\testuser\src\example";
+
+    /// <summary>The folder a session in <see cref="OtherProjectFolder"/> records it was started in.</summary>
+    public const string OtherProjectPath = @"C:\Users\testuser\src\another";
+
+    /// <summary>The prompt every invented conversation ends on. No title or sentence may ever contain it.</summary>
+    public const string LastPrompt = "an invented last prompt that must never be shown";
+
     /// <summary>An editor's connection token. No sentence Deguffer writes may ever contain it.</summary>
     public const string AuthToken = "00000000-0000-4000-8000-00000000abcd";
 
@@ -87,6 +96,121 @@ public sealed class ClaudeCodeFixture
         CreateFile(Path.Combine(Project(folder), session + ".jsonl"), 128);
 
     /// <summary>
+    /// A conversation in the shape Claude Code writes one, with every message invented: a queued prompt,
+    /// the first user line recording <paramref name="project"/>, a generated title early on,
+    /// <paramref name="padding"/> bytes of assistant lines, any later titles, and the last prompt.
+    /// </summary>
+    /// <param name="project">The folder the session records, or null for a conversation that records none.</param>
+    /// <param name="title">The generated title near the head, or null for none.</param>
+    /// <param name="lateTitle">A generated title near the end, superseding <paramref name="title"/>.</param>
+    /// <param name="customTitle">A title the user gave the session, near the end.</param>
+    /// <param name="age">How long ago it was last written, or null for now.</param>
+    public string Conversation(
+        string session,
+        string folder = ProjectFolder,
+        string? project = ProjectPath,
+        string? title = "Tidy the build scripts",
+        string? lateTitle = null,
+        string? customTitle = null,
+        DateTimeOffset? started = null,
+        TimeSpan? age = null,
+        int padding = 0)
+    {
+        var start = started ?? DateTimeOffset.UtcNow - (age ?? TimeSpan.Zero) - TimeSpan.FromHours(2);
+        var stamp = start.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+        var lines = new List<object>
+        {
+            new Dictionary<string, object> { ["type"] = "queue-operation", ["operation"] = "enqueue", ["timestamp"] = stamp, ["sessionId"] = session },
+        };
+
+        var user = new Dictionary<string, object>
+        {
+            ["type"] = "user",
+            ["sessionId"] = session,
+            ["timestamp"] = stamp,
+            ["isSidechain"] = false,
+            ["message"] = new Dictionary<string, object> { ["role"] = "user", ["content"] = "an invented first prompt" },
+        };
+
+        if (project is not null)
+        {
+            user["cwd"] = project;
+        }
+
+        lines.Add(user);
+
+        if (title is not null)
+        {
+            lines.Add(new Dictionary<string, object> { ["type"] = "ai-title", ["aiTitle"] = title, ["sessionId"] = session });
+        }
+
+        for (var written = 0; written < padding; written += 1024)
+        {
+            lines.Add(new Dictionary<string, object>
+            {
+                ["type"] = "assistant",
+                ["sessionId"] = session,
+                ["message"] = new Dictionary<string, object> { ["role"] = "assistant", ["content"] = new string('x', 1000) },
+            });
+        }
+
+        if (lateTitle is not null)
+        {
+            lines.Add(new Dictionary<string, object> { ["type"] = "ai-title", ["aiTitle"] = lateTitle, ["sessionId"] = session });
+        }
+
+        if (customTitle is not null)
+        {
+            lines.Add(new Dictionary<string, object> { ["type"] = "custom-title", ["customTitle"] = customTitle, ["sessionId"] = session });
+        }
+
+        lines.Add(new Dictionary<string, object> { ["type"] = "last-prompt", ["lastPrompt"] = LastPrompt, ["sessionId"] = session });
+
+        var path = WriteText(
+            Path.Combine(Project(folder), session + ".jsonl"),
+            string.Concat(lines.Select(line => JsonSerializer.Serialize(line) + "\n")));
+
+        if (age is { } by)
+        {
+            TempDirectory.Age(path, by);
+        }
+
+        return path;
+    }
+
+    /// <summary>
+    /// A session's folder beside its conversation: one subagent's conversation and one spilled output,
+    /// dated by the folders, which is how a provider has to date it.
+    /// </summary>
+    public string SessionFolder(string session, string folder = ProjectFolder, TimeSpan? age = null)
+    {
+        var sidecar = Path.Combine(Project(folder), session);
+        var subagents = Path.Combine(sidecar, "subagents");
+        var output = Path.Combine(sidecar, "tool-results");
+
+        foreach (var file in new[]
+                 {
+                     CreateFile(Path.Combine(subagents, "agent-0123456789abcdef.jsonl"), 512),
+                     CreateFile(Path.Combine(output, "output.txt"), 256),
+                 })
+        {
+            if (age is { } by)
+            {
+                TempDirectory.Age(file, by);
+            }
+        }
+
+        AgeFolder(subagents, age);
+        AgeFolder(output, age);
+        AgeFolder(sidecar, age);
+
+        return sidecar;
+    }
+
+    /// <summary>Claude Code's own settings file, written as given.</summary>
+    public string Settings(string json) => WriteText(Path.Combine(Home, "settings.json"), json);
+
+    /// <summary>
     /// Tool output spilled beside a session's transcript. Dated by the folders, never by the file inside,
     /// which is how a provider has to date it too.
     /// </summary>
@@ -119,15 +243,25 @@ public sealed class ClaudeCodeFixture
     }
 
     /// <summary>An entry in Claude Code's list of running sessions.</summary>
-    public string Registered(int processId, string session, DateTimeOffset? started = null, string? domain = "win32:testmachine")
+    /// <param name="project">The folder the process was started in, or null for an entry that records none.</param>
+    public string Registered(
+        int processId,
+        string session,
+        DateTimeOffset? started = null,
+        string? domain = "win32:testmachine",
+        string? project = ProjectPath)
     {
         var fields = new Dictionary<string, object>
         {
             ["pid"] = processId,
             ["sessionId"] = session,
-            ["cwd"] = @"C:\Users\testuser\src\example",
             ["kind"] = "interactive",
         };
+
+        if (project is not null)
+        {
+            fields["cwd"] = project;
+        }
 
         if (started is { } start)
         {

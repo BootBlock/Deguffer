@@ -83,6 +83,31 @@ public static partial class ClaudeCodeHome
             : null;
     }
 
+    /// <summary>
+    /// The first place on the way down from the folder to <paramref name="folder"/> inside it that stops a
+    /// walk, <paramref name="folder"/> included, or null where nothing does. A provider's plan, its survey
+    /// and its declaration all ask this, so none of them can read a refusal as absence while another
+    /// names it.
+    ///
+    /// <para>The folder first, then everything below it, and all of it before <paramref name="folder"/>
+    /// is probed for. Probing for that resolves through the folder, so a link there that Windows declines
+    /// to follow would leave <paramref name="folder"/> reading as unreachable and the link — which
+    /// Deguffer can see perfectly well — never named.</para>
+    /// </summary>
+    internal static DerivedPathObstacle? FirstObstacle(string home, string folder)
+    {
+        switch (LongPath.ProbeDirectory(home, out var isLink))
+        {
+            case PathPresence.Refused:
+                return new DerivedPathObstacle(home, IsLink: false);
+
+            case PathPresence.Present when isLink is true:
+                return new DerivedPathObstacle(home, IsLink: true);
+        }
+
+        return DerivedPath.FirstObstacleBetween(home, folder);
+    }
+
     /// <summary>Whether <paramref name="name"/> is shaped like one of Claude Code's session ids.</summary>
     public static bool IsSessionId(string name) => SessionIdPattern().IsMatch(name);
 }

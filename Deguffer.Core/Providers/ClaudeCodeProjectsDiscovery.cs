@@ -2,25 +2,42 @@ using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
-/// <summary>A folder named for a session, beside that session's transcript: the output Claude Code spilled out of it.</summary>
+/// <summary>
+/// A folder named for a session, beside that session's transcript: the output Claude Code spilled out of
+/// it, and its subagents' conversations.
+/// </summary>
 /// <param name="Path">The folder, in display form.</param>
 /// <param name="SessionId">The session it is named for.</param>
 /// <param name="IsLink">
 /// Whether it is a junction or a symbolic link. Named rather than dropped, and never followed.
 /// </param>
-internal sealed record ClaudeCodeSidecar(string Path, string SessionId, bool IsLink);
+public sealed record ClaudeCodeSidecar(string Path, string SessionId, bool IsLink);
+
+/// <summary>One session's conversation: a <c>&lt;session&gt;.jsonl</c> file in a project folder.</summary>
+/// <param name="Path">The file, in display form.</param>
+/// <param name="SessionId">The session it is named for.</param>
+/// <param name="LastWrittenUtc">
+/// When Claude Code last appended to it, which is when the session was last used. Claude Code's own
+/// clean-up ages a conversation by the same timestamp.
+/// </param>
+/// <param name="IsLink">
+/// Whether it is a symbolic link. Named rather than dropped, and never read through.
+/// </param>
+public sealed record ClaudeCodeTranscript(string Path, string SessionId, DateTime LastWrittenUtc, bool IsLink);
 
 /// <summary>One project folder under <see cref="ClaudeCodeHome.Projects"/>, and what it holds.</summary>
 /// <param name="Path">The folder, in display form. Never a target: the project's memory is inside it.</param>
+/// <param name="Transcripts">Every session's conversation in the folder.</param>
 /// <param name="Sidecars">
 /// Every child folder named for a session, whether or not that session still has a transcript.
 /// </param>
 /// <param name="Others">
-/// Everything else in the folder except the transcripts. The project's <c>memory</c> is among these,
-/// and it is the reason a project folder is never a target.
+/// Everything else in the folder. The project's <c>memory</c> is among these, and it is the reason a
+/// project folder is never a target.
 /// </param>
-internal sealed record ClaudeCodeProjectFolder(
+public sealed record ClaudeCodeProjectFolder(
     string Path,
+    IReadOnlyList<ClaudeCodeTranscript> Transcripts,
     IReadOnlyList<ClaudeCodeSidecar> Sidecars,
     IReadOnlyList<FileSystemInfo> Others);
 
@@ -35,7 +52,7 @@ internal sealed record ClaudeCodeProjectFolder(
 /// False where anything above could not be established. A session this walk found no transcript for
 /// may then have one in a folder it did not see, so nothing may be called an orphan.
 /// </param>
-internal sealed record ClaudeCodeProjects(
+public sealed record ClaudeCodeProjects(
     IReadOnlyList<ClaudeCodeProjectFolder> Folders,
     IReadOnlySet<string> TranscriptIds,
     IReadOnlyList<string> Unreadable,
@@ -52,7 +69,11 @@ internal sealed record ClaudeCodeProjects(
 
 /// <summary>
 /// One walk over Claude Code's project folders, for everything that has to know which sessions still
-/// have a transcript.
+/// have a transcript, and for the conversations themselves.
+///
+/// <para><b>Shared by every provider over Claude Code's folder</b>, so that one planning pass lists it
+/// once. The leftovers row asks which sessions have a conversation, and the conversations row offers
+/// them.</para>
 ///
 /// <para><b>Only one level of each project folder is listed.</b> <c>projects</c> held 15,847 files on
 /// the measured machine, nearly all of them inside the session folders, and which sessions have a
@@ -64,7 +85,7 @@ internal sealed record ClaudeCodeProjects(
 /// their own session's transcript. A set difference taken one project folder at a time would have
 /// called their output an orphan.</para>
 /// </summary>
-internal sealed class ClaudeCodeProjectsDiscovery
+public sealed class ClaudeCodeProjectsDiscovery
 {
     private const string TranscriptExtension = ".jsonl";
 
@@ -136,6 +157,7 @@ internal sealed class ClaudeCodeProjectsDiscovery
             ct.ThrowIfCancellationRequested();
 
             var path = LongPath.Display(directory.FullName);
+            var conversations = new List<ClaudeCodeTranscript>();
             var sidecars = new List<ClaudeCodeSidecar>();
             var others = new List<FileSystemInfo>();
 
@@ -146,6 +168,11 @@ internal sealed class ClaudeCodeProjectsDiscovery
                     if (TranscriptSession(entry) is { } session)
                     {
                         transcripts.Add(session);
+                        conversations.Add(new ClaudeCodeTranscript(
+                            LongPath.Display(entry.FullName),
+                            session,
+                            entry.LastWriteTimeUtc,
+                            entry.Attributes.HasFlag(FileAttributes.ReparsePoint)));
                     }
                     else if (entry is DirectoryInfo && ClaudeCodeHome.IsSessionId(entry.Name))
                     {
@@ -169,7 +196,7 @@ internal sealed class ClaudeCodeProjectsDiscovery
                 continue;
             }
 
-            folders.Add(new ClaudeCodeProjectFolder(path, sidecars, others));
+            folders.Add(new ClaudeCodeProjectFolder(path, conversations, sidecars, others));
         }
 
         var links = scan.Links.Select(link => LongPath.Display(link.FullName)).ToList();
