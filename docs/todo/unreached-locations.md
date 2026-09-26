@@ -4,7 +4,7 @@
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
-> servicing logs and completed upgrade scaffolding, §7's per-volume recycle bins, §8's Unreal Engine
+> servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins, §8's Unreal Engine
 > derived-data caches and DaVinci Resolve render cache, §10's release of OneDrive's local copies
 > and §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
 > **Open questions 1, 2 and 3 are answered** — see the foot of this document.
@@ -1304,6 +1304,15 @@ The Delivery Optimization cache under
 `C:\Windows\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization`
 holds update payloads kept for peer distribution. Regenerated as needed, and clearing it does not
 break Windows Update.
+
+**Outcome for Delivery Optimization:** shipped as `DeliveryOptimizationProvider`, at **Tier 1**
+rather than the Tier 2 proposed here: the content is kept for peers rather than for this machine, so
+clearing it costs at most a download that may never be needed. It deletes no path. The size is
+`Get-DeliveryOptimizationPerfSnap`'s `CacheSizeBytes`, which answers unelevated where the folder
+refuses a listing, and the eviction is `Delete-DeliveryOptimizationCache -Force`, never with
+`-IncludePinnedFiles`. Because nothing Deguffer can read holds that figure, a command step gained
+`IToolMeasurement`, so the executor asks the tool again after the run instead of measuring a folder.
+The search index below is unstarted.
 
 The search index is the more interesting one. **On Windows 11 it is `Windows.db`, not the
 `Windows.edb` every guide still names** — 1.94 GB measured, with a further 237 MB in

@@ -133,6 +133,7 @@ installed" cleanly on a machine without that toolchain.
 | Tool caches in temporary folders | Node's compile cache, and what Flutter, Dart's test runner, Firefox and Roslyn left there, each recognised by its own name and left alone while its tool may be using it |
 | Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
 | Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one Deguffer can see a running browser using |
+| Delivery Optimization cache | Windows' own command clears it, sized by Windows' own figure; never a file Windows was told to keep, and never Windows Update's own folder |
 
 **Tier 2 — regenerable, with cost.** Re-created by re-downloading or rebuilding.
 
