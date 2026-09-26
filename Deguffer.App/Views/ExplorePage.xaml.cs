@@ -182,7 +182,7 @@ public sealed partial class ExplorePage : Page
 
         ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
 
-        _appearance = new MapAppearanceViewModel(MapLook.From(preferences));
+        _appearance = new MapAppearanceViewModel(MapLook.From(preferences), App.Preferences);
         _appearance.Changed += (_, _) =>
         {
             ViewModel.SelectedScheme = _appearance.Look.SchemeFor(ViewModel.SelectedView);
