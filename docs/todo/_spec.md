@@ -838,11 +838,13 @@ picture puts it in front of them. So the rule is a type rather than a place, and
 - A step whose removal is not Deguffer's to steer is withheld while a store is inside its reach: a
   tool's own command (§5.1), File History's cleanup, and a Recycle Bin on either route, since a bin's
   deleted items and the records that restore them go together. Immediately before a command runs or a
-  bin is emptied, the disk is looked at again.
+  bin is emptied, the disk is looked at again. A folder Windows will not list there could hold a
+  store, so it withholds the step too: §5.3's skip is for a removal that leaves what it cannot see.
 - Every store a plan finds is protected by its path, so §5.6 fails a run that lost one, whether or not
   the store's own row ran.
 - Explore refuses a store by extension, together with Outlook's own folder under `%LOCALAPPDATA%` and
-  any folder named `Outlook Files`, and refuses to move a folder holding one to the Recycle Bin.
+  any folder named `Outlook Files`, and refuses to move a folder holding one, or one it cannot look
+  inside, to the Recycle Bin.
   Hovering a store says what it is and how Outlook itself makes it smaller.
 
 `docs/cache-locations.md` records the whole argument, and what would change the refusal.

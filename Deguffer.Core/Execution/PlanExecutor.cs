@@ -228,18 +228,15 @@ public sealed class PlanExecutor(
         }
 
         // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
-        // told to leave one file and a store can arrive between the preview and the clean. See
-        // MailStoreSearch for what the look costs and why it is paid here.
-        if (await MailStoreSearch.InsideAsync(step.MeasuredPaths, ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        // told to leave one file and a store can arrive between the preview and the clean. A folder
+        // Windows will not list could hold one. See WholeTreeLook for what the look costs and why it is
+        // paid here.
+        var look = await WholeTreeLook.TakeAsync(step.MeasuredPaths, MinimumAge.Off, ct).ConfigureAwait(false);
+
+        if (look.WhyNot("Not run", "The tool cannot be told to leave anything", MinimumAge.Off) is { } held)
         {
             return new StepOutcome(
-                step.Description,
-                Succeeded: false,
-                BytesReclaimed: 0,
-                Refusals.None,
-                $"Not run: an Outlook data file is inside what this command clears, at {MailStorePlan.Name(stores)}. "
-                + "The tool cannot be told to leave it, and Deguffer never removes one.",
-                MailStores: stores.Count);
+                step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, held, MailStores: look.Stores.Count);
         }
 
         // A tool that states its own figure is asked for it immediately before the command as well as
@@ -416,18 +413,14 @@ public sealed class PlanExecutor(
         }
 
         // §9, for the reason the guard is refused above: Windows empties the bin whole, and a store
-        // deleted into it since the preview would go with everything else. Looked for on the disk,
-        // because the plan was made before it arrived.
-        if (await MailStoreSearch.InsideAsync([step.Path], ct).ConfigureAwait(false) is { Count: > 0 } stores)
+        // deleted into it since the preview, or inside a folder Windows will not list, would go with
+        // everything else. Looked for on the disk, because the plan was made before it arrived.
+        var look = await WholeTreeLook.TakeAsync([step.Path], MinimumAge.Off, ct).ConfigureAwait(false);
+
+        if (look.WhyNot("Nothing was removed", "Windows empties a Recycle Bin whole", MinimumAge.Off) is { } held)
         {
             return new StepOutcome(
-                step.Description,
-                Succeeded: false,
-                BytesReclaimed: 0,
-                Refusals.None,
-                $"Nothing was removed: this Recycle Bin holds an Outlook data file, at {MailStorePlan.Name(stores)}. "
-                + "Windows empties a bin whole, and Deguffer never removes one.",
-                MailStores: stores.Count);
+                step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, held, MailStores: look.Stores.Count);
         }
 
         // The last honest moment to stop: the call itself cannot be cancelled once it starts, and
@@ -497,26 +490,23 @@ public sealed class PlanExecutor(
         // the guard would keep, or a folder that would not be listed, and the removal below would leave a
         // part of it standing. A directory that goes with its index is one of these by construction. See
         // DeleteDirectoryStep.IsAllOrNothing and DeleteDirectoryStep.IndexedBy.
-        if (step.GoesWholeOrNotAtAll
-            && (await WholeTreeLook.TakeAsync(step.Destroys, keep, ct).ConfigureAwait(false))
-                .WhyNot("Its parts only mean something together, so it goes whole or not at all", keep) is { } partial)
+        //
+        // §9 alone for an indivisible directory: the walk below would step over a store that arrived
+        // since the preview, or one inside a folder it cannot list, and take what belongs with it. The
+        // guard is not asked, because what it keeps can stay. See DeleteDirectoryStep.IsIndivisible.
+        if (step.GoesWholeOrNotAtAll || step.IsIndivisible)
         {
-            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, partial);
-        }
+            var (guard, how) = step.GoesWholeOrNotAtAll
+                ? (keep, "Its parts only mean something together, so it goes whole or not at all")
+                : (MinimumAge.Off, "What is inside it goes whole or not at all");
 
-        // §9, for a directory that goes whole or not at all: the walk below would step over a store that
-        // arrived since the preview and take what belongs with it. Looked for on the disk, as it is before
-        // Windows empties a bin. See DeleteDirectoryStep.IsIndivisible.
-        if (step.IsIndivisible && await MailStoreSearch.InsideAsync(step.Destroys, ct).ConfigureAwait(false) is { Count: > 0 } arrived)
-        {
-            return new StepOutcome(
-                step.Description,
-                Succeeded: false,
-                BytesReclaimed: 0,
-                Refusals.None,
-                $"Nothing was removed: this holds an Outlook data file, at {MailStorePlan.Name(arrived)}. "
-                + "What is inside it goes whole or not at all, and Deguffer never removes one.",
-                MailStores: arrived.Count);
+            var look = await WholeTreeLook.TakeAsync(step.Destroys, guard, ct).ConfigureAwait(false);
+
+            if (look.WhyNot("Nothing was removed", how, guard) is { } partial)
+            {
+                return new StepOutcome(
+                    step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, partial, MailStores: look.Stores.Count);
+            }
         }
 
         // The index first, and the directory it indexes only once all of it is gone. See

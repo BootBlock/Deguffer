@@ -256,9 +256,11 @@ public static class ExploreRemover
             // A folder Windows will not describe is left where it is. The link question fails closed, so
             // asked first it would read the refusal as "a link" and skip the look, and a folder nobody
             // could classify would go to the shell unexamined. The permanent route's DirectoryRemover
-            // gives a root it cannot describe the same answer, and leaves it standing. A folder that is
-            // described but will not be listed is not caught here: MailStoreSearch skips it (§5.3), as
-            // it skips one below.
+            // gives a root it cannot describe the same answer, and leaves it standing.
+            //
+            // A folder Windows describes but will not list, here or anywhere below, is left where it is
+            // too. The shell moves it without listing it, so "could not look" reads as "might hold one".
+            // See WholeTreeLook.
             if (item.IsDirectory && fs.ProbeDirectory(LongPath.Extended(item.Path)) is PathPresence.Refused)
             {
                 return new ExploreItemOutcome(
@@ -269,16 +271,30 @@ public static class ExploreRemover
                     + "check it for an Outlook data file. Deguffer never removes one, so it left the folder alone.");
             }
 
-            if (item.IsDirectory
-                && !fs.IsReparsePoint(LongPath.Extended(item.Path))
-                && MailStoreSearch.Under(item.Path, fs, ct) is { Count: > 0 } stores)
+            if (item.IsDirectory && !fs.IsReparsePoint(LongPath.Extended(item.Path)))
             {
-                return new ExploreItemOutcome(
-                    item.Path,
-                    Removed: false,
-                    Bytes: 0,
-                    $"'{Path.GetFileName(item.Path)}' holds an Outlook data file, at {MailStorePlan.Name(stores)}. "
-                    + "Moving the folder to the Recycle Bin would take it along, and Deguffer never removes one.");
+                var look = WholeTreeLook.Take([item.Path], MinimumAge.Off, fs, ct);
+
+                if (look.Stores.Count > 0)
+                {
+                    return new ExploreItemOutcome(
+                        item.Path,
+                        Removed: false,
+                        Bytes: 0,
+                        $"'{Path.GetFileName(item.Path)}' holds an Outlook data file, at {MailStorePlan.Name(look.Stores)}. "
+                        + "Moving the folder to the Recycle Bin would take it along, and Deguffer never removes one.");
+                }
+
+                if (look.Unlisted.Count > 0)
+                {
+                    return new ExploreItemOutcome(
+                        item.Path,
+                        Removed: false,
+                        Bytes: 0,
+                        $"Windows would not let Deguffer look inside {MailStorePlan.Name(look.Unlisted)}, so Deguffer "
+                        + $"could not check '{Path.GetFileName(item.Path)}' for an Outlook data file. Deguffer never "
+                        + "removes one, so it left the folder alone.");
+                }
             }
 
             // The display form, normalised: the shell namespace refuses the extended-length prefix
