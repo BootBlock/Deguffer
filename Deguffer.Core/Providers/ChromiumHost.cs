@@ -8,10 +8,9 @@ namespace Deguffer.Core.Providers;
 /// Embedded Framework.
 ///
 /// <para>A declaration rather than a deeper walk. Every such host keeps that folder two or three
-/// levels below an application-data root, under a vendor or product directory, where the
-/// one-level walk in <see cref="ChromiumUserDataDiscovery"/> never looks. Walking two levels of both
-/// roots would multiply the candidates that walk's one file-existence check exists to keep few, and
-/// a recursive search for <c>Local State</c> would identify folders nobody declared. So each host
+/// levels below an application-data root, under a vendor or product directory, where
+/// <see cref="ChromiumUserDataWalk"/> identifies a folder only if it is WebView2's <c>EBWebView</c>.
+/// A search for <c>Local State</c> at any depth would identify folders nobody declared. So each host
 /// is named here, and a row only says <em>where</em> to look: the folder still has to hold its
 /// <see cref="ChromiumLayout.IdentifyingFile"/> before anything inside it is examined.
 /// </para>

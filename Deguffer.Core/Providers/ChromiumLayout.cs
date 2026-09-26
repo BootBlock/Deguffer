@@ -18,6 +18,15 @@ public enum ChromiumProfileRule
     /// looked inside, which is the safe direction to be wrong in.
     /// </summary>
     Marked,
+
+    /// <summary>
+    /// Chromium's own names, plus the <c>WV2Profile_&lt;name&gt;</c> directory WebView2 creates for
+    /// each named profile a host application asks for. Microsoft documents only that each profile
+    /// gets "a dedicated profile folder", so the prefix is observed rather than documented. The one
+    /// measured host that uses the feature keeps all of its real cache and all of its sign-in state
+    /// in there, beside an almost empty <c>Default</c>.
+    /// </summary>
+    WebView2,
 }
 
 /// <summary>
@@ -43,4 +52,11 @@ public sealed record ChromiumLayout(string IdentifyingFile, ChromiumProfileRule 
     /// would say nothing about whose folder it was.
     /// </summary>
     public static readonly ChromiumLayout EmbeddedFramework = new("LocalPrefs.json", ChromiumProfileRule.Marked);
+
+    /// <summary>
+    /// An application embedding the engine through WebView2, whose folder is the
+    /// <c>EBWebView</c> directory the runtime creates inside the folder the application chose. The
+    /// same marker as a browser's, and profiles named by <see cref="ChromiumProfileRule.WebView2"/>.
+    /// </summary>
+    public static readonly ChromiumLayout WebView2 = new("Local State", ChromiumProfileRule.WebView2);
 }

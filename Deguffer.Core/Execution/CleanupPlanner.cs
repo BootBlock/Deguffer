@@ -153,7 +153,7 @@ public sealed class CleanupPlanner
             new MavenRepositoryProvider(environment),
             new VcpkgCacheProvider(environment),
             new GpuShaderCacheProvider(environment),
-            new ChromiumCacheProvider(environment),
+            new ChromiumCacheProvider(environment, liveTrees: liveTrees),
             new VsCodeCacheProvider(environment),
             new FirefoxCacheProvider(environment),
             new EpicLauncherWebCacheProvider(environment),

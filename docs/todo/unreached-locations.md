@@ -824,6 +824,13 @@ list would put both entries near the top, and both are wrong to delete. The corr
 classifies the redirection and then applies the same per-app rules it would have applied
 unpackaged. It never treats `LocalCache` as a licence.
 
+**Correction (issue #61):** MSIX was not the main reason packaged applications' Chromium caches went
+unseen. The survey behind issue #61 found 23 WebView2 hosts on one machine, and only 6 were under
+`Packages`. The other 17 were unpackaged applications keeping their `EBWebView` folder a level or
+more deeper than the scan looked. A later count, taken for the fix, found 19, with 5 under `Packages`. The blind spot was nesting depth, and MSIX is one of several things that produce it.
+`ChromiumUserDataWalk` now finds an `EBWebView` folder up to six levels down, packaged or not. A
+packaged Electron application, whose folder has no fixed name, is still unreached.
+
 ---
 
 ## 4. Chromium-shaped caches, recognised by shape ✅ done
@@ -887,6 +894,12 @@ They are declared rather than walked, in `ChromiumBrowser`: a vendor and product
 the one-marker design keeps few. Every declared path is checked segment by
 segment for a link before the marker is probed, since nothing enumerated it. `Local State` still
 decides what qualifies, and the six names and the §5.6 negatives are unchanged.
+
+**Superseded (issue #61):** the one-level walk is now `ChromiumUserDataWalk`, which also identifies
+a WebView2 `EBWebView` folder up to six levels down, and packaged applications' WebView2 folders with
+it. It enters no link, no temporary folder and no other Chromium user-data folder. WebView2's
+`WV2Profile_<name>` profiles are recognised, and a folder a running program was started with is
+left alone whole.
 
 Cleaners handle browsers. Almost none handle the desktop applications that embed the same engine,
 each carrying the same cache directories under its own vendor name.
