@@ -430,13 +430,6 @@ public sealed record CleanupPlan
     /// The keys kept for this plan's provider, as <see cref="Configuration.KeepList.KeysFor"/> gives
     /// them, with that set's own comparison.
     /// </param>
-    /// <summary>
-    /// The marker a step's tool would leave in a subject it scheduled for removal, so a subject left
-    /// alone is proved unmarked as well as standing. An item offered was not marked when the plan was
-    /// made, because a provider does not offer what its tool has already scheduled.
-    /// </summary>
-    private static string? MarkerOf(CleanupStep step) => (step as RunCommandStep)?.Scheduled?.Marker;
-
     public CleanupPlan WithKeepList(IReadOnlySet<string> keys)
     {
         ArgumentNullException.ThrowIfNull(keys);
@@ -479,6 +472,13 @@ public sealed record CleanupPlan
             ],
         };
     }
+
+    /// <summary>
+    /// The marker a step's tool would leave in a subject it scheduled for removal, so a subject left
+    /// alone is proved unmarked as well as standing. An item offered was not marked when the plan was
+    /// made, because a provider does not offer what its tool has already scheduled.
+    /// </summary>
+    private static string? MarkerOf(CleanupStep step) => (step as RunCommandStep)?.Scheduled?.Marker;
 
     /// <summary>
     /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves

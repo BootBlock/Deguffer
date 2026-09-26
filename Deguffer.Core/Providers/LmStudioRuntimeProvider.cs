@@ -317,12 +317,14 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     ///
     /// <para><b>Standing is not enough, because LM Studio's removal is deferred.</b> A command that
     /// reached the wrong runtime would mark it and leave it standing, and LM Studio would delete it at
-    /// its next start. So each is also proved to hold no marker, unless it held one already. The
-    /// shared libraries in <c>vendor</c> are asked about existence alone: LM Studio marks the
-    /// libraries a removed runtime used alone, inside that folder, and never the folder.</para>
+    /// its next start. So each is also proved to hold no marker. The shared libraries in
+    /// <c>vendor</c> are asked about existence alone: LM Studio marks the libraries a removed runtime
+    /// used alone, inside that folder, and never the folder.</para>
     ///
     /// <para>Read from the disk rather than from the listing, so a folder LM Studio did not list is
-    /// protected as well as one it did.</para>
+    /// protected as well as one it did. A folder LM Studio had marked already is not protected at all:
+    /// LM Studio deletes it the moment it next starts, which can be between the preview and the clean,
+    /// and its going is not this run's doing.</para>
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         IReadOnlyDictionary<string, string> kept,
@@ -335,6 +337,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             .Concat(listing.Links.Select(link => link.Name))
             .Where(name => !excluded.Contains(name))
             .Select(name => Path.Combine(Backends, name))
+            .Where(path => !LongPath.FileExists(Path.Combine(path, Marker)))
             .ToList();
 
         return
@@ -348,7 +351,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
                 (Path.Combine(Root, ".internal"), "LM Studio's own record of what is installed and selected."),
             ]),
             .. Protect([.. siblings.Select(path => (path, kept.GetValueOrDefault(Path.GetFileName(path), "A runtime folder Deguffer does not offer.")))])
-                .Select(path => LongPath.FileExists(Path.Combine(path.Path, Marker)) ? path : path with { Marker = Marker }),
+                .Select(path => path with { Marker = Marker }),
         ];
     }
 

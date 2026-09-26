@@ -481,8 +481,8 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
 
     /// <summary>
     /// §5.2 and §5.6: a folder beside the runtimes that Deguffer does not recognise, or that LM Studio
-    /// did not list, is proved standing and unmarked. One LM Studio had marked already is proved
-    /// standing alone, because its marker is not this run's doing.
+    /// did not list, is proved standing and unmarked. One LM Studio had marked already is not
+    /// protected, because LM Studio deletes it whenever it next starts, which may be before the clean.
     /// </summary>
     [Fact]
     public async Task ProtectsEveryFolderBesideTheRuntimesOffered()
@@ -501,8 +501,11 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Assert.Equal([$"runtime remove --yes {Cuda12}@2.45.0"], plan.Steps.Cast<RunCommandStep>().Select(step => step.Arguments));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == stranger && p.Marker == LmStudioRuntimeProvider.Marker);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.46.0") && p.Marker == LmStudioRuntimeProvider.Marker);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.41.0") && p.Marker is null);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.41.0"));
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.45.0"));
+
+        // LM Studio starting between the preview and the clean deletes what it had marked.
+        Directory.Delete(Folder($"{Cuda12}@2.41.0"), recursive: true);
 
         var result = await provider.ExecuteAsync(plan);
 
