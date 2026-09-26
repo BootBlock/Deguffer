@@ -31,6 +31,8 @@ public sealed partial class CleanPage : Page
         ViewModel = new CleanViewModel(
             CleanupPlanner.CreateDefault(App.Preferences),
             UserEnvironment.Current,
+            VolumeInventory.Current,
+            ElevatedRelaunch.IsElevated,
             App.Selections,
             App.Keeps,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme));
