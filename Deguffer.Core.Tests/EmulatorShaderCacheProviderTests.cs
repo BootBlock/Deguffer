@@ -399,6 +399,23 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A declared folder holding RetroArch is the RetroArch rows' to answer for, so this row does not
+    /// tell the user it holds no emulator.
+    /// </summary>
+    [Fact]
+    public async Task ADeclaredRetroArchFolderIsNotSaidToHoldNoEmulator()
+    {
+        var retroArch = new RetroArchFixture(_environment, Path.Combine(_temp.Path, "RetroArch-Win64")).Install();
+        Declare(retroArch.Program);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(retroArch.Program, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// A settings file in a folder that holds the whole profile does not make the profile an
     /// emulator's: Explore would otherwise refuse everything in it but a cache.
     /// </summary>

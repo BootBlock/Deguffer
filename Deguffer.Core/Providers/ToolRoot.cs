@@ -38,4 +38,36 @@ public sealed record ToolRoot(string Path, string Reason, Predicate<string> Reco
 
         return new ToolRoot(path, reason, children.IsDisposable);
     }
+
+    /// <summary>
+    /// A root for <paramref name="top"/> and for every folder between it and each of
+    /// <paramref name="folders"/>, each recognising only the next folder on the way. Explore decides by
+    /// the innermost root that refuses, so without the levels between, the top would refuse the way
+    /// down or allow everything beside it.
+    /// </summary>
+    public static IEnumerable<ToolRoot> WayDown(string top, IEnumerable<string> folders, string reason)
+    {
+        var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [top] = new(StringComparer.OrdinalIgnoreCase),
+        };
+
+        foreach (var folder in folders.Where(folder => LongPath.Contains(top, folder) && !folder.Equals(top, StringComparison.OrdinalIgnoreCase)))
+        {
+            var parent = top;
+
+            foreach (var segment in System.IO.Path.GetRelativePath(top, folder).Split(System.IO.Path.DirectorySeparatorChar))
+            {
+                if (!next.TryGetValue(parent, out var names))
+                {
+                    next[parent] = names = new(StringComparer.OrdinalIgnoreCase);
+                }
+
+                names.Add(segment);
+                parent = System.IO.Path.Combine(parent, segment);
+            }
+        }
+
+        return next.Select(level => new ToolRoot(level.Key, reason, level.Value.Contains));
+    }
 }

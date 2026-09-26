@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Sixty-eight sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Seventy sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Sixty-eight providers, each holding its own knowledge of one location. A provider reports "not
+Seventy providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -153,6 +153,7 @@ installed" cleanly on a machine without that toolchain.
 | Steam library artwork | One item per game, fetched again when Steam next shows it; never Steam's index of it. A picture you replaced by hand is lost, so keep that game |
 | Steam shader pre-cache | One item per game, in every library Steam's own list names; never the games beside it |
 | Emulator shader caches | What Cemu, RPCS3, Dolphin and PCSX2 compile for your GPU, found where each keeps its data and in the emulator folders you add in Settings; never Cemu's transferable cache, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator runs |
+| RetroArch shaders and game databases | The shader sets and `.rdb` databases its Online Updater downloaded, found through Steam's record and the emulator folders you add in Settings, in the folders its own `retroarch.cfg` names; never the presets you saved, `system`, cores, cheats, overlays or saves, and nothing while RetroArch runs |
 | Unreal Engine derived data cache | The cache every project shares, in both the older folder and each Zen store; a store is left alone while its server runs |
 | Node.js project dependencies | `node_modules` under your own source trees |
 | Python virtual environments | |
@@ -178,6 +179,7 @@ installed" cleanly on a machine without that toolchain.
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
 | Battle.net launcher logs | |
+| RetroArch thumbnails | Each system's box art, snapshots, title screens and logos, grouped by system. Most download again, but a picture you added yourself cannot be told apart and is lost |
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written into stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |

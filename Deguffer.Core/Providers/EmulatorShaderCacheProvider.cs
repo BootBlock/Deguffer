@@ -99,7 +99,13 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     /// that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
     private EmulatorCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, ct);
+        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, ct);
+
+    /// <summary>
+    /// Whether the RetroArch rows answer for <paramref name="folder"/>. A refusal counts, because those
+    /// rows say so themselves, and "no emulator here" is not something a refusal established.
+    /// </summary>
+    private static bool HoldsRetroArch(string folder) => RetroArchInstall.ProgramIn(folder) is not PathPresence.Absent;
 
     private string? WhyNotOwned(string folder) =>
         ConfiguredFolder.WhyNotOwned(folder, Environment, _system, TempRoots.Resolve(Environment, _system).AccountFolders);
@@ -143,7 +149,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             var reason = $"This is {root.Layout.Name}'s folder, which holds your saves, firmware and settings "
                 + "beside its shader cache. Deguffer removes only the shader cache inside it.";
 
-            roots.AddRange(WayDown(root.Path, root.CacheFolders.Select(folder => folder.Path), reason));
+            roots.AddRange(ToolRoot.WayDown(root.Path, root.CacheFolders.Select(folder => folder.Path), reason));
             roots.AddRange(root.CacheFolders.Select(folder => new ToolRoot(
                 folder.Path,
                 $"This is {root.Layout.Name}'s cache folder. Deguffer removes only the shader caches in it.",
@@ -158,38 +164,6 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
-    }
-
-    /// <summary>
-    /// A root for <paramref name="top"/> and for every folder between it and each of
-    /// <paramref name="folders"/>, each recognising only the next folder on the way. Explore decides by
-    /// the innermost root that refuses, so without the levels between, the top would refuse the way
-    /// down or allow everything beside it.
-    /// </summary>
-    private static IEnumerable<ToolRoot> WayDown(string top, IEnumerable<string> folders, string reason)
-    {
-        var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
-        {
-            [top] = new(StringComparer.OrdinalIgnoreCase),
-        };
-
-        foreach (var folder in folders.Where(folder => LongPath.Contains(top, folder) && !folder.Equals(top, StringComparison.OrdinalIgnoreCase)))
-        {
-            var parent = top;
-
-            foreach (var segment in Path.GetRelativePath(top, folder).Split(Path.DirectorySeparatorChar))
-            {
-                if (!next.TryGetValue(parent, out var names))
-                {
-                    next[parent] = names = new(StringComparer.OrdinalIgnoreCase);
-                }
-
-                names.Add(segment);
-                parent = Path.Combine(parent, segment);
-            }
-        }
-
-        return next.Select(level => new ToolRoot(level.Key, reason, level.Value.Contains));
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
