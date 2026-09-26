@@ -412,7 +412,7 @@ public sealed class CleanupPlannerTests
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
-                "graphics-driver-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
+                "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "temp-installer-downloads", "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
@@ -424,7 +424,7 @@ public sealed class CleanupPlannerTests
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "platformio", "playwright",
-                "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers",
+                "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
                 "windows-update-leftovers",
             ],

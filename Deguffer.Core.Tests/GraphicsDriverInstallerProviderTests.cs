@@ -33,8 +33,15 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
 
     private string Amd => Path.Combine(Drive, "AMD");
 
-    private GraphicsDriverInstallerProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, system: _system);
+    private GraphicsDriverInstallerProvider CreateProvider(
+        FakeProcessInspector? inspector = null,
+        FakeLiveTreeInspector? liveTrees = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
+            system: _system);
 
     /// <summary>A directory with a file at <paramref name="file"/> below it, so it measures above zero.</summary>
     private static string Populate(string directory, string file = "setup.exe", int bytes = 4096)
@@ -348,6 +355,24 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
         var plan = await CreateProvider(new FakeProcessInspector("AMDSoftwareInstaller")).PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
+    }
+
+    /// <summary>
+    /// §5.3, beyond the warning: AMD's installer runs from the folder it unpacks into, and while it
+    /// does that folder is held back rather than offered.
+    /// </summary>
+    [Fact]
+    public async Task AFolderAmdsInstallerIsRunningFromIsLeftAlone()
+    {
+        var installer = Populate(Path.Combine(Amd, "AMD-Software-Installer"), Path.Combine("Bin64", "AMDSoftwareInstaller.exe"));
+        var liveTrees = FakeLiveTreeInspector.NothingLive.WithProgram(
+            "AMDSoftwareInstaller", executable: Path.Combine(installer, "Bin64", "AMDSoftwareInstaller.exe"));
+
+        var plan = await CreateProvider(liveTrees: liveTrees).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(installer, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
