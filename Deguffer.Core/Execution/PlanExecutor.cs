@@ -311,12 +311,15 @@ public sealed class PlanExecutor(
 
         var reclaimed = start - after;
 
-        // A negative delta means the tree grew between preview and clean — a build restoring
-        // packages in the background, most likely. Report what is actually still there rather
-        // than clamping to zero and claiming nothing was reclaimed.
+        // A negative delta means the tree grew between the start figure and the end — a build
+        // restoring packages in the background, most likely. A tool asked immediately before its
+        // command grew while the command ran, and a disk measurement grew since the scan. Report
+        // what is actually still there rather than clamping to zero and claiming nothing was
+        // reclaimed.
         var message = reclaimed < 0
-            ? $"{outcome.Message} (the cache grew since the scan; " +
-              $"{FreeSpace.Format(after)} remains)"
+            ? $"{outcome.Message} (the cache grew "
+              + (step.MeasuredBy is null ? "since the scan" : "while the command ran")
+              + $"; {FreeSpace.Format(after)} remains)"
             : outcome.Message;
 
         return new StepOutcome(

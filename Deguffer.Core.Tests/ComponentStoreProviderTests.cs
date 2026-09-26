@@ -112,7 +112,8 @@ public sealed class ComponentStoreProviderTests : IDisposable
         Assert.Equal("Dism.exe", Path.GetFileName(step.FileName));
         Assert.Equal("/Online /English /Cleanup-Image /StartComponentCleanup", step.Arguments);
         Assert.Equal(3 * Gigabyte, step.EstimatedBytes);
-        Assert.True(step.Estimated.IsApproximate);
+        Assert.True(step.Estimated.IsCeiling);
+        Assert.Equal($"up to {FreeSpace.Format(3 * Gigabyte)}", FreeSpace.Format(step.Estimated));
         Assert.True(step.RequiresElevation);
         Assert.True(step.HeldWhileUpdating);
         Assert.IsType<ComponentStoreAnalysis>(step.MeasuredBy);
@@ -172,7 +173,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         IReadOnlyList<CleanupPlan> plans = [await Cleanup(analysis).PlanAsync(), await Reset(analysis).PlanAsync()];
 
         Assert.All(plans, plan => Assert.Equal(ComponentStoreProviderBase.Overhead, Assert.Single(plan.Steps).SharesReclaim));
-        Assert.Equal(FreeSpace.Format(ScanSize.Approximate(3 * Gigabyte)), CleanConfirmation.For(plans).TotalLabel);
+        Assert.Equal($"up to {FreeSpace.Format(3 * Gigabyte)}", CleanConfirmation.For(plans).TotalLabel);
     }
 
     /// <summary>G4: the analysis takes a minute or more, so both rows share one per planning pass.</summary>
@@ -356,6 +357,23 @@ public sealed class ComponentStoreProviderTests : IDisposable
 
         Assert.Equal(2 * Gigabyte, cleaned.BytesReclaimed);
         Assert.Equal(1 * Gigabyte, wasReset.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// The start figure is Windows' own immediately before the command, so a store that grew grew while
+    /// the command ran, and the run says so rather than blaming the time since the scan.
+    /// </summary>
+    [Fact]
+    public async Task AStoreThatGrewSaysItGrewWhileTheCommandRan()
+    {
+        Analyses(null, 21 * Gigabyte, 19 * Gigabyte, 20 * Gigabyte);
+
+        var provider = Cleanup();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        var step = Assert.Single(result.Steps);
+        Assert.Equal(0, step.BytesReclaimed);
+        Assert.Contains("grew while the command ran", step.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Windows would not say what the store held before the command, so nothing is counted.</summary>

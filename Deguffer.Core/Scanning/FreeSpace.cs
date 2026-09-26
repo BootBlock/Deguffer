@@ -48,7 +48,8 @@ public static class FreeSpace
     /// Both of §5.5's routes measure exactly and agree, so neither is hedged. What is hedged is a
     /// figure a tool produced about its own future behaviour — conda's dry run — and a sole-link
     /// sum whose link counts move whenever a project installs a dependency. Saying "about" is the
-    /// difference between reporting a measurement and repeating someone else's forecast.
+    /// difference between reporting a measurement and repeating someone else's forecast. A ceiling
+    /// says "up to" instead, because it is not a forecast at all: the removal is known to fall short.
     ///
     /// <para>Where no bytes go and entries do, the entries are the figure. A leftover of empty folders
     /// frees nothing measurable, and "0 B" beside a row that is ready to clean reads as nothing to do.
@@ -58,6 +59,7 @@ public static class FreeSpace
     public static string Format(ScanSize size) => size switch
     {
         { Reclaimable: 0, Entries: > 0 } => Items(size.Entries),
+        { IsCeiling: true } => $"up to {Format(size.Reclaimable)}",
         { IsApproximate: true } => $"about {Format(size.Reclaimable)}",
         _ => Format(size.Reclaimable),
     };

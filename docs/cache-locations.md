@@ -4741,7 +4741,7 @@ the kernel ones — or the reverse.
 and it works differently from every other location in this document. Elsewhere Deguffer looks inside
 a folder and decides what each thing in it is. Here it does not look inside at all: it holds a list
 of exact paths, and nothing else under the Windows directory is reachable, whatever it is called.
-`WinSxS` and `Windows\Installer` — the two large folders Deguffer refuses to go near, and the two
+`WinSxS` and `Windows\Installer` — the two large folders Deguffer never deletes from by path, and the two
 that break Windows if you get them wrong — are named as things that must still be there when the run
 finishes, and Deguffer checks that they are.
 
@@ -5139,7 +5139,7 @@ not boot and make it impossible to update".
 
 The row's figure comes from DISM's own `/AnalyzeComponentStore`, which counts the shared files once.
 It is the store's overhead as Microsoft does the arithmetic, *Backups and Disabled Features* plus
-*Cache and Temporary Data*, and it is the most a cleanup could free. The cleanup never removes the
+*Cache and Temporary Data*, and it is the most a cleanup could free, so the row says "up to". The cleanup never removes the
 payload of a feature that is switched off, so it usually frees less. What the clean freed is DISM's
 actual size immediately before the command less its actual size afterwards, so the result is
 Windows' own measurement rather than the estimate. The row shows DISM's whole analysis: the size
@@ -5154,7 +5154,7 @@ even if Deguffer stops waiting for it.
 Nothing is offered:
 
 - **without administrator rights.** DISM analyses and cleans the store only for an administrator, so
-  an unelevated scan says so and offers **Elevate** instead.
+  an unelevated scan says so, and a scan as administrator is what lets Deguffer ask.
 - **while an update is unfinished**, on the same tests as the previous installation above, asked
   when the scan plans the row and again when the clean reaches it.
 - **where Windows reports that the store does not need cleaning**, which is DISM's own verdict.

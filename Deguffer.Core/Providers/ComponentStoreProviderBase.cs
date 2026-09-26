@@ -120,9 +120,10 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             [
                 new RunCommandStep(_analysis.Dism, $"/Online /English /Cleanup-Image {CleanupArguments}", What)
                 {
-                    // The most a cleanup could free, which Windows does not narrow down further, so it is
-                    // shown as the prediction it is. The reclaim is measured, not taken from this.
-                    Estimated = ScanSize.Approximate(report.Overhead),
+                    // The most a cleanup could free, which Windows does not narrow down further, and which
+                    // counts switched-off features no cleanup removes. The reclaim is measured, not taken
+                    // from this.
+                    Estimated = ScanSize.Ceiling(report.Overhead),
                     MeasuredBy = _analysis,
                     SharesReclaim = Overhead,
                     RequiresElevation = true,
