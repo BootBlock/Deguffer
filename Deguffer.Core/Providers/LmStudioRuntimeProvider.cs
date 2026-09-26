@@ -228,7 +228,8 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             Lms,
             // The version is what makes this one runtime: a bare line name removes every version of it.
             $"runtime remove --yes {item.Runtime.Id}",
-            $"Remove the LM Studio runtime {item.Runtime.Id} using LM Studio's own command")
+            // The command beside it names the runtime, and the heading and the version column say it again.
+            "Remove this runtime using LM Studio's own command")
         {
             Estimated = size,
             MeasuredPaths = [item.Folder],
