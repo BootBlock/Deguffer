@@ -9,10 +9,10 @@ namespace Deguffer.Core.Execution;
 /// sentence from the byte totals announced that the caches were already clear directly above a row
 /// saying it had not been examined.</para>
 ///
-/// <para>The value is decided in the shell rather than here, because the last two states depend on
-/// the token the app is running under as well as on what the scan found — see
-/// <c>FindingViewModel.Status</c>. The value and the words for it live together in this file so
-/// that every reader of one gets the other.</para>
+/// <para>The value, the rule that decides it and the words for it live together in this file so that
+/// every reader of one gets the others. The last two states depend on the token the app is running
+/// under as well as on what the scan found, so the rule takes that as an argument rather than reading
+/// it: see <see cref="FindingStatusExtensions.ToStatus"/>.</para>
 /// </summary>
 public enum FindingStatus
 {
@@ -93,6 +93,61 @@ public enum FindingStatus
 public static class FindingStatusExtensions
 {
     /// <summary>
+    /// What a row built from <paramref name="offered"/> is reporting, for a process holding the rights
+    /// <paramref name="isElevated"/> describes.
+    ///
+    /// <para>Presence is asked after <see cref="Finding.AwaitingSourceFolders"/>, because the two do
+    /// not line up: the .NET build output is present whenever the SDK is, approved folders or not,
+    /// and that row has as little to report as the four that are absent for the same reason.</para>
+    ///
+    /// <para>The held-back state asks the plan what the measurement actually withheld, never whether
+    /// a guard is switched on. Driving the real window settled that: with the guard at seven days,
+    /// deriving it from the setting put "Nothing old enough" on twelve rows, most of them simply
+    /// empty — the same false claim wearing the opposite costume.</para>
+    ///
+    /// <para>A row with something to remove is ready only where a step of it can be ticked, which is
+    /// <see cref="Choosing.StepChoice.AnyCanBeSelected"/>'s question, so the label and the checkbox
+    /// beside it cannot disagree.</para>
+    /// </summary>
+    /// <param name="offered">
+    /// The finding with the keep list applied, which is what the row describes. See
+    /// <see cref="CleanupPlan.WithKeepList"/>.
+    /// </param>
+    public static FindingStatus ToStatus(this Finding offered, bool isElevated)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+
+        if (offered.AwaitingSourceFolders)
+        {
+            return FindingStatus.AwaitingSourceFolders;
+        }
+
+        if (!offered.IsPresent)
+        {
+            return FindingStatus.ToolchainMissing;
+        }
+
+        if (offered.HasSomethingToRemove)
+        {
+            return Choosing.StepChoice.AnyCanBeSelected(offered, isElevated)
+                ? FindingStatus.ReadyToClean
+                : FindingStatus.NeedsElevation;
+        }
+
+        return offered.Plan switch
+        {
+            { HasUnreadableRoot: true } => FindingStatus.UnreadableRoot,
+            { WasNotExamined: true } => FindingStatus.NotExamined,
+            { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
+            { HasRefusedContent: true } => FindingStatus.RefusedByWindows,
+            { HoldsKeepListItems: true } => FindingStatus.OnKeepList,
+            { HoldsMailStores: true } => FindingStatus.MailStoresHeldBack,
+            { WaitsForAnUpdate: true } => FindingStatus.UpdateInProgress,
+            _ => FindingStatus.AlreadyClear,
+        };
+    }
+
+    /// <summary>
     /// The two or three words the row states beside its size.
     ///
     /// <para>"Already clear" is a claim about the folder, and the seven states above it must not be
@@ -131,8 +186,8 @@ public static class FindingStatusExtensions
         // extensions elsewhere do. A name is a plausible-looking label, so a state added without
         // words of its own would reach a row reading "RecentContentHeldBack" while every test in
         // FindingStatusTests stayed green — the identifier is non-empty and distinct, which is all
-        // they can check. The arm itself is unreachable: FindingViewModel.Status only ever returns
-        // a named member, and CS8524 is why it has to be written at all.
+        // they can check. The arm itself is unreachable: ToStatus only ever returns a named member,
+        // and CS8524 is why it has to be written at all.
         _ => throw new ArgumentOutOfRangeException(
             nameof(status), status, "This status has no words of its own yet."),
     };

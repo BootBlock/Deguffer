@@ -112,5 +112,18 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         return this;
     }
 
+    /// <summary>
+    /// The space of the volume <see cref="MountPointOf"/> answers for <paramref name="path"/>, as that
+    /// volume stands at the call. A test that replaces the volume through <see cref="Without"/> and
+    /// <see cref="With"/> is the machine's free space moving under a caller, which is what a clean
+    /// read either side of a run needs.
+    /// </summary>
+    public (long Total, long Free)? SpaceOf(string path) =>
+        MountPointOf(path) is { } mountPoint
+        && _volumes.FirstOrDefault(volume => volume.MountPoints.Contains(mountPoint, StringComparer.OrdinalIgnoreCase))
+            is { TotalBytes: { } total, FreeBytes: { } free }
+            ? (total, free)
+            : null;
+
     public void Invalidate() => InvalidateCount++;
 }

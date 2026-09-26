@@ -55,8 +55,8 @@ public enum VolumeFeatures : uint
 /// <param name="TotalBytes">Capacity, on the same terms.</param>
 /// <param name="FreeBytes">
 /// What is left of that capacity for this user, on the same terms. The figure a quota allows rather
-/// than the raw free space, matching <c>FreeSpace.ForPath</c>: the two are read by the same app,
-/// through the same call, and must not disagree.
+/// than the raw free space, matching <see cref="IVolumeInventory.SpaceOf"/>: the two are read by the
+/// same app, through the same call, and must not disagree.
 /// </param>
 /// <param name="Features">
 /// What the volume says it supports, or <see cref="VolumeFeatures.None"/> where it would not say or
@@ -171,6 +171,21 @@ public interface IVolumeInventory
     string? MountPointOf(string path);
 
     /// <summary>
+    /// The capacity of the volume holding <paramref name="path"/>, and what is left of it for this
+    /// user, asked of the machine at the moment of the call, or null where the volume will not say.
+    ///
+    /// <para>Live rather than read from <see cref="Volumes"/>, for the reason
+    /// <see cref="MountPointOf"/> is and one of its own: this is the figure a clean is measured by,
+    /// read either side of the run, and a remembered list would report the space as it was before
+    /// the run on both sides.</para>
+    ///
+    /// <para>Asked of the volume the path is really on, which <see cref="Path.GetPathRoot(string)"/>
+    /// and <c>DriveInfo</c> cannot answer: both reduce a path to a drive letter, so a path on a volume
+    /// mounted at a folder would be measured against the disk that folder sits on.</para>
+    /// </summary>
+    (long Total, long Free)? SpaceOf(string path);
+
+    /// <summary>
     /// Discard the remembered list, so a drive mounted while the app was open is seen on the next
     /// preview. Called at the start of a planning pass, as <see cref="IUserEnvironment.Invalidate"/>
     /// is.
@@ -208,6 +223,9 @@ public sealed class VolumeInventory : IVolumeInventory
     }
 
     public string? MountPointOf(string path) => VolumeCalls.MountPointOf(path);
+
+    public (long Total, long Free)? SpaceOf(string path) =>
+        VolumeCalls.MountPointOf(path) is { } mountPoint ? VolumeCalls.SpaceOf(mountPoint) : null;
 
     public void Invalidate()
     {

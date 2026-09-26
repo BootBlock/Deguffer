@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -187,5 +188,83 @@ public sealed class VolumeInventoryTests
         var second = inventory.Volumes;
         Assert.NotSame(first, second);
         Assert.Equal(first.Select(v => v.RootPath), second.Select(v => v.RootPath));
+    }
+
+    /// <summary>
+    /// §7 shows free space against capacity, so the two figures have to describe the same volume and
+    /// degrade together.
+    /// </summary>
+    [Fact]
+    public void ReportsCapacityForTheVolumeHoldingThePath()
+    {
+        using var temp = new TempDirectory();
+
+        var (total, free) = VolumeInventory.Current.SpaceOf(temp.Path)!.Value;
+
+        // The pairing is what the capacity bar draws: free above capacity would render a negative
+        // used-fraction, and a zero capacity would divide by zero.
+        Assert.True(total > 0);
+
+        // Strictly greater, so that returning free space in both slots fails here. Any volume able
+        // to hold this test's temp directory has something on it, so the two figures are never
+        // equal in practice — and if they were, the bar would read empty on a full disk.
+        Assert.True(total > free);
+    }
+
+    /// <summary>
+    /// An unavailable volume is a dash in the UI, not an exception. The drive letter below is
+    /// deliberately one Windows reserves for floppies and effectively never mounts.
+    /// </summary>
+    [Fact]
+    public void AnswersNoSpaceForAVolumeThatIsNotThere() =>
+        Assert.Null(VolumeInventory.Current.SpaceOf(@"B:\nonexistent\cache"));
+
+    [Fact]
+    public void AnswersNoSpaceForAPathThatCannotBeRooted() =>
+        Assert.Null(VolumeInventory.Current.SpaceOf(string.Empty));
+
+    /// <summary>
+    /// The figure the native route reads is the figure Windows reports for the same volume.
+    ///
+    /// <para><c>DriveInfo</c> is the independent witness here rather than the implementation: it is
+    /// what the space used to be read with before the mount point was resolved natively, and it is
+    /// not on the route under test. A rewrite that read the wrong field of <c>GetDiskFreeSpaceEx</c>
+    /// — the raw free space rather than the caller's quota, or the total in place of the free — or
+    /// that resolved a different volume, disagrees here.</para>
+    ///
+    /// <para><b>What this cannot show is the defect the rewrite fixed.</b> Telling the two routes
+    /// apart needs a volume mounted at a folder, and a test cannot mount one. On a machine whose
+    /// volumes all wear drive letters the two agree by construction, which is exactly what is
+    /// asserted.</para>
+    /// </summary>
+    [Fact]
+    public void ReportsTheSameSpaceTheVolumeItselfReports()
+    {
+        using var temp = new TempDirectory();
+
+        var drive = new DriveInfo(Path.GetPathRoot(temp.Path)!);
+        var (total, free) = VolumeInventory.Current.SpaceOf(temp.Path)!.Value;
+
+        Assert.Equal(drive.TotalSize, total);
+
+        // Free space moves between two reads on a working machine, so this is a bound rather than
+        // an equality: the quota figure can never exceed the volume's capacity, and reading the
+        // total into the free slot would break it on any disk holding anything.
+        Assert.InRange(free, 0, drive.TotalSize - 1);
+    }
+
+    /// <summary>
+    /// §6.3: a path in extended-length form measures the same volume as the same path without the
+    /// prefix. Every path in Core may arrive as <c>\\?\C:\…</c>, and the mount-point lookup hands
+    /// the path to Win32.
+    /// </summary>
+    [Fact]
+    public void ReadsSpaceThroughTheExtendedLengthPrefix()
+    {
+        using var temp = new TempDirectory();
+
+        Assert.Equal(
+            VolumeInventory.Current.SpaceOf(temp.Path)?.Total,
+            VolumeInventory.Current.SpaceOf(LongPath.Extended(temp.Path))?.Total);
     }
 }
