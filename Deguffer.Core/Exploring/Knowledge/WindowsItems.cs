@@ -172,9 +172,9 @@ internal static class WindowsItems
             + "accumulate. On a machine with a discrete graphics card this is often the largest "
             + "folder in Windows.",
 
-            "Deleting a package by hand leaves Windows behaving unpredictably, and 'pnputil "
-            + "/delete-driver <name>.inf /uninstall' is the supported way to remove one — at the "
-            + "cost of being able to roll that driver back."),
+            "Deleting a package by hand leaves Windows behaving unpredictably, and Disk Cleanup's "
+            + "'Device driver packages' is the supported way to remove the older versions, keeping "
+            + "the newest of every driver and every driver a device is using."),
 
         new(
             KnownPlace.WindowsDirectory,
