@@ -47,6 +47,7 @@ public class StepGrainTests
             "lmstudio-runtimes",
             "node-modules",
             "playwright",
+            "puppeteer",
             "python-venv",
             "roslyn-cache",
             "squirrel-superseded-versions",
