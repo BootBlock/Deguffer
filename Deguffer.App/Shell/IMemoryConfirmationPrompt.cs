@@ -8,7 +8,7 @@ namespace Deguffer.App.Shell;
 /// Puts a Memory close to the user. What is asked and what they are told comes from
 /// <see cref="MemoryClosePrompt"/>; this seam only carries it to a surface that can ask.
 ///
-/// Separate from <see cref="IExploreConfirmationPrompt"/> rather than a second method on it, for the
+/// Separate from <see cref="Deguffer.Core.Exploring.Acting.IExploreConfirmationPrompt"/> rather than a second method on it, for the
 /// reason that one is separate from <see cref="IConfirmationPrompt"/>: the three ask about different
 /// subjects. This one asks about another program's unsaved work, which no tier applies to and no
 /// preference may switch off (§7.2.1).

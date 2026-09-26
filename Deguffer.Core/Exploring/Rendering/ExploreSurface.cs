@@ -95,8 +95,8 @@ public readonly record struct ExploreOutline(int Node, IReadOnlyList<ExplorePoin
 /// memory share every layout, hit test and rasteriser. What the colours say is the one thing that
 /// depends on the tree, and <see cref="ShapeColours"/> carries it.</para>
 ///
-/// <para>In Core rather than in the shell for the usual reason: none of it needs a window, and the
-/// shell has no test project (G8).</para>
+/// <para>In Core rather than in the shell for the usual reason: none of it needs a window, and a
+/// decision belongs in Core (G1).</para>
 /// </summary>
 public abstract class ExploreSurface
 {

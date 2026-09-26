@@ -13,9 +13,9 @@ namespace Deguffer.Core.Tests;
 /// <para>Every test that runs a plan asserts the negative (§5.6) as well as the positive: what was
 /// kept or never recognised is still there, and so is the registry beside the builds.</para>
 ///
-/// <para>What these cannot reach is the tick itself. Whether a kept item's checkbox can be ticked is
-/// decided in the shell, which has no test project yet, so the Core half is asserted here — a kept
-/// item is not a step, so no selection of steps can run it — and the shell half is driven.</para>
+/// <para>What these do not reach is the tick itself. Whether a kept item's checkbox can be ticked is
+/// <see cref="Deguffer.Core.Choosing.StepChoice"/>'s rule, tested beside it; the Core half is asserted
+/// here — a kept item is not a step, so no selection of steps can run it.</para>
 /// </summary>
 public sealed class KeepListPlanTests : IDisposable
 {

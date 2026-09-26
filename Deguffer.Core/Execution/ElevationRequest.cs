@@ -13,8 +13,8 @@ namespace Deguffer.Core.Execution;
 /// <para><see cref="ElevationOffer"/> decides whether to offer the relaunch at all. This says what
 /// the relaunch carries.</para>
 ///
-/// <para>In Core rather than in the shell for the usual reason: none of it needs a window, and the
-/// shell has no test project (G8).</para>
+/// <para>In Core rather than in the shell for the usual reason: none of it needs a window, and a
+/// decision belongs in Core (G1).</para>
 /// </summary>
 public abstract record ElevationRequest
 {

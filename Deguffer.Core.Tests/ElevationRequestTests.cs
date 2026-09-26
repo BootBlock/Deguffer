@@ -11,8 +11,7 @@ namespace Deguffer.Core.Tests;
 /// read another produces no error at all, just a window that opens somewhere the user did not leave
 /// it.</para>
 ///
-/// <para>Proved here rather than through the shell because none of it needs a window, and the shell
-/// has no test project (G8).</para>
+/// <para>Proved here rather than through the shell because none of it needs a window.</para>
 /// </summary>
 public sealed class ElevationRequestTests
 {

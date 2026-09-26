@@ -12,8 +12,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// the cached frame.</para>
 ///
 /// <para>In Core rather than in the shell because it is a pure function from rectangles to bytes,
-/// with no window, no dispatcher and no theme object anywhere in it. The shell has no test project,
-/// so anything left there is verifiable only by looking at it (G8).</para>
+/// with no window, no dispatcher and no theme object anywhere in it. What reaches the screen is
+/// verifiable only by looking at it, so as little as possible is left to that (G8).</para>
 ///
 /// <para>Text is deliberately not drawn here. Labels are laid over the finished bitmap as real
 /// controls, which keeps them selectable, scalable with the user's text size, and visible to a
