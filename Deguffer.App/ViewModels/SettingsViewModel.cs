@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
@@ -293,16 +294,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool SaveFailed { get; set; }
 
-    private void Apply(Func<AppPreferences, AppPreferences> change)
+    /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
+    private void Apply(Func<AppPreferences, AppPreferences> change, [CallerMemberName] string setting = "")
     {
         SaveFailed = !_preferences.Update(change);
 
         // A rejected write changes nothing, so the control is now showing a value that is not in
         // effect. Re-reading every bound property puts it back to what actually holds, rather than
         // leaving a toggle that claims a setting the app is not honouring.
-        if (SaveFailed)
-        {
-            OnPropertyChanged(string.Empty);
-        }
+        //
+        // A write that succeeds can store something other than what was typed, because a number goes
+        // through EnteredSetting first: half an hour is stored as one. The control that made the
+        // change reads it back, or it goes on showing a value that is not in effect.
+        OnPropertyChanged(SaveFailed ? string.Empty : setting);
     }
 }

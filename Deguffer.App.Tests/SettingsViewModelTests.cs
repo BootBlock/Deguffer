@@ -95,8 +95,27 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Contains(string.Empty, raised);
     }
 
+    /// <summary>
+    /// A number goes through <see cref="EnteredSetting"/> before it is stored, so what holds can differ
+    /// from what was typed. The box that made the change reads it back, or it goes on showing half an
+    /// hour while the guard holds one.
+    /// </summary>
     [Fact]
-    public void AWriteThatSucceedsPutsNoControlBack()
+    public void ABoxReadsBackWhatWasStoredRatherThanWhatWasTyped()
+    {
+        var (page, _) = Page();
+        var raised = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        page.KeepFilesChangedWithinHours = 0.5;
+
+        Assert.Contains(nameof(SettingsViewModel.KeepFilesChangedWithinHours), raised);
+        Assert.Equal(1, page.KeepFilesChangedWithinHours);
+    }
+
+    /// <summary>A write that succeeds is read back by the control that made it, and by no other.</summary>
+    [Fact]
+    public void AWriteThatSucceedsLeavesTheOtherControlsAlone()
     {
         var (page, preferences) = Page();
         var raised = new List<string?>();
@@ -106,7 +125,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
         Assert.False(page.SaveFailed);
         Assert.False(preferences.Current.BackdropEnabled);
-        Assert.DoesNotContain(string.Empty, raised);
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabled)], raised);
     }
 
     /// <summary>
