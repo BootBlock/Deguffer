@@ -224,6 +224,54 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// A row the run emptied says "Already clear" once it is planned again, and the filter that hides
+    /// such rows hides it where it stands, with the empty state saying why the list is empty.
+    /// </summary>
+    [Fact]
+    public void ARowTheRunEmptiedIsFilteredAgainWhenItIsPlannedAgain()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        cache.Steps = [page.Cache("a", 1024)];
+        cache.AfterCleaning = () => cache.Steps = [];
+        page.Scan();
+        Assert.True(page.Row("cache").IsListed);
+
+        page.Clean();
+
+        Assert.Equal(FindingStatus.AlreadyClear, page.Row("cache").Status);
+        Assert.False(page.Row("cache").IsListed);
+        Assert.Equal("Every row is hidden", page.ViewModel.EmptyStateTitle);
+    }
+
+    /// <summary>
+    /// An item list left open over a row that is planned again is closed as the row's steps are
+    /// replaced: its ticks would land on steps no run takes. A list over a row the run did not reach
+    /// stays open.
+    /// </summary>
+    [Fact]
+    public void AnItemListIsClosedOnlyWhenItsRowIsPlannedAgain()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        var other = new FakeCleanupProvider("other");
+        using var page = new StoragePage([cache, other]);
+        cache.Steps = [page.Cache("a", 1024)];
+        other.Steps = [Rows.Folder("elsewhere", 10)];
+        page.Scan();
+        page.Row("other").IsSelected = false;
+
+        page.ViewModel.ShowItems(page.Row("other"));
+        page.Clean();
+
+        Assert.Same(page.Row("other"), page.ViewModel.ShownItems?.Row);
+
+        page.ViewModel.ShowItems(page.Row("cache"));
+        page.Clean();
+
+        Assert.Null(page.ViewModel.ShownItems);
+    }
+
+    /// <summary>
     /// The bar moves in steps of half a percent at least, and always reaches the end. Every report
     /// that reaches the property re-lays out the bar, and a removal reports every 256 files.
     /// </summary>
