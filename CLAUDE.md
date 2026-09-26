@@ -32,8 +32,9 @@ primary checkout is for reading and integrating, and you never switch its branch
 
 A type that needs "and" to describe it is two types. A new cache source is a new `ICleanupProvider`,
 never an edit to a switch. Core depends on `IUserEnvironment`, `IProcessRunner` and
-`IProcessInspector`, never on `Environment.GetFolderPath` or `Process.Start`: that inversion makes
-the safety rules testable. Past about 250 lines, look for the seam. A 500-line file needs a reason.
+`IProcessInspector`, never on `Environment.GetFolderPath` or `Process.Start`, so the safety rules
+are testable. A view-model's decisions go to Core, and `Deguffer.App.Tests` tests only how the shell
+wires them. Past about 250 lines, look for the seam. A 500-line file needs a reason.
 
 ## G2: no god objects
 
@@ -167,14 +168,13 @@ This issue was actioned by an agent on behalf of @BootBlock.
 ## Plan docs carry a status
 
 Every `.md` under `docs/todo/` opens with a `> **Status:**` banner, and a finished one moves to
-`docs/todo/done/` in the same change. Never rewrite a past-tense record to match current practice.
-Memory note: *Deguffer plan docs carry a status banner*.
+`docs/todo/done/` in the same change. Memory note: *Deguffer plan docs carry a status banner*.
 
 ## Keep this file small
 
-This file loads into every session. It holds only rules that apply to every change, each in a few
-lines. Put detail for one kind of change in a memory note that a short rule names. Shorten or
-replace a rule before you add one, and never append an explanation.
+This file holds only rules that apply to every change, each in a few lines. Put detail for one
+kind of change in a memory note that a short rule names. Shorten or replace a rule before you add
+one, and never append an explanation.
 [AGENTS.md](AGENTS.md) stays a pointer to this file. `AgentGuideBudgetTests` fails past 10,000
 characters here, 1,200 in a section, or 600 in `AGENTS.md`. Never raise a budget without asking the
 maintainer.
