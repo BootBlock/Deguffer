@@ -773,7 +773,7 @@ measured in seconds and there is no path by which anything is lost.
 
 | | |
 | --- | --- |
-| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, each Chromium-based browser's own user-data folder, and the Battle.net launcher's built-in browser |
+| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, any WebView2 user-data folder (`EBWebView`) up to six levels under them, each Chromium-based browser's own user-data folder, and the Battle.net launcher's built-in browser |
 | **Method** | Delete the ten cache directories Chromium writes, per profile |
 | **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB. One browser's `Code Cache` alone came to 194 MB on the same workstation |
 
@@ -820,13 +820,37 @@ launcher's own cache and logs beside that folder are two rows of their own:
 [Battle.net launcher cache](#battlenet-launcher-cache) and
 [Battle.net launcher logs](#battlenet-launcher-logs).
 
+Many Windows applications show web content through Microsoft's WebView2, which is the Edge engine
+embedded in another program: Teams, Outlook, OneDrive, Visual Studio, the Windows widgets and
+Microsoft Store among them, and a good many applications from other vendors. WebView2 keeps the same
+user-data folder as any other Chromium host, always in a directory called `EBWebView`, inside
+whichever folder the application chose. One workstation had 19 of them, between two and six levels
+under `%APPDATA%` or `%LOCALAPPDATA%`, and five were inside packaged applications' folders under
+`%LOCALAPPDATA%\Packages`:
+
+| Application's folder | WebView2 user-data folder |
+| --- | --- |
+| Directly in the data folder | `%LOCALAPPDATA%\<Product>\EBWebView` |
+| A vendor and a product | `%LOCALAPPDATA%\Microsoft\OneDrive\EBWebView` |
+| A packaged application | `%LOCALAPPDATA%\Packages\<package>\LocalState\EBWebView` |
+| Deeper still | `%LOCALAPPDATA%\Packages\MSTeams_<id>\LocalCache\Microsoft\MSTeams\EBWebView` |
+
+Deguffer lists each one under that folder's path, because `EBWebView` is the same in every
+application and says nothing about whose it is.
+
 ### What Deguffer does
 
 **It identifies the folder before it looks inside it.** Any directory on your disk may happen to be
 called `GPUCache`, so a cache name is never on its own a reason to go in. Deguffer looks for
 `Local State`, the file Chromium writes into the user-data folder it owns, and only a folder holding
 that file is examined at all. The browser table above only says where to look: a browser's folder
-has to hold `Local State` too.
+has to hold `Local State` too, and so does a directory called `EBWebView`.
+
+To find WebView2's folders, Deguffer looks through the directories under `%APPDATA%` and
+`%LOCALAPPDATA%` down to six levels. It does not follow a link, it does not look inside your
+temporary folder, and it does not look inside another Chromium user-data folder. Everything in one
+of those that Deguffer does not recognise is left alone, so a WebView2 folder inside it is left
+alone too. Edge keeps one for signing in, inside its own user data, and that is why.
 
 The framework Battle.net uses writes `LocalPrefs.json` instead, into the folder and into each
 partition inside it. Deguffer accepts that file only where Battle.net keeps its folder, because an
@@ -837,7 +861,10 @@ guessed, and a directory without the file is not looked inside.
 Within such a folder it removes exactly the ten directories above and nothing else, one step each,
 so you can clear one application and keep another. Where an application keeps several profiles —
 `Default`, `Profile 1` and so on — each profile's caches are their own steps too, so you can clear a
-dormant profile and leave the one you use signed in and warm.
+dormant profile and leave the one you use signed in and warm. In a WebView2 folder, a profile the
+application named for itself sits in a `WV2Profile_<name>` directory beside `Default`, and it is
+treated exactly as `Default` is. Teams keeps all of its cache, and all of its sign-in state, in one
+of those.
 
 `Cache` and `Service Worker` are **not** removed, only the one directory inside each. `Service
 Worker` keeps its registrations and scripts next to the responses they cached, and `Cache` is left
@@ -882,18 +909,32 @@ Close the applications first if you can. A running one keeps its cache files ope
 open is left in place rather than removed. Edge can keep running in the background after its last
 window closes, so check the notification area for it.
 
+Where Deguffer can see that a running program is using a folder, it leaves the whole folder alone and
+says which program it is. WebView2 names the folder it is using when it starts, so this is how a
+WebView2 application that is open is kept out of the clean. Deguffer asks again just before it
+removes each cache, in case the application started after the preview. Some parts of Windows, such
+as the widgets and the Start menu search, run WebView2 almost all the time, so their folders are
+usually left alone.
+
 ### Why Tier 1
 
 Every one of the ten is derived content with an authoritative source elsewhere: web content the
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
-### Not reached: packaged applications
+### Not reached: packaged Electron applications
 
 An application installed from the Microsoft Store does not write to `%APPDATA%`. Windows redirects
-it under `%LOCALAPPDATA%\Packages`, and reaching a Chromium cache there is a separate piece of work
-that is not done yet. If one of your Store applications embeds Chromium, Deguffer does not currently
-see its cache.
+it under `%LOCALAPPDATA%\Packages`. A packaged application's WebView2 folder is reached all the
+same, because Deguffer finds that by its own name. A packaged application that embeds Chromium the
+way an Electron application does keeps a folder with no fixed name there, and Deguffer does not
+currently see its cache.
+
+### Not reached: WebView2 folders further down
+
+A WebView2 folder more than six levels under `%APPDATA%` or `%LOCALAPPDATA%` is not looked for, and
+nor is one inside your temporary folder or inside another application's Chromium folder. Nothing in
+one of those is removed.
 
 ### Not reached: what a browser keeps beside its profiles
 
