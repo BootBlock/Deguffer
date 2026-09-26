@@ -41,6 +41,26 @@ public sealed class ExplorePositionTests
         Assert.Null(ExplorePosition.Top(tree).Opening(tree, tree.RootNode, VolumeSpace.None));
     }
 
+    /// <summary>
+    /// A file, and a folder with nothing in it, lead nowhere. Opened, either would draw an empty card
+    /// under a trail claiming the reader had gone somewhere.
+    /// </summary>
+    [Fact]
+    public void AFileOrAnEmptyFolderLeadsNowhere()
+    {
+        var builder = new ExploreTreeBuilder(@"D:\");
+        var empty = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("empty", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("file", IsDirectory: false, IsLink: false, Size: 10),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        var top = ExplorePosition.Inside(tree.RootNode);
+
+        Assert.Null(top.Opening(tree, empty, Volume));
+        Assert.Null(top.Opening(tree, empty + 1, Volume));
+    }
+
     [Fact]
     public void GoingUpFromTheOpenedRootGoesBackOutToTheVolume()
     {

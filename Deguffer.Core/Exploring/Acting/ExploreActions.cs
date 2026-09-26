@@ -1,23 +1,23 @@
-using Deguffer.App.Shell;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
-using Deguffer.Core.Exploring.Acting;
-using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 
-namespace Deguffer.App.ViewModels;
+namespace Deguffer.Core.Exploring.Acting;
 
 /// <summary>
 /// Asks about an Explore removal and carries it out.
 ///
-/// <para>Separate from <see cref="ExploreViewModel"/> because the two have different subjects. That
-/// one is about which node is being looked at and what the screen says about it; this one is about
-/// what happens to a thing the user picked. Keeping them apart is G1 applied to a page that would
-/// otherwise be scanning, navigating, formatting <em>and</em> deleting.</para>
+/// <para>Separate from the Explore page's view-models because the subjects differ. They are about
+/// which node is being looked at and what the screen says about it; this is about what happens to a
+/// thing the user picked. Keeping them apart is G1 applied to a page that would otherwise be
+/// scanning, navigating, formatting <em>and</em> deleting.</para>
 ///
-/// <para>It decides nothing. What may be removed is <see cref="ExploreActionPolicy"/>'s, what the
-/// user is told is <see cref="ExploreRemovalPrompt"/>'s, and what happened is
-/// <see cref="ExploreRemovalReport.Summary"/>'s — all in Core, all provable without a WinUI
-/// host.</para>
+/// <para>In Core because what it holds are rules about what gets deleted: what a path is told
+/// while the policy is still being built, that a failed build refuses everything, that nothing is
+/// asked about a selection the policy refuses outright, and that a removal waits for the whole
+/// policy rather than acting on part of it. What may be removed is still
+/// <see cref="ExploreActionPolicy"/>'s, what the user is told is <see cref="ExploreRemovalPrompt"/>'s,
+/// and what happened is <see cref="ExploreRemovalReport.Summary"/>'s.</para>
 /// </summary>
 public sealed class ExploreActions
 {
@@ -47,6 +47,9 @@ public sealed class ExploreActions
 
     private readonly Func<CancellationToken, Task<ExploreActionPolicy>> _build;
     private readonly Func<IExploreConfirmationPrompt> _prompt;
+    private readonly CrashLog _faults;
+    private readonly IRecycleBin? _recycleBin;
+    private readonly IFileSystem? _fileSystem;
 
     private Task<ExploreActionPolicy>? _policy;
 
@@ -55,12 +58,25 @@ public sealed class ExploreActions
     /// <see cref="Reconsider"/> has to be able to ask for a fresh one: a declaration that a path is
     /// in use is true of this minute and not of the next.
     /// </param>
+    /// <param name="faults">
+    /// Where a failed build is written down. Handed in rather than reached for, because the app's
+    /// own log is rooted in the real <c>%LOCALAPPDATA%</c>, and a test of a failed build would
+    /// otherwise write into the developer's profile.
+    /// </param>
+    /// <param name="recycleBin">Handed to <see cref="ExploreRemover"/>; the shell's own bin where null.</param>
+    /// <param name="fileSystem">Handed to <see cref="ExploreRemover"/>; the real one where null.</param>
     public ExploreActions(
         Func<CancellationToken, Task<ExploreActionPolicy>> build,
-        Func<IExploreConfirmationPrompt> prompt)
+        Func<IExploreConfirmationPrompt> prompt,
+        CrashLog faults,
+        IRecycleBin? recycleBin = null,
+        IFileSystem? fileSystem = null)
     {
         _build = build;
         _prompt = prompt;
+        _faults = faults;
+        _recycleBin = recycleBin;
+        _fileSystem = fileSystem;
     }
 
     /// <summary>
@@ -85,7 +101,7 @@ public sealed class ExploreActions
     /// The shared instances are not cleared instead, because that would change what a Storage pass
     /// already under way sees.</para>
     /// </summary>
-    public static ExploreActions ForThisMachine(Func<IExploreConfirmationPrompt> prompt) =>
+    public static ExploreActions ForThisMachine(Func<IExploreConfirmationPrompt> prompt, CrashLog faults) =>
         new(
             ct =>
             {
@@ -97,7 +113,8 @@ public sealed class ExploreActions
                 return ExploreActionPolicy.ForAsync(
                     SystemDirectories.Current, environment, VolumeInventory.Current, providers, ct);
             },
-            prompt);
+            prompt,
+            faults);
 
     /// <summary>
     /// Start building the policy, unless one is built or on its way. Called once, when the page is
@@ -191,7 +208,8 @@ public sealed class ExploreActions
         // Everything goes back in, refusals included: the remover partitions again and reports what
         // it would not take, so the user is told about each one rather than seeing it silently
         // dropped from the count.
-        return await ExploreRemover.RemoveAsync(items, mode, policy, ct: ct).ConfigureAwait(true);
+        return await ExploreRemover.RemoveAsync(items, mode, policy, _recycleBin, _fileSystem, ct)
+            .ConfigureAwait(true);
     }
 
     /// <summary>
@@ -239,7 +257,7 @@ public sealed class ExploreActions
         // not reported a second time when the task is collected.
         if (building.Exception is { } failure)
         {
-            App.Faults.Record("Building Explore's removal policy", failure);
+            _faults.Record("Building Explore's removal policy", failure);
         }
 
         if (ReferenceEquals(building, _policy))
