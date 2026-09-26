@@ -23,7 +23,7 @@ public sealed class ChromiumHostTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     private ChromiumCacheProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning);
+        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive);
 
     private string EdgeUserData => Path.Combine(_environment.LocalAppData, "Microsoft", "Edge", "User Data");
 

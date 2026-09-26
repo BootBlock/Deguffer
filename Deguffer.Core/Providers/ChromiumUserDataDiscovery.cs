@@ -8,12 +8,15 @@ namespace Deguffer.Core.Providers;
 /// What the user knows the application as. For a declared browser that is its product name. For an
 /// application embedding the engine it is the folder's own name: the embedding application creates
 /// the folder under its own vendor name, so this is the only label available and it is the one the
-/// user will recognise in the folder listing.
+/// user will recognise in the folder listing. A WebView2 folder is always called <c>EBWebView</c>,
+/// so for one of those it is the path of the folder the host chose, below its application-data
+/// root: <c>Microsoft\OneDrive</c>.
 /// </param>
 /// <param name="ProcessName">
 /// The application's process, for §5.3's warning. A declared browser names it. For an embedding
 /// application the folder's name stands in for it, which is right far more often than not for an
-/// application that named its own data folder.
+/// application that named its own data folder. A WebView2 host's engine runs as the runtime's own
+/// process, whichever application started it, so that is the name given for one.
 /// </param>
 /// <param name="Path">The folder, in display form — a plan never holds an extended-length path.</param>
 /// <param name="Layout">
@@ -43,8 +46,10 @@ public sealed record ChromiumUserData(
 
 /// <summary>
 /// Finds the Chromium user-data folders on this machine: one level under <c>%APPDATA%</c> and
-/// <c>%LOCALAPPDATA%</c>, where an application embedding the engine keeps its folder, and at each
-/// place a <see cref="ChromiumHost"/> declares, where a browser or a launcher keeps its own.
+/// <c>%LOCALAPPDATA%</c>, where an application embedding the engine keeps its folder, in each
+/// <c>EBWebView</c> directory further down, where an application embedding it through WebView2 keeps
+/// its own (see <see cref="ChromiumUserDataWalk"/>), and at each place a <see cref="ChromiumHost"/>
+/// declares, where a browser or a launcher keeps its own.
 ///
 /// <para>Separate from <see cref="ChromiumCacheProvider"/> because the two answer different
 /// questions. This one answers "whose folder is this?", and the provider answers "what inside it
@@ -69,19 +74,32 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     private static partial Regex NumberedProfile();
 
     /// <summary>
+    /// The process a WebView2 host's engine runs as. The runtime starts it for every host
+    /// application, and names the folder it is using on its command line.
+    /// </summary>
+    public const string WebView2ProcessName = "msedgewebview2";
+
+    /// <summary>
+    /// A WebView2 profile directory: the prefix the runtime writes, then a profile name in the
+    /// characters and length Microsoft documents for one. Anything else is not looked inside.
+    /// </summary>
+    [GeneratedRegex(@"\AWV2Profile_[A-Za-z0-9#@$()+\-_~.\[\]{}]{1,64}\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex WebView2Profile();
+
+    /// <summary>
     /// Every Chromium user-data folder under the two application-data roots, then every declared
     /// host's.
     ///
-    /// <para>The roots hold hundreds of directories between them, so the order of the two checks is
-    /// the performance design (G4): one file-existence check rejects almost every candidate, and
-    /// only a folder that passes it is enumerated at all.</para>
+    /// <para>Only the browser's marker identifies a folder found by walking. The framework's
+    /// <c>LocalPrefs.json</c> is a name any application might give its own settings, so it
+    /// identifies a folder only where a host row declares it.</para>
     ///
-    /// <para>A link one level under an application-data root is neither followed nor reported.
-    /// Everywhere else in Deguffer a skipped link is named, because there it is a sibling of
-    /// something being deleted and the user can see it in the folder. Here it is neither: this walk
-    /// is choosing which applications to look at, not classifying the children of a tool root, and
-    /// a link to some unrelated application's data folder is not something a plan would ever have
-    /// mentioned. What it points at was never identified, so it is not looked at.</para>
+    /// <para>A link below an application-data root is neither followed nor reported. Everywhere
+    /// else in Deguffer a skipped link is named, because there it is a sibling of something being
+    /// deleted and the user can see it in the folder. Here it is neither: this walk is choosing
+    /// which applications to look at, not classifying the children of a tool root, and a link to
+    /// some unrelated application's data folder is not something a plan would ever have mentioned.
+    /// What it points at was never identified, so it is not looked at.</para>
     /// </summary>
     public IReadOnlyList<ChromiumUserData> Discover(CancellationToken ct = default)
     {
@@ -92,9 +110,9 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
 
         foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
         {
-            var scan = ChildDirectories.Under(root);
+            var walk = ChromiumUserDataWalk.Under(root, environment.TempPath, ct);
 
-            if (scan.Unreadable)
+            if (walk.RootUnreadable)
             {
                 // An application-data root that will not be listed leaves this walk with nothing to
                 // report and nothing to say, which the provider would otherwise render as "no
@@ -103,23 +121,21 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
                 continue;
             }
 
-            foreach (var child in scan.Directories)
+            foreach (var folder in walk.Folders)
             {
                 ct.ThrowIfCancellationRequested();
 
-                var path = LongPath.Display(child.FullName);
+                var layout = folder.IsWebView2 ? ChromiumLayout.WebView2 : ChromiumLayout.Browser;
+                var name = folder.IsWebView2 ? HostOf(root, folder.Path) : Path.GetFileName(folder.Path);
+                var profiles = ProfilesUnder(folder.Path, layout, out var incomplete);
 
-                // Only the browser's marker. The framework's LocalPrefs.json is a name any
-                // application might give its own settings, so it identifies a folder only where a
-                // host row declares it.
-                if (!LongPath.FileExists(Path.Combine(path, ChromiumLayout.Browser.IdentifyingFile)))
-                {
-                    continue;
-                }
-
-                var profiles = ProfilesUnder(path, ChromiumLayout.Browser, out var incomplete);
                 found.Add(new ChromiumUserData(
-                    child.Name, child.Name, path, ChromiumLayout.Browser, profiles, incomplete));
+                    name,
+                    folder.IsWebView2 ? WebView2ProcessName : name,
+                    folder.Path,
+                    layout,
+                    profiles,
+                    incomplete));
             }
         }
 
@@ -229,9 +245,24 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
         return profiles;
     }
 
+    /// <summary>
+    /// The folder a WebView2 host chose, below its application-data root, which is how the user can
+    /// find it. The runtime's own <c>EBWebView</c> is the same in every host and says nothing, and so
+    /// does the folder above it often enough (<c>0001</c>, <c>LocalState</c>) that no one segment
+    /// would do. A folder directly in the root has only its own name.
+    /// </summary>
+    private static string HostOf(string root, string userData)
+    {
+        var host = Path.GetRelativePath(root, Path.GetDirectoryName(userData) ?? root);
+
+        return host == "." ? Path.GetFileName(userData) : host;
+    }
+
     private static bool IsProfile(string path, ChromiumLayout layout) => layout.Profiles switch
     {
         ChromiumProfileRule.Named => IsNamedProfile(Path.GetFileName(path)),
+        ChromiumProfileRule.WebView2 =>
+            IsNamedProfile(Path.GetFileName(path)) || WebView2Profile().IsMatch(Path.GetFileName(path)),
         ChromiumProfileRule.Marked => LongPath.FileExists(Path.Combine(path, layout.IdentifyingFile)),
 
         // A rule this method does not know yields no profile, so nothing inside it is looked at.
