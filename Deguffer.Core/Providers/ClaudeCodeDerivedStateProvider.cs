@@ -62,7 +62,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             ClaudeCodeHome.Projects,
             SafetyTier.DoNotTouch,
             "Your conversations with Claude Code, and each project's memory. It stays: only output a session "
-            + "spilled beside a conversation that is already gone is removed from inside it."),
+            + "spilled beside a conversation that is already gone is removed from inside it by this row. The "
+            + "conversations themselves are the Claude Code conversations row's, offered one at a time."),
         new ChildClassification(
             ClaudeCodeHome.Sessions,
             SafetyTier.DoNotTouch,
@@ -129,22 +130,28 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
     /// <param name="sessions">
-    /// Claude Code's list of running sessions, shared with <see cref="ClaudeCodeFileHistoryProvider"/> so
-    /// that one planning pass reads it, and asks about each process in it, once.
+    /// Claude Code's list of running sessions, shared with <see cref="ClaudeCodeFileHistoryProvider"/> and
+    /// <see cref="ClaudeCodeConversationProvider"/> so that one planning pass reads it, and asks about each
+    /// process in it, once.
+    /// </param>
+    /// <param name="projects">
+    /// The walk over Claude Code's project folders, shared with <see cref="ClaudeCodeConversationProvider"/>
+    /// so that one planning pass lists them once.
     /// </param>
     public ClaudeCodeDerivedStateProvider(
         IUserEnvironment? environment = null,
         ClaudeCodeSessionRegistry? sessions = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ClaudeCodeProjectsDiscovery? projects = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
     {
-        _projects = new ClaudeCodeProjectsDiscovery(Environment);
+        _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment);
         _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector);
     }
 

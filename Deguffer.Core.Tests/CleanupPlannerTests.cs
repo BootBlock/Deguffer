@@ -416,7 +416,7 @@ public sealed class CleanupPlannerTests
                 "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
-                "claude-code-file-history",
+                "claude-code-file-history", "claude-code-conversations",
             ],
             planner.Providers.Select(p => p.Id));
 
@@ -434,6 +434,7 @@ public sealed class CleanupPlannerTests
             [
                 "retroarch-thumbnails", "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
+                "claude-code-conversations",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
 

@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Seventy sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Seventy-two sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Seventy providers, each holding its own knowledge of one location. A provider reports "not
+Seventy-two providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -184,6 +184,7 @@ installed" cleanly on a machine without that toolchain.
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written into stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |
+| Claude Code conversations | One item per session, by its title and project, for when you want one gone before Claude Code deletes it itself after 30 days; never one running, one in a project Claude Code is running in, or one used this week |
 
 **Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
 excluded by construction rather than by enumeration. Outlook's mailbox and data files are named as

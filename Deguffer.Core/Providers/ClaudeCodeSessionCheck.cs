@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
@@ -23,9 +24,10 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
         + "session this belongs to has ended";
 
     private readonly ClaudeCodeSessionRegistry _sessions;
-    private readonly Func<ClaudeCodeSessionList, string?> _inUse;
+    private readonly Func<ClaudeCodeSessionList, CancellationToken, string?> _inUse;
 
-    private ClaudeCodeSessionCheck(ClaudeCodeSessionRegistry sessions, Func<ClaudeCodeSessionList, string?> inUse)
+    private ClaudeCodeSessionCheck(
+        ClaudeCodeSessionRegistry sessions, Func<ClaudeCodeSessionList, CancellationToken, string?> inUse)
     {
         _sessions = sessions;
         _inUse = inUse;
@@ -33,16 +35,60 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
 
     /// <summary>For something named by its session: held while the list names that session.</summary>
     public static ClaudeCodeSessionCheck Ended(ClaudeCodeSessionRegistry sessions, string sessionId) =>
-        new(sessions, list => list.Lists(sessionId)
+        new(sessions, (list, _) => list.Lists(sessionId)
             ? "the Claude Code session it belongs to is running again"
             : null);
+
+    /// <summary>
+    /// For both parts of a session whose conversation was offered: held while the list names the session,
+    /// while a running session may be working in its project (see <see cref="ClaudeCodeOccupancy"/>), or
+    /// once anything has written to the conversation since the preview.
+    ///
+    /// <para><b>The last is what keeps a session whole.</b> The guard on recent content spares a
+    /// conversation written to after the preview, and a session folder is a separate step it does not
+    /// spare. Asked of both parts, the question holds the folder back with the conversation.</para>
+    /// </summary>
+    /// <param name="starts">Where each session's conversation says it started, shared by every check of a plan.</param>
+    /// <param name="conversation">The session's conversation.</param>
+    /// <param name="lastWrittenUtc">When the preview found the conversation last written.</param>
+    public static ClaudeCodeSessionCheck Untouched(
+        ClaudeCodeSessionRegistry sessions,
+        ClaudeCodeSessionStarts starts,
+        string sessionId,
+        string project,
+        string conversation,
+        DateTime lastWrittenUtc) =>
+        new(sessions, (list, ct) =>
+            list.Lists(sessionId)
+                ? "the Claude Code session it belongs to is running again"
+                : ClaudeCodeOccupancy.Of(list, starts, ct).Occupies(project)
+                    ? "Claude Code is running in the project this conversation belongs to, and could resume it"
+                    : WrittenSince(conversation, lastWrittenUtc));
+
+    /// <summary>
+    /// Why the session is held back where its conversation was written after <paramref name="lastWrittenUtc"/>,
+    /// or where Windows would not say when it was. A date nobody could read is not a date that has not moved.
+    /// </summary>
+    private static string? WrittenSince(string conversation, DateTime lastWrittenUtc)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(LongPath.Extended(conversation)) > lastWrittenUtc
+                ? "Claude Code has written to this conversation since the scan"
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "Deguffer could not tell whether Claude Code has written to this conversation since the scan";
+        }
+    }
 
     /// <summary>
     /// For something that names no session: held while any running session could have written it,
     /// which is <see cref="ClaudeCodeSessionList.Predates"/> answering no.
     /// </summary>
     public static ClaudeCodeSessionCheck Predating(ClaudeCodeSessionRegistry sessions, DateTime writtenUtc) =>
-        new(sessions, list => list.Predates(writtenUtc)
+        new(sessions, (list, _) => list.Predates(writtenUtc)
             ? null
             : "a Claude Code session that is running now may have made it");
 
@@ -50,7 +96,7 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
     {
         var list = _sessions.ReadAfresh(ct);
 
-        return (list.Complete ? _inUse(list) : UnreadableReason) is { } reason
+        return (list.Complete ? _inUse(list, ct) : UnreadableReason) is { } reason
             ? [new InUseNow(step.Path, reason)]
             : [];
     }

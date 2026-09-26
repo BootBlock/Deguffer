@@ -1132,7 +1132,7 @@ It removes each session's folder, one step each, and shows when each was last wr
 Claude Code's folder, `file-history` itself, the folder of any session that is running or was written
 to in the last 7 days, and everything in `file-history` that is not a session's folder. The rest of
 Claude Code's folder is outside this row: [Claude Code session leftovers](#claude-code-session-leftovers)
-covers it.
+and [Claude Code conversations](#claude-code-conversations) cover it.
 
 ### What it costs you
 
@@ -1149,6 +1149,85 @@ finished with, differ. VS Code has three rows for the same reason.
 
 Nothing re-creates a snapshot. It is the record of a file as it was, which is the judgement made for
 [crash dumps and error reports](#crash-dumps-and-error-reports).
+
+---
+
+## Claude Code conversations
+
+**Tier 3 — user data.** Never pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.claude\projects\<project>\<session>.jsonl` and the `<session>` folder beside it, or inside `CLAUDE_CONFIG_DIR` where that is set |
+| **Method** | Delete each conversation, and its session's folder, one session at a time |
+| **Typical size** | About 6.7 GB across 1,405 conversations and their folders on the machine this was measured on, where Claude Code was set to keep them for two years |
+
+### What it is
+
+Claude Code saves every conversation, so that you can resume it: the messages, every tool call and
+its result. Beside each conversation is a folder of the same name, holding what its subagents said
+and the tool output it set aside. Claude Code deletes both itself once nobody has used them for its
+retention period, `cleanupPeriodDays`, which is 30 days unless you changed it.
+
+### What Deguffer does
+
+**This row is for control, not for space.** Everything here goes on its own once its retention period
+runs out, so removing a conversation brings its deletion forward rather than freeing space that would
+otherwise stay taken. Each item says when Claude Code would have deleted it anyway.
+
+It lists each session by the title Claude Code shows for it, grouped by project, with when it
+started and when it expires. A session is two items, the conversation and its folder, so that either
+can stay. Keeping a session keeps both.
+
+- **A session Claude Code lists as running is left alone**, and each entry in that list is checked
+  against Windows. If the list cannot be read, no conversation is offered, and the row says so.
+- **Every conversation in a project Claude Code is running in is left alone.** A running session can
+  resume any conversation in its project. A session counts as in a project if it is working in it or
+  inside it, or if it started there and has since moved, into a worktree for example.
+- **If any project folder cannot be listed, no conversation is offered.** Which folders are a session's
+  is answered across every project folder.
+- **A session goes whole or not at all.** If anything in its folder was written in the last 7 days, the
+  conversation stays too, and if the conversation is written to after the scan, both stay.
+- **Nothing used in the last 7 days is offered**, whatever the list says, and whatever the guard on
+  recently changed files is set to. A conversation is written to all the time it is in use.
+- **A conversation Deguffer cannot place in a project is not offered.** The format is Claude Code's
+  own and changes between versions, and a conversation that cannot be described cannot be chosen.
+  The row says how many it left.
+- **The list is read again when you press Clean**, immediately before each item is removed, so a
+  conversation you resume after the scan, or one in a project you open after it, stays.
+- **The title, project and date are read from the start and the end of each conversation**, never
+  more. The last line of a conversation is the last thing you typed, word for word, and it is never
+  shown.
+
+The expiry date is the one your own Claude Code settings set. A project's settings, or your
+organisation's, can set a different period, and the row says so.
+
+§5.1 was asked, and the answer is no. Claude Code's own purge removes a whole project's conversations
+and memory together, and nothing removes one conversation.
+
+### What is protected
+
+Claude Code's folder, `projects`, every project folder, each project's `memory`, `.credentials.json`,
+every conversation that is running, is in a project Claude Code is running in, was used in the last
+7 days or could not be read, the folder of each of those sessions, and anything in a project folder that is not a conversation or a
+session's folder, such as a conversation Claude Code set aside. A session folder whose conversation
+has already gone is outside this row: [Claude Code session leftovers](#claude-code-session-leftovers)
+covers it.
+
+### What it costs you
+
+**Permanently.** Those conversations cannot be resumed or read again. Claude Code would have deleted
+each of them on the date shown, so what you lose is the rest of that time. Your other conversations,
+each project's memory, your settings and your sign-in are untouched.
+
+With the typed confirmation turned on, clearing this and
+[Claude Code rewind snapshots](#claude-code-rewind-snapshots) in one pass means typing both names.
+They are separate rows for the reason that row gives.
+
+### Why Tier 3
+
+Nothing re-creates a conversation. It is the record of what was said, which is the judgement made
+for [crash dumps and error reports](#crash-dumps-and-error-reports).
 
 ---
 
@@ -2973,7 +3052,8 @@ purge removes a whole project's conversations and memory together.
 | `%USERPROFILE%\.claude-swap-backup` | Not Claude Code's at all. Another program's saved sign-ins, under a name that begins the same way |
 
 A conversation that still exists, and the output beside it, is never removed here. Whether to remove
-a conversation is a choice about your own history, and this row never makes it.
+a conversation is a choice about your own history, made one conversation at a time in
+[Claude Code conversations](#claude-code-conversations).
 
 ### What it costs you
 

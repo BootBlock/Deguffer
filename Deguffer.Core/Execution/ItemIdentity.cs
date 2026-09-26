@@ -17,9 +17,11 @@ namespace Deguffer.Core.Execution;
 /// item whose only name is where it is.</para>
 /// </summary>
 /// <param name="Key">
-/// What matches this item from one scan to the next. Unique within the provider that supplies it,
-/// and compared without regard to case, because most keys are directory names and NTFS does not
-/// distinguish theirs.
+/// What matches this item from one scan to the next. Unique to one item within the provider that
+/// supplies it, and compared without regard to case, because most keys are directory names and NTFS
+/// does not distinguish theirs. An item removed in more than one step gives each step the same
+/// identity, so keeping the item keeps all of them: a Claude Code conversation and its session folder
+/// are the case.
 /// </param>
 /// <param name="Name">
 /// What the user recognises the item by. Stored beside the key so that a list of kept items can

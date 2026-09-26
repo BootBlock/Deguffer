@@ -32,12 +32,13 @@ namespace Deguffer.Core.Providers;
 /// is Tier 4 by construction.</para>
 ///
 /// <para><b>§5.6, scoped to Claude Code's folder and <see cref="ClaudeCodeHome.FileHistory"/>.</b>
-/// Everything else in Claude Code's folder is <see cref="ClaudeCodeDerivedStateProvider"/>'s to assert, and
-/// some of it is that provider's to remove, which a plan here that asserted it would read as a
-/// failure.</para>
+/// Everything else in Claude Code's folder is <see cref="ClaudeCodeDerivedStateProvider"/>'s and
+/// <see cref="ClaudeCodeConversationProvider"/>'s to assert, and some of it is theirs to remove, which a
+/// plan here that asserted it would read as a failure.</para>
 ///
-/// <para><b>A second Tier 3 row over Claude Code's data, deliberately.</b> With the typed confirmation on,
-/// clearing this and <see cref="ClaudeCodeMcpLogProvider"/> in one pass means typing both names. The rows
+/// <para><b>One of three Tier 3 rows over Claude Code's data, deliberately.</b> With the typed confirmation
+/// on, clearing this beside <see cref="ClaudeCodeMcpLogProvider"/> or
+/// <see cref="ClaudeCodeConversationProvider"/> in one pass means typing each name. The rows
 /// are split on the basis the VS Code rows are: what each must leave standing, and how each decides that
 /// something is finished with, differ.</para>
 ///
@@ -151,7 +152,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
         var folder = Path.Combine(home, ClaudeCodeHome.FileHistory);
 
-        if (FirstObstacle(home, folder) is { } obstacle)
+        if (ClaudeCodeHome.FirstObstacle(home, folder) is { } obstacle)
         {
             return obstacle.IsLink ? LinkedAway(obstacle.Path) : UnreadableRootPlan(obstacle.Path);
         }
@@ -244,7 +245,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             // the way down to it, the plan names the place, so Explore is told about it too: the home
             // recognising nothing refuses everything below it, snapshots included.
             return ClaudeCodeHome.Resolve(Environment) is { } home
-                && FirstObstacle(home, Path.Combine(home, ClaudeCodeHome.FileHistory)) is { IsLink: false }
+                && ClaudeCodeHome.FirstObstacle(home, Path.Combine(home, ClaudeCodeHome.FileHistory)) is { IsLink: false }
                     ? [new ToolRoot(home, HomeReason, static _ => false)]
                     : [];
         }
@@ -269,30 +270,6 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         + "through a link.");
 
     /// <summary>
-    /// The first place on the way down to the snapshot folder that stops it, the folder included, or
-    /// null where nothing does. The plan, the survey and the declaration all ask this, so none of them
-    /// can read a refusal as absence while another names it.
-    ///
-    /// <para>The home first, then everything below it, and all of it before the folder is probed
-    /// for. Probing for the folder resolves through the home, so a link there that Windows declines
-    /// to follow would leave the folder reading as unreachable and the link — which Deguffer can see
-    /// perfectly well — never named.</para>
-    /// </summary>
-    private static DerivedPathObstacle? FirstObstacle(string home, string folder)
-    {
-        switch (LongPath.ProbeDirectory(home, out var isLink))
-        {
-            case PathPresence.Refused:
-                return new DerivedPathObstacle(home, IsLink: false);
-
-            case PathPresence.Present when isLink is true:
-                return new DerivedPathObstacle(home, IsLink: true);
-        }
-
-        return DerivedPath.FirstObstacleBetween(home, folder);
-    }
-
-    /// <summary>
     /// One look at the snapshot folder and the list of running sessions, memoised for the life of a planning
     /// pass (G4). Presence, planning and the declaration all read it.
     /// </summary>
@@ -307,7 +284,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
         var folder = Path.Combine(home, ClaudeCodeHome.FileHistory);
 
-        if (FirstObstacle(home, folder) is not null || !LongPath.DirectoryExists(folder))
+        if (ClaudeCodeHome.FirstObstacle(home, folder) is not null || !LongPath.DirectoryExists(folder))
         {
             return null;
         }

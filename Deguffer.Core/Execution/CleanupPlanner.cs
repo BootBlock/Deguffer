@@ -25,7 +25,7 @@ public sealed class CleanupPlanner
     /// launcher's cache and its logs, the Steam client's
     /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
-    /// Claude Code's sessions leave behind, its rewind snapshots and the logs of the MCP servers it runs, the
+    /// Claude Code's sessions leave behind, its conversations, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
     /// per-volume Recycle Bins, the Windows File History target, the crash
     /// dumps, the Windows servicing logs and the per-project build output, Unreal's included, inside the user's own
@@ -37,7 +37,7 @@ public sealed class CleanupPlanner
     /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds and the local copies of cloud files, which are Tier 2, and the
     /// Recycle Bins, the File History target, the crash dumps, the servicing logs, the Epic
-    /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
+    /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
     /// acknowledgement for Tier 2, and for Tier 3 the typed phrase where the user has asked to be
     /// held to it.
@@ -88,6 +88,11 @@ public sealed class CleanupPlanner
         // about each running process twice per pass.
         var claudeSessions = new ClaudeCodeSessionRegistry(environment, ProcessInspector.Default);
 
+        // One walk over Claude Code's project folders for the two providers inside them, on the same
+        // reasoning: the leftovers row asks which sessions have a conversation, and the conversations row
+        // offers them, and the folder holds thousands of entries.
+        var claudeProjects = new ClaudeCodeProjectsDiscovery(environment);
+
         // One finding of Steam for both providers inside its folders, on the same reasoning: each
         // asks the registry and probes the install, and the shader cache also reads the library list.
         var steam = new SteamDiscovery(environment);
@@ -106,7 +111,7 @@ public sealed class CleanupPlanner
             new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
             .. CacheProviders(
-                environment, squirrel, steam, retroArch, claudeSessions, liveTrees, preferences ?? DefaultPreferences.Instance),
+                environment, squirrel, steam, retroArch, claudeSessions, claudeProjects, liveTrees, preferences ?? DefaultPreferences.Instance),
         ]);
     }
 
@@ -116,6 +121,7 @@ public sealed class CleanupPlanner
         SteamDiscovery steam,
         RetroArchDiscovery retroArch,
         ClaudeCodeSessionRegistry claudeSessions,
+        ClaudeCodeProjectsDiscovery claudeProjects,
         ILiveTreeInspector liveTrees,
         ICurrentPreferences preferences)
     {
@@ -176,7 +182,7 @@ public sealed class CleanupPlanner
             new AzureFunctionsToolsProvider(environment),
             new GraphicsDriverInstallerProvider(environment, liveTrees: liveTrees),
             new AutodeskInstallerProvider(environment, liveTrees: liveTrees),
-            new ClaudeCodeDerivedStateProvider(environment, sessions: claudeSessions),
+            new ClaudeCodeDerivedStateProvider(environment, projects: claudeProjects, sessions: claudeSessions),
             new RecycleBinProvider(environment, preferences: preferences),
             new FileHistoryProvider(environment, preferences: preferences),
             new CloudLocalCopiesProvider(environment),
@@ -197,6 +203,7 @@ public sealed class CleanupPlanner
             new ClaudeCodeMcpLogProvider(environment),
             toolLogs,
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions),
+            new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions),
         ];
     }
 

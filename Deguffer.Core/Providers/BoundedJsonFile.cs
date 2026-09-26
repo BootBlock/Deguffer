@@ -14,11 +14,15 @@ internal static class BoundedJsonFile
     /// </summary>
     public static JsonDocument? Read(string path, int maximumBytes)
     {
-        if (BoundedFile.Read(path, maximumBytes) is not { } content)
-        {
-            return null;
-        }
+        return BoundedFile.Read(path, maximumBytes) is { } content ? Parse(content) : null;
+    }
 
+    /// <summary>
+    /// A record already read within its bound, or null where it is not JSON or not a JSON object. The
+    /// caller disposes what it is given.
+    /// </summary>
+    public static JsonDocument? Parse(ReadOnlyMemory<byte> content)
+    {
         try
         {
             var document = JsonDocument.Parse(content);
