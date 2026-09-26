@@ -225,6 +225,28 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The cmdlet writes a progress line and then throws, so the run reports the error rather than the
+    /// progress line: "Deleting..." beside a failed step says nothing about why it failed.
+    /// </summary>
+    [Fact]
+    public async Task AFailedClearReportsWindowsReasonRatherThanItsProgressLine()
+    {
+        InstallModule();
+        _runner.Replying(arguments =>
+            arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal)
+                ? new CommandOutcome(1, "Deleting...\r\n", "File is not initialized. Please try again later.\r\n")
+                : new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty));
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.StartsWith("File is not initialized.", step.Message, StringComparison.Ordinal);
+        Assert.Equal(0, step.BytesReclaimed);
+    }
+
+    /// <summary>
     /// §5.2 and §5.6: the plan names no path to delete, protects Windows Update's folder and its
     /// history by name, and a run proves that they and the unrecognised folder beside them stand.
     /// </summary>
