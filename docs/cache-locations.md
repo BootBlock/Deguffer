@@ -1881,7 +1881,9 @@ PlayStation 3 program into code for your processor.
 keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin or PCSX2
 does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table. A folder with none in it gets a note on the plan, and nothing in it is touched.
+table. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+folder that holds RetroArch gets no note, because the
+[RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
 **A folder counts only where the emulator's own settings file is in it.** A folder that merely holds
 a `cache` directory is not an emulator's. A folder that holds your whole profile, or a drive's root,
@@ -1953,6 +1955,107 @@ A [GPU shader cache](#gpu-shader-caches) costs a few seconds of stutter. These c
 game starts, or stutter through a whole play session, which Dolphin's own settings describe: shader
 compilation causes stuttering, and compiling ahead costs a longer delay before the game starts. That
 is a cost in time rather than a slower next use, so it is the second tier.
+
+---
+
+## RetroArch's downloaded shaders, databases and thumbnails
+
+Two rows, because they are two tiers.
+
+| | |
+| --- | --- |
+| **Rows** | **RetroArch shaders and game databases**, Tier 2. **RetroArch thumbnails**, Tier 3 |
+| **Location** | `shaders_slang`, `shaders_glsl` and `shaders_cg` in RetroArch's shader folder; the `.rdb` files in its database folder; `Named_Boxarts`, `Named_Snaps`, `Named_Titles` and `Named_Logos` in each system's folder in its thumbnails folder. Each folder is where RetroArch's settings put it, `shaders`, `database\rdb` and `thumbnails` beside the program by default |
+| **Method** | Delete the recognised folders, and the `.rdb` files one by one, one item each. Thumbnails are grouped by system |
+| **Typical size** | Nothing measured: the machine this was written on has no RetroArch. The libretro servers put the shader sets at about 15 to 54 MB compressed each, a few hundred megabytes extracted, and the databases at about 52 MB compressed. Thumbnails run to many gigabytes for a large library |
+
+### What it is
+
+RetroArch's **Online Updater** downloads shader sets, game databases and thumbnails, and nothing in
+RetroArch ever removes them. The shaders are the effects a preset applies, such as a CRT look. The
+databases are what **Scan Directory** matches your games against to build a playlist. The thumbnails
+are the box art, title screens, snapshots and logos shown beside each game in a playlist, fetched by
+the **Playlist Thumbnails Updater**, or as each game is shown where on-demand thumbnails are
+switched on.
+
+### What Deguffer does
+
+**It finds RetroArch beside the program, because that is where RetroArch keeps everything.** Every
+folder's Windows default begins `:\`, which RetroArch reads as the folder `retroarch.exe` is in, so
+a location in your profile finds nothing. Deguffer looks:
+
+- in each folder you add under **Emulator folders** in Settings, and
+- where Steam's own record of RetroArch, `appmanifest_1118310.acf` in any Steam library, says it is
+  installed.
+
+A folder counts only where `retroarch.exe`, or `retroarch_angle.exe`, is in it. The installer's
+records are not read, so **add the folder of an installed or unpacked copy under Emulator folders**.
+
+**It reads RetroArch's own settings, in RetroArch's own order.** A `retroarch.cfg` beside the
+program wins whenever it exists. Otherwise it is `%APPDATA%\retroarch.cfg`, with no `RetroArch`
+folder between, although that folder is widely written about. The file is read by RetroArch's own
+rules, which are not an INI file's: the first entry for a setting wins, `#include` is followed, and
+a value set to `default` switches the thumbnails or the shaders off. A setting relative to where
+RetroArch was started from is not followed, and the plan says so. Settings in `%APPDATA%` that no
+program found is using are followed only where they give a full path.
+
+**Only what the updater writes, by the name it writes it under.** The updater extracts each shader
+set into a folder of its own name, so only those three are offered, and the presets you saved in the
+shader folder stay. It extracts the databases straight into the database folder, so only `.rdb`
+files are offered there, and a folder you pointed the setting at keeps everything else.
+
+**Nothing of RetroArch's while it runs.** RetroArch writes thumbnails as you browse and extracts an
+update in place, so while it is running nothing is offered, the plan says why, and Explore refuses
+the folders. The clean asks again before it removes each item.
+
+RetroArch has no command Deguffer could run to remove a downloaded set.
+
+### What is protected
+
+**Everything in RetroArch's folder except the items in the Location row.** These are asserted by
+name after a clean:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `system` | BIOS and system files you supplied. Much of it cannot be downloaded at any price, and the updater's route into it is not a way to restore it |
+| `saves`, `states` | Your saves and save states |
+| `playlists`, `playlists\logs` | Your playlists, and how long you have played each game. The `logs` folder is a record, not logs |
+| `config`, `config\remaps`, `config\record` | The settings, remaps and recording settings you chose |
+| `screenshots`, `recordings` | What you captured |
+| `downloads`, `downloads\core_backups` | Content the downloader fetched for you, and your core backups. The updater does not stage anything here |
+| `cheats`, `autoconfig`, `overlays` | The updater extracts into these beside your own files, with no record of which is which |
+| `filters`, `assets`, `info` | Filters, the menu's look with your wallpapers, and what RetroArch knows about each core |
+| `cores` | The cores you installed. The updater updates only installed cores, so each would have to be picked again by hand |
+| `database`, `database\cursors` | The database folder itself, and queries you saved |
+| `shaders` | The shader folder itself, with the presets you saved |
+| `retroarch.cfg`, `retroarch-core-options.cfg`, `custom.ini` | RetroArch's settings |
+| `thumbnails\discord`, `thumbnails\cheevos` | Discord avatars and achievement badges, which are not thumbnails |
+| Anything else in a system's thumbnails folder | Not one of the four kinds of picture |
+
+Explore enforces the same rule. In RetroArch's folder it allows only the way to what is offered, and
+in each folder it reads only what the plan recognised. A system's thumbnails folder with none of the
+four kinds of picture in it is refused whole. Deguffer does not look through a link anywhere between
+the program and what it removes.
+
+### What it costs you
+
+**Shaders and game databases:** until you download them again from **Online Updater**, with **Update
+Slang Shaders**, **Update GLSL Shaders**, **Update Cg Shaders** and **Update Databases**, a shader
+preset that uses one does not load, and **Scan Directory** finds no games. Your playlists stay.
+
+**Thumbnails:** RetroArch shows no pictures for those games until they are downloaded again. **A
+picture you added yourself is gone for good**, and so is one for a game the libretro server does not
+carry.
+
+### Why these tiers
+
+The shaders and databases are a documented re-download through a named menu entry. That is a cost in
+time and bandwidth, and nothing is lost, so they are Tier 2.
+
+Most thumbnails download again too, but RetroArch lets you add your own, and a picture you added sits
+in the same folder, under the same kind of name, as a downloaded one. Nothing tells them apart, and
+yours cannot be downloaded, so the thumbnails are Tier 3: never selected for you, and confirmed as a
+permanent loss.
 
 ---
 

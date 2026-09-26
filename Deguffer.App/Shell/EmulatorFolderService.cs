@@ -6,8 +6,8 @@ namespace Deguffer.App.Shell;
 /// The folders the user has said an emulator is installed in, held for the life of the app and
 /// written through to <see cref="EmulatorFolderStore"/> on every change.
 ///
-/// <para>The emulator row reads the same file at the start of each scan, so a folder added here is
-/// looked in by the next one.</para>
+/// <para>The emulator and RetroArch rows read the same file at the start of each scan, so a folder
+/// added here is looked in by the next one.</para>
 /// </summary>
 public sealed class EmulatorFolderService
 {

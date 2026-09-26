@@ -35,10 +35,10 @@ public sealed record SteamApp(string Id, string? Name, bool? IsInstalled)
 /// Reads the manifest Steam keeps for each installed game, <c>steamapps\appmanifest_&lt;id&gt;.acf</c>
 /// in whichever library holds it, to put a name to an application id.
 ///
-/// <para>Read rather than guessed, and only for the name. A manifest also records the game's
-/// install folder, its build and the account that installed it, and none of that is taken. The
-/// manifest is Steam's record that the game is installed, so it is never a target: the provider that
-/// asks here names it as a survivor instead.</para>
+/// <para>Read rather than guessed, and only for the name and the install folder. A manifest also
+/// records the game's build and the account that installed it, and neither is taken. The manifest is
+/// Steam's record that the game is installed, so it is never a target: the provider that asks here
+/// names it as a survivor instead.</para>
 ///
 /// <para>Memoised per id for the life of one planning pass (G4), because a game's cache can sit in
 /// more than one library and each library is asked about the same game.</para>
@@ -47,6 +47,9 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
 {
     /// <summary>Far past any manifest Steam writes, which run to a few kilobytes.</summary>
     private const int MaximumBytes = 256 * 1024;
+
+    /// <summary>Every character a single folder name cannot hold, the separators among them.</summary>
+    private static readonly char[] NotInAFolderName = Path.GetInvalidFileNameChars();
 
     private readonly Dictionary<string, SteamApp> _described = new(StringComparer.Ordinal);
 
@@ -80,20 +83,80 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
         return _described[id] = new SteamApp(id, Name: null, IsInstalled: unknowable ? null : false);
     }
 
+    /// <summary>
+    /// The folder each library holding the application's manifest installed it in,
+    /// <c>steamapps\common\&lt;installdir&gt;</c>, with the library it was built from, and the
+    /// manifests Windows would not describe or that could not be read. Not memoised: it is asked once
+    /// a pass, about one application.
+    /// </summary>
+    /// <remarks>
+    /// An <c>installdir</c> that is not one plain folder name is not taken, because Steam writes only
+    /// a folder name there and anything else would lead out of the library.
+    /// </remarks>
+    public (IReadOnlyList<(string Library, string Folder)> Folders, IReadOnlyList<string> Unread) InstallFoldersOf(string id)
+    {
+        List<(string Library, string Folder)> folders = [];
+        List<string> unread = [];
+
+        foreach (var library in libraries.Folders)
+        {
+            var manifest = Path.Combine(library, RelativePath(id));
+
+            switch (LongPath.ProbeFile(manifest))
+            {
+                case PathPresence.Absent:
+                    continue;
+
+                case PathPresence.Refused:
+                    unread.Add(manifest);
+                    continue;
+            }
+
+            if (!AppStateOf(manifest, out var appState))
+            {
+                unread.Add(manifest);
+                continue;
+            }
+
+            if (appState?.Child("installdir")?.Value?.Trim() is { Length: > 0 } installDir
+                && installDir is not ("." or "..")
+                && installDir.IndexOfAny(NotInAFolderName) < 0)
+            {
+                folders.Add((library, Path.Combine(library, "steamapps", "common", installDir)));
+            }
+        }
+
+        return (folders, unread);
+    }
+
     /// <summary>The <c>name</c> under the manifest's <c>AppState</c> block, or null.</summary>
     private static string? NameIn(string manifest)
     {
-        if (BoundedFile.Read(manifest, MaximumBytes) is not { } content
-            || SteamKeyValues.Parse(Encoding.UTF8.GetString(content.Span)) is not { } entries)
+        if (!AppStateOf(manifest, out var appState))
         {
             return null;
         }
 
-        var name = entries
-            .FirstOrDefault(e => string.Equals(e.Key, "AppState", StringComparison.OrdinalIgnoreCase))
-            ?.Child("name")
-            ?.Value;
+        var name = appState?.Child("name")?.Value;
 
         return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
+
+    /// <summary>
+    /// The manifest's <c>AppState</c> block, which is null where the manifest has none. False where the
+    /// manifest could not be read or parsed at all.
+    /// </summary>
+    private static bool AppStateOf(string manifest, out SteamKeyValue? appState)
+    {
+        appState = null;
+
+        if (BoundedFile.Read(manifest, MaximumBytes) is not { } content
+            || SteamKeyValues.Parse(Encoding.UTF8.GetString(content.Span)) is not { } entries)
+        {
+            return false;
+        }
+
+        appState = entries.FirstOrDefault(e => string.Equals(e.Key, "AppState", StringComparison.OrdinalIgnoreCase));
+        return true;
     }
 }
