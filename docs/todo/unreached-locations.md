@@ -1445,6 +1445,13 @@ nothing else is offered. Resolve's manual corrected this entry: optimised media 
 `CacheClip`, not beside it, and it is refused by name. See
 [../cache-locations.md](../cache-locations.md).
 
+**Outcome for the After Effects disk cache:** it shipped at Tier 2 as `AfterEffectsDiskCacheProvider`,
+for the reason Resolve's render cache did: the refill is the render itself. Adobe publishes no default
+folder, so the folder is read from `"Folder 7"` in the `["Disk Cache Controls"]` section of each
+version's preferences, and only `Adobe\After Effects\<version>\Disk Cache - <computer>.noindex`
+below it, named for this computer, is offered. A version whose preferences name no folder is reported
+rather than guessed at.
+
 ### Game engine derived-data caches — Tier 2, present but empty ✅ done
 
 Unreal's local derived-data cache at `%LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache` is

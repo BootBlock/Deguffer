@@ -409,7 +409,7 @@ public sealed class CleanupPlannerTests
                 "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "spotify",
-                "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache",
+                "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
@@ -423,7 +423,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "platformio", "playwright", "lmstudio-runtimes",
+                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "platformio", "playwright", "lmstudio-runtimes",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
                 "windows-update-leftovers", "driver-store",

@@ -145,6 +145,7 @@ installed" cleanly on a machine without that toolchain.
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |
 | DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders it again only while your media is connected |
+| After Effects disk cache | Each version's cache named for this computer, only in the folder After Effects' own preferences name; never anything beside it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview |
 | Capture One previews and thumbnails | The `Cache` in each catalog and session Capture One lists, wherever it is; never the photographs or the adjustments beside it. A catalog whose originals are offline cannot be browsed until they are reconnected |
 | Playwright browsers | |
 | LM Studio superseded runtimes | Every llama.cpp build LM Studio has downloaded except the one it uses and the newest for each kind of hardware, removed by LM Studio's own command. LM Studio must be open, and it frees the space the next time it starts |
