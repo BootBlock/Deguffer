@@ -29,6 +29,8 @@ public sealed partial class CleanViewModel : ObservableObject
 {
     private readonly CleanupPlanner _planner;
     private readonly IUserEnvironment _environment;
+    private readonly IVolumeInventory _volumes;
+    private readonly bool _isElevated;
     private readonly SelectionService _selections;
     private readonly KeepService _keeps;
     private readonly Func<IConfirmationPrompt> _prompt;
@@ -47,6 +49,12 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private bool _barShowsPreviewSummary;
 
+    /// <param name="volumes">Where the profile's volume is asked how full it is, before and after a run.</param>
+    /// <param name="isElevated">
+    /// Whether this process holds administrator rights. Read once by the page and handed down, so
+    /// every row, step and offer on it is decided by the rights it was given rather than by
+    /// whichever process's token a static read would find.
+    /// </param>
     /// <param name="selections">
     /// What the rows were left ticked as last time, and where a change to that is written back.
     /// A scan re-plans from scratch, so without this every preview hands the user the same list of
@@ -63,20 +71,25 @@ public sealed partial class CleanViewModel : ObservableObject
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
+        IVolumeInventory volumes,
+        bool isElevated,
         SelectionService selections,
         KeepService keeps,
         Func<IConfirmationPrompt> prompt)
     {
         _planner = planner;
         _environment = environment;
+        _volumes = volumes;
+        _isElevated = isElevated;
         _selections = selections;
         _keeps = keeps;
         _prompt = prompt;
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
         // is re-read after a run.
-        TotalSpace = FreeSpace.TotalForPath(environment.UserProfile);
-        FreeSpaceNow = FreeSpace.ForPath(environment.UserProfile);
+        var space = volumes.SpaceOf(environment.UserProfile);
+        TotalSpace = space?.Total;
+        FreeSpaceNow = space?.Free;
 
         // Rows arrive one provider at a time and are cleared wholesale between runs; subscribing
         // covers both without every mutation site having to remember to raise this.
@@ -84,7 +97,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
-        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+        CanElevate = ElevationOffer.ShouldOffer(isElevated);
     }
 
     /// <summary>
@@ -245,15 +258,9 @@ public sealed partial class CleanViewModel : ObservableObject
         NotifyEmptyStateChanged();
     }
 
-    /// <summary>
-    /// A row is drawn unless a filter the user left on hides it. Both hide a row that offers no
-    /// decision: one whose toolchain this machine does not have, and one with nothing left to
-    /// reclaim. Neither hides a row that has something to say, so the two are asked together and
-    /// a row has to pass both.
-    /// </summary>
+    /// <summary>A row is drawn unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
     private bool IsListed(FindingViewModel row) =>
-        (ShowNotInstalled || !row.IsToolchainMissing)
-        && (ShowAlreadyClear || !row.IsAlreadyClear);
+        new PreviewFilter(ShowNotInstalled, ShowAlreadyClear).Lists(row.Status);
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
@@ -491,15 +498,22 @@ public sealed partial class CleanViewModel : ObservableObject
         // still leaves the screen exactly as it was.
         ClearRunResult();
 
-        var freeBefore = FreeSpace.ForPath(_environment.UserProfile);
+        var freeBefore = FreeSpaceOfProfile();
 
         try
         {
             // §7's confirmation is collected here, on the UI thread and before any work starts:
             // a dialog cannot be raised from the worker below, and asking mid-deletion would be
             // asking after the point the answer could still change anything.
-            var (authorised, confirmations) =
-                await CollectConfirmationsAsync(selected, requireTypedPhrase, ct);
+            IConfirmationPrompt? prompt = null;
+
+            // The prompt is built on first need, so a Tier 1 run never constructs a dialog it will
+            // not show.
+            var (authorised, confirmations, declined) = await Authorisation.CollectAsync(
+                selected,
+                requireTypedPhrase,
+                (requirement, token) => (prompt ??= _prompt()).AskAsync(requirement, token),
+                ct);
 
             if (authorised.Count == 0)
             {
@@ -508,7 +522,7 @@ public sealed partial class CleanViewModel : ObservableObject
                 // A refusal is a run that stopped, so it carries the same weight as a cancellation
                 // rather than reading like routine progress.
                 Report(
-                    selected.Any(f => f.Plan is { IsEmpty: false })
+                    declined > 0
                         ? "Nothing was cleaned — no selected item was confirmed."
                         : "Nothing was cleaned — the selected items had nothing to remove.",
                     InfoBarSeverity.Warning);
@@ -575,56 +589,8 @@ public sealed partial class CleanViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-            FreeSpaceNow = FreeSpace.ForPath(_environment.UserProfile);
+            FreeSpaceNow = FreeSpaceOfProfile();
         }
-    }
-
-    /// <summary>
-    /// Ask for whatever §7 requires of each selection, and return only the ones that got an answer.
-    ///
-    /// Declining is a decision rather than a failure: that provider is dropped and the rest of the
-    /// run continues, the same way a dismissed UAC prompt leaves the app running unelevated.
-    /// </summary>
-    private async Task<(List<Finding> Authorised, List<Confirmation> Confirmations)>
-        CollectConfirmationsAsync(
-            IReadOnlyList<Finding> selected,
-            bool requireTypedPhrase,
-            CancellationToken ct)
-    {
-        List<Finding> authorised = [];
-        List<Confirmation> confirmations = [];
-        IConfirmationPrompt? prompt = null;
-
-        foreach (var finding in selected)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            if (finding.Plan is not { IsEmpty: false } plan)
-            {
-                continue;
-            }
-
-            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
-
-            if (requirement.Level == ConfirmationLevel.None)
-            {
-                authorised.Add(finding);
-                continue;
-            }
-
-            // Built on first need, so a Tier 1 run never constructs a dialog it will not show.
-            prompt ??= _prompt();
-
-            if (await prompt.AskAsync(requirement, ct) is not { } answer)
-            {
-                continue;
-            }
-
-            authorised.Add(finding);
-            confirmations.Add(answer);
-        }
-
-        return (authorised, confirmations);
     }
 
     /// <summary>
@@ -653,7 +619,7 @@ public sealed partial class CleanViewModel : ObservableObject
         // preview that is cancelled or fails never reaches the assignment below, and the rows whose
         // fallback reasons the old offer was read from have already been thrown away.
         HasPreview = false;
-        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+        CanElevate = ElevationOffer.ShouldOffer(_isElevated);
 
         // The sentence the last preview stated describes rows that are being thrown away, so the
         // bar stops being one a selection change may refresh. Explicit for the same reason
@@ -669,7 +635,7 @@ public sealed partial class CleanViewModel : ObservableObject
         await Task.Run(() => _planner.PlanAllAsync(keep, progress, found, ct), ct);
 
         HasPreview = true;
-        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));
+        CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
         UpdateSelectionTotal();
     }
 
@@ -686,7 +652,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private async Task ReplanAsync(IReadOnlyList<ICleanupProvider> providers, CancellationToken ct)
     {
         HasPreview = false;
-        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+        CanElevate = ElevationOffer.ShouldOffer(_isElevated);
         _barShowsPreviewSummary = false;
 
         var progress = new Progress<string>(message => Report(message));
@@ -698,7 +664,7 @@ public sealed partial class CleanViewModel : ObservableObject
         await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct), ct);
 
         HasPreview = true;
-        CanElevate = ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, Findings.Select(f => f.Finding));
+        CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
     }
 
     /// <summary>
@@ -764,7 +730,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private void AddRowInSizeOrder(Finding finding)
     {
-        var row = new FindingViewModel(finding, _selections.Memory, _keeps.Current);
+        var row = new FindingViewModel(finding, _selections.Memory, _keeps.Current, _isElevated);
 
         // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
@@ -778,15 +744,11 @@ public sealed partial class CleanViewModel : ObservableObject
         // Rows arrive while a preview is running, when the keep list is not to be changed.
         AllowKeepListChanges(row, !IsBusy);
 
-        var index = 0;
         // The row's own figure rather than the finding's, so a kept item does not place a row by
         // space it will never offer.
-        while (index < Findings.Count && Findings[index].Finding.EstimatedBytes >= row.Finding.EstimatedBytes)
-        {
-            index++;
-        }
-
-        Findings.Insert(index, row);
+        Findings.Insert(
+            SizeOrder.IndexFor(Findings.Select(listed => listed.Finding.EstimatedBytes), row.Finding.EstimatedBytes),
+            row);
         UpdateShares();
     }
 
@@ -815,22 +777,19 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private RunOutcome RecordRunResult(IReadOnlyList<CleanupResult> results, long? freeBefore)
     {
-        // Entries beside the bytes, so a clean that took only empty leftovers says what it removed
-        // rather than "0 B". FreeSpace states the count only where no bytes went.
-        var bytes = results.Sum(r => r.BytesReclaimed);
-        RemovedLabel = FreeSpace.Format(new ScanSize(bytes, bytes, Entries: results.Sum(r => r.EntriesRemoved)));
+        var figures = RunFigures.For(results);
 
-        var requested = results.Sum(r => r.BytesRequested);
-        RequestedLabel = requested > 0 ? FreeSpace.Format(requested) : string.Empty;
+        // FreeSpace states the entries only where no bytes went.
+        RemovedLabel = FreeSpace.Format(figures.Removed);
+
+        RequestedLabel = figures.Requested > 0 ? FreeSpace.Format(figures.Requested) : string.Empty;
         OnPropertyChanged(nameof(HasRequested));
 
-        var scheduled = results.Sum(r => r.BytesScheduled);
-        ScheduledLabel = scheduled > 0 ? FreeSpace.Format(scheduled) : string.Empty;
+        ScheduledLabel = figures.Scheduled > 0 ? FreeSpace.Format(figures.Scheduled) : string.Empty;
         OnPropertyChanged(nameof(HasScheduled));
 
-        var freeAfter = FreeSpace.ForPath(_environment.UserProfile);
-        FreeSpaceChangeLabel = freeBefore is { } before && freeAfter is { } after
-            ? FreeSpace.Format(after - before)
+        FreeSpaceChangeLabel = RunFigures.FreeSpaceChange(freeBefore, FreeSpaceOfProfile()) is { } change
+            ? FreeSpace.Format(change)
             : "—";
 
         var outcome = RunOutcome.For(results);
@@ -839,14 +798,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Written over rather than emptied and filled, so a second run that meets the same checks
         // leaves the panel alone instead of taking it down and putting it back up.
-        LiveList.Rewrite(
-            RunVerificationNotes,
-            [
-                .. results
-                    .Select(r => r.Verification)
-                    .OfType<VerificationResult>()
-                    .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside).Concat(v.Unverified)),
-            ]);
+        LiveList.Rewrite(RunVerificationNotes, figures.Checks);
 
         OnPropertyChanged(nameof(HasRunVerificationNotes));
         OnPropertyChanged(nameof(HasRunResult));
@@ -952,6 +904,12 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     private bool CanRun() => !IsBusy;
+
+    /// <summary>
+    /// What is left on the profile's volume now. Asked of the machine each time rather than
+    /// remembered, because it is read either side of a run to say what the run changed.
+    /// </summary>
+    private long? FreeSpaceOfProfile() => _volumes.SpaceOf(_environment.UserProfile)?.Free;
 
     /// <summary>
     /// One change by the user: retotal, and remember what they chose.
