@@ -348,7 +348,9 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
                 $"Leaving {Count(drivers.InUse.Count, "older package")} alone although a newer version is "
-                + "here: a device is installed with each of them.");
+                + (drivers.InUse.Count == 1
+                    ? "here: a device is installed with it."
+                    : "here: a device is installed with each of them."));
         }
 
         if (drivers.Unplaced > 0)
