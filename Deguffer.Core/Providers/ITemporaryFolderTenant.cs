@@ -1,7 +1,7 @@
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// A provider whose own row offers an entry that sits directly inside a temporary folder.
+/// A provider whose own row offers an entry that sits inside a temporary folder.
 ///
 /// <para><b>It exists so that one entry is offered on one row.</b> <see cref="TempDirectoryProvider"/>
 /// empties each temporary folder of whatever is old enough, so without this every entry another
@@ -20,9 +20,13 @@ public interface ITemporaryFolderTenant
     string Name { get; }
 
     /// <summary>
-    /// The full paths of the entries directly inside <paramref name="folders"/> that this provider's
-    /// own row offers, or would offer once it is safe to. Empty where it offers none, which includes
-    /// a provider that is not present on this machine.
+    /// The full paths of the entries inside <paramref name="folders"/> that this provider's own row
+    /// offers, or would offer once it is safe to. Empty where it offers none, which includes a
+    /// provider that is not present on this machine.
+    ///
+    /// <para>An entry may be at any depth. After Effects keeps its disk cache three folders down in
+    /// <c>%TEMP%</c>, and the temporary-folder row takes everything around it and leaves the folders
+    /// above it standing, because they are not empty.</para>
     /// </summary>
     /// <param name="folders">This machine's temporary folders, as <see cref="TempRoots"/> resolves them.</param>
     Task<IReadOnlyList<string>> ClaimedEntriesAsync(IReadOnlyList<string> folders, CancellationToken ct = default);

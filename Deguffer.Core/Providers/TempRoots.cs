@@ -17,7 +17,20 @@ namespace Deguffer.Core.Providers;
 public sealed record TempRootSet(
     IReadOnlyList<DeclaredRoot> Roots,
     IReadOnlyList<(string Path, string Reason)> Refused,
-    IReadOnlyList<string> AccountFolders);
+    IReadOnlyList<string> AccountFolders)
+{
+    /// <summary>
+    /// Every temporary folder among <see cref="Roots"/>, the machine's included: the folders the
+    /// temporary-files row empties, and so the folders where another row must leave that row's rules
+    /// to it.
+    /// </summary>
+    public IReadOnlyList<string> Folders =>
+    [
+        .. from root in Roots
+           from location in root.Locations
+           select Path.Combine(root.Path, location.RelativePath),
+    ];
+}
 
 /// <summary>
 /// Where this machine's temporary folders are, and which of them Deguffer will reach into.

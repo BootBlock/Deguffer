@@ -5,7 +5,7 @@
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins, §8's Unreal Engine
-> derived-data caches, DaVinci Resolve render cache and Adobe media cache, §10's release of OneDrive's local copies
+> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies
 > and §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
 > **Open questions 1, 2 and 3 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
@@ -1452,6 +1452,13 @@ The cache is also found wherever the `FolderPath` and `DatabasePath` values unde
 `HKCU\Software\Adobe\Common <version>\Media Cache` key moved it. Each value names the folder Adobe
 writes its own folder into, not the cache folder itself. Nothing is offered while an Adobe
 application runs. See [../cache-locations.md](../cache-locations.md).
+
+**Outcome for the After Effects disk cache:** it shipped at Tier 2 as `AfterEffectsDiskCacheProvider`,
+for the reason Resolve's render cache did: the refill is the render itself. Adobe publishes no default
+folder, so the folder is read from `"Folder 7"` in the `["Disk Cache Controls"]` section of each
+version's preferences, and only `Adobe\After Effects\<version>\Disk Cache - <computer>.noindex`
+below it, named for this computer, is offered. A version whose preferences name no folder is reported
+rather than guessed at.
 
 ### Game engine derived-data caches — Tier 2, present but empty ✅ done
 
