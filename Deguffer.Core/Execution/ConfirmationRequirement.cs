@@ -212,9 +212,14 @@ public sealed record ConfirmationRequirement
             // and the wording read as a contradiction against the one plan whose whole business is
             // emptying them. What the user needs from a generic sentence is that the loss is total;
             // which mechanism is bypassed belongs to the plan's own WhatHappensOnNextUse.
+            //
+            // Silent too about what kind of thing is lost. §3's Tier 3 is any permanent loss, and not
+            // every one is data the user made: resetting the component store's base loses the means to
+            // uninstall updates. "This is user data" would be false there, and each plan's own sentence
+            // already names what goes.
             SafetyTier.UserData =>
-                $"This is user data, and deleting it is permanent — it is removed outright and " +
-                $"cannot be undone. {plan.WhatHappensOnNextUse}",
+                $"This is permanent: what it removes is removed outright and cannot be undone. " +
+                $"{plan.WhatHappensOnNextUse}",
 
             _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
         };

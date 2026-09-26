@@ -330,16 +330,14 @@ public sealed partial class FindingViewModel : ObservableObject
         SelectedSteps.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Reclaim);
 
     /// <summary>
-    /// The ceiling <see cref="SelectedSize"/> can reach: every step this row offers, ticked or not.
+    /// The ceiling <see cref="SelectedSteps"/> can reach: every step this row offers, ticked or not.
     ///
     /// Steps rather than <see cref="Finding.Reclaim"/>, and only the selectable ones, so the two
     /// figures the info bar states side by side count the same bytes. Taking the finding's own total
     /// would include a step whose checkbox is disabled, and the bar would then offer space that no
     /// amount of ticking can reach.
     /// </summary>
-    public ScanSize SelectableSize => Steps
-        .Where(s => s.CanBeSelected)
-        .Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Reclaim);
+    public IEnumerable<StepViewModel> SelectableSteps => Steps.Where(s => s.CanBeSelected);
 
     /// <summary>
     /// Whether this row's steps are listed to be chosen one by one, which is what puts the link to the

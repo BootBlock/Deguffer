@@ -138,6 +138,12 @@ public abstract record CleanupStep
     public bool HeldWhileUpdating { get; init; }
 
     /// <summary>
+    /// The space this step frees that a step on another row frees too, or null where no other row
+    /// offers it. Totals across rows count a pool once. See <see cref="ReclaimPool"/>.
+    /// </summary>
+    public ReclaimPool? SharesReclaim { get; init; }
+
+    /// <summary>
     /// What this item is apart from its path, where its provider can say. Null for an item whose only
     /// name is where it is, which is an item nobody can keep. See <see cref="ItemIdentity"/>.
     ///
@@ -262,8 +268,8 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     public ScanSize? MeasuredBefore { get; init; }
 
     /// <summary>
-    /// Where the tool itself states what the command clears, the run asks it again after the command
-    /// rather than measuring <see cref="MeasuredPaths"/> from the disk. Null for every command whose
+    /// Where the tool itself states what the command clears, the run asks it again immediately before
+    /// and after the command rather than measuring <see cref="MeasuredPaths"/> from the disk. Null for every command whose
     /// figure is Deguffer's own measurement of those paths. See <see cref="IToolMeasurement"/>.
     ///
     /// <para>A step carrying one lists no <see cref="MeasuredPaths"/> unless it can name where the tool

@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Seventy-six sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Seventy-eight sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Seventy-six providers, each holding its own knowledge of one location. A provider reports "not
+Seventy-eight providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -171,13 +171,16 @@ installed" cleanly on a machine without that toolchain.
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
 | Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document: offered on Deguffer's own stated judgement, whole, once nothing inside has changed for 30 days |
 | Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one a device is using, or one that is part of Windows |
+| Superseded Windows components | The component store (`WinSxS`), reclaimed by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows once; nothing is ever deleted from the store |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 
-**Tier 3 — user data.** Never pre-selected, and shown with what losing it costs.
+**Tier 3 — user data, and anything else whose loss is permanent.** Never pre-selected, and shown
+with what losing it costs.
 
 | Source | Notes |
 | --- | --- |
 | Recycle Bin | |
+| Windows update uninstall data | `DISM /StartComponentCleanup /ResetBase`, a row of its own: afterwards no update installed so far can be uninstalled |
 | Windows File History | Windows' own command drops saved versions past an age you set; the backup drive itself is never touched |
 | Crash dumps and error reports | |
 | Windows servicing logs | The logs a reset of this PC leaves are cleared by Windows' own cleanup for them, never by path |
@@ -268,9 +271,9 @@ the one action it will ever have: asking a program you pick to close itself, and
 Still to come: VS Code workspace storage with per-workspace
 ages, Docker (reporting reclaim *inside* the VHDX separately from host space), and Android SDK.
 
-Deliberately out of scope: `WinSxS`, `Windows\Installer`, and installer package caches. They are
-large and tempting, but the failure modes are severe and the safe operations are already exposed by
-`DISM` and the vendors' own tooling.
+Deliberately out of scope: deleting anything from `WinSxS`, `Windows\Installer`, or the installer
+package caches. They are large and tempting, but the failure modes are severe. The component store
+is reclaimed only through `DISM`'s own cleanup, and the rest not at all.
 
 ## Documentation
 
