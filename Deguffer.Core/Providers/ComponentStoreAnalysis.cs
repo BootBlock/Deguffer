@@ -4,7 +4,8 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// DISM's analysis of the component store, and the tool that runs it and the store's cleanups.
+/// DISM's analysis of the component store, asked once per planning pass for the plans and afresh for
+/// each figure the run subtracts.
 ///
 /// <para><b>One analysis for both component store rows.</b> The analysis is read-only but takes a
 /// minute or more, and the cleanup and the reset ask it the same question, so the planner builds one

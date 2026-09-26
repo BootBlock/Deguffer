@@ -290,6 +290,37 @@ public sealed class ComponentStoreProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The analysis before the command takes a minute or more, so an update that starts during it
+    /// still holds the cleanup.
+    /// </summary>
+    [Fact]
+    public async Task AnUpdateThatStartsDuringTheAnalysisBeforeTheCommandHoldsTheCleanup()
+    {
+        var analyses = 0;
+        _runner.Replying(arguments =>
+        {
+            if (!IsAnalysis(arguments))
+            {
+                return new CommandOutcome(0, "The operation completed successfully.", string.Empty);
+            }
+
+            if (++analyses == 2)
+            {
+                _servicing.IsRestartPending = true;
+            }
+
+            return new CommandOutcome(0, Report(21 * Gigabyte), string.Empty);
+        });
+
+        var provider = Cleanup();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.Equal(2, analyses);
+        Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.DoesNotContain(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>
     /// The reclaim is Windows' before-and-after pair around the command. Windows' own scheduled cleanup
     /// shrank the store after the preview, and the plan's figure would credit Deguffer with that too.
     /// </summary>

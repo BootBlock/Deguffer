@@ -249,6 +249,13 @@ public sealed class PlanExecutor(
         // it did not make.
         var measuredBefore = step.MeasuredBy is { } asked ? await asked.MeasureAsync(ct).ConfigureAwait(false) : before;
 
+        // Asked again, because the tool's measurement can take a minute, and an update that starts
+        // during it is exactly what the hold exists for.
+        if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && StillUpdating(step) is { } updating)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
+        }
+
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
         if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
