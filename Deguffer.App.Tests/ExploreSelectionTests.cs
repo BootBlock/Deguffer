@@ -197,6 +197,61 @@ public sealed class ExploreSelectionTests : IDisposable
     });
 
     /// <summary>
+    /// Navigating while a removal runs empties the selection, because nothing blocks the list, the
+    /// map or the trail until it ends. What went is still what was picked when it started, or the
+    /// removed folder would stay listed and could be picked again.
+    /// </summary>
+    [Fact]
+    public void ARemovalRecordsWhatWasPickedEvenIfTheSelectionWasCleared() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+        var selection = Selection(tree);
+
+        selection.Select([folder]);
+        var removing = selection.DeleteCommand.ExecuteAsync(null);
+
+        selection.Show(tree);
+        answer.SetResult(true);
+        await removing;
+
+        Assert.False(Directory.Exists(tree.PathOf(folder)));
+        Assert.True(selection.WasRemoved(folder));
+        Assert.StartsWith("1 item(s) have been removed since this scan.", selection.StaleNote);
+
+        // §5.6: what was not picked is still there, and so is the folder the scan started from.
+        Assert.True(File.Exists(tree.PathOf(file)));
+        Assert.True(Directory.Exists(tree.PathOf(tree.RootNode)));
+        Assert.False(selection.WasRemoved(file));
+    });
+
+    /// <summary>
+    /// Picking something else while a removal runs neither puts it in the record nor loses it. The
+    /// record is of what was acted on, and the new pick is the user's, so it stays picked.
+    /// </summary>
+    [Fact]
+    public void ARemovalLeavesAPickMadeWhileItRan() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+        var selection = Selection(tree);
+
+        selection.Select([folder]);
+        var removing = selection.DeleteCommand.ExecuteAsync(null);
+
+        selection.Select([file]);
+        answer.SetResult(true);
+        await removing;
+
+        Assert.True(selection.WasRemoved(folder));
+        Assert.False(selection.WasRemoved(file));
+        Assert.True(File.Exists(tree.PathOf(file)));
+        Assert.Equal([file], selection.Nodes);
+    });
+
+    /// <summary>
     /// A dismissed dialog says so. The sentence left standing from before would be read as the
     /// outcome of the dialog just closed.
     /// </summary>

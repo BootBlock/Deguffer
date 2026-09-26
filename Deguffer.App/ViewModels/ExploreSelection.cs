@@ -191,9 +191,9 @@ public sealed partial class ExploreSelection : ObservableObject
     /// <para>§7.1: Explore never pre-selects, and never acts on more than what was picked out by
     /// hand. A gesture is the only thing that may widen this, and the page holds every change the
     /// list reports while the rows are being rewritten, so what a rewrite left behind never arrives
-    /// here as one. The callers that are not gestures only ever narrow: <see cref="Show"/> and the
-    /// end of a removal empty it outright, and <see cref="Carry"/> drops whatever no longer names
-    /// what it named.</para>
+    /// here as one. The callers that are not gestures only ever narrow: <see cref="Show"/> empties
+    /// it outright, the end of a removal empties it or drops what the removal took, and
+    /// <see cref="Carry"/> drops whatever no longer names what it named.</para>
     /// </summary>
     public void Select(IReadOnlyList<int> nodes)
     {
@@ -258,9 +258,12 @@ public sealed partial class ExploreSelection : ObservableObject
 
     private async Task RemoveAsync(ExploreRemovalMode mode, CancellationToken ct)
     {
-        var items = Items();
+        // Taken together and before the await, because nothing stops the list, the map or the trail
+        // while the removal runs: navigating empties the selection, and a pick replaces it. What is
+        // recorded has to be what was acted on, or a removed folder stays listed and pickable.
+        var (tree, picked, items) = (_tree, _nodes, Items());
 
-        if (items.Count == 0)
+        if (tree is null || items.Count == 0)
         {
             return;
         }
@@ -277,11 +280,14 @@ public sealed partial class ExploreSelection : ObservableObject
                 return;
             }
 
-            // Items() answers empty without a tree, so there is one to record against here.
-            _removals.Record(_tree!, _nodes, report);
+            _removals.Record(tree, picked, report);
 
             Reported?.Invoke(this, report.Summary);
-            Select([]);
+
+            // Every Select replaces the list, so the same list means nothing was picked meanwhile and
+            // what was acted on is let go. A pick made while this ran is the user's and stays, less
+            // anything the removal took from under it.
+            Select(ReferenceEquals(_nodes, picked) ? [] : _nodes);
             Stale();
             Changed?.Invoke(this, EventArgs.Empty);
         }

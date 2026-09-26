@@ -496,7 +496,7 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>Told rather than remembered, because the selection is not the map's to hold. The list
     /// view selects the same things, a scan snapshot carries some of them and drops the rest, and a
-    /// removal empties it — so the one copy that decides what Delete acts on lives in the view
+    /// removal empties it or drops what it took — so the one copy that decides what Delete acts on lives in the view
     /// model, and this draws whatever that copy currently says (§7.1).</para>
     /// </summary>
     public void Select(IReadOnlyList<int> nodes)
