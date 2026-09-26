@@ -76,6 +76,13 @@ public sealed class MemoryTree : ISizedTree
 
     public int NodeCount => _names.Length;
 
+    /// <summary>
+    /// Whether <paramref name="node"/> is a node of this tree. Every reading renumbers the nodes, so a
+    /// number a view held from the reading before can fall outside this one, and a caller asks here
+    /// rather than index with it.
+    /// </summary>
+    public bool Holds(int node) => node >= 0 && node < NodeCount;
+
     public long SizeOf(int node) => _sizes[node];
 
     public ReadOnlySpan<int> ChildrenOf(int node) =>

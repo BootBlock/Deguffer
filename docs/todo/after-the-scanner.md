@@ -318,7 +318,9 @@ process, which Deguffer is not, so there is no correct interpretation available.
   a subdirectory, so there is no deeper level whose writes it could miss. Extending the MFT parser
   remains open and is genuinely cheap — the attribute is already materialised in the record the
   parser enumerates — but it wants a subject that needs volume-wide timestamps.
-- **`Deguffer.App` has no test project, and that cost a regression the whole suite missed.**
+- ~~**`Deguffer.App` has no test project, and that cost a regression the whole suite missed.**~~
+  **Done, both ways:** a view-model's decisions moved to Core, and `Deguffer.App.Tests` tests how
+  the shell wires them, the construction order above included (issue #3).
   Building the step view-models re-entered `FindingViewModel`'s constructor before its `Steps` list
   was assigned, so every pre-selected provider's row silently failed to appear — an exception in a
   `Progress<T>` callback has nowhere to surface. 263 Core tests passed throughout; it was only

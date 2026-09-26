@@ -239,7 +239,8 @@ dotnet build Deguffer.sln
 dotnet test  Deguffer.sln
 ```
 
-`Deguffer.Core` carries no UI dependency and is testable as an ordinary class library. The app is
+`Deguffer.Core` carries no UI dependency and is testable as an ordinary class library, and that is
+where a rule goes. `Deguffer.App.Tests` covers how the view-models hold those rules together. The app is
 WinUI 3, unpackaged, shipped self-contained — a disk-cleanup tool is exactly what someone reaches
 for on a machine too full to install a runtime.
 
@@ -256,7 +257,9 @@ Deguffer.Core/
   Configuration/ user preferences
   Diagnostics/   run logging
 Deguffer.Core.Tests/
+Deguffer.Testing/  the fakes and fixtures both test projects use
 Deguffer.App/  WinUI 3 shell, MVVM over Core
+Deguffer.App.Tests/
 ```
 
 Adding a cache source is one `ICleanupProvider` plus tests; the safety model then applies to it

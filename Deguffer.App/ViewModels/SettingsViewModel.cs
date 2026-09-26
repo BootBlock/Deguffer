@@ -25,8 +25,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <param name="volumes">
     /// The machine's volumes, so that approving a folder can say what the folder is stored on.
-    /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the App has no
-    /// test project, so an optional seam here would be a parameter nothing ever passes.
+    /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the page passes
+    /// the machine's own and a test passes a fake, and neither is the one to fall back to.
     /// </param>
     public SettingsViewModel(
         PreferenceService preferences,
@@ -227,29 +227,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// A week. Bound by the control as well as used by the clamp below, so the box and the value it
-    /// produces cannot disagree — a number typed past the maximum is otherwise accepted by one and
-    /// silently rewritten by the other.
-    ///
-    /// <para>A week rather than no limit at all: past that the guard stops being "leave what is in
-    /// use alone" and becomes a second, invisible answer to what Deguffer will ever delete, which
-    /// is a decision the row it sits on does not make.</para>
+    /// Bound by the control as well as used by the clamp, so the box and the value it produces cannot
+    /// disagree — a number typed past the maximum is otherwise accepted by one and silently rewritten
+    /// by the other. See <see cref="EnteredSetting.MaximumKeepHours"/>.
     /// </summary>
-    public double MaximumKeepHours => 168;
+    public double MaximumKeepHours => EnteredSetting.MaximumKeepHours;
 
     /// <summary>
     /// The guard on recently changed files, in whole hours, as a <see cref="double"/> because that
-    /// is what a <c>NumberBox</c> exposes.
-    ///
-    /// <para>An emptied box reports <see cref="double.NaN"/> rather than zero, and NaN survives
-    /// every comparison in <see cref="Math.Clamp(double, double, double)"/> — so it is answered
-    /// first, as off. Without that, clearing the field would store NaN's cast, and the guard would
-    /// be set to something nobody chose.</para>
+    /// is what a <c>NumberBox</c> exposes. <see cref="EnteredSetting.KeepHours"/> turns what was typed
+    /// into what is stored.
     /// </summary>
     public double KeepFilesChangedWithinHours
     {
         get => _preferences.Current.KeepFilesChangedWithinHours;
-        set => Apply(current => current with { KeepFilesChangedWithinHours = WholeHours(value) });
+        set => Apply(current => current with { KeepFilesChangedWithinHours = EnteredSetting.KeepHours(value) });
     }
 
     /// <summary>
@@ -266,17 +258,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// How old a File History version has to be before Windows may discard it, on the same terms as
-    /// <see cref="KeepFilesChangedWithinHours"/>: a <see cref="double"/> because that is what a
-    /// <c>NumberBox</c> exposes, and an emptied box reports <see cref="double.NaN"/>.
-    ///
-    /// <para>NaN falls back to the shipped default rather than to the floor. Clearing the field is
-    /// not a request to delete as much as possible, and the floor is the setting that destroys
-    /// most.</para>
+    /// <see cref="KeepFilesChangedWithinHours"/>. <see cref="EnteredSetting.FileHistoryRetentionDays"/>
+    /// turns what was typed into what is stored.
     /// </summary>
     public double FileHistoryRetentionDays
     {
         get => _preferences.Current.FileHistoryRetentionDays;
-        set => Apply(current => current with { FileHistoryRetentionDays = WholeDays(value) });
+        set => Apply(current => current with { FileHistoryRetentionDays = EnteredSetting.FileHistoryRetentionDays(value) });
     }
 
     /// <summary>
@@ -289,57 +277,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// How long something must sit untouched in a temporary folder before Deguffer offers it, on
-    /// the same terms as the two boxes above: a <see cref="double"/> because that is what a
-    /// <c>NumberBox</c> exposes, and an emptied box reports <see cref="double.NaN"/>.
-    ///
-    /// <para>NaN falls back to the shipped seven days rather than to the floor, for the reason
-    /// <see cref="FileHistoryRetentionDays"/> gives and more sharply: clearing the field is not a
-    /// request to delete everything in <c>%TEMP%</c> however recently it was written, and zero is
-    /// the value that does exactly that.</para>
+    /// the same terms as the two boxes above. <see cref="EnteredSetting.TemporaryFileAgeDays"/> turns
+    /// what was typed into what is stored, and holds the safety rule on zero.
     /// </summary>
     public double MinimumTemporaryFileAge
     {
         get => _preferences.Current.MinimumTemporaryFileAgeDays;
-        set => Apply(current => current with { MinimumTemporaryFileAgeDays = WholeStaleDays(value) });
+        set => Apply(current => current with { MinimumTemporaryFileAgeDays = EnteredSetting.TemporaryFileAgeDays(value) });
     }
-
-    /// <summary>
-    /// <see cref="MidpointRounding.AwayFromZero"/> rather than the default, which is the one place
-    /// on this page the difference decides a safety rule.
-    ///
-    /// <para>Zero here is not the smallest window but the absence of one, so every fraction of a
-    /// day has to land on <c>1</c> rather than on it. Rounding alone does not do that, in either
-    /// mode: <c>Math.Round</c> sends a midpoint to even so <c>0.5</c> becomes <b>0</b>, and
-    /// <see cref="MidpointRounding.AwayFromZero"/> moves only the midpoint, leaving every value in
-    /// <c>(0, 0.5)</c> on zero as well. Somebody typing <c>0.25</c> and meaning "a short window"
-    /// would have stored the value that offers every file in both folders however recently it was
-    /// written, without ever choosing it. So anything above zero and below a day is raised
-    /// outright, and the rounding decides only between whole days above that.</para>
-    ///
-    /// <para><see cref="WholeDays"/> below does the same arithmetic and needs none of this: its
-    /// clamp floor is one, so no rounding can reach a dangerous value there.</para>
-    /// </summary>
-    private int WholeStaleDays(double value)
-    {
-        if (double.IsNaN(value))
-        {
-            return AppPreferences.Default.MinimumTemporaryFileAgeDays;
-        }
-
-        // Zero itself is a deliberate choice and passes through. Anything between zero and a day is
-        // somebody asking for a short window, and the shortest one that exists is a day.
-        var days = value > 0 && value < 1 ? 1 : Math.Round(value, MidpointRounding.AwayFromZero);
-
-        return (int)Math.Clamp(days, MinimumTemporaryFileAgeDays, MaximumTemporaryFileAgeDays);
-    }
-
-    private int WholeDays(double value) => double.IsNaN(value)
-        ? AppPreferences.Default.FileHistoryRetentionDays
-        : (int)Math.Clamp(
-            Math.Round(value), MinimumFileHistoryRetentionDays, MaximumFileHistoryRetentionDays);
-
-    private int WholeHours(double value) =>
-        double.IsNaN(value) ? 0 : (int)Math.Clamp(Math.Round(value), 0, MaximumKeepHours);
 
     /// <summary>
     /// Shown only when a write failed. A settings page that silently discards a choice is worse

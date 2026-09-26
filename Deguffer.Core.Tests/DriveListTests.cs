@@ -1,7 +1,8 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Deguffer.Core.Exploring;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Core.Safety;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -167,6 +168,71 @@ public sealed class DriveListTests
         Assert.Same(drives.Entries[0], drives.Find(@"d:\"));
         Assert.Null(drives.Find(@"E:\"));
         Assert.Null(drives.Find(null));
+    }
+
+    /// <summary>The drive the reader chose stays chosen for as long as it is offered.</summary>
+    [Fact]
+    public void AChosenDriveThatIsStillOfferedStaysChosen()
+    {
+        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider());
+
+        drives.Refresh();
+
+        Assert.Same(drives.Find(@"D:\"), drives.Choose(@"d:\"));
+    }
+
+    /// <summary>
+    /// A refused volume is listed and not defaulted onto: opening the page on a drive whose Scan
+    /// button is dead reads as an app that failed to start. Taking the first row would put a cloud
+    /// mount lettered before the system drive in the box.
+    /// </summary>
+    [Fact]
+    public void TheDefaultIsTheFirstDriveExploreWillScan()
+    {
+        var drives = new DriveList(
+            new FakeVolumeInventory()
+                .With(@"A:\", features: VolumeFeatures.RemoteStorage)
+                .With(@"C:\"),
+            new ManualTimeProvider());
+
+        drives.Refresh();
+
+        Assert.Equal(@"C:\", drives.Choose(null)?.RootPath);
+        Assert.Equal(@"C:\", drives.Choose(@"E:\")?.RootPath);
+    }
+
+    /// <summary>Where every volume is refused there is nothing better to name, and the page says why it will not scan it.</summary>
+    [Fact]
+    public void WhereEveryDriveIsRefusedTheFirstIsNamed()
+    {
+        var drives = new DriveList(
+            new FakeVolumeInventory()
+                .With(@"A:\", features: VolumeFeatures.RemoteStorage)
+                .With(@"B:\", features: VolumeFeatures.RemoteStorage),
+            new ManualTimeProvider());
+
+        drives.Refresh();
+
+        Assert.Equal(@"A:\", drives.Choose(null)?.RootPath);
+        Assert.Null(new DriveList(new FakeVolumeInventory(), new ManualTimeProvider()).Choose(null));
+    }
+
+    /// <summary>
+    /// The volume holding a folder is asked of the inventory, so a folder under a volume mounted at
+    /// a folder names that volume rather than the disk the mount point sits on.
+    /// </summary>
+    [Fact]
+    public void TheDriveHoldingAFolderIsTheVolumeItIsOn()
+    {
+        var drives = new DriveList(
+            new FakeVolumeInventory().With(@"C:\").With(@"C:\Mount\").With(@"D:\"),
+            new ManualTimeProvider());
+
+        drives.Refresh();
+
+        Assert.Equal(@"C:\Mount\", drives.Holding(@"C:\Mount\Photos")?.RootPath);
+        Assert.Equal(@"C:\", drives.Holding(@"C:\Users\testuser")?.RootPath);
+        Assert.Null(drives.Holding(@"\\server.test\share\folder"));
     }
 
     private static List<NotifyCollectionChangedAction> WatchList(DriveList drives)

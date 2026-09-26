@@ -1,5 +1,5 @@
 using Deguffer.Core.Scanning;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

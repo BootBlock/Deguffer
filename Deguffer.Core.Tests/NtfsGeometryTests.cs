@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 using Deguffer.Core.Scanning.Mft;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

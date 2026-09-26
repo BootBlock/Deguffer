@@ -33,6 +33,9 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     private Finding _found;
 
+    /// <summary>Whether this process holds administrator rights. See <see cref="StepChoice"/>.</summary>
+    private readonly bool _isElevated;
+
     /// <param name="memory">
     /// What this row and its steps were last left ticked as. It answers per step as well as per
     /// row, so restoring a ticked row does not re-tick the individual workspaces the user had
@@ -43,8 +46,15 @@ public sealed partial class FindingViewModel : ObservableObject
     /// below reads the plan, so every figure, status and default this row states is about what it
     /// will actually offer.
     /// </param>
-    public FindingViewModel(Finding finding, SelectionMemory memory, KeepList keepList) =>
+    /// <param name="isElevated">
+    /// Whether this process holds administrator rights, which decides whether a step needing them can
+    /// be ticked. Handed down by the page rather than read from the token here.
+    /// </param>
+    public FindingViewModel(Finding finding, SelectionMemory memory, KeepList keepList, bool isElevated)
+    {
+        _isElevated = isElevated;
         Load(finding, memory, keepList);
+    }
 
     /// <summary>
     /// Take the plan the re-plan after a clean made for this row's provider, and stay the same row.
@@ -97,7 +107,7 @@ public sealed partial class FindingViewModel : ObservableObject
             // its checkbox is disabled, so ticking it would leave the user a selection they have
             // no way to clear, and the row-level toggle skips it for the same reason.
             //
-            // The condition is StepViewModel's own rather than a copy of it. Written out here it
+            // The condition is StepChoice's rather than a copy of it. Written out here it
             // was a copy, and it went stale the moment a second reason to disable a checkbox
             // arrived — a step needing administrator rights would have started ticked, rendered
             // disabled, and been skipped by the loop that clears the row.
@@ -108,7 +118,8 @@ public sealed partial class FindingViewModel : ObservableObject
             .. finding.Plan?.Steps.Select(s => new StepViewModel(
                 s,
                 memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected),
-                isKept: !offered.Contains(s))
+                isKept: !offered.Contains(s),
+                _isElevated)
             {
                 FacetValues = columns.ValuesOf(s),
             }) ?? [],
@@ -210,48 +221,18 @@ public sealed partial class FindingViewModel : ObservableObject
 
     /// <summary>
     /// What this row is reporting, as the single value both its own label and the page's info bar
-    /// are read off. See <see cref="FindingStatus"/> for why one value rather than two conditions.
-    ///
-    /// <para>Presence is asked after <see cref="Finding.AwaitingSourceFolders"/>, because the two do
-    /// not line up: the .NET build output is present whenever the SDK is, approved folders or not,
-    /// and that row has as little to report as the four that are absent for the same reason.</para>
-    ///
-    /// <para>The held-back state asks the plan what the measurement actually withheld, never whether
-    /// a guard is switched on. Driving the real window settled that: with the guard at seven days,
-    /// deriving it from the setting put "Nothing old enough" on twelve rows, most of them simply
-    /// empty — the same false claim wearing the opposite costume.</para>
+    /// are read off. See <see cref="FindingStatus"/> for why one value rather than two conditions,
+    /// and <see cref="FindingStatusExtensions.ToStatus"/> for the order the states are asked in.
     /// </summary>
-    public FindingStatus Status => Finding.AwaitingSourceFolders
-        ? FindingStatus.AwaitingSourceFolders
-        : !Finding.IsPresent
-        ? FindingStatus.ToolchainMissing
-        : !Finding.HasSomethingToRemove
-            ? Finding.Plan switch
-            {
-                { HasUnreadableRoot: true } => FindingStatus.UnreadableRoot,
-                { WasNotExamined: true } => FindingStatus.NotExamined,
-                { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
-                { HasRefusedContent: true } => FindingStatus.RefusedByWindows,
-                { HoldsKeepListItems: true } => FindingStatus.OnKeepList,
-                { HoldsMailStores: true } => FindingStatus.MailStoresHeldBack,
-                { WaitsForAnUpdate: true } => FindingStatus.UpdateInProgress,
-                _ => FindingStatus.AlreadyClear,
-            }
-            : CanBeSelected
-                ? FindingStatus.ReadyToClean
-                : FindingStatus.NeedsElevation;
+    public FindingStatus Status => Finding.ToStatus(_isElevated);
 
     public string StatusLabel => Status.ToStatusLabel();
 
     /// <summary>
-    /// Only rows with a step that can actually be acted on.
-    ///
-    /// Asked of the steps rather than of the finding's total, because the row checkbox is a shorthand
-    /// for ticking every step in it: where nothing in the row is selectable, ticking it would tick
-    /// nothing and leave a row that says it is selected and removes nothing. That case arrived with
-    /// the Windows servicing logs, every step of which needs administrator rights.
+    /// Only rows with a step that can actually be acted on. See <see cref="StepChoice.AnyCanBeSelected"/>,
+    /// which asks it of the plan the keep list left, so it agrees with the steps' own checkboxes.
     /// </summary>
-    public bool CanBeSelected => Finding.HasSomethingToRemove && Steps.Any(s => s.CanBeSelected);
+    public bool CanBeSelected => StepChoice.AnyCanBeSelected(Finding, _isElevated);
 
     /// <summary>
     /// Whether the compact row states why it cannot be ticked. Stated here rather than negated in
@@ -272,41 +253,6 @@ public sealed partial class FindingViewModel : ObservableObject
     /// says in words.
     /// </summary>
     public bool HasSizeToShow => Finding.HasSomethingToRemove;
-
-    /// <summary>
-    /// Whether this row is one the "show items not installed" filter hides.
-    ///
-    /// Only a tool that is genuinely not on this machine, never one waiting on a folder the user
-    /// can approve. The second kind is absent in exactly the same way through
-    /// <see cref="Finding.IsPresent"/>, and is the opposite of noise: it is the row that says the
-    /// largest reclaimable thing on the disk is one setting away.
-    /// </summary>
-    public bool IsToolchainMissing => Status is FindingStatus.ToolchainMissing;
-
-    /// <summary>
-    /// Whether this row is one the "show items already clear" filter hides.
-    ///
-    /// Read off <see cref="Status"/> rather than restating the condition that produces it, because
-    /// a second copy of that condition is free to disagree with the words on screen — and what this
-    /// filter promises is that it hides exactly the rows saying "Already clear". The seven
-    /// neighbouring states measure zero as well and are not clear at all: a root Windows would not
-    /// let Deguffer list, a location Deguffer declined to look at or could not locate, a cache
-    /// whose every file is inside the guard on recently changed files, a folder whose contents
-    /// Windows would not let the last clean take, a location holding only what the user keeps, a
-    /// location holding only Outlook data files, and a location an unfinished update is holding back.
-    /// All seven stay listed, because each is a thing the user may want to act on — the keep-list row
-    /// by releasing what it holds, the Outlook row by moving the file somewhere it belongs, and the
-    /// update row by restarting.
-    ///
-    /// <para>A row this is true of can carry no ticked step, which is what makes hiding it safe:
-    /// the label needs <see cref="Finding.HasSomethingToRemove"/> to be false, which is no step
-    /// answering <see cref="CleanupStep.RemovesSomething"/>, and
-    /// <see cref="StepViewModel.CanBeSelected"/> refuses exactly the steps that do not. The proof
-    /// holds only while both sides ask that one property. A second copy of the rule on either side —
-    /// a byte test here, or <c>ScanSize.Allocated</c> there — would let a selected row be hidden by a
-    /// filter that is on by default.</para>
-    /// </summary>
-    public bool IsAlreadyClear => Status is FindingStatus.AlreadyClear;
 
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; private set; }

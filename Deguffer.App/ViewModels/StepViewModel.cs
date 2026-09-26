@@ -1,5 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using Deguffer.App.Shell;
+using Deguffer.Core.Choosing;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 
@@ -14,20 +14,25 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class StepViewModel : ObservableObject
 {
+    private readonly bool _isElevated;
+
     /// <param name="preSelect">
-    /// What §3's "Default" column says for the owning row. It is honoured only where this step can
-    /// actually be acted on, so the caller states the row's intent and the answer to "may this be
-    /// ticked?" stays in one place — see <see cref="CanBeSelected"/>.
+    /// What the owning row's remembered selection, or §3's "Default" column, says for this step. It is
+    /// honoured only where this step can actually be acted on, which is
+    /// <see cref="StepChoice.StartsSelected"/>'s rule.
     /// </param>
-    /// <param name="isKept">
-    /// Whether the keep list took this step out of the row's plan. Set before the tick, because a kept
-    /// item is never pre-selected, whatever the row says.
+    /// <param name="isKept">Whether the keep list took this step out of the row's plan.</param>
+    /// <param name="isElevated">
+    /// Whether this process holds administrator rights. Handed down by the page rather than read here,
+    /// so what a step offers is decided by the rights it was given and not by the token of whatever
+    /// process happens to host it.
     /// </param>
-    public StepViewModel(CleanupStep step, bool preSelect, bool isKept)
+    public StepViewModel(CleanupStep step, bool preSelect, bool isKept, bool isElevated)
     {
         Step = step;
+        _isElevated = isElevated;
         IsKept = isKept;
-        IsSelected = preSelect && CanBeSelected;
+        IsSelected = StepChoice.StartsSelected(step, preSelect, isKept, isElevated);
     }
 
     public CleanupStep Step { get; }
@@ -84,32 +89,17 @@ public sealed partial class StepViewModel : ObservableObject
     public bool HasAge => Step.LastWritten is not null;
 
     /// <summary>
-    /// Nothing to reclaim means nothing to choose, and neither does a step this process has no
-    /// rights to carry out, nor an item the user keeps.
-    ///
-    /// Pairing the step's declaration with the token the app is actually running under happens here
-    /// rather than in Core, because the declaration is a fact about the location and the token is a
-    /// fact about this process. A plan that described the disk differently depending on who asked
-    /// would be a worse thing to have than one line of conjunction in the shell.
-    ///
-    /// A kept item is not in the row's plan at all, so a tick on it would count towards the selected
-    /// total and remove nothing. Refusing it here is what the row-wide toggle and the roll-up read.
-    ///
-    /// "Nothing to reclaim" is <see cref="CleanupStep.RemovesSomething"/>'s answer rather than a byte
-    /// test, so a leftover of empty folders can be chosen and an empty cache folder its tool re-creates
-    /// still cannot.
+    /// Whether this step's checkbox can be ticked. See <see cref="StepChoice.CanBeSelected"/>; the row's
+    /// own toggle and every checkbox standing for several steps read this.
     /// </summary>
-    public bool CanBeSelected => Step.RemovesSomething && !NeedsElevationFirst && !IsKept;
+    public bool CanBeSelected => StepChoice.CanBeSelected(Step, IsKept, _isElevated);
 
     /// <summary>
-    /// Whether this step is one Deguffer can see and cannot remove as it is currently running.
-    ///
-    /// Shown beside the step, because the two alternatives are worse: a step that fails at execution
-    /// time explains nothing, and a location dropped from an unelevated preview is a folder the user
-    /// never learns about. The Elevate button is already on screen whenever this is true —
-    /// <see cref="Deguffer.Core.Execution.ElevationOffer"/> reads the same claim.
+    /// Whether this step is one Deguffer can see and cannot remove as it is currently running, which
+    /// is said beside the step. The Elevate button is already on screen whenever this is true. See
+    /// <see cref="StepChoice.NeedsElevationFirst"/>.
     /// </summary>
-    public bool NeedsElevationFirst => Step.RequiresElevation && !ElevatedRelaunch.IsElevated;
+    public bool NeedsElevationFirst => StepChoice.NeedsElevationFirst(Step, _isElevated);
 
     /// <summary>
     /// This step's value under each of its row's facet columns, in order, with an empty string where it

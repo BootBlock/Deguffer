@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The fakes, fixtures and scratch trees both test projects stand the code up on. A library of its
+    own rather than a folder of Deguffer.Core.Tests, so Deguffer.App.Tests drives the view-models
+    through the same FakeUserEnvironment and process seams Core's own tests do, not a second copy.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.assert" Version="2.9.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deguffer.Core\Deguffer.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    A fake of an internal Core seam is itself internal, because its members name that seam's types.
+    The test projects are what Core grants those types to, so they are granted the fakes as well.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Deguffer.Core.Tests" />
+    <InternalsVisibleTo Include="Deguffer.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

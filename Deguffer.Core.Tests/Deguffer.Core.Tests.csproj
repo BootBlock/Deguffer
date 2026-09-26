@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Deguffer.Core\Deguffer.Core.csproj" />
+    <ProjectReference Include="..\Deguffer.Testing\Deguffer.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

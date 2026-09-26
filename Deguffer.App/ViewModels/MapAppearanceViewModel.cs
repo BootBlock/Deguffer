@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Rendering;
-using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 
 namespace Deguffer.App.ViewModels;
@@ -16,6 +16,8 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class MapAppearanceViewModel : ObservableObject
 {
+    private readonly PreferenceService _preferences;
+
     private MapLook _look;
 
     /// <summary>
@@ -25,10 +27,20 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     /// </summary>
     private ExploreSpacing _storedSpacing;
 
-    public MapAppearanceViewModel(MapLook look)
+    /// <param name="look">
+    /// The look the page is drawing, read from <paramref name="preferences"/> once, when the page was
+    /// built. Not read again here, for the reason the page reads it once: re-reading would undo a
+    /// choice whose write failed.
+    /// </param>
+    /// <param name="preferences">Where a change is written, one setting at a time.</param>
+    public MapAppearanceViewModel(MapLook look, PreferenceService preferences)
     {
+        ArgumentNullException.ThrowIfNull(look);
+        ArgumentNullException.ThrowIfNull(preferences);
+
         _look = look;
         _storedSpacing = look.Spacing;
+        _preferences = preferences;
     }
 
     /// <summary>The look changed. Whoever draws a map draws it again.</summary>
@@ -147,7 +159,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         OnPropertyChanged(nameof(SpacingIndex));
         Changed?.Invoke(this, EventArgs.Empty);
 
-        return App.Preferences.Update(write);
+        return _preferences.Update(write);
     }
 }
 
@@ -158,14 +170,19 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 /// <para>Which scheme an option is, is its place in <see cref="All"/>: the list is bound by index,
 /// as the other boxes indexed against an enum are, so <see cref="All"/> is in
 /// <see cref="ExploreScheme"/>'s order and built from it.</para>
+///
+/// <para>The strips are colours rather than brushes. A brush is a XAML object, and one made in a
+/// static initialiser ties every reader of <see cref="All"/> to a running XAML host; the window's
+/// template paints each swatch from its colour instead. The strips are decoration: the name and the
+/// sentence say what the scheme is, with or without them (§6.5).</para>
 /// </summary>
 /// <param name="Branches">A few branch colours at the first level, as a treemap's largest folders are drawn.</param>
 /// <param name="Ages">The age bands, newest first, without the grey for an undated entry.</param>
 public sealed record MapSchemeOption(
     string Name,
     string Description,
-    IReadOnlyList<SolidColorBrush> Branches,
-    IReadOnlyList<SolidColorBrush> Ages)
+    IReadOnlyList<MapSwatch> Branches,
+    IReadOnlyList<MapSwatch> Ages)
 {
     /// <summary>
     /// Hues spread round the circle, and alternately lifted, as a folder's children are given them.
@@ -200,10 +217,15 @@ public sealed record MapSchemeOption(
         return new(
             name,
             description,
-            [.. SampleHues.Select(hue => Brush(TilePalette.For(hue, 1, scheme)))],
-            [.. AgePalette.Bands(scheme).SkipLast(1).Select(band => Brush(band.Colour))]);
+            [.. SampleHues.Select(hue => new MapSwatch(TilePalette.For(hue, 1, scheme)))],
+            [.. AgePalette.Bands(scheme).SkipLast(1).Select(band => new MapSwatch(band.Colour))]);
     }
+}
 
-    private static SolidColorBrush Brush(TileColour colour) =>
-        new(Color.FromArgb(255, colour.Red, colour.Green, colour.Blue));
+/// <summary>One colour of a scheme's strip, as the map draws it.</summary>
+/// <param name="Tile">The colour as the map's palette states it.</param>
+public sealed record MapSwatch(TileColour Tile)
+{
+    /// <summary>The colour the window's template paints the swatch in. Opaque, as a tile is drawn.</summary>
+    public Color Colour => Color.FromArgb(255, Tile.Red, Tile.Green, Tile.Blue);
 }

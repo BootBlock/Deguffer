@@ -44,7 +44,7 @@ public static class MemoryTarget
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        if (node < 0 || node >= tree.NodeCount)
+        if (!tree.Holds(node))
         {
             return null;
         }

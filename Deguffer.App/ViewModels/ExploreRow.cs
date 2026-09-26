@@ -3,7 +3,6 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
-using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 
 namespace Deguffer.App.ViewModels;
@@ -202,15 +201,17 @@ public sealed record ExploreCrumb(ExplorePosition Position, string Name, bool Fo
 
 /// <summary>One band of the age legend, ready to draw.</summary>
 /// <param name="Swatch">
-/// The band's colour as a brush. Converted here rather than in Core, which deliberately knows
-/// nothing about the UI framework so that the whole of the drawing stays testable without a window.
+/// The band's colour, in the platform's colour type so the view can paint it without converting.
+/// A colour rather than a brush, because a brush is a XAML object: it cannot be made without the
+/// XAML runtime, so a view-model holding one could not be constructed anywhere but in the running
+/// app. The view makes the brush. The label beside it carries the meaning, so the legend still
+/// reads where the colours do not (§6.5).
 /// </param>
-public sealed record ExploreLegendBand(string Label, SolidColorBrush Swatch)
+public sealed record ExploreLegendBand(string Label, Color Swatch)
 {
     /// <summary>
     /// Every scheme's bands, built once for the life of the app rather than per view-model: the
-    /// scale does not depend on what was scanned, and a brush per band per page would be objects
-    /// created to say the same thing again (G5).
+    /// scale does not depend on what was scanned (G5).
     /// </summary>
     private static readonly IReadOnlyList<ExploreLegendBand>[] Schemes =
     [
@@ -218,7 +219,7 @@ public sealed record ExploreLegendBand(string Label, SolidColorBrush Swatch)
         [
             .. AgePalette.Bands(scheme).Select(band => new ExploreLegendBand(
                 band.Label,
-                new SolidColorBrush(Color.FromArgb(255, band.Colour.Red, band.Colour.Green, band.Colour.Blue)))),
+                new Color { A = 255, R = band.Colour.Red, G = band.Colour.Green, B = band.Colour.Blue })),
         ]),
     ];
 

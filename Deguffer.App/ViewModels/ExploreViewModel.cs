@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
@@ -25,16 +24,26 @@ namespace Deguffer.App.ViewModels;
 ///
 /// <para><b>Past G1's 500-line ceiling, and the reason is that what remains does not divide.</b>
 /// Every seam this page had has been cut and lives beside it: the row and crumb values, the wording
-/// of a row, the legend's bands, the drawing, the scanning, and the rules of where a step leads
-/// (<see cref="ExplorePosition"/>). What is left is one page's
-/// controller, and its parts are not independently useful — the scan, the scope, the navigation and
-/// the view selection all read and write the same current tree and current node, so a second type
-/// over them would share that state rather than own any of it.</para>
+/// of a row, the legend's bands, the drawing, the scanning, and the rules in Core of where a step
+/// leads (<see cref="ExplorePosition"/>), what a redraw keeps (<see cref="ExploreRedraw"/>), and
+/// where each way of re-pointing the page leaves it (<see cref="ExploreTarget"/>). What is left is
+/// one page's controller, and its parts are not independently useful — the scan, the scope, the
+/// navigation and the view selection all read and write the same current tree and current node, so
+/// a second type over them would share that state rather than own any of it.</para>
 /// </summary>
 public sealed partial class ExploreViewModel : ObservableObject
 {
-    private readonly ExploreScanner _scanner;
+    private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
+
+    /// <summary>Whether this process holds administrator rights, which decides the elevation offer.</summary>
+    private readonly bool _isElevated;
+
+    /// <summary>
+    /// Starts an elevated replacement pointed where this page is, and says whether one started. A
+    /// real relaunch raises the UAC prompt, which is why it is handed in.
+    /// </summary>
+    private readonly Func<ExploreRequest, bool> _relaunch;
 
     /// <summary>
     /// What a redraw puts in the list and the trail above it. Filled again per redraw and never
@@ -68,15 +77,19 @@ public sealed partial class ExploreViewModel : ObservableObject
     private bool _hasScanned;
 
     /// <summary>
-    /// True while <see cref="RefreshDrives"/> is bringing the list up to date.
+    /// True while the page is writing its own target, so a write that arrives as a change of drive
+    /// is not taken for a person choosing one.
     ///
-    /// <para>A picker whose selected entry stops being in the list where it was writes null back
-    /// through its two-way binding, before this has put the selection back. Taken at face value that
-    /// is the user choosing a different drive, so it drops the folder scope — and the refresh can
-    /// happen as the picker opens, when somebody is only looking at the list. Rows are written over
-    /// in place, so only a reading that finds the chosen drive gone still does this.</para>
+    /// <para>Two writers are not people. <see cref="Retarget"/> writes the drive and the folder one
+    /// after the other, and the drive's handler would otherwise drop the folder it is about to set.
+    /// And a picker whose selected entry stops being in the list where it was writes null back
+    /// through its two-way binding while <see cref="RefreshDrives"/> is reading the volumes, before
+    /// this has put the selection back. Taken at face value that is the user choosing a different
+    /// drive, so it drops the folder scope — and the refresh can happen as the picker opens, when
+    /// somebody is only looking at the list. Rows are written over in place, so only a reading that
+    /// finds the chosen drive gone still does this.</para>
     /// </summary>
-    private bool _refreshingDrives;
+    private bool _retargeting;
 
     /// <summary>
     /// The refusal <see cref="ExplainRefusal"/> last put on the status line, so it can take that
@@ -85,17 +98,23 @@ public sealed partial class ExploreViewModel : ObservableObject
     private string? _statedRefusal;
 
     /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
+    /// <param name="isElevated">Whether this process holds administrator rights.</param>
+    /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
     public ExploreViewModel(
-        ExploreScanner scanner,
+        IExploreScanner scanner,
         IVolumeInventory volumes,
         TimeProvider time,
         ExploreActions actions,
-        ItemGuide guide)
+        ItemGuide guide,
+        bool isElevated,
+        Func<ExploreRequest, bool> relaunch)
     {
         _scanner = scanner;
         _volumes = volumes;
         _drives = new DriveList(volumes, time);
         _guide = guide;
+        _isElevated = isElevated;
+        _relaunch = relaunch;
 
         Selection = new ExploreSelection(actions);
 
@@ -152,45 +171,26 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>Set from the system picker rather than from a typed string, so the path is one the
     /// shell confirmed exists — the same reason <see cref="SettingsViewModel"/>'s source folders go
     /// through one.</para>
+    ///
+    /// <para>Written only through <see cref="Retarget"/>, which is what keeps the drive box, the
+    /// elevation offer and the status line answering for it.</para>
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsScopedToFolder))]
     [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
-    public partial string? ScopeFolder { get; set; }
+    public partial string? ScopeFolder { get; private set; }
 
     /// <summary>
-    /// What the next scan covers: the chosen folder, and the whole drive where none was chosen.
-    /// Choosing a folder is the more specific act, so it wins, and the drive box follows it rather
-    /// than contradicting it — see <see cref="ScopeTo"/>.
+    /// What the page is pointed at, as the two controls state it. See <see cref="ExploreTarget"/>
+    /// for what the next scan covers and why it may be refused.
     ///
     /// <para>Not bound to anything. The screen states the two halves separately, in the drive box
     /// and the folder beside it, and this is what the scan is actually pointed at.</para>
     /// </summary>
-    private string? ScanRoot => ScopeFolder ?? SelectedDrive?.RootPath;
+    private ExploreTarget Target => new(SelectedDrive?.RootPath, ScopeFolder);
 
-    /// <summary>
-    /// Why the page will not scan what it is pointed at, or null where it will.
-    ///
-    /// <para>Asked of the scan's root rather than of the drive box, because the volume decides and
-    /// a folder chosen through the picker can be on one the box is not naming. Scoping to a folder
-    /// on a cloud mount is the same hazard as scanning the whole of it, and it is the route a
-    /// reader takes next when the drive is refused.</para>
-    ///
-    /// <para>Asked of the machine's volumes through <see cref="HostVolume"/> rather than of
-    /// <see cref="Drives"/>. The picker's list answers only for the volumes this page chose to offer,
-    /// and deriving the refusal from it left the rule where Core could not reach it — which is how an
-    /// approved source folder on a cloud mount came to be searched in full.</para>
-    ///
-    /// <para>A target on a volume the inventory says nothing about — a share, most often — is not
-    /// refused here. Nothing measured its flags, and refusing on no reading would be a guess.</para>
-    /// </summary>
-    private string? Refusal =>
-        ScanRoot is { } root && HostVolume.For(_volumes, root) is { StoresContentRemotely: true }
-            ? DriveChoice.RemoteStorageRefusal
-            : null;
-
-    public bool IsScopedToFolder => ScopeFolder is not null;
+    public bool IsScopedToFolder => Target.IsScopedToFolder;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -400,13 +400,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// and back again, which is a substitution too, and one nobody is told about is the kind a user
     /// reads as a bug.</para>
     /// </summary>
-    public string? ViewNote => Tree is { ChildOrder: not ExploreChildOrder.BySize }
+    public string? ViewNote => Tree is { ChildOrder: not ExploreChildOrder.BySize } tree
         ? SelectedView switch
         {
-            ExploreView.Treemap =>
+            ExploreView.Treemap when ExploreSurface.Drawn(tree, ExploreView.Treemap) == ExploreView.Icicle =>
                 "Drawing the icicle, in name order, while the scan runs. A treemap reorders every "
                 + "folder as it grows, so it follows when the scan finishes.",
-            ExploreView.Sunburst =>
+            ExploreView.Sunburst when ExploreSurface.Drawn(tree, ExploreView.Sunburst) == ExploreView.Icicle =>
                 "Drawing the icicle, in name order, while the scan runs. A sunburst turns every "
                 + "wedge after one that grows, so it follows when the scan finishes.",
             _ =>
@@ -423,7 +423,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// the View box says (see <see cref="ViewNote"/>).
     /// </summary>
     public bool ShowsMapControls =>
-        SelectedView == ExploreView.Treemap && Tree is { ChildOrder: ExploreChildOrder.BySize };
+        SelectedView == ExploreView.Treemap && Tree is { } tree
+        && ExploreSurface.Drawn(tree, ExploreView.Treemap) == ExploreView.Treemap;
 
     /// <summary>
     /// How large the volume was and how much of it was free when the scan on screen finished, where
@@ -525,7 +526,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan), IncludeCancelCommand = true)]
     private async Task ScanAsync(CancellationToken ct)
     {
-        if (ScanRoot is not { } target)
+        if (Target.Root is not { } target)
         {
             return;
         }
@@ -607,106 +608,90 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
 
-        // The drive box moves to the volume holding the folder, where that volume is one it offers.
-        // The two controls describe a single choice, and a drive box naming a volume the scan is not
-        // on is the kind of disagreement a reader takes for a bug. A folder on a share, or on a
-        // volume the box does not list, has no entry to move to and leaves it as it was.
-        //
-        // Asked of the inventory rather than of Path.GetPathRoot, which reduces a path to a drive
-        // letter: a folder on a volume mounted at C:\Mount would otherwise select the disk that
-        // folder sits on, and both are in the list.
-        //
-        // Assigned before the folder, because selecting a drive is what drops a folder scope. The
-        // other order would clear the scope this is establishing.
-        if (Offered(HostVolume.For(_volumes, folder)?.RootPath) is { } listed)
-        {
-            SelectedDrive = listed;
-        }
-
-        ScopeFolder = folder;
+        Retarget(Target, Target.ScopedTo(folder, _drives.Holding(folder)?.RootPath));
     }
 
     /// <summary>
     /// Point the page where an earlier instance was pointed, so an elevated replacement resumes the
-    /// scan the user asked for instead of starting from nothing. See <see cref="ExploreRequest"/>.
-    ///
-    /// <para>A drive that is no longer mounted, and so is not in <see cref="Drives"/>, is left
-    /// alone rather than forced into the box: the picker would then name a volume it cannot
-    /// offer.</para>
+    /// scan the user asked for instead of starting from nothing. See <see cref="ExploreRequest"/>
+    /// and <see cref="ExploreTarget.Pointing"/>.
     /// </summary>
     /// <returns>
-    /// Whether the page is now pointed at what was asked for. False means nothing was restored —
-    /// the drive has gone and no folder was named — and the caller must not scan on the strength of
-    /// it. The box still holds whichever volume it defaulted to, and scanning a volume the user
-    /// never chose is worse than scanning nothing.
+    /// Whether the page is now pointed at what was asked for. False means nothing was restored, and
+    /// the caller must not scan on the strength of it.
     /// </returns>
     public bool PointAt(string? drive, string? folder)
     {
-        var pointed = false;
-
-        // The drive first, for the reason ScopeTo gives: selecting one drops any folder scope, so
-        // the other order would clear the scope this is restoring.
-        if (Offered(drive) is { } mounted)
+        if (Target.Pointing(_drives.Find(drive)?.RootPath, folder) is not { } pointed)
         {
-            SelectedDrive = mounted;
-            pointed = true;
+            return false;
         }
 
-        if (folder is not null)
-        {
-            ScopeFolder = folder;
-            pointed = true;
-        }
+        Retarget(Target, pointed);
 
-        return pointed;
+        return true;
     }
-
-    /// <summary>
-    /// The entry in <see cref="Drives"/> naming <paramref name="volume"/>, or null where the box
-    /// does not offer it. Null in, null out, so a path with no root and an absent drive are one case
-    /// here rather than two at each caller.
-    /// </summary>
-    private DriveEntry? Offered(string? volume) => _drives.Find(volume);
 
     /// <summary>Drop a folder scope, so the next scan covers the whole drive again.</summary>
     [RelayCommand(CanExecute = nameof(CanRun))]
-    private void ScanWholeDrive() => ScopeFolder = null;
+    private void ScanWholeDrive() => Retarget(Target, Target.WholeDrive());
 
     /// <summary>
-    /// Choosing a drive is choosing to scan the whole of it, so any folder scope goes with it. The
-    /// alternative leaves both set, and the page then states one target while scanning another.
+    /// A drive chosen in the picker, which drops any folder scope: see
+    /// <see cref="ExploreTarget.Choosing"/>.
     ///
-    /// <para>Only where a person chose it. See <see cref="_refreshingDrives"/> for the writes that
-    /// come from rebuilding the list rather than from the picker.</para>
+    /// <para>Only where a person chose it. See <see cref="_retargeting"/> for the writes that come
+    /// from the page itself.</para>
     /// </summary>
-    partial void OnSelectedDriveChanged(DriveEntry? value)
+    partial void OnSelectedDriveChanged(DriveEntry? oldValue, DriveEntry? newValue)
     {
-        if (_refreshingDrives)
+        if (_retargeting)
         {
             return;
         }
 
-        ScopeFolder = null;
+        var before = new ExploreTarget(oldValue?.RootPath, ScopeFolder);
 
-        // Called here as well as from the scope's own handler below. Assigning null over null
-        // raises nothing, so a drive chosen while no folder was scoped would otherwise leave the
-        // offer describing somewhere the page is no longer pointed.
-        OfferElevation(null);
-
-        ExplainRefusal();
+        Retarget(before, before.Choosing(newValue?.RootPath));
     }
 
     /// <summary>
-    /// The offer describes what pressing the button would scan, not what is drawn on screen, so
-    /// moving the target puts it back to the state before anything was measured.
+    /// Point the page at <paramref name="to"/>, and make what it says about the target answer for
+    /// where it now points.
     ///
-    /// <para>Leaving it alone is how the button comes to be hidden for a volume nothing has looked
-    /// at, which is the whole of the defect it was just changed to fix, and how it comes to offer a
-    /// rescan of a drive that was never scanned.</para>
+    /// <para>Both halves are written under <see cref="_retargeting"/>, because the drive's handler
+    /// would otherwise read the half-written pair as a person choosing a drive, and drop the folder
+    /// this is setting.</para>
+    ///
+    /// <para>The elevation offer describes what pressing the button would scan, not what is drawn on
+    /// screen, so a move that changes what the next scan covers puts it back to the state before
+    /// anything was measured. Leaving it alone is how the button comes to be hidden for a volume
+    /// nothing has looked at, and how it comes to offer a rescan of a drive that was never scanned.
+    /// A move that scans the same place leaves it, so a reading of the volumes that hands the chosen
+    /// drive back does not take away an offer the last scan made.</para>
     /// </summary>
-    partial void OnScopeFolderChanged(string? value)
+    /// <param name="from">
+    /// Where the page was pointed before the move. Passed rather than read, because a drive chosen
+    /// in the picker has already been written by the time its handler runs.
+    /// </param>
+    private void Retarget(ExploreTarget from, ExploreTarget to)
     {
-        OfferElevation(null);
+        _retargeting = true;
+
+        try
+        {
+            SelectedDrive = _drives.Find(to.Drive);
+            ScopeFolder = to.Folder;
+        }
+        finally
+        {
+            _retargeting = false;
+        }
+
+        if (!from.ScansTheSameAs(to))
+        {
+            OfferElevation(null);
+        }
 
         ExplainRefusal();
     }
@@ -729,7 +714,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan))]
     private void ElevateAndRescan()
     {
-        if (!ElevatedRelaunch.TryRelaunch(new ExploreRequest(SelectedDrive?.RootPath, ScopeFolder)))
+        if (!_relaunch(new ExploreRequest(Target.Drive, Target.Folder)))
         {
             Status = "Deguffer is still running without administrator rights, so it scans by walking "
                 + "directories. Everything else works exactly the same.";
@@ -755,20 +740,20 @@ public sealed partial class ExploreViewModel : ObservableObject
         _hasScanned = found is not null;
 
         CanElevate = found is { } fallback
-            ? ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, fallback)
-            : ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+            ? ElevationOffer.ShouldOffer(_isElevated, fallback)
+            : ElevationOffer.ShouldOffer(_isElevated);
 
         OnPropertyChanged(nameof(ElevateLabel));
     }
 
     /// <summary>
-    /// Show what is inside <paramref name="node"/>. Ignored for anything with nothing in it, and for
-    /// the root when the views are already inside it. See <see cref="ExplorePosition.Opening"/>.
+    /// Show what is inside <paramref name="node"/>. Ignored for anything removed since the scan,
+    /// which the map still draws, and wherever <see cref="ExplorePosition.Opening"/> says the step
+    /// leads nowhere.
     /// </summary>
     public void Descend(int node)
     {
-        if (Tree is not { } tree || Selection.WasRemoved(node) || !tree.IsDirectory(node)
-            || tree.ChildrenOf(node).Length == 0
+        if (Tree is not { } tree || Selection.WasRemoved(node)
             || _position.Opening(tree, node, Volume) is not { } opened)
         {
             return;
@@ -796,33 +781,6 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
-    /// What the block for space in use that the scan did not count can be made of, most likely
-    /// first. A block with a size and no explanation reads as a fault in the scan, and every item
-    /// here is something the reader can check or act on.
-    ///
-    /// <para>Two versions, because the first item is the one an elevated scan fixes. Offering that
-    /// fix to a scan that is already elevated would send the reader round in a circle.</para>
-    /// </summary>
-    private const string UnaccountedCauses =
-        "\n• Restore points and shadow copies, which Windows keeps in System Volume Information."
-        + "\n• Space Windows keeps back for updates (reserved storage)."
-        + "\n• The file system's own records: the file table, its journals and the free-space map."
-        + "\n• Rounding: each file takes whole clusters, so many small files use more than their sizes."
-        + "\n• Files deleted while a program still has them open. The space comes back when it closes them."
-        + "\n• A disk quota, which makes Windows report less free space to this account.";
-
-    private const string UnaccountedNote =
-        "Windows says this much of the drive is in use beyond what the scan counted. It can include:"
-        + "\n• Folders this scan was not allowed to open, such as other accounts' files. Scan as "
-        + "administrator to count most of them."
-        + UnaccountedCauses;
-
-    private const string UnaccountedNoteElevated =
-        "Windows says this much of the drive is in use beyond what the scan counted. It can include:"
-        + "\n• Folders even an administrator's scan cannot open."
-        + UnaccountedCauses;
-
-    /// <summary>
     /// Say what the pointer is over. Called from the map on every move, so it formats and assigns
     /// and does nothing else — anything heavier here runs at the display's refresh rate.
     /// </summary>
@@ -839,7 +797,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             (_, { IsUnaccounted: true } unaccounted) => (
                 "In use, but not accounted for by this scan",
                 FreeSpace.Format(unaccounted.Bytes),
-                ElevatedRelaunch.IsElevated ? UnaccountedNoteElevated : UnaccountedNote),
+                ExploreUnaccountedNote.For(_isElevated)),
 
             ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
@@ -906,19 +864,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <param name="volume">The volume <paramref name="tree"/> is the whole of. See <see cref="Volume"/>.</param>
     private void Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume)
     {
-        var standing = Tree;
-        var node = position.Node;
-
-        // Whether what is on screen is still about the same directory. A snapshot landing mid-scan
-        // is: it measures again what the page is already standing in. Stepping into a folder is
-        // not, and neither is a scan that came back rooted somewhere else.
-        var sameDirectory = ExplorePlace.TryCarry(standing, CurrentNode, tree) == node;
-
-        // Opening the root, or going back out of it onto the volume, is the same directory and the
-        // same rows, but it is a step like opening any folder, and a step starts with nothing
-        // picked: the first click of the double-click that opened the root picked the root.
-        var continuing = sameDirectory
-            && (!ReferenceEquals(standing, tree) || position.OnVolume == _position.OnVolume);
+        var redraw = ExploreRedraw.Between(Tree, _position, tree, position);
 
         Tree = tree;
         Volume = volume;
@@ -927,7 +873,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentNode));
         AscendCommand.NotifyCanExecuteChanged();
 
-        if (continuing)
+        if (redraw.KeepsSelection)
         {
             Selection.Carry(tree);
         }
@@ -936,12 +882,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             Selection.Show(tree);
         }
 
-        // Brought up to date in place only while the list is the same list: the same directory, in
-        // the same order. A finished tree arrives with its children in size order after a walk's
-        // snapshots delivered them in name order, and that is a different list rather than this one
-        // changed — every row has moved, so reconciling it would be a move per entry, and the scroll
-        // position it would preserve is a position in content that is no longer there.
-        ShowRows(tree, node, sameDirectory && standing?.ChildOrder == tree.ChildOrder);
+        ShowRows(tree, position.Node, redraw.KeepsRows);
         BuildTrail(tree);
 
         // What the pointer is over is the map's to say, and it says it again for the drawing this
@@ -1065,45 +1006,31 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     public void RefreshDrives()
     {
-        var chosen = SelectedDrive?.RootPath;
+        // Read before the volumes are, because the picker can write null over the selection while
+        // the list under it changes. See _retargeting.
+        var standing = Target;
+        bool read;
 
-        _refreshingDrives = true;
+        _retargeting = true;
 
         try
         {
-            if (!_drives.Refresh())
-            {
-                return;
-            }
-
-            // A refused volume is listed and is not defaulted onto. It is in the list because the
-            // user can see the drive and needs to be told why it is not scanned, and it is not the
-            // default because opening the page on a drive whose Scan button is dead reads as an app
-            // that failed to start. Where every volume is refused there is nothing better to point
-            // at, and ExplainRefusal below says so.
-            SelectedDrive = Offered(chosen)
-                ?? Drives.FirstOrDefault(static listed => !listed.Choice.IsRefused)
-                ?? Drives.FirstOrDefault();
+            read = _drives.Refresh();
         }
         finally
         {
-            _refreshingDrives = false;
+            _retargeting = false;
         }
 
-        // A reading that hands the same volume back is not a choice, and the guard above stopped it
-        // reading as one. A reading that cannot — the drive was unplugged, the disc ejected, the
-        // volume re-locked — has moved the page to a volume nobody picked, and that is a change of
-        // drive however it came about. Leaving the scope and the offer alone there is exactly the
-        // state OnSelectedDriveChanged exists to prevent: one target stated, another scanned.
-        if (chosen is not null
-            && !string.Equals(chosen, SelectedDrive?.RootPath, StringComparison.OrdinalIgnoreCase))
+        if (!read)
         {
-            ScopeFolder = null;
-
-            // Both, for the reason OnSelectedDriveChanged gives: assigning null over null raises
-            // nothing, so the scope's own handler cannot be relied on to have run.
-            OfferElevation(null);
+            return;
         }
+
+        // Where the reading leaves the page, by DriveList.Choose and ExploreTarget.AfterReading.
+        // Retarget ends by explaining a refusal, which is what keeps the page from opening pointed
+        // at a refused volume with the button dead and nothing said.
+        Retarget(standing, standing.AfterReading(_drives.Choose(standing.Drive)?.RootPath));
 
         // A reading can change whether the chosen volume is refused without changing which row is
         // chosen — the row is written over, not replaced — so the selection raises nothing and the
@@ -1111,13 +1038,9 @@ public sealed partial class ExploreViewModel : ObservableObject
         // volume the status line has just refused is the page stating one thing and doing another.
         ScanCommand.NotifyCanExecuteChanged();
         ElevateAndRescanCommand.NotifyCanExecuteChanged();
-
-        // After the guard, because the reading suppressed the selection's own handler. Without it
-        // the page can open pointed at a refused volume, with the button dead and nothing said.
-        ExplainRefusal();
     }
 
-    private bool CanScan() => !IsBusy && ScanRoot is not null && Refusal is null;
+    private bool CanScan() => !IsBusy && Target.IsScannable(_volumes);
 
     /// <summary>
     /// State why the page will not scan what it is pointed at, and take the sentence back once it
@@ -1135,7 +1058,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private void ExplainRefusal()
     {
-        if (Refusal is { } refused)
+        if (Target.Refusal(_volumes) is { } refused)
         {
             Status = refused;
             _statedRefusal = refused;

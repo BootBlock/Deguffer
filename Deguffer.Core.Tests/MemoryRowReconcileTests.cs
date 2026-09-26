@@ -1,15 +1,15 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Deguffer.Core.Memory;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// What the Memory page's list of programs is told between two readings of the same machine
-/// (issue #142). The page itself is in Deguffer.App and has no test project, so this stands in for
-/// it: two trees built by <see cref="MemoryTreeBuilder"/> from two snapshots, reconciled by the same
+/// (issue #142). The page's own wiring is tested in Deguffer.App.Tests; this holds the call it makes:
+/// two trees built by <see cref="MemoryTreeBuilder"/> from two snapshots, reconciled by the same
 /// call the page makes, with the changes counted.
 ///
 /// <para>A process starting or exiting is the ordinary case, not the rare one: on a machine running

@@ -1,49 +1,17 @@
-using Deguffer.Core.Safety;
-
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// §7: show free space before and after, prominently. It is the only number the user came for.
+///
+/// <para>This states a size in words. The figures themselves are read through
+/// <see cref="Safety.IVolumeInventory.SpaceOf"/>, which a test can answer for a volume it built.</para>
 /// </summary>
 public static class FreeSpace
 {
     private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB"];
 
     /// <summary>
-    /// Free bytes on the volume holding <paramref name="path"/>, or null if unknown. Callers
-    /// supply the path from <c>IUserEnvironment</c> rather than this class reading the profile
-    /// location itself — Core does not touch <c>Environment.GetFolderPath</c>.
-    /// </summary>
-    public static long? ForPath(string path) => Measure(path, static space => space.Free);
-
-    /// <summary>
-    /// Total size of the volume holding <paramref name="path"/>, or null if unknown. Capacity does
-    /// not change while the app is open, so the UI reads it once and keeps it — only the free
-    /// figure is re-read after a run.
-    /// </summary>
-    public static long? TotalForPath(string path) => Measure(path, static space => space.Total);
-
-    /// <summary>
-    /// Asked of the volume the path is really on, which <see cref="Path.GetPathRoot(string)"/> and
-    /// <c>DriveInfo</c> cannot answer: both reduce a path to a drive letter, so a path on a volume
-    /// mounted at a folder would be measured against the disk that folder sits on. Windows resolves
-    /// the mount point itself, for a path that does not exist as readily as one that does.
-    ///
-    /// <para>Null where the volume would not say, which the UI shows as a dash. An unavailable or
-    /// disconnected volume is not an error worth raising.</para>
-    /// </summary>
-    private static long? Measure(string path, Func<(long Total, long Free), long> read)
-    {
-        if (VolumeCalls.MountPointOf(path) is not { } mountPoint)
-        {
-            return null;
-        }
-
-        return VolumeCalls.SpaceOf(mountPoint) is { } space ? read(space) : null;
-    }
-
-    /// <summary>
-    /// The same figure, qualified where it is a prediction rather than a measurement.
+    /// A size in words, qualified where it is a prediction rather than a measurement.
     ///
     /// Both of §5.5's routes measure exactly and agree, so neither is hedged. What is hedged is a
     /// figure a tool produced about its own future behaviour — conda's dry run — and a sole-link

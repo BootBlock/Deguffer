@@ -64,8 +64,12 @@
 
       This grant is not a licence to reach past a public seam. Where the consequence is testable
       from outside, it is tested from outside - see the class comment on LiveTreeInspectorTests.
+
+      Deguffer.Testing holds the fakes behind those same internal seams (the process and window
+      calls, the process table records), so it is granted what the tests it serves are granted.
     -->
     <InternalsVisibleTo Include="Deguffer.Core.Tests" />
+    <InternalsVisibleTo Include="Deguffer.Testing" />
   </ItemGroup>
 
 </Project>

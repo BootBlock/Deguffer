@@ -5,7 +5,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
-using Deguffer.Core.Tests.Fakes;
+using Deguffer.Testing;
 using Xunit.Sdk;
 
 namespace Deguffer.Core.Tests;

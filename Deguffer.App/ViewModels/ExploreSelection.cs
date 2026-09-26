@@ -14,37 +14,22 @@ namespace Deguffer.App.ViewModels;
 /// <para>Separate from <see cref="ExploreViewModel"/> because the two have different subjects. That
 /// one is about which node is being looked at and what the screen says about the drive; this one is
 /// about one thing in it and what happens to that thing (G1). It decides nothing:
-/// <see cref="ExploreActionPolicy"/> settles what may be removed, <see cref="ExploreRemovalPrompt"/>
-/// what the user is told, and <see cref="ExploreRemovalReport.Summary"/> what happened — all in
-/// Core, all provable without a WinUI host.</para>
+/// <see cref="ExploreActions"/> settles what may be removed and carries it out,
+/// <see cref="ExploreRefusalNote"/> says why a selection will not be, <see cref="ExploreRemovals"/>
+/// what has gone since the scan, and <see cref="ExplorePlace.TryCarry"/> what a selection still
+/// names in a later tree — all in Core, all provable without a WinUI host.</para>
 /// </summary>
 public sealed partial class ExploreSelection : ObservableObject
 {
     private readonly ExploreActions _actions;
 
     /// <summary>
-    /// Nodes removed since the scan.
-    ///
-    /// <para>The tree is parallel arrays built once, and rebuilding it would mean rescanning the
-    /// drive — minutes, for one deleted folder. So what went is remembered instead: the list stops
-    /// showing it, and <see cref="StaleNote"/> says plainly that the totals and the picture are now
-    /// larger than what is on the disk. §7.1 allows Explore's numbers to be off provided the picture
-    /// says which way, and this is the other direction of the same rule.</para>
+    /// What has gone since the scan. The list stops showing it, and <see cref="StaleNote"/> says
+    /// plainly that the totals and the picture are now larger than what is on the disk.
     /// </summary>
-    private readonly HashSet<int> _removed = [];
+    private readonly ExploreRemovals _removals = new();
 
     private ExploreTree? _tree;
-
-    /// <summary>
-    /// The tree <see cref="_removed"/>'s indices belong to.
-    ///
-    /// <para>A node index means nothing outside the tree it came from, and the trees are replaced
-    /// wholesale — on every mid-scan snapshot as well as at the end of a scan. Without this, a
-    /// rescan filtered the new tree's children through the old tree's indices, so a directory that
-    /// is genuinely on the disk vanished from the list and could not be opened, while the stale
-    /// note claimed items had been removed since a scan that had only just started.</para>
-    /// </summary>
-    private ExploreTree? _removedFrom;
 
     private IReadOnlyList<int> _nodes = [];
     private string _label = string.Empty;
@@ -58,6 +43,10 @@ public sealed partial class ExploreSelection : ObservableObject
         // Started here rather than on the first selection, because §5.2's probed half takes a moment
         // and the page has nothing else to do while it opens. Until it lands every path is refused
         // with a sentence saying why, and this is what makes that window short enough to go unseen.
+        //
+        // A build that has already finished announces itself inside Prepare, before the owner has
+        // subscribed to anything here. Nothing is lost by that: nothing can be selected yet, so the
+        // restatement has nothing to say, and the first selection asks the finished policy.
         _actions.Ready += (_, _) => Restate();
         _actions.Prepare();
     }
@@ -118,12 +107,8 @@ public sealed partial class ExploreSelection : ObservableObject
     public string Figures => _figures;
 
     /// <summary>
-    /// Why the selection will not be removed, or null when nothing stands in the way.
-    ///
-    /// <para>Stated as soon as something is selected rather than after the user tries. §7.1 asks for
-    /// refusals to be "stated with their reason rather than by greying something out", and a menu
-    /// item that does nothing teaches nothing — least of all somebody reading a size picture, who
-    /// has no way to guess which of several rules applies.</para>
+    /// Why the selection will not be removed, or null when nothing stands in the way. See
+    /// <see cref="ExploreRefusalNote"/>.
     /// </summary>
     public string? Note => _note;
 
@@ -131,12 +116,12 @@ public sealed partial class ExploreSelection : ObservableObject
 
     /// <summary>
     /// How the picture now differs from the disk, or null while they still agree. See
-    /// <see cref="_removed"/>.
+    /// <see cref="_removals"/>.
     /// </summary>
-    public string? StaleNote => !ReferenceEquals(_tree, _removedFrom) || _removed.Count == 0
-        ? null
-        : $"{_removed.Count} item(s) have been removed since this scan. The sizes above still count "
-          + "them, and the map still draws them. Scan again for a current picture.";
+    public string? StaleNote => _removals.CountIn(_tree) is > 0 and var count
+        ? $"{count} item(s) have been removed since this scan. The sizes above still count them, and "
+          + "the map still draws them. Scan again for a current picture."
+        : null;
 
     public bool HasStaleNote => StaleNote is not null;
 
@@ -144,43 +129,12 @@ public sealed partial class ExploreSelection : ObservableObject
     /// Whether this node has gone since the scan, so nothing on screen may offer it.
     ///
     /// <para>The list stops showing such a node; the map cannot, because the tree behind the
-    /// picture is not rebuilt for a deletion — see <see cref="_removed"/> — so the shape stays where
+    /// picture is not rebuilt for a deletion — see <see cref="_removals"/> — so the shape stays where
     /// it was. What both must stop doing is <em>acting</em> on it, and the map must stop marking it
     /// out under the pointer, which reads as an offer to pick something that can only select
-    /// nothing (§7.1).</para>
-    ///
-    /// <para><b>Walked up, because a removal takes everything inside it.</b> The set holds what the
-    /// user picked out by hand, which is a handful of folders; what went with them is every file
-    /// under each. A deleted directory of ten thousand entries would otherwise leave every one of
-    /// them looking present, pickable and deletable — and the map is where that shows, because it
-    /// draws descendants the list never lists.</para>
+    /// nothing (§7.1). Asked of the tree on screen: see <see cref="ExploreRemovals.WasRemoved"/>.</para>
     /// </summary>
-    public bool WasRemoved(int node)
-    {
-        if (_removed.Count == 0 || !ReferenceEquals(_tree, _removedFrom) || _tree is not { } tree)
-        {
-            return false;
-        }
-
-        for (var current = node; ;)
-        {
-            if (_removed.Contains(current))
-            {
-                return true;
-            }
-
-            var parent = tree.ParentOf(current);
-
-            // Every reader marks its scan root as its own parent, so this is where the walk ends —
-            // and it ends for a node outside the scanned subtree too, rather than never.
-            if (parent == current)
-            {
-                return false;
-            }
-
-            current = parent;
-        }
-    }
+    public bool WasRemoved(int node) => _removals.WasRemoved(_tree, node);
 
     /// <summary>
     /// Ask what may be removed again, because part of the answer is about this minute: a folder an
@@ -323,17 +277,8 @@ public sealed partial class ExploreSelection : ObservableObject
                 return;
             }
 
-            // Recorded against the tree they are indices into, so a later tree cannot inherit them.
-            if (!ReferenceEquals(_tree, _removedFrom))
-            {
-                _removed.Clear();
-                _removedFrom = _tree;
-            }
-
-            foreach (var node in _nodes.Where(n => report.Removed.Any(r => IsNode(n, r.Path))))
-            {
-                _removed.Add(node);
-            }
+            // Items() answers empty without a tree, so there is one to record against here.
+            _removals.Record(_tree!, _nodes, report);
 
             Reported?.Invoke(this, report.Summary);
             Select([]);
@@ -360,9 +305,6 @@ public sealed partial class ExploreSelection : ObservableObject
         OnPropertyChanged(nameof(HasStaleNote));
     }
 
-    private bool IsNode(int node, string path) =>
-        _tree is { } tree && string.Equals(tree.PathOf(node), path, StringComparison.OrdinalIgnoreCase);
-
     /// <summary>The selection as Core sees it. Empty while no scan is on screen.</summary>
     private IReadOnlyList<ExploreItem> Items() =>
         _tree is not { } tree
@@ -386,25 +328,7 @@ public sealed partial class ExploreSelection : ObservableObject
         OnPropertyChanged(nameof(HasNote));
     }
 
-    private string? NoteFor(IReadOnlyList<ExploreItem> items) => items is [var first, ..]
-        ? items.Count == 1 ? Refusal(first) : Refusals(items)
-        : null;
-
-    private string? Refusal(ExploreItem item) =>
-        _actions.Verdict(item.Path) is { IsAllowed: false } verdict ? verdict.Reason : null;
-
-    private string? Refusals(IReadOnlyList<ExploreItem> items)
-    {
-        var reasons = items.Select(Refusal).OfType<string>().ToList();
-
-        return reasons switch
-        {
-            [] => null,
-            [var only] => $"One of these {items.Count} items will not be removed: {only}",
-            _ => $"{reasons.Count} of these {items.Count} items will not be removed. Select them one "
-                 + "at a time to see why.",
-        };
-    }
+    private string? NoteFor(IReadOnlyList<ExploreItem> items) => ExploreRefusalNote.For(items, _actions.Verdict);
 
     /// <summary>
     /// What another program said went wrong, or nothing at all when it worked. A successful open
