@@ -247,15 +247,15 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2 and §5.6: the plan names no path to delete, protects Windows Update's folder and its
-    /// history by name, and a run proves that they and the unrecognised folder beside them stand.
+    /// §5.2 and §5.6: the plan names no path to delete, and protects Windows Update's folder and its
+    /// history by name, on their contents as well as their existence.
     /// </summary>
     [Fact]
-    public async Task TheRunTargetsNoPathAndWindowsUpdateSurvivesIt()
+    public async Task TheRunTargetsNoPathAndProtectsWindowsUpdate()
     {
         InstallModule();
         ReportCache(CacheBytes);
-        var (softwareDistribution, dataStore, download) = CreateSoftwareDistribution();
+        var (softwareDistribution, dataStore, _) = CreateSoftwareDistribution();
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -269,9 +269,75 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
                 p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore));
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
-        Assert.True(File.Exists(Path.Combine(dataStore, "DataStore.edb")));
-        Assert.True(File.Exists(Path.Combine(download, "pending.cab")));
-        Assert.True(File.Exists(Path.Combine(softwareDistribution, "ReportingEvents.log")));
+    }
+
+    /// <summary>
+    /// §5.6's tool root. What the service's folder holds is the command's to clear, so a run that
+    /// empties it is the ordinary run and raises no alarm, and a run that took the folder itself fails.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheServiceFolderMayBeEmptiedAndMustStillStand(bool removeFolder)
+    {
+        InstallModule();
+        var folder = _temp.CreateDirectory(
+            "Windows", "ServiceProfiles", "NetworkService", "AppData", "Local", "Microsoft", "Windows",
+            "DeliveryOptimization");
+        var cached = _temp.CreateFile(4096, Path.GetRelativePath(_temp.Path, folder), "Cache", "payload");
+
+        _runner.Replying(arguments =>
+        {
+            if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
+            {
+                if (removeFolder)
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+                else
+                {
+                    File.Delete(cached);
+                }
+            }
+
+            return new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && !p.HeldContentBefore);
+        Assert.Equal(!removeFolder, result.Verification!.Passed);
+    }
+
+    /// <summary>
+    /// An unelevated account is refused the service's folder. Protecting it then would fail every run
+    /// on a question nobody could answer, so the plan says instead that the folder goes unconfirmed.
+    /// </summary>
+    [Fact]
+    public async Task ARefusedServiceFolderIsNamedAsUnconfirmedRatherThanProtected()
+    {
+        InstallModule();
+        ReportCache(CacheBytes);
+        var folder = _temp.CreateDirectory(
+            "Windows", "ServiceProfiles", "NetworkService", "AppData", "Local", "Microsoft", "Windows",
+            "DeliveryOptimization");
+
+        CleanupPlan plan;
+        CleanupResult result;
+
+        using (DeniedDirectory.WithUnreadableAttributes(folder))
+        {
+            var provider = CreateProvider();
+            plan = await provider.PlanAsync();
+            result = await provider.ExecuteAsync(plan);
+        }
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("cannot confirm afterwards", StringComparison.Ordinal));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>

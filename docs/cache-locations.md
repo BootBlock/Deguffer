@@ -4401,7 +4401,11 @@ figure shown.
 
 `C:\Windows\SoftwareDistribution`, Windows Update's own folder, and the `DataStore` inside it, which
 holds the history of the updates installed on this machine. The command reaches neither. Deguffer
-asserts after the run that both are still there and still hold what they held.
+asserts after the run that both are still there and have not been emptied.
+
+Delivery Optimization's own folder must still be there after the run too, although what is inside it
+is the command's to clear. Windows lets only an administrator look at that folder, so on an ordinary
+scan the row says that the run cannot confirm it.
 
 ### What it costs you
 

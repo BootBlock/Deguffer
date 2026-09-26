@@ -24,14 +24,22 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>§5.2.</b> <c>SoftwareDistribution</c>, where older Windows builds kept this cache, is
 /// Windows Update's own folder, and its <c>DataStore</c> is the update history. The command reaches
-/// neither, and §5.6 asserts afterwards that both are still standing and still hold what they held.
-/// The cache's own folder is not asserted: a policy can move it, the signed-in account may not list
-/// it, and what it holds is what the command removes.</para>
+/// neither, and §5.6 asserts afterwards that both are still standing and have not been emptied.</para>
+///
+/// <para><b>§5.6 and the service's own folder.</b> The folder Delivery Optimization keeps in the
+/// Network Service profile is the tool's root, so the run asserts it is still standing. It is asserted
+/// on its existence alone: what it holds is the command's to remove, and nobody outside the service
+/// can list it to say which part is cache. An unelevated account is refused even that much, so there
+/// the plan says the run cannot confirm the folder afterwards rather than protecting a path whose
+/// every answer would be a refusal.</para>
 /// </summary>
 public sealed class DeliveryOptimizationProvider : CleanupProviderBase
 {
     private readonly DeliveryOptimizationCache _cache;
     private readonly ISystemDirectories _system;
+
+    /// <summary>Where Delivery Optimization keeps its own folder, in the Network Service profile.</summary>
+    private readonly string _serviceFolder;
 
     public DeliveryOptimizationProvider(
         IUserEnvironment? environment = null,
@@ -47,6 +55,9 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _cache = new DeliveryOptimizationCache(_system, Runner);
+        _serviceFolder = Path.Combine(
+            _system.WindowsDirectory, "ServiceProfiles", "NetworkService", "AppData", "Local", "Microsoft",
+            "Windows", "DeliveryOptimization");
     }
 
     public override string Id => "delivery-optimization";
@@ -107,6 +118,8 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
             return EmptyPlan("Windows reports that its Delivery Optimization cache is empty.");
         }
 
+        var serviceFolder = ServiceFolder();
+
         return new CleanupPlan
         {
             ProviderId = Id,
@@ -124,18 +137,49 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
                     MeasuredBy = _cache,
                 },
             ],
-            ProtectedPaths = Protect(
+            ProtectedPaths = [.. Protect(
                 (Path.Combine(_system.WindowsDirectory, "SoftwareDistribution"),
                     "Windows Update's own folder, which the Delivery Optimization command does not clear."),
                 (Path.Combine(_system.WindowsDirectory, "SoftwareDistribution", "DataStore"),
                     "The database Windows Update keeps its history of installed updates in.")),
+                .. serviceFolder.Protected],
             Notes =
             [
                 new PlanNote(
                     PlanNoteSeverity.Information,
                     "The figure is what Windows reports its Delivery Optimization cache holds. Any file "
                     + "Windows was told to keep is left in place, so the clean may free less."),
+                .. serviceFolder.Notes,
             ],
         };
     }
+
+    /// <summary>
+    /// The service's own folder as §5.6 can assert it: on its existence where Windows describes it,
+    /// and as a sentence where Windows refuses. See the class remarks for why it is never asked about
+    /// its contents. Absent needs neither, because a folder that was never there cannot be lost.
+    /// </summary>
+    private (IReadOnlyList<ProtectedPath> Protected, IReadOnlyList<PlanNote> Notes) ServiceFolder() =>
+        LongPath.ProbeDirectory(_serviceFolder) switch
+        {
+            PathPresence.Present =>
+            (
+                [new ProtectedPath(
+                    _serviceFolder,
+                    "Delivery Optimization's own folder, which its command clears inside and never removes.",
+                    PathPresence.Present,
+                    HeldContentBefore: false)],
+                []
+            ),
+            PathPresence.Refused =>
+            (
+                [],
+                [new PlanNote(
+                    PlanNoteSeverity.Information,
+                    "Windows does not let this account look at Delivery Optimization's own folder, so "
+                    + "the clean cannot confirm afterwards that the folder is still there. Scanning as "
+                    + "administrator lets it.")]
+            ),
+            _ => ([], []),
+        };
 }
