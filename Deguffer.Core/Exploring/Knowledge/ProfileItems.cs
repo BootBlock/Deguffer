@@ -197,8 +197,10 @@ internal static class ProfileItems
             KnownPlace.LocalAppData,
             "Packages",
             "One folder per installed Store or packaged app, holding that app's own data for this "
-            + "account. Inside each, LocalState is the app's real data, LocalCache is derived but "
-            + "may hold sign-in tokens, and TempState is scratch Windows may clear at any time.",
+            + "account. Inside each, LocalState is the app's data, LocalCache is data the app keeps "
+            + "on this device but leaves out of backups — for a packaged desktop program it is "
+            + "where that program's AppData actually lives — and TempState is scratch Windows may "
+            + "clear at any time.",
 
             "The folder for an app is not a cache — resetting an app through Settings, under Apps "
             + "and Advanced options, is what clears it properly and it loses that app's data."),
