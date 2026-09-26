@@ -260,6 +260,56 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- The second list that widens where Deguffer looks. An emulator run from its own folder
+                 records that folder nowhere Deguffer may rely on, so the user is the only source.
+                 Nothing is taken from a folder here unless the emulator's own settings file is in it. -->
+            <TextBlock Text="Emulator folders" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <views:SettingsRow Glyph="&#xE7FC;"
+                               Title="Where your emulators are installed"
+                               Description="Deguffer finds Cemu, Dolphin and PCSX2 where each keeps its data by default. Add the folder of a portable install here, and the folder of every RPCS3 install, which keeps everything beside the program. Deguffer looks in each folder only for the emulator's own settings file, and removes only that emulator's shader cache, never saves, memory cards, firmware or games.">
+                <views:SettingsRow.Control>
+                    <Button Content="Add folder…"
+                            Click="OnAddEmulatorFolder"
+                            AutomationProperties.Name="Add emulator folder" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <TextBlock Text="No emulator folders added, so only each emulator's default location is looked in."
+                       Style="{StaticResource SecondaryText}"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Margin="4,0,0,0"
+                       Visibility="{x:Bind ViewModel.HasNoEmulatorFolders, Mode=OneWay}" />
+
+            <ItemsControl ItemsSource="{x:Bind ViewModel.EmulatorFolders, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
+                              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                              BorderThickness="1"
+                              CornerRadius="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{x:Bind}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTipService.ToolTip="{x:Bind}" />
+
+                            <Button Grid.Column="1"
+                                    Content="Remove"
+                                    Tag="{x:Bind}"
+                                    Click="OnRemoveEmulatorFolder"
+                                    AutomationProperties.Name="Remove emulator folder" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <!-- The one setting on this page that only ever narrows what Deguffer deletes. Listed in
                  full, including items no scan finds any more, so it never becomes a protection
                  nobody can see. Items are added where they are seen, on the Storage page. -->

@@ -39,6 +39,13 @@ public partial class App : Application
         new(new SourceRootStore(UserEnvironment.Current));
 
     /// <summary>
+    /// The folders the user has said an emulator is installed in, shared for the reason
+    /// <see cref="SourceRoots"/> is.
+    /// </summary>
+    public static EmulatorFolderService EmulatorFolders { get; } =
+        new(new EmulatorFolderStore(UserEnvironment.Current));
+
+    /// <summary>
     /// What the Storage rows were left ticked as, shared for the same reason the two above are: the
     /// page reads it as it builds each row and writes it back as the user clicks, so a second
     /// instance would hand out a copy that is stale by the first tick.

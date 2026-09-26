@@ -19,6 +19,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly PreferenceService _preferences;
     private readonly SourceRootService _sourceRoots;
+    private readonly EmulatorFolderService _emulatorFolders;
     private readonly KeepService _keeps;
     private readonly IVolumeInventory _volumes;
 
@@ -30,15 +31,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(
         PreferenceService preferences,
         SourceRootService sourceRoots,
+        EmulatorFolderService emulatorFolders,
         KeepService keeps,
         IVolumeInventory volumes)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
+        _emulatorFolders = emulatorFolders;
         _keeps = keeps;
         _volumes = volumes;
 
         SourceRoots = [.. sourceRoots.Current];
+        EmulatorFolders = [.. emulatorFolders.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
     }
 
@@ -138,6 +142,28 @@ public sealed partial class SettingsViewModel : ObservableObject
         LiveList.Show(SourceRoots, [.. _sourceRoots.Current], root => root.Path);
 
         OnPropertyChanged(nameof(HasNoSourceRoots));
+    }
+
+    /// <summary>
+    /// The folders the user has said an emulator is installed in. Like the source folders, they widen
+    /// where Deguffer looks, so the page lists them in full.
+    /// </summary>
+    public ObservableCollection<string> EmulatorFolders { get; }
+
+    public bool HasNoEmulatorFolders => EmulatorFolders.Count == 0;
+
+    public void AddEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Add(folder));
+
+    public void RemoveEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Remove(folder));
+
+    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(Func{bool})"/> does.</summary>
+    private void ApplyEmulatorFolders(Func<bool> change)
+    {
+        SaveFailed = !change();
+
+        LiveList.Show(EmulatorFolders, [.. _emulatorFolders.Current], folder => folder);
+
+        OnPropertyChanged(nameof(HasNoEmulatorFolders));
     }
 
     /// <summary>Index into the theme combo box, ordered to match <see cref="AppTheme"/>.</summary>
