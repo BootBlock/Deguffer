@@ -195,6 +195,7 @@ public sealed class CleanupPlanner
             new DeliveryOptimizationProvider(environment),
             new PreviousWindowsInstallationProvider(environment),
             new WindowsUpdateLeftoverProvider(environment),
+            new DriverStoreProvider(environment),
             new CrashDumpProvider(environment),
             new WindowsServicingLogProvider(environment),
             new EpicLauncherLogProvider(environment),

@@ -4737,6 +4737,74 @@ through that and listed under [Windows servicing logs](#windows-servicing-logs) 
 
 ---
 
+## Superseded driver packages
+
+**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+
+| | |
+| --- | --- |
+| **Location** | Older package folders in `C:\Windows\System32\DriverStore\FileRepository` |
+| **Method** | Windows' own Disk Cleanup handler, *Device driver packages*, as one row. Where Windows cannot load it, `pnputil /delete-driver` for each older package |
+| **Typical size** | 94 older packages held 1.06 GB of a 6.5 GB store on one workstation, most of it Intel graphics, wireless and Bluetooth drivers |
+
+### What it is
+
+Windows keeps a copy of every driver package it installs in its driver store, so it can set a device
+up again without asking for the driver. When a newer version of a driver arrives, nothing removes the
+older copy. A machine that has taken several graphics, wireless or chipset driver updates keeps one
+folder for each version: one Bluetooth driver was found 26 times.
+
+### What Deguffer does
+
+It asks Windows to run its own *Device driver packages* cleanup, the one Disk Cleanup's *Clean up
+system files* runs. That cleanup is Microsoft's own code deciding which older packages are no
+longer needed, which is a better authority than any comparison Deguffer can make.
+
+Deguffer lists the third-party packages with `pnputil`, which works without administrator rights,
+and treats two packages as versions of one driver where the INF's name, its provider, its device
+class and any extension it provides all match. Everything but the newest version is what the row
+counts. Windows' cleanup then decides for itself, so it may remove a little more or less than the
+figure.
+
+Where Windows cannot load its cleanup, Deguffer removes each older package with `pnputil
+/delete-driver`, one row part for each, and never with `/force` or `/uninstall`. Without `/force`,
+`pnputil` refuses to remove a package a device is using. `/uninstall` would take the driver away
+from the devices using it.
+
+Nothing is offered:
+
+- **while an update is unfinished**, on the same tests as the previous installation above, because
+  Windows Update installs drivers too.
+- **for a package a device is using**, whatever its age.
+- **where your recent-files setting would keep any of it**, when Windows' cleanup does the work,
+  because it takes every older package at once and cannot be told to leave one. Where `pnputil`
+  does the work instead, the row says that your recent-files setting does not protect anything from
+  it, as it does for every tool Deguffer asks to clear its own files.
+
+Removing a package needs administrator rights.
+
+### What is protected
+
+`FileRepository` itself is never a target. The run checks afterwards that the store, the newest
+version of each driver, every package a device is using and every driver that is part of Windows
+are still there. Where `pnputil` does the work, every other third-party package is checked as well,
+and immediately before each removal Deguffer asks Windows again whether the package's name still
+belongs to the folder it planned to remove. Windows gives a freed name to the next package it
+stages, so a name that has changed hands stops that removal.
+
+### What it costs you
+
+Windows can no longer roll a device back to an older version of its driver, or install one from the
+copy it kept. A device that needs an older driver again gets it from the manufacturer or Windows
+Update.
+
+### Why Tier 2
+
+Getting an older driver back means a download, and at worst a device that needs its driver before
+the network works. Nothing here is a record of something you did, so it is not Tier 3.
+
+---
+
 ## Windows temporary folders
 
 **Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and it needs an extra

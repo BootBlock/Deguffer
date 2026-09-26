@@ -414,7 +414,7 @@ public sealed class CleanupPlannerTests
                 "platformio", "playwright", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
-                "crash-dumps",
+                "driver-store", "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
                 "claude-code-file-history", "claude-code-conversations",
             ],
@@ -426,7 +426,7 @@ public sealed class CleanupPlannerTests
                 "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "platformio", "playwright", "lmstudio-runtimes",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
-                "windows-update-leftovers",
+                "windows-update-leftovers", "driver-store",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 

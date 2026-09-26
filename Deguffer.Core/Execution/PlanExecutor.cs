@@ -222,6 +222,11 @@ public sealed class PlanExecutor(
             }
         }
 
+        if (step.TargetCheck?.WhyNot(step, ct) is { } renamed)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Not run: {renamed}.");
+        }
+
         // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
         // told to leave one file and a store can arrive between the preview and the clean. See
         // MailStoreSearch for what the look costs and why it is paid here.
