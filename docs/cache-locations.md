@@ -1881,7 +1881,9 @@ PlayStation 3 program into code for your processor.
 keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin or PCSX2
 does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table. A folder with none in it gets a note on the plan, and nothing in it is touched.
+table. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+folder that holds RetroArch gets no note, because the
+[RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
 **A folder counts only where the emulator's own settings file is in it.** A folder that merely holds
 a `cache` directory is not an emulator's. A folder that holds your whole profile, or a drive's root,

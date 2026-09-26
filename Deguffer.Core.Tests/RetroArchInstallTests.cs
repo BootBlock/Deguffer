@@ -1,4 +1,5 @@
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Tests.Fakes;
 
 namespace Deguffer.Core.Tests;
@@ -108,6 +109,26 @@ public sealed class RetroArchInstallTests : IDisposable
 
         Assert.Null(folder.Path);
         Assert.NotNull(folder.Unresolved);
+    }
+
+    /// <summary>
+    /// RetroArch appends the rest of the value as text, so a rest that is itself a full path names
+    /// nothing RetroArch could use. Combining it as a path would take the rest alone, and send the rows
+    /// to a folder RetroArch never wrote to.
+    /// </summary>
+    [Theory]
+    [InlineData(@":\D:\Games\RetroArch\shaders")]
+    [InlineData(@"~\D:\Games\RetroArch\shaders")]
+    public void ARootedRestIsAppendedAndNeverTakenAlone(string value)
+    {
+        _environment.WithEnvironmentVariable("HOME", Path.Combine(_temp.Path, "home"));
+
+        var folder = Thumbnails(Install(Program, $"thumbnails_directory = \"{value}\""));
+
+        var within = value[0] == ':' ? Program : Path.Combine(_temp.Path, "home");
+
+        Assert.NotEqual(@"D:\Games\RetroArch\shaders", folder.Path);
+        Assert.True(folder.Path is null || LongPath.Contains(within, folder.Path), folder.Path);
     }
 
     [Fact]

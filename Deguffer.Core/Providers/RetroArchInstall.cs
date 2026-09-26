@@ -86,6 +86,8 @@ internal sealed record RetroArchInstall(string? Program, RetroArchSettings? Sett
     /// The folder <paramref name="setting"/> names, expanded as RetroArch's
     /// <c>fill_pathname_expand_special</c> expands it: <c>:</c> at the start is the program's folder,
     /// <c>~</c> is <c>HOME</c>, and in either case the character after it is skipped whatever it is.
+    /// The rest is appended as text, as RetroArch appends it, rather than combined as a path: a rest
+    /// that is itself rooted names no folder RetroArch could use, where combining would take it alone.
     /// </summary>
     public RetroArchFolder Folder(RetroArchFolderSetting setting, IUserEnvironment environment)
     {
@@ -108,11 +110,11 @@ internal sealed record RetroArchInstall(string? Program, RetroArchSettings? Sett
                     + "folder that is. Add the folder RetroArch is installed in under Emulator folders in Settings.");
             }
 
-            expanded = Path.Combine(Program, value.Length > 2 ? value[2..] : string.Empty);
+            expanded = Appended(Program, value);
         }
         else if (value[0] == '~' && environment.GetEnvironmentVariable("HOME") is { Length: > 0 } home)
         {
-            expanded = Path.Combine(home, value.Length > 2 ? value[2..] : string.Empty);
+            expanded = Appended(home, value);
         }
         else if (Path.IsPathFullyQualified(value))
         {
@@ -130,4 +132,8 @@ internal sealed record RetroArchInstall(string? Program, RetroArchSettings? Sett
             ? new RetroArchFolder(folder, null)
             : new RetroArchFolder(null, $"'{Settings?.Path}' names it as something Windows does not accept as a path.");
     }
+
+    /// <summary><paramref name="folder"/>, a separator, and <paramref name="value"/> from its third character.</summary>
+    private static string Appended(string folder, string value) =>
+        Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar + (value.Length > 2 ? value[2..] : string.Empty);
 }

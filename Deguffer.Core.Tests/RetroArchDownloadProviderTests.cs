@@ -281,6 +281,27 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
         Assert.True(Directory.Exists(slang));
     }
 
+    /// <summary>
+    /// The Steam copy's folder is built from the library and fixed names, so a link at any folder
+    /// between puts it somewhere nothing established, and every survivor would resolve through it.
+    /// </summary>
+    [Fact]
+    public async Task ASteamCopyReachedThroughALinkIsLeftAlone()
+    {
+        var steamRoot = RegisterSteam("RetroArch");
+        var elsewhere = Path.Combine(_temp.Path, "other-drive");
+        var slang = new RetroArchFixture(_environment, Path.Combine(elsewhere, "RetroArch")).Install().ShaderSet("shaders_slang");
+        var link = Path.Combine(steamRoot, "steamapps", "common");
+        SymbolicLink.ToDirectory(link, elsewhere);
+
+        var plan = await CreateProvider(steam: new SteamDiscovery(_environment)).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        AssertProtected(plan, link);
+        Assert.True(Directory.Exists(slang));
+    }
+
     /// <summary>§5.3: RetroArch extracts an update in place while it runs.</summary>
     [Fact]
     public async Task NothingIsOfferedWhileRetroArchRuns()

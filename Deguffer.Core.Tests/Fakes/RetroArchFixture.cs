@@ -72,9 +72,9 @@ public sealed class RetroArchFixture(FakeUserEnvironment environment, string pro
         return path;
     }
 
-    public static string Folder(string path, int bytes = 4096)
+    public static string Folder(string path)
     {
-        WriteFile(Path.Combine(path, "entry.bin"), bytes);
+        WriteFile(Path.Combine(path, "entry.bin"));
         return path;
     }
 }

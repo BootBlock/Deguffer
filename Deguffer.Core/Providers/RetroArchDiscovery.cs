@@ -37,21 +37,29 @@ public sealed class RetroArchDiscovery
     private readonly SteamDiscovery _steam;
     private readonly EmulatorFolderStore _folders;
     private readonly ISystemDirectories _system;
+    private readonly List<RetroArchProviderBase> _rows = [];
     private RetroArchFinding? _finding;
 
     public RetroArchDiscovery(
         IUserEnvironment environment,
         SteamDiscovery? steam = null,
-        EmulatorFolderStore? folders = null,
         ISystemDirectories? system = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
         _environment = environment;
         _steam = steam ?? new SteamDiscovery(environment);
-        _folders = folders ?? new EmulatorFolderStore(environment);
+        _folders = new EmulatorFolderStore(environment);
         _system = system ?? SystemDirectories.Current;
     }
+
+    /// <summary>
+    /// The rows reading this finding, so each can declare to Explore what all of them offer. See
+    /// <see cref="RetroArchProviderBase.DiscoverToolRootsAsync"/>.
+    /// </summary>
+    internal IReadOnlyList<RetroArchProviderBase> Rows => _rows;
+
+    internal void Enlist(RetroArchProviderBase row) => _rows.Add(row);
 
     /// <summary>The settings file RetroArch reads where none is beside the program.</summary>
     private string ApplicationDataSettings => Path.Combine(_environment.RoamingAppData, RetroArchInstall.SettingsFileName);
@@ -166,12 +174,30 @@ public sealed class RetroArchDiscovery
             found.Unread(manifest, "it could not tell whether Steam installed RetroArch in that library.");
         }
 
-        foreach (var folder in folders)
+        foreach (var (library, folder) in folders)
         {
-            if (LongPath.Configured(folder) is { } configured)
+            if (LongPath.Configured(folder) is not { } configured)
             {
-                yield return configured;
+                continue;
             }
+
+            // Built from the library and fixed names, so a link at any folder between would put the
+            // copy somewhere nothing established, with every survivor resolving through the same link.
+            if (DerivedPath.FirstObstacleBetween(library, configured) is { } obstacle)
+            {
+                if (obstacle.IsLink)
+                {
+                    found.DeclineLink(obstacle.Path);
+                }
+                else
+                {
+                    found.Unreached(obstacle.Path);
+                }
+
+                continue;
+            }
+
+            yield return configured;
         }
     }
 

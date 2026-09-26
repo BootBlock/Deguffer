@@ -85,16 +85,17 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
 
     /// <summary>
     /// The folder each library holding the application's manifest installed it in,
-    /// <c>steamapps\common\&lt;installdir&gt;</c>, and the manifests Windows would not describe or
-    /// that could not be read. Not memoised: it is asked once a pass, about one application.
+    /// <c>steamapps\common\&lt;installdir&gt;</c>, with the library it was built from, and the
+    /// manifests Windows would not describe or that could not be read. Not memoised: it is asked once
+    /// a pass, about one application.
     /// </summary>
     /// <remarks>
     /// An <c>installdir</c> that is not one plain folder name is not taken, because Steam writes only
     /// a folder name there and anything else would lead out of the library.
     /// </remarks>
-    public (IReadOnlyList<string> Folders, IReadOnlyList<string> Unread) InstallFoldersOf(string id)
+    public (IReadOnlyList<(string Library, string Folder)> Folders, IReadOnlyList<string> Unread) InstallFoldersOf(string id)
     {
-        List<string> folders = [];
+        List<(string Library, string Folder)> folders = [];
         List<string> unread = [];
 
         foreach (var library in libraries.Folders)
@@ -121,7 +122,7 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
                 && installDir is not ("." or "..")
                 && installDir.IndexOfAny(NotInAFolderName) < 0)
             {
-                folders.Add(Path.Combine(library, "steamapps", "common", installDir));
+                folders.Add((library, Path.Combine(library, "steamapps", "common", installDir)));
             }
         }
 

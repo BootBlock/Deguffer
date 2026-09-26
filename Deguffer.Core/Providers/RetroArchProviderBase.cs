@@ -77,6 +77,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
     {
         _discovery = discovery ?? new RetroArchDiscovery(Environment);
         _stillClosed = new RunningProcessCheck(Inspector, RetroArchInstall.ProcessNames);
+        _discovery.Enlist(this);
     }
 
     public sealed override StepGrain Grain => StepGrain.Parts;
@@ -190,47 +191,70 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.2 as §7.1 reads it, at every level from the program's folder to what is offered: each level
-    /// recognises only the way down, and each folder read only what this pass recognised in it. While
-    /// RetroArch runs nothing is recognised. Every other path the plan names as protected is refused
-    /// outright.
+    /// §5.2 as §7.1 reads it, at every level from the program's folder to what is offered, declared
+    /// for every RetroArch row sharing this finding rather than for this one alone.
+    ///
+    /// <para><b>One declaration for both rows, one root for each folder.</b> Explore asks each root a
+    /// provider discovers on its own and lets any one of them refuse, so two rows that each declared
+    /// only their own way down would refuse each other's: the program's folder would refuse
+    /// <c>thumbnails</c> on one row's word and <c>shaders</c> on the other's. So every row declares the
+    /// same roots, built from what all of them read, and each folder is one root recognising everything
+    /// any of them recognised in it. That also joins a folder read outside the program with the level
+    /// the way down gives it, which on its own would recognise nothing.</para>
+    ///
+    /// <para>While RetroArch runs nothing is recognised. Every other path a plan names as protected is
+    /// refused outright.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var reading = Examine(ct);
-        var roots = new List<ToolRoot>();
+        var readings = _discovery.Rows.Select(row => row.Examine(ct)).ToList();
+        var folders = readings.SelectMany(reading => reading.Folders).ToList();
+        IEnumerable<ToolRoot> declared;
 
         if (IsRunning())
         {
-            roots.AddRange(reading.Folders
+            declared = folders
                 .SelectMany(folder => new[] { folder.Top, folder.Path })
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(path => new ToolRoot(path, HeldReason, static _ => false)));
+                .Select(path => new ToolRoot(path, HeldReason, static _ => false));
         }
         else
         {
-            var reason = $"This is RetroArch's folder, which holds your saves, BIOS files and settings beside "
-                + $"the {Taken}. Deguffer removes only the {Taken}.";
-
-            foreach (var top in reading.Folders.GroupBy(folder => folder.Top, StringComparer.OrdinalIgnoreCase))
-            {
-                roots.AddRange(ToolRoot.WayDown(top.Key, top.Select(folder => folder.Path), reason));
-            }
-
-            roots.AddRange(reading.Folders.Select(folder => new ToolRoot(
-                folder.Path,
-                $"This is a RetroArch folder. Deguffer removes only the {Taken} in it.",
-                folder.Recognised.Contains)));
+            declared = folders
+                .GroupBy(folder => folder.Top, StringComparer.OrdinalIgnoreCase)
+                .SelectMany(top => ToolRoot.WayDown(top.Key, top.Select(folder => folder.Path), ProgramReason))
+                .Concat(folders.Select(folder => new ToolRoot(folder.Path, FolderReason, folder.Recognised.Contains)));
         }
 
-        var declared = roots.Select(root => root.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var roots = declared
+            .GroupBy(root => root.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(Joined)
+            .ToList();
+        var paths = roots.Select(root => root.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        roots.AddRange(reading.Survivors
-            .Where(survivor => !declared.Contains(survivor.Path))
+        roots.AddRange(readings
+            .SelectMany(reading => reading.Survivors)
+            .Where(survivor => !paths.Contains(survivor.Path))
             .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase)
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
+    }
+
+    private const string ProgramReason =
+        "This is RetroArch's folder, which holds your saves, BIOS files and settings beside what its "
+        + "online updater downloaded. Deguffer removes only those downloads.";
+
+    private const string FolderReason =
+        "This is a RetroArch folder. Deguffer removes only what RetroArch downloaded into it.";
+
+    /// <summary>The roots declared for one folder, as one root recognising what any of them does.</summary>
+    private static ToolRoot Joined(IGrouping<string, ToolRoot> folder)
+    {
+        var roots = folder.ToList();
+
+        return roots is [var only]
+            ? only
+            : new ToolRoot(folder.Key, roots[0].Reason, name => roots.Exists(root => root.Recognises(name)));
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
