@@ -85,6 +85,29 @@ public class CleanViewModelKeepTests
     }
 
     /// <summary>
+    /// Each row's bar is drawn against the largest row. A row shrunk by keeping an item stays where it
+    /// stands rather than the list being reshuffled, so the largest row is not always the first one.
+    /// </summary>
+    [Fact]
+    public void ARowShrunkByAKeepNoLongerSetsTheScaleOfTheBars()
+    {
+        var big = new FakeCleanupProvider("big");
+        var small = new FakeCleanupProvider("small");
+        using var page = new StoragePage([big, small]);
+        big.Steps = [page.Cache("a", 4096, key: "a")];
+        small.Steps = [page.Cache("b", 1024)];
+        page.Scan();
+        Assert.Equal(25.0, page.Row("small").SharePercent);
+
+        var row = page.Row("big");
+        page.ViewModel.ToggleKeep(row, row.Steps[0]);
+
+        Assert.Same(row, page.ViewModel.Findings[0]);
+        Assert.Equal(100.0, page.Row("small").SharePercent);
+        Assert.Equal(0.0, row.SharePercent);
+    }
+
+    /// <summary>
     /// A keep that could not be saved is said, as a warning, because an item offered again after a
     /// restart is the failure the keep list exists to prevent. It stays said through later ticking.
     /// </summary>
