@@ -128,6 +128,16 @@ public static class PlanVerifier
                     + "could not take everything it tried to.");
             }
 
+            if (protectedPath.Marker is { } marker && LongPath.FileExists(Path.Combine(protectedPath.Path, marker)))
+            {
+                return new VerificationCheck(
+                    protectedPath.Path,
+                    protectedPath.Reason,
+                    VerificationOutcome.Failed,
+                    $"MARKED — the folder is still here, but it now holds {marker}, so the program that owns "
+                    + "it will delete it the next time it starts. Delete that file to keep the folder.");
+            }
+
             return WasEmptied(protectedPath, reach)
                 ? new VerificationCheck(
                     protectedPath.Path,

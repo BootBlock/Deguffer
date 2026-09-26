@@ -28,7 +28,7 @@ public static class ItemGroups
 
         foreach (var item in items)
         {
-            var name = (stepOf(item) as DeleteStep)?.Group;
+            var name = stepOf(item).Group;
 
             int position;
             if (name is null)

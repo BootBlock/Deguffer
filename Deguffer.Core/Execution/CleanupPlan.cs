@@ -47,12 +47,22 @@ namespace Deguffer.Core.Execution;
 /// something real is there, Deguffer would have offered it, and the figure excludes it, so a row
 /// holding one is not clear. Nothing else on the plan can say so once the step is gone.</para>
 /// </param>
+/// <param name="Marker">
+/// The file a tool writes into a folder it will remove the next time it starts, where the run holds a
+/// command from such a tool and the folder was not marked when the plan was made. Null otherwise.
+///
+/// <para><b>Existence is not enough where a removal is deferred.</b> LM Studio's command marks a
+/// runtime and deletes it later, so a command that reached the wrong runtime leaves its folder
+/// standing, and §5.6 would pass over the runtime LM Studio is about to delete. Finding the marker
+/// afterwards is that over-reach, caught while it can still be undone by deleting the file.</para>
+/// </param>
 public sealed record ProtectedPath(
     string Path,
     string Reason,
     PathPresence PresenceBefore,
     bool HeldContentBefore = false,
-    Withholding Withheld = Withholding.None);
+    Withholding Withheld = Withholding.None,
+    string? Marker = null);
 
 /// <summary>Which choice, if any, took a candidate out of a plan rather than a rule keeping it out.</summary>
 public enum Withholding
@@ -344,9 +354,10 @@ public sealed record CleanupPlan
     /// filtering <see cref="Steps"/> itself would silently drop that guarantee, so the only
     /// narrowing available adds it.
     ///
-    /// A dropped <see cref="RunCommandStep"/> contributes no protection: its
-    /// <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1), and
-    /// asserting the tool left them alone would be asserting something this plan never controlled.
+    /// A dropped <see cref="RunCommandStep"/> contributes no protection unless it names the one item it
+    /// removes: its <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1),
+    /// and asserting the tool left them alone would be asserting something this plan never
+    /// controlled. See <see cref="CleanupStep.Subjects"/>.
     /// </summary>
     public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> chosen)
     {
@@ -364,10 +375,9 @@ public sealed record CleanupPlan
 
         var declined = Steps
             .Except(selected)
-            .OfType<DeleteStep>()
-            .SelectMany(s => s.Destroys)
-            .Select(path => new ProtectedPath(
-                path,
+            .SelectMany(s => s.Subjects.Select(path => (Path: path, Marker: MarkerOf(s))))
+            .Select(subject => new ProtectedPath(
+                subject.Path,
                 "Left alone because it was not selected for this run.",
                 // It was measured during planning, so it was there when the plan was made. That is
                 // the only claim PresenceBefore makes, and re-probing the disk here would let a
@@ -385,7 +395,8 @@ public sealed record CleanupPlan
                 // This is the site the declined Recycle Bin depends on. A bin the user unticked is
                 // still standing after a call that emptied it anyway, so existence proves nothing
                 // and this is the whole of what §5.6 has left to compare.
-                DirectoryContent.IsPresent(path)));
+                DirectoryContent.IsPresent(subject.Path),
+                Marker: subject.Marker));
 
         return this with
         {
@@ -397,7 +408,7 @@ public sealed record CleanupPlan
     /// <summary>
     /// This plan with every item on the keep list taken out of it, and each of those protected instead.
     ///
-    /// <para><b>Matched on <see cref="DeleteStep.Identity"/>, never on the path.</b> A path changes
+    /// <para><b>Matched on <see cref="CleanupStep.Identity"/>, never on the path.</b> A path changes
     /// when a cache is relocated or a project is moved, and the item does not. A keep entry matched on
     /// the path would silently stop matching, and the item would be offered again, which is the one
     /// direction a protection must not fail in. A step with no identity is never kept.</para>
@@ -424,7 +435,6 @@ public sealed record CleanupPlan
         ArgumentNullException.ThrowIfNull(keys);
 
         var kept = Steps
-            .OfType<DeleteStep>()
             .Where(step => step.Identity is { } identity && keys.Contains(identity.Key))
             .ToList();
 
@@ -439,14 +449,15 @@ public sealed record CleanupPlan
             ProtectedPaths =
             [
                 .. ProtectedPaths,
-                .. kept.Select(step => new ProtectedPath(
-                    step.Path,
+                .. kept.SelectMany(step => step.Subjects.Select(path => (Path: path, Marker: MarkerOf(step)))).Select(subject => new ProtectedPath(
+                    subject.Path,
                     "On your keep list, so Deguffer left it alone.",
                     // Measured during planning, so it was there when the plan was made: the claim
                     // NarrowedTo makes, for the reason it gives.
                     PresenceBefore: PathPresence.Present,
                     HeldContentBefore: false,
-                    Withheld: Withholding.OnKeepList)),
+                    Withheld: Withholding.OnKeepList,
+                    Marker: subject.Marker)),
             ],
             Notes =
             [
@@ -461,6 +472,13 @@ public sealed record CleanupPlan
             ],
         };
     }
+
+    /// <summary>
+    /// The marker a step's tool would leave in a subject it scheduled for removal, so a subject left
+    /// alone is proved unmarked as well as standing. An item offered was not marked when the plan was
+    /// made, because a provider does not offer what its tool has already scheduled.
+    /// </summary>
+    private static string? MarkerOf(CleanupStep step) => (step as RunCommandStep)?.Scheduled?.Marker;
 
     /// <summary>
     /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves

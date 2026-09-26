@@ -136,7 +136,54 @@ public abstract record CleanupStep
     /// answer is wrong in the direction that deletes. See <see cref="UnfinishedUpdate"/>.</para>
     /// </summary>
     public bool HeldWhileUpdating { get; init; }
+
+    /// <summary>
+    /// What this item is apart from its path, where its provider can say. Null for an item whose only
+    /// name is where it is, which is an item nobody can keep. See <see cref="ItemIdentity"/>.
+    ///
+    /// <para>On every step rather than on a deletion alone, because an item is not always removed by
+    /// Deguffer: a tool's own command can be the route for one item, and §5.1 prefers it. Such a step
+    /// names what it removes in <see cref="RunCommandStep.Removes"/>, so a kept one is protected as a
+    /// deletion is.</para>
+    /// </summary>
+    public ItemIdentity? Identity { get; init; }
+
+    /// <summary>
+    /// What a reader choosing between items is told about this one beyond its path, in the order its
+    /// provider wants the columns. Empty for most steps. See <see cref="ItemFacet"/>.
+    /// </summary>
+    public IReadOnlyList<ItemFacet> Facets { get; init; } = [];
+
+    /// <summary>
+    /// The heading this item is listed under, such as the approved folder a project was found in or the
+    /// browser profile a cache belongs to. Null where its provider's items fall under no heading.
+    ///
+    /// <para>Presentation only, like <see cref="Facets"/>. A heading lets hundreds of items be read and
+    /// chosen a group at a time. Nothing about a run depends on which group a step is in.</para>
+    /// </summary>
+    public string? Group { get; init; }
+
+    /// <summary>
+    /// The paths this step is about, which §5.6 asserts are still standing where the step does not
+    /// run: because the user declined it, or because it is on the keep list. Empty for a step whose
+    /// reach nothing here can state.
+    /// </summary>
+    public abstract IReadOnlyList<string> Subjects { get; }
 }
+
+/// <summary>
+/// What a tool writes into an item it has been told to remove, where it removes the item later
+/// rather than at once.
+///
+/// <para><b>LM Studio on Windows is the case.</b> Its <c>lms runtime remove</c> writes a
+/// <c>MARKED_FOR_DELETION</c> file into the runtime's folder and returns, and LM Studio deletes the
+/// folder the next time it starts. So the run frees nothing it can measure, and the step's figure is reported as scheduled rather than
+/// reclaimed. The marker is also the only evidence that the command did anything: the tool reports
+/// success before its own removal has run.</para>
+/// </summary>
+/// <param name="Marker">The file the tool writes directly inside the item.</param>
+/// <param name="Remover">What will carry the removal out, named for the user.</param>
+public sealed record ScheduledRemoval(string Marker, string Remover);
 
 /// <summary>
 /// Invoke a tool's own eviction command (§5.1) — always preferred over deleting paths, because
@@ -144,6 +191,40 @@ public abstract record CleanupStep
 /// </summary>
 public sealed record RunCommandStep(string FileName, string Arguments, string What) : CleanupStep
 {
+    /// <summary>
+    /// The one item this command is sent to remove, where it names one, in display form. Null for a
+    /// command that clears a whole cache, whose reach is the tool's to decide.
+    ///
+    /// <para>It makes the command a choice between items rather than a part of one location. A
+    /// declined or kept item is then protected under §5.6 as a declined deletion is, which is sound
+    /// here and nowhere else: the command that would have removed it never ran, and every other
+    /// command in the plan names a different item.</para>
+    /// </summary>
+    public string? Removes { get; init; }
+
+    /// <summary>
+    /// How the tool marks <see cref="Removes"/> when it removes it later rather than at once. Null for
+    /// a tool that removes its item before the command returns.
+    /// </summary>
+    public ScheduledRemoval? Scheduled { get; init; }
+
+    /// <summary>
+    /// Programs one of which must be running when the command runs. Empty for a command that needs
+    /// none.
+    ///
+    /// <para><b>For a tool that starts its own application when it finds it closed.</b> <c>lms</c> is
+    /// the case: it launches LM Studio as a service rather than fail. The plan was made while the
+    /// program ran, and the user can close it while the preview is on screen, so the run asks again
+    /// immediately before the command and does not run it if the program is gone.</para>
+    /// </summary>
+    public IReadOnlyList<string> RunsOnlyWhile { get; init; } = [];
+
+    /// <summary>
+    /// <see cref="Removes"/>, where the command names an item. <see cref="MeasuredPaths"/> never
+    /// counts: it is a probe of where the tool was sent, and the tool decides what it takes there.
+    /// </summary>
+    public override IReadOnlyList<string> Subjects => Removes is { } item ? [item] : [];
+
     /// <summary>
     /// The locations we expect the command to clear. The command remains the authority on *what*
     /// gets removed, which is the whole point of §5.1. NuGet's own clear reached two locations that
@@ -236,15 +317,19 @@ public sealed record ReleaseLocalCopiesStep(string SyncRoot, string SyncApp, str
     public override string SelectionKey => SyncRoot;
 
     public override string Description => $"{What} — {LongPath.Display(SyncRoot)}";
+
+    /// <summary>Nothing: the step destroys nothing, so a declined one leaves nothing that could have gone.</summary>
+    public override IReadOnlyList<string> Subjects => [];
 }
 
 /// <summary>
 /// A step that destroys one path outright.
 ///
 /// The base exists so that "everything this plan would remove" is one question with one answer:
-/// <see cref="CleanupPlan.TargetedPaths"/> and <see cref="CleanupPlan.NarrowedTo"/> both select on
-/// this type, so a new kind of deletion joins the §5.2 assertions and the §5.6 negative by
-/// construction rather than by somebody remembering to update two <c>OfType</c> clauses.
+/// <see cref="CleanupPlan.TargetedPaths"/> selects on this type, and <see cref="CleanupPlan.NarrowedTo"/>
+/// reads <see cref="Subjects"/>, which this type answers with <see cref="Destroys"/>. So a new kind of
+/// deletion joins the §5.2 assertions and the §5.6 negative by construction rather than by somebody
+/// remembering to update an <c>OfType</c> clause.
 ///
 /// It is deliberately narrower than "a new kind of step". <see cref="ReleaseLocalCopiesStep"/> frees
 /// space while leaving every file present and readable, so it is a sibling of this and of
@@ -273,11 +358,8 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
     /// </summary>
     public virtual IReadOnlyList<string> Destroys => [Path];
 
-    /// <summary>
-    /// What this item is apart from its path, where its provider can say. Null for an item whose only
-    /// name is where it is, which is an item nobody can keep. See <see cref="ItemIdentity"/>.
-    /// </summary>
-    public ItemIdentity? Identity { get; init; }
+    /// <summary>What the removal destroys, which is what a declined or kept one leaves standing.</summary>
+    public override IReadOnlyList<string> Subjects => Destroys;
 
     /// <summary>
     /// Whether the path itself is what is being reclaimed — something nothing will create again —
@@ -296,21 +378,6 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
     public bool IsLeftover { get; init; }
 
     public override ScanSize Reclaim => IsLeftover ? Estimated : base.Reclaim;
-
-    /// <summary>
-    /// What a reader choosing between items is told about this one beyond its path, in the order its
-    /// provider wants the columns. Empty for most steps. See <see cref="ItemFacet"/>.
-    /// </summary>
-    public IReadOnlyList<ItemFacet> Facets { get; init; } = [];
-
-    /// <summary>
-    /// The heading this item is listed under, such as the approved folder a project was found in or the
-    /// browser profile a cache belongs to. Null where its provider's items fall under no heading.
-    ///
-    /// <para>Presentation only, like <see cref="Facets"/>. A heading lets hundreds of items be read and
-    /// chosen a group at a time. Nothing about a run depends on which group a step is in.</para>
-    /// </summary>
-    public string? Group { get; init; }
 
     /// <summary>
     /// The question this step was offered on the answer to, where a program starting could change

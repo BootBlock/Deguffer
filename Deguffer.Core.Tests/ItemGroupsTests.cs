@@ -71,4 +71,19 @@ public class ItemGroupsTests
 
         Assert.Equal([first, second, third], group.Items);
     }
+
+    /// <summary>An item a tool's own command removes is gathered under its heading as a deleted one is.</summary>
+    [Fact]
+    public void AnItemRemovedByCommandIsGroupedToo()
+    {
+        var runtime = new RunCommandStep("lms.exe", "runtime remove --yes llama.cpp-win-x86_64-avx2@2.13.0", "Remove a runtime")
+        {
+            Estimated = ScanSize.FromLengths(10),
+            Group = "llama.cpp-win-x86_64-avx2",
+        };
+
+        var groups = ItemGroups.Of<CleanupStep>([runtime, Item("a", 20, null)], step => step);
+
+        Assert.Contains(groups, group => group.Name == "llama.cpp-win-x86_64-avx2" && group.Items.Contains(runtime));
+    }
 }

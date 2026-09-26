@@ -53,6 +53,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <see cref="CleanupStep.HeldWhileUpdating"/> runs, by the same instance for the reason
     /// <see cref="Emptier"/> is shared.
     /// </param>
+    /// <param name="time">
+    /// The clock a command step waits on while its tool marks what it will remove later. See
+    /// <see cref="PlanExecutor"/>.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
@@ -61,7 +65,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IRecycleBinEmptier? emptier = null,
         ICloudFiles? cloud = null,
         IDiskCleanupHandlers? handlers = null,
-        IWindowsServicing? servicing = null)
+        IWindowsServicing? servicing = null,
+        TimeProvider? time = null)
     {
         Environment = environment;
         Inspector = inspector;
@@ -71,7 +76,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Cloud = cloud ?? CloudFiles.Default;
         Handlers = handlers ?? DiskCleanupHandlers.Default;
         Servicing = servicing ?? WindowsServicing.Current;
-        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector);
+        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector, time);
         Runner = runner;
     }
 

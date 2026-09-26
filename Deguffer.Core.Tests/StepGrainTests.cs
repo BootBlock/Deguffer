@@ -43,6 +43,7 @@ public class StepGrainTests
             "claude-code-file-history",
             "dotnet-obj",
             "graphics-driver-installers",
+            "lmstudio-runtimes",
             "node-modules",
             "playwright",
             "python-venv",

@@ -389,6 +389,17 @@
                             <TextBlock Text="{x:Bind ViewModel.RequestedLabel, Mode=OneWay}"
                                        Style="{StaticResource Figure}" />
                         </StackPanel>
+
+                        <!-- Nothing has gone yet: the program removes these the next time it starts,
+                             so the free space change beside it does not include them. -->
+                        <StackPanel Spacing="2"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind ViewModel.HasScheduled, Mode=OneWay}"
+                                    ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
+                            <TextBlock Text="Removed at next start" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{x:Bind ViewModel.ScheduledLabel, Mode=OneWay}"
+                                       Style="{StaticResource Figure}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- §5.6's verdict on the run those two figures describe, and it stays as long

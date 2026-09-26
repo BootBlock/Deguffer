@@ -24,7 +24,14 @@ namespace Deguffer.Core.Execution;
 /// </param>
 /// <param name="servicing">
 /// Asked again, with <paramref name="inspector"/>, immediately before a step that is
-/// <see cref="CleanupStep.HeldWhileUpdating"/>. Defaulted for the reason <paramref name="emptier"/> is.
+/// <see cref="CleanupStep.HeldWhileUpdating"/>, and before a command that
+/// <see cref="RunCommandStep.RunsOnlyWhile"/> a program runs. Defaulted for the reason
+/// <paramref name="emptier"/> is.
+/// </param>
+/// <param name="time">
+/// The clock a command waits on while its tool marks what it will remove later. See
+/// <see cref="ScheduledRemoval"/>. Defaulted to the system clock, and injected so a test of a tool
+/// that never marks anything does not wait out the real interval.
 /// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
@@ -34,13 +41,25 @@ public sealed class PlanExecutor(
     ICloudFiles? cloud = null,
     IDiskCleanupHandlers? handlers = null,
     IWindowsServicing? servicing = null,
-    IProcessInspector? inspector = null)
+    IProcessInspector? inspector = null,
+    TimeProvider? time = null)
 {
+    /// <summary>
+    /// How long a command's tool is given to mark the item it will remove later. LM Studio answers
+    /// <c>lms</c> before it writes its marker, so the first look can come too early, and the write
+    /// itself takes milliseconds. Long enough for a machine under load, and short enough that a tool
+    /// that never marks anything costs the run a few seconds rather than a hang.
+    /// </summary>
+    private static readonly TimeSpan MarkingWait = TimeSpan.FromSeconds(5);
+
+    private static readonly TimeSpan MarkingPoll = TimeSpan.FromMilliseconds(250);
+
     private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
     private readonly ICloudFiles _cloud = cloud ?? CloudFiles.Default;
     private readonly IDiskCleanupHandlers _handlers = handlers ?? DiskCleanupHandlers.Default;
     private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
     private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -185,6 +204,24 @@ public sealed class PlanExecutor(
         // reports that axis.
         var before = (step.MeasuredBefore ?? step.Estimated).Reclaimable;
 
+        // Asked of the process table afresh rather than of the snapshot the planning pass took: the
+        // user can close the program while the preview is on screen, and the tool would then start it.
+        if (step.RunsOnlyWhile.Count > 0)
+        {
+            _inspector.Invalidate();
+
+            if (_inspector.FindRunning(step.RunsOnlyWhile).Count == 0)
+            {
+                return new StepOutcome(
+                    step.Description,
+                    Succeeded: false,
+                    BytesReclaimed: 0,
+                    Refusals.None,
+                    $"Not run: {step.RunsOnlyWhile[0]} is no longer running, and this command would start it. "
+                    + $"Open {step.RunsOnlyWhile[0]} and clean again.");
+            }
+        }
+
         // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
         // told to leave one file and a store can arrive between the preview and the clean. See
         // MailStoreSearch for what the look costs and why it is paid here.
@@ -201,6 +238,32 @@ public sealed class PlanExecutor(
         }
 
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
+
+        if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
+        {
+            switch (await AwaitMarkingAsync(item, scheduled, ct).ConfigureAwait(false))
+            {
+                case Marking.Marked:
+                    return new StepOutcome(
+                        step.Description,
+                        Succeeded: true,
+                        BytesReclaimed: 0,
+                        Refusals.None,
+                        $"{scheduled.Remover} removes it the next time it starts.",
+                        BytesScheduled: before);
+
+                case Marking.Neither:
+                    return new StepOutcome(
+                        step.Description,
+                        Succeeded: false,
+                        BytesReclaimed: 0,
+                        Refusals.None,
+                        $"{scheduled.Remover} reported success, but it neither removed {LongPath.Display(item)} "
+                        + "nor marked it for removal, so nothing will happen to it.");
+            }
+
+            // Removed: the tool took the item at once after all, which the measurement below reports.
+        }
 
         // From the disk, never from the volume snapshot. Nothing invalidates that snapshot between
         // planning and executing — Invalidate runs once, at the top of a planning pass — so an
@@ -242,6 +305,40 @@ public sealed class PlanExecutor(
             BytesReclaimed: Math.Max(0, reclaimed),
             Refusals.None,
             message);
+    }
+
+    /// <summary>
+    /// What the tool did to <paramref name="item"/> in the time it was given.
+    ///
+    /// <para><b>Looked for rather than trusted.</b> <c>lms runtime remove</c> prints that it removed
+    /// the runtime and exits zero once LM Studio has accepted the request, before LM Studio has
+    /// written anything, and a failure after that point never reaches the command. The marker is the
+    /// only evidence the removal will happen.</para>
+    /// </summary>
+    private async Task<Marking> AwaitMarkingAsync(string item, ScheduledRemoval scheduled, CancellationToken ct)
+    {
+        var marker = Path.Combine(item, scheduled.Marker);
+        var deadline = _time.GetUtcNow() + MarkingWait;
+
+        while (true)
+        {
+            if (LongPath.ProbeDirectory(item) is PathPresence.Absent)
+            {
+                return Marking.Removed;
+            }
+
+            if (LongPath.FileExists(marker))
+            {
+                return Marking.Marked;
+            }
+
+            if (_time.GetUtcNow() >= deadline)
+            {
+                return Marking.Neither;
+            }
+
+            await Task.Delay(MarkingPoll, _time, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -614,5 +711,13 @@ public sealed class PlanExecutor(
         }
 
         return total;
+    }
+
+    /// <summary>What a tool that removes later was seen to do. See <see cref="AwaitMarkingAsync"/>.</summary>
+    private enum Marking
+    {
+        Marked,
+        Removed,
+        Neither,
     }
 }
