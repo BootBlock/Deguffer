@@ -38,6 +38,20 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         return directory;
     }
 
+    /// <summary>
+    /// A repository as Maven lays one out, for a folder the settings move it to: one artifact, filed by
+    /// group, artifact and version, with its .pom and the record of where it came from.
+    /// </summary>
+    private static string PopulateRepository(string directory, int bytes = 4096)
+    {
+        var version = Path.Combine(directory, "org", "example", "library", "1.0");
+        Directory.CreateDirectory(version);
+        File.WriteAllText(Path.Combine(version, "library-1.0.pom"), "<project />");
+        File.WriteAllText(Path.Combine(version, "_remote.repositories"), "library-1.0.pom>central=");
+        File.WriteAllBytes(Path.Combine(version, "library-1.0.jar"), new byte[bytes]);
+        return directory;
+    }
+
     /// <summary>A settings file, in Maven's own namespace, optionally naming a local repository.</summary>
     private string WriteSettings(string? localRepository = null)
     {
@@ -126,7 +140,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     [Fact]
     public async Task HonoursALocalRepositoryConfiguredInSettingsXml()
     {
-        var moved = Populate(Path.Combine(_temp.Path, "shared", "m2-repository"));
+        var moved = PopulateRepository(Path.Combine(_temp.Path, "shared", "m2-repository"));
         WriteSettings(moved);
 
         var provider = CreateProvider();
@@ -139,13 +153,111 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A settings file naming one of the account's own folders as the repository. The repository is
+    /// removed whole, so this would take all of the Desktop or Downloads, and §5.6 protected only the
+    /// profile above it. The folder is laid out exactly as Maven lays one out, so nothing but the
+    /// account-folder refusal can be what keeps it.
+    /// </summary>
+    [Theory]
+    [InlineData("Desktop")]
+    [InlineData("Documents")]
+    [InlineData("Downloads")]
+    public async Task NeverTargetsOneOfTheAccountsOwnFoldersTheSettingsNameAsTheRepository(string name)
+    {
+        var folder = PopulateRepository(Path.Combine(_environment.UserProfile, name));
+        WriteSettings("${user.home}/" + name);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(folder, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("one of your own folders", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same refusal for a folder Windows is built out of, answered from the directories the
+    /// provider was handed rather than the machine it runs on.
+    /// </summary>
+    [Fact]
+    public async Task NeverTargetsAFolderWindowsIsBuiltOutOfTheSettingsNameAsTheRepository()
+    {
+        var system = new FakeSystemDirectories(Path.Combine(_temp.Path, "machine"));
+        var programFiles = PopulateRepository(system.ProgramFiles);
+        WriteSettings(programFiles);
+
+        var plan = await new MavenRepositoryProvider(
+                _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: system)
+            .PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(programFiles, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("a folder Windows is built out of", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A folder the settings name is Maven's only if Maven filled it: a folder per group, artifact
+    /// and version holding the artifact's .pom, and nothing at the top but folders. Anything else is
+    /// somebody's, and the repository is removed whole.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "nothing in it is laid out as Maven lays out an artifact")]
+    [InlineData(true, "'notes.txt' is in it")]
+    public async Task LeavesAMovedRepositoryAloneUnlessItIsLaidOutAsMavenLaysOneOut(bool laidOut, string reason)
+    {
+        var moved = Path.Combine(_temp.Path, "shared", "projects");
+
+        if (laidOut)
+        {
+            PopulateRepository(moved);
+            File.WriteAllText(Path.Combine(moved, "notes.txt"), "mine");
+        }
+        else
+        {
+            Populate(Path.Combine(moved, "website", "src"));
+        }
+
+        WriteSettings(moved);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains(reason, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Maven run with <c>-llr</c> keeps no record of where an artifact came from, and the metadata in
+    /// the artifact's folder says the same thing in its place.
+    /// </summary>
+    [Fact]
+    public async Task TakesAMovedRepositoryWhoseArtifactsCarryMetadataInsteadOfARecord()
+    {
+        var moved = Path.Combine(_temp.Path, "shared", "m2-repository");
+        var artifact = Path.Combine(moved, "org", "example", "library");
+        Populate(Path.Combine(artifact, "1.0"));
+        File.WriteAllText(Path.Combine(artifact, "1.0", "library-1.0.pom"), "<project />");
+        File.WriteAllText(Path.Combine(artifact, "maven-metadata-central.xml"), "<metadata />");
+        WriteSettings(moved);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([moved], plan.TargetedPaths);
+    }
+
+    /// <summary>
     /// The one property Maven interpolation idiom this resolves, because writing the settings file
     /// portably is the common reason to use it at all.
     /// </summary>
     [Fact]
     public async Task ResolvesTheUserHomePropertyInAConfiguredPath()
     {
-        var moved = Populate(Path.Combine(_environment.UserProfile, "m2-repository"));
+        var moved = PopulateRepository(Path.Combine(_environment.UserProfile, "m2-repository"));
         WriteSettings("${user.home}/m2-repository");
 
         var plan = await CreateProvider().PlanAsync();
@@ -232,7 +344,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     [Fact]
     public async Task NormalisesAConfiguredRepositoryThatEndsInASeparator()
     {
-        var moved = Populate(Path.Combine(_temp.Path, "shared", "m2-repository"));
+        var moved = PopulateRepository(Path.Combine(_temp.Path, "shared", "m2-repository"));
         WriteSettings(moved + Path.DirectorySeparatorChar);
 
         var plan = await CreateProvider().PlanAsync();
@@ -269,7 +381,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     [Fact]
     public async Task StillAssertsTheCredentialsWhenTheRepositoryHasMovedElsewhere()
     {
-        var moved = Populate(Path.Combine(_temp.Path, "shared", "m2-repository"));
+        var moved = PopulateRepository(Path.Combine(_temp.Path, "shared", "m2-repository"));
         var settings = WriteSettings(moved);
 
         var plan = await CreateProvider().PlanAsync();
@@ -410,7 +522,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     public async Task ReadsTheSettingsFileAgainAfterAnInvalidation()
     {
         Populate(DefaultRepository);
-        var moved = Populate(Path.Combine(_temp.Path, "shared", "m2-repository"));
+        var moved = PopulateRepository(Path.Combine(_temp.Path, "shared", "m2-repository"));
 
         var provider = CreateProvider();
         Assert.Equal([DefaultRepository], (await provider.PlanAsync()).TargetedPaths);
@@ -447,7 +559,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     public async Task ExploreRefusesTheFolderHoldingARelocatedRepository()
     {
         var container = Path.Combine(_environment.UserProfile, "build-tools");
-        var repository = Populate(Path.Combine(container, "maven-repo"));
+        var repository = PopulateRepository(Path.Combine(container, "maven-repo"));
         var neighbour = Populate(Path.Combine(container, "other-tool"));
         WriteSettings(repository);
 
@@ -471,7 +583,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     [Fact]
     public async Task ARepositoryInTheProfileLeavesTheRestOfTheProfileOrdinary()
     {
-        var repository = Populate(Path.Combine(_environment.UserProfile, "maven-repo"));
+        var repository = PopulateRepository(Path.Combine(_environment.UserProfile, "maven-repo"));
         var documents = Populate(Path.Combine(_environment.UserProfile, "Documents"));
         WriteSettings(repository);
 

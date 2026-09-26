@@ -56,32 +56,63 @@ public static partial class ClaudeCodeHome
     private static partial Regex SessionIdPattern();
 
     /// <summary>
-    /// The folder, or null where <see cref="ConfigDirectoryVariable"/> holds something that is not a
-    /// full path. A relative value resolves against the working directory of whichever process reads
-    /// it, which Deguffer does not share, so there is no correct reading of it — the reasoning
-    /// <see cref="CargoCacheProvider.ResolveHome"/> gives for <c>CARGO_HOME</c>.
+    /// The folder, or null where <see cref="ConfigDirectoryVariable"/> names one Deguffer will not treat
+    /// as Claude Code's. <see cref="WhyUnusable"/> says why.
     /// </summary>
-    public static string? Resolve(IUserEnvironment environment)
+    public static string? Resolve(IUserEnvironment environment, ISystemDirectories system) =>
+        Examine(environment, system).Home;
+
+    /// <summary>
+    /// Why <see cref="Resolve"/> has no folder, as whole sentences, or null where it has one. A provider
+    /// says it before it says what it is leaving alone.
+    /// </summary>
+    public static string? WhyUnusable(IUserEnvironment environment, ISystemDirectories system) =>
+        Examine(environment, system).Why;
+
+    /// <summary>
+    /// Two ways for <see cref="ConfigDirectoryVariable"/> to be no answer.
+    ///
+    /// <list type="bullet">
+    /// <item>A relative value resolves against the working directory of whichever process reads it,
+    /// which Deguffer does not share, so there is no correct reading of it — the reasoning
+    /// <see cref="CargoCacheProvider.ResolveHome"/> gives for <c>CARGO_HOME</c>.</item>
+    /// <item>A value naming somewhere <see cref="ConfiguredFolder"/> refuses — the profile, a drive
+    /// root, one of the account's own folders — would have every entry there asserted as a Claude
+    /// Code survivor and refused in Explore as Claude Code's own, and a removal there by any other
+    /// row would read as a failure of §5.6.</item>
+    /// </list>
+    /// </summary>
+    private static (string? Home, string? Why) Examine(IUserEnvironment environment, ISystemDirectories system)
     {
         ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(system);
 
-        return ConfiguredValue(environment) is { } configured
-            ? LongPath.Configured(configured)
-            : Path.Combine(environment.UserProfile, DefaultDirectoryName);
+        if (ConfiguredValue(environment) is not { } configured)
+        {
+            return (Path.Combine(environment.UserProfile, DefaultDirectoryName), null);
+        }
+
+        if (LongPath.Configured(configured) is not { } folder)
+        {
+            return (null, $"{ConfigDirectoryVariable} is set to '{configured}', which is not a full path. "
+                + "Deguffer cannot tell which folder that means.");
+        }
+
+        return ConfiguredFolder.WhyNotOwned(folder, environment, system, TempRoots.Resolve(environment, system).AccountFolders)
+            is { } declined
+                ? (null, $"{ConfigDirectoryVariable} is set to '{configured}', and Deguffer will not treat that as "
+                    + $"Claude Code's folder: {declined}")
+                : (folder, null);
     }
 
     /// <summary>
-    /// What <see cref="ConfigDirectoryVariable"/> holds, trimmed, or null where it is unset. A
-    /// provider names the value in the sentence it writes about one it could not use.
+    /// What <see cref="ConfigDirectoryVariable"/> holds, trimmed, or null where it is unset. Named as it
+    /// was set in the sentence about one Deguffer could not use.
     /// </summary>
-    public static string? ConfiguredValue(IUserEnvironment environment)
-    {
-        ArgumentNullException.ThrowIfNull(environment);
-
-        return environment.GetEnvironmentVariable(ConfigDirectoryVariable)?.Trim() is { Length: > 0 } value
+    private static string? ConfiguredValue(IUserEnvironment environment) =>
+        environment.GetEnvironmentVariable(ConfigDirectoryVariable)?.Trim() is { Length: > 0 } value
             ? value
             : null;
-    }
 
     /// <summary>
     /// The first place on the way down from the folder to <paramref name="folder"/> inside it that stops a

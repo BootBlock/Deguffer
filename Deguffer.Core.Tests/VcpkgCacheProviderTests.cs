@@ -40,6 +40,30 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A binary cache as vcpkg lays one out, for a folder a variable moves it to: one package, filed in
+    /// the shard named by the first two digits of its hash.
+    /// </summary>
+    private static string PopulateBinaryCache(string directory, int bytes = 4096)
+    {
+        const string abi = "3f9c1e2d4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0";
+        var shard = Path.Combine(directory, abi[..2]);
+        Directory.CreateDirectory(shard);
+        File.WriteAllBytes(Path.Combine(shard, abi + ".zip"), new byte[bytes]);
+        return directory;
+    }
+
+    /// <summary>
+    /// A downloads folder as vcpkg leaves one, for a folder a variable moves it to: a source archive
+    /// and a tool vcpkg unpacked under <c>tools</c>.
+    /// </summary>
+    private static string PopulateDownloads(string directory, int bytes = 4096)
+    {
+        Populate(Path.Combine(directory, "tools", "cmake-3.30.1-windows"));
+        File.WriteAllBytes(Path.Combine(directory, "zlib-1.3.1.tar.gz"), new byte[bytes]);
+        return directory;
+    }
+
+    /// <summary>
     /// A clone with all three scratch directories, the payload that must survive, and the marker
     /// file vcpkg's own tooling identifies a root by.
     /// </summary>
@@ -462,10 +486,160 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Assert.Equal(afterFirst, _environment.EnvironmentReads);
     }
 
+    /// <summary>
+    /// A variable naming one of the account's own folders as a cache. The folder is removed whole,
+    /// so this would take all of Downloads or the Desktop, and §5.6 protected only the profile above
+    /// it. The folder holds exactly what vcpkg writes, so nothing but the account-folder refusal can
+    /// be what keeps it.
+    /// </summary>
+    [Theory]
+    [InlineData(VcpkgDiscovery.BinaryCacheVariable, "Documents")]
+    [InlineData(VcpkgDiscovery.BinaryCacheVariable, "Desktop")]
+    [InlineData(VcpkgDiscovery.DownloadsVariable, "Downloads")]
+    public async Task NeverTargetsOneOfTheAccountsOwnFoldersAVariableNamesAsACache(string variable, string name)
+    {
+        var root = CreateClone();
+        var folder = Path.Combine(_environment.UserProfile, name);
+
+        if (variable == VcpkgDiscovery.BinaryCacheVariable)
+        {
+            PopulateBinaryCache(folder);
+        }
+        else
+        {
+            PopulateDownloads(folder);
+        }
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(variable, folder);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.NotEmpty(plan.TargetedPaths);
+        Assert.All(plan.TargetedPaths, targeted => Assert.False(IsAtOrUnder(targeted, folder), $"{targeted} is in {name}."));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(folder, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("one of your own folders", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan with { Tier = SafetyTier.RegenerableCache });
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.NotEmpty(Directory.EnumerateFileSystemEntries(folder));
+        Assert.True(Directory.Exists(Path.Combine(root, "installed")));
+    }
+
+    /// <summary>
+    /// The same refusal for a folder Windows is built out of, answered from the directories the
+    /// provider was handed rather than the machine it runs on. The folder holds exactly what vcpkg
+    /// writes, so the refusal can only come from where it is.
+    /// </summary>
+    [Fact]
+    public async Task NeverTargetsAFolderWindowsIsBuiltOutOfAVariableNamesAsACache()
+    {
+        var system = new FakeSystemDirectories(Path.Combine(_temp.Path, "machine"));
+        var programData = PopulateBinaryCache(system.ProgramData);
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, programData);
+
+        var plan = await new VcpkgCacheProvider(
+                _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: system)
+            .PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(programData, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("a folder Windows is built out of", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A folder inside one of the account's own is somewhere somebody chose to keep a cache, and one
+    /// holding what vcpkg writes is vcpkg's.
+    /// </summary>
+    [Fact]
+    public async Task TakesACacheKeptInsideOneOfTheAccountsOwnFolders()
+    {
+        var moved = PopulateBinaryCache(Path.Combine(_environment.UserProfile, "Downloads", "vcpkg-archives"));
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, moved);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([moved], plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// A folder a variable names is vcpkg's binary cache only if it holds nothing vcpkg did not put
+    /// there, and at least one package vcpkg did. Anything else means somebody else keeps things in
+    /// it, and the folder is removed whole.
+    /// </summary>
+    [Theory]
+    [InlineData("notes.txt", "'notes.txt' is in it")]
+    [InlineData("projects", "'projects' is in it")]
+    [InlineData(null, "nothing in it is a package vcpkg cached")]
+    public async Task LeavesAMovedBinaryCacheAloneUnlessItHoldsOnlyWhatVcpkgWrites(string? stranger, string reason)
+    {
+        var moved = Path.Combine(_temp.Path, "shared", "vcpkg-archives");
+
+        if (stranger is null)
+        {
+            Populate(Path.Combine(moved, "ab"));
+        }
+        else
+        {
+            PopulateBinaryCache(moved);
+
+            if (Path.HasExtension(stranger))
+            {
+                File.WriteAllText(Path.Combine(moved, stranger), "mine");
+            }
+            else
+            {
+                Populate(Path.Combine(moved, stranger));
+            }
+        }
+
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, moved);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains(reason, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// vcpkg writes no marker in its downloads folder, and the archives are named by each port. The
+    /// tools it unpacks under <c>tools</c> are the one thing that says the folder is vcpkg's, so a
+    /// folder without them is left alone — and the clone's own downloads folder is not offered in its
+    /// place, because the variable still says vcpkg looks elsewhere.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAMovedDownloadsFolderAloneWithoutTheToolsVcpkgUnpacks()
+    {
+        var root = CreateClone();
+        var moved = Populate(Path.Combine(_temp.Path, "shared", "vcpkg-downloads"));
+        Populate(Path.Combine(moved, "tools", "my-scripts"));
+
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, moved);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(moved, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Path.Combine(root, "downloads"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(moved, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("'tools' folder", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task HonoursTheConfiguredBinaryCacheLocation()
     {
-        var moved = Populate(Path.Combine(_temp.Path, "shared", "vcpkg-archives"));
+        var moved = PopulateBinaryCache(Path.Combine(_temp.Path, "shared", "vcpkg-archives"));
         Populate(DefaultBinaryCache);
         _environment.WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, moved);
 
@@ -489,7 +663,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     public async Task HonoursARelocatedDownloadsDirectory()
     {
         var root = CreateClone();
-        var moved = Populate(Path.Combine(_temp.Path, "shared", "vcpkg-downloads"));
+        var moved = PopulateDownloads(Path.Combine(_temp.Path, "shared", "vcpkg-downloads"));
         _environment
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
             .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, moved);
@@ -707,7 +881,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     {
         var root = CreateClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
         var holder = Path.Combine(_environment.UserProfile, "caches");
-        var binaryCache = Populate(Path.Combine(holder, "vcpkg-archives"));
+        var binaryCache = PopulateBinaryCache(Path.Combine(holder, "vcpkg-archives"));
 
         _environment
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
@@ -741,7 +915,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     {
         var root = CreateClone(Path.Combine(_environment.UserProfile, "dev", "vcpkg"));
         var holder = Path.Combine(_environment.UserProfile, "downloads-elsewhere");
-        var downloads = Populate(Path.Combine(holder, "vcpkg-downloads"));
+        var downloads = PopulateDownloads(Path.Combine(holder, "vcpkg-downloads"));
 
         _environment
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)

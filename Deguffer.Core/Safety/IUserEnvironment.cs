@@ -55,6 +55,18 @@ public interface IUserEnvironment
     /// </summary>
     string? Documents { get; }
 
+    /// <summary>
+    /// The folders Windows gives this account for its own files — Desktop, Documents, Downloads,
+    /// Music, Pictures, Videos, Saved Games and OneDrive — wherever each has been moved to. A folder
+    /// Windows will not name is left out rather than guessed.
+    ///
+    /// <para>Read from the known folders rather than composed from <see cref="UserProfile"/>, for the
+    /// reason <see cref="Videos"/> is: Windows and OneDrive both move them, and a folder a setting
+    /// names at the moved location is still the account's own. <c>StandingFolders</c> refuses every
+    /// one of them as a target, and adds the locations in the profile that they have by default.</para>
+    /// </summary>
+    IReadOnlyList<string> PersonalFolders { get; }
+
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
 
@@ -261,6 +273,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string? Documents { get; } =
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) is { Length: > 0 } documents ? documents : null;
+
+    public IReadOnlyList<string> PersonalFolders { get; } = ResolvePersonalFolders();
 
     /// <summary>
     /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever
@@ -505,24 +519,49 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// <summary><c>KF_FLAG_DONT_VERIFY</c>.</summary>
     private const uint DoNotVerify = 0x00004000;
 
+    /// <summary>Ask Windows where LocalLow is, once, when the environment is constructed.</summary>
+    private static string? ResolveLocalLow() => KnownFolder("a520a1a4-1780-4ff6-bd18-167343c5af16");
+
     /// <summary>
-    /// Ask Windows where LocalLow is, once, when the environment is constructed.
+    /// Ask Windows where the account's own folders are, once, when the environment is constructed:
+    /// <c>FOLDERID_Desktop</c>, <c>_Documents</c>, <c>_Downloads</c>, <c>_Music</c>, <c>_Pictures</c>,
+    /// <c>_Videos</c>, <c>_SavedGames</c> and <c>_SkyDrive</c>, the last being OneDrive's folder.
+    /// </summary>
+    private static IReadOnlyList<string> ResolvePersonalFolders() =>
+    [
+        .. new[]
+        {
+            "b4bfcc3a-db2c-424c-b029-7fe99a87c641",
+            "fdd39ad0-238f-46af-adb4-6c85480369c7",
+            "374de290-123f-4565-9164-39c4925e467b",
+            "4bd8d571-6d19-48d3-be97-422220080e43",
+            "33e28130-4e1e-4676-835a-98395c3bc3bb",
+            "18989b1d-99b5-455b-841c-ab7c74e4ddfc",
+            "4c5c32ff-bb9d-43b0-b5b4-2d72e54eaaa4",
+            "a52bba46-e9e1-435f-b3d9-28daa648c0f6",
+        }
+        .Select(KnownFolder)
+        .OfType<string>(),
+    ];
+
+    /// <summary>
+    /// Where Windows says a known folder is, or null where it will not say.
     ///
-    /// <para>Verification is switched off because the question is where the tier <em>is</em>, not
+    /// <para>Verification is switched off because the question is where the folder <em>is</em>, not
     /// whether it exists yet. A caller decides what to do about an absent directory by looking for
     /// the cache it wants, and without this flag a profile that has never had a low-integrity
     /// program run in it would answer identically to a platform that could not say at all.</para>
     ///
-    /// <para><b><c>FOLDERID_LocalAppDataLow</c> is built here rather than held in a static
-    /// field.</b> This runs from an instance initialiser, and <see cref="Current"/> is a static
-    /// field declared above any such field would be. Static initialisers run in textual order, so
-    /// the identifier would still be <see cref="Guid.Empty"/> when the singleton constructs itself,
-    /// the call would fail, and the one environment the application actually uses would report
-    /// LocalLow as unknown while a freshly constructed one answered correctly.</para>
+    /// <para><b>The identifiers are passed in as text rather than held in static fields.</b> These
+    /// run from instance initialisers, and <see cref="Current"/> is a static field declared above
+    /// any such field would be. Static initialisers run in textual order, so an identifier would
+    /// still be <see cref="Guid.Empty"/> when the singleton constructs itself, the call would fail,
+    /// and the one environment the application actually uses would report the folder as unknown
+    /// while a freshly constructed one answered correctly.</para>
     /// </summary>
-    private static string? ResolveLocalLow()
+    private static string? KnownFolder(string id)
     {
-        var folderId = new Guid("a520a1a4-1780-4ff6-bd18-167343c5af16");
+        var folderId = new Guid(id);
         var result = SHGetKnownFolderPath(in folderId, DoNotVerify, IntPtr.Zero, out var buffer);
 
         try

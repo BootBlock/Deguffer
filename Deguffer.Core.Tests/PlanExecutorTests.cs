@@ -352,6 +352,41 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains(locked, outcome.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The last check before a removal. A provider should never plan the account's own folder, and
+    /// every provider handed a folder by a setting asks first — but a step that names one anyway must
+    /// not run, because it would take somebody's files and §5.6 would protect only the profile above.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task NeverRemovesOneOfTheAccountsOwnFoldersEvenWhenAStepNamesIt(bool clear, bool extended)
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var plain = Path.Combine(environment.UserProfile, "Downloads");
+        var downloads = extended ? LongPath.Extended(plain) : plain;
+        Assert.Equal(extended, downloads.StartsWith(@"\\?\", StringComparison.Ordinal));
+        var kept = _temp.CreateFile(2048, "profile", "Downloads", "setup.exe");
+        var step = clear
+            ? (CleanupStep)new ClearDirectoryStep(downloads, "A cache")
+            : new DeleteDirectoryStep(downloads, "A cache");
+
+        var result = await new PlanExecutor(
+                new FakeProcessRunner(),
+                ParallelEnumerationScanner.Default,
+                RefusalLog,
+                environment: environment,
+                system: new FakeSystemDirectories(Path.Combine(_temp.Path, "machine")))
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
+
+        Assert.True(File.Exists(kept));
+        var outcome = Assert.Single(result.Steps);
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("one of your own folders", outcome.Message, StringComparison.Ordinal);
+        Assert.Equal(0, result.BytesReclaimed);
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

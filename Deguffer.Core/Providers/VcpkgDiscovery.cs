@@ -37,7 +37,15 @@ public sealed record VcpkgLocations(
     string? Root,
     string? RelocatedDownloads,
     string? UnmarkedRoot = null,
-    string? UnreachedRoot = null);
+    string? UnreachedRoot = null)
+{
+    /// <summary>
+    /// Folders a variable moved <see cref="BinaryCache"/> or <see cref="RelocatedDownloads"/> to that
+    /// Deguffer will not remove, each with the sentence the user is told. The location still answers
+    /// where vcpkg looks, so nothing falls back to the default in its place.
+    /// </summary>
+    public IReadOnlyList<(string Path, string Sentence)> Declined { get; init; } = [];
+}
 
 /// <summary>
 /// Finds vcpkg. Separate from the provider for the reason <see cref="ChromiumUserDataDiscovery"/>
@@ -50,7 +58,7 @@ public sealed record VcpkgLocations(
 /// profile location to fall back on, so finding it is three probes with three different failure
 /// modes, and none of them may be assumed.</para>
 /// </summary>
-public sealed class VcpkgDiscovery(IUserEnvironment environment)
+public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirectories system)
 {
     /// <summary>Moves the binary cache. The first entry in the documented search order.</summary>
     public const string BinaryCacheVariable = "VCPKG_DEFAULT_BINARY_CACHE";
@@ -98,8 +106,51 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment)
     public VcpkgLocations Discover()
     {
         var (root, unmarked, unreached) = FindRoot();
+        var binaryCache = FindBinaryCache();
+        var downloads = FindRelocatedDownloads(root);
 
-        return new VcpkgLocations(FindBinaryCache(), root, FindRelocatedDownloads(root), unmarked, unreached);
+        return new VcpkgLocations(binaryCache, root, downloads, unmarked, unreached)
+        {
+            Declined =
+            [
+                .. Decline(binaryCache, root, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
+                .. Decline(downloads, root, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
+            ],
+        };
+    }
+
+    /// <summary>
+    /// The sentence for a folder a variable moved a location to, where Deguffer will not remove it
+    /// whole. The location is removed whole, so it has to be somewhere nothing forbids and hold what
+    /// vcpkg writes there.
+    ///
+    /// <para>Not asked of a folder inside the clone or one of the user's vcpkg directories, which is
+    /// vcpkg's by where it is, and whose own declarations already say what in it may go. Nor are the
+    /// contents asked of a folder that is not there, which holds nothing to remove.</para>
+    /// </summary>
+    private IEnumerable<(string Path, string Sentence)> Decline(
+        string? folder,
+        string? root,
+        string variable,
+        string what,
+        Func<string, string?> evidence)
+    {
+        if (folder is null
+            || ProfileDirectories.Append(root).OfType<string>().Any(own => LongPath.Contains(own, folder)))
+        {
+            yield break;
+        }
+
+        var why = ConfiguredFolder.WhyNotOwned(folder, environment, system, TempRoots.Resolve(environment, system).AccountFolders)
+            ?? (LongPath.DirectoryMayExist(folder) ? evidence(folder) : null);
+
+        if (why is not null)
+        {
+            yield return (
+                folder,
+                $"Leaving '{LongPath.Display(folder)}' alone: {variable} names it as vcpkg's {what}, and Deguffer "
+                + $"removes that whole, so it will not take this one because {why}");
+        }
     }
 
     /// <summary>

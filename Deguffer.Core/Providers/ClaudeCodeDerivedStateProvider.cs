@@ -125,6 +125,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     private readonly ClaudeCodeProjectsDiscovery _projects;
     private readonly ClaudeCodeSessionRegistry _sessions;
+    private readonly ISystemDirectories _system;
 
     private Survey? _survey;
     private IReadOnlyList<ToolRoot>? _toolRoots;
@@ -138,21 +139,27 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// The walk over Claude Code's project folders, shared with <see cref="ClaudeCodeConversationProvider"/>
     /// so that one planning pass lists them once.
     /// </param>
+    /// <param name="system">
+    /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
+    /// be or hold. The machine's own by default.
+    /// </param>
     public ClaudeCodeDerivedStateProvider(
         IUserEnvironment? environment = null,
         ClaudeCodeSessionRegistry? sessions = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ClaudeCodeProjectsDiscovery? projects = null)
+        ClaudeCodeProjectsDiscovery? projects = null,
+        ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
     {
-        _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment);
-        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector);
+        _system = system ?? SystemDirectories.Current;
+        _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment, _system);
+        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system);
     }
 
     public override string Id => "claude-code-leftovers";
@@ -194,7 +201,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// never asked for one.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ClaudeCodeHome.Resolve(Environment) is not { } home || LongPath.DirectoryMayExist(home));
+        Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system) is not { } home || LongPath.DirectoryMayExist(home));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own
@@ -216,11 +223,10 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment) is not { } home)
+        if (ClaudeCodeHome.Resolve(Environment, _system) is not { } home)
         {
             return EmptyPlan(
-                $"{ClaudeCodeHome.ConfigDirectoryVariable} is set to '{ClaudeCodeHome.ConfiguredValue(Environment)}', "
-                + "which is not a full path. Deguffer cannot tell which folder that means, so it is leaving it alone.");
+                $"{ClaudeCodeHome.WhyUnusable(Environment, _system)} Deguffer is leaving Claude Code's leftovers alone.");
         }
 
         if (NothingToPlanFor(
@@ -370,7 +376,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             // Nothing was classified. Where that is because Windows would not describe the folder, the
             // plan names it, so Explore is told about it too. The folder's own rule recognises none of
             // its children, so it refuses everything below without the per-folder roots a look adds.
-            return ClaudeCodeHome.Resolve(Environment) is { } home
+            return ClaudeCodeHome.Resolve(Environment, _system) is { } home
                 && LongPath.ProbeDirectory(home) is PathPresence.Refused
                     ? [ToolRoot.Of(home, HomeReason, HomeChildren), .. Neighbours()]
                     : [];
@@ -418,7 +424,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     private Survey? Examine(CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment) is not { } home
+        if (ClaudeCodeHome.Resolve(Environment, _system) is not { } home
             || !LongPath.DirectoryExists(home)
             || LongPath.IsReparsePoint(home))
         {

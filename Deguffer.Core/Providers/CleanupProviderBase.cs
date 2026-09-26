@@ -76,7 +76,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Cloud = cloud ?? CloudFiles.Default;
         Handlers = handlers ?? DiskCleanupHandlers.Default;
         Servicing = servicing ?? WindowsServicing.Current;
-        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector, time);
+        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector, time, environment);
         Runner = runner;
     }
 
