@@ -35,6 +35,18 @@ public class FreeSpaceTests
         Assert.Equal("about 1.5 MB", FreeSpace.Format(ScanSize.Approximate(1536 * 1024)));
 
     /// <summary>
+    /// A ceiling the removal is known to fall short of says "up to", never "about", and stays a ceiling
+    /// in any total it is part of.
+    /// </summary>
+    [Fact]
+    public void ACeilingSaysUpToAndStaysOneInATotal()
+    {
+        Assert.Equal("up to 1.5 MB", FreeSpace.Format(ScanSize.Ceiling(1536 * 1024)));
+        Assert.Equal("up to 2.0 MB", FreeSpace.Format(ScanSize.Ceiling(1536 * 1024) + ScanSize.FromLengths(512 * 1024)));
+        Assert.Equal("up to 2.0 MB", FreeSpace.Format(ScanSize.Approximate(512 * 1024) + ScanSize.Ceiling(1536 * 1024)));
+    }
+
+    /// <summary>
     /// §5.5's fallback walk is <em>not</em> hedged, and this is the assertion that changed when
     /// <see cref="ScanSize.Reclaimable"/> became the logical figure. The walk reports file lengths;
     /// file lengths are now the number reported; so the walk measures the reported number exactly,

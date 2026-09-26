@@ -1,8 +1,13 @@
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// A tool's own figure for what its eviction command clears, asked again by the run once the command
-/// has finished (§5.1).
+/// A tool's own figure for what its eviction command clears, asked again by the run immediately before
+/// the command and once it has finished (§5.1).
+///
+/// <para><b>Before as well as after.</b> The plan's figure is as old as the preview, and what a tool
+/// describes can change without Deguffer in between: Windows cleans its component store on a schedule,
+/// and two rows can run commands over the same store in one clean. Subtracting from the plan's figure
+/// would credit the command with those changes.</para>
 ///
 /// <para><b>Why the run cannot measure the disk instead.</b> Most commands clear folders Deguffer can
 /// read, so what they freed is the plan's figure less a fresh measurement of

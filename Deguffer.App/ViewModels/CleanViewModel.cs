@@ -1072,13 +1072,14 @@ public sealed partial class CleanViewModel : ObservableObject
     /// back space that the unticked steps within it are not going to release.
     /// </summary>
     private ScanSize SelectedTotal =>
-        Findings.Aggregate(ScanSize.Zero, (total, row) => total + row.SelectedSize);
+        ReclaimPool.Total(Findings.SelectMany(row => row.SelectedSteps).Select(s => s.Step));
 
     /// <summary>
     /// The ceiling <see cref="SelectedTotal"/> can reach: every step the user is free to tick. This
     /// is what the info bar means by "can be reclaimed", and it is summed the same way the selected
-    /// total is so that the two figures beside each other count the same bytes.
+    /// total is so that the two figures beside each other count the same bytes. Both count space two
+    /// rows share once: see <see cref="ReclaimPool"/>.
     /// </summary>
     private ScanSize SelectableTotal =>
-        Findings.Aggregate(ScanSize.Zero, (total, row) => total + row.SelectableSize);
+        ReclaimPool.Total(Findings.SelectMany(row => row.SelectableSteps).Select(s => s.Step));
 }

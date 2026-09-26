@@ -148,7 +148,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     /// The whole of §5.2 against the most dangerous parent Deguffer has reached into, proved by
     /// running a plan rather than by reading the declaration.
     ///
-    /// §9 keeps <c>WinSxS</c> and <c>Windows\Installer</c> out of the product because the failure
+    /// §9 keeps every removal by path out of <c>WinSxS</c> and <c>Windows\Installer</c> because the failure
     /// modes are a broken uninstall and an unbootable rollback. An over-broad rule passes every
     /// positive assertion, so the only evidence that this one is not over-broad is that those paths,
     /// the two installer caches beside <c>%PROGRAMDATA%</c>'s own targets, an unrecognised

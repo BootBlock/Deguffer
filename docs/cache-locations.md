@@ -19,7 +19,7 @@ four questions worth asking before deleting anything:
 | --- | --- | --- |
 | **1 — Regenerable cache** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
 | **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **never pre-selected**, and needs an extra acknowledgement. |
-| **3 — User data in a cache costume** | Logs, histories, saved sessions. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
+| **3 — User data in a cache costume** | Logs, histories, saved sessions, and anything else whose loss is permanent, such as the means to uninstall updates. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
 | **4 — Do not touch** | Config, credentials, live state, or anything Deguffer cannot positively identify. | Excluded entirely — not even shown as an option. |
 
 **Tier 4 is the default, not the exception.** Every provider names the children it recognises;
@@ -4741,7 +4741,7 @@ the kernel ones — or the reverse.
 and it works differently from every other location in this document. Elsewhere Deguffer looks inside
 a folder and decides what each thing in it is. Here it does not look inside at all: it holds a list
 of exact paths, and nothing else under the Windows directory is reachable, whatever it is called.
-`WinSxS` and `Windows\Installer` — the two large folders Deguffer refuses to go near, and the two
+`WinSxS` and `Windows\Installer` — the two large folders Deguffer never deletes from by path, and the two
 that break Windows if you get them wrong — are named as things that must still be there when the run
 finishes, and Deguffer checks that they are.
 
@@ -5107,6 +5107,118 @@ Update.
 
 Getting an older driver back means a download, and at worst a device that needs its driver before
 the network works. Nothing here is a record of something you did, so it is not Tier 3.
+
+---
+
+## Superseded Windows components
+
+**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+
+| | |
+| --- | --- |
+| **Location** | The component store, `C:\Windows\WinSxS` |
+| **Method** | `DISM /Online /Cleanup-Image /StartComponentCleanup`, run as administrator. Nothing is deleted by path |
+| **Typical size** | One workstation's store was reported by Explorer as 23.36 GB, of which DISM counted 21.33 GB as its actual size, 8.35 GB of that shared with Windows and 12.98 GB as superseded components and switched-off features |
+
+### What it is
+
+Windows keeps every version of every system component it has installed in its component store, so it
+can turn a feature on without a download and roll an update back. It removes the older versions
+itself, about 30 days after each update and only while the machine is idle, so the store can hold
+several gigabytes of them at once.
+
+Explorer reports the store as far larger than it is. Most of its files are hard links: a second name
+for a file that is also in `System32`, not a second copy of it. Microsoft's own worked example is a
+store Explorer reported as 4.98 GB carrying 507 MB of real overhead.
+
+### What Deguffer does
+
+It runs Windows' own cleanup, DISM's `/StartComponentCleanup`, and never deletes anything from the
+store. Microsoft warns that deleting from it "may severely damage your system so that your PC might
+not boot and make it impossible to update".
+
+The row's figure comes from DISM's own `/AnalyzeComponentStore`, which counts the shared files once.
+It is the store's overhead as Microsoft does the arithmetic, *Backups and Disabled Features* plus
+*Cache and Temporary Data*, and it is the most a cleanup could free, so the row says "up to". The cleanup never removes the
+payload of a feature that is switched off, so it usually frees less. What the clean freed is DISM's
+actual size immediately before the command less its actual size afterwards, so the result is
+Windows' own measurement rather than the estimate. The row shows DISM's whole analysis: the size
+Explorer reports, the part shared with Windows, the actual size, the number of reclaimable packages
+and when Windows last cleaned the store.
+
+It is DISM run directly, not Windows' scheduled `StartComponentCleanup` task. The task waits 30 days
+after each update and stops after an hour, so a run through it can free nothing without saying so.
+DISM has no time limit, and the cleanup can take many minutes. Once it starts it runs to the end,
+even if Deguffer stops waiting for it.
+
+Nothing is offered:
+
+- **without administrator rights.** DISM analyses and cleans the store only for an administrator, so
+  an unelevated scan says so, and a scan as administrator is what lets Deguffer ask.
+- **while an update is unfinished**, on the same tests as the previous installation above, asked
+  when the scan plans the row and again when the clean reaches it.
+- **where Windows reports that the store does not need cleaning**, which is DISM's own verdict.
+
+### What is protected
+
+No path is ever a target. The run checks afterwards that the store itself, Windows' record of its
+installed updates in `C:\Windows\servicing\Packages`, and `System32`, which shares most of the
+store's files, are all still there and not emptied. Every other provider that reaches into
+`C:\Windows` keeps `WinSxS` as a folder that must survive.
+
+### What it costs you
+
+Windows removes the older versions of its components now rather than 30 days after each update, so
+it can no longer roll those components back. Every installed update can still be uninstalled.
+
+### Why Tier 2
+
+The older versions come back only with the updates that bring them, and Windows removes them itself
+in time. Nothing is lost that Windows needs to run or to uninstall an update.
+
+---
+
+## Windows update uninstall data
+
+**Tier 3 — permanent loss.** Offered, **never pre-selected**, and confirmed on its own.
+
+| | |
+| --- | --- |
+| **Location** | The component store, `C:\Windows\WinSxS` |
+| **Method** | `DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase`, run as administrator. Nothing is deleted by path |
+| **Typical size** | The same analysis as *Superseded Windows components* above |
+
+### What it is
+
+Besides the older versions the ordinary cleanup removes, Windows keeps what it needs to uninstall each
+update it has installed. `/ResetBase` removes every superseded version of every component, and with
+it that ability.
+
+### What Deguffer does
+
+Everything the *Superseded Windows components* row does, with `/ResetBase` added, and as a row of its
+own rather than a switch on that one. Microsoft's warning is that "all existing update packages can't
+be uninstalled after this command is completed, but this won't block the uninstallation of future
+update packages". That cost is permanent, so it is its own decision with its own confirmation.
+
+Both rows can be chosen in one clean. Each asks DISM for the store's size immediately before and after
+its own command, so a gigabyte the first frees is not counted again by the second. The preview's
+totals count the store's overhead once, however many of the two rows are chosen.
+
+### What is protected
+
+The same as *Superseded Windows components* above.
+
+### What it costs you
+
+**No update installed so far can be uninstalled afterwards**, from Settings or anywhere else. An update
+that turns out to cause a problem can then only be undone by resetting or reinstalling Windows.
+Updates installed later can still be uninstalled.
+
+### Why Tier 3
+
+Nothing you made is deleted, but what goes cannot be had back, which is what Tier 3 exists to say.
+The confirmation states the loss without calling it user data.
 
 ---
 

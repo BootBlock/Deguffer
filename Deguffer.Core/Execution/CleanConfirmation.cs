@@ -74,7 +74,8 @@ public sealed record CleanConfirmation
     public bool AllRegenerable => PermanentLosses.Count == 0;
 
     /// <summary>
-    /// The sum of <see cref="Items"/> and of nothing else.
+    /// The sum of <see cref="Items"/> and of nothing else, with space two of them share counted once
+    /// (see <see cref="ReclaimPool"/>).
     ///
     /// Derived rather than taken from the caller, which is most of the point of the type: in a
     /// mixed selection the screen's own total includes the rows §7 asks about separately, and a
@@ -95,6 +96,6 @@ public sealed record CleanConfirmation
                     .Select(p => new CleanConfirmationLoss(
                         p.ProviderName, ConfirmationRequirement.ConsequenceOf(p))),
             ],
-            FreeSpace.Format(plans.Aggregate(ScanSize.Zero, (total, p) => total + p.Reclaim)));
+            FreeSpace.Format(ReclaimPool.Total(plans.SelectMany(p => p.Steps))));
     }
 }

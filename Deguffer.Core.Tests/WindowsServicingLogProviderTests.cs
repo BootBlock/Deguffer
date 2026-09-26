@@ -203,7 +203,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     /// <summary>
     /// §5.2 against the operating system's own directory, proved by running a plan.
     ///
-    /// §9 keeps <c>WinSxS</c> and <c>Windows\Installer</c> out of the product, and an over-broad rule
+    /// §9 keeps every removal by path out of <c>WinSxS</c> and <c>Windows\Installer</c>, and an over-broad rule
     /// passes every positive assertion — so the evidence that this one is not over-broad is that they
     /// are still there, along with a sibling of a target that the declaration never named.
     /// </summary>

@@ -239,6 +239,20 @@ public sealed class PlanExecutor(
                 step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, held, MailStores: look.Stores.Count);
         }
 
+        // A tool that states its own figure is asked for it immediately before the command as well as
+        // after, rather than trusted from the plan. What it describes can change without Deguffer:
+        // Windows cleans its component store on a schedule, and another row in the same clean can run a
+        // command over the same store. The plan's figure would then credit this command with a reclaim
+        // it did not make.
+        var measuredBefore = step.MeasuredBy is { } asked ? await asked.MeasureAsync(ct).ConfigureAwait(false) : before;
+
+        // Asked again, because the tool's measurement can take a minute, and an update that starts
+        // during it is exactly what the hold exists for.
+        if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && StillUpdating(step) is { } updating)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
+        }
+
         var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
         if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
@@ -280,25 +294,29 @@ public sealed class PlanExecutor(
 
         // Nothing is counted rather than the whole estimate: a figure nobody checked is the one this
         // subtraction exists to avoid reporting.
-        if (measured is not { } after)
+        if (measured is not { } after || measuredBefore is not { } start)
         {
             return new StepOutcome(
                 step.Description,
                 outcome.Succeeded,
                 BytesReclaimed: 0,
                 Refusals.None,
-                $"{outcome.Message} (the tool did not say what its cache holds now, so nothing is "
-                + "counted as reclaimed)");
+                $"{outcome.Message} (the tool did not say what its cache held "
+                + (measuredBefore is null ? "before the command" : "afterwards")
+                + ", so nothing is counted as reclaimed)");
         }
 
-        var reclaimed = before - after;
+        var reclaimed = start - after;
 
-        // A negative delta means the tree grew between preview and clean — a build restoring
-        // packages in the background, most likely. Report what is actually still there rather
-        // than clamping to zero and claiming nothing was reclaimed.
+        // A negative delta means the tree grew between the start figure and the end — a build
+        // restoring packages in the background, most likely. A tool asked immediately before its
+        // command grew while the command ran, and a disk measurement grew since the scan. Report
+        // what is actually still there rather than clamping to zero and claiming nothing was
+        // reclaimed.
         var message = reclaimed < 0
-            ? $"{outcome.Message} (the cache grew since the scan; " +
-              $"{FreeSpace.Format(after)} remains)"
+            ? $"{outcome.Message} (the cache grew "
+              + (step.MeasuredBy is null ? "since the scan" : "while the command ran")
+              + $"; {FreeSpace.Format(after)} remains)"
             : outcome.Message;
 
         return new StepOutcome(

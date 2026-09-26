@@ -414,7 +414,7 @@ public sealed class CleanupPlannerTests
                 "platformio", "playwright", "puppeteer", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
-                "driver-store", "crash-dumps",
+                "driver-store", "component-store", "component-store-reset-base", "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
                 "claude-code-file-history", "claude-code-conversations",
             ],
@@ -426,13 +426,13 @@ public sealed class CleanupPlannerTests
                 "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
-                "windows-update-leftovers", "driver-store",
+                "windows-update-leftovers", "driver-store", "component-store",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(
             [
-                "retroarch-thumbnails", "recycle-bin", "file-history", "crash-dumps", "windows-servicing-logs",
+                "retroarch-thumbnails", "recycle-bin", "file-history", "component-store-reset-base", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
                 "claude-code-conversations",
             ],

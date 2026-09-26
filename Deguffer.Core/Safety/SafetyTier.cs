@@ -19,8 +19,9 @@ public enum SafetyTier
     RegenerableWithCost = 2,
 
     /// <summary>
-    /// Tier 3 — user data wearing a cache costume. Logs, histories, saved sessions.
-    /// Deleting loses it permanently.
+    /// Tier 3 — user data wearing a cache costume. Logs, histories, saved sessions. Also anything
+    /// else whose loss is permanent, such as the means to uninstall updates. Deleting loses it
+    /// permanently.
     /// </summary>
     UserData = 3,
 
@@ -74,8 +75,8 @@ public static class SafetyTierExtensions
             "Re-created only by re-downloading gigabytes or re-indexing for minutes. Offered, but " +
             "never selected for you.",
         SafetyTier.UserData =>
-            "Logs, histories and saved sessions living in a folder called cache. Deleting loses " +
-            "them permanently.",
+            "Logs, histories and saved sessions living in a folder called cache, and anything else " +
+            "whose loss cannot be undone. Removing any of it loses it permanently.",
         SafetyTier.DoNotTouch =>
             "Config, credentials, live state, and anything Deguffer cannot prove is idle. Never " +
             "offered — a child a provider does not recognise lands here rather than being " +

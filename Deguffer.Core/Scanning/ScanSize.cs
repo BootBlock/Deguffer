@@ -42,7 +42,13 @@ namespace Deguffer.Core.Scanning;
 /// which neither measuring route sees, and a sole-link prediction, which counts nothing because the
 /// tool it forecasts decides what it removes.</para>
 /// </param>
-public readonly record struct ScanSize(long Allocated, long Logical, bool IsApproximate = false, long Entries = 0)
+/// <param name="IsCeiling">
+/// True when the number is the most the removal could free, and it is known beforehand to free less:
+/// the component store's overhead, which counts the payload of switched-off features that no cleanup
+/// removes. "About" would state it as a forecast, which it is not.
+/// </param>
+public readonly record struct ScanSize(
+    long Allocated, long Logical, bool IsApproximate = false, long Entries = 0, bool IsCeiling = false)
 {
     public static readonly ScanSize Zero = new(0, 0);
 
@@ -62,12 +68,22 @@ public readonly record struct ScanSize(long Allocated, long Logical, bool IsAppr
     /// </summary>
     public static ScanSize Approximate(long logical) => new(logical, logical, IsApproximate: true);
 
-    /// <summary>Approximation is contagious: a total is only as exact as its least exact part.</summary>
+    /// <summary>
+    /// The most a removal could free, which it is known to fall short of, and says so. See
+    /// <see cref="IsCeiling"/>.
+    /// </summary>
+    public static ScanSize Ceiling(long logical) => new(logical, logical, IsCeiling: true);
+
+    /// <summary>
+    /// Approximation is contagious: a total is only as exact as its least exact part. So is a
+    /// ceiling: a total with a part that frees less than its figure frees less than its own.
+    /// </summary>
     public static ScanSize operator +(ScanSize left, ScanSize right) => new(
         left.Allocated + right.Allocated,
         left.Logical + right.Logical,
         left.IsApproximate || right.IsApproximate,
-        left.Entries + right.Entries);
+        left.Entries + right.Entries,
+        left.IsCeiling || right.IsCeiling);
 
     /// <summary>
     /// A measurement with part of it taken out: what a folder holds, less the part of it a plan has
@@ -86,7 +102,8 @@ public readonly record struct ScanSize(long Allocated, long Logical, bool IsAppr
         Math.Max(0, left.Allocated - right.Allocated),
         Math.Max(0, left.Logical - right.Logical),
         left.IsApproximate || right.IsApproximate,
-        Math.Max(0, left.Entries - right.Entries));
+        Math.Max(0, left.Entries - right.Entries),
+        left.IsCeiling || right.IsCeiling);
 
     /// <summary>
     /// The single number to show and to subtract. It is <see cref="Logical"/>, and that is a
