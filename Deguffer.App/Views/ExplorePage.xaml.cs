@@ -4,6 +4,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
@@ -87,7 +88,7 @@ public sealed partial class ExplorePage : Page
             // The dialog is built per ask, as the Storage page's is: a XamlRoot captured in this
             // constructor would be the one from before a theme change or a reparent.
             ExploreActions.ForThisMachine(
-                () => new ContentDialogExploreConfirmation(XamlRoot, ActualTheme)),
+                () => new ContentDialogExploreConfirmation(XamlRoot, ActualTheme), App.Faults),
 
             // Built synchronously, where the policy above is built in the background: that one
             // constructs every provider and runs their probes, and this one reads four environment

@@ -200,6 +200,25 @@ public abstract class ExploreSurface
             spacing, volume);
 
     /// <summary>
+    /// The picture <paramref name="tree"/> is actually drawn as when <paramref name="view"/> is
+    /// asked for.
+    ///
+    /// <para>A tree still being filled in orders its children by name rather than by size, so that a
+    /// growing child widens where it is instead of moving. Two of the four drawings cannot be made
+    /// from that at all and say so by refusing: squarification is defined over a decreasing
+    /// sequence, and a sunburst's residual wedge assumes the small children are the tail. So a scan
+    /// in progress draws the icicle whichever view was picked, and the chosen one arrives with the
+    /// finished scan. Public because the page has to say so, and has to say it from this rule rather
+    /// than from a copy of it: a substitution nobody is told about reads as a bug.</para>
+    /// </summary>
+    public static ExploreView Drawn(ISizedTree tree, ExploreView view)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return tree.ChildOrder == ExploreChildOrder.BySize ? view : ExploreView.Icicle;
+    }
+
+    /// <summary>
     /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a
     /// canvas of <paramref name="width"/> by <paramref name="height"/> device pixels at
     /// <paramref name="scale"/>.
@@ -243,16 +262,7 @@ public abstract class ExploreSurface
         var limits = LayoutLimits.Default.Spaced(spacing).ForText(textScale).At(scale);
         var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
-        // A tree still being filled in orders its children by name rather than by size, so that a
-        // growing child widens where it is instead of moving. Two of the four drawings cannot be
-        // made from that at all and say so by refusing: squarification is defined over a decreasing
-        // sequence, and a sunburst's residual wedge assumes the small children are the tail. So a
-        // scan in progress draws the icicle whichever view was picked, and the chosen one arrives
-        // with the finished scan. ExploreViewModel.ViewNote is what keeps that from being a silent
-        // substitution.
-        var drawn = tree.ChildOrder == ExploreChildOrder.BySize ? view : ExploreView.Icicle;
-
-        return drawn switch
+        return Drawn(tree, view) switch
         {
             ExploreView.Sunburst => new SunburstSurface(
                 tree, root, width, height, limits, colours),

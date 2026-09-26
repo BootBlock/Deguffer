@@ -68,6 +68,20 @@ public sealed class ExploreSurfaceTests
 
         Assert.IsType<TiledSurface>(surface);
         Assert.NotEmpty(surface.Labels);
+        Assert.Equal(ExploreView.Icicle, ExploreSurface.Drawn(tree, view));
+    }
+
+    /// <summary>
+    /// A finished tree is drawn as whatever was picked. The page says a substitution is happening
+    /// from this same answer, so it must not report one that is not.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Sunburst)]
+    [InlineData(ExploreView.Icicle)]
+    public void AFinishedScanIsDrawnAsThePickedView(ExploreView view)
+    {
+        Assert.Equal(view, ExploreSurface.Drawn(NestedTree(), view));
     }
 
     /// <summary>

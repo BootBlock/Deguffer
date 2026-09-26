@@ -85,4 +85,29 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
         rootPath is null
             ? null
             : Entries.FirstOrDefault(entry => entry.RootPath.Equals(rootPath, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The row the picker should name once the list has been read: <paramref name="chosen"/> where it
+    /// is still offered, and otherwise the first volume Explore will scan.
+    ///
+    /// <para>A refused volume is listed and is not defaulted onto. It is in the list because the user
+    /// can see the drive and needs to be told why it is not scanned, and it is not the default
+    /// because opening the page on a drive whose Scan button is dead reads as an app that failed to
+    /// start. Where every volume is refused there is nothing better to point at, so the first is
+    /// named and the page says why it will not scan it.</para>
+    /// </summary>
+    public DriveEntry? Choose(string? chosen) =>
+        Find(chosen)
+        ?? Entries.FirstOrDefault(static listed => !listed.Choice.IsRefused)
+        ?? Entries.FirstOrDefault();
+
+    /// <summary>
+    /// The row for the volume holding <paramref name="folder"/>, or null where the picker does not
+    /// offer one.
+    ///
+    /// <para>Asked of the inventory rather than of <c>Path.GetPathRoot</c>, which reduces a path to
+    /// a drive letter: a folder on a volume mounted at <c>C:\Mount</c> would otherwise name the disk
+    /// that folder sits on, and both are in the list.</para>
+    /// </summary>
+    public DriveEntry? Holding(string folder) => Find(HostVolume.For(volumes, folder)?.RootPath);
 }

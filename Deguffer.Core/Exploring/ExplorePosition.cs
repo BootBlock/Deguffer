@@ -51,12 +51,18 @@ public readonly record struct ExplorePosition(int Node, bool OnVolume)
     }
 
     /// <summary>
-    /// Where opening <paramref name="node"/> leads, or null where it leads nowhere new: the root when
-    /// the views are already inside it.
+    /// Where opening <paramref name="node"/> leads, or null where it leads nowhere new: a file, a
+    /// folder with nothing in it, and the root when the views are already inside it. The first two
+    /// would draw an empty card with a trail claiming the reader had gone somewhere.
     /// </summary>
     public ExplorePosition? Opening(ExploreTree tree, int node, VolumeSpace volume)
     {
         ArgumentNullException.ThrowIfNull(tree);
+
+        if (!tree.IsDirectory(node) || tree.ChildrenOf(node).Length == 0)
+        {
+            return null;
+        }
 
         return node != tree.RootNode || IsVolume(tree, volume) ? Inside(node) : null;
     }
