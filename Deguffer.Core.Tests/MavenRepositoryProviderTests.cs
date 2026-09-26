@@ -178,6 +178,27 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The same refusal for a folder Windows is built out of, answered from the directories the
+    /// provider was handed rather than the machine it runs on.
+    /// </summary>
+    [Fact]
+    public async Task NeverTargetsAFolderWindowsIsBuiltOutOfTheSettingsNameAsTheRepository()
+    {
+        var system = new FakeSystemDirectories(Path.Combine(_temp.Path, "machine"));
+        var programFiles = PopulateRepository(system.ProgramFiles);
+        WriteSettings(programFiles);
+
+        var plan = await new MavenRepositoryProvider(
+                _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: system)
+            .PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(programFiles, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("a folder Windows is built out of", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A folder the settings name is Maven's only if Maven filled it: a folder per group, artifact
     /// and version holding the artifact's .pom, and nothing at the top but folders. Anything else is
     /// somebody's, and the repository is removed whole.

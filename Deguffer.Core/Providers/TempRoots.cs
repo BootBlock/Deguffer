@@ -228,8 +228,8 @@ public static class TempRoots
     /// because only this row empties a folder of whatever is in it.</item>
     /// <item><b>A candidate that is not recognisably a temporary folder.</b> This is §5.2's
     /// "unrecognised is Tier 4" applied to the root rather than to a child, and it is the rule that
-    /// does the work: the containment test above accepts <c>C:\Users\&lt;user&gt;\Documents</c> and
-    /// <c>C:\Windows\System32</c>, because neither of them holds anything structural, and a step
+    /// does the work: the containment tests above accept <c>D:\Projects</c> and
+    /// <c>C:\Windows\System32</c>, because neither of them is or holds anything they refuse, and a step
     /// labelled "Temporary files" would then delete every file in them older than the cut-off. What
     /// is recognised is a folder named <c>Temp</c> or <c>Tmp</c>, or one sitting directly inside
     /// one — which covers the default location, a <c>D:\Temp</c> somebody chose, and the numbered

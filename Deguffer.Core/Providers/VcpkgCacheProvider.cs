@@ -82,17 +82,22 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     private VcpkgLocations? _located;
 
+    /// <param name="system">
+    /// The directories Windows is built out of, which a folder a variable moves a cache to must not be or
+    /// hold. The machine's own by default.
+    /// </param>
     public VcpkgCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new VcpkgDiscovery(Environment, SystemDirectories.Current);
+        => _discovery = new VcpkgDiscovery(Environment, system ?? SystemDirectories.Current);
 
     public override string Id => "vcpkg";
 

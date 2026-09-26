@@ -59,13 +59,15 @@ public static partial class ClaudeCodeHome
     /// The folder, or null where <see cref="ConfigDirectoryVariable"/> names one Deguffer will not treat
     /// as Claude Code's. <see cref="WhyUnusable"/> says why.
     /// </summary>
-    public static string? Resolve(IUserEnvironment environment) => Examine(environment).Home;
+    public static string? Resolve(IUserEnvironment environment, ISystemDirectories system) =>
+        Examine(environment, system).Home;
 
     /// <summary>
     /// Why <see cref="Resolve"/> has no folder, as whole sentences, or null where it has one. A provider
     /// says it before it says what it is leaving alone.
     /// </summary>
-    public static string? WhyUnusable(IUserEnvironment environment) => Examine(environment).Why;
+    public static string? WhyUnusable(IUserEnvironment environment, ISystemDirectories system) =>
+        Examine(environment, system).Why;
 
     /// <summary>
     /// Two ways for <see cref="ConfigDirectoryVariable"/> to be no answer.
@@ -80,9 +82,10 @@ public static partial class ClaudeCodeHome
     /// row would read as a failure of §5.6.</item>
     /// </list>
     /// </summary>
-    private static (string? Home, string? Why) Examine(IUserEnvironment environment)
+    private static (string? Home, string? Why) Examine(IUserEnvironment environment, ISystemDirectories system)
     {
         ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(system);
 
         if (ConfiguredValue(environment) is not { } configured)
         {
@@ -94,8 +97,6 @@ public static partial class ClaudeCodeHome
             return (null, $"{ConfigDirectoryVariable} is set to '{configured}', which is not a full path. "
                 + "Deguffer cannot tell which folder that means.");
         }
-
-        var system = SystemDirectories.Current;
 
         return ConfiguredFolder.WhyNotOwned(folder, environment, system, TempRoots.Resolve(environment, system).AccountFolders)
             is { } declined

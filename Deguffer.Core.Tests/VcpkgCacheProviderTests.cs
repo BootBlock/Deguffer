@@ -533,6 +533,28 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The same refusal for a folder Windows is built out of, answered from the directories the
+    /// provider was handed rather than the machine it runs on. The folder holds exactly what vcpkg
+    /// writes, so the refusal can only come from where it is.
+    /// </summary>
+    [Fact]
+    public async Task NeverTargetsAFolderWindowsIsBuiltOutOfAVariableNamesAsACache()
+    {
+        var system = new FakeSystemDirectories(Path.Combine(_temp.Path, "machine"));
+        var programData = PopulateBinaryCache(system.ProgramData);
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, programData);
+
+        var plan = await new VcpkgCacheProvider(
+                _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: system)
+            .PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(programData, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("a folder Windows is built out of", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A folder inside one of the account's own is somewhere somebody chose to keep a cache, and one
     /// holding what vcpkg writes is vcpkg's.
     /// </summary>

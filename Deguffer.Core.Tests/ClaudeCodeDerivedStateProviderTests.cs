@@ -517,6 +517,29 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
         Assert.Empty(await provider.DiscoverToolRootsAsync());
     }
 
+    /// <summary>
+    /// The same refusal for a folder Windows is built out of, answered from the directories the
+    /// provider was handed rather than the machine it runs on.
+    /// </summary>
+    [Fact]
+    public async Task LeavesEverythingAloneWhereTheConfigDirectoryVariableNamesAFolderWindowsIsBuiltOutOf()
+    {
+        var system = new FakeSystemDirectories(Path.Combine(_temp.Path, "machine"));
+        _environment.WithEnvironmentVariable(ClaudeCodeHome.ConfigDirectoryVariable, system.WindowsDirectory);
+
+        var plan = await new ClaudeCodeDerivedStateProvider(
+                _environment,
+                runner: new FakeProcessRunner(),
+                inspector: FakeProcessInspector.NothingRunning,
+                system: system)
+            .PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("will not treat that as Claude Code's folder", StringComparison.Ordinal)
+            && n.Message.Contains("a folder Windows is built out of", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task AFolderThatIsALinkIsNeverLookedThrough()
     {

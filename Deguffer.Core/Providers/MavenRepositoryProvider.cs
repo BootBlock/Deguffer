@@ -66,22 +66,28 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         ("wrapper", "Maven distributions the wrapper downloaded. Small, and not what this provider removes."),
     ];
 
+    private readonly ISystemDirectories _system;
+
     private string? _localRepository;
 
     private (string Repository, string? Why)? _vetted;
 
+    /// <param name="system">
+    /// The directories Windows is built out of, which a repository the settings move must not be or hold.
+    /// The machine's own by default.
+    /// </param>
     public MavenRepositoryProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-    {
-    }
+        => _system = system ?? SystemDirectories.Current;
 
     public override string Id => "maven";
 
@@ -330,9 +336,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             return null;
         }
 
-        var system = SystemDirectories.Current;
-
-        var why = ConfiguredFolder.WhyNotOwned(repository, Environment, system, TempRoots.Resolve(Environment, system).AccountFolders)
+        var why = ConfiguredFolder.WhyNotOwned(repository, Environment, _system, TempRoots.Resolve(Environment, _system).AccountFolders)
             ?? (LongPath.DirectoryMayExist(repository) ? MavenRepositoryEvidence.WhyNotARepository(repository) : null);
 
         return why is null

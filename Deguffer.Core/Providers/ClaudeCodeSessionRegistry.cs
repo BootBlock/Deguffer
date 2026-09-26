@@ -93,16 +93,22 @@ public sealed partial class ClaudeCodeSessionRegistry
 
     private readonly IUserEnvironment _environment;
     private readonly IProcessInspector _inspector;
+    private readonly ISystemDirectories _system;
 
     private ClaudeCodeSessionList? _list;
 
-    public ClaudeCodeSessionRegistry(IUserEnvironment environment, IProcessInspector inspector)
+    /// <param name="system">
+    /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
+    /// be or hold. The machine's own by default.
+    /// </param>
+    public ClaudeCodeSessionRegistry(IUserEnvironment environment, IProcessInspector inspector, ISystemDirectories? system = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(inspector);
 
         _environment = environment;
         _inspector = inspector;
+        _system = system ?? SystemDirectories.Current;
     }
 
     /// <summary>
@@ -123,7 +129,7 @@ public sealed partial class ClaudeCodeSessionRegistry
     /// </summary>
     public ClaudeCodeSessionList ReadAfresh(CancellationToken ct = default)
     {
-        if (ClaudeCodeHome.Resolve(_environment) is not { } home)
+        if (ClaudeCodeHome.Resolve(_environment, _system) is not { } home)
         {
             return Unreadable;
         }

@@ -92,14 +92,20 @@ public sealed class ClaudeCodeProjectsDiscovery
     private static readonly IReadOnlySet<string> NoTranscripts = new HashSet<string>();
 
     private readonly IUserEnvironment _environment;
+    private readonly ISystemDirectories _system;
 
     private ClaudeCodeProjects? _projects;
 
-    public ClaudeCodeProjectsDiscovery(IUserEnvironment environment)
+    /// <param name="system">
+    /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
+    /// be or hold. The machine's own by default.
+    /// </param>
+    public ClaudeCodeProjectsDiscovery(IUserEnvironment environment, ISystemDirectories? system = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
         _environment = environment;
+        _system = system ?? SystemDirectories.Current;
     }
 
     /// <summary>
@@ -113,7 +119,7 @@ public sealed class ClaudeCodeProjectsDiscovery
 
     private ClaudeCodeProjects Walk(CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(_environment) is not { } home)
+        if (ClaudeCodeHome.Resolve(_environment, _system) is not { } home)
         {
             return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: false);
         }
