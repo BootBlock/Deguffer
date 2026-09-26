@@ -111,6 +111,19 @@ public sealed class MemoryActionPolicy
             ?? Windows(facts);
     }
 
+    /// <summary>
+    /// The verdict where Windows would not answer the questions <see cref="For"/> asks, and the
+    /// policy could not be run at all.
+    ///
+    /// <para>A refusal, as every other unanswered fact is: a program nobody could establish anything
+    /// about is not one to ask. A verdict rather than a bare sentence, so it reaches the press in the
+    /// same shape as every row of the table, and a press answers with it rather than finding no
+    /// verdict at all.</para>
+    /// </summary>
+    public static readonly MemoryVerdict Unanswered = MemoryVerdict.Refuse(
+        "Windows would not answer what Deguffer has to know before it asks a program to close, so it "
+        + "will not ask this one.");
+
     private const string Unidentified =
         "Deguffer could not read when this process was created, so it cannot tell it from a later "
         + "program holding the same identifier, and it will not act on it.";

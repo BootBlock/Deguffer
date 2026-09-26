@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Memory.Acting;
 
@@ -15,9 +16,10 @@ namespace Deguffer.App.ViewModels;
 /// There is one verb here and it does not grow a second: no terminate, no bulk close, and no
 /// preference that adds either.</para>
 ///
-/// <para>It decides nothing. What may be closed is <see cref="MemoryActionPolicy"/>'s, what the user
-/// is told is <see cref="MemoryClosePrompt"/>'s, and what happened is <see cref="CloseReport"/>'s —
-/// all in Core, all provable without a WinUI host.</para>
+/// <para>It decides nothing. What a pick is and when it is dropped is <see cref="MemoryPick"/>'s,
+/// what may be closed is <see cref="MemoryActionPolicy"/>'s, what the user is told is
+/// <see cref="MemoryClosePrompt"/>'s, and what happened is <see cref="CloseOutcome"/>'s — all in
+/// Core, all provable without a WinUI host. What is here is the order they happen in.</para>
 /// </summary>
 public sealed partial class MemorySelection : ObservableObject
 {
@@ -30,29 +32,13 @@ public sealed partial class MemorySelection : ObservableObject
     /// </summary>
     private const string Asking = "Deguffer is asking Windows about this program.";
 
-    /// <summary>
-    /// What the page says once Windows has refused to answer what §7.2.1 decides from.
-    ///
-    /// <para>A verdict rather than a bare sentence, for the reason
-    /// <see cref="ExploreActions.Failed"/> is one: it is the selection's answer, so it has to reach
-    /// the button's own path as an answer rather than leave the selection with no verdict at
-    /// all.</para>
-    /// </summary>
-    private static readonly MemoryVerdict Unanswered = MemoryVerdict.Refuse(
-        "Windows would not answer what Deguffer has to know before it asks a program to close, so it "
-        + "will not ask this one.");
-
     private readonly MemoryActions _actions;
+    private readonly CrashLog _faults;
 
+    /// <summary>The tree on screen, which the next pick is a node of.</summary>
     private MemoryTree? _tree;
-    private int? _node;
 
-    /// <summary>
-    /// The process the selection is about, and the reading it was picked from, kept together because
-    /// §7.2.1 identifies a process by both: the identifier alone belongs to whatever holds it now.
-    /// </summary>
-    private ProcessMemory? _target;
-    private MemorySnapshot? _pickedFrom;
+    private MemoryPick? _pick;
 
     private MemoryVerdict? _verdict;
 
@@ -85,11 +71,17 @@ public sealed partial class MemorySelection : ObservableObject
 
     private bool _closing;
 
-    public MemorySelection(MemoryActions actions)
+    /// <param name="faults">
+    /// Where a question Windows would not answer is recorded, beside the sentence the page shows:
+    /// the sentence says it went unanswered, and the log says which call failed and how.
+    /// </param>
+    public MemorySelection(MemoryActions actions, CrashLog faults)
     {
         ArgumentNullException.ThrowIfNull(actions);
+        ArgumentNullException.ThrowIfNull(faults);
 
         _actions = actions;
+        _faults = faults;
 
         Report.Dismissed += (_, _) =>
         {
@@ -111,15 +103,13 @@ public sealed partial class MemorySelection : ObservableObject
     /// its own copy and drops it whenever the rows are rewritten, which on this page is every couple
     /// of seconds, so something has to say which of the two copies is right.</para>
     /// </summary>
-    public int? Node => _node;
+    public int? Node => _pick?.Node;
 
     /// <summary>What is selected, in words. The only thing that names it.</summary>
-    public string Label =>
-        _tree is { } tree && _node is { } node ? $"Selected: {MemoryText.Name(tree, node)}" : string.Empty;
+    public string Label => _pick is { } pick ? $"Selected: {MemoryText.Name(pick.Tree, pick.Node)}" : string.Empty;
 
     /// <summary>How much it holds, said apart from what it is, so a long name cannot push the figure off the line.</summary>
-    public string Figures =>
-        _tree is { } tree && _node is { } node ? MemoryText.Figures(tree, node) : string.Empty;
+    public string Figures => _pick is { } pick ? MemoryText.Figures(pick.Tree, pick.Node) : string.Empty;
 
     /// <summary>
     /// What Deguffer will do about the selection, or why it will not.
@@ -132,53 +122,38 @@ public sealed partial class MemorySelection : ObservableObject
 
     public bool HasNote => Note.Length > 0;
 
-    public bool HasSelection => _node is not null;
-
-    /// <summary>Point at a tree and select nothing. Called on every navigation: a selection in one part is not one in the next.</summary>
-    public void Show(MemoryTree? tree)
-    {
-        _tree = tree;
-        Select(null);
-    }
+    public bool HasSelection => _pick is not null;
 
     /// <summary>
-    /// Move to the reading that replaces the one on screen, keeping the selection where it still names
-    /// the same process.
+    /// Move to the tree now on screen, keeping the pick where <see cref="MemoryPick.After"/> carries
+    /// it and dropping it where it does not: a reading carries it, and a navigation drops it.
     ///
-    /// <para>By <see cref="MemoryPlace"/>'s rule, which is identifier and creation time: every reading
-    /// renumbers the nodes, and a number carried across would point at whatever now sits there. A
-    /// selection that does not carry is dropped rather than replaced — the program exited, and putting
-    /// another in its place would be Deguffer choosing the target.</para>
-    ///
-    /// <para>Nothing is asked of Windows here. The verdict was read when the user picked the program,
-    /// and reading it again twice a second would open that process thirty times a minute for an answer
-    /// nobody asked for (§7.2.1).</para>
+    /// <para>Nothing is asked of Windows for a pick that carries. The verdict was read when the user
+    /// picked the program, and reading it again twice a second would open that process thirty times a
+    /// minute for an answer nobody asked for (§7.2.1). So a carried pick keeps its verdict, and a
+    /// verdict still on its way lands on it.</para>
     /// </summary>
-    public void Carry(MemoryTree tree)
+    public void Follow(MemoryTree tree, MemoryViewChange change)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        // Read against the tree the number belongs to, before that becomes the arriving one.
-        var carried = _node is { } node ? MemoryPlace.TryCarry(_tree, node, tree) : null;
-        var had = _node;
-
         _tree = tree;
 
-        if (had is null)
+        if (_pick is null)
         {
-            // Nothing was picked, and a reading arriving does not pick anything (§7.2). Said by
+            // Nothing was picked, and a tree arriving does not pick anything (§7.2). Said by
             // returning rather than by restating: every reading would otherwise announce a selection
             // that has not changed, twice a second, for the life of the page.
             return;
         }
 
-        if (carried is null)
+        if (_pick.After(change, tree) is not { } carried)
         {
             Select(null);
             return;
         }
 
-        _node = carried;
+        _pick = carried;
 
         Restate();
     }
@@ -196,33 +171,21 @@ public sealed partial class MemorySelection : ObservableObject
 
         _asking?.Cancel();
 
-        _node = _tree is { } tree && node is { } picked && picked >= 0 && picked < tree.NodeCount
-            ? picked
-            : null;
-
-        _verdict = null;
-        _target = null;
-        _pickedFrom = null;
+        _pick = MemoryPick.Of(_tree, node);
         _deciding = null;
-
-        if (_tree is { } current && _node is { } chosen)
-        {
-            _target = MemoryTarget.Of(current, chosen);
-            _pickedFrom = current.Snapshot;
-        }
 
         // A sentence rather than an empty selection, for the reason every refusal is one
         // (§7.2.1): a reader who picked a shape and found nothing to press learns nothing about
-        // why. The words are Core's, as every other refusal's are.
-        _verdict = _target is null && _node is not null ? MemoryTarget.NotAProgram : null;
+        // why.
+        _verdict = _pick?.Settled;
 
-        Note = _target is not null ? Asking : _verdict?.Reason ?? string.Empty;
+        Note = _pick is { Target: not null } ? Asking : _verdict?.Reason ?? string.Empty;
 
         Restate();
 
-        if (_target is { } about && _pickedFrom is { } from)
+        if (_pick is { Target: { } about } pick)
         {
-            _deciding = AskAsync(about, from, _generation);
+            _deciding = AskAsync(about, pick.PickedFrom, _generation);
         }
     }
 
@@ -280,16 +243,9 @@ public sealed partial class MemorySelection : ObservableObject
 
     private async Task AskAndCloseAsync()
     {
-        // One question — is there a program here, and may it be asked? A verdict is only allowed for
-        // a program picked out of a reading, so the three terms are three spellings of one state
-        // rather than a guard against something that cannot happen.
-        if (_verdict is not { IsAllowed: true } allowed
-            || _target is not { } target
-            || _pickedFrom is not { } snapshot)
+        if (_pick is not { } pick || _verdict is not { } verdict || pick.ToClose(verdict) is not { } target)
         {
-            // The reason is already under the selection. Saying it here as well is what answers the
-            // press: a button that appears to do nothing teaches nothing at all.
-            Report.Say(_verdict?.Reason ?? Unanswered.Reason);
+            Show(CloseOutcome.Refused(_verdict ?? MemoryActionPolicy.Unanswered));
             return;
         }
 
@@ -312,31 +268,13 @@ public sealed partial class MemorySelection : ObservableObject
             });
 
             var attempt = await _actions.CloseAsync(
-                target, allowed.Windows.Count, snapshot.Services.Listing, watching, watch.Token);
+                target, verdict.Windows.Count, pick.PickedFrom.Services.Listing, watching, watch.Token);
 
-            if (_dismissed)
+            // A report the user took down while the close went on stays down: putting the answer back
+            // would undo the dismissal.
+            if (!_dismissed)
             {
-                return;
-            }
-
-            switch (attempt)
-            {
-                case null:
-                    // Declined. Saying so beats leaving the previous sentence standing, which
-                    // somebody who has just dismissed a dialog reads as the outcome of it.
-                    Report.Say($"{target.Named} was not asked to close. Nothing was sent.");
-                    break;
-
-                case { Report: { } done }:
-                    Report.Show(done);
-                    break;
-
-                case { Verdict: var refused }:
-                    // The second decision, made with the handle held. The machine moved between the
-                    // selection and the confirmation, so what is on screen is out of date and this is
-                    // the answer.
-                    Report.Say(refused.Reason);
-                    break;
+                Show(CloseOutcome.Of(target, attempt));
             }
         }
         catch (OperationCanceledException)
@@ -346,9 +284,7 @@ public sealed partial class MemorySelection : ObservableObject
         }
         catch (Win32Exception ex)
         {
-            // Windows would not answer one of the calls a close is decided from. Nothing had been
-            // posted: everything that can fail this way happens before the first message.
-            Report.Say($"Windows would not answer: {ex.Message} Nothing was asked to close.");
+            Show(CloseOutcome.Unanswered(ex));
         }
         finally
         {
@@ -394,17 +330,14 @@ public sealed partial class MemorySelection : ObservableObject
         }
         catch (Win32Exception ex)
         {
-            // Recorded as well as shown: the sentence says the question went unanswered, and the log
-            // says which call failed and how.
-            App.Faults.Record("Deciding whether Memory may close a program", ex);
+            _faults.Record("Deciding whether Memory may close a program", ex);
 
             if (generation != _generation)
             {
                 return;
             }
 
-            Note = "Windows would not answer what Deguffer has to know before it asks a program to "
-                   + "close, so it will not ask this one.";
+            Note = MemoryActionPolicy.Unanswered.Reason;
 
             Restate();
         }
@@ -416,6 +349,18 @@ public sealed partial class MemorySelection : ObservableObject
             }
 
             asking.Dispose();
+        }
+    }
+
+    private void Show(CloseOutcome outcome)
+    {
+        if (outcome.Report is { } done)
+        {
+            Report.Show(done);
+        }
+        else
+        {
+            Report.Say(outcome.Statement);
         }
     }
 
@@ -456,5 +401,5 @@ public sealed partial class MemorySelection : ObservableObject
     /// Whether a close may be offered at all. <b>One close at a time</b> (§7.2.1): while a watch is
     /// open there is no second one, so that one report is about one action.
     /// </summary>
-    private bool CanClose() => _node is not null && !_closing && !Report.IsWatching;
+    private bool CanClose() => _pick is not null && !_closing && !Report.IsWatching;
 }

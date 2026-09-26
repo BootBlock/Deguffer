@@ -73,7 +73,8 @@ public sealed partial class MemoryPage : Page
             // this constructor would be the one from before a theme change or a reparent.
             new MemorySelection(
                 MemoryActions.ForThisMachine(
-                    () => new ContentDialogMemoryConfirmation(XamlRoot, ActualTheme))));
+                    () => new ContentDialogMemoryConfirmation(XamlRoot, ActualTheme)),
+                App.Faults));
 
         ViewModel.ViewChanged += (_, _) =>
         {
