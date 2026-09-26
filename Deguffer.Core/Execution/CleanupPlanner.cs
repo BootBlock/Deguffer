@@ -186,6 +186,7 @@ public sealed class CleanupPlanner
                 preferences: preferences,
                 tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers]),
             installerDownloads,
+            new DeliveryOptimizationProvider(environment),
             new PreviousWindowsInstallationProvider(environment),
             new WindowsUpdateLeftoverProvider(environment),
             new CrashDumpProvider(environment),

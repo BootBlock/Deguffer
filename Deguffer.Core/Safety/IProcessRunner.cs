@@ -8,11 +8,25 @@ public sealed record CommandOutcome(int ExitCode, string StandardOutput, string 
 {
     public bool Succeeded => ExitCode == 0;
 
-    /// <summary>Whatever the tool said, preferring stdout — for surfacing in the result.</summary>
-    public string Message =>
-        !string.IsNullOrWhiteSpace(StandardOutput) ? StandardOutput.Trim()
-        : !string.IsNullOrWhiteSpace(StandardError) ? StandardError.Trim()
-        : $"exit code {ExitCode}";
+    /// <summary>
+    /// Whatever the tool said, for surfacing in the result: stderr first where the command failed,
+    /// and stdout first where it did not, each falling back to the other.
+    ///
+    /// <para>A failed command's reason is on stderr, and its stdout is often a progress line written
+    /// before it failed. <c>Delete-DeliveryOptimizationCache</c> writes "Deleting..." and then throws,
+    /// so preferring stdout reported the progress line and hid why nothing was cleared.</para>
+    /// </summary>
+    public string Message
+    {
+        get
+        {
+            var (first, second) = Succeeded ? (StandardOutput, StandardError) : (StandardError, StandardOutput);
+
+            return !string.IsNullOrWhiteSpace(first) ? first.Trim()
+                : !string.IsNullOrWhiteSpace(second) ? second.Trim()
+                : $"exit code {ExitCode}";
+        }
+    }
 }
 
 /// <summary>

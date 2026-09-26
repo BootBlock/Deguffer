@@ -4434,6 +4434,65 @@ acts.
 
 ---
 
+## Delivery Optimization cache
+
+**Tier 1 — regenerable cache.** Offered and pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Wherever Windows keeps it, ordinarily `C:\Windows\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization`; older Windows builds used `C:\Windows\SoftwareDistribution\DeliveryOptimization`, and a policy can move it to another drive |
+| **Method** | `Delete-DeliveryOptimizationCache -Force`, Windows' own command, sized by `Get-DeliveryOptimizationPerfSnap` |
+| **Typical size** | Nothing at all on a machine set to download from Microsoft only; up to a fifth of the free space on the drive where peer sharing is on |
+
+### What it is
+
+Delivery Optimization is the download service behind Windows Update and the Microsoft Store. It keeps
+a copy of what it downloads, so it can pass updates and apps on to other PCs on your network, or on
+the internet if that is switched on, instead of each of them downloading the same files again.
+
+Windows looks after the size itself. By default it keeps a file for three days and lets the whole
+cache grow to a fifth of the free space on the drive, and it clears the cache as space runs short. On
+a machine set to download from Microsoft only, it keeps nothing to share at all.
+
+### What Deguffer does
+
+It asks Windows how much the cache holds, and offers to clear it only when that figure is more than
+nothing. The cache is in a profile your account cannot look inside, so Windows' own figure is the
+only one there is, and it is exact. A zero is Windows saying the cache is empty, and the row says
+*Already clear*. Where Windows will not answer, Deguffer offers nothing rather than guessing.
+
+To clear it, Deguffer runs Windows' own `Delete-DeliveryOptimizationCache` and never deletes a file
+itself. After the run it asks Windows for the figure again, and reports the difference as what was
+freed.
+
+**`-IncludePinnedFiles` is never used.** A pinned file is one Delivery Optimization was told to keep,
+and Deguffer does not overrule that. Such a file stays, so the clean can free a little less than the
+figure shown.
+
+### What is protected
+
+`C:\Windows\SoftwareDistribution`, Windows Update's own folder, and the `DataStore` inside it, which
+holds the history of the updates installed on this machine. The command reaches neither. Deguffer
+asserts after the run that both are still there and have not been emptied.
+
+Delivery Optimization's own folder must still be there after the run too, although what is inside it
+is the command's to clear. Windows lets only an administrator look at that folder, so on an ordinary
+scan the row says that the run cannot confirm it.
+
+### What it costs you
+
+If Windows needs an update or an app it had kept here, it downloads it again from Microsoft. Other
+PCs on your network that would have fetched it from this one download it themselves instead. Nothing
+on this machine stops working, and Windows starts filling the cache again with the next download.
+
+### Why Tier 1
+
+Everything in it is a copy of something Windows downloaded and will download again on demand, and it
+is kept for other machines rather than for this one. Clearing it costs at most a download that may
+never be needed, and nothing is lost.
+
+---
+
 ## Previous Windows installation
 
 **Tier 2 — regenerable with cost.** Offered, **never pre-selected**.

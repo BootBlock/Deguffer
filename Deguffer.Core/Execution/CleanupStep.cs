@@ -261,6 +261,16 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// </summary>
     public ScanSize? MeasuredBefore { get; init; }
 
+    /// <summary>
+    /// Where the tool itself states what the command clears, the run asks it again after the command
+    /// rather than measuring <see cref="MeasuredPaths"/> from the disk. Null for every command whose
+    /// figure is Deguffer's own measurement of those paths. See <see cref="IToolMeasurement"/>.
+    ///
+    /// <para>A step carrying one lists no <see cref="MeasuredPaths"/> unless it can name where the tool
+    /// works, because those paths are also what §5.6 reads as where the tool was sent.</para>
+    /// </summary>
+    public IToolMeasurement? MeasuredBy { get; init; }
+
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 
     /// <summary>

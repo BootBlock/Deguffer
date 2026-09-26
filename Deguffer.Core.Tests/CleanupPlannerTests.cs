@@ -413,7 +413,7 @@ public sealed class CleanupPlannerTests
                 "squirrel-staging",
                 "platformio", "playwright", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
-                "temp-installer-downloads", "previous-windows-installation", "windows-update-leftovers",
+                "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
                 "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
                 "claude-code-file-history",
