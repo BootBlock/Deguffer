@@ -37,8 +37,25 @@ public static class UiThread
     private sealed class SingleThreadContext : SynchronizationContext, IDisposable
     {
         private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _queue = [];
+        private readonly Lock _gate = new();
+        private bool _closed;
 
-        public override void Post(SendOrPostCallback d, object? state) => _queue.Add((d, state));
+        /// <summary>
+        /// A post that arrives once the test has finished is not run, because the thread it belongs to
+        /// has moved on. It comes from work the test left behind, typically after an assertion failed
+        /// part-way, and throwing here would throw on a thread-pool thread and take the whole test
+        /// host down with it, losing every result rather than reporting the one failure.
+        /// </summary>
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_gate)
+            {
+                if (!_closed)
+                {
+                    _queue.Add((d, state));
+                }
+            }
+        }
 
         /// <summary>
         /// Refused rather than run inline: nothing the view-models do sends, and running a send on the
@@ -47,7 +64,14 @@ public static class UiThread
         public override void Send(SendOrPostCallback d, object? state) =>
             throw new NotSupportedException("A view-model under test sent to the UI thread rather than posting.");
 
-        public void Complete() => _queue.CompleteAdding();
+        public void Complete()
+        {
+            lock (_gate)
+            {
+                _closed = true;
+                _queue.CompleteAdding();
+            }
+        }
 
         public void Pump()
         {
@@ -57,6 +81,13 @@ public static class UiThread
             }
         }
 
-        public void Dispose() => _queue.Dispose();
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _closed = true;
+                _queue.Dispose();
+            }
+        }
     }
 }

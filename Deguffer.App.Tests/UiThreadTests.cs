@@ -29,6 +29,26 @@ public class UiThreadTests
         Assert.All(seen, entry => Assert.Equal(thread, entry.Thread));
     }
 
+    /// <summary>
+    /// Work a failed test left running posts after the test has ended. Throwing there throws on a
+    /// thread-pool thread, which ends the test host and every result with it.
+    /// </summary>
+    [Fact]
+    public void APostAfterTheTestHasEndedIsNotRunAndDoesNotThrow()
+    {
+        SynchronizationContext? captured = null;
+        UiThread.Run(() =>
+        {
+            captured = SynchronizationContext.Current;
+            return Task.CompletedTask;
+        });
+
+        var ran = false;
+        captured!.Post(_ => ran = true, null);
+
+        Assert.False(ran);
+    }
+
     [Fact]
     public void AFailureInTheBodyReachesTheTest()
     {
