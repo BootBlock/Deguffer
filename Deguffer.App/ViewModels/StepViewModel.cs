@@ -46,7 +46,7 @@ public sealed partial class StepViewModel : ObservableObject
     public partial bool IsKept { get; set; }
 
     /// <summary>What the item is apart from its path, where its provider can say. See <see cref="ItemIdentity"/>.</summary>
-    public ItemIdentity? Identity => (Step as DeleteStep)?.Identity;
+    public ItemIdentity? Identity => Step.Identity;
 
     /// <summary>Whether this item can go on the keep list at all, which needs an identity to match it by.</summary>
     public bool CanBeKept => Identity is not null;

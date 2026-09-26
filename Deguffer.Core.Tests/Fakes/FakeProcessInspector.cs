@@ -33,6 +33,16 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         return this;
     }
 
+    /// <summary>
+    /// Declare a program closed from now on, so a test can close one between the preview and the
+    /// clean and show the clean asking again.
+    /// </summary>
+    public FakeProcessInspector WithoutRunning(string name)
+    {
+        _running.RemoveAll(running => running.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return this;
+    }
+
     public IReadOnlyList<string> FindRunning(IEnumerable<string> names) =>
         [.. names.Intersect(_running, StringComparer.OrdinalIgnoreCase)];
 

@@ -67,4 +67,23 @@ public class ItemColumnsTests
 
         Assert.Equal(["api"], ItemColumns.Of([item]).ValuesOf(item));
     }
+
+    /// <summary>
+    /// An item a tool's own command removes is listed as a deleted one is. A column read from
+    /// deletions alone would leave LM Studio's runtimes with no version beside them.
+    /// </summary>
+    [Fact]
+    public void AnItemRemovedByCommandHasItsColumnsToo()
+    {
+        var runtime = new RunCommandStep("lms.exe", "runtime remove --yes llama.cpp-win-x86_64-avx2@2.13.0", "Remove a runtime")
+        {
+            Removes = @"C:\Users\testuser\.lmstudio\extensions\backends\llama.cpp-win-x86_64-avx2-2.13.0",
+            Facets = [new ItemFacet("Version", "2.13.0")],
+        };
+
+        var columns = ItemColumns.Of([runtime]);
+
+        Assert.Equal(["Version"], columns.Labels);
+        Assert.Equal(["2.13.0"], columns.ValuesOf(runtime));
+    }
 }

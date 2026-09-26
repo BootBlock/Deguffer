@@ -196,6 +196,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
+        : parameter == typeof(TimeProvider) ? new ManualTimeProvider()
 
         // Never the real one: it would empty the Recycle Bin of whoever ran the suite.
         : parameter == typeof(IRecycleBinEmptier) ? new FakeRecycleBinEmptier()

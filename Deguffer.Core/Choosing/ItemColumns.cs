@@ -44,12 +44,7 @@ public sealed class ItemColumns
 
         foreach (var step in steps)
         {
-            if (step is not DeleteStep { Facets: var facets })
-            {
-                continue;
-            }
-
-            foreach (var facet in facets)
+            foreach (var facet in step.Facets)
             {
                 if (seen.Add(facet.Label))
                 {
@@ -76,14 +71,11 @@ public sealed class ItemColumns
 
         var values = new string?[Labels.Count];
 
-        if (step is DeleteStep { Facets: var facets })
+        foreach (var facet in step.Facets)
         {
-            foreach (var facet in facets)
+            if (_positions.TryGetValue(facet.Label, out var position))
             {
-                if (_positions.TryGetValue(facet.Label, out var position))
-                {
-                    values[position] ??= facet.Value;
-                }
+                values[position] ??= facet.Value;
             }
         }
 

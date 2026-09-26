@@ -87,8 +87,7 @@ public sealed class ItemFilter
             return true;
         }
 
-        return step is DeleteStep deletion
-            && (Contains(deletion.Group, word) || deletion.Facets.Any(facet => Contains(facet.Value, word)));
+        return Contains(step.Group, word) || step.Facets.Any(facet => Contains(facet.Value, word));
     }
 
     private static bool Contains(string? text, string word) =>

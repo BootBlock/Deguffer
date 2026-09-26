@@ -38,6 +38,13 @@ namespace Deguffer.Core.Execution;
 /// file when it chooses to and nothing Deguffer can read says when. A figure for what was freed would
 /// be a claim nobody checked.
 /// </param>
+/// <param name="BytesScheduled">
+/// What a tool marked to remove itself later, for a command whose tool deletes at its next start
+/// rather than at once. See <see cref="ScheduledRemoval"/>. Apart from
+/// <paramref name="BytesReclaimed"/>, which stays zero for that step, because nothing has gone yet,
+/// and apart from <paramref name="BytesRequested"/>, because the user can say when this one happens:
+/// it happens when they next open the program.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -49,7 +56,8 @@ public sealed record StepOutcome(
     long EntriesRemoved = 0,
     FolderRefusals RefusedFolders = default,
     int MailStores = 0,
-    long BytesRequested = 0);
+    long BytesRequested = 0,
+    long BytesScheduled = 0);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -68,6 +76,9 @@ public sealed record CleanupResult
 
     /// <summary>What sync apps were asked to release, across every step. See <see cref="StepOutcome.BytesRequested"/>.</summary>
     public long BytesRequested => Steps.Sum(s => s.BytesRequested);
+
+    /// <summary>What tools marked to remove at their next start, across every step. See <see cref="StepOutcome.BytesScheduled"/>.</summary>
+    public long BytesScheduled => Steps.Sum(s => s.BytesScheduled);
 
     /// <summary>Entries the run took, across every step. See <see cref="StepOutcome.EntriesRemoved"/>.</summary>
     public long EntriesRemoved => Steps.Sum(s => s.EntriesRemoved);
