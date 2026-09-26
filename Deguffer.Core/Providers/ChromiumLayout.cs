@@ -22,9 +22,9 @@ public enum ChromiumProfileRule
     /// <summary>
     /// Chromium's own names, plus the <c>WV2Profile_&lt;name&gt;</c> directory WebView2 creates for
     /// each named profile a host application asks for. Microsoft documents only that each profile
-    /// gets "a dedicated profile folder", so the prefix is observed rather than documented: it was
-    /// measured across 23 hosts, and the one measured host that uses the feature keeps all of its
-    /// real cache and all of its sign-in state in there, beside an almost empty <c>Default</c>.
+    /// gets "a dedicated profile folder", so the prefix is observed rather than documented. The one
+    /// measured host that uses the feature keeps all of its real cache and all of its sign-in state
+    /// in there, beside an almost empty <c>Default</c>.
     /// </summary>
     WebView2,
 }

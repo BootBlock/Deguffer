@@ -272,6 +272,7 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
         _applications = null;
         _userData = null;
         _toolRoots = null;
+        _liveTrees.Invalidate();
         base.InvalidateCaches();
     }
 
@@ -472,7 +473,9 @@ public sealed class ChromiumCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
-            WasNotExamined = targets.Count == 0 && declined.Count > 0,
+            // A folder held back as in use and a cache behind a link are both something real left
+            // unexamined, so a row with no steps must not read as clear.
+            WasNotExamined = targets.Count == 0 && (declined.Count > 0 || live.Live.Count > 0),
         };
     }
 

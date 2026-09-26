@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -34,14 +35,15 @@ public sealed record ChromiumFolderWalk(IReadOnlyList<ChromiumFolder> Folders, b
 /// could hold such a folder above the depth bound, which is the cost of finding a folder whose
 /// place nobody declares. Three things are never entered:</para>
 /// <list type="bullet">
-/// <item>A link. What it points at was never identified, as for the one-level walk this replaced.
-/// </item>
+/// <item>A link. What it points at was never identified, and <see cref="BoundedFileWalk"/> holds
+/// that rule itself.</item>
 /// <item>A Chromium user-data folder, <c>EBWebView</c> or not. Its children are its own profiles and
 /// state, which <see cref="ChromiumCacheProvider"/> classifies as a whole, so everything in there it
 /// does not recognise is Tier 4 (§5.2). Finding a second folder inside one would let a deletion
 /// reach into a child the first folder's rules declined. Edge keeps a WebView2 folder for its sign-in
 /// inside its own user data, and this is why it stays unreached. A marker Windows would not describe
-/// is treated as a boundary too, since the folder may be one.</item>
+/// is treated as a boundary too, since the folder may be one. A declared host whose folder another
+/// file marks, as Battle.net's <c>LocalPrefs.json</c> does, is named by the caller instead.</item>
 /// <item>The temporary folder. It is not application data, it is the temporary files row's, and it
 /// held 108,379 of the 129,815 directories within six levels of <c>%LOCALAPPDATA%</c> on the
 /// measured workstation.</item>
@@ -66,78 +68,93 @@ public static class ChromiumUserDataWalk
     /// </summary>
     public const int WebView2Depth = 6;
 
-    /// <summary>
-    /// Listing a directory waits on the disk, so the directories at one depth are listed side by side.
-    /// Bounded as <see cref="Scanning.BoundedFileWalk"/> bounds its own (G4).
-    /// </summary>
-    private static readonly int Parallelism = Math.Min(Environment.ProcessorCount * 2, 16);
-
     /// <param name="root">An application-data root.</param>
-    /// <param name="temporaryFolder">The user's temporary folder, which is never entered.</param>
-    public static ChromiumFolderWalk Under(string root, string temporaryFolder, CancellationToken ct = default)
+    /// <param name="notEntered">
+    /// Folders that are never entered or identified: the user's temporary folder, and each declared
+    /// host's own folder, which the caller classifies as a whole.
+    /// </param>
+    public static ChromiumFolderWalk Under(string root, IReadOnlyList<string> notEntered, CancellationToken ct = default)
     {
-        var top = ChildDirectories.Under(root);
-
-        if (top.Unreadable)
+        // Absent is a complete answer, and the walk below would report it as a refusal.
+        if (LongPath.ProbeDirectory(root) is PathPresence.Absent)
         {
-            return new ChromiumFolderWalk([], RootUnreadable: true);
+            return new ChromiumFolderWalk([], RootUnreadable: false);
         }
 
         // The short form is what Windows puts in TEMP on a profile with a long folder name, and the
         // listing reports long names, so both sides are compared unaliased.
-        var temporary = Path.TrimEndingDirectorySeparator(LongPath.Unaliased(temporaryFolder));
+        var excluded = notEntered
+            .Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var found = new ConcurrentBag<ChromiumFolder>();
-        var options = new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct };
+        var rootUnreadable = false;
 
-        IReadOnlyList<string> level = Outside(top.Directories, temporary);
-
-        for (var depth = 1; level.Count > 0; depth++)
-        {
-            var next = new ConcurrentBag<string>();
-            var atDepth = depth;
-
-            Parallel.ForEach(level, options, path =>
+        BoundedFileWalk.Visit<(string Path, int Depth)>(
+            LongPath.Extended(root),
+            (root, 0),
+            (directory, contents, descend) =>
             {
-                var webView2 = Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase);
-                var marker = Path.Combine(path, ChromiumLayout.Browser.IdentifyingFile);
-
-                if (LongPath.FileMayExist(marker))
+                if (directory.Depth == 0)
                 {
-                    // Identified only on the file itself, since a refusal is no evidence of a folder
-                    // that holds it. Either way nothing below is entered.
-                    if ((atDepth == 1 || webView2) && LongPath.FileExists(marker))
+                    rootUnreadable = contents.WasRefused;
+                }
+                else if (!Enters(directory.Path, directory.Depth, contents))
+                {
+                    return;
+                }
+
+                foreach (var child in contents.Entries.OfType<DirectoryInfo>())
+                {
+                    var path = LongPath.Display(child.FullName);
+
+                    if (!excluded.Contains(Path.TrimEndingDirectorySeparator(path)))
                     {
-                        found.Add(new ChromiumFolder(path, webView2));
+                        descend(child, (path, directory.Depth + 1));
+                    }
+                }
+
+                bool Enters(string path, int depth, DirectoryContents listed)
+                {
+                    var webView2 = Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase);
+
+                    var marker = Marked(path, listed);
+
+                    if (marker is not PathPresence.Absent)
+                    {
+                        // Identified only on the file itself, since a refusal is no evidence of a
+                        // folder that holds it. Either way nothing below is entered.
+                        if ((depth == 1 || webView2) && marker is PathPresence.Present)
+                        {
+                            found.Add(new ChromiumFolder(path, webView2));
+                        }
+
+                        return false;
                     }
 
-                    return;
+                    // An EBWebView without the marker has nothing inside that could be looked for.
+                    return !webView2 && depth < WebView2Depth;
                 }
-
-                // An EBWebView without the marker has nothing inside that could be looked for.
-                if (webView2 || atDepth == WebView2Depth)
-                {
-                    return;
-                }
-
-                foreach (var child in Outside(ChildDirectories.Under(path).Directories, temporary))
-                {
-                    next.Add(child);
-                }
-            });
-
-            level = [.. next];
-        }
+            },
+            static () => { },
+            ct);
 
         return new ChromiumFolderWalk(
-            [.. found.OrderBy(folder => folder.Path, StringComparer.OrdinalIgnoreCase)],
-            RootUnreadable: false);
+            rootUnreadable ? [] : [.. found.OrderBy(folder => folder.Path, StringComparer.OrdinalIgnoreCase)],
+            rootUnreadable);
     }
 
-    /// <summary>The directories as display paths, less the temporary folder.</summary>
-    private static List<string> Outside(IReadOnlyList<DirectoryInfo> directories, string temporary) =>
-    [
-        .. directories
-            .Select(directory => LongPath.Display(directory.FullName))
-            .Where(path => !Path.TrimEndingDirectorySeparator(path).Equals(temporary, StringComparison.OrdinalIgnoreCase)),
-    ];
+    /// <summary>
+    /// Whether <paramref name="directory"/> holds <c>Local State</c>, read from the listing the walk
+    /// already made. A directory that refused the listing is probed by name instead, because a full
+    /// path can resolve where the directory cannot be listed, and a user-data folder like that is
+    /// still one.
+    /// </summary>
+    private static PathPresence Marked(string directory, DirectoryContents listed) => listed.WasRefused
+        ? LongPath.ProbeFile(Path.Combine(directory, ChromiumLayout.Browser.IdentifyingFile))
+        : listed.Entries.OfType<FileInfo>().Concat(listed.ReparseFiles).Any(IsMarker)
+            ? PathPresence.Present
+            : PathPresence.Absent;
+
+    private static bool IsMarker(FileInfo file) =>
+        file.Name.Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase);
 }

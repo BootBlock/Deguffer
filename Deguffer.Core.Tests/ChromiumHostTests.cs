@@ -8,7 +8,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The declared hosts: the browsers, which keep their user-data folder below a vendor directory and
-/// a product directory where the one-level walk never looks, and the Battle.net launcher, whose
+/// a product directory where the walk identifies only a WebView2 folder, and the Battle.net launcher, whose
 /// framework marks its folder and each partition with <c>LocalPrefs.json</c> instead. What may go
 /// inside a folder is unchanged, so these establish that a declared place is reached, that it is
 /// identified by its own marker, and that a link on the way there is never looked through.

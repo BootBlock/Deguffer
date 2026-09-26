@@ -825,9 +825,9 @@ classifies the redirection and then applies the same per-app rules it would have
 unpackaged. It never treats `LocalCache` as a licence.
 
 **Correction (issue #61):** MSIX was not the main reason packaged applications' Chromium caches went
-unseen. A later survey found 23 WebView2 hosts on one machine, and only 6 were under `Packages`. The
-other 17 were unpackaged applications keeping their `EBWebView` folder a level or more deeper than
-the scan looked. The blind spot was nesting depth, and MSIX is one of several things that produce it.
+unseen. The survey behind issue #61 found 23 WebView2 hosts on one machine, and only 6 were under
+`Packages`. The other 17 were unpackaged applications keeping their `EBWebView` folder a level or
+more deeper than the scan looked. A later count, taken for the fix, found 19, with 5 under `Packages`. The blind spot was nesting depth, and MSIX is one of several things that produce it.
 `ChromiumUserDataWalk` now finds an `EBWebView` folder up to six levels down, packaged or not. A
 packaged Electron application, whose folder has no fixed name, is still unreached.
 

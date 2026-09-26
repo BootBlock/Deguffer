@@ -169,12 +169,15 @@ public sealed class ChromiumWebView2Tests : IDisposable
     /// <summary>
     /// §5.2. A Chromium user-data folder is classified as a whole, so a WebView2 folder inside one is
     /// inside a child that folder's rules left alone. Edge keeps one for its sign-in in exactly that
-    /// place, and the walk does not go in to find it.
+    /// place, and the walk does not go in to find it. Edge's folder is declared as well, so the
+    /// second case is a folder nothing declares, which only its <c>Local State</c> stops the walk at.
     /// </summary>
-    [Fact]
-    public async Task NeverFindsAWebView2FolderInsideAnotherUserDataFolder()
+    [Theory]
+    [InlineData(@"Microsoft\Edge\User Data")]
+    [InlineData(@"Vendor\Chat\User Data")]
+    public async Task NeverFindsAWebView2FolderInsideAnotherUserDataFolder(string outer)
     {
-        var edge = Path.Combine(_environment.LocalAppData, "Microsoft", "Edge", "User Data");
+        var edge = Path.Combine(_environment.LocalAppData, outer);
         Directory.CreateDirectory(edge);
         File.WriteAllText(Path.Combine(edge, "Local State"), "{}");
 
@@ -189,6 +192,49 @@ public sealed class ChromiumWebView2Tests : IDisposable
 
         await provider.ExecuteAsync(plan);
         Assert.True(Directory.Exists(bystander));
+    }
+
+    /// <summary>
+    /// The same boundary at a declared host whose folder another file marks. Battle.net's folder holds
+    /// <c>LocalPrefs.json</c>, not <c>Local State</c>, and a directory in it that is not a partition is
+    /// Tier 4 there, so a WebView2 folder inside that directory is not found either.
+    /// </summary>
+    [Fact]
+    public async Task NeverFindsAWebView2FolderInsideADeclaredHostsFolder()
+    {
+        var browserCaches = Path.Combine(_environment.LocalAppData, "Battle.net", "BrowserCaches");
+        Directory.CreateDirectory(browserCaches);
+        File.WriteAllText(Path.Combine(browserCaches, "LocalPrefs.json"), "{}");
+
+        var nested = CreateWebView2(Path.Combine(browserCaches, "Unrecognised"));
+        var bystander = CreateDirectory(Path.Combine(nested, "Default", "Code Cache"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(provider.Applications(), a => a.Path.Equals(nested, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.TargetedPaths, p => p.StartsWith(nested, StringComparison.OrdinalIgnoreCase));
+
+        await provider.ExecuteAsync(plan);
+        Assert.True(Directory.Exists(bystander));
+    }
+
+    /// <summary>
+    /// A user-data folder that will not be listed is still identified by its marker, and the plan
+    /// says its profiles may be incomplete, as before the walk went deeper.
+    /// </summary>
+    [Fact]
+    public void AFolderThatRefusesTheListingIsStillIdentifiedByItsMarker()
+    {
+        var userData = CreateWebView2(Path.Combine(_environment.LocalAppData, "Vendor"));
+        CreateDirectory(Path.Combine(userData, "GPUCache"));
+
+        using var denied = new DeniedDirectory(userData);
+
+        var application = Assert.Single(new ChromiumUserDataDiscovery(_environment).Discover());
+
+        Assert.Equal(userData, application.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.True(application.ProfilesIncomplete);
     }
 
     /// <summary>
@@ -394,7 +440,7 @@ public sealed class ChromiumWebView2Tests : IDisposable
 
     /// <summary>
     /// A folder whose only cache is held back is still a folder with a cache. The plan must not then
-    /// say that no application keeps one.
+    /// say that no application keeps one, and the row must not read as clear.
     /// </summary>
     [Fact]
     public async Task AFolderHeldBackIsNotReportedAsNoCacheAtAll()
@@ -406,6 +452,7 @@ public sealed class ChromiumWebView2Tests : IDisposable
             .PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("No application on this machine keeps a Chromium cache", StringComparison.Ordinal));
     }
 
@@ -431,6 +478,20 @@ public sealed class ChromiumWebView2Tests : IDisposable
 
         Assert.True(Directory.Exists(cache), "the clean removed a cache an engine started using after the preview.");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A planning pass must see the machine as it is now, so dropping this provider's caches drops
+    /// the process table its veto reads as well.
+    /// </summary>
+    [Fact]
+    public void InvalidatingTheCachesDropsTheProcessSnapshot()
+    {
+        var liveTrees = FakeLiveTreeInspector.NothingLive;
+
+        CreateProvider(liveTrees).InvalidateCaches();
+
+        Assert.Equal(1, liveTrees.InvalidateCount);
     }
 
     /// <summary>A check that could not run must not look like one that found nothing.</summary>

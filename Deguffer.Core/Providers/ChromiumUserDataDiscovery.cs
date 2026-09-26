@@ -108,9 +108,16 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
         UnreadableRoots = [];
         Obstructed = [];
 
+        // Each declared host's folder is identified below, by its own marker, and classified whole.
+        string[] notEntered =
+        [
+            environment.TempPath,
+            .. ChromiumHost.Declared.Select(host => host.PathIn(environment)?.UserData).OfType<string>(),
+        ];
+
         foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
         {
-            var walk = ChromiumUserDataWalk.Under(root, environment.TempPath, ct);
+            var walk = ChromiumUserDataWalk.Under(root, notEntered, ct);
 
             if (walk.RootUnreadable)
             {
@@ -157,8 +164,8 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// passing through a link.
     ///
     /// <para><b>A declared path is built, not enumerated, so no listing has filtered its links
-    /// out.</b> The one-level walk above meets its only intermediate directory as a child of the
-    /// root, and a link there is set aside before anything is looked at. Here the vendor directory,
+    /// out.</b> The walk above meets every directory on the way down as a listed child, and a link
+    /// there is set aside before anything is looked at. Here the vendor directory,
     /// the product directory and the folder itself are joined from constants, and a junction at any
     /// of them would put every deletion on the far side while each §5.6 survivor resolved through
     /// the same link and passed. So every segment is checked before the marker is.</para>
