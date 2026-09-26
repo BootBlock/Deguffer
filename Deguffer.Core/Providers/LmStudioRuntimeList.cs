@@ -16,6 +16,9 @@ internal sealed record LmStudioRuntime(string Name, string Version, bool IsSelec
 {
     /// <summary>What <c>lms</c> names the runtime by, and the only form its remove command matches one version by.</summary>
     public string Id => $"{Name}@{Version}";
+
+    /// <summary>The folder LM Studio keeps the runtime in, inside its runtimes folder.</summary>
+    public string Folder => $"{Name}-{Version}";
 }
 
 /// <summary>
@@ -87,7 +90,11 @@ internal static class LmStudioRuntimeList
             runtimes.Add(runtime);
         }
 
-        return runtimes;
+        // A runtime listed twice could be selected on one row and not on the other, and the second row
+        // would then be offered. LM Studio lists each once, so a second row is output this cannot read.
+        return runtimes.DistinctBy(runtime => runtime.Id, StringComparer.OrdinalIgnoreCase).Count() == runtimes.Count
+            ? runtimes
+            : null;
     }
 
     /// <summary>
@@ -97,7 +104,7 @@ internal static class LmStudioRuntimeList
     /// </summary>
     private static LmStudioRuntime? TryReadRow(string line, int selectedFrom, int formatFrom)
     {
-        if (line.Length == 0 || char.IsWhiteSpace(line[0]))
+        if (char.IsWhiteSpace(line[0]))
         {
             return null;
         }

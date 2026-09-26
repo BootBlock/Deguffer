@@ -10,8 +10,8 @@ namespace Deguffer.Core.Providers;
 /// downloaded, of which it uses one.
 ///
 /// <para>LM Studio downloads a llama.cpp build for each hardware target it supports, and keeps each
-/// version of it. Its own clean-up keeps five versions of a line, and only runs after that line
-/// downloads again, so a line nothing updates keeps every version it ever had.</para>
+/// version of it. Its own clean-up keeps the five versions of a line used most recently, and only
+/// runs after that line downloads again, so a line nothing updates keeps every version it ever had.</para>
 ///
 /// <para><b>§5.1, and what it costs here.</b> <c>lms runtime remove</c> is LM Studio's own command,
 /// and it does more than delete a folder: it also removes the shared CUDA and Vulkan libraries that
@@ -44,6 +44,9 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     private static readonly IReadOnlyList<string> LmStudio = ["LM Studio", "llmster"];
 
     private static readonly ScheduledRemoval MarkedByLmStudio = new(Marker, "LM Studio");
+
+    /// <summary>The folder of libraries the runtimes share, which is never a runtime.</summary>
+    private const string Vendor = "vendor";
 
     public LmStudioRuntimeProvider(
         IUserEnvironment? environment = null,
@@ -93,8 +96,11 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     [GeneratedRegex(@"\Allama\.cpp-win(?:-[A-Za-z0-9_]+)+\z", RegexOptions.CultureInvariant)]
     private static partial Regex RecognisedLine();
 
-    /// <summary>A version as LM Studio numbers its runtimes: two to four dotted numbers.</summary>
-    [GeneratedRegex(@"\A[0-9]+(?:\.[0-9]+){1,3}\z", RegexOptions.CultureInvariant)]
+    /// <summary>
+    /// A version as LM Studio numbers its runtimes: two to four dotted numbers, each short enough for
+    /// <see cref="Version"/> to hold.
+    /// </summary>
+    [GeneratedRegex(@"\A[0-9]{1,9}(?:\.[0-9]{1,9}){1,3}\z", RegexOptions.CultureInvariant)]
     private static partial Regex RecognisedVersion();
 
     /// <summary>A runtime's folder, which LM Studio names <c>{line}-{version}</c>.</summary>
@@ -188,7 +194,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var kept = new List<(LmStudioRuntime Runtime, string Reason)>();
+        var kept = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var offered = new List<(LmStudioRuntime Runtime, string Folder)>();
 
         foreach (var line in runtimes.GroupBy(runtime => runtime.Name, StringComparer.OrdinalIgnoreCase))
@@ -197,23 +203,22 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
 
             if (!RecognisedLine().IsMatch(line.Key) || line.Any(runtime => !RecognisedVersion().IsMatch(runtime.Version)))
             {
-                // Not protected by name either: a name Deguffer does not recognise is not one it builds a
-                // path from, and no step here is sent anywhere near it.
                 notes.Add(Information($"Leaving every version of {line.Key} alone: not a runtime Deguffer recognises."));
                 continue;
             }
 
-            var newest = line.MaxBy(runtime => Version.Parse(runtime.Version))!;
+            // Compared as versions rather than as text, so 2.46.0 and 2.046.0 are both the newest.
+            var newest = line.Max(runtime => Version.Parse(runtime.Version));
 
             foreach (var runtime in line)
             {
                 if (runtime.IsSelected)
                 {
-                    kept.Add((runtime, "The runtime LM Studio uses."));
+                    kept[runtime.Folder] = "The runtime LM Studio uses.";
                 }
-                else if (runtime == newest)
+                else if (Version.Parse(runtime.Version) == newest)
                 {
-                    kept.Add((runtime, "The newest build for its kind of hardware."));
+                    kept.TryAdd(runtime.Folder, "The newest build for its kind of hardware.");
                 }
                 else if (Offerable(runtime, notes) is { } folder)
                 {
@@ -261,7 +266,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(kept),
+            ProtectedPaths = BuildProtectedPaths(kept, offered.Select(item => item.Runtime.Folder)),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -274,7 +279,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     /// </summary>
     private string? Offerable(LmStudioRuntime runtime, List<PlanNote> notes)
     {
-        var folder = Path.Combine(Backends, $"{runtime.Name}-{runtime.Version}");
+        var folder = Path.Combine(Backends, runtime.Folder);
 
         switch (LongPath.ProbeDirectory(folder, out var isLink))
         {
@@ -306,20 +311,46 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.6. The runtimes kept are the point: the one LM Studio uses and the newest of each line must
-    /// survive every command sent to its siblings, whose folders are the same shape beside them. The
-    /// shared libraries in <c>vendor</c> stay present however many LM Studio marks, because it marks
-    /// the libraries inside and never the folder.
+    /// §5.6. Every folder beside the runtimes offered is the point: the one LM Studio uses, the newest
+    /// of each line, and anything Deguffer does not recognise must survive every command sent to its
+    /// siblings, whose folders are the same shape beside them.
+    ///
+    /// <para><b>Standing is not enough, because LM Studio's removal is deferred.</b> A command that
+    /// reached the wrong runtime would mark it and leave it standing, and LM Studio would delete it at
+    /// its next start. So each is also proved to hold no marker, unless it held one already. The
+    /// shared libraries in <c>vendor</c> are asked about existence alone: LM Studio marks the
+    /// libraries a removed runtime used alone, inside that folder, and never the folder.</para>
+    ///
+    /// <para>Read from the disk rather than from the listing, so a folder LM Studio did not list is
+    /// protected as well as one it did.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(IReadOnlyList<(LmStudioRuntime Runtime, string Reason)> kept) => Protect(
-    [
-        (Root, "LM Studio's own folder must survive: only superseded runtimes inside it are removed."),
-        (Backends, "Where LM Studio keeps its runtimes: runtimes are removed from it, never the folder."),
-        (Path.Combine(Backends, "vendor"), "The libraries LM Studio's runtimes share."),
-        (Path.Combine(Root, "models"), "Your downloaded models."),
-        (Path.Combine(Root, ".internal"), "LM Studio's own record of what is installed and selected."),
-        .. kept.Select(item => (Path.Combine(Backends, $"{item.Runtime.Name}-{item.Runtime.Version}"), item.Reason)),
-    ]);
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        IReadOnlyDictionary<string, string> kept,
+        IEnumerable<string> offered)
+    {
+        var excluded = new HashSet<string>(offered, StringComparer.OrdinalIgnoreCase) { Vendor };
+        var listing = ChildDirectories.Under(Backends);
+
+        var siblings = listing.Directories.Select(child => child.Name)
+            .Concat(listing.Links.Select(link => link.Name))
+            .Where(name => !excluded.Contains(name))
+            .Select(name => Path.Combine(Backends, name))
+            .ToList();
+
+        return
+        [
+            .. Protect(
+            [
+                (Root, "LM Studio's own folder must survive: only superseded runtimes inside it are removed."),
+                (Backends, "Where LM Studio keeps its runtimes: runtimes are removed from it, never the folder."),
+                (Path.Combine(Backends, Vendor), "The libraries LM Studio's runtimes share."),
+                (Path.Combine(Root, "models"), "Your downloaded models."),
+                (Path.Combine(Root, ".internal"), "LM Studio's own record of what is installed and selected."),
+            ]),
+            .. Protect([.. siblings.Select(path => (path, kept.GetValueOrDefault(Path.GetFileName(path), "A runtime folder Deguffer does not offer.")))])
+                .Select(path => LongPath.FileExists(Path.Combine(path.Path, Marker)) ? path : path with { Marker = Marker }),
+        ];
+    }
 
     private static PlanNote Information(string message) => new(PlanNoteSeverity.Information, message);
 }

@@ -102,4 +102,21 @@ public sealed class LmStudioRuntimeListTests
 
         Assert.Null(LmStudioRuntimeList.TryRead(listing));
     }
+
+    /// <summary>
+    /// A runtime listed twice could be selected on one row and not on the other, and the unselected
+    /// row would then be offered.
+    /// </summary>
+    [Theory]
+    [InlineData("llama.cpp-win-x86_64-nvidia-cuda12-avx2@2.46.0")]
+    [InlineData("LLAMA.CPP-WIN-X86_64-NVIDIA-CUDA12-AVX2@2.46.0")]
+    public void RefusesAListingThatNamesARuntimeTwice(string twice)
+    {
+        var listing =
+            "LLM ENGINE                                        SELECTED    MODEL FORMAT\n"
+            + "llama.cpp-win-x86_64-nvidia-cuda12-avx2@2.46.0       \u2713            GGUF\n"
+            + twice + "                                    GGUF\n";
+
+        Assert.Null(LmStudioRuntimeList.TryRead(listing));
+    }
 }

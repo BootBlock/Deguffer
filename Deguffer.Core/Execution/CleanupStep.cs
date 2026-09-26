@@ -177,8 +177,7 @@ public abstract record CleanupStep
 ///
 /// <para><b>LM Studio on Windows is the case.</b> Its <c>lms runtime remove</c> writes a
 /// <c>MARKED_FOR_DELETION</c> file into the runtime's folder and returns, and LM Studio deletes the
-/// folder the next time it starts, because a loaded runtime holds its libraries open. So the run
-/// frees nothing it can measure, and the step's figure is reported as scheduled rather than
+/// folder the next time it starts. So the run frees nothing it can measure, and the step's figure is reported as scheduled rather than
 /// reclaimed. The marker is also the only evidence that the command did anything: the tool reports
 /// success before its own removal has run.</para>
 /// </summary>
@@ -317,9 +316,10 @@ public sealed record ReleaseLocalCopiesStep(string SyncRoot, string SyncApp, str
 /// A step that destroys one path outright.
 ///
 /// The base exists so that "everything this plan would remove" is one question with one answer:
-/// <see cref="CleanupPlan.TargetedPaths"/> and <see cref="CleanupPlan.NarrowedTo"/> both select on
-/// this type, so a new kind of deletion joins the §5.2 assertions and the §5.6 negative by
-/// construction rather than by somebody remembering to update two <c>OfType</c> clauses.
+/// <see cref="CleanupPlan.TargetedPaths"/> selects on this type, and <see cref="CleanupPlan.NarrowedTo"/>
+/// reads <see cref="Subjects"/>, which this type answers with <see cref="Destroys"/>. So a new kind of
+/// deletion joins the §5.2 assertions and the §5.6 negative by construction rather than by somebody
+/// remembering to update an <c>OfType</c> clause.
 ///
 /// It is deliberately narrower than "a new kind of step". <see cref="ReleaseLocalCopiesStep"/> frees
 /// space while leaving every file present and readable, so it is a sibling of this and of

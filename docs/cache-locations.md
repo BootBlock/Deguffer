@@ -3189,7 +3189,7 @@ acknowledgement.
 
 | | |
 | --- | --- |
-| **Location** | `%USERPROFILE%\.lmstudio\extensionsackends\llama.cpp-win-<arch>-<accelerator>-<version>` |
+| **Location** | `%USERPROFILE%\.lmstudio\extensions\backends\llama.cpp-win-<arch>-<accelerator>-<version>` |
 | **Method** | LM Studio's own `lms runtime remove --yes <name>@<version>`, one runtime at a time, while LM Studio is open |
 | **Typical size** | 1.26 GB on one workstation, beside the 3.3 GB `extensions` folder |
 
@@ -3199,9 +3199,10 @@ LM Studio runs language models with llama.cpp, and downloads a build of it for e
 it supports: CUDA 12, an older CUDA line, Vulkan, and the processor alone. Each is a *runtime line*,
 and LM Studio keeps every version of a line it has downloaded. It uses one.
 
-LM Studio has a clean-up of its own, and it does not reach most of them. After a line downloads a new
-version, LM Studio keeps the five versions of that line used most recently and removes the rest. A
-line that never updates keeps every version it has, and a line that does keeps five.
+LM Studio has a clean-up of its own, and it runs only after a line downloads a new version. It then
+keeps the five versions of that line used most recently, filled up with the newest where fewer have
+been used, and removes the rest. So a line that never updates keeps every version it has, and a line
+that does keeps five.
 
 ### What Deguffer does
 
@@ -3220,18 +3221,23 @@ asked again when you press Clean: a runtime is not removed if LM Studio was clos
 
 **The space comes back when LM Studio next starts.** On Windows, `lms runtime remove` does not
 delete a runtime. It writes a `MARKED_FOR_DELETION` file into its folder, and LM Studio deletes the
-folder at its next start, because a loaded runtime holds its files open. Deguffer checks for that
+folder at its next start. Deguffer checks for that
 file after each command, since the command reports success before LM Studio has written it, and
 reports the runtime's size as *removed at next start* rather than as removed.
 
-LM Studio's command also removes the shared CUDA and Vulkan libraries in `backendsendor` that only
+LM Studio's command also removes the shared CUDA and Vulkan libraries in `backends\vendor` that only
 the removed runtime used. That is LM Studio's judgement, not Deguffer's, and is the reason to use its
 command rather than delete the folders.
 
 ### What is protected
 
-The runtime LM Studio uses, the newest version of each line, `.lmstudio` itself, `extensionsackends`,
-`backendsendor`, `models` and `.internal` are checked after the clean to prove they survived.
+`.lmstudio` itself, `extensions\backends`, `backends\vendor`, `models` and `.internal` are checked
+after the clean to prove they survived. So is every folder in `backends` that was not offered: the
+runtime LM Studio uses, the newest version of each line, and anything Deguffer does not recognise.
+Because LM Studio removes a runtime later rather than at once, each of those is also checked for LM
+Studio's `MARKED_FOR_DELETION` file. A folder that gained one during the clean fails the check, and
+deleting that file keeps the folder.
+
 Everything else under `.lmstudio` is Tier 4: models, chats, settings, credentials, plugins and the
 rest. Explore refuses `.lmstudio` and every runtime folder directly, for the same reason.
 

@@ -372,12 +372,171 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         _inspector.WithoutRunning("LM Studio");
+        var asked = _inspector.InvalidateCount;
         var result = await provider.ExecuteAsync(plan);
 
         var outcome = Assert.Single(result.Steps);
         Assert.False(outcome.Succeeded);
         Assert.Contains("LM Studio is no longer running", outcome.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_runner.Invocations, call => call.Arguments.StartsWith("runtime remove", StringComparison.Ordinal));
+
+        // The real inspector answers from a snapshot of the process table, so the run has to discard
+        // it to see a program closed since the preview. This fake has no snapshot to go stale.
+        Assert.True(_inspector.InvalidateCount > asked);
+    }
+
+    /// <summary>A tool that removes the runtime at once after all is reported as having freed it.</summary>
+    [Fact]
+    public async Task ReportsTheSpaceAsReclaimedWhereTheRuntimeGoesAtOnce()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        _runner.Replying(arguments =>
+        {
+            if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            Directory.Delete(Folder($"{Cuda12}@2.45.0"), recursive: true);
+            return new CommandOutcome(0, $"Removed {Cuda12}@2.45.0\n", string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        var outcome = Assert.Single(result.Steps);
+        Assert.True(outcome.Succeeded);
+        Assert.Equal(8192, outcome.BytesReclaimed);
+        Assert.Equal(0, outcome.BytesScheduled);
+        Assert.NotNull(result.Verification);
+        Assert.True(result.Verification.Passed);
+    }
+
+    /// <summary>
+    /// §5.6 where the removal is deferred. A command that reached the runtime LM Studio uses would
+    /// mark it and leave it standing, and LM Studio would delete it at its next start, so the run
+    /// fails on the marker rather than passing on the folder.
+    /// </summary>
+    [Fact]
+    public async Task FailsTheRunWhenAKeptRuntimeIsMarked()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        _runner.Replying(arguments =>
+        {
+            if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            foreach (var runtime in new[] { $"{Cuda12}@2.45.0", $"{Cuda12}@2.46.0" })
+            {
+                File.WriteAllText(Path.Combine(Folder(runtime), LmStudioRuntimeProvider.Marker), "marked");
+            }
+
+            return new CommandOutcome(0, $"Removed {Cuda12}@2.45.0\n", string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.NotNull(result.Verification);
+        Assert.False(result.Verification.Passed);
+        Assert.Contains(result.Verification.Failures, check =>
+            check.Subject == Folder($"{Cuda12}@2.46.0") && check.Detail.StartsWith("MARKED", StringComparison.Ordinal));
+    }
+
+    /// <summary>The same for a runtime the user declined, which sits beside the one removed.</summary>
+    [Fact]
+    public async Task FailsTheRunWhenADeclinedRuntimeIsMarked()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", $"{Cuda12}@2.44.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", $"{Cuda12}@2.44.0");
+        _runner.Replying(arguments =>
+        {
+            if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            foreach (var runtime in new[] { $"{Cuda12}@2.45.0", $"{Cuda12}@2.44.0" })
+            {
+                File.WriteAllText(Path.Combine(Folder(runtime), LmStudioRuntimeProvider.Marker), "marked");
+            }
+
+            return new CommandOutcome(0, $"Removed {Cuda12}@2.44.0\n", string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var chosen = plan.Steps.Single(step => step.Subjects.Contains(Folder($"{Cuda12}@2.44.0")));
+
+        var result = await provider.ExecuteAsync(plan.NarrowedTo([chosen]));
+
+        Assert.NotNull(result.Verification);
+        Assert.Contains(result.Verification.Failures, check =>
+            check.Subject == Folder($"{Cuda12}@2.45.0") && check.Detail.StartsWith("MARKED", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.2 and §5.6: a folder beside the runtimes that Deguffer does not recognise, or that LM Studio
+    /// did not list, is proved standing and unmarked. One LM Studio had marked already is proved
+    /// standing alone, because its marker is not this run's doing.
+    /// </summary>
+    [Fact]
+    public async Task ProtectsEveryFolderBesideTheRuntimesOffered()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", $"{Cuda12}@2.41.0");
+        File.WriteAllText(Path.Combine(Folder($"{Cuda12}@2.41.0"), LmStudioRuntimeProvider.Marker), "marked");
+        var stranger = Path.Combine(Backends, "mlx-llm-win-x86_64-0.9.0");
+        Directory.CreateDirectory(stranger);
+        File.WriteAllBytes(Path.Combine(stranger, "engine.dll"), new byte[4096]);
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", "mlx-llm-win-x86_64@0.9.0");
+        MarkingOnRemove();
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([$"runtime remove --yes {Cuda12}@2.45.0"], plan.Steps.Cast<RunCommandStep>().Select(step => step.Arguments));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == stranger && p.Marker == LmStudioRuntimeProvider.Marker);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.46.0") && p.Marker == LmStudioRuntimeProvider.Marker);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.41.0") && p.Marker is null);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.45.0"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.NotNull(result.Verification);
+        Assert.True(result.Verification.Passed);
+        Assert.True(File.Exists(Path.Combine(stranger, "engine.dll")));
+    }
+
+    /// <summary>
+    /// Two versions that are one version as numbers are both the newest, whichever way they are
+    /// written, so neither is offered.
+    /// </summary>
+    [Fact]
+    public async Task KeepsEveryVersionEqualToTheNewest()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.046.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.45.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.046.0", $"{Cuda12}@2.45.0");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+    }
+
+    /// <summary>A version too long for a number is not a runtime Deguffer recognises, and it does not fail the preview.</summary>
+    [Fact]
+    public async Task LeavesALineWithAnOverlongVersionAlone()
+    {
+        Install($"{Cuda12}@2.46.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", "llama.cpp-win-x86_64-avx2@2.99999999999", "llama.cpp-win-x86_64-avx2@2.1.0");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, note => note.Message.Contains("not a runtime Deguffer recognises", StringComparison.Ordinal));
     }
 
     /// <summary>
