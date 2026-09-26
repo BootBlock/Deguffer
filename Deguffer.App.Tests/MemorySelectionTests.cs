@@ -38,7 +38,12 @@ public sealed class MemorySelectionTests : IDisposable
         _tree = MemoryTreeBuilder.Build(_machine.Before);
     }
 
-    public void Dispose() => _temp.Dispose();
+    /// <summary>A question a failed test left held is let go, so no thread waits on it for the rest of the run.</summary>
+    public void Dispose()
+    {
+        _facts.Release();
+        _temp.Dispose();
+    }
 
     private int TargetNode => _tree.Find(MemoryCloseMachine.TargetKey)!.Value;
 
