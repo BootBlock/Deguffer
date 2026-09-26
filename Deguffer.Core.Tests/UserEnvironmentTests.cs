@@ -232,4 +232,24 @@ public sealed class UserEnvironmentTests : IDisposable
         Assert.Equal(new EnvironmentValue(Written, Expandable: false), values["Written"]);
         Assert.DoesNotContain("Number", values.Keys, StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// That the subkey read names the keys under a key and not its values, and answers nothing for a
+    /// key that is not there. It writes a key for the reason
+    /// <see cref="TheRegistryReadTellsTheTwoValueKindsApart"/> gives.
+    /// </summary>
+    [Fact]
+    public void TheSubkeyReadNamesKeysAndNotValues()
+    {
+        using var scratch = new ScratchKey();
+
+        scratch.Key.CreateSubKey("Common 13.0").Dispose();
+        scratch.Key.CreateSubKey(@"Common 25.0\Media Cache").Dispose();
+        scratch.Key.SetValue("Common 26.0", "a value, not a key");
+
+        Assert.Equal(
+            ["Common 13.0", "Common 25.0"],
+            UserEnvironment.Current.ReadCurrentUserRegistrySubKeyNames(scratch.Path).Order(StringComparer.Ordinal));
+        Assert.Empty(UserEnvironment.Current.ReadCurrentUserRegistrySubKeyNames(scratch.Path + @"\Missing"));
+    }
 }

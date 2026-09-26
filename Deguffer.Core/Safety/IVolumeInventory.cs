@@ -128,6 +128,17 @@ public readonly record struct LocalVolume(
     /// </summary>
     public bool StoresContentRemotely =>
         Features.HasFlag(VolumeFeatures.RemoteStorage) && !Features.HasFlag(VolumeFeatures.ReparsePoints);
+
+    /// <summary>
+    /// Whether this is a disk in or attached to this machine, readable now, whose files are here.
+    ///
+    /// <para>For a provider that finds an application's cache wherever the user pointed it and
+    /// offers it only where no other computer can be using it. A share, and a cloud mount that says
+    /// so, may hold a cache that a copy of the same application on another computer is writing to
+    /// now, and Deguffer can see only the processes that run on this one.</para>
+    /// </summary>
+    public bool IsLocalDisk =>
+        IsReady && (Kind is DriveType.Fixed or DriveType.Removable) && !StoresContentRemotely;
 }
 
 /// <summary>

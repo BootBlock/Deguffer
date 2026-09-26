@@ -173,6 +173,27 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value : null;
     }
 
+    /// <summary>
+    /// Every key a recorded value sits under, one level below <paramref name="keyPath"/>. A value
+    /// recorded directly under <paramref name="keyPath"/> is not a key, so it names nothing here.
+    /// </summary>
+    public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath)
+    {
+        RegistryReads++;
+
+        var prefix = keyPath + "\\";
+
+        return
+        [
+            .. _registry.Keys
+                .Where(entry => entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry[prefix.Length..].Split('\\'))
+                .Where(segments => segments.Length > 1)
+                .Select(segments => segments[0])
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+        ];
+    }
+
     public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view)
     {
         RegistryReads++;
