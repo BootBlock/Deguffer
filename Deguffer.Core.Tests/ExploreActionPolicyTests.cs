@@ -754,8 +754,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"firefox\win64-stable_129.0", true)]
     [InlineData(@"chromedriver\win64-stable_129.0", false)]             // a Firefox version where none is written
     [InlineData(@"chrome\win64-127.0.6533.88-backup", false)]           // something a person made
-    [InlineData(@"chrome
-otes", false)]
+    [InlineData(@"chrome\notes", false)]                                // a folder a person made
     [InlineData("webkit", false)]                                       // not a browser Puppeteer downloads
     public void PuppeteersCacheRecognisesOnlyEachBrowsersOwnBuilds(string relative, bool allowed)
     {

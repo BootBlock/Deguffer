@@ -337,6 +337,30 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache whose every build is held back, or whose every folder was declined, is present and
+    /// offers nothing, and a figure of zero that leaves those out must not read as "Already clear".
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ACacheWithNothingOfferedButSomethingLeftAloneIsNotCalledClear(bool heldByABrowser)
+    {
+        var relative = heldByABrowser ? @"chrome\win64-127.0.6533.88" : @"chrome\my-notes";
+        var root = CreateRoot(relative);
+        var folder = Path.Combine(root, relative);
+
+        var liveTrees = FakeLiveTreeInspector.NothingLive
+            .WithProgram("chrome", executable: Path.Combine(folder, "chrome-win64", "chrome.exe"));
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == folder);
+    }
+
+    /// <summary>
     /// A check that could not run must not look like one that found nothing. The builds are still
     /// offered, as every other row offers on a partial answer, and the plan says so.
     /// </summary>

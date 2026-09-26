@@ -16,14 +16,12 @@ internal sealed record PuppeteerBuild(string Path, string Browser, string Name, 
 /// <param name="BrowserFolders">The browser folders found, in display form.</param>
 /// <param name="Declined">Every folder left alone at either level, and why, for §5.6.</param>
 /// <param name="Unreadable">Whether the root or a browser folder would not be listed.</param>
-/// <param name="Links">How many links were named and not followed, at either level.</param>
 internal sealed record PuppeteerCacheSurvey(
     IReadOnlyList<PuppeteerBuild> Builds,
     IReadOnlyList<string> BrowserFolders,
     IReadOnlyList<(string Path, string Reason)> Declined,
     IReadOnlyList<PlanNote> Notes,
-    bool Unreadable,
-    int Links)
+    bool Unreadable)
 {
     /// <param name="root">The cache root, already found on disk and not a link.</param>
     public static PuppeteerCacheSurvey Of(string root, CancellationToken ct)
@@ -33,7 +31,6 @@ internal sealed record PuppeteerCacheSurvey(
         var declined = new List<(string Path, string Reason)>();
         var notes = new List<PlanNote>();
         var unreadable = false;
-        var links = 0;
 
         // A listing right is separate from a traverse right, so a folder found by name may still
         // refuse. Without the note the plan has no steps and nothing said, which the shell renders
@@ -55,7 +52,6 @@ internal sealed record PuppeteerCacheSurvey(
                 var path = LongPath.Display(link.FullName);
                 notes.Add(CacheLevelWalk.Note(path));
                 declined.Add((path, CacheLevelWalk.LinkReason));
-                links++;
             }
 
             return scan;
@@ -99,6 +95,6 @@ internal sealed record PuppeteerCacheSurvey(
             }
         }
 
-        return new PuppeteerCacheSurvey(builds, browserFolders, declined, notes, unreadable, links);
+        return new PuppeteerCacheSurvey(builds, browserFolders, declined, notes, unreadable);
     }
 }

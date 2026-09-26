@@ -225,7 +225,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = survey.Unreadable,
-            WasNotExamined = targets.Count == 0 && live.Vetoed.Count == 0 && survey.Links > 0,
+            WasNotExamined = targets.Count == 0 && (survey.Declined.Count > 0 || live.Vetoed.Count > 0),
         };
     }
 
