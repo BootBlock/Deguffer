@@ -5824,7 +5824,9 @@ In Explore that is a refusal by type rather than by place:
 A name that only resembles one — `archive.pst.txt`, `archive.pstx`, a folder called
 `Outlook Files backup` — is ordinary. A folder of your own that holds a `.pst`, `Documents` included,
 is not refused, because a folder is not a store — but the store inside it still stays. Moving the
-folder to the Recycle Bin is refused, naming the store, because Windows moves a folder whole.
+folder to the Recycle Bin is refused, naming the store, because Windows moves a folder whole. So is
+moving a folder with a folder inside that Windows will not let Deguffer list, because nobody can say
+what is in it.
 Removing it permanently takes everything else, leaves the store and the folders holding it, and
 checks afterwards that the store is still there. Hovering any of these says what it is, and
 *Compact Now* is the supported way to make one smaller.
@@ -5845,7 +5847,9 @@ Every store a scan finds is named in its notes, and every clean checks that it i
 afterwards — on the rows the clean does not run as well as on the rows it does — so a clean that lost
 one reports a verification failure. A scan runs minutes before the clean, so immediately before
 a tool's command runs or a Recycle Bin is emptied, by either route, Deguffer looks on the disk again,
-and does none of these where a store has arrived since. A row holding nothing but stores reads
+and does none of these where a store has arrived since. It does none of them either where Windows will
+not let it list a folder inside, and names the folder: the command or the bin would take that folder
+whole, and a store could be in it. A row holding nothing but stores reads
 *Outlook data kept*, never *Already clear*.
 
 ### Outlook's secure temporary folder — a Tier 1 candidate that needs measuring first

@@ -393,6 +393,36 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// §9 one step further in: a folder Windows describes but will not list, below the one picked. The
+    /// shell moves the picked folder without listing it, so a store in the part nobody could look at
+    /// would go along. The look used to skip that part and answer "no store".
+    /// </summary>
+    [Fact]
+    public async Task LeavesAFolderHoldingOneWindowsWillNotListOutOfTheRecycleBinAndSaysWhy()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "old mail");
+        var locked = _temp.CreateDirectory("profile", "Downloads", "old mail", "2014");
+        var store = _temp.CreateFile(64, "profile", "Downloads", "old mail", "2014", "archive.pst");
+        var bin = new FakeRecycleBin();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin,
+            new UnlistableFileSystem(WindowsFileSystem.Default, locked));
+
+        Assert.Empty(bin.Paths);
+        Assert.True(LongPath.FileExists(store), "a folder holding one nobody could list was moved to the Recycle Bin");
+        Assert.True(Directory.Exists(folder));
+
+        var refused = Assert.Single(report.Refused);
+        Assert.Contains($"Windows would not let Deguffer look inside {locked},", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("could not check 'old mail' for an Outlook data file", refused.Message, StringComparison.Ordinal);
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// The policy is asked again inside the remover rather than trusted from the caller, so a shell
     /// that never asked cannot get past it. Driven here by handing the remover a refused path
     /// directly, which is what such a shell would do.
