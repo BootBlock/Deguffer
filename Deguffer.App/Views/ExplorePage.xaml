@@ -829,8 +829,11 @@
                                     AutomationProperties.Name="{x:Bind Label}">
                             <Border Width="12" Height="12" CornerRadius="2"
                                     VerticalAlignment="Center"
-                                    Background="{x:Bind Swatch}"
-                                    AutomationProperties.AccessibilityView="Raw" />
+                                    AutomationProperties.AccessibilityView="Raw">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{x:Bind Swatch}" />
+                                </Border.Background>
+                            </Border>
                             <TextBlock Text="{x:Bind Label}"
                                        VerticalAlignment="Center"
                                        Style="{StaticResource SecondaryText}" />

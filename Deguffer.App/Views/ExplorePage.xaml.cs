@@ -94,7 +94,9 @@ public sealed partial class ExplorePage : Page
             // constructs every provider and runs their probes, and this one reads four environment
             // variables. It is asked about every row of every directory the page opens, so it has to
             // exist before the first scan finishes.
-            ItemGuide.ForThisMachine());
+            ItemGuide.ForThisMachine(),
+            ElevatedRelaunch.IsElevated,
+            ElevatedRelaunch.TryRelaunch);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.ViewChanged += (_, _) =>

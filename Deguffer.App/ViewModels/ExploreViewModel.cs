@@ -34,8 +34,17 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ExploreViewModel : ObservableObject
 {
-    private readonly ExploreScanner _scanner;
+    private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
+
+    /// <summary>Whether this process holds administrator rights, which decides the elevation offer.</summary>
+    private readonly bool _isElevated;
+
+    /// <summary>
+    /// Starts an elevated replacement pointed where this page is, and says whether one started. A
+    /// real relaunch raises the UAC prompt, which is why it is handed in.
+    /// </summary>
+    private readonly Func<ExploreRequest, bool> _relaunch;
 
     /// <summary>
     /// What a redraw puts in the list and the trail above it. Filled again per redraw and never
@@ -90,17 +99,23 @@ public sealed partial class ExploreViewModel : ObservableObject
     private string? _statedRefusal;
 
     /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
+    /// <param name="isElevated">Whether this process holds administrator rights.</param>
+    /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
     public ExploreViewModel(
-        ExploreScanner scanner,
+        IExploreScanner scanner,
         IVolumeInventory volumes,
         TimeProvider time,
         ExploreActions actions,
-        ItemGuide guide)
+        ItemGuide guide,
+        bool isElevated,
+        Func<ExploreRequest, bool> relaunch)
     {
         _scanner = scanner;
         _volumes = volumes;
         _drives = new DriveList(volumes, time);
         _guide = guide;
+        _isElevated = isElevated;
+        _relaunch = relaunch;
 
         Selection = new ExploreSelection(actions);
 
@@ -700,7 +715,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanScan))]
     private void ElevateAndRescan()
     {
-        if (!ElevatedRelaunch.TryRelaunch(new ExploreRequest(Target.Drive, Target.Folder)))
+        if (!_relaunch(new ExploreRequest(Target.Drive, Target.Folder)))
         {
             Status = "Deguffer is still running without administrator rights, so it scans by walking "
                 + "directories. Everything else works exactly the same.";
@@ -726,8 +741,8 @@ public sealed partial class ExploreViewModel : ObservableObject
         _hasScanned = found is not null;
 
         CanElevate = found is { } fallback
-            ? ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated, fallback)
-            : ElevationOffer.ShouldOffer(ElevatedRelaunch.IsElevated);
+            ? ElevationOffer.ShouldOffer(_isElevated, fallback)
+            : ElevationOffer.ShouldOffer(_isElevated);
 
         OnPropertyChanged(nameof(ElevateLabel));
     }
@@ -783,7 +798,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             (_, { IsUnaccounted: true } unaccounted) => (
                 "In use, but not accounted for by this scan",
                 FreeSpace.Format(unaccounted.Bytes),
-                ExploreUnaccountedNote.For(ElevatedRelaunch.IsElevated)),
+                ExploreUnaccountedNote.For(_isElevated)),
 
             ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
