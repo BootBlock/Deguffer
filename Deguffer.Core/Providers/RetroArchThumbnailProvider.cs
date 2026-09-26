@@ -8,7 +8,8 @@ namespace Deguffer.Core.Providers;
 /// which reach many gigabytes on a machine with a real library.
 ///
 /// <para><b>Tier 3, although most of it downloads again.</b> The Playlist Thumbnails Updater, and
-/// RetroArch itself as each game is shown, fetch the pictures the libretro server carries. A picture
+/// RetroArch itself as each game is shown where on-demand thumbnails are switched on, fetch the
+/// pictures the libretro server carries. A picture
 /// the user added by hand, for a game the server does not carry or in place of the one it does, sits
 /// in the same folder under the same kind of name, and nothing tells it apart. It is lost for good, so
 /// the row says so and is never ticked for the user.</para>
@@ -56,7 +57,8 @@ public sealed class RetroArchThumbnailProvider : RetroArchProviderBase
 
     public override string WhatHappensOnNextUse =>
         "RetroArch shows no box art, title screens or snapshots for those games until they are downloaded "
-        + "again, with Online Updater, Playlist Thumbnails Updater, or as each game is shown. A picture you "
+        + "again, with Online Updater, Playlist Thumbnails Updater, or as each game is shown where on-demand "
+        + "thumbnails are switched on. A picture you "
         + "added yourself, or one for a game the libretro server does not carry, is gone permanently: "
         + "nothing tells it apart from a downloaded one. Your games, playlists and saves are untouched.";
 

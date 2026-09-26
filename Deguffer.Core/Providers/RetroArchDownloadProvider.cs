@@ -60,10 +60,10 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
     public override SafetyTier Tier => SafetyTier.RegenerableWithCost;
 
     public override string WhatHappensOnNextUse =>
-        "RetroArch has none of the shaders or game databases removed until you download them again from "
-        + "Online Updater, with Update Slang Shaders, Update GLSL Shaders, Update Cg Shaders and Update "
-        + "Databases. Until then a shader preset that uses one does not load, and scanning for new games "
-        + "finds none. Your saves, save states, playlists, cores, BIOS files, settings and the shader "
+        "The shaders and game databases removed are gone from RetroArch until you download them again "
+        + "from Online Updater, with Update Slang Shaders, Update GLSL Shaders, Update Cg Shaders and "
+        + "Update Databases. Until then a shader preset that uses one does not load, and scanning for new "
+        + "games finds none. Your saves, save states, playlists, cores, BIOS files, settings and the shader "
         + "presets you saved are untouched.";
 
     public override ProviderDescription Description { get; } = new()

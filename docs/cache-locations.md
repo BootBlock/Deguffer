@@ -1975,7 +1975,8 @@ RetroArch's **Online Updater** downloads shader sets, game databases and thumbna
 RetroArch ever removes them. The shaders are the effects a preset applies, such as a CRT look. The
 databases are what **Scan Directory** matches your games against to build a playlist. The thumbnails
 are the box art, title screens, snapshots and logos shown beside each game in a playlist, fetched by
-the **Playlist Thumbnails Updater** or as each game is shown.
+the **Playlist Thumbnails Updater**, or as each game is shown where on-demand thumbnails are
+switched on.
 
 ### What Deguffer does
 
