@@ -206,7 +206,26 @@ public sealed class PlanExecutor(
         // planning and executing — Invalidate runs once, at the top of a planning pass — so an
         // ordinary measurement here would hand back the very figure it is about to be subtracted
         // from, and a clean that freed gigabytes would report nothing.
-        var after = (await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false)).Reclaimable;
+        //
+        // A tool that states its own figure is asked for it instead, because the disk is not where
+        // that figure came from. See IToolMeasurement.
+        var measured = step.MeasuredBy is { } tool
+            ? await tool.MeasureAsync(ct).ConfigureAwait(false)
+            : (await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false)).Reclaimable;
+
+        // Nothing is counted rather than the whole estimate: a figure nobody checked is the one this
+        // subtraction exists to avoid reporting.
+        if (measured is not { } after)
+        {
+            return new StepOutcome(
+                step.Description,
+                outcome.Succeeded,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"{outcome.Message} (the tool did not say what its cache holds now, so nothing is "
+                + "counted as reclaimed)");
+        }
+
         var reclaimed = before - after;
 
         // A negative delta means the tree grew between preview and clean — a build restoring
