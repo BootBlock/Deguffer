@@ -615,6 +615,11 @@ public sealed partial class CleanViewModel : ObservableObject
 
         Findings.Clear();
 
+        // Nothing is ticked on an empty list. Totalled here and again as each row lands, rather than
+        // once at the end of the pass: a scan that is cancelled or fails never reaches the end, and
+        // the Selected figure then went on stating the previous scan beside rows that did not hold it.
+        UpdateSelectionTotal();
+
         // Back to what is known before anything is measured, not just reassigned at the end: a
         // preview that is cancelled or fails never reaches the assignment below, and the rows whose
         // fallback reasons the old offer was read from have already been thrown away.
@@ -636,7 +641,6 @@ public sealed partial class CleanViewModel : ObservableObject
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
-        UpdateSelectionTotal();
     }
 
     /// <summary>
@@ -761,6 +765,9 @@ public sealed partial class CleanViewModel : ObservableObject
             SizeOrder.IndexFor(Findings.Select(listed => listed.Finding.EstimatedBytes), row.Finding.EstimatedBytes),
             row);
         UpdateShares();
+
+        // A row can start ticked, and it raises no selection change for that: nobody ticked it.
+        UpdateSelectionTotal();
     }
 
     /// <summary>

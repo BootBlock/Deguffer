@@ -57,6 +57,52 @@ public class CleanViewModelScanTests
     }
 
     /// <summary>
+    /// A scan that fails after some rows have landed leaves those rows on the page, and the Selected
+    /// figure has to describe them. It used to be totalled only at the end of a scan that succeeded,
+    /// so it went on stating the previous scan's figure beside rows that no longer held it.
+    /// </summary>
+    [Fact]
+    public void AScanThatFailsPartWayTotalsTheRowsItBuilt()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        var broken = new FakeCleanupProvider("broken");
+        using var page = new StoragePage([cache, broken]);
+        cache.Steps = [page.Cache("a", 1024)];
+        page.Scan();
+        Assert.Equal("1 KB", page.ViewModel.SelectedTotalLabel);
+
+        cache.Steps = [page.Cache("a", 3072)];
+        broken.PlanFailure = new IOException("The device is not ready.");
+        page.Scan();
+
+        Assert.StartsWith("Scan failed", page.ViewModel.Status);
+        Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
+        Assert.Single(page.ViewModel.Findings);
+        Assert.Equal("3 KB", page.ViewModel.SelectedTotalLabel);
+    }
+
+    /// <summary>
+    /// A scan cancelled before any row lands leaves no rows, so nothing is selected. The previous
+    /// scan's figure stood beside an empty list.
+    /// </summary>
+    [Fact]
+    public void AScanCancelledBeforeAnyRowLandsSelectsNothing()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        cache.Steps = [page.Cache("a", 1024)];
+        page.Scan();
+
+        cache.PlanFailure = new OperationCanceledException();
+        page.Scan();
+
+        Assert.Equal("Scan cancelled. Nothing was changed.", page.ViewModel.Status);
+        Assert.Empty(page.ViewModel.Findings);
+        Assert.Equal("0 B", page.ViewModel.SelectedTotalLabel);
+        Assert.False(page.ViewModel.CanClean);
+    }
+
+    /// <summary>
     /// Both filters are on by default and each hides its own rows as they land. A row waiting for a
     /// folder is absent too, and is never hidden: it is the one row that says what the user can do.
     /// </summary>
