@@ -4299,7 +4299,10 @@ the tool itself writes inside it.
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
 how many were left and why. `obj` carries an extra check of its own: git is asked whether the
 directory holds any tracked file, because intermediate output never should, and one that does is not
-intermediate output whatever the manifest beside it claims.
+intermediate output whatever the manifest beside it claims. The check needs git on `PATH`. Where git
+is installed but cannot answer, the directory is left alone. Where git is not installed at all, the
+conditions above decide alone, as they do for every other directory here, and the scan says that
+the tracked-file check did not run.
 
 Two of those requirements are there for a reason worth stating, because both look like fussiness and
 neither is:

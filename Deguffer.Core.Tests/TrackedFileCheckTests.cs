@@ -149,19 +149,49 @@ public sealed class TrackedFileCheckTests : IDisposable
     /// <summary>
     /// Git absent is not git failing. There is no second opinion to be had, the recognition rule
     /// governs alone — the same protection every other provider relies on — and nothing is declined
-    /// on the strength of a question that was never asked.
+    /// on the strength of a question that was never asked. Every candidate git would have been asked
+    /// about is reported as unasked, so the plan can say the check did not run.
     /// </summary>
     [Fact]
     public async Task AsksNothingAndDeclinesNothingWhenGitIsNotInstalled()
     {
         var runner = new FakeProcessRunner();
+        var candidates = Candidates(900);
 
         var findings = await new TrackedFileCheck(new FakeUserEnvironment(_temp.Path), runner)
-            .FindTrackedAsync(Candidates(900));
+            .FindTrackedAsync(candidates);
 
         Assert.Empty(runner.Invocations);
         Assert.Empty(findings.Tracked);
         Assert.Empty(findings.Unanswered);
+        Assert.Equal(candidates.Count, findings.Unasked.Count);
+        Assert.True(findings.Unasked.SetEquals(candidates));
+    }
+
+    /// <summary>
+    /// A candidate outside any repository has no tracked files to ask about, whether git is
+    /// installed or not. Reporting it as unasked would tell the user a check was skipped that could
+    /// never have applied.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportACandidateOutsideAnyRepositoryAsUnasked()
+    {
+        var outside = Path.Combine(_temp.CreateDirectory("loose"), "Example", "obj");
+        var inside = Candidates(1)[0];
+
+        var findings = await new TrackedFileCheck(new FakeUserEnvironment(_temp.Path), new FakeProcessRunner())
+            .FindTrackedAsync([outside, inside]);
+
+        Assert.Equal([inside], findings.Unasked);
+    }
+
+    /// <summary>Git installed and asked leaves nothing unasked, whatever it answered.</summary>
+    [Fact]
+    public async Task ReportsNothingUnaskedWhenGitIsInstalled()
+    {
+        var findings = await Create(new FakeProcessRunner()).FindTrackedAsync(Candidates(50));
+
+        Assert.Empty(findings.Unasked);
     }
 
     /// <summary>

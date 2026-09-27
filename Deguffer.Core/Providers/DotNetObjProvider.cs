@@ -254,7 +254,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 unrecognised,
                 live,
                 measured.Note,
-                ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count)),
+                ObjPlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count, git.Unasked.Count)),
             Fallback = measured.Fallback,
             HasUnreadableRoot =
                 discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0,
