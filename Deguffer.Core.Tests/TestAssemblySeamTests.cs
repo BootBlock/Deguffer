@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace Deguffer.Core.Tests;
@@ -54,14 +55,18 @@ public sealed partial class TestAssemblySeamTests
 
     /// <summary>
     /// Every C# file in a test project and in the shared test library, found by name so a test project
-    /// added later is covered the moment it exists.
+    /// added later is covered the moment it exists. This file is left out, because its list of allowed
+    /// uses names the routes it forbids.
     /// </summary>
     private static IEnumerable<string> TestSources() =>
         Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot)
             .Where(project => Path.GetFileName(project) is { } name
                 && (name.EndsWith(".Tests", StringComparison.Ordinal) || name == "Deguffer.Testing"))
             .SelectMany(project => Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories))
-            .Where(file => !IsBuildOutput(file));
+            .Where(file => !IsBuildOutput(file)
+                && !string.Equals(Path.GetFullPath(file), Path.GetFullPath(ThisFile()), StringComparison.OrdinalIgnoreCase));
+
+    private static string ThisFile([CallerFilePath] string path = "") => path;
 
     private static bool IsBuildOutput(string file) =>
         file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
