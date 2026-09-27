@@ -213,6 +213,13 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <!-- A choice the picker allowed but Deguffer cannot use, such as a library. Said on this row
+                 because the list below it is where the reader looks for the folder they chose. -->
+            <InfoBar IsOpen="{x:Bind ViewModel.SourceRootNotOnDisk, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Informational"
+                     Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
+
             <TextBlock Text="No source folders added, so Deguffer will not look for build output anywhere."
                        Style="{StaticResource SecondaryText}"
                        FontSize="12"
@@ -275,6 +282,12 @@
                             AutomationProperties.Name="Add emulator folder" />
                 </views:SettingsRow.Control>
             </views:SettingsRow>
+
+            <!-- On this row for the reason the source folders give theirs. -->
+            <InfoBar IsOpen="{x:Bind ViewModel.EmulatorFolderNotOnDisk, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Informational"
+                     Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
 
             <TextBlock Text="No emulator folders added, so only each emulator's default location is looked in."
                        Style="{StaticResource SecondaryText}"

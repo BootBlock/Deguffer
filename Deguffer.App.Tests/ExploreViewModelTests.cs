@@ -138,6 +138,30 @@ public sealed class ExploreViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// A library or a device chosen in the picker comes back with no path. It threw from an
+    /// <c>async void</c> handler, which ends the process. It leaves the target where it was and says
+    /// why, and the next folder chosen takes the sentence back.
+    /// </summary>
+    [Fact]
+    public void AChoiceThatIsNotAFolderOnADiskLeavesTheTargetAndSaysSo()
+    {
+        _explore.Volumes.With(@"C:\").With(@"D:\");
+        var page = _explore.Page();
+        page.ScopeTo(@"D:\Photos");
+
+        page.ScopeTo(string.Empty);
+
+        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
+        Assert.Equal(@"D:\Photos", page.ScopeFolder);
+        Assert.Equal(PickedFolder.NotOnDisk, page.Status);
+
+        page.ScopeTo(@"C:\Users\testuser");
+
+        Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
+        Assert.Equal(ScanPrompt, page.Status);
+    }
+
+    /// <summary>
     /// A folder on cloud storage is refused on the status line, and the refusal is taken back once
     /// the page points somewhere it will scan — its own sentence, and nobody else's.
     /// </summary>

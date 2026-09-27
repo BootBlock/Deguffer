@@ -204,4 +204,42 @@ public sealed class SettingsViewModelTests : IDisposable
 
         Assert.Equal(1, _volumes.InvalidateCount);
     }
+
+    /// <summary>
+    /// A library or a device chosen in the picker comes back with no path. Nothing is approved for
+    /// it, and the row says why until a folder on a disk is chosen.
+    /// </summary>
+    [Fact]
+    public void ASourceFolderThatIsNotOnADiskIsNotApprovedAndTheRowSaysSo()
+    {
+        var (page, _) = Page();
+
+        Assert.Null(page.ApprovalFor(string.Empty));
+        Assert.True(page.SourceRootNotOnDisk);
+        Assert.False(page.EmulatorFolderNotOnDisk);
+
+        var folder = Path.Combine(_temp.Path, "src");
+
+        Assert.Equal(folder, page.ApprovalFor(folder)?.Path);
+        Assert.False(page.SourceRootNotOnDisk);
+    }
+
+    /// <summary>The emulator folders answer the same choice the same way.</summary>
+    [Fact]
+    public void AnEmulatorFolderThatIsNotOnADiskIsNotAddedAndTheRowSaysSo()
+    {
+        var (page, _) = Page();
+
+        page.AddEmulatorFolder(string.Empty);
+
+        Assert.Empty(page.EmulatorFolders);
+        Assert.True(page.EmulatorFolderNotOnDisk);
+        Assert.False(page.SourceRootNotOnDisk);
+
+        var folder = Path.Combine(_temp.Path, "Cemu");
+        page.AddEmulatorFolder(folder);
+
+        Assert.Equal([folder], page.EmulatorFolders);
+        Assert.False(page.EmulatorFolderNotOnDisk);
+    }
 }
