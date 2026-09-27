@@ -66,12 +66,12 @@ public sealed class DriverStoreProviderTests : IDisposable
         FakeProcessRunner? runner = null,
         FakeWindowsServicing? servicing = null) =>
         new(
+            handlers ?? new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true)),
             _environment,
             runner ?? new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             system: _system,
             servicing: servicing ?? FakeWindowsServicing.Settled,
-            handlers: handlers ?? new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true)),
             store: store);
 
     /// <summary>Windows' cleanup, taking <paramref name="folders"/> as the real one takes what it judges superseded.</summary>

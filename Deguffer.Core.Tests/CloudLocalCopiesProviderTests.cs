@@ -34,11 +34,11 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
     private string At(params string[] segments) => Path.Combine([_root, .. segments]);
 
     private CloudLocalCopiesProvider CreateProvider() => new(
+        _cloud,
         _environment,
         new FakeProcessRunner(),
         FakeProcessInspector.NothingRunning,
-        new FakeDirectoryScanner(),
-        _cloud);
+        new FakeDirectoryScanner());
 
     private static ReleaseLocalCopiesStep OnlyStep(CleanupPlan plan) =>
         Assert.IsType<ReleaseLocalCopiesStep>(Assert.Single(plan.Steps));
@@ -185,7 +185,7 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
         var cloud = new FakeCloudFiles().Root("ElsewhereDrive!S-1-5-21-1!Me", _root, "Elsewhere Drive");
 
         var provider = new CloudLocalCopiesProvider(
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, new FakeDirectoryScanner(), cloud);
+            cloud, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, new FakeDirectoryScanner());
 
         Assert.False(await provider.IsPresentAsync());
         Assert.True(await CreateProvider().IsPresentAsync());

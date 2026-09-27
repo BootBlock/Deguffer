@@ -14,19 +14,29 @@ namespace Deguffer.Core.Execution;
 /// can leave out what is still refused. Required rather than defaulted: the default would be the
 /// signed-in user's own record, and a caller that forgot to pass one would write into it.
 /// </param>
+/// <param name="emptier">
+/// How an <see cref="EmptyRecycleBinStep"/> is carried out. Null where the plans this executor runs
+/// hold none, and a plan that holds one is then refused before any of its steps runs.
+///
+/// <para><b>Never defaulted to the real one.</b> It empties the Recycle Bin of whoever runs the
+/// process, so a test that forgot to pass a fake would be one broken guard away from doing that. The
+/// real one is given only where the app composes its providers,
+/// <see cref="CleanupPlanner.CreateDefault"/>.</para>
+/// </param>
 /// <param name="cloud">
-/// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and its files proved standing, for the one
-/// provider that plans one. Defaulted for the reason <paramref name="emptier"/> is.
+/// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and its files proved standing. Null, and
+/// never defaulted, for the reasons <paramref name="emptier"/> is: the real one acts on the cloud
+/// accounts of whoever runs the process.
 /// </param>
 /// <param name="handlers">
-/// How a <see cref="DiskCleanupStep"/> is carried out. Defaulted for the reason
-/// <paramref name="emptier"/> is.
+/// How a <see cref="DiskCleanupStep"/> is carried out. Null, and never defaulted, for the reasons
+/// <paramref name="emptier"/> is: the real one can delete the previous Windows installation.
 /// </param>
 /// <param name="servicing">
 /// Asked again, with <paramref name="inspector"/>, immediately before a step that is
 /// <see cref="CleanupStep.HeldWhileUpdating"/>, and before a command that
-/// <see cref="RunCommandStep.RunsOnlyWhile"/> a program runs. Defaulted for the reason
-/// <paramref name="emptier"/> is.
+/// <see cref="RunCommandStep.RunsOnlyWhile"/> a program runs. Defaulted to the machine's own, because
+/// it only reads.
 /// </param>
 /// <param name="time">
 /// The clock a command waits on while its tool marks what it will remove later. See
@@ -61,9 +71,9 @@ public sealed class PlanExecutor(
 
     private static readonly TimeSpan MarkingPoll = TimeSpan.FromMilliseconds(250);
 
-    private readonly IRecycleBinEmptier _emptier = emptier ?? ShellRecycleBinEmptier.Default;
-    private readonly ICloudFiles _cloud = cloud ?? CloudFiles.Default;
-    private readonly IDiskCleanupHandlers _handlers = handlers ?? DiskCleanupHandlers.Default;
+    private readonly IRecycleBinEmptier? _emptier = emptier;
+    private readonly ICloudFiles? _cloud = cloud;
+    private readonly IDiskCleanupHandlers? _handlers = handlers;
     private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
     private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -87,6 +97,14 @@ public sealed class PlanExecutor(
         IProgress<double>? progress,
         CancellationToken ct)
     {
+        // Before anything runs, so a plan this executor cannot finish removes nothing rather than half
+        // of itself.
+        if (plan.Steps.FirstOrDefault(step => !HasRouteFor(step)) is { } unroutable)
+        {
+            throw new InvalidOperationException(
+                $"The executor for '{plan.ProviderId}' was given no way to carry out a {unroutable.GetType().Name}.");
+        }
+
         var leftStanding = residue ?? new RunResidue();
         var stopwatch = Stopwatch.StartNew();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
@@ -149,8 +167,8 @@ public sealed class PlanExecutor(
                 DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
                 DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers, scanner, handler, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud, release, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, stepProgress, ct).ConfigureAwait(false),
+                ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, stepProgress, ct).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
             });
 
@@ -180,6 +198,15 @@ public sealed class PlanExecutor(
                 _cloud),
         };
     }
+
+    /// <summary>Whether this executor was given the route <paramref name="step"/> is carried out by.</summary>
+    private bool HasRouteFor(CleanupStep step) => step switch
+    {
+        EmptyRecycleBinStep => _emptier is not null,
+        DiskCleanupStep => _handlers is not null,
+        ReleaseLocalCopiesStep => _cloud is not null,
+        _ => true,
+    };
 
     /// <summary>
     /// Why <paramref name="step"/> must not run because Windows is now in the middle of an update, or
@@ -457,7 +484,7 @@ public sealed class PlanExecutor(
         // on a large bin it runs for a long time. See ShellRecycleBinEmptier.
         ct.ThrowIfCancellationRequested();
 
-        var outcome = await Task.Run(() => _emptier.Empty(step.VolumeRoot), ct).ConfigureAwait(false);
+        var outcome = await Task.Run(() => _emptier!.Empty(step.VolumeRoot), ct).ConfigureAwait(false);
 
         var after = await scanner.MeasureFromDiskAsync(step.Path, ct).ConfigureAwait(false);
         var remaining = after.Size.Reclaimable;

@@ -259,6 +259,43 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// The routes that hand Windows a whole volume or a cloud account are never defaulted to the
+    /// machine's own, so an executor given none cannot carry out a step that needs one. It refuses the
+    /// plan before the first step runs, so nothing is half done.
+    /// </summary>
+    [Theory]
+    [InlineData("recycle-bin")]
+    [InlineData("disk-cleanup")]
+    [InlineData("cloud")]
+    public async Task RefusesAPlanWhoseRouteItWasNotGivenBeforeRemovingAnything(string route)
+    {
+        var cache = _temp.CreateDirectory("cache");
+        var file = _temp.CreateFile(4096, "cache", "blob");
+        var bin = _temp.CreateDirectory("volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier);
+
+        CleanupStep needsARoute = route switch
+        {
+            "recycle-bin" => new EmptyRecycleBinStep(bin, "A bin"),
+            "disk-cleanup" => new DiskCleanupStep(cache, "A leftover") { Handler = "Previous Installations", Volume = @"C:\" },
+            _ => new ReleaseLocalCopiesStep(cache, "OneDrive", "Local copies"),
+        };
+
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with
+        {
+            Steps = [new DeleteDirectoryStep(cache, "A cache"), needsARoute],
+        };
+
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, default));
+
+        Assert.Contains(needsARoute.GetType().Name, refused.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(file), "a step ran before the plan was refused");
+        Assert.True(Directory.Exists(bin));
+    }
+
+    /// <summary>
     /// A Recycle Bin removed file by file goes whole or not at all: a deleted folder and the record
     /// that restores it are two entries. Stepping over a store that arrived in one after the preview
     /// would keep the store and take its record, so an indivisible step is looked at again on the disk

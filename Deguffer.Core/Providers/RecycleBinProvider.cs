@@ -74,6 +74,12 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     private readonly IVolumeInventory _volumes;
 
     /// <summary>
+    /// Asked which route each bin takes, and given to the executor that takes it. See
+    /// <see cref="CleanupProviderBase"/>'s <c>emptier</c>.
+    /// </summary>
+    private readonly IRecycleBinEmptier _emptier;
+
+    /// <summary>
     /// Read at plan time rather than held, so a change on the Settings page takes effect from the
     /// next preview. See <see cref="ICurrentPreferences"/>.
     /// </summary>
@@ -92,13 +98,13 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     private readonly DisposableChildSet _children;
 
     public RecycleBinProvider(
+        IRecycleBinEmptier emptier,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         IVolumeInventory? volumes = null,
-        ICurrentPreferences? preferences = null,
-        IRecycleBinEmptier? emptier = null)
+        ICurrentPreferences? preferences = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -106,6 +112,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default,
             emptier)
     {
+        _emptier = emptier;
         _volumes = volumes ?? VolumeInventory.Current;
         _preferences = preferences ?? DefaultPreferences.Instance;
         _children = new DisposableChildSet(
@@ -273,7 +280,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             // The root the shell would be handed, derived as EmptyRecycleBinStep derives it, so the
             // path this choice is made about and the path that route receives cannot differ.
             var volumeRoot = Path.GetDirectoryName(bin) ?? string.Empty;
-            var servedByTheShell = Emptier.Serves(volumeRoot);
+            var servedByTheShell = _emptier.Serves(volumeRoot);
 
             if (!direct && !servedByTheShell)
             {

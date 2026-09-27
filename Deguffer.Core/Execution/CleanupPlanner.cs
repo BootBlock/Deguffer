@@ -1,3 +1,4 @@
+using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -134,6 +135,11 @@ public sealed class CleanupPlanner
         var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences);
         var afterEffects = new AfterEffectsDiskCacheProvider(environment);
 
+        // The routes that hand Windows a whole volume or a cloud account are given here and nowhere else
+        // in the product. A provider takes each as a required argument, so a test builds one only by
+        // naming a stand-in, and never inherits the one that empties its runner's Recycle Bin.
+        var handlers = DiskCleanupHandlers.Default;
+
         // One analysis of the component store for both its rows: the analysis takes a minute or more,
         // and the cleanup and the reset ask it the same question.
         var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default);
@@ -191,9 +197,9 @@ public sealed class CleanupPlanner
             new GraphicsDriverInstallerProvider(environment, liveTrees: liveTrees),
             new AutodeskInstallerProvider(environment, liveTrees: liveTrees),
             new ClaudeCodeDerivedStateProvider(environment, projects: claudeProjects, sessions: claudeSessions),
-            new RecycleBinProvider(environment, preferences: preferences),
+            new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences),
             new FileHistoryProvider(environment, preferences: preferences),
-            new CloudLocalCopiesProvider(environment),
+            new CloudLocalCopiesProvider(CloudFiles.Default, environment),
             new TempDirectoryProvider(
                 environment,
                 liveTrees: liveTrees,
@@ -201,13 +207,13 @@ public sealed class CleanupPlanner
                 tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects]),
             installerDownloads,
             new DeliveryOptimizationProvider(environment),
-            new PreviousWindowsInstallationProvider(environment),
+            new PreviousWindowsInstallationProvider(handlers, environment),
             new WindowsUpdateLeftoverProvider(environment),
-            new DriverStoreProvider(environment),
+            new DriverStoreProvider(handlers, environment),
             new ComponentStoreCleanupProvider(environment, analysis: componentStore),
             new ComponentStoreResetBaseProvider(environment, analysis: componentStore),
             new CrashDumpProvider(environment),
-            new WindowsServicingLogProvider(environment),
+            new WindowsServicingLogProvider(handlers, environment),
             new EpicLauncherLogProvider(environment),
             new BattleNetLogProvider(environment),
             new VsCodeLogProvider(environment),

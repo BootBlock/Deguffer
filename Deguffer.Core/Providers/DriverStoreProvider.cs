@@ -37,6 +37,13 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// <summary>The Disk Cleanup handler, as Windows registers it under <c>VolumeCaches</c>.</summary>
     public const string Handler = "Device Driver Packages";
 
+    /// <summary>
+    /// Asked whether Windows' own cleanup has anything to clear, and given to the executor that runs it,
+    /// so the plan and the clean ask the same instance. See <see cref="CleanupProviderBase"/>'s
+    /// <c>handlers</c>.
+    /// </summary>
+    private readonly IDiskCleanupHandlers _handlers;
+
     private readonly ISystemDirectories _system;
     private readonly IDriverStore _store;
     private readonly string _repository;
@@ -48,13 +55,13 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     private Task<DriverStoreListing>? _listing;
 
     public DriverStoreProvider(
+        IDiskCleanupHandlers handlers,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
         IWindowsServicing? servicing = null,
-        IDiskCleanupHandlers? handlers = null,
         IDriverStore? store = null)
         : base(
             environment ?? UserEnvironment.Current,
@@ -64,6 +71,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             handlers: handlers,
             servicing: servicing)
     {
+        _handlers = handlers;
         _system = system ?? SystemDirectories.Current;
         _store = store ?? new DriverStore(Runner, _system);
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
@@ -169,7 +177,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         // Asked last, for the reason PreviousWindowsInstallationProvider asks last: the handler works
         // out what it would clear, and that is the one question here that can take a while.
         var volume = LongPath.Display(_system.SystemDrive);
-        var survey = await Task.Run(() => Handlers.Survey(Handler, volume, ct), ct).ConfigureAwait(false);
+        var survey = await Task.Run(() => _handlers.Survey(Handler, volume, ct), ct).ConfigureAwait(false);
 
         return survey.Answer switch
         {

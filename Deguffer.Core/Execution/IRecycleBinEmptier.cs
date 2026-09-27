@@ -75,7 +75,8 @@ public interface IRecycleBinEmptier
 /// </summary>
 public sealed class ShellRecycleBinEmptier : IRecycleBinEmptier
 {
-    public static ShellRecycleBinEmptier Default { get; } = new();
+    public static ShellRecycleBinEmptier Default { get; } =
+        new(volumeRoot => ShellNative.SHEmptyRecycleBin(IntPtr.Zero, volumeRoot, EmptyFlags));
 
     // SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND.
     //
@@ -86,14 +87,22 @@ public sealed class ShellRecycleBinEmptier : IRecycleBinEmptier
     // appearing behind the window that caused it.
     private const uint EmptyFlags = 0x00000001 | 0x00000002 | 0x00000004;
 
-    private ShellRecycleBinEmptier()
-    {
-    }
+    private readonly Func<string, int> _emptyBin;
+
+    /// <param name="emptyBin">
+    /// The native call, given the volume root and answering its HRESULT. A seam so the guard in
+    /// <see cref="Empty"/> can be tested against this type with a stand-in: a test that held the real
+    /// call would be one broken guard away from emptying the bin of whoever ran the suite, and
+    /// Microsoft documents a folder path as naming its drive's bin, and an empty one as naming every
+    /// bin on every drive.
+    /// </param>
+    internal ShellRecycleBinEmptier(Func<string, int> emptyBin) => _emptyBin = emptyBin;
 
     /// <summary>
     /// A drive root and nothing else. The scope of <c>SHEmptyRecycleBin</c> over one is what was
-    /// measured, and its scope over a volume mounted at a folder is not stated anywhere, so such a
-    /// volume is served by the direct route instead.
+    /// measured. Microsoft documents a folder path as accepted, but not whether the folder a volume is
+    /// mounted at names that volume's bin or its host drive's, so such a volume is served by the direct
+    /// route instead.
     ///
     /// <para>Fully qualified as well as a root, because <c>C:</c> is its own root and is
     /// drive-<em>relative</em> — it means the current directory on C:, which is a different path on
@@ -137,13 +146,13 @@ public sealed class ShellRecycleBinEmptier : IRecycleBinEmptier
         return outcome;
     }
 
-    private static RecycleBinEmptyOutcome Perform(string volumeRoot)
+    private RecycleBinEmptyOutcome Perform(string volumeRoot)
     {
         int hresult;
 
         try
         {
-            hresult = ShellNative.SHEmptyRecycleBin(IntPtr.Zero, volumeRoot, EmptyFlags);
+            hresult = _emptyBin(volumeRoot);
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {

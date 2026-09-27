@@ -31,27 +31,28 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
+    private readonly ICloudFiles? _cloud;
 
     /// <param name="emptier">
-    /// How a <see cref="EmptyRecycleBinStep"/> is carried out, for the one provider that plans one.
-    /// Defaulted rather than required because every other provider has no use for it, and injected
-    /// rather than reached for because the real one empties the Recycle Bin of whoever runs the
-    /// suite.
+    /// How an <see cref="EmptyRecycleBinStep"/> is carried out, given by the one provider that plans one
+    /// and null for every other. That provider takes it as a required argument and chooses its route by
+    /// asking the same instance, so a plan cannot choose a route on one object's answer and then be
+    /// carried out by another. Never defaulted to the real one, which empties the Recycle Bin of
+    /// whoever runs the process. See <see cref="PlanExecutor"/>.
     /// </param>
     /// <param name="cloud">
-    /// How a <see cref="ReleaseLocalCopiesStep"/> is planned, carried out and proved, for the one provider
-    /// that plans one. Defaulted and injected for the reason <paramref name="emptier"/> is: the real one
-    /// acts on the cloud accounts of whoever runs the suite.
+    /// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and proved, on the terms
+    /// <paramref name="emptier"/> is given: the real one acts on the cloud accounts of whoever runs the
+    /// process.
     /// </param>
     /// <param name="handlers">
-    /// How a <see cref="DiskCleanupStep"/> is carried out, for the providers that plan one. Defaulted
-    /// and injected for the reason <paramref name="emptier"/> is: the real one deletes the previous
-    /// Windows installation of whoever runs the suite.
+    /// How a <see cref="DiskCleanupStep"/> is carried out, on the terms <paramref name="emptier"/> is
+    /// given: the real one can delete the previous Windows installation.
     /// </param>
     /// <param name="servicing">
     /// Where Windows is in servicing itself, asked when a plan is made and again before a step that is
-    /// <see cref="CleanupStep.HeldWhileUpdating"/> runs, by the same instance for the reason
-    /// <see cref="Emptier"/> is shared.
+    /// <see cref="CleanupStep.HeldWhileUpdating"/> runs, by the same instance. Defaulted to the
+    /// machine's own, because it only reads.
     /// </param>
     /// <param name="time">
     /// The clock a command step waits on while its tool marks what it will remove later. See
@@ -72,35 +73,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Inspector = inspector;
         Scanner = scanner;
         _refusals = RefusalRecord.For(environment);
-        Emptier = emptier ?? ShellRecycleBinEmptier.Default;
-        Cloud = cloud ?? CloudFiles.Default;
-        Handlers = handlers ?? DiskCleanupHandlers.Default;
+        _cloud = cloud;
         Servicing = servicing ?? WindowsServicing.Current;
-        _executor = new PlanExecutor(runner, scanner, _refusals, Emptier, Cloud, Handlers, Servicing, inspector, time, environment);
+        _executor = new PlanExecutor(runner, scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment);
         Runner = runner;
     }
 
     protected IUserEnvironment Environment { get; }
-
-    /// <summary>
-    /// The route a <see cref="EmptyRecycleBinStep"/> takes, resolved here rather than left to the
-    /// executor so that a provider choosing between it and removing the files itself asks the same
-    /// instance the step will be carried out by. Two defaults would let a plan choose a route on
-    /// one object's answer and then be executed by another.
-    /// </summary>
-    protected IRecycleBinEmptier Emptier { get; }
-
-    /// <summary>
-    /// The Cloud Files API a <see cref="ReleaseLocalCopiesStep"/> is planned through, and the same one it
-    /// is carried out and proved through, for the reason <see cref="Emptier"/> is shared.
-    /// </summary>
-    protected ICloudFiles Cloud { get; }
-
-    /// <summary>
-    /// The handlers a <see cref="DiskCleanupStep"/> is carried out by, asked whether each is there by
-    /// the same instance that will run it, for the reason <see cref="Emptier"/> is shared.
-    /// </summary>
-    protected IDiskCleanupHandlers Handlers { get; }
 
     /// <summary>Where Windows is in servicing itself. See the constructor's parameter.</summary>
     protected IWindowsServicing Servicing { get; }
@@ -239,7 +218,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CleanupPlan plan,
         RunReach? runReach = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue: null, ct, Cloud));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue: null, ct, _cloud));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()

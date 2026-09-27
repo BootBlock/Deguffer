@@ -36,12 +36,12 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         FakeWindowsServicing? servicing = null,
         FakeProcessInspector? inspector = null) =>
         new(
+            handlers ?? FakeDiskCleanupHandlers.Windows(),
             _environment,
             new FakeProcessRunner(),
             inspector ?? FakeProcessInspector.NothingRunning,
             system: _system,
-            servicing: servicing ?? FakeWindowsServicing.Settled,
-            handlers: handlers ?? FakeDiskCleanupHandlers.Windows());
+            servicing: servicing ?? FakeWindowsServicing.Settled);
 
     /// <summary>
     /// A directory at the top of the drive holding one file, with every entry in it dated

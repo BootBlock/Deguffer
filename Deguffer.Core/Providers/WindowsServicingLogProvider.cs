@@ -68,16 +68,23 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     /// </summary>
     public const string ResetLogsHandler = "Windows Reset Log Files";
 
+    /// <summary>
+    /// Asked whether Windows' own cleanup has anything to clear, and given to the executor that runs it,
+    /// so the plan and the clean ask the same instance. See <see cref="CleanupProviderBase"/>'s
+    /// <c>handlers</c>.
+    /// </summary>
+    private readonly IDiskCleanupHandlers _handlers;
+
     private readonly ISystemDirectories _system;
     private readonly IReadOnlyList<DeclaredRoot> _roots;
 
     public WindowsServicingLogProvider(
+        IDiskCleanupHandlers handlers,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null,
-        IDiskCleanupHandlers? handlers = null)
+        ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -85,6 +92,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default,
             handlers: handlers)
     {
+        _handlers = handlers;
         _system = system ?? SystemDirectories.Current;
         _roots = Declare(_system);
         ResetLogs = SystemDriveRoot.Holding(
@@ -187,7 +195,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         var volume = LongPath.Display(_system.SystemDrive);
         var survey = resetLogs.Count == 0
             ? null
-            : await Task.Run(() => Handlers.Survey(ResetLogsHandler, volume, ct), ct).ConfigureAwait(false);
+            : await Task.Run(() => _handlers.Survey(ResetLogsHandler, volume, ct), ct).ConfigureAwait(false);
 
         if (survey is { MayOffer: true })
         {

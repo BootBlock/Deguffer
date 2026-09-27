@@ -42,12 +42,18 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             ["OneDrive"] = "OneDrive",
         }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// What the sync roots are read through, and the same instance their files are released and proved
+    /// through. See <see cref="CleanupProviderBase"/>'s <c>cloud</c>.
+    /// </summary>
+    private readonly ICloudFiles _cloud;
+
     public CloudLocalCopiesProvider(
+        ICloudFiles cloud,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null,
-        ICloudFiles? cloud = null)
+        IDirectoryScanner? scanner = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -55,6 +61,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default,
             cloud: cloud)
     {
+        _cloud = cloud;
     }
 
     public override string Id => "cloud-local-copies";
@@ -86,12 +93,12 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
     /// plan then says what happened.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Cloud.SyncRoots() is not { } roots
+        Task.FromResult(_cloud.SyncRoots() is not { } roots
             || roots.Any(root => RecognisedApps.ContainsKey(root.ProviderName)));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (Cloud.SyncRoots() is not { } roots)
+        if (_cloud.SyncRoots() is not { } roots)
         {
             return UnexaminedPlan("Windows would not list the folders kept in step with the cloud, so none of "
                 + "them was looked at.") with
@@ -134,7 +141,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             protect.Add((root.Path, $"The folder {app} keeps in step with the cloud, which must survive with "
                 + "every file in it."));
 
-            if (Cloud.ProviderState(root.Path) is not SyncProviderState.Running)
+            if (_cloud.ProviderState(root.Path) is not SyncProviderState.Running)
             {
                 declined = true;
                 notes.Add(new PlanNote(
@@ -143,7 +150,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
                 continue;
             }
 
-            var selection = await Task.Run(() => PlaceholderWalk.Of(Cloud, root.Path, keep, ct), ct)
+            var selection = await Task.Run(() => PlaceholderWalk.Of(_cloud, root.Path, keep, ct), ct)
                 .ConfigureAwait(false);
 
             notes.AddRange(NotesFor(selection, app, name));
