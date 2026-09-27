@@ -192,7 +192,7 @@ public sealed class RunChangesTests
             throw new NotSupportedException();
 
         public Task<VerificationResult> VerifyAsync(
-            CleanupPlan plan, RunReach? runReach = null, CancellationToken ct = default) =>
+            CleanupPlan plan, RunReach? runReach = null, RunResidue? residue = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 }

@@ -1795,6 +1795,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         public Task<Execution.VerificationResult> VerifyAsync(
             Execution.CleanupPlan plan,
             Execution.RunReach? runReach = null,
+            Execution.RunResidue? residue = null,
             CancellationToken ct = default) =>
             throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
     }

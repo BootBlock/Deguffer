@@ -45,6 +45,10 @@ namespace Deguffer.Core.Execution;
 /// and apart from <paramref name="BytesRequested"/>, because the user can say when this one happens:
 /// it happens when they next open the program.
 /// </param>
+/// <param name="Interrupted">
+/// Whether the clean was cancelled while this step ran. Its figures are what it did before it
+/// stopped, and a step that could not say is counted as having reclaimed nothing.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -57,7 +61,8 @@ public sealed record StepOutcome(
     FolderRefusals RefusedFolders = default,
     int MailStores = 0,
     long BytesRequested = 0,
-    long BytesScheduled = 0);
+    long BytesScheduled = 0,
+    bool Interrupted = false);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -71,6 +76,13 @@ public sealed record CleanupResult
     public TimeSpan Duration { get; init; }
 
     public VerificationResult? Verification { get; init; }
+
+    /// <summary>
+    /// Whether the clean was cancelled before this plan finished: a step stopped part-way, or steps
+    /// that never started. <see cref="Steps"/> holds only the steps that ran, and
+    /// <see cref="Verification"/> is made whatever happened, because §5.6 is part of acting.
+    /// </summary>
+    public bool Interrupted { get; init; }
 
     public long BytesReclaimed => Steps.Sum(s => s.BytesReclaimed);
 

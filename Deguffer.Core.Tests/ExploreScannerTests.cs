@@ -380,13 +380,4 @@ public class ExploreScannerTests
     private static char UnusedDriveLetter() =>
         "ZYXWVUTSRQPONM".First(letter => !Directory.Exists($@"{letter}:\"));
 
-    /// <summary>
-    /// Progress that runs the callback on the reporting thread. <see cref="Progress{T}"/> posts to
-    /// the thread pool, so a test that has to act on a report while the scan is still on it cannot
-    /// use one.
-    /// </summary>
-    private sealed class CallbackProgress<T>(Action<T> onReport) : IProgress<T>
-    {
-        public void Report(T value) => onReport(value);
-    }
 }

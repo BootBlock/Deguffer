@@ -104,9 +104,14 @@ public interface ICleanupProvider
         CancellationToken ct = default);
 
     /// <summary>§5.6 — assert the survivors.</summary>
+    /// <param name="residue">
+    /// What the run's removals left standing, for a plan verified inside a run it did not act in. Null
+    /// means nothing was removed.
+    /// </param>
     Task<VerificationResult> VerifyAsync(
         CleanupPlan plan,
         RunReach? runReach = null,
+        RunResidue? residue = null,
         CancellationToken ct = default);
 
     /// <summary>

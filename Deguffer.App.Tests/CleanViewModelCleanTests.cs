@@ -48,6 +48,41 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// A clean cancelled part-way still reports what it did and its §5.6 verdict, and plans again the
+    /// rows it changed, so none of them goes on offering what has gone.
+    /// </summary>
+    [Fact]
+    public void ACancelledCleanReportsWhatItDidAndPlansItsRowsAgain()
+    {
+        var first = new FakeCleanupProvider("first");
+        var second = new FakeCleanupProvider("second");
+        using var page = new StoragePage([first, second]);
+        var taken = page.Cache("taken", 4096);
+        var untouched = page.Cache("untouched", 1024);
+        first.Steps = [taken];
+        second.Steps = [untouched];
+        first.AfterCleaning = () => page.ViewModel.CancelCommand.Execute(null);
+        page.Scan();
+
+        page.Clean();
+
+        Assert.False(Directory.Exists(taken.Path));
+        Assert.True(Directory.Exists(untouched.Path));
+        Assert.Empty(second.Executed);
+
+        Assert.True(page.ViewModel.HasRunResult);
+        Assert.Equal("4 KB", page.ViewModel.RemovedLabel);
+        Assert.Equal(
+            "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived.",
+            page.ViewModel.RunStatement);
+        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+        Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
+
+        Assert.Equal(2, first.PlanCount);
+        Assert.True(page.ViewModel.HasPreview);
+    }
+
+    /// <summary>
     /// §5.4 and §7: what the run removed and how the volume's free space moved are two figures, and the
     /// second is read from the volume either side of the run.
     /// </summary>

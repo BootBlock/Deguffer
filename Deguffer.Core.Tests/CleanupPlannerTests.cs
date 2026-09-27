@@ -875,7 +875,7 @@ public sealed class CleanupPlannerTests
         }
 
         public Task<VerificationResult> VerifyAsync(
-            CleanupPlan plan, RunReach? runReach = null, CancellationToken ct = default) =>
+            CleanupPlan plan, RunReach? runReach = null, RunResidue? residue = null, CancellationToken ct = default) =>
             Task.FromResult(new VerificationResult());
     }
 }

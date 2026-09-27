@@ -52,6 +52,45 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
+    /// A cancelled run says so first, and holds the bar even where every protected path survived:
+    /// the fresh preview's totals would not say that the clean stopped part-way.
+    /// </summary>
+    [Fact]
+    public void ACancelledRunSaysItStoppedAndHoldsTheBar()
+    {
+        var outcome = RunOutcome.For([Result("npm"), Result("NuGet") with { Interrupted = true }]);
+
+        Assert.True(outcome.Cancelled);
+        Assert.True(outcome.NeedsReporting);
+        Assert.Equal(RunVerdict.AllSurvived, outcome.Verdict);
+        Assert.Equal(
+            "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived.",
+            outcome.Statement);
+    }
+
+    /// <summary>A cancelled run that failed verification is still the alarm, and still says it stopped.</summary>
+    [Fact]
+    public void ACancelledRunThatFailedVerificationIsStillTheAlarm()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm") with { Interrupted = true }, Result("NuGet", VerificationOutcome.Failed) with { Interrupted = true }]);
+
+        Assert.True(outcome.VerificationFailed);
+        Assert.True(outcome.Cancelled);
+        Assert.StartsWith("Clean cancelled part-way, and verification failed for NuGet.", outcome.Statement);
+    }
+
+    /// <summary>A run that finished is not reported as cancelled, and yields the bar when all is well.</summary>
+    [Fact]
+    public void ARunThatFinishedIsNotReportedAsCancelled()
+    {
+        var outcome = RunOutcome.For([Result("npm")]);
+
+        Assert.False(outcome.Cancelled);
+        Assert.False(outcome.NeedsReporting);
+    }
+
+    /// <summary>
     /// One provider over-reaching is the whole run's headline. Reporting the majority that passed
     /// would be true and useless: the user needs to know a rule was over-broad before the next run.
     /// </summary>

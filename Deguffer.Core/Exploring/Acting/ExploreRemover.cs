@@ -40,6 +40,9 @@ public sealed record ExploreItemOutcome(string Path, bool Removed, long Bytes, s
     /// check on what stood beside the item says nothing about it.
     /// </summary>
     public IReadOnlyList<string> MailStores { get; init; } = [];
+
+    /// <summary>Whether the removal was cancelled while it worked on this item.</summary>
+    public bool Interrupted { get; init; }
 }
 
 /// <summary>What one Explore removal did, and the §5.6 evidence that it did no more.</summary>
@@ -174,7 +177,16 @@ public static class ExploreRemover
             {
                 ct.ThrowIfCancellationRequested();
 
-                outcomes.Add(await RemoveOneAsync(item, mode, bin, fs, ct).ConfigureAwait(false));
+                var outcome = await RemoveOneAsync(item, mode, bin, fs, ct).ConfigureAwait(false);
+                outcomes.Add(outcome);
+
+                // A folder removal returns what it did rather than throwing, so the item it stopped in
+                // is reported with the rest.
+                if (outcome.Interrupted)
+                {
+                    cancelled = true;
+                    break;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -332,16 +344,22 @@ public static class ExploreRemover
         // A folder whose root went held nothing refused, because a refused file or folder keeps every
         // folder above it standing. So only the partial case has anything to say about what stayed —
         // and an Outlook mail store the removal stepped over keeps its folders standing the same way.
+        var left = LeftInPlace.Clauses(tree.Refused, tree.RefusedFolders, kept: 0, mailStores: tree.MailStores.Count);
+
         return new ExploreItemOutcome(
             item.Path,
             tree.RootRemoved,
             tree.BytesReclaimed,
-            tree.RootRemoved
-                ? "Deleted."
-                : $"Partly deleted{LeftInPlace.Clauses(tree.Refused, tree.RefusedFolders, kept: 0, mailStores: tree.MailStores.Count)}, "
-                  + "so the folder is still there.")
+            tree switch
+            {
+                { Interrupted: true, BytesReclaimed: 0, EntriesRemoved: 0 } => "Not deleted: the removal was cancelled first.",
+                { Interrupted: true } => $"Partly deleted before the removal was cancelled{left}, so the folder is still there.",
+                { RootRemoved: true } => "Deleted.",
+                _ => $"Partly deleted{left}, so the folder is still there.",
+            })
         {
             MailStores = tree.MailStores,
+            Interrupted = tree.Interrupted,
         };
     }
 

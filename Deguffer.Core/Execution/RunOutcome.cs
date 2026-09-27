@@ -43,7 +43,11 @@ public enum RunVerdict
 /// </summary>
 /// <param name="Statement">The sentence, always non-empty: a run that verified cleanly still says so.</param>
 /// <param name="Verdict">Which of the things above happened.</param>
-public sealed record RunOutcome(string Statement, RunVerdict Verdict)
+/// <param name="Cancelled">
+/// Whether the user cancelled the run before it finished. The verdict still stands: it covers every
+/// plan, the ones never started included. See <see cref="CleanupPlanner.ExecuteAsync"/>.
+/// </param>
+public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cancelled = false)
 {
     /// <summary>
     /// Whether a rule was over-broad. The headline, and the only verdict that is an alarm: the user
@@ -55,13 +59,20 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
     /// Whether this sentence has to hold the info bar rather than yield to the fresh preview's
     /// totals. Every verdict but the clean one does: one is a fault to report, one is the reason the
     /// run's figures describe a machine that moved underneath them, and one names paths nobody could
-    /// check, which the fresh preview's totals would not mention.
+    /// check, which the fresh preview's totals would not mention. A cancelled run does too, because
+    /// the totals would not say that the clean stopped part-way.
     /// </summary>
-    public bool NeedsReporting => Verdict != RunVerdict.AllSurvived;
+    public bool NeedsReporting => Verdict != RunVerdict.AllSurvived || Cancelled;
 
     public static RunOutcome For(IReadOnlyList<CleanupResult> results)
     {
         ArgumentNullException.ThrowIfNull(results);
+
+        var cancelled = results.Any(r => r.Interrupted);
+
+        // What the run did, before what §5.6 found. A cancelled run says so first, because every
+        // figure beside the sentence is smaller than the preview promised for that reason.
+        var did = cancelled ? "Clean cancelled part-way." : "Cleaned.";
 
         var failed = results.Where(r => r.Verification is { Failures.Count: > 0 }).ToList();
 
@@ -70,9 +81,11 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
             // A failed run says one thing. What the run left behind is routine, and appending it
             // here would bury the only sentence on the screen that is an alarm.
             return new RunOutcome(
-                $"Cleaned, but verification failed for {Names(failed)}. " +
-                "A protected path did not survive — please report this.",
-                RunVerdict.VerificationFailed);
+                (cancelled ? "Clean cancelled part-way, and" : "Cleaned, but")
+                + $" verification failed for {Names(failed)}. "
+                + "A protected path did not survive — please report this.",
+                RunVerdict.VerificationFailed,
+                cancelled);
         }
 
         var outside = results.Where(r => r.Verification is { RemovedFromOutside.Count: > 0 }).ToList();
@@ -94,19 +107,26 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict)
             // What the run left behind stays on this one, because it is not an alarm and because
             // both facts explain the same thing: why the figures are not what the preview implied.
             return new RunOutcome(
-                $"Cleaned. {went} — which no step in this run named. Scan again to see the "
+                $"{did} {went} — which no step in this run named. Scan again to see the "
                 + "machine as it is now."
                 + NotChecked(results)
                 + LeftBehind(results),
-                RunVerdict.RemovedFromOutside);
+                RunVerdict.RemovedFromOutside,
+                cancelled);
         }
 
         if (results.Any(r => r.Verification is { Unverified.Count: > 0 }))
         {
-            return new RunOutcome("Cleaned." + NotChecked(results) + LeftBehind(results), RunVerdict.Unverified);
+            return new RunOutcome(did + NotChecked(results) + LeftBehind(results), RunVerdict.Unverified, cancelled);
         }
 
-        return new RunOutcome("All protected paths survived." + LeftBehind(results), RunVerdict.AllSurvived);
+        return new RunOutcome(
+            (cancelled
+                ? "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived."
+                : "All protected paths survived.")
+            + LeftBehind(results),
+            RunVerdict.AllSurvived,
+            cancelled);
     }
 
     /// <summary>

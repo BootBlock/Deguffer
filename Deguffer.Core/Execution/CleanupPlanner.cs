@@ -331,8 +331,9 @@ public sealed class CleanupPlanner
     /// </summary>
     /// <param name="confirmations">
     /// The answers §7 requires for anything above Tier 1, collected before execution begins because
-    /// §7 makes deleting the deliberate second step. A plan whose requirement is unmet throws rather
-    /// than being skipped: silently dropping it would report success for work not done.
+    /// §7 makes deleting the deliberate second step. A plan whose requirement is unmet throws, before
+    /// any plan runs, rather than being skipped: silently dropping it would report success for work not
+    /// done.
     /// </param>
     /// <param name="requireTypedPhrase">
     /// The user's preference about §7's typed phrase, which has to reach here as well as the shell:
@@ -343,6 +344,12 @@ public sealed class CleanupPlanner
     /// <param name="progress">
     /// How far through the whole run, 0 to 1. Unlike planning, execution knows its own extent
     /// before it starts, so this is a fraction rather than a sentence.
+    /// </param>
+    /// <param name="ct">
+    /// Stops the run. <b>Never thrown:</b> the results hold every plan, the ones that finished, the
+    /// one that was stopped and the ones never started, each <see cref="CleanupResult.Interrupted"/>
+    /// where it did not finish and each verified (§5.6). Unlike planning, a cancelled clean has
+    /// already changed the disk, and the results are the only account of how.
     /// </param>
     public async Task<IReadOnlyList<CleanupResult>> ExecuteAsync(
         IReadOnlyList<Finding> selected,
@@ -384,46 +391,61 @@ public sealed class CleanupPlanner
         // to leave. See RunResidue.
         var residue = new RunResidue();
 
+        // §7's extra confirmation for anything above Tier 1, for every plan before the first deletion.
+        // The requirement is derived here rather than trusted from the caller: a shell that forgot to
+        // ask, or asked for the wrong subject, must fail closed rather than delete. Asked inside the
+        // loop, the refusal of a later plan arrived after an earlier one had deleted, and threw away
+        // that plan's result and its §5.6 verdict.
+        //
+        // A plan with no steps is not asked about at any tier. It destroys nothing, so there is
+        // nothing to authorise, and failing closed on it would refuse the run over a check that only
+        // reads the disk.
+        foreach (var (_, plan) in plans.Where(p => !p.Plan.IsEmpty))
+        {
+            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
+
+            if (!requirement.IsSatisfiedBy(confirmations))
+            {
+                throw new ConfirmationRequiredException(requirement);
+            }
+        }
+
         var weights = Weigh([.. plans.Select(p => p.Plan)]);
         var total = weights.Sum();
         var results = new List<CleanupResult>(plans.Count);
         var done = 0.0;
+        var cancelled = false;
 
         for (var i = 0; i < plans.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
-
             var (finding, plan) = plans[i];
 
-            // §7's extra confirmation for anything above Tier 1. The requirement is derived here
-            // rather than trusted from the caller: a shell that forgot to ask, or asked for the
-            // wrong subject, must fail closed rather than delete.
-            //
-            // A plan with no steps is not asked about at any tier. It destroys nothing, so there is
-            // nothing to authorise, and failing closed on it would throw the rest of the run away
-            // over a check that only reads the disk.
-            if (!plan.IsEmpty)
+            // A plan that deletes is not started once the clean is cancelled, and is only verified. See
+            // ProveUnstartedAsync. A plan that only proves is run whatever happened, with a token that
+            // cannot be cancelled: its promise is about what the run leaves standing, and a cancelled
+            // run is the one that most needs it kept.
+            if (!plan.IsEmpty && (cancelled || ct.IsCancellationRequested))
             {
-                var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
-
-                if (!requirement.IsSatisfiedBy(confirmations))
-                {
-                    throw new ConfirmationRequiredException(requirement);
-                }
+                cancelled = true;
+                results.Add(await ProveUnstartedAsync(finding, plan, reach, residue).ConfigureAwait(false));
+                continue;
             }
 
             status?.Report(plan.IsEmpty
                 ? $"Checking what {finding.Provider.Name} left alone…"
                 : $"Cleaning {finding.Provider.Name}…");
 
-            results.Add(await finding.Provider
+            var result = await finding.Provider
                 .ExecuteAsync(
                     plan,
                     reach,
                     residue,
                     ScaledProgress.Within(progress, done / total, weights[i] / total),
-                    ct)
-                .ConfigureAwait(false));
+                    plan.IsEmpty ? CancellationToken.None : ct)
+                .ConfigureAwait(false);
+
+            results.Add(result);
+            cancelled |= result.Interrupted;
 
             // Reported from here rather than trusted from the provider: a provider that reports
             // nothing would otherwise leave the bar wherever the previous one left it, and one that
@@ -434,6 +456,25 @@ public sealed class CleanupPlanner
 
         return results;
     }
+
+    /// <summary>
+    /// The result of a plan the clean was cancelled before starting: no steps, and the §5.6 check of
+    /// everything it protects. An earlier plan's over-reach is what could have taken one of those
+    /// paths, and in a run that finished this plan's own verification would have been what said so.
+    /// </summary>
+    private static async Task<CleanupResult> ProveUnstartedAsync(
+        Finding finding,
+        CleanupPlan plan,
+        RunReach reach,
+        RunResidue residue) => new()
+    {
+        ProviderId = plan.ProviderId,
+        ProviderName = plan.ProviderName,
+        Interrupted = true,
+        Verification = await finding.Provider
+            .VerifyAsync(plan, reach, residue, CancellationToken.None)
+            .ConfigureAwait(false),
+    };
 
     /// <summary>
     /// Each plan's share of the bar: a plan that deletes is weighted by what it frees, and a plan run
