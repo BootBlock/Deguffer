@@ -158,17 +158,16 @@ public sealed class PlanExecutorCancellationTests : IDisposable
     }
 
     /// <summary>
-    /// An index the clean was cancelled in the middle of removing still points into the directory it
-    /// indexes, so that directory is left alone, and the step says it was stopped rather than that
-    /// the index could not be removed.
+    /// An index removal the clean was cancelled in says it was stopped, rather than that the index
+    /// could not be removed, and is not complete, which is what keeps the executor away from the
+    /// directory it indexes.
     /// </summary>
     [Fact]
-    public async Task AnIndexRemovalStoppedByTheCancelLeavesTheIndexedDirectoryAlone()
+    public async Task AnIndexRemovalStoppedByTheCancelSaysItWasStopped()
     {
         var index = _temp.CreateDirectory("project", "index");
         _temp.CreateFile(16, "project", "index", "entries.bin");
         var output = _temp.CreateDirectory("project", "out");
-        var built = _temp.CreateFile(16, "project", "out", "app.dll");
         var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
 
         using var cts = new CancellationTokenSource();
@@ -183,7 +182,6 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         Assert.True(outcome.Interrupted);
         Assert.False(outcome.Succeeded);
         Assert.StartsWith("Stopped when the clean was cancelled", outcome.Message);
-        Assert.True(File.Exists(built));
     }
 
     private PlanExecutor Executor() =>

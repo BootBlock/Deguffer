@@ -49,8 +49,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private bool _barShowsPreviewSummary;
 
-    /// <summary>Stops the re-plan after a cancelled clean. See <see cref="ReplanAfterCancelAsync"/>.</summary>
-    private CancellationTokenSource? _replanAfterCancel;
+    /// <summary>Stops the re-plan after a clean. See <see cref="ReplanRunChangesAsync"/>.</summary>
+    private CancellationTokenSource? _replanCancellation;
 
     /// <param name="volumes">Where the profile's volume is asked how full it is, before and after a run.</param>
     /// <param name="isElevated">
@@ -574,14 +574,7 @@ public sealed partial class CleanViewModel : ObservableObject
             // the disk, and measuring it again is the whole scan over for answers already on screen.
             var stale = RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised);
 
-            if (outcome.Cancelled)
-            {
-                await ReplanAfterCancelAsync(stale);
-            }
-            else
-            {
-                await ReplanAsync(stale, ct);
-            }
+            await ReplanRunChangesAsync(stale, ct);
 
             // Last, so a re-plan's per-provider progress lines cannot be what the bar is left
             // showing. See ReportOutcome for which of the two sentences wins it.
@@ -589,7 +582,9 @@ public sealed partial class CleanViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            Report("Clean cancelled. Anything already removed stays removed.", InfoBarSeverity.Warning);
+            // Only the confirmations can be cancelled here: the run itself reports a cancellation
+            // rather than throwing it, and so does the re-plan after it.
+            Report("Clean cancelled. Nothing was removed.", InfoBarSeverity.Warning);
         }
         catch (Exception ex) when (ex is IOException
                                       or UnauthorizedAccessException
@@ -702,30 +697,36 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The re-plan after a clean the user cancelled, which changed the disk as far as it got.
+    /// The re-plan after a clean, of the rows it changed.
     ///
-    /// <para>Under a token of its own, because the clean's is already cancelled, and one that
-    /// <see cref="Cancel"/> still stops: a re-plan measures whole trees, and pressing Cancel twice
-    /// has to work. A re-plan stopped that way leaves the preview withdrawn, as
-    /// <see cref="ReplanAsync"/> says, so Clean stays off until a scan. The run's own sentence still
-    /// stands, which is why the cancellation is caught here rather than reported as the clean's.</para>
+    /// <para>Under a token of its own, which <see cref="Cancel"/> stops, and which the clean's token
+    /// stops too while that one is live. A clean the user cancelled, part-way or after its last
+    /// deletion, has spent its token, and what it changed still has to be planned again. A re-plan
+    /// measures whole trees, so pressing Cancel again has to work.</para>
+    ///
+    /// <para>A re-plan stopped that way leaves the preview withdrawn, as <see cref="ReplanAsync"/>
+    /// says, so Clean stays off until a scan. The run's own sentence still stands, a §5.6 alarm
+    /// included, which is why the cancellation is caught here rather than reported over it.</para>
     /// </summary>
-    private async Task ReplanAfterCancelAsync(IReadOnlyList<ICleanupProvider> providers)
+    private async Task ReplanRunChangesAsync(IReadOnlyList<ICleanupProvider> providers, CancellationToken ct)
     {
-        using var replan = new CancellationTokenSource();
-        _replanAfterCancel = replan;
+        using var replan = ct.IsCancellationRequested
+            ? new CancellationTokenSource()
+            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        _replanCancellation = replan;
 
         try
         {
             await ReplanAsync(providers, replan.Token);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (replan.IsCancellationRequested)
         {
-            // Stopped by the second Cancel. The rows stay withdrawn, and the caller reports the run.
+            // Stopped by Cancel. The rows stay withdrawn, and the caller reports the run.
         }
         finally
         {
-            _replanAfterCancel = null;
+            _replanCancellation = null;
         }
     }
 
@@ -884,6 +885,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// describe keeps it as a warning as well, because nothing else on the screen says it went
     /// unchecked.</para>
     ///
+    /// <para>A cancelled run keeps it as a warning whatever its verdict, because the totals would not
+    /// say that the clean stopped part-way.</para>
+    ///
     /// <para>Every other outcome yields to those totals, which describe the list now on screen. That
     /// sentence is also the only one a selection change may keep current, so stating it here is what
     /// makes ticking a row after a clean move the bar rather than leave it describing a machine two
@@ -949,7 +953,7 @@ public sealed partial class CleanViewModel : ObservableObject
             CleanCancelCommand.Execute(null);
         }
 
-        _replanAfterCancel?.Cancel();
+        _replanCancellation?.Cancel();
     }
 
     private void ClearRunResult()

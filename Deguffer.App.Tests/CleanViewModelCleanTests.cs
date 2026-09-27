@@ -83,6 +83,57 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// Cancel pressed once the last deletion has finished stops nothing, so the run is reported as the
+    /// clean it was, and its rows are planned again rather than left withdrawn under a spent token.
+    /// </summary>
+    [Fact]
+    public void ACancelAfterTheLastDeletionStillReportsTheRunAndPlansItsRowsAgain()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        var taken = page.Cache("taken", 4096);
+        cache.Steps = [taken];
+        cache.AfterCleaning = () => page.ViewModel.CancelCommand.Execute(null);
+        page.Scan();
+
+        page.Clean();
+
+        Assert.False(Directory.Exists(taken.Path));
+        Assert.Equal("All protected paths survived.", page.ViewModel.RunStatement);
+        Assert.DoesNotContain("cancelled", page.ViewModel.Status, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, cache.PlanCount);
+        Assert.True(page.ViewModel.HasPreview);
+    }
+
+    /// <summary>
+    /// Cancel pressed while the rows are planned again stops the re-plan and nothing else: the run's
+    /// own sentence stays on the bar, and here it is a §5.6 alarm, which a cancellation notice would
+    /// otherwise have replaced.
+    /// </summary>
+    [Fact]
+    public void ACancelDuringTheReplanLeavesTheRunsAlarmOnTheBar()
+    {
+        var first = new FakeCleanupProvider("first");
+        var second = new FakeCleanupProvider("second");
+        using var page = new StoragePage([first, second]);
+        var taken = page.Cache("taken", 4096);
+        var promised = Path.Combine(taken.Path, "promised");
+        Directory.CreateDirectory(promised);
+        first.Steps = [taken];
+        first.ProtectedPaths = [new ProtectedPath(promised, "Must survive.", PathPresence.Present)];
+        second.Steps = [page.Cache("other", 1024)];
+        page.Scan();
+
+        first.AfterCleaning = () => first.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
+        page.Clean();
+
+        Assert.True(page.ViewModel.RunVerificationFailed);
+        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+        Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
+        Assert.False(page.ViewModel.HasPreview);
+    }
+
+    /// <summary>
     /// §5.4 and §7: what the run removed and how the volume's free space moved are two figures, and the
     /// second is read from the volume either side of the run.
     /// </summary>

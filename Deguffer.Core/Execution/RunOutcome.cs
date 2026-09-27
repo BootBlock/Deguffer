@@ -47,7 +47,7 @@ public enum RunVerdict
 /// Whether the user cancelled the run before it finished. The verdict still stands: it covers every
 /// plan, the ones never started included. See <see cref="CleanupPlanner.ExecuteAsync"/>.
 /// </param>
-public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cancelled = false)
+public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cancelled)
 {
     /// <summary>
     /// Whether a rule was over-broad. The headline, and the only verdict that is an alarm: the user

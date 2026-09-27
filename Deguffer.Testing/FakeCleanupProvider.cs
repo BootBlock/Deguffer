@@ -59,6 +59,9 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// </summary>
     public Action? AfterCleaning { get; set; }
 
+    /// <summary>Run each time it is planned, such as the user pressing Cancel while a re-plan is under way.</summary>
+    public Action? WhilePlanning { get; set; }
+
     /// <summary>How many times it has been planned. A re-plan that left it alone did not add to this.</summary>
     public int PlanCount { get; private set; }
 
@@ -79,6 +82,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
     {
         PlanCount++;
+        WhilePlanning?.Invoke();
 
         return PlanFailure is { } failure
             ? Task.FromException<CleanupPlan>(failure)

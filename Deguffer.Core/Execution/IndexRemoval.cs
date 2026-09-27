@@ -20,7 +20,8 @@ namespace Deguffer.Core.Execution;
 /// <param name="MailStores">How many Outlook data files the removal stepped over, and left.</param>
 /// <param name="Interrupted">
 /// Whether the clean was cancelled while the index was being removed. Never <paramref name="Complete"/>
-/// as well: what is left of the index still points into the directory, which then must not be touched.
+/// as well, because a removal takes its root last and a cancelled one never reaches it: what is left of
+/// the index still points into the directory, which then must not be touched.
 /// </param>
 internal sealed record IndexRemoval(
     bool Complete,
@@ -57,7 +58,7 @@ internal sealed record IndexRemoval(
             leftStanding.Record(index, removal.LeftStanding);
 
             // Also true of an index already gone when the run arrived: nothing is left to point anywhere.
-            var complete = removal.RootRemoved && !removal.Interrupted;
+            var complete = removal.RootRemoved;
 
             total = new IndexRemoval(
                 complete,

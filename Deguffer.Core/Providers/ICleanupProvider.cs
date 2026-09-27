@@ -96,6 +96,11 @@ public interface ICleanupProvider
     /// a folder another provider's removal went into is still a folder this run went into. Null means
     /// this plan is the whole run.
     /// </param>
+    /// <param name="ct">
+    /// Stops the plan. <b>Never thrown:</b> a cancelled plan returns the steps that ran, is
+    /// <see cref="CleanupResult.Interrupted"/>, and is verified (§5.6). The planner keeps the results of
+    /// a cancelled run on that promise. See <see cref="PlanExecutor.ExecuteAsync"/>.
+    /// </param>
     Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
         RunReach? runReach = null,
