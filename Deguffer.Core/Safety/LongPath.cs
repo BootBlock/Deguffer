@@ -403,8 +403,8 @@ public static partial class LongPath
     /// put a candidate and its parent through this without probing either, and what they say when
     /// they get a true is "not recognised as build output, so it is left alone" — §5.2's own answer
     /// for a thing that could not be classified, which names no link and claims nothing.
-    /// <see cref="Execution.FileRemover"/> asks this before anything else, through the
-    /// <see cref="IFileSystem"/> seam, and a true there removes the path as a link and reports
+    /// <see cref="Execution.FileRemover"/> asks this through the <see cref="IFileSystem"/> seam, and
+    /// a true there removes the path as a link, once the recent-files guard allows it, and reports
     /// nothing reclaimed rather than its length. That under-reports, which is the safe
     /// direction.</para>
     ///
