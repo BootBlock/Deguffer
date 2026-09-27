@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-
 namespace Deguffer.Core.Safety;
 
 /// <param name="Id">
@@ -24,9 +21,10 @@ internal sealed record RunningProcess(
 
 /// <param name="Processes">Every process this account was allowed to look at.</param>
 /// <param name="CurrentDirectoriesReadable">
-/// Whether working directories could be read at all. False means the layout self-check failed, so
-/// every <see cref="RunningProcess.CurrentDirectory"/> is null because nothing could be read rather
-/// than because the processes have none.
+/// Whether every working directory that was read can be trusted. False means either the layout
+/// self-check failed, so every <see cref="RunningProcess.CurrentDirectory"/> is null because nothing
+/// could be read, or a 32-bit process's block could not be checked, so its directory is null
+/// although it has one. Either way a null directory is not evidence that nothing is working there.
 /// </param>
 /// <param name="CommandLinesReadable">
 /// Whether command lines could be read at all. False means this process could not read its own, so
@@ -62,321 +60,86 @@ internal sealed record ProcessTable(
 /// preview, and a second pass would open every process again.</para>
 ///
 /// <para><b>The working directory has no documented accessor</b>, so it is read out of the process
-/// environment block at offsets Windows does not promise to keep. A layout that moved would produce
+/// environment block at an offset Windows does not promise to keep. A layout that moved would produce
 /// nonsense matching no directory, which reads as "nothing is using this" — the one wrong answer
-/// that costs somebody their work. So the offsets are checked against this process, whose own
+/// that costs somebody their work. So the offset is checked against this process, whose own
 /// working directory is already known, and a mismatch turns the mechanism off and says so rather
-/// than quietly reporting an empty result.</para>
+/// than quietly reporting an empty result. A 32-bit process keeps its directory in a second block,
+/// which <see cref="ProcessWorkingDirectory"/> checks per process instead.</para>
 /// </summary>
-internal static partial class RunningProcessTable
+internal static class RunningProcessTable
 {
-    private const uint QueryLimitedInformation = 0x1000;
-    private const uint VmRead = 0x0010;
-
-    /// <summary>
-    /// Offsets into the 64-bit process environment block: <c>PEB.ProcessParameters</c>, then
-    /// <c>RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath</c>. Both are undocumented, which is
-    /// what <see cref="LayoutIsSound"/> exists to catch.
-    /// </summary>
-    private const int ProcessParametersOffset = 0x20;
-    private const int CurrentDirectoryOffset = 0x38;
-
-    /// <summary>A working directory longer than this is not one — it is a misread.</summary>
-    private const ushort MaximumPathBytes = 0x8000;
-
-    /// <summary>
-    /// <c>ProcessCommandLineInformation</c>. Unlike the working directory this needs no offsets: the
-    /// kernel copies the command line out itself, and asks only for limited query access.
-    /// </summary>
-    private const int CommandLineInformationClass = 60;
-
-    private const int StatusInfoLengthMismatch = unchecked((int)0xC0000004);
-
-    public static ProcessTable Read(CancellationToken ct = default)
+    public static ProcessTable Read(IProcessTableCalls calls, CancellationToken ct = default)
     {
-        var readable = LayoutIsSound();
-        var commandLines = CommandLinesAreReadable();
+        var readable = LayoutIsSound(calls);
+        var verified = readable;
+        var commandLines = CommandLinesAreReadable(calls);
         var processes = new List<RunningProcess>();
 
-        foreach (var process in Process.GetProcesses())
+        foreach (var (id, name) in calls.List())
         {
             ct.ThrowIfCancellationRequested();
 
-            using (process)
+            using var process = calls.Open(id, withMemory: readable);
+
+            if (process is null)
             {
-                string name;
-                int id;
-
-                try
-                {
-                    name = process.ProcessName;
-                    id = process.Id;
-                }
-                catch (InvalidOperationException)
-                {
-                    // Exited between enumeration and inspection. Normal; skip it.
-                    continue;
-                }
-
-                var handle = Open((uint)id, readable);
-
-                if (handle == 0)
-                {
-                    // A process of another account, or a protected one. Neither is the developer's
-                    // own editor or build, which is the only thing this is looking for.
-                    continue;
-                }
-
-                try
-                {
-                    processes.Add(new RunningProcess(
-                        id,
-                        name,
-                        LongPath.Unaliased(ImagePathOf(handle)),
-                        readable ? LongPath.Unaliased(CurrentDirectoryOf(handle)) : null,
-                        commandLines && CommandLineOf(handle) is { } line
-                            ? [.. CommandLinePaths.Of(line).Select(path => LongPath.Unaliased(path))]
-                            : []));
-                }
-                finally
-                {
-                    CloseHandle(handle);
-                }
+                // A process of another account, or a protected one. Neither is the developer's
+                // own editor or build, which is the only thing this is looking for.
+                continue;
             }
+
+            var directory = readable && process.Memory is { } memory
+                ? ProcessWorkingDirectory.Of(memory)
+                : WorkingDirectoryRead.Unread;
+
+            // Only this process's directory is in doubt, so the others are still read.
+            if (directory.LayoutUnverified)
+            {
+                verified = false;
+            }
+
+            processes.Add(new RunningProcess(
+                id,
+                name,
+                LongPath.Unaliased(process.ImagePath()),
+                LongPath.Unaliased(directory.Directory),
+                commandLines && process.CommandLine() is { } line
+                    ? [.. CommandLinePaths.Of(line).Select(path => LongPath.Unaliased(path))]
+                    : []));
         }
 
-        return new ProcessTable(processes, readable, commandLines);
-    }
-
-    private static nint Open(uint id, bool wantMemory)
-    {
-        if (wantMemory)
-        {
-            var full = OpenProcess(QueryLimitedInformation | VmRead, false, id);
-
-            if (full != 0)
-            {
-                return full;
-            }
-        }
-
-        // Reading memory is refused more often than reading the image path, and the image path on
-        // its own still answers the .venv case.
-        return OpenProcess(QueryLimitedInformation, false, id);
+        return new ProcessTable(processes, verified, commandLines);
     }
 
     /// <summary>
-    /// Whether the environment-block offsets still describe this Windows, checked against the one
+    /// Whether the environment-block offset still describes this Windows, checked against the one
     /// process whose working directory is already known.
     /// </summary>
-    private static bool LayoutIsSound()
+    private static bool LayoutIsSound(IProcessTableCalls calls)
     {
-        var handle = OpenProcess(QueryLimitedInformation | VmRead, false, (uint)Environment.ProcessId);
+        using var own = calls.Open(Environment.ProcessId, withMemory: true);
 
-        if (handle == 0)
+        if (own?.Memory is not { } memory || ProcessWorkingDirectory.Of(memory).Directory is not { } read)
         {
             return false;
         }
 
-        try
-        {
-            if (CurrentDirectoryOf(handle) is not { } read)
-            {
-                return false;
-            }
-
-            // Windows stores it with a trailing separator; Environment does not.
-            return Path.TrimEndingDirectorySeparator(read).Equals(
-                Path.TrimEndingDirectorySeparator(Environment.CurrentDirectory),
-                StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            CloseHandle(handle);
-        }
+        // Windows stores it with a trailing separator; Environment does not.
+        return Path.TrimEndingDirectorySeparator(read).Equals(
+            Path.TrimEndingDirectorySeparator(Environment.CurrentDirectory),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
-    /// Whether this Windows answers <see cref="CommandLineInformationClass"/> at all, asked of this
+    /// Whether this Windows answers <c>ProcessCommandLineInformation</c> at all, asked of this
     /// process. It was added in Windows 8.1, and where it is refused every process would otherwise
     /// read as having been started with no paths.
     /// </summary>
-    private static bool CommandLinesAreReadable()
+    private static bool CommandLinesAreReadable(IProcessTableCalls calls)
     {
-        var handle = OpenProcess(QueryLimitedInformation, false, (uint)Environment.ProcessId);
+        using var own = calls.Open(Environment.ProcessId, withMemory: false);
 
-        if (handle == 0)
-        {
-            return false;
-        }
-
-        try
-        {
-            return CommandLineOf(handle) is not null;
-        }
-        finally
-        {
-            CloseHandle(handle);
-        }
+        return own?.CommandLine() is not null;
     }
-
-    private static string? CommandLineOf(nint handle)
-    {
-        if (NtQueryCommandLine(handle, CommandLineInformationClass, 0, 0, out var needed) != StatusInfoLengthMismatch
-            || needed < Marshal.SizeOf<UnicodeString>())
-        {
-            return null;
-        }
-
-        var buffer = Marshal.AllocHGlobal(needed);
-
-        try
-        {
-            if (NtQueryCommandLine(handle, CommandLineInformationClass, buffer, needed, out _) != 0)
-            {
-                return null;
-            }
-
-            // The string's own buffer is inside the one handed in, straight after its header.
-            var line = Marshal.PtrToStructure<UnicodeString>(buffer);
-
-            return line.Buffer == 0 || line.Length == 0 || line.Length % 2 != 0
-                ? null
-                : Marshal.PtrToStringUni(line.Buffer, line.Length / 2);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static string? ImagePathOf(nint handle)
-    {
-        const int characters = 1024;
-        var buffer = Marshal.AllocHGlobal(characters * sizeof(char));
-
-        try
-        {
-            var size = (uint)characters;
-
-            return QueryFullProcessImageName(handle, 0, buffer, ref size)
-                ? Marshal.PtrToStringUni(buffer, (int)size)
-                : null;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static string? CurrentDirectoryOf(nint handle)
-    {
-        if (NtQueryInformationProcess(handle, 0, out var basic, Marshal.SizeOf<ProcessBasicInformation>(), out _) != 0
-            || basic.ProcessEnvironmentBlock == 0)
-        {
-            return null;
-        }
-
-        if (ReadStruct<nint>(handle, basic.ProcessEnvironmentBlock + ProcessParametersOffset) is not { } parameters
-            || parameters == 0)
-        {
-            return null;
-        }
-
-        if (ReadStruct<UnicodeString>(handle, parameters + CurrentDirectoryOffset) is not { } path
-            || path.Buffer == 0
-            || path.Length == 0
-            || path.Length > MaximumPathBytes
-            || path.Length % 2 != 0)
-        {
-            return null;
-        }
-
-        var text = Marshal.AllocHGlobal(path.Length);
-
-        try
-        {
-            if (!ReadProcessMemory(handle, path.Buffer, text, path.Length, out _))
-            {
-                return null;
-            }
-
-            var value = Marshal.PtrToStringUni(text, path.Length / 2);
-
-            // A working directory is always a rooted path. Anything else is a misread of a process
-            // whose layout differs, and reporting it would put a wrong answer beside right ones.
-            return value is not null && Path.IsPathRooted(value) ? value : null;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(text);
-        }
-    }
-
-    private static T? ReadStruct<T>(nint handle, nint address) where T : struct
-    {
-        var size = Marshal.SizeOf<T>();
-        var buffer = Marshal.AllocHGlobal(size);
-
-        try
-        {
-            return ReadProcessMemory(handle, address, buffer, size, out _)
-                ? Marshal.PtrToStructure<T>(buffer)
-                : null;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ProcessBasicInformation
-    {
-        public nint ExitStatus;
-        public nint ProcessEnvironmentBlock;
-        public nint AffinityMask;
-        public nint BasePriority;
-        public nint UniqueProcessId;
-        public nint ParentProcessId;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct UnicodeString
-    {
-        public ushort Length;
-        public ushort MaximumLength;
-        public nint Buffer;
-    }
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    private static partial nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool CloseHandle(nint handle);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool ReadProcessMemory(nint process, nint address, nint buffer, nint size, out nint read);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool QueryFullProcessImageName(nint process, uint flags, nint buffer, ref uint size);
-
-    [LibraryImport("ntdll.dll")]
-    private static partial int NtQueryInformationProcess(
-        nint process,
-        int informationClass,
-        out ProcessBasicInformation information,
-        int length,
-        out int returned);
-
-    [LibraryImport("ntdll.dll", EntryPoint = "NtQueryInformationProcess")]
-    private static partial int NtQueryCommandLine(
-        nint process,
-        int informationClass,
-        nint information,
-        int length,
-        out int returned);
 }

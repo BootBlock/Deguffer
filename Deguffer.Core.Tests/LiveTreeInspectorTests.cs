@@ -54,6 +54,59 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// The same for a 32-bit program, whose working directory Windows keeps in a 32-bit block of its
+    /// own. Its 64-bit block reads the Windows directory, so this is what shows the 32-bit block is
+    /// found on this machine and passes its check, which leaves the findings complete.
+    /// </summary>
+    [Fact]
+    public void ADirectoryIsLiveWhileA32BitProcessIsWorkingInTheProject()
+    {
+        var project = _temp.CreateDirectory("x86");
+        var target = _temp.CreateDirectory("x86", "bin");
+
+        using var busy = StartWaiting(project, new LiveTreeQuery(target, project), Wow64Program("PING.EXE"));
+
+        var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
+
+        Assert.True(findings.Complete);
+        Assert.True(findings.IsLive(target));
+    }
+
+    /// <summary>
+    /// A 32-bit shell started in one folder that then changes to another is working in the second.
+    /// The 32-bit block is the only one its <c>cd</c> updates.
+    /// </summary>
+    [Fact]
+    public void A32BitShellIsSeenInTheDirectoryItChangedTo()
+    {
+        var started = _temp.CreateDirectory("started");
+        var moved = _temp.CreateDirectory("moved");
+        var target = _temp.CreateDirectory("moved", "bin");
+        var query = new LiveTreeQuery(target, moved);
+
+        // /k keeps the shell running after the cd, waiting on a standard input nothing writes to. One
+        // argument string rather than a list, because cmd does not read the backslash-escaped quotes
+        // a list would produce.
+        var start = new ProcessStartInfo(Wow64Program("cmd.exe"), $"/d /k cd /d \"{moved}\"")
+        {
+            WorkingDirectory = started,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+        };
+
+        using var shell = VisibleOrStopped(
+            new WaitingProcess(Process.Start(start)!),
+            () => new LiveTreeInspector().FindLive([query]).IsLive(target));
+
+        var findings = new LiveTreeInspector().FindOccupiedDirectories();
+
+        Assert.True(findings.Complete);
+        Assert.DoesNotContain(findings.Live, place => place.Directory.Equals(started, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// The same project with nothing running in it is not live. Without this the test above passes
     /// on a rule that answers "live" to everything.
     /// </summary>
@@ -535,6 +588,19 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// </summary>
     private static string WaitingProgram =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ping.exe");
+
+    /// <summary>
+    /// A 32-bit Windows program. Every 64-bit Windows this runs on keeps them in <c>SysWOW64</c>,
+    /// so its absence fails the test rather than skipping it.
+    /// </summary>
+    private static string Wow64Program(string name)
+    {
+        var program = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86), name);
+
+        Assert.True(File.Exists(program), $"{program} is missing, so no 32-bit process can be started");
+
+        return program;
+    }
 
     /// <param name="visibleAt">
     /// A query the started process must answer, which is what makes the wait a wait. A process that
