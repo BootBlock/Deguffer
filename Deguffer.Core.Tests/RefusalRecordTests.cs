@@ -52,6 +52,31 @@ public sealed class RefusalRecordTests : IDisposable
     }
 
     /// <summary>
+    /// A removal the clean was cancelled in the middle of did not ask every file, so what it found is
+    /// added to what an earlier clean recorded rather than put in its place. A place it never reached
+    /// would otherwise go back to being offered, and refused again.
+    /// </summary>
+    [Fact]
+    public void AnInterruptedRemovalAddsToWhatAnEarlierCleanRecorded()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var earlier = _temp.CreateDirectory("temp", "profile");
+        var now = _temp.CreateDirectory("temp", "session");
+        var record = RefusalRecord.For(_environment);
+
+        record.Replace(step, [earlier]);
+        record.Record(step, new RemovalOutcome(0, Refusals.None, RootRemoved: false) { RefusedAt = [now], Interrupted = true });
+
+        Assert.Equal([earlier, now], record.At(step).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal([earlier, now], new RefusalRecord(_environment).At(step).Order(StringComparer.OrdinalIgnoreCase));
+
+        // One that finished asked every file, so what it found is the whole answer.
+        record.Record(step, new RemovalOutcome(0, Refusals.None, RootRemoved: false) { RefusedAt = [now] });
+
+        Assert.Equal([now], record.At(step));
+    }
+
+    /// <summary>
     /// The executor records against the path it removed and the preview asks with the path it
     /// planned. A spelling that missed would leave the row offering everything Windows refuses, with
     /// nothing on screen to say why.

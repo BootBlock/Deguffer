@@ -47,7 +47,8 @@ public sealed record RemovalOutcome(
     /// <summary>
     /// Every directory this removal tried to take and could not, in display form, whatever kept it:
     /// Windows refusing the folder itself, or something still inside it. A root the caller asked to
-    /// keep was never tried, so it is not here.
+    /// keep was never tried, so it is not here. A removal that was <see cref="Interrupted"/> adds the
+    /// folders it had gone into and not yet tried.
     ///
     /// <para>The evidence §5.6 reads through <see cref="RunResidue"/>. A folder left standing says
     /// where the removal went, which no question about what a folder still holds can say.</para>
@@ -72,4 +73,11 @@ public sealed record RemovalOutcome(
     /// see <see cref="DirectoryRemover"/>.
     /// </summary>
     public FolderRefusals RefusedFolders { get; init; }
+
+    /// <summary>
+    /// Whether the removal was cancelled before it finished. Every figure above is still true: it is
+    /// what the removal did before it stopped. <see cref="LeftStanding"/> then also holds every folder
+    /// it gathered and never tried, because it had gone inside each of them.
+    /// </summary>
+    public bool Interrupted { get; init; }
 }

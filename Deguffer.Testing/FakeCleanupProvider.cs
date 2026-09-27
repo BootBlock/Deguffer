@@ -13,6 +13,9 @@ namespace Deguffer.Testing;
 /// <para>Its clean is real where it matters to §5.6: each directory step it is handed is removed from
 /// disk, and nothing else is, so a test asserts what survived by looking at the tree it built. The
 /// planner's own verifier then checks the plan's protected paths, as it does for every provider.</para>
+///
+/// <para>Cancelled as the real executor is: it stops before the next step rather than throwing, says
+/// it was <see cref="CleanupResult.Interrupted"/>, and verifies whatever happened.</para>
 /// </summary>
 public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.RegenerableCache) : ICleanupProvider
 {
@@ -56,6 +59,9 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// </summary>
     public Action? AfterCleaning { get; set; }
 
+    /// <summary>Run each time it is planned, such as the user pressing Cancel while a re-plan is under way.</summary>
+    public Action? WhilePlanning { get; set; }
+
     /// <summary>How many times it has been planned. A re-plan that left it alone did not add to this.</summary>
     public int PlanCount { get; private set; }
 
@@ -76,6 +82,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
     {
         PlanCount++;
+        WhilePlanning?.Invoke();
 
         return PlanFailure is { } failure
             ? Task.FromException<CleanupPlan>(failure)
@@ -102,9 +109,16 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
         Executed.Add(plan);
 
         List<StepOutcome> outcomes = [];
+        var interrupted = false;
 
         foreach (var step in plan.Steps.OfType<DeleteDirectoryStep>())
         {
+            if (ct.IsCancellationRequested)
+            {
+                interrupted = true;
+                break;
+            }
+
             if (LongPath.DirectoryExists(step.Path))
             {
                 Directory.Delete(LongPath.Extended(step.Path), recursive: true);
@@ -125,13 +139,15 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
             ProviderId = Id,
             ProviderName = Name,
             Steps = outcomes,
-            Verification = PlanVerifier.Verify(plan, runReach, residue, ct),
+            Interrupted = interrupted,
+            Verification = PlanVerifier.Verify(plan, runReach, residue, CancellationToken.None),
         });
     }
 
     public Task<VerificationResult> VerifyAsync(
         CleanupPlan plan,
         RunReach? runReach = null,
+        RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue: null, ct));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct));
 }

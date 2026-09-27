@@ -555,8 +555,12 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.Equal(0, outcome.BytesReclaimed);
     }
 
+    /// <summary>
+    /// A removal cancelled before it starts takes nothing, and says so rather than throwing: its caller
+    /// verifies a cancelled clean from what each removal returns (§5.6).
+    /// </summary>
     [Fact]
-    public async Task StopsWhenCancelled()
+    public async Task ACancelledRemovalTakesNothingAndSaysItWasStopped()
     {
         var root = _temp.CreateDirectory("cache");
         for (var i = 0; i < 200; i++)
@@ -567,8 +571,76 @@ public sealed class DirectoryRemoverTests : IDisposable
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, cts.Token));
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, cts.Token);
+
+        Assert.True(outcome.Interrupted);
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.Equal(200, Directory.EnumerateFiles(root).Count());
+    }
+
+    /// <summary>
+    /// A removal cancelled while it is still gathering its tree has deleted nothing, and returns that
+    /// rather than throwing.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalCancelledWhileItGathersTakesNothingAndSaysItWasStopped()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(64, "cache", "a.bin");
+        _temp.CreateFile(64, "cache", "sub", "b.bin");
+
+        using var cts = new CancellationTokenSource();
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root,
+            MinimumAge.Off,
+            progress: null,
+            cts.Token,
+            new CancellingFileSystem(WindowsFileSystem.Default, cts, whileListing: true));
+
+        Assert.True(outcome.Interrupted);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.Empty(outcome.LeftStanding);
+        Assert.Equal(2, Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).Count());
+    }
+
+    /// <summary>
+    /// A removal stopped part-way returns what it took, and names every folder it had gone into and
+    /// not yet tried. Those are where it went, and §5.6 reads a protected folder among them as one the
+    /// removal entered (see <see cref="RunResidue"/>). Without them a protected folder inside the
+    /// tree, stripped of its files, would still hold its folders and read as a survivor.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalStoppedPartWayNamesEveryFolderItHadNotTried()
+    {
+        const int Folders = 4;
+        const int FilesEach = 300;
+        var root = _temp.CreateDirectory("cache");
+
+        for (var folder = 0; folder < Folders; folder++)
+        {
+            for (var i = 0; i < FilesEach; i++)
+            {
+                _temp.CreateFile(16, "cache", $"d{folder}", $"f{i}.bin");
+            }
+        }
+
+        using var cts = new CancellationTokenSource();
+
+        // The first report comes after 256 files, so the removal is stopped with most still to go.
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, MinimumAge.Off, new CallbackProgress<double>(_ => cts.Cancel()), cts.Token);
+
+        Assert.True(outcome.Interrupted);
+        Assert.False(outcome.RootRemoved);
+        Assert.InRange(outcome.BytesReclaimed, 1, (Folders * FilesEach * 16) - 1);
+        Assert.True(Directory.Exists(root));
+
+        for (var folder = 0; folder < Folders; folder++)
+        {
+            Assert.Contains(Path.Combine(root, $"d{folder}"), outcome.LeftStanding);
+        }
     }
 
     [Fact]

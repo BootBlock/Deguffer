@@ -294,7 +294,7 @@ public sealed class ProcessCloserTests
             new QueuedMemorySource(before, After(Shell, Compositor, Own, TargetId, Child, Host)));
 
         // The user dismisses the result the moment it appears, which is one of §7.2.1's three ends.
-        var attempt = await closer.CloseAsync(Target(before), new WhenPosted(_ => stop.Cancel()), stop.Token);
+        var attempt = await closer.CloseAsync(Target(before), new CallbackProgress<CloseReport>(_ => stop.Cancel()), stop.Token);
 
         var report = Assert.IsType<CloseReport>(attempt.Report);
 
@@ -372,7 +372,7 @@ public sealed class ProcessCloserTests
             Processes(target), Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
 
         var held = false;
-        var closing = closer.CloseAsync(Target(before), new WhenPosted(_ => held = !target.Disposed));
+        var closing = closer.CloseAsync(Target(before), new CallbackProgress<CloseReport>(_ => held = !target.Disposed));
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
         target.Exited = true;
@@ -525,12 +525,4 @@ public sealed class ProcessCloserTests
                 && c.Outcome == VerificationOutcome.Survived);
     }
 
-    /// <summary>
-    /// Runs a test's own check at the one moment nothing else can reach: the messages are posted, the
-    /// handle is still held, and the watch has not begun.
-    /// </summary>
-    private sealed class WhenPosted(Action<CloseReport> check) : IProgress<CloseReport>
-    {
-        public void Report(CloseReport value) => check(value);
-    }
 }

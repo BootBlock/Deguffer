@@ -34,6 +34,11 @@ public static class DirectoryRemover
     /// something is using. <see cref="RemovalBounds.None"/> by default, which is every ordinary
     /// deletion and is what a caller that says nothing gets.
     /// </param>
+    /// <param name="ct">
+    /// Stops the removal where it is. <b>Never thrown:</b> a cancelled removal returns what it did,
+    /// with <see cref="RemovalOutcome.Interrupted"/> set. What a removal stopped part-way has already
+    /// taken, and where it went, is what §5.6 needs afterwards, and an exception carries neither.
+    /// </param>
     public static Task<RemovalOutcome> RemoveAsync(
         string path,
         MinimumAge keep = default,
@@ -41,10 +46,12 @@ public static class DirectoryRemover
         CancellationToken ct = default,
         IFileSystem? fileSystem = null,
         RemovalBounds? bounds = null) =>
+        // Not handed the token: Task.Run throws for a token cancelled before the work starts, which
+        // would break the contract above at its first step.
         Task.Run(
             () => Remove(
                 path, keep, bounds ?? RemovalBounds.None, progress, fileSystem ?? WindowsFileSystem.Default, ct),
-            ct);
+            CancellationToken.None);
 
     private static RemovalOutcome Remove(
         string path,
@@ -54,6 +61,11 @@ public static class DirectoryRemover
         IFileSystem fs,
         CancellationToken ct)
     {
+        if (ct.IsCancellationRequested)
+        {
+            return NothingDone;
+        }
+
         var extended = LongPath.Extended(path);
 
         switch (fs.ProbeDirectory(extended))
@@ -128,7 +140,17 @@ public static class DirectoryRemover
         // Two passes: gather the tree first so progress is a real fraction rather than a guess,
         // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
         // leave us deleting a partially-understood tree.
-        var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+        RemovalInventory inventory;
+
+        try
+        {
+            inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return NothingDone;
+        }
+
         var leftStanding = new List<string>();
 
         // Every entry this removal takes, so a tree of empty folders reports what went rather than
@@ -166,61 +188,84 @@ public static class DirectoryRemover
             MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 4, 32),
         };
 
-        Parallel.ForEach(inventory.Files, options, file =>
-        {
-            if (TryDeleteFile(file.Path, fs) is { } reason)
-            {
-                refused.Add(reason, file.Length);
-                refusedAt.TryAdd(EntryHolding(extended, file.Path), 0);
-            }
-            else
-            {
-                Interlocked.Add(ref reclaimed, file.Length);
-                Interlocked.Increment(ref removed);
-            }
-
-            var completed = Interlocked.Increment(ref done);
-            if (completed % 256 == 0 || completed == inventory.Files.Count)
-            {
-                progress?.Report((double)completed / total);
-            }
-        });
-
         var refusedFolders = FolderRefusals.None;
 
         // Deepest first, so a directory is only removed once its children are gone. Ordering by
         // path length is a correct topological order here, not a shortcut: a parent's path is
         // always a strict prefix of its descendants', so it is always strictly shorter.
-        //
-        // A directory still holding something refused stays, and so does one Windows refuses for
-        // itself. Neither is an error (§5.3), and both are recorded: a folder left standing is where
-        // this removal went, and only the second is a refusal the reader has not already been told
-        // about.
-        foreach (var directory in inventory.Directories.OrderByDescending(d => d.Length))
+        var directories = inventory.Directories.OrderByDescending(d => d.Length).ToList();
+
+        // How far the directory pass got, so a removal stopped before its end can say which folders
+        // it never tried.
+        var reached = 0;
+        var interrupted = false;
+
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            // The root goes last by construction, so skipping it here cannot leave a child behind.
-            if (bounds.KeepRoot && directory.Equals(extended, StringComparison.OrdinalIgnoreCase))
+            Parallel.ForEach(inventory.Files, options, file =>
             {
-                continue;
+                if (TryDeleteFile(file.Path, fs) is { } reason)
+                {
+                    refused.Add(reason, file.Length);
+                    refusedAt.TryAdd(EntryHolding(extended, file.Path), 0);
+                }
+                else
+                {
+                    Interlocked.Add(ref reclaimed, file.Length);
+                    Interlocked.Increment(ref removed);
+                }
+
+                var completed = Interlocked.Increment(ref done);
+                if (completed % 256 == 0 || completed == inventory.Files.Count)
+                {
+                    progress?.Report((double)completed / total);
+                }
+            });
+
+            // A directory still holding something refused stays, and so does one Windows refuses for
+            // itself. Neither is an error (§5.3), and both are recorded: a folder left standing is
+            // where this removal went, and only the second is a refusal the reader has not already
+            // been told about.
+            for (; reached < directories.Count; reached++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var directory = directories[reached];
+
+                // The root goes last by construction, so skipping it here cannot leave a child behind.
+                if (bounds.KeepRoot && directory.Equals(extended, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (TryDeleteDirectory(directory, fs) is not { } standing)
+                {
+                    removed++;
+                    continue;
+                }
+
+                leftStanding.Add(directory);
+
+                if (standing.Refused is { } reason)
+                {
+                    refusedFolders += FolderRefusals.One(reason);
+                }
             }
 
-            if (TryDeleteDirectory(directory, fs) is not { } standing)
-            {
-                removed++;
-                continue;
-            }
-
-            leftStanding.Add(directory);
-
-            if (standing.Refused is { } reason)
-            {
-                refusedFolders += FolderRefusals.One(reason);
-            }
+            progress?.Report(1.0);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A removal stopped part-way was inside every folder it had not yet tried: it gathered
+            // them, and any file in them may already be gone. Each is recorded as standing for that
+            // reason, so §5.6 reads a protected folder among them as one this removal went into. See
+            // RunResidue. A root the caller keeps is left out, because nothing tries it.
+            interrupted = true;
 
-        progress?.Report(1.0);
+            leftStanding.AddRange(directories
+                .Skip(reached)
+                .Where(d => !(bounds.KeepRoot && d.Equals(extended, StringComparison.OrdinalIgnoreCase))));
+        }
 
         // The root is among the directories, so the loop above has already attempted it — unless
         // the caller asked for it to stay, in which case it is still there and that is the success.
@@ -236,8 +281,12 @@ public static class DirectoryRemover
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
             RefusedFolders = refusedFolders,
             MailStores = [.. inventory.MailStores.Select(LongPath.Display)],
+            Interrupted = interrupted,
         };
     }
+
+    /// <summary>A removal stopped before it deleted anything.</summary>
+    private static RemovalOutcome NothingDone => new(0, Refusals.None, RootRemoved: false) { Interrupted = true };
 
     /// <summary>
     /// The entry directly inside <paramref name="root"/> that <paramref name="path"/> is at or

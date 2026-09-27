@@ -89,6 +89,44 @@ public sealed class RefusalRecord
     }
 
     /// <summary>
+    /// What a removal of <paramref name="stepPath"/> has just found: in place of what an earlier clean
+    /// found where the removal finished, and beside it where the removal was
+    /// <see cref="RemovalOutcome.Interrupted"/>. A removal stopped part-way did not ask every file, so
+    /// a place it never reached keeps its entry, and the next preview asks about it again.
+    /// </summary>
+    public void Record(string stepPath, RemovalOutcome removal)
+    {
+        ArgumentNullException.ThrowIfNull(removal);
+
+        if (!removal.Interrupted)
+        {
+            Replace(stepPath, removal.RefusedAt);
+            return;
+        }
+
+        if (removal.RefusedAt.Count == 0 || LongPath.Configured(stepPath) is not { } key)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            string[] places = _entries.TryGetValue(key, out var existing)
+                ? [.. existing.Union(Wellformed(removal.RefusedAt), StringComparer.OrdinalIgnoreCase)]
+                : [.. Wellformed(removal.RefusedAt)];
+
+            // Nothing new: every place was already recorded, or none was well formed.
+            if (places.Length == (existing?.Length ?? 0))
+            {
+                return;
+            }
+
+            _entries[key] = places;
+            Save();
+        }
+    }
+
+    /// <summary>
     /// What a clean of <paramref name="stepPath"/> has just found, replacing whatever an earlier one
     /// did. An empty list clears the entry: the clean asked every file it attempted, and none refused.
     /// </summary>

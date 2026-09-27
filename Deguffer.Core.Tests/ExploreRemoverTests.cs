@@ -176,6 +176,38 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A folder removal cancelled part-way is reported as partly deleted and stopped, and the run as
+    /// stopped. The folder is the last item, so nothing after it would notice the cancel: the removal
+    /// returns what it did rather than throwing, and only its own outcome can say it was stopped.
+    /// </summary>
+    [Fact]
+    public async Task AFolderRemovalCancelledPartWayIsReportedAndStopsTheRun()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "junk");
+        _temp.CreateFile(32, "profile", "Downloads", "junk", "a.bin");
+        _temp.CreateFile(32, "profile", "Downloads", "junk", "sub", "b.bin");
+
+        using var cts = new CancellationTokenSource();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            ExploreRemovalMode.Permanent,
+            _policy,
+            recycleBin: null,
+            fileSystem: new CancellingFileSystem(WindowsFileSystem.Default, cts),
+            cts.Token);
+
+        Assert.True(report.Cancelled);
+        Assert.StartsWith("Stopped part-way.", report.Summary);
+
+        var stopped = Assert.Single(report.Items);
+        Assert.True(stopped.Interrupted);
+        Assert.False(stopped.Removed);
+        Assert.StartsWith("Partly deleted before the removal was cancelled", stopped.Message);
+        Assert.True(Directory.Exists(folder));
+    }
+
+    /// <summary>
     /// A folder a program is working in keeps the item around it standing, and the sentence says so.
     /// Without it the item was "partly deleted" for no stated reason, and the reader had no way to know
     /// that closing a program would let the rest go.

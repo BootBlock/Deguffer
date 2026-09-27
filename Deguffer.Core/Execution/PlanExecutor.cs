@@ -90,6 +90,11 @@ public sealed class PlanExecutor(
     /// reads — see <see cref="RunResidue"/>. Null means this plan is the whole run, and it is given a
     /// record of its own.
     /// </param>
+    /// <param name="ct">
+    /// Stops the plan between steps, and inside a step that can stop. <b>Never thrown:</b> the result
+    /// holds the steps that ran, is <see cref="CleanupResult.Interrupted"/>, and is verified like any
+    /// other, because what a cancelled clean already took is what §5.6 has to answer for.
+    /// </param>
     public async Task<CleanupResult> ExecuteAsync(
         CleanupPlan plan,
         RunReach? runReach,
@@ -117,60 +122,49 @@ public sealed class PlanExecutor(
         var total = weights.Sum();
         var done = 0.0;
 
+        // Set when the clean is cancelled before every step has run to its end.
+        var interrupted = false;
+
         for (var i = 0; i < plan.Steps.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            var step = plan.Steps[i];
+            // Stopped here rather than thrown, so what the steps before this one did is still verified
+            // below.
+            if (ct.IsCancellationRequested)
+            {
+                interrupted = true;
+                break;
+            }
 
             // Each step's own 0-to-1 becomes its slice of this plan's 0-to-1.
             var stepProgress = ScaledProgress.Within(progress, done / total, weights[i] / total);
 
-            if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
+            StepOutcome outcome;
+
+            try
             {
-                outcomes.Add(new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating));
-                done += weights[i];
-                progress?.Report(done / total);
-                continue;
+                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, leftStanding, stepProgress, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // A step that throws when cancelled cannot say what it did first. A tool's command can
+                // have removed part of its cache, and nothing counted it.
+                outcome = new StepOutcome(
+                    plan.Steps[i].Description,
+                    Succeeded: false,
+                    BytesReclaimed: 0,
+                    Refusals.None,
+                    "Stopped when the clean was cancelled. What it had removed by then is not counted.",
+                    Interrupted: true);
             }
 
-            if (step is DeleteStep standing && WhyNotTaken(standing) is { } refused)
+            outcomes.Add(outcome);
+
+            if (outcome.Interrupted)
             {
-                outcomes.Add(new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, refused));
-                done += weights[i];
-                progress?.Report(done / total);
-                continue;
+                interrupted = true;
+                break;
             }
-
-            // §5.3 asked again: the plan's answer about what is in use is as old as the preview.
-            if (step is DeleteStep deletion)
-            {
-                var recheck = UseRecheck.Of(deletion, ct);
-                heldAtClean.AddRange(recheck.Survivors);
-
-                if (recheck.Step is null)
-                {
-                    outcomes.Add(new StepOutcome(
-                        step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Nothing was removed: {recheck.Withheld}."));
-                    done += weights[i];
-                    progress?.Report(done / total);
-                    continue;
-                }
-
-                step = recheck.Step;
-            }
-
-            outcomes.Add(step switch
-            {
-                RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
-                ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
-                DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, stepProgress, ct).ConfigureAwait(false),
-                DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, stepProgress, ct).ConfigureAwait(false),
-                _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
-            });
 
             // Reported from here rather than trusted from the step: a command step reports nothing
             // at all while it runs, and a removal that ends early would leave a gap that never
@@ -187,15 +181,69 @@ public sealed class PlanExecutor(
             ProviderName = plan.ProviderName,
             Steps = outcomes,
             Duration = stopwatch.Elapsed,
+            Interrupted = interrupted,
 
             // §5.6 is not a separate user action: acting and proving what survived are one step. What a
             // use check held back is proved standing with everything the plan protected.
+            //
+            // Never cancelled, because a cancelled clean is the one that most needs it: something has
+            // gone, and the user chose where it stopped without knowing what it had reached.
             Verification = PlanVerifier.Verify(
                 heldAtClean.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. heldAtClean] },
                 runReach,
                 leftStanding,
-                ct,
+                CancellationToken.None,
                 _cloud),
+        };
+    }
+
+    /// <summary>
+    /// Carry out one step, or say why it did not run. What a use check holds back is added to
+    /// <paramref name="heldAtClean"/>, because it is proved standing afterwards.
+    /// </summary>
+    private async Task<StepOutcome> RunStepAsync(
+        CleanupPlan plan,
+        CleanupStep step,
+        List<ProtectedPath> heldAtClean,
+        RunResidue leftStanding,
+        IProgress<double>? progress,
+        CancellationToken ct)
+    {
+        if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
+        }
+
+        if (step is DeleteStep standing && WhyNotTaken(standing) is { } refused)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, refused);
+        }
+
+        // §5.3 asked again: the plan's answer about what is in use is as old as the preview.
+        if (step is DeleteStep deletion)
+        {
+            var recheck = UseRecheck.Of(deletion, ct);
+            heldAtClean.AddRange(recheck.Survivors);
+
+            if (recheck.Step is null)
+            {
+                return new StepOutcome(
+                    step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Nothing was removed: {recheck.Withheld}.");
+            }
+
+            step = recheck.Step;
+        }
+
+        return step switch
+        {
+            RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
+            ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, leftStanding, progress, ct).ConfigureAwait(false),
+            DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, progress, ct).ConfigureAwait(false),
+            DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, progress, ct).ConfigureAwait(false),
+            EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, progress, ct).ConfigureAwait(false),
+            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, progress, ct).ConfigureAwait(false),
+            ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, ct).ConfigureAwait(false),
+            _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
         };
     }
 
@@ -577,10 +625,11 @@ public sealed class PlanExecutor(
 
         var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
-        refusals.Replace(step.Path, removal.RefusedAt);
+        refusals.Record(step.Path, removal);
         leftStanding.Record(step.Path, removal.LeftStanding);
 
         // The index went with it, so what the step reports is both. Nothing is added where there is none.
+        // A removal stopped part-way adds its index too, because the index went before it began.
         removal = removal with
         {
             BytesReclaimed = removal.BytesReclaimed + index.BytesReclaimed,
@@ -602,6 +651,11 @@ public sealed class PlanExecutor(
         // An Outlook mail store left where it was is something achieved for the same reason: it is the
         // outcome §9 requires, and a folder holding nothing else would otherwise read as a failure.
         var stores = removal.MailStores.Count + index.MailStores;
+
+        if (removal.Interrupted)
+        {
+            return Stopped(step, removal, stores);
+        }
 
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0
             || removal.EntriesRemoved > 0 || stores > 0;
@@ -666,12 +720,17 @@ public sealed class PlanExecutor(
             fileSystem: null,
             new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere)).ConfigureAwait(false);
 
-        refusals.Replace(step.Path, removal.RefusedAt);
+        refusals.Record(step.Path, removal);
         leftStanding.Record(step.Path, removal.LeftStanding);
 
         // A folder Windows refused is a refusal as much as a file is. Without it, a clear whose only
         // outcome was a folder a program is working in would pass as a folder that held nothing.
         var stores = removal.MailStores.Count;
+
+        if (removal.Interrupted)
+        {
+            return Stopped(step, removal, stores);
+        }
 
         var succeeded = removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
             || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty);
@@ -706,6 +765,26 @@ public sealed class PlanExecutor(
             removal.RefusedFolders,
             stores);
     }
+
+    /// <summary>
+    /// A removal the clean was cancelled in the middle of, with what it did before it stopped. Never a
+    /// success, because the step did not do what it named.
+    /// </summary>
+    private static StepOutcome Stopped(CleanupStep step, RemovalOutcome removal, int stores) => new(
+        step.Description,
+        Succeeded: false,
+        removal.BytesReclaimed,
+        removal.Refused,
+        (removal.BytesReclaimed == 0 && removal.EntriesRemoved == 0
+            ? "Stopped when the clean was cancelled, before anything was removed"
+            : "Stopped part-way when the clean was cancelled")
+        + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores)}.",
+        removal.Kept,
+        removal.Spared,
+        removal.EntriesRemoved,
+        removal.RefusedFolders,
+        stores,
+        Interrupted: true);
 
     private async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,

@@ -49,6 +49,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private bool _barShowsPreviewSummary;
 
+    /// <summary>Stops the re-plan after a clean. See <see cref="ReplanRunChangesAsync"/>.</summary>
+    private CancellationTokenSource? _replanCancellation;
+
     /// <param name="volumes">Where the profile's volume is asked how full it is, before and after a run.</param>
     /// <param name="isElevated">
     /// Whether this process holds administrator rights. Read once by the page and handed down, so
@@ -492,8 +495,9 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // A previous run's figures and its §5.6 verdict describe a machine state this run is about
         // to replace, exactly as a preview's do. Cleared here rather than when the new ones arrive,
-        // because a run that is cancelled or fails never reaches RecordRunResult: leaving the old
-        // verdict up would stand "All protected paths survived" over a deletion nobody verified,
+        // because a run that fails, or is cancelled while its confirmations are collected, never
+        // reaches RecordRunResult: leaving the old verdict up would stand "All protected paths
+        // survived" over a deletion nobody verified,
         // which is the inversion §5.6 exists to prevent. After the confirmation above, so declining
         // still leaves the screen exactly as it was.
         ClearRunResult();
@@ -541,13 +545,16 @@ public sealed partial class CleanViewModel : ObservableObject
             CleanPercent = 0;
             IsCleaning = true;
 
+            // The planner is started whatever the token says, and never throws for it: a clean
+            // cancelled at any point returns what it did and its §5.6 verdict, and a Task.Run that
+            // declined to start would lose both.
             IReadOnlyList<CleanupResult> results;
             try
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
                         [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, ct),
-                    ct);
+                    CancellationToken.None);
             }
             finally
             {
@@ -565,7 +572,9 @@ public sealed partial class CleanViewModel : ObservableObject
             // The rows the run changed say sizes and "Ready to clean" labels about a machine that no
             // longer exists, so they are planned again. Only those: every other row still describes
             // the disk, and measuring it again is the whole scan over for answers already on screen.
-            await ReplanAsync(RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised), ct);
+            var stale = RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised);
+
+            await ReplanRunChangesAsync(stale, ct);
 
             // Last, so a re-plan's per-provider progress lines cannot be what the bar is left
             // showing. See ReportOutcome for which of the two sentences wins it.
@@ -573,7 +582,9 @@ public sealed partial class CleanViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            Report("Clean cancelled. Anything already removed stays removed.", InfoBarSeverity.Warning);
+            // Only the confirmations can be cancelled here: the run itself reports a cancellation
+            // rather than throwing it, and so does the re-plan after it.
+            Report("Clean cancelled. Nothing was removed.", InfoBarSeverity.Warning);
         }
         catch (Exception ex) when (ex is IOException
                                       or UnauthorizedAccessException
@@ -683,6 +694,40 @@ public sealed partial class CleanViewModel : ObservableObject
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
+    }
+
+    /// <summary>
+    /// The re-plan after a clean, of the rows it changed.
+    ///
+    /// <para>Under a token of its own, which <see cref="Cancel"/> stops, and which the clean's token
+    /// stops too while that one is live. A clean the user cancelled, part-way or after its last
+    /// deletion, has spent its token, and what it changed still has to be planned again. A re-plan
+    /// measures whole trees, so pressing Cancel again has to work.</para>
+    ///
+    /// <para>A re-plan stopped that way leaves the preview withdrawn, as <see cref="ReplanAsync"/>
+    /// says, so Clean stays off until a scan. The run's own sentence still stands, a §5.6 alarm
+    /// included, which is why the cancellation is caught here rather than reported over it.</para>
+    /// </summary>
+    private async Task ReplanRunChangesAsync(IReadOnlyList<ICleanupProvider> providers, CancellationToken ct)
+    {
+        using var replan = ct.IsCancellationRequested
+            ? new CancellationTokenSource()
+            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        _replanCancellation = replan;
+
+        try
+        {
+            await ReplanAsync(providers, replan.Token);
+        }
+        catch (OperationCanceledException) when (replan.IsCancellationRequested)
+        {
+            // Stopped by Cancel. The rows stay withdrawn, and the caller reports the run.
+        }
+        finally
+        {
+            _replanCancellation = null;
+        }
     }
 
     /// <summary>
@@ -840,6 +885,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// describe keeps it as a warning as well, because nothing else on the screen says it went
     /// unchecked.</para>
     ///
+    /// <para>A cancelled run keeps it as a warning whatever its verdict, because the totals would not
+    /// say that the clean stopped part-way.</para>
+    ///
     /// <para>Every other outcome yields to those totals, which describe the list now on screen. That
     /// sentence is also the only one a selection change may keep current, so stating it here is what
     /// makes ticking a row after a clean move the bar rather than leave it describing a machine two
@@ -904,6 +952,8 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             CleanCancelCommand.Execute(null);
         }
+
+        _replanCancellation?.Cancel();
     }
 
     private void ClearRunResult()
