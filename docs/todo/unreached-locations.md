@@ -528,7 +528,10 @@ Ten things the work settled.
   Deguffer's own process, whose working directory is already known, and a mismatch turns the
   mechanism off and says so. `LiveTreeFindings.Complete` is what carries that outward, and it is the
   same distinction §5.5 draws for the measurement fallback: a safeguard that could not run must not
-  look like a safeguard that found nothing.
+  look like a safeguard that found nothing. A 32-bit process keeps its working directory in a
+  32-bit block of its own, and its 64-bit copy is never updated, so that block is read instead. With
+  no 32-bit process whose directory is known, it is checked per process: its command line must be
+  exactly the 64-bit block's. One that fails is left out, and the findings say they are incomplete.
 
 - **The veto can miss and must never fire wrongly, and that asymmetry is what sets the shape.** Every
   signal is positive evidence, so a directory reported live is one. The reverse does not follow, and

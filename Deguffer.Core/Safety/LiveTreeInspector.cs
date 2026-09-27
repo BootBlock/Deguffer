@@ -5,8 +5,16 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 {
     public static readonly LiveTreeInspector Default = new();
 
+    private readonly IProcessTableCalls _calls;
     private readonly Lock _gate = new();
     private ProcessTable? _snapshot;
+
+    public LiveTreeInspector()
+        : this(ProcessTableCalls.Instance)
+    {
+    }
+
+    internal LiveTreeInspector(IProcessTableCalls calls) => _calls = calls;
 
     public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
     {
@@ -212,7 +220,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     {
         lock (_gate)
         {
-            return _snapshot ??= Filtered(RunningProcessTable.Read(ct));
+            return _snapshot ??= Filtered(RunningProcessTable.Read(_calls, ct));
         }
     }
 
