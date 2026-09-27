@@ -403,6 +403,7 @@ public sealed class DotNetObjProviderTests : IDisposable
 
         Assert.Equal(3, plan.TargetedPaths.Count);
         Assert.Single(runner.Invocations);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Git could not be found", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -443,7 +444,8 @@ public sealed class DotNetObjProviderTests : IDisposable
     /// The regression guard for the rule above over-reaching. Git absent is a deliberately different
     /// case from git failing: there is no second opinion to be had, the recognition rule governs
     /// alone, and that is the same protection every other provider relies on. A recognised project
-    /// still plans.
+    /// still plans, and the plan says the check did not run, so it does not read the same as one
+    /// where git was asked and found nothing tracked.
     /// </summary>
     [Fact]
     public async Task StillPlansARecognisedObjWhenGitIsNotInstalledAtAll()
@@ -457,12 +459,40 @@ public sealed class DotNetObjProviderTests : IDisposable
         // No WithExecutable("git") — the check has nothing to ask.
         var runner = new FakeProcessRunner();
 
-        var plan = await CreateProvider(runner: runner).PlanAsync();
+        var provider = CreateProvider(runner: runner);
+        var plan = await provider.PlanAsync();
 
         Assert.Equal([obj], plan.TargetedPaths);
         Assert.Empty(runner.Invocations);
         Assert.DoesNotContain(plan.Notes, n =>
             n.Message.Contains("could not be checked against git", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Information
+            && n.Message.StartsWith("Git could not be found, so 1 directory inside a repository was not checked", StringComparison.Ordinal));
+
+        // §5.6: the project directory and its source survive the clean the plan still offers.
+        var project = Path.GetDirectoryName(obj)!;
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.False(LongPath.DirectoryExists(obj));
+        Assert.True(LongPath.FileExists(Path.Combine(project, "Example.csproj")));
+    }
+
+    /// <summary>
+    /// A project outside any repository has no tracked files to check for, so git being absent took
+    /// nothing from its plan and the plan does not claim it did.
+    /// </summary>
+    [Fact]
+    public async Task SaysNothingAboutGitForAProjectOutsideAnyRepository()
+    {
+        var root = ApproveRoot();
+        var obj = ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
+
+        var plan = await CreateProvider(runner: new FakeProcessRunner()).PlanAsync();
+
+        Assert.Equal([obj], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Git", StringComparison.Ordinal));
     }
 
     /// <summary>
