@@ -9,7 +9,10 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal static class ObjPlanNotes
 {
-    /// <summary>The git findings, in the order they are shown, or empty if git said nothing.</summary>
+    /// <summary>
+    /// The git findings, in the order they are shown, or empty if git was asked and found nothing
+    /// to report.
+    /// </summary>
     public static IReadOnlyList<PlanNote> ForGit(int trackedCount, int uncheckedCount, int unaskedCount)
     {
         var notes = new List<PlanNote>(3);
@@ -50,8 +53,8 @@ internal static class ObjPlanNotes
     /// nothing tracked.
     /// </summary>
     private static string Unasked(int count) => count == 1
-        ? "Git is not installed, so 1 directory inside a repository was not checked for tracked files. Its project files alone confirmed it as build output."
-        : $"Git is not installed, so {count} directories inside a repository were not checked for tracked files. Their project files alone confirmed them as build output.";
+        ? "Git could not be found, so 1 directory inside a repository was not checked for tracked files. Its project files alone confirmed it as build output."
+        : $"Git could not be found, so {count} directories inside a repository were not checked for tracked files. Their project files alone confirmed them as build output.";
 
     private static string Tracked(int count) => count == 1
         ? "1 directory is tracked in git, so despite looking like build output it holds committed files and was left alone."

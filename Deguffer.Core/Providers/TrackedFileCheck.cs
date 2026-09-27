@@ -9,7 +9,7 @@ namespace Deguffer.Core.Providers;
 /// the question was put and failed rather than never being asked at all.
 /// </param>
 /// <param name="Unasked">
-/// Candidates inside a repository that git was never asked about, because git is not installed.
+/// Candidates inside a repository that git was never asked about, because git could not be found.
 /// Not declined, because the recognition rule is what decides, but counted so the plan can say the
 /// check did not run rather than read the same as one that ran and found nothing tracked.
 /// </param>
@@ -66,8 +66,11 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
         var unanswered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var unasked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var git = candidates.Count == 0 ? null : environment.FindExecutable("git");
+        var roots = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var repository in candidates.GroupBy(FindRepositoryRoot, StringComparer.OrdinalIgnoreCase))
+        foreach (var repository in candidates.GroupBy(
+                     candidate => FindRepositoryRoot(candidate, roots),
+                     StringComparer.OrdinalIgnoreCase))
         {
             // Before the null-key test, not after it: grouping is lazy, so FindRepositoryRoot's walk
             // up the ancestors runs during this enumeration. A source folder that is not a
@@ -194,21 +197,41 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
     /// Found by walking up for <c>.git</c> rather than by asking git: this runs per candidate, and
     /// the whole point of grouping is to avoid a process per directory. <c>.git</c> is matched as
     /// either a directory or a file, because a worktree and a submodule both record it as a file.
+    ///
+    /// Every directory the walk passes is remembered in <paramref name="known"/> with the answer it
+    /// led to, because sibling projects share almost all of their ancestors, and without it each
+    /// candidate would probe the same directories again. The answer for a directory is the nearest
+    /// repository at or above it, so it holds for every candidate beneath that directory.
     /// </summary>
-    private static string? FindRepositoryRoot(string candidate)
+    private static string? FindRepositoryRoot(string candidate, Dictionary<string, string?> known)
     {
+        var visited = new List<string>();
+        string? root = null;
+
         for (var directory = Path.GetDirectoryName(candidate.TrimEnd(Path.DirectorySeparatorChar));
              !string.IsNullOrEmpty(directory);
              directory = Path.GetDirectoryName(directory))
         {
+            if (known.TryGetValue(directory, out root))
+            {
+                break;
+            }
+
+            visited.Add(directory);
             var git = Path.Combine(directory, ".git");
 
             if (LongPath.DirectoryExists(git) || LongPath.FileExists(git))
             {
-                return directory;
+                root = directory;
+                break;
             }
         }
 
-        return null;
+        foreach (var directory in visited)
+        {
+            known[directory] = root;
+        }
+
+        return root;
     }
 }

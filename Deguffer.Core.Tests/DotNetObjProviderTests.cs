@@ -403,7 +403,7 @@ public sealed class DotNetObjProviderTests : IDisposable
 
         Assert.Equal(3, plan.TargetedPaths.Count);
         Assert.Single(runner.Invocations);
-        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Git is not installed", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Git could not be found", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -468,7 +468,7 @@ public sealed class DotNetObjProviderTests : IDisposable
             n.Message.Contains("could not be checked against git", StringComparison.Ordinal));
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Information
-            && n.Message.StartsWith("Git is not installed, so 1 directory inside a repository was not checked", StringComparison.Ordinal));
+            && n.Message.StartsWith("Git could not be found, so 1 directory inside a repository was not checked", StringComparison.Ordinal));
 
         // §5.6: the project directory and its source survive the clean the plan still offers.
         var project = Path.GetDirectoryName(obj)!;

@@ -185,6 +185,37 @@ public sealed class TrackedFileCheckTests : IDisposable
         Assert.Equal([inside], findings.Unasked);
     }
 
+    /// <summary>
+    /// A repository nested inside another, such as a submodule, is its own repository. The walk up
+    /// for <c>.git</c> is remembered between candidates, and what it remembers must not let a
+    /// candidate in the outer repository take the inner one's root, or the reverse, whichever is
+    /// walked first.
+    /// </summary>
+    [Fact]
+    public async Task AsksEachNestedRepositoryAboutItsOwnCandidates()
+    {
+        var inner = Path.Combine(_repository, "external", "Library");
+        Directory.CreateDirectory(inner);
+        File.WriteAllText(Path.Combine(inner, ".git"), "gitdir: ../../.git/modules/Library");
+
+        var innerFirst = Path.Combine(inner, "src", "A", "obj");
+        var outer = Path.Combine(_repository, "external", "B", "obj");
+        var innerSecond = Path.Combine(inner, "src", "C", "obj");
+        var runner = new FakeProcessRunner();
+
+        await Create(runner).FindTrackedAsync([innerFirst, outer, innerSecond]);
+
+        Assert.Equal(2, runner.Invocations.Count);
+        Assert.Contains(runner.Invocations, i =>
+            i.Arguments.Contains($"-C \"{inner}\"", StringComparison.OrdinalIgnoreCase)
+            && i.Arguments.Contains("\"src/A/obj\"", StringComparison.Ordinal)
+            && i.Arguments.Contains("\"src/C/obj\"", StringComparison.Ordinal));
+        Assert.Contains(runner.Invocations, i =>
+            i.Arguments.Contains($"-C \"{_repository}\"", StringComparison.OrdinalIgnoreCase)
+            && i.Arguments.Contains("\"external/B/obj\"", StringComparison.Ordinal)
+            && !i.Arguments.Contains("src/", StringComparison.Ordinal));
+    }
+
     /// <summary>Git installed and asked leaves nothing unasked, whatever it answered.</summary>
     [Fact]
     public async Task ReportsNothingUnaskedWhenGitIsInstalled()
