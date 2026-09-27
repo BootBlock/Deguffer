@@ -13,10 +13,10 @@ namespace Deguffer.Core.Exploring.Acting;
 ///
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
 /// The first is <see cref="ProtectedRegions"/>, a table of regions — the operating system's own directories, the signed-in user's
-/// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which is
-/// read from where the path's volume is mounted rather than from a list of drives. Apart from
-/// Outlook's folder, all of that is
-/// a fact about Windows and is stated here. The second is
+/// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which
+/// <see cref="VolumeReservations"/> names and which is read from where the path's volume is mounted
+/// rather than from a list of drives. Apart from Outlook's folder, all of that is a fact about
+/// Windows and is stated beside this policy. The second is
 /// §5.2, which is a fact about a tool and belongs to whichever provider knows the tool: Explore
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
 /// twice is one that gets changed once.</para>

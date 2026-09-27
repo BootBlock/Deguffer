@@ -16,9 +16,9 @@ namespace Deguffer.Core.Tests;
 public sealed class VolumeReservationTests : IDisposable
 {
     /// <summary>
-    /// The names the guide describes at a volume root that Explore allows, each on purpose. The
-    /// guide's entries for them say what removing them costs and the supported route, and none says
-    /// the machine stops working without it. <c>inetpub</c> and <c>AMD</c> carry "leave it" guidance
+    /// The names the guide describes at a volume root that Explore allows, each on purpose. None of
+    /// the guide's entries for them says the machine cannot start or repair itself without it.
+    /// <c>inetpub</c> and <c>AMD</c> carry "leave it" guidance
     /// the policy does not yet enforce, and are listed here until that is decided.
     /// </summary>
     private static readonly HashSet<string> AllowedOnPurpose = new(StringComparer.OrdinalIgnoreCase)
