@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -15,8 +14,11 @@ namespace Deguffer.Core.Exploring;
 /// <para>Its own route choice is tested through <see cref="IMftSourceFactory"/>, which the tests
 /// substitute directly. <see cref="IExploreScanner"/> is the page's seam instead, for when a scan's
 /// results arrive rather than how they were read.</para>
+///
+/// <para>The snapshot cadence is measured through <paramref name="time"/>, so a test decides when
+/// the interval has passed rather than spending real time for it.</para>
 /// </summary>
-public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExploreScanner
+public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvider? time = null) : IExploreScanner
 {
     /// <summary>
     /// How often the walk publishes a tree to draw.
@@ -35,9 +37,10 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExplore
     /// ordered by <see cref="ExploreChildOrder.ByName"/>, under which a growing child widens where
     /// it already is rather than overtaking its siblings.</para>
     /// </summary>
-    private static readonly TimeSpan SnapshotInterval = TimeSpan.FromMilliseconds(750);
+    public static readonly TimeSpan SnapshotInterval = TimeSpan.FromMilliseconds(750);
 
     private readonly IMftSourceFactory _sources = sources ?? VolumeMftSourceFactory.Default;
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
 
     /// <summary>The scanner the app runs with: real volumes (G5).</summary>
     public static ExploreScanner Default { get; } = new();
@@ -129,13 +132,13 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExplore
             ct);
     }
 
-    private static ExploreScan Walk(
+    private ExploreScan Walk(
         string root,
         FallbackReason reason,
         IProgress<ExploreProgress>? progress,
         CancellationToken ct)
     {
-        var since = Stopwatch.StartNew();
+        var since = _time.GetTimestamp();
 
         var tree = WalkExploreReader.Read(
             root,
@@ -146,10 +149,10 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null) : IExplore
                     return;
                 }
 
-                var due = since.Elapsed >= SnapshotInterval;
+                var due = _time.GetElapsedTime(since) >= SnapshotInterval;
                 if (due)
                 {
-                    since.Restart();
+                    since = _time.GetTimestamp();
                 }
 
                 progress.Report(new ExploreProgress(

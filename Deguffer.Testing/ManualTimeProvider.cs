@@ -7,6 +7,10 @@ namespace Deguffer.Testing;
 /// <para>Only one-shot timers, which is what <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)"/>
 /// creates. A periodic one is refused rather than fired once and forgotten, which would read as
 /// a timer that stopped.</para>
+///
+/// <para>The timestamp moves with the clock too. The base class reads it from the machine's
+/// counter, so code that measures elapsed time with <see cref="TimeProvider.GetElapsedTime(long)"/>
+/// would otherwise see real time pass under a clock the test is holding still.</para>
 /// </summary>
 public sealed class ManualTimeProvider : TimeProvider
 {
@@ -21,6 +25,10 @@ public sealed class ManualTimeProvider : TimeProvider
             return _now;
         }
     }
+
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    public override long GetTimestamp() => GetUtcNow().UtcTicks;
 
     /// <summary>How many timers are armed and not yet due.</summary>
     public int Waiting
