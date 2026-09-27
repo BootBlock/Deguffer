@@ -69,7 +69,7 @@ public static class FileRemover
     {
         var extended = LongPath.Extended(path);
 
-        // §9: an Outlook mail store is never removed, whoever named it. Asked before the link branch,
+        // §9: an Outlook mail store is never removed, whoever named it. Asked before the link question,
         // because the mark Windows puts on a link is also on files that are not links — a OneDrive
         // placeholder, a deduplicated file — and deleting one of those deletes its content, so a file
         // named like a store is left whatever it carries. Asked before the guard, because the rule is
@@ -93,7 +93,9 @@ public static class FileRemover
 
         // Something that is not a file has taken the name. Not this step's to remove, and the
         // read-only retry below would otherwise clear a directory's own attributes on the way to
-        // failing anyway. A link to a directory is not this case: it is removed as a link.
+        // failing anyway. A link to a directory skips this branch and goes to the deletion as a
+        // link, which Windows refuses for a directory link, so it stays and the step reports a
+        // refusal.
         if (!isLink && fs.DirectoryExists(extended))
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false);
