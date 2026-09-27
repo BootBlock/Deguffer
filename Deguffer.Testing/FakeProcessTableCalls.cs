@@ -75,13 +75,15 @@ internal sealed class FakeListedProcess
 /// </summary>
 internal sealed class FakeProcessMemory : IProcessMemory
 {
-    public const long NativeBlock = 0x1000;
+    private const long NativeBlock = 0x1000;
     private const long NativeParameters = 0x2000;
     private const long Wow64Block = 0x3000;
     private const long Wow64Parameters = 0x4000;
 
     private readonly Dictionary<long, byte> _bytes = [];
     private long _nextText = 0x10000;
+    private bool _exitsAtWow64Block;
+    private bool _exited;
 
     public long? EnvironmentBlockAddress { get; set; } = NativeBlock;
 
@@ -120,12 +122,29 @@ internal sealed class FakeProcessMemory : IProcessMemory
         return this;
     }
 
+    /// <summary>
+    /// Makes the process exit as its 32-bit block is first read, after its 64-bit block has read: from
+    /// then on nothing in its memory can be read, as for a process whose address space has gone.
+    /// </summary>
+    public FakeProcessMemory ExitingAtWow64Block()
+    {
+        _exitsAtWow64Block = true;
+        return this;
+    }
+
     public long? EnvironmentBlock() => EnvironmentBlockAddress;
 
     public long? Wow64EnvironmentBlock() => Wow64EnvironmentBlockAddress;
 
     public bool TryRead(long address, Span<byte> buffer)
     {
+        _exited |= _exitsAtWow64Block && address is >= Wow64Block and < Wow64Parameters + 0x1000;
+
+        if (_exited)
+        {
+            return false;
+        }
+
         for (var i = 0; i < buffer.Length; i++)
         {
             if (!_bytes.TryGetValue(address + i, out var value))

@@ -66,6 +66,32 @@ public class ProcessWorkingDirectoryTests
         Assert.Equal(WorkingDirectoryRead.Unverified, ProcessWorkingDirectory.Of(memory));
     }
 
+    /// <summary>
+    /// A process that exits between the reads of its two blocks has no memory left to read. That is
+    /// a process that could not be read, as it is for a 64-bit one, and it must not turn every table
+    /// incomplete because some 32-bit program happened to exit during a scan.
+    /// </summary>
+    [Fact]
+    public void A32BitProcessThatExitsWhileBeingReadIsUnreadRatherThanUnverified()
+    {
+        var memory = FakeProcessMemory.Wow64(Project, Stale, CommandLine).ExitingAtWow64Block();
+
+        Assert.Equal(WorkingDirectoryRead.Unread, ProcessWorkingDirectory.Of(memory));
+    }
+
+    /// <summary>
+    /// The 64-bit block's layout is the one the self-check proved, so a 32-bit process whose 64-bit
+    /// block cannot be read is one that could not be read, not doubt about the layout.
+    /// </summary>
+    [Fact]
+    public void A32BitProcessWhose64BitBlockCannotBeReadIsUnread()
+    {
+        var memory = FakeProcessMemory.Wow64(Project, Stale, CommandLine);
+        memory.EnvironmentBlockAddress = 0x9000;
+
+        Assert.Equal(WorkingDirectoryRead.Unread, ProcessWorkingDirectory.Of(memory));
+    }
+
     [Fact]
     public void A32BitBlockWhoseDirectoryIsNotRootedIsUnverified()
     {

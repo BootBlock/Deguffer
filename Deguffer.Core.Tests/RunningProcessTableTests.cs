@@ -74,6 +74,38 @@ public class RunningProcessTableTests
     }
 
     /// <summary>
+    /// A process that cannot be opened at all, one of another account or a protected one, is left out
+    /// as it always was, and the processes that can be opened are still read, image path included.
+    /// </summary>
+    [Fact]
+    public void AProcessThatCannotBeOpenedIsLeftOutAndTheRestAreRead()
+    {
+        var otherBuild = new LiveTreeQuery(Path.Combine(Other, "bin"), Other);
+
+        var calls = new FakeProcessTableCalls()
+            .With(FakeProcessTableCalls.Own)
+            .With(new FakeListedProcess
+            {
+                Id = 4324,
+                Name = "service",
+                OpenRefused = true,
+                ImagePath = Path.Combine(otherBuild.Directory, "service.exe"),
+            })
+            .With(new FakeListedProcess
+            {
+                Id = 4325,
+                Name = "app",
+                ImagePath = Path.Combine(Build.Directory, "app.exe"),
+            });
+
+        var findings = new LiveTreeInspector(calls).FindLive([Build, otherBuild]);
+
+        Assert.True(findings.Complete);
+        Assert.True(findings.IsLive(Build.Directory));
+        Assert.False(findings.IsLive(otherBuild.Directory));
+    }
+
+    /// <summary>
     /// The self-check reads a directory that is not this process's own, so the offset no longer
     /// describes this Windows and no working directory is read at all.
     /// </summary>

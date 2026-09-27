@@ -87,13 +87,20 @@ internal static class ProcessWorkingDirectory
 
     private static WorkingDirectoryRead Wow64(IProcessMemory memory, long block, long wow64)
     {
-        if (Parameters(memory, block) is not { } parameters
+        // The 64-bit block's layout is the one the self-check proved, so failing to read it is a process
+        // that could not be read, exactly as for a 64-bit process, and not doubt about the layout.
+        if (Parameters(memory, block) is not { } parameters)
+        {
+            return WorkingDirectoryRead.Unread;
+        }
+
+        // An empty command line would match an empty one anywhere, so it checks nothing.
+        if (String(memory, parameters + CommandLineOffset, ushort.MaxValue) is not { } commandLine
             || Wow64Parameters(memory, wow64) is not { } wow64Parameters
-            || String(memory, parameters + CommandLineOffset, ushort.MaxValue) is not { } commandLine
             || Wow64String(memory, wow64Parameters + Wow64CommandLineOffset, ushort.MaxValue) is not { } wow64CommandLine
             || !commandLine.Equals(wow64CommandLine, StringComparison.Ordinal))
         {
-            return WorkingDirectoryRead.Unverified;
+            return Doubted(memory, block);
         }
 
         // The block was shown to be the process's own, so a directory missing from it or not rooted is
@@ -101,8 +108,17 @@ internal static class ProcessWorkingDirectory
         return Wow64String(memory, wow64Parameters + Wow64CurrentDirectoryOffset, MaximumPathBytes) is { } directory
             && Path.IsPathRooted(directory)
                 ? new WorkingDirectoryRead(directory, false)
-                : WorkingDirectoryRead.Unverified;
+                : Doubted(memory, block);
     }
+
+    /// <summary>
+    /// A 32-bit block that did not check out, unless the process exited while it was being read: its
+    /// memory is gone then, and that is a process that could not be read. Asked again of the 64-bit
+    /// block, which read a moment ago, so that one 32-bit process exiting mid-scan does not turn every
+    /// table incomplete.
+    /// </summary>
+    private static WorkingDirectoryRead Doubted(IProcessMemory memory, long block) =>
+        Parameters(memory, block) is null ? WorkingDirectoryRead.Unread : WorkingDirectoryRead.Unverified;
 
     private static long? Parameters(IProcessMemory memory, long block)
     {

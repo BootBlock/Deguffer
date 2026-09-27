@@ -36,8 +36,9 @@ public sealed record LiveTree(string Directory, IReadOnlyList<string> Holders);
 /// <param name="Live">Every candidate found to be in use.</param>
 /// <param name="Complete">
 /// False when one of the mechanisms could not run at all — the Restart Manager refused the query, or
-/// the process table could not be read. Absence from <see cref="Live"/> is then not evidence of
-/// dormancy.
+/// the process table could not be read — or when a 32-bit process's working directory could not be
+/// shown to be the one it keeps current, and was left out rather than reported stale. Absence from
+/// <see cref="Live"/> is then not evidence of dormancy.
 ///
 /// The distinction is the whole point. "Nothing is using this" and "we could not tell" lead to
 /// opposite decisions on a directory whose deletion breaks the work someone is doing right now, and
@@ -113,7 +114,8 @@ public interface ILiveTreeInspector
     /// this answer, because a file held open is not a place a program is.</para>
     ///
     /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories could not be
-    /// read, and the list then holds executables' folders alone. The same limits apply as to
+    /// read, and the list then holds executables' folders alone, or where one 32-bit process's could
+    /// not be checked, and the list then lacks that one. The same limits apply as to
     /// <see cref="FindLive"/>: every entry is positive evidence, and an elevated program or one
     /// belonging to another account cannot be inspected at all.</para>
     /// </summary>
@@ -152,7 +154,8 @@ public interface ILiveTreeInspector
     /// folder was asked.</para>
     ///
     /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories or command
-    /// lines could not be read at all. The same limits apply as to <see cref="FindLive"/>: every
+    /// lines could not be read at all, or where one 32-bit process's working directory could not be
+    /// checked. The same limits apply as to <see cref="FindLive"/>: every
     /// signal is positive evidence, and an elevated program or one belonging to another account
     /// cannot be inspected at all.</para>
     /// </summary>

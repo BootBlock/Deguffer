@@ -103,6 +103,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
         var findings = new LiveTreeInspector().FindOccupiedDirectories();
 
         Assert.True(findings.Complete);
+        Assert.Contains(findings.Live, place => place.Directory.Equals(moved, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(findings.Live, place => place.Directory.Equals(started, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -590,8 +591,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ping.exe");
 
     /// <summary>
-    /// A 32-bit Windows program. Every 64-bit Windows this runs on keeps them in <c>SysWOW64</c>,
-    /// so its absence fails the test rather than skipping it.
+    /// A 32-bit Windows program from <c>SysWOW64</c>. 64-bit desktop Windows always has one, and a
+    /// machine with WOW64 removed cannot run these tests, so its absence fails them rather than
+    /// skipping them.
     /// </summary>
     private static string Wow64Program(string name)
     {
