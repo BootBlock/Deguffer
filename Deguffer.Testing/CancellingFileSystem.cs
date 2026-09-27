@@ -7,7 +7,14 @@ namespace Deguffer.Testing;
 /// pressing Cancel with a removal under way. The file itself is still deleted, as it would be, so a
 /// removal stopped this way has always taken something.
 /// </summary>
-public sealed class CancellingFileSystem(IFileSystem inner, CancellationTokenSource cancel) : IFileSystem
+/// <param name="whileListing">
+/// Cancel as the first directory is listed instead, while a removal is still gathering its tree and
+/// has deleted nothing.
+/// </param>
+public sealed class CancellingFileSystem(
+    IFileSystem inner,
+    CancellationTokenSource cancel,
+    bool whileListing = false) : IFileSystem
 {
     public bool DirectoryExists(string path) => inner.DirectoryExists(path);
 
@@ -15,7 +22,15 @@ public sealed class CancellingFileSystem(IFileSystem inner, CancellationTokenSou
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) => inner.EnumerateEntries(directory);
+    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory)
+    {
+        if (whileListing)
+        {
+            cancel.Cancel();
+        }
+
+        return inner.EnumerateEntries(directory);
+    }
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 
@@ -24,7 +39,11 @@ public sealed class CancellingFileSystem(IFileSystem inner, CancellationTokenSou
     public void DeleteFile(string path)
     {
         inner.DeleteFile(path);
-        cancel.Cancel();
+
+        if (!whileListing)
+        {
+            cancel.Cancel();
+        }
     }
 
     public RefusalReason? ProbeRemoval(string path) => inner.ProbeRemoval(path);

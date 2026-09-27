@@ -580,6 +580,32 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A removal cancelled while it is still gathering its tree has deleted nothing, and returns that
+    /// rather than throwing.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalCancelledWhileItGathersTakesNothingAndSaysItWasStopped()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(64, "cache", "a.bin");
+        _temp.CreateFile(64, "cache", "sub", "b.bin");
+
+        using var cts = new CancellationTokenSource();
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root,
+            MinimumAge.Off,
+            progress: null,
+            cts.Token,
+            new CancellingFileSystem(WindowsFileSystem.Default, cts, whileListing: true));
+
+        Assert.True(outcome.Interrupted);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.Empty(outcome.LeftStanding);
+        Assert.Equal(2, Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).Count());
+    }
+
+    /// <summary>
     /// A removal stopped part-way returns what it took, and names every folder it had gone into and
     /// not yet tried. Those are where it went, and §5.6 reads a protected folder among them as one the
     /// removal entered (see <see cref="RunResidue"/>). Without them a protected folder inside the
