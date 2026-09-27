@@ -226,7 +226,7 @@ public sealed class ExploreActionPolicy
             return bin;
         }
 
-        if (OnAnyReading(readings, AtAVolumeRoot) is { } reserved)
+        if (OnAnyReading(readings, VolumeReservations.Refusal) is { } reserved)
         {
             return reserved;
         }
@@ -257,54 +257,15 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
-    /// What Windows keeps at the top of a volume, refused wherever the volume is.
-    ///
-    /// <para>Decided by asking where the path's volume is mounted at the moment of the question,
-    /// never from a remembered list of drives, and that is the point. A remembered list is a
-    /// snapshot: Explore re-reads its drive list whenever the page refreshes, so a volume mounted
-    /// after the policy was built would be scannable with its paging file and its restore points
-    /// unprotected. Asked live, the question "is this a direct child of its own volume root, named
-    /// one of these?" is right on every volume, mounted before or after and at a drive letter or at
-    /// a folder. <see cref="VolumeRoot"/> answers the first half of it, where
-    /// <see cref="Knowledge.ItemGuide"/> can read the same rule rather than restate it.</para>
-    ///
-    /// <para>They are named at all because Explore draws them.
-    /// <c>System Volume Information</c> and the paging files are among the largest items on a drive,
-    /// so they are exactly what a size picture puts in front of somebody — and "access denied" from
-    /// a deletion the app offered is a worse answer than not offering it.</para>
-    /// </summary>
-    /// <param name="below">Where the path sits below its volume's root, from <see cref="VolumeRoot"/>.</param>
-    private static ExploreVerdict? AtAVolumeRoot(string below)
-    {
-        if (below.IndexOfAny(Separators) >= 0)
-        {
-            return null;
-        }
-
-        return below.ToLowerInvariant() switch
-        {
-            "system volume information" => ExploreVerdict.Refuse(
-                "Windows keeps this drive's restore points, indexing data and change journal here. "
-                + "It belongs to the operating system, and Windows is what should reclaim it."),
-
-            "pagefile.sys" => Managed("the paging file"),
-            "swapfile.sys" => Managed("the swap file"),
-            "hiberfil.sys" => Managed("the hibernation file"),
-
-            _ => null,
-        };
-    }
-
-    /// <summary>
     /// NTFS's own records, which §7.1 puts out of reach: they are live filesystem state, so the tier
     /// model calls them Tier 4, and Explore "refuses whatever the tier model would call Tier 4, and
     /// it does not get to decide what that is".
     ///
-    /// <para>Separate from <see cref="AtAVolumeRoot"/> and not folded into it, because the two ask
-    /// different questions. That one is about a <em>direct child</em> of a volume root, which is
-    /// where Windows keeps the paging file and the restore points. NTFS's optional features live a
-    /// level down in <c>$Extend</c>, so this asks about the first segment below the root and covers
-    /// everything under it.</para>
+    /// <para>Separate from <see cref="VolumeReservations"/> and not folded into it, because the two
+    /// sets come from different owners. What Windows keeps at the top of a volume changes with
+    /// Windows, and this set is closed by the filesystem's specification. Both ask about the first
+    /// segment below the root, because NTFS's optional features live a level down in
+    /// <c>$Extend</c>.</para>
     ///
     /// <para>They are refused at all because §5.5's file-table route <em>draws</em> them. A walk
     /// never sees these names — Windows hides the reserved records from directory enumeration — but
@@ -366,10 +327,6 @@ public sealed class ExploreActionPolicy
 
         return null;
     }
-
-    private static ExploreVerdict Managed(string what) => ExploreVerdict.Refuse(
-        $"This is {what}. Windows manages it, and its size is changed through the system settings "
-        + "rather than by deleting it.");
 
     /// <summary>
     /// §5.2, asked of the <em>innermost</em> tool root containing this path, or the unclassified
