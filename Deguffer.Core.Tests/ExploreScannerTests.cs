@@ -252,11 +252,9 @@ public class ExploreScannerTests
     ///
     /// <para>The cadence is a wall-clock interval rather than a level count, deliberately: copying
     /// every array is not free, and a scan of a full drive is long enough that an unchanging window
-    /// reads as a hung one. So what the test has to produce is elapsed time, and it produces it by
-    /// holding the reporting thread rather than by building a fixture large enough to take three
-    /// quarters of a second to walk — which at unit scale would mean tens of thousands of files, and
-    /// would still be timing-dependent. Holding the thread exercises the same decision: no snapshot
-    /// while the interval has not passed, one when it has.</para>
+    /// reads as a hung one. So what the test has to produce is elapsed time, and it moves the
+    /// scanner's clock from the reporting thread rather than spending real time, which would race
+    /// the walk and every test running beside it.</para>
     /// </summary>
     [Fact]
     public async Task PublishesATreeToDrawOnlyOnceTheSnapshotIntervalHasPassed()
@@ -267,32 +265,39 @@ public class ExploreScannerTests
         temp.CreateFile(4000, "cache", "one", "two", "c.bin");
         temp.CreateFile(8000, "cache", "one", "two", "three", "d.bin");
 
+        var clock = new ManualTimeProvider();
         var reports = new List<ExploreProgress>();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock);
 
-        // Half the interval per level, so the third report is the first one past it.
+        // One tick short of the interval by the second report, and exactly on it by the third. The
+        // fourth follows with no time passing, so it shows the interval starting again.
+        var steps = new Queue<TimeSpan>(
+            [ExploreScanner.SnapshotInterval - TimeSpan.FromTicks(1), TimeSpan.FromTicks(1)]);
+
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
             reports.Add(report);
 
-            if (reports.Count <= 2)
+            if (steps.TryDequeue(out var step))
             {
-                Thread.Sleep(400);
+                clock.Advance(step);
             }
         });
 
         var scan = await scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress);
 
+        Assert.True(reports.Count >= 4, $"The walk reported {reports.Count} levels, not the four it holds.");
         Assert.Null(reports[0].Snapshot);
         Assert.Null(reports[1].Snapshot);
+        Assert.NotNull(reports[2].Snapshot);
+        Assert.Null(reports[3].Snapshot);
 
-        var published = reports.Select(report => report.Snapshot).OfType<ExploreTree>().ToList();
+        var published = reports[2].Snapshot!;
 
-        Assert.NotEmpty(published);
         Assert.True(
-            published[0].NodeCount < scan.Tree.NodeCount,
-            "The first snapshot already held the whole tree, so nothing was published early.");
-        Assert.True(published[0].NodeCount > 1, "The snapshot held nothing but the root.");
+            published.NodeCount < scan.Tree.NodeCount,
+            "The snapshot already held the whole tree, so nothing was published early.");
+        Assert.True(published.NodeCount > 1, "The snapshot held nothing but the root.");
     }
 
     /// <summary>
@@ -301,9 +306,8 @@ public class ExploreScannerTests
     /// ordering siblings by one of them makes every snapshot a different arrangement of the same
     /// disk; a name does not grow.
     ///
-    /// <para>Driven the same way as the interval test above, by holding the reporting thread, for
-    /// the same reason: what is needed is elapsed time rather than a fixture large enough to take
-    /// three quarters of a second to walk.</para>
+    /// <para>Driven the same way as the interval test above, by moving the scanner's clock a whole
+    /// interval on every report, so every report after the first carries a snapshot.</para>
     /// </summary>
     [Fact]
     public async Task OrdersASnapshotByNameAndTheFinishedTreeBySize()
@@ -313,14 +317,15 @@ public class ExploreScannerTests
         temp.CreateFile(2000, "cache", "one", "b.bin");
         temp.CreateFile(4000, "cache", "one", "two", "c.bin");
 
+        var clock = new ManualTimeProvider();
         var reports = new List<ExploreProgress>();
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
             reports.Add(report);
-            Thread.Sleep(400);
+            clock.Advance(ExploreScanner.SnapshotInterval);
         });
 
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock);
         var scan = await scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress);
 
         var published = reports.Select(report => report.Snapshot).OfType<ExploreTree>().ToList();
