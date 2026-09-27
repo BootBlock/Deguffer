@@ -176,9 +176,9 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// A folder removal cancelled part-way is reported with the rest, as partly deleted and stopped,
-    /// and the run is reported as stopped. The item after it is never started. Without this the item
-    /// the removal was working in went unreported, and a cancel after the last item went unnoticed.
+    /// A folder removal cancelled part-way is reported as partly deleted and stopped, and the run as
+    /// stopped. The folder is the last item, so nothing after it would notice the cancel: the removal
+    /// returns what it did rather than throwing, and only its own outcome can say it was stopped.
     /// </summary>
     [Fact]
     public async Task AFolderRemovalCancelledPartWayIsReportedAndStopsTheRun()
@@ -186,12 +186,11 @@ public sealed class ExploreRemoverTests : IDisposable
         var folder = _temp.CreateDirectory("profile", "Downloads", "junk");
         _temp.CreateFile(32, "profile", "Downloads", "junk", "a.bin");
         _temp.CreateFile(32, "profile", "Downloads", "junk", "sub", "b.bin");
-        var next = _temp.CreateDirectory("profile", "Downloads", "later");
 
         using var cts = new CancellationTokenSource();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 64), new ExploreItem(next, IsDirectory: true, Bytes: 0)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
             ExploreRemovalMode.Permanent,
             _policy,
             recycleBin: null,
@@ -199,13 +198,13 @@ public sealed class ExploreRemoverTests : IDisposable
             cts.Token);
 
         Assert.True(report.Cancelled);
+        Assert.StartsWith("Stopped part-way.", report.Summary);
 
         var stopped = Assert.Single(report.Items);
         Assert.True(stopped.Interrupted);
         Assert.False(stopped.Removed);
         Assert.StartsWith("Partly deleted before the removal was cancelled", stopped.Message);
         Assert.True(Directory.Exists(folder));
-        Assert.True(Directory.Exists(next));
     }
 
     /// <summary>
