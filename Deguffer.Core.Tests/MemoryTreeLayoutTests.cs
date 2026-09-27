@@ -72,11 +72,17 @@ public sealed class MemoryTreeLayoutTests
         var total = (double)Tree.SizeOf(Tree.RootNode);
         var ring = sunburst.Sectors.Where(sector => sector.Depth == 1 && !sector.IsAggregate).ToArray();
 
-        Assert.NotEmpty(ring);
+        // Each part is measured by its own node, so a wedge drawn at one part's size and labelled
+        // with another fails here. The three parts' sizes differ, so no borrowed size can match.
+        Assert.Equal(3, ring.Length);
+        Assert.Equal(3, ring.Select(sector => Tree.SizeOf(sector.Node)).Distinct().Count());
 
         foreach (var sector in ring)
         {
-            Assert.InRange(sector.SweepAngle, (Math.Tau * sector.Bytes / total) - 0.001, (Math.Tau * sector.Bytes / total) + 0.001);
+            var expected = Math.Tau * Tree.SizeOf(sector.Node) / total;
+
+            Assert.Equal(Tree.SizeOf(sector.Node), sector.Bytes);
+            Assert.InRange(sector.SweepAngle, expected - 0.001, expected + 0.001);
         }
     }
 

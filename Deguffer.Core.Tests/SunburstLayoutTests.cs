@@ -98,14 +98,24 @@ public sealed class SunburstLayoutTests
         Assert.Equal(MathF.Tau, root.SweepAngle, 4);
     }
 
+    /// <summary>
+    /// Size and angle are read from the tree by each sector's own node, not from each other. A sector
+    /// carries its size and its sweep beside its node, and Explore acts on the node, so a wedge drawn
+    /// at one child's size and labelled with another would put the wrong folder in front of the
+    /// user. The sizes are distinct so that a borrowed size cannot match by coincidence.
+    /// </summary>
     [Fact]
     public void SweepIsProportionalToSizeWithinARing()
     {
-        var sunburst = Layout(TreeOf(500, 300, 200), Sized(LayoutLimits.Default));
+        var tree = TreeOf(500, 300, 200);
+        var ring = Layout(tree, Sized(LayoutLimits.Default)).Sectors.Where(s => s.Depth == 1).ToList();
 
-        foreach (var sector in sunburst.Sectors.Where(s => s.Depth == 1))
+        Assert.Equal(tree.ChildrenOf(tree.RootNode).ToArray(), ring.Select(s => s.Node));
+
+        foreach (var sector in ring)
         {
-            Assert.Equal(MathF.Tau * sector.Bytes / 1000f, sector.SweepAngle, 3);
+            Assert.Equal(tree.SizeOf(sector.Node), sector.Bytes);
+            Assert.Equal(MathF.Tau * tree.SizeOf(sector.Node) / tree.SizeOf(tree.RootNode), sector.SweepAngle, 3);
         }
     }
 
