@@ -69,5 +69,9 @@ public sealed class WindowsServicingTests
 
         Assert.Equal(DiskCleanupAnswer.Unavailable, survey.Answer);
         Assert.False(survey.MayOffer);
+
+        // The refusal of anything but the top of a drive answers Unavailable too, so the reason is
+        // what shows that C:\ passed that guard and reached the registry.
+        Assert.Contains("no longer registers", survey.Message, StringComparison.Ordinal);
     }
 }

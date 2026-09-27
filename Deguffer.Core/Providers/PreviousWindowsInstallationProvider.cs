@@ -59,17 +59,24 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
             "The Windows installation files Setup downloaded for an upgrade that has finished."),
     ];
 
+    /// <summary>
+    /// Asked whether Windows' own cleanup has anything to clear, and given to the executor that runs it,
+    /// so the plan and the clean ask the same instance. See <see cref="CleanupProviderBase"/>'s
+    /// <c>handlers</c>.
+    /// </summary>
+    private readonly IDiskCleanupHandlers _handlers;
+
     private readonly ISystemDirectories _system;
     private readonly IReadOnlyList<DeclaredRoot> _roots;
 
     public PreviousWindowsInstallationProvider(
+        IDiskCleanupHandlers handlers,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        IWindowsServicing? servicing = null,
-        IDiskCleanupHandlers? handlers = null)
+        IWindowsServicing? servicing = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -78,6 +85,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
             handlers: handlers,
             servicing: servicing)
     {
+        _handlers = handlers;
         _system = system ?? SystemDirectories.Current;
         _roots =
         [
@@ -187,7 +195,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
             // Asked last, because it is the one question that can take a while: the handler measures
             // what it would clear, and Windows.old is an entire installation.
             var volume = LongPath.Display(_system.SystemDrive);
-            var survey = await Task.Run(() => Handlers.Survey(cleanup.Handler, volume, ct), ct).ConfigureAwait(false);
+            var survey = await Task.Run(() => _handlers.Survey(cleanup.Handler, volume, ct), ct).ConfigureAwait(false);
 
             if (survey.WhyLeftAlone(cleanup.Handler, LongPath.Display(paths[0])) is { } why)
             {

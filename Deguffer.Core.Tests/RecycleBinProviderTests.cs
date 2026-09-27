@@ -46,12 +46,12 @@ public sealed class RecycleBinProviderTests : IDisposable
         _emptier = emptier ?? _emptier;
 
         return new RecycleBinProvider(
+            _emptier,
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             volumes: _volumes,
-            preferences: new FakePreferences(preferences ?? AppPreferences.Default),
-            emptier: _emptier);
+            preferences: new FakePreferences(preferences ?? AppPreferences.Default));
     }
 
     /// <summary>A volume root under the scratch tree, registered as fixed and ready.</summary>

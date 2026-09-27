@@ -194,4 +194,37 @@ public sealed class VolumeRootTests
         Assert.Equal("pagefile.sys", VolumeRoot.Below(_volumes, @"\\?\C:\Mount\pagefile.sys"));
         Assert.Equal(@"C:\Mount\pagefile.sys", Assert.Single(_volumes.MountPointQueries));
     }
+
+    /// <summary>
+    /// The top of a drive in display form, and the paths that look like one but are not. Shared with
+    /// <see cref="ShellRecycleBinEmptierTests"/>, because the Recycle Bin and Disk Cleanup routes each
+    /// ask this before handing Windows a whole volume.
+    /// </summary>
+    public static TheoryData<string?, bool> DriveTops => new()
+    {
+        { @"C:\", true },
+        { @"D:\", true },
+        { @"c:\", true },
+        { @"C:", false },
+        { @"..", false },
+        { @"C:\Users\testuser", false },
+        { @"C:\Mount\", false },
+        { @"\\?\C:\", false },
+        { @"\\server\share\", false },
+        { @"\\server\share", false },
+        { "C:pagefile.sys", false },
+        { string.Empty, false },
+        { "   ", false },
+        { null, false },
+    };
+
+    /// <summary>
+    /// Every route that hands Windows a whole volume asks this first, so it must answer true as well as
+    /// false. An answer of false for every drive would send each Recycle Bin down the direct route
+    /// (§5.1) and hide every Disk Cleanup row.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DriveTops))]
+    public void OnlyTheTopOfADriveInDisplayFormIsADriveTop(string? path, bool driveTop) =>
+        Assert.Equal(driveTop, VolumeRoot.IsDriveTop(path));
 }

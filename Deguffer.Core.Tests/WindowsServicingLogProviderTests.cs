@@ -36,11 +36,11 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     /// </summary>
     private WindowsServicingLogProvider CreateProvider(FakeDiskCleanupHandlers? handlers = null) =>
         new(
+            handlers ?? FakeDiskCleanupHandlers.Windows(),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
-            system: _system,
-            handlers: handlers ?? FakeDiskCleanupHandlers.Windows());
+            system: _system);
 
     /// <summary>A directory at the top of the system drive with one log in it.</summary>
     private string AtTheTop(string relative, string file = "setupact.log")
@@ -495,11 +495,11 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
 
         var provider = new WindowsServicingLogProvider(
+            FakeDiskCleanupHandlers.Windows(),
             _environment,
             new FakeProcessRunner(),
             new FakeProcessInspector("TiWorker"),
-            system: _system,
-            handlers: FakeDiskCleanupHandlers.Windows());
+            system: _system);
 
         var plan = await provider.PlanAsync();
 
@@ -647,12 +647,12 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     {
         AtTheTop(Path.Combine("$SysReset", "Logs"));
         var provider = new WindowsServicingLogProvider(
+            FakeDiskCleanupHandlers.Windows(),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)),
-            system: _system,
-            handlers: FakeDiskCleanupHandlers.Windows());
+            system: _system);
 
         var plan = await provider.PlanAsync();
 
