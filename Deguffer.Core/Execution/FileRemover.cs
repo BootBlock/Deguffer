@@ -69,7 +69,7 @@ public static class FileRemover
     {
         var extended = LongPath.Extended(path);
 
-        // §9: an Outlook mail store is never removed, whoever named it. Asked before the link branch,
+        // §9: an Outlook mail store is never removed, whoever named it. Asked before the link question,
         // because the mark Windows puts on a link is also on files that are not links — a OneDrive
         // placeholder, a deduplicated file — and deleting one of those deletes its content, so a file
         // named like a store is left whatever it carries. Asked before the guard, because the rule is
@@ -85,25 +85,27 @@ public static class FileRemover
         // This changes no outcome on Windows today, which is worth saying rather than implying:
         // File.Delete already removes a link instead of what it points at, and FileInfo.Length
         // already reports the link's own zero rather than the target's — measured here for a live
-        // link and a dangling one alike. The branch is kept because both of those are the
-        // platform's behaviour and not this code's, and a safety property riding on an unstated one
-        // is exactly how the shader caches came to enumerate through a junction. Stated here, the
-        // zero and the link-not-target removal are decisions a reader can check.
-        if (fs.IsReparsePoint(extended))
-        {
-            return Delete(extended, fs, length: 0);
-        }
+        // link and a dangling one alike. The zero is kept because both of those are the platform's
+        // behaviour and not this code's, and a safety property riding on an unstated one is exactly
+        // how the shader caches came to enumerate through a junction. Stated here, the zero and the
+        // link-not-target removal are decisions a reader can check.
+        var isLink = fs.IsReparsePoint(extended);
 
         // Something that is not a file has taken the name. Not this step's to remove, and the
         // read-only retry below would otherwise clear a directory's own attributes on the way to
-        // failing anyway.
-        if (fs.DirectoryExists(extended))
+        // failing anyway. A link to a directory skips this branch and goes to the deletion as a
+        // link, which Windows refuses for a directory link, so it stays and the step reports a
+        // refusal.
+        if (!isLink && fs.DirectoryExists(extended))
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false);
         }
 
-        // The guard, on the file this step actually names. Asked after the link and directory
-        // branches above, so the timestamp read is the one belonging to the thing being removed.
+        // The guard, on whatever this step is about to remove, a link included. A link carries its
+        // own timestamps, so one made or retargeted after the preview is recent whatever it points
+        // at — and the mark a link carries is also on files whose deletion takes their content.
+        // Asked after the directory branch, so a folder that is not this step's to remove is
+        // reported as that rather than as kept.
         if (fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest))
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false, Kept: true);
@@ -116,7 +118,7 @@ public static class FileRemover
         // file that was still on the disk, because a refusal and an absence look the same to one.
         // Once the deletion has succeeded, though, an unknown length can only have been an absence,
         // and that is what says this removal took nothing.
-        return Delete(extended, fs, fs.TryGetFileLength(extended));
+        return Delete(extended, fs, isLink ? 0 : fs.TryGetFileLength(extended));
     }
 
     /// <param name="length">The file's length, or null where no file was there to measure.</param>

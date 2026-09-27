@@ -80,6 +80,33 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// A link that appeared at a file step's path after the preview is left under the guard, and the
+    /// step says so, rather than reporting "Removed." with nothing reclaimed and nothing kept.
+    /// </summary>
+    [Fact]
+    public async Task LeavesALinkAtAFileStepThatChangedInsideTheWindow()
+    {
+        var target = TempDirectory.Age(_temp.CreateFile(4096, "precious", "irreplaceable.bin"), TimeSpan.FromDays(9));
+        var link = Path.Combine(_temp.CreateDirectory("Windows"), "MEMORY.DMP");
+
+        SymbolicLink.ToFile(link, target);
+
+        var plan = PlanDeleting(new DeleteFileStep(link, "A crash dump"))
+            with { Keep = MinimumAge.WithinHours(8, DateTime.UtcNow) };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: CancellationToken.None);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.True(File.Exists(link), "a link made a moment ago was removed under a guard");
+        Assert.True(File.Exists(target), "a file was deleted through a link");
+        Assert.Equal("Left alone: it changed too recently.", step.Message);
+        Assert.Equal(1, step.Kept);
+        Assert.Equal(1, result.KeptCount);
+    }
+
+    /// <summary>
     /// A clear that took something and was denied the rest says so in those words. Windows' own
     /// refusal is staged, so the reason is the one a real denial produces rather than a fake's.
     /// </summary>

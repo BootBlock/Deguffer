@@ -262,6 +262,30 @@ public sealed class FileRemoverTests : IDisposable
         Assert.Equal(0, outcome.BytesReclaimed);
     }
 
+    /// <summary>
+    /// The guard covers a link at the named path, not only a plain file. A link carries its own
+    /// timestamps, so one made or retargeted after the preview is recent whatever it points at, and
+    /// the plan promised to leave anything recent alone. The target is old, so a guard that read the
+    /// target's times instead of the link's would let the link go.
+    /// </summary>
+    [Fact]
+    public async Task LeavesALinkThatChangedInsideTheWindow()
+    {
+        var target = TempDirectory.Age(_temp.CreateFile(4096, "precious", "irreplaceable.bin"), TimeSpan.FromDays(9));
+        var link = Path.Combine(_temp.CreateDirectory("dumps"), "MEMORY.DMP");
+
+        SymbolicLink.ToFile(link, target);
+
+        var outcome = await FileRemover.RemoveAsync(link, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.True(File.Exists(link), "a link made a moment ago was removed under a guard");
+        Assert.True(outcome.Kept);
+        Assert.False(outcome.Removed);
+        Assert.True(outcome.Refused.IsEmpty);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.True(File.Exists(target), "a file was deleted through a link");
+    }
+
     [Fact]
     public async Task RemovesAFileOlderThanTheWindow()
     {
