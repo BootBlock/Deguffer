@@ -613,8 +613,14 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (PickedFolder.OnDisk(folder) is not { } onDisk)
         {
-            Status = PickedFolder.NotOnDisk;
-            _statedRefusal = PickedFolder.NotOnDisk;
+            // The target stays, so a refusal of it still stands and still has to be said: without
+            // it the Scan button stays greyed out with nothing on the page saying why.
+            var refused = Target.Refusal(_volumes) is { } standing
+                ? $"{PickedFolder.NotOnDisk} {standing}"
+                : PickedFolder.NotOnDisk;
+
+            Status = refused;
+            _statedRefusal = refused;
 
             return;
         }

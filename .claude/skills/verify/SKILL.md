@@ -43,12 +43,11 @@ C:\Users\<user>\AppData\Local\DriveNet\DriveNet.Cli.exe
 - **Launching blocks past the CLI's own `--startup-wait-ms`.** The launch command routinely exceeds
   the 120-second Bash timeout and lands in the background while the app is in fact up. Poll
   `discover` for the PID rather than trusting the launch call to return.
-- **A file or folder picker cannot be driven at all.** `FolderPicker` opens in a separate
-  `PickerHost` broker process, and every Drive.NET command against that PID fails with "Could not
-  get UI Automation element": `find`, `capture` and `sendKeys` alike. You can prove the picker
-  *opens*, which is what verifies the `InitializeWithWindow` interop, but not that a selection
-  round-trips. Cover the code behind the picker another way. Close the dialog with `Stop-Process` on
-  the `PickerHost` PID, or it blocks the app.
+- **The folder picker is drivable, through the app's own PID.** `FolderDialog` opens the Windows
+  App SDK picker in-process, as a `Select Folder` dialog owned by the main window. `setFocus` and
+  `type` a full path into the `Edit` named `Folder:`, then `click` the `Select Folder` `Button`.
+  To drive an elevated Deguffer, run the Drive.NET CLI elevated too: UI Automation does not cross
+  from a normal process into an elevated one.
 - **Plan notes are two clicks away, inside a modal.** They live on the `Contents` tab of each row's
   information dialog, so `find` matches none of their text until you open it: in compact,
   `--action expand` the row's "More about …" button first, then click its `What is …?`

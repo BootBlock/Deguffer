@@ -3,29 +3,35 @@ using Deguffer.Core.Configuration;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// What a folder chosen in the system picker becomes. The picker lets a person choose places that
-/// are not folders on a disk, and what comes back for them is not a path Deguffer can use.
+/// Whether a folder chosen in the system picker is one on a disk. The picker's result is a string
+/// with no promise of a path in it, so anything that is not a fully qualified path is refused.
 /// </summary>
 public sealed class PickedFolderTests
 {
-    /// <summary>
-    /// A library, a phone or a namespace extension comes back as an empty path or a shell name, and
-    /// none of them is a folder on a disk.
-    /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("::{031E4825-7B94-4DC3-B131-E946B44C8DD5}\\Documents.library-ms")]
     [InlineData("This PC\\Phone\\Internal storage")]
     [InlineData("Games")]
-    public void AChoiceThatIsNotAFolderOnADiskIsNothing(string picked) =>
+    [InlineData(@"C:Games")]
+    public void AChoiceThatIsNotAFullyQualifiedPathIsNothing(string picked) =>
         Assert.Null(PickedFolder.OnDisk(picked));
 
     [Theory]
-    [InlineData(@"C:\Users\testuser\Games", @"C:\Users\testuser\Games")]
-    [InlineData(@"D:\", @"D:\")]
-    [InlineData(@"\\server.test\share\src", @"\\server.test\share\src")]
-    [InlineData(@"C:\Users\testuser\Games\", @"C:\Users\testuser\Games")]
-    public void AFolderOnADiskIsThatFolder(string picked, string expected) =>
-        Assert.Equal(expected, PickedFolder.OnDisk(picked));
+    [InlineData(@"C:\Users\testuser\Games")]
+    [InlineData(@"D:\")]
+    [InlineData(@"\\server.test\share\src")]
+    public void AFolderOnADiskIsThatFolder(string picked) =>
+        Assert.Equal(picked, PickedFolder.OnDisk(picked));
+
+    /// <summary>
+    /// A folder whose name ends in a dot or a space is a different folder from the one without it,
+    /// and resolving the path would turn the one into the other.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\testuser\build.")]
+    [InlineData(@"C:\Users\testuser\build ")]
+    public void AFolderNamedWithATrailingDotOrSpaceKeepsIt(string picked) =>
+        Assert.Equal(picked, PickedFolder.OnDisk(picked));
 }

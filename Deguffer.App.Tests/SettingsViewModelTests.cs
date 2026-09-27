@@ -206,8 +206,8 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// A library or a device chosen in the picker comes back with no path. Nothing is approved for
-    /// it, and the row says why until a folder on a disk is chosen.
+    /// A choice that is not a folder on a disk approves nothing, and the row says why until a folder
+    /// on a disk is chosen.
     /// </summary>
     [Fact]
     public void ASourceFolderThatIsNotOnADiskIsNotApprovedAndTheRowSaysSo()
