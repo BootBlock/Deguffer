@@ -14,7 +14,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
-using Windows.Storage.Pickers;
 
 namespace Deguffer.App.Views;
 
@@ -474,16 +473,9 @@ public sealed partial class ExplorePage : Page
             return;
         }
 
-        var picker = new FolderPicker();
-        picker.FileTypeFilter.Add("*");
-
-        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
-        WinRT.Interop.InitializeWithWindow.Initialize(
-            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-
-        if (await picker.PickSingleFolderAsync() is { } folder)
+        if (await FolderDialog.ChooseAsync(window) is { } folder)
         {
-            ViewModel.ScopeTo(folder.Path);
+            ViewModel.ScopeTo(folder);
         }
     }
 

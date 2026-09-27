@@ -93,7 +93,8 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// The refusal <see cref="ExplainRefusal"/> last put on the status line, so it can take that
-    /// sentence back and leave anything written over it alone.
+    /// sentence back and leave anything written over it alone. A folder <see cref="ScopeTo"/> refused
+    /// is stated here too, because the next change of target answers it just as well.
     /// </summary>
     private string? _statedRefusal;
 
@@ -603,12 +604,28 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>The picking itself belongs to the page: it is a WinUI dialog needing a window handle,
     /// and this stays testable by knowing only about the path that comes back — the arrangement
     /// <see cref="SettingsViewModel.AddSourceRoot"/> already uses for the same dialog.</para>
+    ///
+    /// <para>A choice that is not a folder on a disk leaves the target where it was and says so,
+    /// by <see cref="PickedFolder.OnDisk"/>.</para>
     /// </summary>
+    /// <param name="folder">What the picker returned, which may name nothing on a disk.</param>
     public void ScopeTo(string folder)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+        if (PickedFolder.OnDisk(folder) is not { } onDisk)
+        {
+            // The target stays, so a refusal of it still stands and still has to be said: without
+            // it the Scan button stays greyed out with nothing on the page saying why.
+            var refused = Target.Refusal(_volumes) is { } standing
+                ? $"{PickedFolder.NotOnDisk} {standing}"
+                : PickedFolder.NotOnDisk;
 
-        Retarget(Target, Target.ScopedTo(folder, _drives.Holding(folder)?.RootPath));
+            Status = refused;
+            _statedRefusal = refused;
+
+            return;
+        }
+
+        Retarget(Target, Target.ScopedTo(onDisk, _drives.Holding(onDisk)?.RootPath));
     }
 
     /// <summary>

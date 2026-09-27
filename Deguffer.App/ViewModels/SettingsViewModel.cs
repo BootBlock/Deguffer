@@ -96,19 +96,37 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// What the user has to be told before <paramref name="folder"/> is approved, if anything. The
-    /// page shows it and asks; nothing is stored by asking.
+    /// page shows it and asks; nothing is stored by asking. Null where the choice was not a folder on
+    /// a disk, which <see cref="SourceRootNotOnDisk"/> then states.
     ///
     /// <para>The remembered volume list is dropped first. It is kept for the life of a planning pass,
     /// so a cloud client that mounted itself since the last one would be missing from it and the
     /// folder would be stored with no warning shown. One enumeration of the machine's drives per
     /// folder the user picks by hand is not a cost worth a stale answer.</para>
     /// </summary>
-    public SourceRootApproval ApprovalFor(string folder)
+    /// <param name="folder">What the picker returned, which may name nothing on a disk.</param>
+    public SourceRootApproval? ApprovalFor(string folder)
     {
+        var onDisk = PickedFolder.OnDisk(folder);
+        SourceRootNotOnDisk = onDisk is null;
+
+        if (onDisk is null)
+        {
+            return null;
+        }
+
         _volumes.Invalidate();
 
-        return SourceRootApproval.For(_volumes, folder);
+        return SourceRootApproval.For(_volumes, onDisk);
     }
+
+    /// <summary>
+    /// Whether the last folder chosen for <see cref="SourceRoots"/> was not a folder on a disk. The
+    /// row says so rather than the choice vanishing, because the picker let the user make it and
+    /// nothing else on the page would explain why the list did not change.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool SourceRootNotOnDisk { get; set; }
 
     /// <summary>
     /// Approve the folder <paramref name="approval"/> names, once the user has read whatever it had to
@@ -153,7 +171,24 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool HasNoEmulatorFolders => EmulatorFolders.Count == 0;
 
-    public void AddEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Add(folder));
+    /// <param name="folder">What the picker returned, which may name nothing on a disk.</param>
+    public void AddEmulatorFolder(string folder)
+    {
+        var onDisk = PickedFolder.OnDisk(folder);
+        EmulatorFolderNotOnDisk = onDisk is null;
+
+        if (onDisk is not null)
+        {
+            ApplyEmulatorFolders(() => _emulatorFolders.Add(onDisk));
+        }
+    }
+
+    /// <summary>
+    /// Whether the last folder chosen for <see cref="EmulatorFolders"/> was not a folder on a disk,
+    /// for the reason <see cref="SourceRootNotOnDisk"/> gives.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool EmulatorFolderNotOnDisk { get; set; }
 
     public void RemoveEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Remove(folder));
 

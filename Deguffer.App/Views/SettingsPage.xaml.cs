@@ -4,7 +4,6 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Storage.Pickers;
 
 namespace Deguffer.App.Views;
 
@@ -29,12 +28,10 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async void OnAddSourceRoot(object sender, RoutedEventArgs e)
     {
-        if (await PickFolderAsync() is not { } folder)
+        if (await PickFolderAsync() is not { } folder || ViewModel.ApprovalFor(folder) is not { } approval)
         {
             return;
         }
-
-        var approval = ViewModel.ApprovalFor(folder);
 
         if (approval.NeedsConfirming && !await AcceptsAsync(approval))
         {
@@ -100,22 +97,8 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>The folder the user picked, or null if they cancelled or there is no window to own the picker.</summary>
-    private static async Task<string?> PickFolderAsync()
-    {
-        if (App.MainWindow is not { } window)
-        {
-            return null;
-        }
-
-        var picker = new FolderPicker();
-        picker.FileTypeFilter.Add("*");
-
-        // A picker with no owner throws in a WinUI 3 desktop app rather than opening unowned.
-        WinRT.Interop.InitializeWithWindow.Initialize(
-            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-
-        return (await picker.PickSingleFolderAsync())?.Path;
-    }
+    private static async Task<string?> PickFolderAsync() =>
+        App.MainWindow is { } window ? await FolderDialog.ChooseAsync(window) : null;
 
     private void OnRemoveSourceRoot(object sender, RoutedEventArgs e)
     {
