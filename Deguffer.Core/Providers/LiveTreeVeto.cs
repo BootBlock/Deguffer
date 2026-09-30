@@ -30,7 +30,7 @@ public sealed record ClearedBuildDirectory(string Path, string Project, IUseChec
 /// the veto the rule that builds one, never one already built.</para>
 /// </summary>
 /// <param name="Ask">The query for one directory.</param>
-public sealed record LiveTreeQuestion(Func<RecognisedBuildDirectory, LiveTreeQuery> Ask)
+internal sealed record LiveTreeQuestion(Func<RecognisedBuildDirectory, LiveTreeQuery> Ask)
 {
     /// <summary>
     /// Project folders this reading found named somewhere a program is, which Explore takes as

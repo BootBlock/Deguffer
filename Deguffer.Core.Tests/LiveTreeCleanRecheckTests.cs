@@ -192,7 +192,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            _liveTrees,
+            new SnapshottingLiveTrees(_liveTrees),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
@@ -209,6 +209,42 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         Assert.True(Directory.Exists(busy), "an obj whose solution was opened after the preview was removed");
         Assert.False(Directory.Exists(idle), "an obj the solution does not name was kept");
         Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: devenv is working in Solution.");
+        AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
+    /// The check drops the preview's reading of the machine before it reads where programs are. The
+    /// inspector here keeps that reading until invalidated, as the real one keeps its process table,
+    /// and the plan has one step, so the first check of the clean is the one that decides: an earlier
+    /// step's check would otherwise have dropped the reading for it.
+    /// </summary>
+    [Fact]
+    public async Task TheCheckAtTheCleanReadsWhereProgramsAreAfterDroppingThePreviewsReading()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var busy = ProjectFixture.CreateProject(Path.Combine(solution, "Busy"), "Busy");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(solution, "Busy", "Busy.csproj"));
+
+        var scanner = new FakeDirectoryScanner();
+        var provider = new DotNetObjProvider(
+            _roots,
+            new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
+            new SnapshottingLiveTrees(_liveTrees),
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            scanner);
+
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, busy);
+
+        _liveTrees.WithProgram("devenv", workingDirectory: solution);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "the check read the preview's machine, where nothing had the solution open");
         AssertProvedStanding(result, busy);
     }
 
@@ -233,7 +269,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            _liveTrees,
+            new SnapshottingLiveTrees(_liveTrees),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
@@ -318,6 +354,31 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         Assert.False(Directory.Exists(idle), "the old build of an application that stayed closed was kept");
         Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: Chatterbox is running from inside it.");
         AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
+    /// <see cref="FakeLiveTreeInspector"/> with the one property of the real inspector it lacks: where
+    /// programs are is read once and kept until <see cref="Invalidate"/>, as the real inspector keeps
+    /// its process table. A check that read before invalidating would see the preview's machine.
+    /// </summary>
+    private sealed class SnapshottingLiveTrees(FakeLiveTreeInspector live) : ILiveTreeInspector
+    {
+        private LiveTreeFindings? _occupied;
+
+        public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default) =>
+            live.FindLive(candidates, ct);
+
+        public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
+            _occupied ??= live.FindOccupiedDirectories(ct);
+
+        public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default) =>
+            live.FindLiveChildren(directories, ct);
+
+        public void Invalidate()
+        {
+            _occupied = null;
+            live.Invalidate();
+        }
     }
 
     private static void AssertOffered(CleanupPlan plan, params string[] paths)

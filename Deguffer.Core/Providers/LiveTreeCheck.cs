@@ -5,7 +5,8 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// <see cref="LiveTreeVeto"/> asked again immediately before the directory it cleared is removed: a
-/// program running from inside it, a program working in its project, or a declared lock file held open.
+/// program running from inside it, a program working in its project or beside a solution that names
+/// it, or a declared lock file held open.
 ///
 /// <para><b>This is the case the question exists for.</b> A preview found nothing using a project, and
 /// the user opened it in an editor, or started a build, before pressing Clean. A build directory
