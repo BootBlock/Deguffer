@@ -812,10 +812,13 @@ break something.
   A bundle counts toward stale only where at least one package names it, every such package holds a
   product code, and Windows Installer knows none of them. A package with no code or a code that is
   not a braced GUID, a patch Windows Installer still holds, a code that names another entry, and a
-  registration Windows would not show all leave it installed. Where its command names an uninstaller,
-  that must be gone too. A cleaner that empties the package cache removes a bundle's uninstaller
-  while its programs stay, often hidden because the bundle stood for them, so the uninstaller alone
-  proves nothing about a bundle.
+  registration Windows would not show all leave it installed. Older WiX packages name their provider
+  by their product code and hold no code in it, so a provider with no code is asked about by its key
+  name: a product Windows Installer knows proves the package there, and a key it does not know proves
+  nothing. Where its command names an uninstaller, that must be gone too, and an uninstaller that
+  stands proves the bundle installed even where its packages cannot be judged. A cleaner that empties
+  the package cache removes a bundle's uninstaller while its programs stay, often hidden because the
+  bundle stood for them, so the uninstaller alone proves nothing about a bundle.
 - **`InstallLocation`, where one is set, must be absent too**, as a file or as a folder: some
   installers name the program's executable there. A missing uninstaller beside a standing install
   folder is an install someone broke, not one that is gone. A value that is set but is not a full
