@@ -34,6 +34,14 @@ public sealed record InstalledAppsPrompt(string Title, string Consequence, IRead
         + "The file is kept afterwards.",
         [backup.KeyPath],
         "Restore");
+
+    public static InstalledAppsPrompt ForUninstall(InstalledEntry entry, UninstallLaunch launch) => new(
+        $"Uninstall '{entry.Name}'?",
+        "Deguffer runs the program's own uninstaller, which may ask you questions and may ask for administrator "
+        + "rights. What it removes is up to the uninstaller. When it exits, Deguffer reads the entry again and "
+        + "reports what the list now says.",
+        [launch.Display],
+        "Uninstall");
 }
 
 /// <summary>

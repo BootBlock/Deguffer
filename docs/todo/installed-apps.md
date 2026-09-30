@@ -54,3 +54,5 @@ Each stage lands on `main` with its tests before the next starts.
   each entry's list.
 - 2026-09-30: stage 2 landed on the branch: `EntryRemover`, `RegistryBackups` and `BackupRestorer`,
   with a real `reg.exe` export, delete and import round trip on a scratch key.
+- 2026-09-30: stage 3 landed on the branch: `UninstallPolicy`, `ProgramUninstaller` and the
+  `IUninstallLauncher` seam over the shell.
