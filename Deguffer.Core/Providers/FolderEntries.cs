@@ -24,18 +24,22 @@ internal static class FolderEntries
     /// </summary>
     public static IReadOnlyList<FileSystemInfo>? Of(string folder)
     {
-        try
+        var entries = new List<FileSystemInfo>();
+
+        using var listing = DirectoryListing.Of(folder);
+
+        while (listing.MoveNext())
         {
-            return [.. new DirectoryInfo(LongPath.Extended(folder)).EnumerateFileSystemInfos()];
+            entries.Add(listing.Current);
         }
-        catch (DirectoryNotFoundException)
+
+        return listing.Outcome switch
         {
-            return [];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
+            PathPresence.Present => entries,
+            PathPresence.Absent => [],
+
             // §5.3 makes a refusal ordinary. It is still not an empty folder, and the caller says so.
-            return null;
-        }
+            _ => null,
+        };
     }
 }

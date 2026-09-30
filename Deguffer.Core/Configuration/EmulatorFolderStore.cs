@@ -32,6 +32,14 @@ public sealed class EmulatorFolderStore
 
     public IReadOnlyList<string> Load()
     {
+        // Missing until the user declares a folder, which most never do, and read by every emulator
+        // provider on every scan. Asked first so that the ordinary case costs no exception; the catch
+        // below still answers for the file going between the two.
+        if (LongPath.ProbeFile(_file) is PathPresence.Absent)
+        {
+            return [];
+        }
+
         try
         {
             var json = File.ReadAllText(LongPath.Extended(_file));

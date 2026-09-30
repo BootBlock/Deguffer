@@ -478,6 +478,30 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A packages folder whose index reads and whose listing is refused. Nothing in it is planned,
+    /// since the packages its index no longer names were never seen, and the row names the folder
+    /// rather than reading as an application with nothing to give up.
+    /// </summary>
+    [Fact]
+    public async Task APackagesFolderThatWillNotBeListedIsReportedAndNothingInItIsPlanned()
+    {
+        var root = CreateApplication("Chatterbox", "1.0.9254");
+        var packages = CreatePackages(
+            root,
+            ["Chatterbox-1.0.9254-full.nupkg"],
+            "Chatterbox-1.0.9254-full.nupkg",
+            "Chatterbox-1.0.9007-full.nupkg");
+
+        using var denied = new DeniedDirectory(packages);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(packages, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// The staging folder moved onto another drive with a link. Nothing is removed through it, and
     /// the row says so rather than reading as clear.
     /// </summary>

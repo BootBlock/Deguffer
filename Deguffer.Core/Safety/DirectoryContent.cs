@@ -46,15 +46,10 @@ public static class DirectoryContent
     /// </summary>
     public static bool HoldsAnyEntry(string path)
     {
-        try
-        {
-            return Directory.EnumerateFileSystemEntries(LongPath.Extended(path)).Any();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
-            // Not a directory, not there, or refused: nothing was seen.
-            return false;
-        }
+        // Not a directory, not there, or refused: nothing was seen, so the listing yields nothing.
+        using var listing = DirectoryListing.Of(path);
+
+        return listing.MoveNext();
     }
 
     /// <summary>
@@ -96,33 +91,27 @@ public static class DirectoryContent
 
         while (pending.TryDequeue(out var directory))
         {
-            try
-            {
-                foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
-                {
-                    if (entry is not DirectoryInfo || entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    {
-                        return Finding.Content;
-                    }
+            using var listing = DirectoryListing.Of(directory);
 
-                    pending.Enqueue(entry.FullName);
-                }
-            }
-            catch (DirectoryNotFoundException)
+            while (listing.MoveNext())
             {
-                // The path is not there, or a subdirectory went between being listed and being read.
-                // Neither is content.
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-            {
-                // Refused, or not a directory at all. Below the root, a refused subdirectory is
-                // something seen and not readable; at the root, nothing was seen.
-                if (directory != root)
+                var entry = listing.Current;
+
+                if (entry is not DirectoryInfo || entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 {
                     return Finding.Content;
                 }
 
-                return Finding.Unlisted;
+                pending.Enqueue(entry.FullName);
+            }
+
+            // Absent is the path not being there, or a subdirectory going between being listed and
+            // being read. Neither is content.
+            if (listing.Outcome is PathPresence.Refused)
+            {
+                // Refused, or not a directory at all. Below the root, a refused subdirectory is
+                // something seen and not readable; at the root, nothing was seen.
+                return directory != root ? Finding.Content : Finding.Unlisted;
             }
         }
 

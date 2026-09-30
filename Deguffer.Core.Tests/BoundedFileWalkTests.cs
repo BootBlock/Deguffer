@@ -41,29 +41,30 @@ public sealed class BoundedFileWalkTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3, and the claim <see cref="BoundedFileWalk.Visit"/> already makes in its own parameter
-    /// documentation: hand it an extended-length root and every path it hands back carries the
-    /// prefix too, because .NET builds each child from the parent it was given.
+    /// §6.3, and the claim <see cref="BoundedFileWalk.Visit"/> makes in its own parameter
+    /// documentation: every path it hands back carries the prefix, whichever form the root was
+    /// given in, because each directory is listed through <see cref="DirectoryListing{T}"/>, which
+    /// extends it.
     ///
-    /// <para>That claim had no test, and it is the one thing about the walk a long-path fixture can
-    /// actually discriminate. Asserting that a deep tree was measured proves nothing — .NET
+    /// <para>That claim is the one thing about the walk a long-path fixture can actually
+    /// discriminate. Asserting that a deep tree was measured proves nothing — .NET
     /// prefixes past 260 characters on its own, so such a test passes with the prefixing deleted
     /// outright. <see cref="LongPathTests.TheRuntimeStillReachesPastMaxPathWithoutOurPrefix"/> is
     /// where that is established.</para>
     ///
-    /// <para>Both directions are asserted, because the propagation is the whole mechanism: a plain
-    /// root yields plain children, so a caller that forgets to extend gets no prefix anywhere below
-    /// it either, however deep the tree runs.</para>
+    /// <para>Both forms are asserted. The plain one is what discriminates: before every listing
+    /// extended its own directory, the prefix only propagated from the root, and a caller that
+    /// forgot to extend got no prefix anywhere below it, however deep the tree ran.</para>
     /// </summary>
     [Fact]
-    public void CarriesTheFormOfTheRootDownToEveryFileItVisits()
+    public void HandsBackEveryFileInTheExtendedLengthFormWhicheverFormTheRootHad()
     {
         var root = _temp.CreateDirectory("cache");
         _temp.CreateFile(64, "cache", "top.bin");
         _temp.CreateFile(64, "cache", "nested", "deeper", "leaf.bin");
 
         Assert.All(Visited(LongPath.Extended(root)), p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
-        Assert.All(Visited(root), p => Assert.False(p.StartsWith(@"\\?\", StringComparison.Ordinal)));
+        Assert.All(Visited(root), p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -193,19 +194,19 @@ public sealed class BoundedFileWalkTests : IDisposable
 
     /// <summary>
     /// §6.3 for the state-carrying overload, asserted the same discriminating way as for the plain
-    /// one: what a long-path fixture can actually prove is that the prefix propagates, not that a
-    /// deep tree was reached. Both overloads run the same traversal, and this is the one three
-    /// callers now use.
+    /// one: what a long-path fixture can actually prove is the form of the paths, not that a deep
+    /// tree was reached. Both overloads run the same traversal, and this is the one three callers
+    /// now use.
     /// </summary>
     [Fact]
-    public void CarriesTheFormOfTheRootDownToEveryDirectoryTheStatefulWalkVisits()
+    public void HandsBackEveryEntryTheStatefulWalkReachesInTheExtendedLengthForm()
     {
         var root = _temp.CreateDirectory("cache");
         _temp.CreateFile(64, "cache", "top.bin");
         _temp.CreateFile(64, "cache", "nested", "deeper", "leaf.bin");
 
         Assert.All(Reached(LongPath.Extended(root)), p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
-        Assert.All(Reached(root), p => Assert.False(p.StartsWith(@"\\?\", StringComparison.Ordinal)));
+        Assert.All(Reached(root), p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
     }
 
     /// <summary>
