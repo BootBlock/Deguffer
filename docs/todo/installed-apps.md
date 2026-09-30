@@ -50,3 +50,7 @@ Each stage lands on `main` with its tests before the next starts.
 ## Status log
 
 - 2026-09-30: §7.3 written, and §2 and §6.3 amended to match.
+- 2026-09-30: stage 1 landed on the branch: `Deguffer.Core/InstalledApps` reads the keys and decides
+  each entry's list.
+- 2026-09-30: stage 2 landed on the branch: `EntryRemover`, `RegistryBackups` and `BackupRestorer`,
+  with a real `reg.exe` export, delete and import round trip on a scratch key.

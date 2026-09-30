@@ -20,7 +20,8 @@ public sealed class WindowsUninstallRegistryTests : IDisposable
     public WindowsUninstallRegistryTests()
     {
         _uninstall = _scratch.Key.CreateSubKey("Uninstall");
-        _registry = new WindowsUninstallRegistry(_ => Registry.CurrentUser.OpenSubKey($@"{_scratch.Path}\Uninstall"));
+        _registry = new WindowsUninstallRegistry(
+            (_, writable) => Registry.CurrentUser.OpenSubKey($@"{_scratch.Path}\Uninstall", writable));
     }
 
     public void Dispose()
@@ -99,8 +100,24 @@ public sealed class WindowsUninstallRegistryTests : IDisposable
     [Fact]
     public void AnUninstallKeyThatIsNotThereIsAbsent()
     {
-        var missing = new WindowsUninstallRegistry(_ => Registry.CurrentUser.OpenSubKey($@"{_scratch.Path}\Missing"));
+        var missing = new WindowsUninstallRegistry((_, _) => Registry.CurrentUser.OpenSubKey($@"{_scratch.Path}\Missing"));
 
         Assert.Equal(PathPresence.Absent, missing.Read(UninstallScope.CurrentUser).Presence);
+    }
+
+    /// <summary>§7.3: only the entry's own key goes, with the keys below it.</summary>
+    [Fact]
+    public void DeletingAnEntryTakesItsSubtreeAndNothingBeside()
+    {
+        using (var entry = _uninstall.CreateSubKey("Tool"))
+        using (entry.CreateSubKey("Child"))
+        {
+        }
+
+        _uninstall.CreateSubKey("Neighbour").Dispose();
+
+        _registry.Delete(new UninstallKey(UninstallScope.CurrentUser, "Tool"));
+
+        Assert.Equal(["Neighbour"], _uninstall.GetSubKeyNames());
     }
 }

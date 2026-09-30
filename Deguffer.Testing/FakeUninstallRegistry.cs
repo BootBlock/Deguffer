@@ -40,6 +40,27 @@ public sealed class FakeUninstallRegistry : IUninstallRegistry
 
     public void Remove(UninstallKey key) => _entries.Remove(key);
 
+    /// <summary>Keys whose deletion Windows refuses, as it does a machine-wide key for an unelevated process.</summary>
+    public HashSet<UninstallKey> RefusedDeletes { get; } = [];
+
+    /// <summary>Every key <see cref="Delete"/> was asked to remove, in order.</summary>
+    public List<UninstallKey> Deleted { get; } = [];
+
+    /// <summary>Run after each delete, so a test can have something else change the keys meanwhile.</summary>
+    public Action<UninstallKey>? AfterDelete { get; set; }
+
+    public void Delete(UninstallKey key)
+    {
+        if (RefusedDeletes.Contains(key))
+        {
+            throw new UnauthorizedAccessException($"Access to the registry key '{key.PhysicalPath}' is denied.");
+        }
+
+        Deleted.Add(key);
+        _entries.Remove(key);
+        AfterDelete?.Invoke(key);
+    }
+
     public UninstallRead Read(UninstallScope scope)
     {
         Reads[scope] = Reads.GetValueOrDefault(scope) + 1;

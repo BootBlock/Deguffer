@@ -32,6 +32,13 @@ public interface IUninstallRegistry
     /// not there.
     /// </summary>
     (PathPresence Presence, UninstallValues Values) ReadOne(UninstallKey key);
+
+    /// <summary>
+    /// Delete one entry's key with the keys below it, and nothing else. Throws
+    /// <see cref="UnauthorizedAccessException"/>, <see cref="SecurityException"/> or
+    /// <see cref="IOException"/> where Windows refuses.
+    /// </summary>
+    void Delete(UninstallKey key);
 }
 
 /// <inheritdoc />
@@ -39,13 +46,13 @@ public sealed class WindowsUninstallRegistry : IUninstallRegistry
 {
     public static WindowsUninstallRegistry Default { get; } = new(OpenParent);
 
-    private readonly Func<UninstallScope, RegistryKey?> _openParent;
+    private readonly Func<UninstallScope, bool, RegistryKey?> _openParent;
 
     /// <param name="openParent">
-    /// Opens the <c>Uninstall</c> key for a scope, or returns null where it is not there. A test
-    /// points this at a scratch key under <c>HKEY_CURRENT_USER</c>.
+    /// Opens the <c>Uninstall</c> key for a scope, writable when asked, or returns null where it is
+    /// not there. A test points this at a scratch key under <c>HKEY_CURRENT_USER</c>.
     /// </param>
-    internal WindowsUninstallRegistry(Func<UninstallScope, RegistryKey?> openParent) => _openParent = openParent;
+    internal WindowsUninstallRegistry(Func<UninstallScope, bool, RegistryKey?> openParent) => _openParent = openParent;
 
     public UninstallRead Read(UninstallScope scope)
     {
@@ -53,7 +60,7 @@ public sealed class WindowsUninstallRegistry : IUninstallRegistry
 
         try
         {
-            parent = _openParent(scope);
+            parent = _openParent(scope, false);
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
@@ -101,7 +108,7 @@ public sealed class WindowsUninstallRegistry : IUninstallRegistry
     {
         try
         {
-            using var parent = _openParent(key.Scope);
+            using var parent = _openParent(key.Scope, false);
 
             return parent is null ? (PathPresence.Absent, UninstallValues.None) : ReadValues(parent, key.Name);
         }
@@ -109,6 +116,16 @@ public sealed class WindowsUninstallRegistry : IUninstallRegistry
         {
             return (PathPresence.Refused, UninstallValues.None);
         }
+    }
+
+    public void Delete(UninstallKey key)
+    {
+        using var parent = _openParent(key.Scope, true)
+            ?? throw new IOException($"The key {key.Scope.PhysicalPath()} is not there.");
+
+        // A key already gone is not an error here: the check after the removal reports what is
+        // there, and it reads the machine rather than trusting this call.
+        parent.DeleteSubKeyTree(key.Name, throwOnMissingSubKey: false);
     }
 
     private static (PathPresence Presence, UninstallValues Values) ReadValues(RegistryKey parent, string name)
@@ -142,7 +159,7 @@ public sealed class WindowsUninstallRegistry : IUninstallRegistry
         }
     }
 
-    private static RegistryKey? OpenParent(UninstallScope scope)
+    private static RegistryKey? OpenParent(UninstallScope scope, bool writable)
     {
         var (hive, view) = scope switch
         {
@@ -155,6 +172,6 @@ public sealed class WindowsUninstallRegistry : IUninstallRegistry
         // A predefined key: disposing it closes nothing, so the subkey outlives it safely.
         using var root = RegistryKey.OpenBaseKey(hive, view);
 
-        return root.OpenSubKey(UninstallScopes.KeyPath);
+        return root.OpenSubKey(UninstallScopes.KeyPath, writable);
     }
 }
