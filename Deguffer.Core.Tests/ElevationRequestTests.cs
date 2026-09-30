@@ -31,6 +31,20 @@ public sealed class ElevationRequestTests
     }
 
     [Fact]
+    public void AnInstalledAppsRequestComesBackAsOne()
+    {
+        Assert.Equal(["--installed-apps"], ElevationRequest.InstalledApps.ToArguments());
+        Assert.IsType<InstalledAppsRequest>(ElevationRequest.From(ElevationRequest.InstalledApps.ToArguments()));
+    }
+
+    [Fact]
+    public void InstalledAppsWinsOverAPreviewAndLosesToExplore()
+    {
+        Assert.IsType<InstalledAppsRequest>(ElevationRequest.From(["--rescan", "--installed-apps"]));
+        Assert.IsType<ExploreRequest>(ElevationRequest.From(["--installed-apps", "--explore"]));
+    }
+
+    [Fact]
     public void APreviewComesBackAsOne()
     {
         Assert.IsType<PreviewRequest>(ElevationRequest.From(ElevationRequest.Preview.ToArguments()));

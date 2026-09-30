@@ -254,6 +254,7 @@ Deguffer.Core/
   Providers/     one class per known cache
   Exploring/     whole-drive view: file-table reads, tree building, what each location is
   Memory/        where memory goes: process and service tables, checked figures, the memory tree
+  InstalledApps/ Windows' installed programs list: stale entries, reg.exe backups, uninstallers
   Configuration/ user preferences
   Diagnostics/   run logging
 Deguffer.Core.Tests/

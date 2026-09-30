@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="Deguffer.App.Views.InstalledAppsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    Background="Transparent">
+
+    <Page.Resources>
+        <!-- One row for both lists: the name, who and what it is, and the sentence saying why the
+             entry is in its list. §7.3 puts that sentence on every row, so it is written out rather
+             than kept for a tooltip. -->
+        <DataTemplate x:Key="EntryTemplate" x:DataType="vm:InstalledAppRow">
+            <StackPanel Padding="0,6" Spacing="2"
+                        AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                        AutomationProperties.HelpText="{x:Bind Reason, Mode=OneWay}">
+                <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{x:Bind Detail, Mode=OneWay}" Style="{StaticResource SecondaryText}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{x:Bind Reason, Mode=OneWay}" Style="{StaticResource SecondaryText}"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*">
+
+        <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Installed apps" Style="{StaticResource SubtitleTextBlockStyle}" />
+                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
+                           Style="{StaticResource SecondaryText}" />
+            </StackPanel>
+
+            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
+                          Width="20" Height="20" VerticalAlignment="Center" />
+
+            <Button Grid.Column="2" Content="Reopen as administrator" VerticalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                    Command="{x:Bind ViewModel.ElevateCommand}"
+                    ToolTipService.ToolTip="Entries for all users can be removed or restored only with administrator rights." />
+
+            <Button Grid.Column="3" Content="Refresh" VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.RefreshCommand}" />
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnSpacing="16" ColumnDefinitions="*,Auto,Auto">
+            <TextBox PlaceholderText="Filter by name, publisher or command"
+                     AutomationProperties.Name="Filter the lists"
+                     Text="{x:Bind ViewModel.Filter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <CheckBox Grid.Column="1" Content="Show entries Windows hides"
+                      IsChecked="{x:Bind ViewModel.ShowHidden, Mode=TwoWay}" />
+
+            <CheckBox Grid.Column="2" Content="Back up entries before removing them"
+                      IsChecked="{x:Bind ViewModel.Actions.BackUpFirst, Mode=TwoWay}"
+                      ToolTipService.ToolTip="{x:Bind ViewModel.Actions.BackupFolder}" />
+        </Grid>
+
+        <InfoBar Grid.Row="2"
+                 IsOpen="{x:Bind ViewModel.Actions.HasReport, Mode=OneWay}"
+                 Severity="{x:Bind ViewModel.Actions.ReportSeverity, Mode=OneWay}"
+                 Message="{x:Bind ViewModel.Actions.Report, Mode=OneWay}"
+                 CloseButtonClick="OnReportClosed">
+            <InfoBar.ActionButton>
+                <Button Content="Stop watching"
+                        Visibility="{x:Bind ViewModel.Actions.IsWatching, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.Actions.StopWatchingCommand}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <Pivot Grid.Row="3">
+            <PivotItem Header="Stale entries">
+                <Grid RowSpacing="8" RowDefinitions="Auto,*,Auto">
+                    <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                               Text="Entries for programs the machine proves are gone. Removing one deletes its registry key only: nothing is uninstalled and no file is touched." />
+
+                    <ListView x:Name="StaleList" Grid.Row="1"
+                              AutomationProperties.Name="Stale entries"
+                              SelectionMode="Extended"
+                              SelectionChanged="OnStaleSelectionChanged"
+                              ItemsSource="{x:Bind ViewModel.StaleRows}"
+                              ItemTemplate="{StaticResource EntryTemplate}" />
+
+                    <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{x:Bind ViewModel.Actions.RemovalNote, Mode=OneWay}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Remove" Style="{StaticResource AccentButtonStyle}"
+                                Command="{x:Bind ViewModel.Actions.RemoveCommand}" />
+                    </Grid>
+                </Grid>
+            </PivotItem>
+
+            <PivotItem Header="Installed programs">
+                <Grid RowSpacing="8" RowDefinitions="Auto,*,Auto">
+                    <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                               Text="Programs that are still there, or that nothing proves gone. Uninstalling runs the program's own uninstaller." />
+
+                    <ListView x:Name="InstalledList" Grid.Row="1"
+                              AutomationProperties.Name="Installed programs"
+                              SelectionMode="Single"
+                              SelectionChanged="OnInstalledSelectionChanged"
+                              ItemsSource="{x:Bind ViewModel.InstalledRows}"
+                              ItemTemplate="{StaticResource EntryTemplate}" />
+
+                    <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{x:Bind ViewModel.Actions.UninstallNote, Mode=OneWay}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Uninstall"
+                                Command="{x:Bind ViewModel.Actions.UninstallCommand}" />
+                    </Grid>
+                </Grid>
+            </PivotItem>
+
+            <PivotItem Header="Backups">
+                <Grid RowSpacing="8" RowDefinitions="Auto,*,Auto">
+                    <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                               Text="{x:Bind BackupsIntro}" />
+
+                    <ListView x:Name="BackupList" Grid.Row="1"
+                              AutomationProperties.Name="Backups"
+                              SelectionMode="Single"
+                              SelectionChanged="OnBackupSelectionChanged"
+                              ItemsSource="{x:Bind ViewModel.Actions.Backups}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BackupRow">
+                                <StackPanel Padding="0,6" Spacing="2" AutomationProperties.Name="{x:Bind Title}">
+                                    <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Detail}" Style="{StaticResource SecondaryText}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{x:Bind ViewModel.Actions.RestoreNote, Mode=OneWay}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Restore"
+                                Command="{x:Bind ViewModel.Actions.RestoreCommand}" />
+                    </Grid>
+                </Grid>
+            </PivotItem>
+        </Pivot>
+    </Grid>
+</Page>
