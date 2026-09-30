@@ -36,7 +36,7 @@ public sealed record UninstallReport(InstalledEntry Entry, AfterUninstall After,
 /// Runs one installed program's own uninstaller (§7.3): decided again from the machine as it
 /// stands, watched with no deadline, and followed by a fresh read of the entry.
 /// </summary>
-public sealed class ProgramUninstaller(InstalledAppsReader reader, IUninstallLauncher launcher, string systemDirectory)
+public sealed class ProgramUninstaller(InstalledAppsReader reader, IUninstallLauncher launcher, string msiexec)
 {
     /// <summary>
     /// The launch <paramref name="chosen"/> would run now, for the confirmation, or the refusal. Read
@@ -49,7 +49,7 @@ public sealed class ProgramUninstaller(InstalledAppsReader reader, IUninstallLau
             return (ActionVerdict.Refuse("The entry is already gone."), null, null);
         }
 
-        var (verdict, launch) = UninstallPolicy.MayUninstall(current, systemDirectory);
+        var (verdict, launch) = UninstallPolicy.MayUninstall(current, msiexec);
 
         return (verdict, launch, current);
     }

@@ -25,7 +25,6 @@ public sealed class EntryRemovalPolicyTests
         var verdict = EntryRemovalPolicy.MayRemove(Entry(UninstallScope.CurrentUser, standing), isElevated: true);
 
         Assert.False(verdict.IsAllowed);
-        Assert.False(verdict.NeedsElevation);
     }
 
     [Fact]
@@ -42,7 +41,7 @@ public sealed class EntryRemovalPolicyTests
         var refused = EntryRemovalPolicy.MayRemove(Entry(scope, EntryStanding.Stale), isElevated: false);
 
         Assert.False(refused.IsAllowed);
-        Assert.True(refused.NeedsElevation);
+        Assert.Contains("administrator", refused.Reason, StringComparison.Ordinal);
         Assert.True(EntryRemovalPolicy.MayRemove(Entry(scope, EntryStanding.Stale), isElevated: true).IsAllowed);
     }
 

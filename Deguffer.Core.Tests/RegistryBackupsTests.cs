@@ -99,7 +99,7 @@ public sealed class RegistryBackupsTests : IDisposable
     [InlineData(@"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tool", UninstallScope.CurrentUser)]
     public void ABackupNamesTheEntryItRestores(string keyPath, UninstallScope scope)
     {
-        var file = new RegistryBackupFile("x.reg", keyPath, null, DateTimeOffset.UnixEpoch);
+        var file = new RegistryBackupFile("x.reg", keyPath, null, DateTimeOffset.UnixEpoch, IsConfined: true);
 
         Assert.Equal(new UninstallKey(scope, "Tool"), file.Key);
     }
@@ -110,6 +110,6 @@ public sealed class RegistryBackupsTests : IDisposable
     [InlineData(@"HKEY_CURRENT_USER\Software\Other\Tool")]
     public void AFileThatNamesNoSingleEntryRestoresNone(string keyPath)
     {
-        Assert.Null(new RegistryBackupFile("x.reg", keyPath, null, DateTimeOffset.UnixEpoch).Key);
+        Assert.Null(new RegistryBackupFile("x.reg", keyPath, null, DateTimeOffset.UnixEpoch, IsConfined: true).Key);
     }
 }

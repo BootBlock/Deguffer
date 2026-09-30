@@ -43,7 +43,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
             new InstalledAppsActions(
                 new EntryRemover(_registry, _installer, backups),
                 new BackupRestorer(_registry, backups),
-                new ProgramUninstaller(reader, new FakeUninstallLauncher(), @"C:\Windows\System32"),
+                new ProgramUninstaller(reader, new FakeUninstallLauncher(), @"C:\Windows\System32\msiexec.exe"),
                 backups,
                 () => _prompt,
                 _preferences,
@@ -148,8 +148,10 @@ public sealed class InstalledAppsViewModelTests : IDisposable
             _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"));
             return null;
         });
+        var file = Path.Combine(_temp.CreateDirectory("backups"), "tool.reg");
+        File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", "\"DisplayName\"=\"Tool\""], System.Text.Encoding.Unicode);
         var page = Page();
-        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile("tool.reg", key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch));
+        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true));
 
         await page.Actions.RestoreCommand.ExecuteAsync(null);
 

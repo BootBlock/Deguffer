@@ -4,8 +4,7 @@ using System.Diagnostics;
 namespace Deguffer.Core.InstalledApps;
 
 /// <summary>What starting an uninstaller came to.</summary>
-/// <param name="ExitCode">The exit code where one could be read, or null.</param>
-public sealed record LaunchOutcome(bool Started, int? ExitCode, string Message);
+public sealed record LaunchOutcome(bool Started, string Message);
 
 /// <summary>
 /// Starts an uninstaller and waits for it, behind a seam so the uninstall flow is proved without
@@ -46,17 +45,17 @@ public sealed class ShellUninstallLauncher : IUninstallLauncher
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
         {
-            return new LaunchOutcome(false, null, "The uninstaller did not start, because the administrator prompt was declined.");
+            return new LaunchOutcome(false, "The uninstaller did not start, because the administrator prompt was declined.");
         }
         catch (Win32Exception ex)
         {
-            return new LaunchOutcome(false, null, $"Windows could not start the uninstaller: {ex.Message}");
+            return new LaunchOutcome(false, $"Windows could not start the uninstaller: {ex.Message}");
         }
 
         if (process is null)
         {
             // The shell handed the command to a process that was already running.
-            return new LaunchOutcome(true, null, "The uninstaller was handed to a program that was already running, so Deguffer could not watch it.");
+            return new LaunchOutcome(true, "The uninstaller was handed to a program that was already running, so Deguffer could not watch it.");
         }
 
         using (process)
@@ -65,13 +64,13 @@ public sealed class ShellUninstallLauncher : IUninstallLauncher
 
             try
             {
-                return new LaunchOutcome(true, process.ExitCode, $"The uninstaller exited with code {process.ExitCode}.");
+                return new LaunchOutcome(true, $"The uninstaller exited with code {process.ExitCode}.");
             }
             catch (InvalidOperationException)
             {
                 // An elevated uninstaller's exit code is not always readable through the handle
                 // the shell returned.
-                return new LaunchOutcome(true, null, "The uninstaller exited.");
+                return new LaunchOutcome(true, "The uninstaller exited.");
             }
         }
     }

@@ -15,7 +15,6 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
 {
     private readonly Func<CancellationToken, InstalledAppsReading> _read;
     private readonly Func<ElevationRequest, bool> _relaunch;
-    private readonly bool _isElevated;
     private InstalledAppsReading _reading = new([], []);
     private CancellationTokenSource? _reads;
 
@@ -29,7 +28,6 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
     {
         _read = read;
         _relaunch = relaunch;
-        _isElevated = isElevated;
         Actions = actions;
         Actions.EntriesChanged += (_, _) => _ = RefreshAsync();
         CanElevate = ElevationOffer.ShouldOffer(isElevated);
@@ -51,8 +49,6 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ElevateCommand))]
     public partial bool CanElevate { get; private set; }
 
-    /// <summary>Whether this process holds administrator rights, as the page's words need it.</summary>
-    public bool IsElevated => _isElevated;
 
     /// <summary>Text the lists are narrowed to.</summary>
     [ObservableProperty]
@@ -81,6 +77,13 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
         try
         {
             var reading = await Task.Run(() => _read(reads.Token), reads.Token);
+
+            // A newer read may have started after this one's last check, and its reading is the
+            // one the lists must show.
+            if (reads.IsCancellationRequested)
+            {
+                return;
+            }
 
             _reading = reading;
             Headline = InstalledAppsLists.Headline(reading);

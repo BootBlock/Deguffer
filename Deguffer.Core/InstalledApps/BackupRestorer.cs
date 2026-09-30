@@ -16,6 +16,12 @@ public sealed class BackupRestorer(IUninstallRegistry registry, RegistryBackups 
             return ActionVerdict.Refuse("This file does not name an installed apps entry, so Deguffer will not import it.");
         }
 
+        if (!backup.IsConfined)
+        {
+            return ActionVerdict.Refuse(
+                "This file writes keys beyond its entry, or deletes something, so it is not a backup Deguffer will import.");
+        }
+
         var presence = registry.ReadOne(key).Presence;
 
         if (presence is not PathPresence.Absent)
@@ -27,10 +33,8 @@ public sealed class BackupRestorer(IUninstallRegistry registry, RegistryBackups 
 
         if (key.Scope.NeedsAdministrator() && !isElevated)
         {
-            return new ActionVerdict(
-                IsAllowed: false,
-                "This entry is for all users, and restoring it needs administrator rights. Reopen Deguffer as administrator to restore it.",
-                NeedsElevation: true);
+            return ActionVerdict.Refuse(
+                "This entry is for all users, and restoring it needs administrator rights. Reopen Deguffer as administrator to restore it.");
         }
 
         return ActionVerdict.Allow($"Restores {backup.KeyPath}.");

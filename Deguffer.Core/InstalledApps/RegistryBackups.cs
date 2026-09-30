@@ -8,7 +8,11 @@ namespace Deguffer.Core.InstalledApps;
 /// <param name="Path">The file, in display form.</param>
 /// <param name="KeyPath">The key the file's first section names, as it is stored.</param>
 /// <param name="DisplayName">The entry's display name as the file records it, or null where it records none.</param>
-public sealed record RegistryBackupFile(string Path, string KeyPath, string? DisplayName, DateTimeOffset Written)
+/// <param name="IsConfined">
+/// Whether the file writes only its entry's key and the keys below it, and deletes nothing. See
+/// <see cref="RegistryFileContent.IsConfined"/>.
+/// </param>
+public sealed record RegistryBackupFile(string Path, string KeyPath, string? DisplayName, DateTimeOffset Written, bool IsConfined)
 {
     /// <summary>The entry this file restores, or null where it names no <c>Uninstall</c> entry.</summary>
     public UninstallKey? Key
@@ -56,14 +60,17 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
     /// <summary>The longest part of a file name taken from a key's name, well inside <c>MAX_PATH</c>.</summary>
     private const int LongestStem = 80;
 
-    /// <summary>How far into a file its display name is looked for. An entry has a few dozen values.</summary>
-    private const int LongestHeader = 500;
+    /// <summary>
+    /// The largest file read as a backup. An entry's export is a few kilobytes; anything near this is
+    /// not one, and reading it whole would be the cost of a stranger's file.
+    /// </summary>
+    private const int LongestFile = 4 * 1024 * 1024;
 
     public static RegistryBackups For(IUserEnvironment environment, ISystemDirectories directories, IProcessRunner runner) =>
         new(
             runner,
             Path.Combine(environment.LocalAppData, "Deguffer", "registry-backups"),
-            Path.Combine(directories.WindowsDirectory, "System32", "reg.exe"),
+            NativeSystemTool.In(directories, "reg.exe"),
             TimeProvider.System);
 
     /// <summary>Where backups are kept, in display form.</summary>
@@ -91,7 +98,7 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new BackupOutcome(false, null, $"The backup folder {folder} could not be created: {ex.Message}");
+            return new BackupOutcome(false, null, $"The backup could not be prepared in {folder}: {ex.Message}");
         }
 
         // /y always: without it reg.exe waits on an overwrite prompt that nothing will answer.
@@ -105,14 +112,62 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         return new BackupOutcome(false, null, $"reg.exe could not back up the entry: {outcome.Message}");
     }
 
-    /// <summary>Import a backup file, writing its keys back.</summary>
+    /// <summary>
+    /// Import a backup file, writing its entry back.
+    ///
+    /// <para>The file is read once, and what is imported is a private copy of exactly the bytes
+    /// that were checked. Importing the file by its name would run whatever it holds by then, and
+    /// the folder is writable by anything running as the user.</para>
+    /// </summary>
     public async Task<BackupOutcome> ImportAsync(RegistryBackupFile backup, CancellationToken ct)
     {
-        var outcome = await runner.RunAsync(regExe, $"import \"{backup.Path}\" /reg:64", ct).ConfigureAwait(false);
+        byte[] bytes;
 
-        return outcome.Succeeded
-            ? new BackupOutcome(true, backup.Path, $"Restored from {backup.Path}.")
-            : new BackupOutcome(false, backup.Path, $"reg.exe could not restore the backup: {outcome.Message}");
+        try
+        {
+            bytes = await File.ReadAllBytesAsync(LongPath.Extended(backup.Path), ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new BackupOutcome(false, backup.Path, $"The backup could not be read: {ex.Message}");
+        }
+
+        if (bytes.Length > LongestFile
+            || RegistryFileContent.Parse(Decode(bytes)) is not { IsConfined: true } content
+            || !content.FirstKey.Equals(backup.KeyPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return new BackupOutcome(false, backup.Path,
+                "The backup no longer holds only the entry it was listed as, so Deguffer did not import it.");
+        }
+
+        var copy = Path.Combine(folder, $".restoring-{Guid.NewGuid():N}.reg");
+
+        try
+        {
+            await File.WriteAllBytesAsync(LongPath.Extended(copy), bytes, ct).ConfigureAwait(false);
+
+            var outcome = await runner.RunAsync(regExe, $"import \"{copy}\" /reg:64", ct).ConfigureAwait(false);
+
+            return outcome.Succeeded
+                ? new BackupOutcome(true, backup.Path, $"Restored from {backup.Path}.")
+                : new BackupOutcome(false, backup.Path, $"reg.exe could not restore the backup: {outcome.Message}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new BackupOutcome(false, backup.Path, $"The backup could not be prepared for import: {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(LongPath.Extended(copy));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Left for the next listing to ignore: its name is not a backup's, and it holds
+                // only what was just checked.
+            }
+        }
     }
 
     /// <summary>Every backup in the folder that names a key, newest first.</summary>
@@ -131,7 +186,8 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         {
             foreach (var file in Directory.EnumerateFiles(extended, "*.reg"))
             {
-                if (Describe(file) is { } backup)
+                // A copy an interrupted restore left behind is not a backup the user took.
+                if (!Path.GetFileName(file).StartsWith('.') && Describe(file) is { } backup)
                 {
                     backups.Add(backup);
                 }
@@ -145,37 +201,21 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         return [.. backups.OrderByDescending(b => b.Written)];
     }
 
-    /// <summary>What a backup file restores, read from its first section, or null where it is not one.</summary>
+    /// <summary>What a backup file restores, read from the whole file, or null where it is not one.</summary>
     internal static RegistryBackupFile? Describe(string file)
     {
         try
         {
-            // reg.exe writes UTF-16 with a byte-order mark, which the reader detects.
-            using var reader = new StreamReader(file, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            string? keyPath = null;
-            string? displayName = null;
+            var info = new FileInfo(file);
 
-            for (var count = 0; count < LongestHeader && reader.ReadLine() is { } line; count++)
+            if (info.Length > LongestFile)
             {
-                if (line.StartsWith('[') && line.EndsWith(']'))
-                {
-                    if (keyPath is not null)
-                    {
-                        break;
-                    }
-
-                    keyPath = line[1..^1];
-                }
-                else if (keyPath is not null && line.StartsWith("\"DisplayName\"=\"", StringComparison.OrdinalIgnoreCase)
-                    && line.EndsWith('"'))
-                {
-                    displayName = Unescape(line["\"DisplayName\"=\"".Length..^1]);
-                }
+                return null;
             }
 
-            return keyPath is null
-                ? null
-                : new RegistryBackupFile(LongPath.Display(file), keyPath, displayName, File.GetLastWriteTimeUtc(file));
+            return RegistryFileContent.Parse(Decode(File.ReadAllBytes(file))) is { } content
+                ? new RegistryBackupFile(LongPath.Display(file), content.FirstKey, content.DisplayName, info.LastWriteTimeUtc, content.IsConfined)
+                : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -183,7 +223,12 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         }
     }
 
-    private static string Unescape(string value) => value.Replace("\\\"", "\"").Replace("\\\\", "\\");
+    /// <summary>reg.exe writes UTF-16 with a byte-order mark; the decoder honours whichever mark is there.</summary>
+    private static string Decode(byte[] bytes)
+    {
+        using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
+    }
 
     private string NewFileName(string label)
     {
@@ -197,11 +242,19 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         var name = $"{time.GetLocalNow():yyyyMMdd-HHmmss} {stem.ToString(0, Math.Min(stem.Length, LongestStem)).Trim()}";
         var file = Path.Combine(folder, name + ".reg");
 
-        for (var n = 2; LongPath.ProbeFile(file) is not PathPresence.Absent; n++)
+        for (var n = 2; ; n++)
         {
+            switch (LongPath.ProbeFile(file))
+            {
+                case PathPresence.Absent:
+                    return file;
+                case PathPresence.Refused:
+                    // A name Windows will not describe cannot be proved free, and asking the next
+                    // one would ask the same folder the same way.
+                    throw new IOException($"Windows would not say whether {file} already exists.");
+            }
+
             file = Path.Combine(folder, $"{name} ({n}).reg");
         }
-
-        return file;
     }
 }

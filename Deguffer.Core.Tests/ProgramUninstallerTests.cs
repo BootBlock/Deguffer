@@ -10,7 +10,7 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class ProgramUninstallerTests : IDisposable
 {
-    private const string System32 = @"C:\Windows\System32";
+    private const string Msiexec = @"C:\Windows\System32\msiexec.exe";
 
     private const string ProductKey = "{12345678-9ABC-DEF0-1234-56789ABCDEF0}";
 
@@ -26,12 +26,12 @@ public sealed class ProgramUninstallerTests : IDisposable
 
     private InstalledAppsReader Reader => new(_registry, _installer);
 
-    private ProgramUninstaller Uninstaller => new(Reader, _launcher, System32);
+    private ProgramUninstaller Uninstaller => new(Reader, _launcher, Msiexec);
 
     private InstalledEntry Current(UninstallKey key) => Reader.ReadAgain(key)!;
 
     private (ActionVerdict Verdict, UninstallLaunch? Launch) Policy(UninstallKey key) =>
-        UninstallPolicy.MayUninstall(Current(key), System32);
+        UninstallPolicy.MayUninstall(Current(key), Msiexec);
 
     private UninstallKey Installed(string name, string arguments = "/uninstall")
     {
@@ -60,7 +60,7 @@ public sealed class ProgramUninstallerTests : IDisposable
 
         var (_, launch) = Policy(key);
 
-        Assert.Equal(new UninstallLaunch(@"C:\Windows\System32\msiexec.exe", $"/x {ProductKey.ToLowerInvariant()}"), launch);
+        Assert.Equal(new UninstallLaunch(Msiexec, $"/x {ProductKey.ToLowerInvariant()}"), launch);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public sealed class ProgramUninstallerTests : IDisposable
         var key = Installed("Tool");
         var chosen = Current(key);
         var (_, launch, _) = Uninstaller.Prepare(chosen);
-        _launcher.Outcome = new LaunchOutcome(false, null, "The administrator prompt was declined.");
+        _launcher.Outcome = new LaunchOutcome(false, "The administrator prompt was declined.");
 
         var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
 
@@ -201,6 +201,6 @@ public sealed class ProgramUninstallerTests : IDisposable
             Standing = new StandingVerdict(EntryStanding.Unproven, "Because."),
         };
 
-        Assert.False(UninstallPolicy.MayUninstall(entry, System32).Verdict.IsAllowed);
+        Assert.False(UninstallPolicy.MayUninstall(entry, Msiexec).Verdict.IsAllowed);
     }
 }

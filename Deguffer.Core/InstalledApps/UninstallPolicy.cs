@@ -15,9 +15,9 @@ public sealed record UninstallLaunch(string FileName, string Arguments)
 /// </summary>
 public static class UninstallPolicy
 {
-    /// <param name="systemDirectory">Windows' <c>System32</c>, where <c>msiexec.exe</c> is.</param>
+    /// <param name="msiexec">Windows Installer's own <c>msiexec.exe</c>, as <see cref="NativeSystemTool"/> names it.</param>
     /// <returns>The verdict, and the launch where it allows one.</returns>
-    public static (ActionVerdict Verdict, UninstallLaunch? Launch) MayUninstall(InstalledEntry entry, string systemDirectory)
+    public static (ActionVerdict Verdict, UninstallLaunch? Launch) MayUninstall(InstalledEntry entry, string msiexec)
     {
         if (entry.Standing.Standing is EntryStanding.OtherAccount)
         {
@@ -38,7 +38,7 @@ public static class UninstallPolicy
         // Windows itself drives such an entry through Windows Installer rather than its command.
         if (StaleRule.ProductCodeOf(new UninstallRecord(entry.Key, entry.Values), entry.Command) is { } code)
         {
-            return Allow(new UninstallLaunch(Path.Combine(systemDirectory, "msiexec.exe"), $"/x {code:B}"));
+            return Allow(new UninstallLaunch(msiexec, $"/x {code:B}"));
         }
 
         return entry.Command switch

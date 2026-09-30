@@ -27,7 +27,7 @@ public sealed partial class InstalledAppsPage : Page
             new InstalledAppsActions(
                 new EntryRemover(registry, installer, backups),
                 new BackupRestorer(registry, backups),
-                new ProgramUninstaller(reader, ShellUninstallLauncher.Default, Path.Combine(SystemDirectories.Current.WindowsDirectory, "System32")),
+                new ProgramUninstaller(reader, ShellUninstallLauncher.Default, NativeSystemTool.In(SystemDirectories.Current, "msiexec.exe")),
                 backups,
 
                 // Built per ask, so the dialog never holds a XamlRoot from before a theme change.

@@ -11,8 +11,8 @@ public sealed class FakeUninstallLauncher : IUninstallLauncher
     /// <summary>What the uninstaller does to the machine while it runs.</summary>
     public Action<UninstallLaunch>? WhileRunning { get; set; }
 
-    /// <summary>The outcome it reports. Started, exit code 0, by default.</summary>
-    public LaunchOutcome Outcome { get; set; } = new(true, 0, "The uninstaller exited with code 0.");
+    /// <summary>The outcome it reports: started and exited, by default.</summary>
+    public LaunchOutcome Outcome { get; set; } = new(true, "The uninstaller exited with code 0.");
 
     public Task<LaunchOutcome> RunAsync(UninstallLaunch launch, CancellationToken ct)
     {

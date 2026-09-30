@@ -86,7 +86,6 @@ public sealed class InstalledAppsListsTests
         var selection = RemovalSelection.For([mine, machine], isElevated: false);
 
         Assert.Equal([mine], selection.Removable);
-        Assert.True(selection.NeedsElevation);
         Assert.StartsWith("'Machine' will be left.", selection.Note, StringComparison.Ordinal);
     }
 
@@ -96,6 +95,5 @@ public sealed class InstalledAppsListsTests
         var selection = RemovalSelection.For([Entry("Mine", EntryStanding.Stale)], isElevated: false);
 
         Assert.Null(selection.Note);
-        Assert.False(selection.NeedsElevation);
     }
 }
