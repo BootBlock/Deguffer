@@ -27,6 +27,13 @@ public sealed class UninstallValues
             ? text.Trim()
             : null;
 
+    /// <summary>
+    /// Whether a value says anything: false only where it is missing or is a string of nothing but
+    /// space. A value of another type says something even where no accessor here can read it.
+    /// </summary>
+    public bool IsSet(string name) =>
+        _values.TryGetValue(name, out var value) && !(value is string text && string.IsNullOrWhiteSpace(text));
+
     /// <summary>A number value, or null where it is missing or not a number.</summary>
     public long? Number(string name) => _values.TryGetValue(name, out var value)
         ? value switch

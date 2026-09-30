@@ -20,11 +20,28 @@ public sealed class ProgramUninstallerTests : IDisposable
 
     private readonly FakeWindowsInstaller _installer = new();
 
+    private readonly FakePathProbe _paths = new();
+
+    /// <summary>A file the probe reports standing, named under the test's tree.</summary>
+    private string StandingFile(string folder, string name)
+    {
+        var path = Path.Combine(_temp.Path, folder, name);
+        _paths.File(path);
+        return path;
+    }
+
+    private string StandingFolder(string folder)
+    {
+        var path = Path.Combine(_temp.Path, folder);
+        _paths.Directory(path);
+        return path;
+    }
+
     private readonly FakeUninstallLauncher _launcher = new();
 
     public void Dispose() => _temp.Dispose();
 
-    private InstalledAppsReader Reader => new(_registry, _installer);
+    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
 
     private ProgramUninstaller Uninstaller => new(Reader, _launcher, Msiexec);
 
@@ -35,7 +52,7 @@ public sealed class ProgramUninstallerTests : IDisposable
 
     private UninstallKey Installed(string name, string arguments = "/uninstall")
     {
-        var uninstaller = _temp.CreateFile(1, name, "setup.exe");
+        var uninstaller = StandingFile(name, "setup.exe");
         return _registry.With(UninstallScope.Machine64, name, ("DisplayName", name), ("UninstallString", $"\"{uninstaller}\" {arguments}"));
     }
 
@@ -87,7 +104,7 @@ public sealed class ProgramUninstallerTests : IDisposable
     [Fact]
     public void AnEntryThatSetsNoRemoveIsRefused()
     {
-        var uninstaller = _temp.CreateFile(1, "Tool", "setup.exe");
+        var uninstaller = StandingFile("Tool", "setup.exe");
         var key = _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"), ("NoRemove", 1), ("UninstallString", $"\"{uninstaller}\""));
 
         Assert.False(Policy(key).Verdict.IsAllowed);
@@ -105,7 +122,7 @@ public sealed class ProgramUninstallerTests : IDisposable
     [Fact]
     public void AnEntryWithNoCommandIsRefused()
     {
-        var key = _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"), ("InstallLocation", _temp.CreateDirectory("Tool")));
+        var key = _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"), ("InstallLocation", StandingFolder("Tool")));
 
         Assert.False(Policy(key).Verdict.IsAllowed);
     }
@@ -130,7 +147,7 @@ public sealed class ProgramUninstallerTests : IDisposable
         var key = Installed("Tool");
         var chosen = Current(key);
         var (_, launch, _) = Uninstaller.Prepare(chosen);
-        _launcher.WhileRunning = l => File.Delete(l.FileName);
+        _launcher.WhileRunning = l => _paths.Remove(l.FileName);
 
         var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
 

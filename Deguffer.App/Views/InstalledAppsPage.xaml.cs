@@ -17,7 +17,6 @@ public sealed partial class InstalledAppsPage : Page
     public InstalledAppsPage()
     {
         var registry = WindowsUninstallRegistry.Default;
-        var installer = WindowsInstaller.Default;
         var backups = RegistryBackups.For(UserEnvironment.Current, SystemDirectories.Current, ProcessRunner.Default);
         var reader = InstalledAppsReader.Default;
 
@@ -25,7 +24,7 @@ public sealed partial class InstalledAppsPage : Page
         ViewModel = new InstalledAppsViewModel(
             reader.Read,
             new InstalledAppsActions(
-                new EntryRemover(registry, installer, backups),
+                new EntryRemover(registry, reader, backups),
                 new BackupRestorer(registry, backups),
                 new ProgramUninstaller(reader, ShellUninstallLauncher.Default, NativeSystemTool.In(SystemDirectories.Current, "msiexec.exe")),
                 backups,

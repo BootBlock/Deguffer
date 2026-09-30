@@ -7,26 +7,31 @@ namespace Deguffer.Core.Tests;
 /// Reading the three <c>Uninstall</c> keys into entries (§7.3): what Windows lists, which list each
 /// entry is in, and that a value of an unexpected type never drops an entry.
 /// </summary>
-public sealed class InstalledAppsReaderTests : IDisposable
+public sealed class InstalledAppsReaderTests
 {
     private const string ProductKey = "{12345678-9ABC-DEF0-1234-56789ABCDEF0}";
 
-    private readonly TempDirectory _temp = new();
+    private const string Apps = @"C:\Users\testuser\Apps";
 
     private readonly FakeUninstallRegistry _registry = new();
 
     private readonly FakeWindowsInstaller _installer = new();
 
-    public void Dispose() => _temp.Dispose();
+    private readonly FakePathProbe _paths = new();
 
-    private InstalledAppsReading Read() => new InstalledAppsReader(_registry, _installer).Read(CancellationToken.None);
+    private readonly FakePackageDependencies _dependencies = new();
+
+    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, _dependencies);
+
+    private InstalledAppsReading Read() => Reader.Read(CancellationToken.None);
 
     private InstalledEntry Only() => Assert.Single(Read().Entries);
 
     [Fact]
     public void AnEntryWithAPresentUninstallerIsListedAndInstalled()
     {
-        var uninstaller = _temp.CreateFile(1, "Tool", "unins000.exe");
+        var uninstaller = $@"{Apps}\Tool\unins000.exe";
+        _paths.File(uninstaller);
         _registry.With(UninstallScope.Machine64, "Tool_is1",
             ("DisplayName", "Tool"), ("Publisher", "Example"), ("DisplayVersion", "1.2"), ("UninstallString", $"\"{uninstaller}\""));
 
@@ -40,7 +45,7 @@ public sealed class InstalledAppsReaderTests : IDisposable
     [Fact]
     public void AnEntryWhoseUninstallerAndFolderAreGoneIsStale()
     {
-        var folder = Path.Combine(_temp.Path, "Gone");
+        var folder = $@"{Apps}\Gone";
         _registry.With(UninstallScope.CurrentUser, "Gone",
             ("DisplayName", "Gone"), ("UninstallString", $"\"{folder}\\unins000.exe\""), ("InstallLocation", folder));
 
@@ -50,7 +55,8 @@ public sealed class InstalledAppsReaderTests : IDisposable
     [Fact]
     public void AnEntryWhoseFolderStandsIsNotStale()
     {
-        var folder = _temp.CreateDirectory("Broken");
+        var folder = $@"{Apps}\Broken";
+        _paths.Directory(folder);
         _registry.With(UninstallScope.CurrentUser, "Broken",
             ("DisplayName", "Broken"), ("UninstallString", $"\"{folder}\\unins000.exe\""), ("InstallLocation", folder));
 
@@ -151,19 +157,65 @@ public sealed class InstalledAppsReaderTests : IDisposable
         var key = _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"));
         _registry.Remove(key);
 
-        Assert.Null(new InstalledAppsReader(_registry, _installer).ReadAgain(key));
+        Assert.Null(Reader.ReadAgain(key));
     }
 
     [Fact]
     public void ReadingAgainAnEntryThatChangedDecidesItAfresh()
     {
-        var uninstaller = _temp.CreateFile(1, "Tool", "unins000.exe");
+        var uninstaller = $@"{Apps}\Tool\unins000.exe";
+        _paths.File(uninstaller);
         var key = _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"), ("UninstallString", $"\"{uninstaller}\""));
-        var reader = new InstalledAppsReader(_registry, _installer);
+        var reader = Reader;
         Assert.False(Assert.Single(reader.Read(CancellationToken.None).Entries).IsStale);
 
-        File.Delete(uninstaller);
+        _paths.Remove(uninstaller);
 
         Assert.True(reader.ReadAgain(key)!.IsStale);
+    }
+
+    /// <summary>Hundreds of entries share a few executables, folders and package registrations (G4).</summary>
+    [Fact]
+    public void EachPathAndThePackageRegistrationsAreAskedAboutOnceForOneReading()
+    {
+        var uninstaller = $@"{Apps}\Shared\unins000.exe";
+        _registry.With(UninstallScope.Machine64, "A", ("DisplayName", "A"), ("UninstallString", $"\"{uninstaller}\" /a"), ("InstallLocation", $@"{Apps}\Shared"));
+        _registry.With(UninstallScope.Machine32, "B", ("DisplayName", "B"), ("UninstallString", $"\"{uninstaller}\" /b"), ("InstallLocation", $@"{Apps}\Shared"));
+
+        Read();
+
+        Assert.Equal(1, _paths.FileQueries[uninstaller]);
+        Assert.Equal(1, _paths.EntryQueries[$@"{Apps}\Shared"]);
+        Assert.Equal(1, _paths.DirectoryQueries[@"C:\Users"]);
+        Assert.Equal(1, _dependencies.Reads);
+    }
+
+    /// <summary>
+    /// A 32-bit entry's <c>%ProgramFiles%</c> expands to the 64-bit folder in a 64-bit Deguffer, so
+    /// the uninstaller the entry means is found under the 32-bit one.
+    /// </summary>
+    [Fact]
+    public void AnUninstallerStandingInTheOtherProgramFolderIsFound()
+    {
+        _paths.File(@"C:\Program Files (x86)\Tool\unins000.exe");
+        _registry.With(UninstallScope.Machine32, "Tool",
+            ("DisplayName", "Tool"), ("UninstallString", @"""C:\Program Files\Tool\unins000.exe"""));
+
+        Assert.Equal(EntryStanding.Installed, Only().Standing.Standing);
+    }
+
+    /// <summary>A Burn bundle whose cached setup is gone is judged by the products it installed.</summary>
+    [Fact]
+    public void ABundleWhoseProductIsStillInstalledIsNotStale()
+    {
+        const string Bundle = "{0A1B2C3D-0000-0000-0000-000000000001}";
+        _installer.With(Guid.Parse(ProductKey), InstallerProductState.Installed);
+        _dependencies.Provider("Tool.Core", ProductKey, Bundle);
+        _registry.With(UninstallScope.Machine32, Bundle,
+            ("DisplayName", "Tool"),
+            ("BundleProviderKey", Bundle),
+            ("UninstallString", @"""C:\ProgramData\Package Cache\" + Bundle + @"\ToolSetup.exe"" /uninstall"));
+
+        Assert.Equal(EntryStanding.Installed, Only().Standing.Standing);
     }
 }

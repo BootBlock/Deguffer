@@ -47,7 +47,11 @@ public static class DerivedPath
     /// <para><paramref name="target"/> must sit under <paramref name="baseDirectory"/>, which every
     /// caller satisfies by construction — the base is the root the target was assembled from.</para>
     /// </summary>
-    public static DerivedPathObstacle? FirstObstacleBetween(string baseDirectory, string target)
+    public static DerivedPathObstacle? FirstObstacleBetween(string baseDirectory, string target) =>
+        FirstObstacleBetween(baseDirectory, target, LongPathProbe.Default);
+
+    /// <summary>The same walk, asking <paramref name="probe"/>, for a rule proved without the real machine.</summary>
+    public static DerivedPathObstacle? FirstObstacleBetween(string baseDirectory, string target, IPathProbe probe)
     {
         var walked = baseDirectory;
 
@@ -59,7 +63,7 @@ public static class DerivedPath
             // One attribute read answers both questions this walk asks of a segment. The link
             // answer is read only on the Present arm below, which is the condition LongPath states
             // for it.
-            switch (LongPath.ProbeDirectory(walked, out var link))
+            switch (probe.ProbeDirectory(walked, out var link))
             {
                 case PathPresence.Refused:
                     return new DerivedPathObstacle(walked, IsLink: false);

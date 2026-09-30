@@ -16,18 +16,27 @@ public sealed record InstalledAppsReading(IReadOnlyList<InstalledEntry> Entries,
 /// <see cref="UninstallCommand"/> what an entry runs, and <see cref="StaleRule"/> which list it is
 /// in.</para>
 /// </summary>
-public sealed class InstalledAppsReader(IUninstallRegistry registry, IWindowsInstaller installer)
+public sealed class InstalledAppsReader(
+    IUninstallRegistry registry,
+    IWindowsInstaller installer,
+    IPathProbe probe,
+    ISystemDirectories system,
+    IPackageDependencies dependencies)
 {
-    public static InstalledAppsReader Default { get; } =
-        new(WindowsUninstallRegistry.Default, WindowsInstaller.Default);
+    public static InstalledAppsReader Default { get; } = new(
+        WindowsUninstallRegistry.Default,
+        WindowsInstaller.Default,
+        LongPathProbe.Default,
+        SystemDirectories.Current,
+        WindowsPackageDependencies.Default);
 
     /// <summary>
-    /// Every entry. Windows Installer and the filesystem are asked once per product code and per
-    /// path for the life of the reading (G4), since hundreds of entries share a few executables.
+    /// Every entry. Each question is asked once for the life of the reading (G4). See
+    /// <see cref="ReadingAnswers"/>.
     /// </summary>
     public InstalledAppsReading Read(CancellationToken ct)
     {
-        var answers = new Answers(installer);
+        var evidence = NewEvidence();
         var entries = new List<InstalledEntry>();
         var refused = new List<UninstallScope>();
 
@@ -45,7 +54,7 @@ public sealed class InstalledAppsReader(IUninstallRegistry registry, IWindowsIns
             foreach (var record in read.Records)
             {
                 ct.ThrowIfCancellationRequested();
-                entries.Add(Evaluate(record, answers));
+                entries.Add(Evaluate(record, evidence));
             }
         }
 
@@ -62,14 +71,21 @@ public sealed class InstalledAppsReader(IUninstallRegistry registry, IWindowsIns
 
         return presence is PathPresence.Absent
             ? null
-            : Evaluate(new UninstallRecord(key, values, IsReadable: presence is PathPresence.Present), new Answers(installer));
+            : Evaluate(new UninstallRecord(key, values, IsReadable: presence is PathPresence.Present), NewEvidence());
     }
 
-    private static InstalledEntry Evaluate(UninstallRecord record, Answers answers)
+    private StaleEvidence NewEvidence()
+    {
+        var answers = new ReadingAnswers(registry, installer, probe, dependencies);
+
+        return new StaleEvidence(answers, new InstalledPaths(answers, system), answers, answers.NonInstallerEntryNamed);
+    }
+
+    private static InstalledEntry Evaluate(UninstallRecord record, StaleEvidence evidence)
     {
         var values = record.Values;
-        var command = UninstallCommand.Parse(values.Text("UninstallString"), answers.ProbeFile);
-        var standing = StaleRule.Decide(record, command, answers.AskInstaller, answers.ProbeDirectory);
+        var command = UninstallCommand.Parse(values.Text("UninstallString"), evidence.Paths.ProbeFile);
+        var standing = StaleRule.Decide(record, command, evidence);
         var visibility = standing.Standing is EntryStanding.OtherAccount
             ? EntryVisibility.OtherAccount
             : EntryListing.Of(record);
@@ -84,32 +100,5 @@ public sealed class InstalledAppsReader(IUninstallRegistry registry, IWindowsIns
             command,
             standing,
             NoRemove: values.Flag("NoRemove"));
-    }
-
-    /// <summary>What was asked during one reading, so nothing is asked twice.</summary>
-    private sealed class Answers(IWindowsInstaller installer)
-    {
-        private readonly Dictionary<Guid, InstallerProductState> _products = [];
-        private readonly Dictionary<string, PathPresence> _files = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, PathPresence> _directories = new(StringComparer.OrdinalIgnoreCase);
-
-        public InstallerProductState AskInstaller(Guid code) =>
-            Remembered(_products, code, installer.QueryProductState);
-
-        public PathPresence ProbeFile(string path) => Remembered(_files, path, LongPath.ProbeFile);
-
-        public PathPresence ProbeDirectory(string path) => Remembered(_directories, path, LongPath.ProbeDirectory);
-
-        private static TValue Remembered<TKey, TValue>(Dictionary<TKey, TValue> cache, TKey key, Func<TKey, TValue> ask)
-            where TKey : notnull
-        {
-            if (!cache.TryGetValue(key, out var answer))
-            {
-                answer = ask(key);
-                cache[key] = answer;
-            }
-
-            return answer;
-        }
     }
 }

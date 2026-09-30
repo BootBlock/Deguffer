@@ -20,6 +20,16 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private readonly FakeWindowsInstaller _installer = new();
 
+    private readonly FakePathProbe _paths = new();
+
+    /// <summary>A file the probe reports standing, named under the test's tree.</summary>
+    private string StandingFile(string folder, string name)
+    {
+        var path = Path.Combine(_temp.Path, folder, name);
+        _paths.File(path);
+        return path;
+    }
+
     private readonly FakeProcessRunner _runner = new();
 
     private readonly ScriptedInstalledAppsPrompt _prompt = new(answer: true);
@@ -35,13 +45,13 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private InstalledAppsViewModel Page(bool relaunchStarts = false)
     {
-        var reader = new InstalledAppsReader(_registry, _installer);
+        var reader = new InstalledAppsReader(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
         var backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), "reg.exe", TimeProvider.System);
 
         return new InstalledAppsViewModel(
             reader.Read,
             new InstalledAppsActions(
-                new EntryRemover(_registry, _installer, backups),
+                new EntryRemover(_registry, reader, backups),
                 new BackupRestorer(_registry, backups),
                 new ProgramUninstaller(reader, new FakeUninstallLauncher(), @"C:\Windows\System32\msiexec.exe"),
                 backups,
@@ -60,7 +70,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         ("DisplayName", name), ("UninstallString", $"\"{Path.Combine(_temp.Path, name, "unins000.exe")}\""));
 
     private UninstallKey Installed(string name) => _registry.With(UninstallScope.CurrentUser, name,
-        ("DisplayName", name), ("UninstallString", $"\"{_temp.CreateFile(1, name, "unins000.exe")}\""));
+        ("DisplayName", name), ("UninstallString", $"\"{StandingFile(name, "unins000.exe")}\""));
 
     [Fact]
     public void AReadingFillsBothListsAndTheHeadline() => UiThread.Run(async () =>

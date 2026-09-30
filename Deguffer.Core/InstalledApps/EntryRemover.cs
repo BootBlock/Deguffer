@@ -41,7 +41,7 @@ public sealed record EntryRemovalReport(IReadOnlyList<EntryRemovalOutcome> Items
 /// Removes the entries the user chose (§7.3): each read and decided again, backed up first when
 /// asked, deleted alone, and followed by the §5.6 check that everything beside it survived.
 /// </summary>
-public sealed class EntryRemover(IUninstallRegistry registry, IWindowsInstaller installer, RegistryBackups backups)
+public sealed class EntryRemover(IUninstallRegistry registry, InstalledAppsReader reader, RegistryBackups backups)
 {
     public async Task<EntryRemovalReport> RemoveAsync(
         IReadOnlyList<InstalledEntry> chosen,
@@ -49,7 +49,6 @@ public sealed class EntryRemover(IUninstallRegistry registry, IWindowsInstaller 
         bool isElevated,
         CancellationToken ct)
     {
-        var reader = new InstalledAppsReader(registry, installer);
         var chosenKeys = chosen.Select(e => e.Key).ToHashSet();
 
         // Taken before anything is deleted, so the check afterwards compares against the machine
@@ -66,7 +65,7 @@ public sealed class EntryRemover(IUninstallRegistry registry, IWindowsInstaller 
                 continue;
             }
 
-            outcomes.Add(await RemoveOneAsync(entry, reader, backUp, isElevated, ct).ConfigureAwait(false));
+            outcomes.Add(await RemoveOneAsync(entry, backUp, isElevated, ct).ConfigureAwait(false));
         }
 
         var removedKeys = outcomes.Where(o => o.Removed).Select(o => o.Entry.Key).ToHashSet();
@@ -76,7 +75,6 @@ public sealed class EntryRemover(IUninstallRegistry registry, IWindowsInstaller 
 
     private async Task<EntryRemovalOutcome> RemoveOneAsync(
         InstalledEntry chosen,
-        InstalledAppsReader reader,
         bool backUp,
         bool isElevated,
         CancellationToken ct)

@@ -32,7 +32,17 @@ public enum InstallerProductState
 public interface IWindowsInstaller
 {
     InstallerProductState QueryProductState(Guid productCode);
+
+    /// <summary>
+    /// Every patch Windows Installer holds for this account and for the machine. Asked because a
+    /// patch code is unknown to <see cref="QueryProductState"/> whether or not the patch is there.
+    /// </summary>
+    InstallerPatches QueryPatches();
 }
+
+/// <summary>The patch codes Windows Installer listed.</summary>
+/// <param name="IsComplete">False where it stopped listing with an error, so a code missing here may still be a patch.</param>
+public sealed record InstallerPatches(IReadOnlySet<Guid> Codes, bool IsComplete);
 
 /// <inheritdoc />
 /// <remarks>
@@ -48,6 +58,17 @@ public sealed partial class WindowsInstaller : IWindowsInstaller
     private const int InstallStateAbsent = 2;
     private const int InstallStateAdvertised = 1;
     private const int InstallStateUnknown = -1;
+
+    /// <summary>Per-user managed, per-user unmanaged and per-machine (<c>MSIINSTALLCONTEXT_ALL</c>).</summary>
+    private const int InstallContextAll = 7;
+
+    /// <summary>Applied, superseded, obsoleted and registered (<c>MSIPATCHSTATE_ALL</c>).</summary>
+    private const int PatchStateAll = 15;
+
+    private const int ErrorSuccess = 0;
+    private const int ErrorNoMoreItems = 259;
+
+    private const int BracedGuidLength = 38;
 
     private WindowsInstaller()
     {
@@ -74,6 +95,59 @@ public sealed partial class WindowsInstaller : IWindowsInstaller
         }
     }
 
+    /// <remarks>
+    /// Asked for this account only (a null user SID). Measured unelevated on 2026-09-30, it listed
+    /// this account's and the machine's patches, and refused every account's with
+    /// <c>ERROR_ACCESS_DENIED</c>. This account's and the machine's are the ones that matter: another
+    /// account's per-user packages register their providers in that account's hive, which is never
+    /// read.
+    /// </remarks>
+    public InstallerPatches QueryPatches()
+    {
+        var codes = new HashSet<Guid>();
+        // A braced code and its terminating null, which is the buffer Windows Installer documents.
+        Span<char> patch = stackalloc char[BracedGuidLength + 1];
+
+        try
+        {
+            for (var index = 0; ; index++)
+            {
+                var result = MsiEnumPatchesEx(
+                    null, null, InstallContextAll, PatchStateAll, index, patch, IntPtr.Zero, out _, IntPtr.Zero, IntPtr.Zero);
+
+                switch (result)
+                {
+                    case ErrorSuccess when Guid.TryParse(patch[..BracedGuidLength], out var code):
+                        codes.Add(code);
+                        break;
+
+                    case ErrorNoMoreItems:
+                        return new InstallerPatches(codes, IsComplete: true);
+
+                    default:
+                        return new InstallerPatches(codes, IsComplete: false);
+                }
+            }
+        }
+        catch (DllNotFoundException)
+        {
+            return new InstallerPatches(codes, IsComplete: false);
+        }
+    }
+
     [LibraryImport("msi.dll", EntryPoint = "MsiQueryProductStateW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int MsiQueryProductState(string product);
+
+    [LibraryImport("msi.dll", EntryPoint = "MsiEnumPatchesExW", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int MsiEnumPatchesEx(
+        string? product,
+        string? userSid,
+        int context,
+        int filter,
+        int index,
+        Span<char> patchCode,
+        IntPtr targetProductCode,
+        out int targetContext,
+        IntPtr targetUserSid,
+        IntPtr targetUserSidLength);
 }

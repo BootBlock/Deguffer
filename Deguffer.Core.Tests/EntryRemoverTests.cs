@@ -20,6 +20,16 @@ public sealed partial class EntryRemoverTests : IDisposable
 
     private readonly FakeWindowsInstaller _installer = new();
 
+    private readonly FakePathProbe _paths = new();
+
+    /// <summary>A file the probe reports standing, named under the test's tree.</summary>
+    private string StandingFile(string folder, string name)
+    {
+        var path = Path.Combine(_temp.Path, folder, name);
+        _paths.File(path);
+        return path;
+    }
+
     private readonly FakeProcessRunner _runner = new();
 
     private readonly RegistryBackups _backups;
@@ -48,10 +58,12 @@ public sealed partial class EntryRemoverTests : IDisposable
     private UninstallKey Stale(UninstallScope scope, string name) => _registry.With(scope, name,
         ("DisplayName", name), ("UninstallString", $"\"{Path.Combine(_temp.Path, name, "unins000.exe")}\""));
 
-    private InstalledEntry Current(UninstallKey key) => new InstalledAppsReader(_registry, _installer).ReadAgain(key)!;
+    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+
+    private InstalledEntry Current(UninstallKey key) => Reader.ReadAgain(key)!;
 
     private Task<EntryRemovalReport> Remove(bool backUp, bool isElevated, params UninstallKey[] keys) =>
-        new EntryRemover(_registry, _installer, _backups).RemoveAsync([.. keys.Select(Current)], backUp, isElevated, CancellationToken.None);
+        new EntryRemover(_registry, Reader, _backups).RemoveAsync([.. keys.Select(Current)], backUp, isElevated, CancellationToken.None);
 
     [Fact]
     public async Task AStaleEntryIsBackedUpRemovedAndItsNeighboursSurvive()
@@ -127,7 +139,7 @@ public sealed partial class EntryRemoverTests : IDisposable
         var chosen = Current(gone);
         _registry.With(UninstallScope.CurrentUser, "Gone", ("DisplayName", "Gone 2"), ("UninstallString", chosen.Command.Text));
 
-        var report = await new EntryRemover(_registry, _installer, _backups).RemoveAsync([chosen], false, false, CancellationToken.None);
+        var report = await new EntryRemover(_registry, Reader, _backups).RemoveAsync([chosen], false, false, CancellationToken.None);
 
         Assert.Empty(_registry.Deleted);
         Assert.Contains("changed after it was chosen", Assert.Single(report.NotRemoved).Message, StringComparison.Ordinal);
@@ -139,9 +151,9 @@ public sealed partial class EntryRemoverTests : IDisposable
     {
         var gone = Stale(UninstallScope.CurrentUser, "Gone");
         var chosen = Current(gone);
-        _temp.CreateFile(1, "Gone", "unins000.exe");
+        StandingFile("Gone", "unins000.exe");
 
-        var report = await new EntryRemover(_registry, _installer, _backups).RemoveAsync([chosen], false, false, CancellationToken.None);
+        var report = await new EntryRemover(_registry, Reader, _backups).RemoveAsync([chosen], false, false, CancellationToken.None);
 
         Assert.Empty(_registry.Deleted);
         Assert.Contains("proves is stale", Assert.Single(report.NotRemoved).Message, StringComparison.Ordinal);
@@ -150,7 +162,7 @@ public sealed partial class EntryRemoverTests : IDisposable
     [Fact]
     public async Task AnInstalledEntryIsNeverRemoved()
     {
-        var uninstaller = _temp.CreateFile(1, "Tool", "unins000.exe");
+        var uninstaller = StandingFile("Tool", "unins000.exe");
         var tool = _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"), ("UninstallString", $"\"{uninstaller}\""));
 
         var report = await Remove(backUp: false, isElevated: true, tool);
@@ -217,7 +229,7 @@ public sealed partial class EntryRemoverTests : IDisposable
         var chosen = Current(gone);
         _registry.Remove(gone);
 
-        var report = await new EntryRemover(_registry, _installer, _backups).RemoveAsync([chosen], false, false, CancellationToken.None);
+        var report = await new EntryRemover(_registry, Reader, _backups).RemoveAsync([chosen], false, false, CancellationToken.None);
 
         Assert.Empty(_registry.Deleted);
         Assert.Contains("already gone", Assert.Single(report.NotRemoved).Message, StringComparison.Ordinal);
@@ -231,7 +243,7 @@ public sealed partial class EntryRemoverTests : IDisposable
         using var cancel = new CancellationTokenSource();
         _registry.AfterDelete = _ => cancel.Cancel();
 
-        var report = await new EntryRemover(_registry, _installer, _backups)
+        var report = await new EntryRemover(_registry, Reader, _backups)
             .RemoveAsync([Current(first), Current(second)], false, false, cancel.Token);
 
         Assert.Equal([first], _registry.Deleted);
