@@ -16,9 +16,14 @@ namespace Deguffer.Core.Providers;
 /// is a child of a directory on the way down from an approved root to a place a program is — and
 /// those few children are all that is looked at.</para>
 ///
+/// <para><b>A solution a program works beside adds the projects it names.</b> Visual Studio works in
+/// the solution's folder, and the projects it has open are below that folder rather than above it,
+/// so walking up from where the editor is would never reach them. The solution names them, and each
+/// named project's build directory is a candidate as well.</para>
+///
 /// <para><b>Each is judged exactly as the plan judges it.</b> The same boundary as discovery, the
-/// provider's own recogniser, and <see cref="LiveTreeVeto.Apply"/> with the lock files the plan
-/// passes. Lying below a project is not the verdict: a program started from a project's own
+/// provider's own recogniser, and <see cref="LiveTreeVeto.Apply"/> with the question the plan
+/// asks. Lying below a project is not the verdict: a program started from a project's own
 /// <c>tools</c> folder, working somewhere else, is using neither the project nor its build output,
 /// and the plan offers that build output. Declaring it here would refuse what the Storage page
 /// allows.</para>
@@ -27,7 +32,8 @@ namespace Deguffer.Core.Providers;
 /// a program that neither runs from inside the directory nor works under its project — a Unity
 /// editor holding <c>UnityLockfile</c> with its working directory elsewhere — is live to the plan
 /// and not declared here, because asking about a lock file means naming its directory first, which
-/// is the walk. The plan still holds that directory back.</para>
+/// is the walk. Nor does it find a project a solution names where the solution could not be read,
+/// because there is nothing to name it by. The plan still holds both back.</para>
 /// </summary>
 internal static class InUseBuildDirectories
 {
@@ -41,14 +47,19 @@ internal static class InUseBuildDirectories
     /// The provider's identification of a candidate, answering with its project folder or null. The
     /// same call its plan makes, so a directory the plan declines is never declared as in use.
     /// </param>
-    /// <param name="lockFilesOf">The lock files the plan hands to the veto, for each directory.</param>
+    /// <param name="projectsNamedIn">
+    /// The project folders a file in a place names, for a provider whose editor works above its
+    /// projects. See <see cref="LiveTreeQuery.Workspaces"/>.
+    /// </param>
+    /// <param name="question">What the plan asks the veto about each directory.</param>
     public static IReadOnlyList<ToolRoot> Declare(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
         IReadOnlyList<SourceRoot> roots,
         IReadOnlyList<string> names,
         Func<string, string?> recognise,
-        Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
+        Func<string, IReadOnlyList<string>> projectsNamedIn,
+        Func<RecognisedBuildDirectory, CancellationToken, LiveTreeQuery> question,
         CancellationToken ct)
     {
         if (roots.Count == 0)
@@ -57,6 +68,7 @@ internal static class InUseBuildDirectories
         }
 
         var occupied = inspector.FindOccupiedDirectories(ct).Live;
+        var named = NamedProjects(roots, occupied, projectsNamedIn, ct);
 
         // A set, because approved roots may nest, and a directory below both would otherwise be
         // asked about twice and declared twice.
@@ -74,8 +86,17 @@ internal static class InUseBuildDirectories
 
             // Asked of the name and the boundary before the disk, because most places a program is
             // are nowhere near a build directory and a string answers that for free.
-            candidates.UnionWith(
-                discovery.WithinTheSearch(Candidates(root.Path, occupied, names, ct), root.Path));
+            candidates.UnionWith(discovery.WithinTheSearch(
+                [
+                    .. Candidates(root.Path, occupied, names, ct),
+
+                    // Only those below this root, because the boundary is asked of a candidate
+                    // already known to be inside it, and a named project may be anywhere.
+                    .. named
+                        .Where(project => LongPath.Contains(root.Path, project))
+                        .SelectMany(project => names.Select(name => Path.Combine(project, name))),
+                ],
+                root.Path));
         }
 
         var recognised = new List<RecognisedBuildDirectory>();
@@ -95,7 +116,7 @@ internal static class InUseBuildDirectories
             }
         }
 
-        var live = LiveTreeVeto.Apply(inspector, recognised, lockFilesOf, ct);
+        var live = LiveTreeVeto.Apply(inspector, recognised, question, ct);
 
         return [.. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false))];
     }
@@ -148,6 +169,34 @@ internal static class InUseBuildDirectories
         }
 
         return candidates;
+    }
+
+    /// <summary>
+    /// Every project a file names in a place a program is, where that place is inside one of
+    /// <paramref name="roots"/>, the consent the plan asks before it reads one. The projects
+    /// themselves may lie anywhere, since a solution may name one beside its own folder, and each
+    /// root takes the ones below it.
+    /// </summary>
+    private static HashSet<string> NamedProjects(
+        IReadOnlyList<SourceRoot> roots,
+        IReadOnlyList<LiveTree> occupied,
+        Func<string, IReadOnlyList<string>> projectsNamedIn,
+        CancellationToken ct)
+    {
+        var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var place in occupied)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (LongPath.Configured(place.Directory) is { } directory
+                && roots.Any(root => LongPath.Contains(root.Path, directory)))
+            {
+                named.UnionWith(projectsNamedIn(directory));
+            }
+        }
+
+        return named;
     }
 
     /// <summary>Why Explore refuses it, naming what the user would have to close.</summary>

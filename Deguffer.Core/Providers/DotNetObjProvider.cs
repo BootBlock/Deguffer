@@ -31,6 +31,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     private readonly SourceDirectoryDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
     private readonly TrackedFileCheck _tracked;
+    private readonly SolutionWorkspaces _solutions = new();
 
     private IReadOnlyList<SourceRoot>? _approved;
 
@@ -99,6 +100,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
 
         _liveTrees.Invalidate();
         _discovery.Invalidate();
+        _solutions.Invalidate();
 
         // Re-read on the next pass, so a root added in Settings is picked up without a restart.
         _approved = null;
@@ -145,7 +147,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             candidate => DotNetIntermediateSignature.TryRecognise(candidate, ct) is { } project
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
-            static _ => [],
+            _solutions.NamedIn,
+            Question,
             ct));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -220,7 +223,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             [.. targets.Select(t => new RecognisedBuildDirectory(
                 t.Path,
                 Path.GetDirectoryName(t.Project.ProjectFilePath)!))],
-            [],
+            Question,
             ct);
 
         var stillUnused = live.Cleared.ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
@@ -264,6 +267,18 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             WasNotExamined = steps.Count == 0 && discovered.RefusedRoots.Count > 0,
         };
     }
+
+    /// <summary>
+    /// What the veto asks about an <c>obj</c>: its project, and every place a program is whose
+    /// solution names that project. Visual Studio works in the solution's folder, and in the common
+    /// layout that folder is above the project, where a program working in the project alone would
+    /// never see it.
+    /// </summary>
+    private LiveTreeQuery Question(RecognisedBuildDirectory candidate, CancellationToken ct) =>
+        new(candidate.Path, candidate.Project)
+        {
+            Workspaces = _solutions.Naming(candidate.Project, _liveTrees.FindOccupiedDirectories(ct).Live, ApprovedRoots),
+        };
 
     /// <summary>One directory that proved its identity, and the project that proved it.</summary>
     private readonly record struct RecognisedObj(string Path, RecognisedProject Project);

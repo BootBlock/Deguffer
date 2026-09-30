@@ -176,6 +176,43 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     }
 
     /// <summary>
+    /// The same for Visual Studio opened after the preview on a solution kept above its projects. The
+    /// solution's folder is read again at the clean, because the editor is in it only now.
+    /// </summary>
+    [Fact]
+    public async Task AnObjWhoseSolutionIsOpenedAfterThePreviewSurvivesTheClean()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var busy = ProjectFixture.CreateProject(Path.Combine(solution, "Busy"), "Busy");
+        var idle = ProjectFixture.CreateProject(Path.Combine(solution, "Idle"), "Idle");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(solution, "Busy", "Busy.csproj"));
+
+        var scanner = new FakeDirectoryScanner();
+        var provider = new DotNetObjProvider(
+            _roots,
+            new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
+            _liveTrees,
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            scanner);
+
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, busy, idle);
+
+        _liveTrees.WithProgram("devenv", workingDirectory: solution);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "an obj whose solution was opened after the preview was removed");
+        Assert.False(Directory.Exists(idle), "an obj the solution does not name was kept");
+        Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: devenv is working in Solution.");
+        AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
     /// Every Squirrel application shares the staging folder, which is why the plan refuses a directory
     /// an install is running from. One that starts running from a directory the preview offered keeps
     /// it, and the other leftover still goes.

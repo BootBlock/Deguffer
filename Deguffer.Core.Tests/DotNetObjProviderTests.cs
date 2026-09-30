@@ -708,6 +708,129 @@ public sealed class DotNetObjProviderTests : IDisposable
         Assert.True(LongPath.DirectoryExists(below));
     }
 
+    // ---- An open solution above its projects -----------------------------------------------------
+
+    /// <summary>
+    /// Visual Studio open on a solution kept above its projects, the common layout. It works in the
+    /// solution's folder, which is above <c>ProjectA</c>, so only the solution naming the project
+    /// ties the two. <c>ProjectB</c> is below the same folder and not in the solution, so it is still
+    /// offered, and §5.6 proves the held-back <c>obj</c> survived the run beside it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnObjOfAProjectAnOpenSolutionNamesIsNotATargetAndSurvivesTheRun(bool xml)
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var named = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectA"), "ProjectA");
+        var unnamed = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectB"), "ProjectB");
+        ProjectFixture.CreateSolution(solution, "Solution", xml, Path.Combine(solution, "ProjectA", "ProjectA.csproj"));
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("devenv", workingDirectory: solution));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([unnamed], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == named);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("devenv is working in Solution", StringComparison.Ordinal));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(LongPath.DirectoryExists(named));
+        Assert.False(LongPath.DirectoryExists(unnamed));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// The veto never fires wrongly. A terminal in a folder above a project, with no solution there,
+    /// is where a shell at the root of a repository sits, and it is using none of the projects below.
+    /// </summary>
+    [Fact]
+    public async Task AProgramAboveAProjectWithNoSolutionNamingItIsNotEvidence()
+    {
+        var root = ApproveRoot();
+        var repository = Path.Combine(root, "Repository");
+        var obj = ProjectFixture.CreateProject(Path.Combine(repository, "ProjectA"), "ProjectA");
+
+        var plan = await CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("pwsh", workingDirectory: repository)).PlanAsync();
+
+        Assert.Equal([obj], plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// A solution folder counts only for a program working exactly there. A build in one project of
+    /// the solution is below that folder too, and it is using its own project, not its sibling.
+    /// </summary>
+    [Fact]
+    public async Task AProgramInOneProjectOfASolutionDoesNotHoldBackAnother()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var building = Path.Combine(solution, "ProjectA");
+        var busy = ProjectFixture.CreateProject(building, "ProjectA");
+        var idle = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectB"), "ProjectB");
+        ProjectFixture.CreateSolution(
+            solution,
+            "Solution",
+            xml: false,
+            Path.Combine(building, "ProjectA.csproj"),
+            Path.Combine(solution, "ProjectB", "ProjectB.csproj"));
+
+        var plan = await CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("MSBuild", workingDirectory: building)).PlanAsync();
+
+        Assert.Equal([idle], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
+    }
+
+    /// <summary>
+    /// A solution that could not be read may name any project below it, so a program working beside
+    /// it holds all of them back. A project outside its folder is still offered.
+    /// </summary>
+    [Fact]
+    public async Task ASolutionThatCannotBeReadHoldsBackEveryProjectBelowIt()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var first = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectA"), "ProjectA");
+        var second = ProjectFixture.CreateProject(Path.Combine(solution, "Nested", "ProjectB"), "ProjectB");
+        var outside = ProjectFixture.CreateProject(Path.Combine(root, "Other"), "Other");
+        File.WriteAllText(Path.Combine(solution, "Solution.sln"), "not a solution");
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("devenv", workingDirectory: solution));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([outside], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == first);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == second);
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(LongPath.DirectoryExists(first));
+        Assert.True(LongPath.DirectoryExists(second));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// Consent bounds what is read as it bounds what is searched. A solution outside every approved
+    /// root is not read, so a program working beside it holds back nothing inside one.
+    /// </summary>
+    [Fact]
+    public async Task ReadsNoSolutionOutsideEveryApprovedRoot()
+    {
+        var solution = _temp.CreateDirectory("Solution");
+        var project = Path.Combine(solution, "ProjectA");
+        var obj = ProjectFixture.CreateProject(project, "ProjectA");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(project, "ProjectA.csproj"));
+        _roots.Save([new SourceRoot(project)]);
+
+        var plan = await CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("devenv", workingDirectory: solution)).PlanAsync();
+
+        Assert.Equal([obj], plan.TargetedPaths);
+    }
+
     // ---- §7.1: Explore refuses what the veto holds back ----------------------------------------
 
     /// <summary>
@@ -747,6 +870,56 @@ public sealed class DotNetObjProviderTests : IDisposable
         Assert.Contains("dotnet is working in Building", refusal.Reason, StringComparison.Ordinal);
         Assert.False(policy.MayRemove(Path.Combine(busy, "Debug")).IsAllowed);
         Assert.False(policy.MayRemove(project).IsAllowed);
+    }
+
+    /// <summary>
+    /// §7.1 over an <c>obj</c> the plan holds back because Visual Studio has a solution open above its
+    /// project. The editor works in the solution's folder, and walking up from there never reaches the
+    /// project, so this route finds it by the solution. The project the solution does not name stays
+    /// Explore's to offer.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnObjOfAProjectAnOpenSolutionNames()
+    {
+        var root = ApproveRootInProfile();
+        var solution = Path.Combine(root, "Solution");
+        var project = Path.Combine(solution, "ProjectA");
+        var named = ProjectFixture.CreateProject(project, "ProjectA");
+        var unnamed = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectB"), "ProjectB");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: true, Path.Combine(project, "ProjectA.csproj"));
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("devenv", workingDirectory: solution));
+
+        var policy = await ExplorePolicy(provider);
+
+        Assert.True(policy.MayRemove(unnamed).IsAllowed);
+
+        var refusal = policy.MayRemove(named);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("devenv is working in Solution", refusal.Reason, StringComparison.Ordinal);
+        Assert.False(policy.MayRemove(project).IsAllowed);
+    }
+
+    /// <summary>
+    /// A solution may name a project outside its own folder, and outside every approved root. The
+    /// plan never finds that project, so Explore must not refuse it either: this route refuses only
+    /// what the plan holds back.
+    /// </summary>
+    [Fact]
+    public async Task ExploreDeclaresNoObjASolutionNamesOutsideEveryApprovedRoot()
+    {
+        var root = ApproveRootInProfile();
+        var solution = Path.Combine(root, "Solution");
+        var project = Path.Combine(_environment.UserProfile, "elsewhere", "Shared");
+        var outside = ProjectFixture.CreateProject(project, "Shared");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(project, "Shared.csproj"));
+
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithProgram("devenv", workingDirectory: solution));
+
+        Assert.True((await ExplorePolicy(provider)).MayRemove(outside).IsAllowed);
     }
 
     /// <summary>

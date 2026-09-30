@@ -52,11 +52,13 @@ internal static class LiveTreeVeto
         IReadOnlyList<string> lockFiles,
         CancellationToken ct = default,
         string? unknown = null) =>
-        Apply(inspector, candidates, _ => lockFiles, ct, unknown);
+        Apply(inspector, candidates, (c, _) => new LiveTreeQuery(c.Path, c.Project, lockFiles), ct, unknown);
 
-    /// <param name="lockFilesOf">
-    /// The files to ask about for each candidate, for a tool whose lock files are named by the
-    /// project rather than in advance. See <see cref="BuildDirectoryKind.ProjectLockFiles"/>.
+    /// <param name="question">
+    /// What to ask about each candidate, for a provider whose evidence is found in the project rather
+    /// than named in advance: lock files a tool names after the project (see
+    /// <see cref="BuildDirectoryKind.ProjectLockFiles"/>), or the solutions that open it (see
+    /// <see cref="LiveTreeQuery.Workspaces"/>).
     /// </param>
     /// <param name="unknown">
     /// Why a cleared directory is held back at the clean where the inspector cannot tell then, for a
@@ -66,7 +68,7 @@ internal static class LiveTreeVeto
     public static LiveTreeVetoResult Apply(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
-        Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
+        Func<RecognisedBuildDirectory, CancellationToken, LiveTreeQuery> question,
         CancellationToken ct = default,
         string? unknown = null)
     {
@@ -75,18 +77,16 @@ internal static class LiveTreeVeto
             return new LiveTreeVetoResult([], [], Complete: true);
         }
 
-        var findings = inspector.FindLive(
-            [.. candidates.Select(c => new LiveTreeQuery(c.Path, c.Project, lockFilesOf(c)))],
-            ct);
+        var findings = inspector.FindLive([.. candidates.Select(c => question(c, ct))], ct);
 
-        // The same rule for the lock files, not the list it produced, because the list is read from
-        // the project and an editor opened after the preview adds to it.
+        // The same rule for the question, not the query it produced, because the query is read from
+        // the project and the machine, and an editor opened after the preview changes both.
         return new LiveTreeVetoResult(
             [
                 .. candidates.Where(c => !findings.IsLive(c.Path)).Select(c => new ClearedBuildDirectory(
                     c.Path,
                     c.Project,
-                    new LiveTreeCheck(inspector, c, lockFilesOf, unknown))),
+                    new LiveTreeCheck(inspector, c, question, unknown))),
             ],
             findings.Live,
             findings.Complete);

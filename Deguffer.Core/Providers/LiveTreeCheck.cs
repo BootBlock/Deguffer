@@ -22,10 +22,11 @@ namespace Deguffer.Core.Providers;
 /// finds holds back the step that removes the build.</para>
 /// </summary>
 /// <param name="directory">The directory the veto asked about, and the project it belongs to.</param>
-/// <param name="lockFilesOf">
-/// The veto's own rule for the files to ask about, applied again rather than its answer remembered.
-/// Unreal's logs are found by listing the project's <c>Saved\Logs</c>, and an editor opened on the
-/// project after the preview may have written the first one there.
+/// <param name="question">
+/// The veto's own rule for what to ask, applied again rather than its answer remembered. Unreal's
+/// logs are found by listing the project's <c>Saved\Logs</c>, and an editor opened on the project
+/// after the preview may have written the first one there. A solution's folder is a workspace only
+/// while a program is in it, and Visual Studio opened after the preview is the one this is for.
 /// </param>
 /// <param name="unknown">
 /// Why the step is held back where the inspector could not tell, as an <see cref="InUseNow.Reason"/>,
@@ -34,15 +35,16 @@ namespace Deguffer.Core.Providers;
 internal sealed class LiveTreeCheck(
     ILiveTreeInspector inspector,
     RecognisedBuildDirectory directory,
-    Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
+    Func<RecognisedBuildDirectory, CancellationToken, LiveTreeQuery> question,
     string? unknown = null) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
-        // The inspector keeps one process table for a planning pass. That table is the preview's.
+        // The inspector keeps one process table for a planning pass. That table is the preview's,
+        // and it is dropped before the question is built, because building it can read the table.
         inspector.Invalidate();
 
-        var query = new LiveTreeQuery(directory.Path, directory.Project, lockFilesOf(directory));
+        var query = question(directory, ct);
         var findings = inspector.FindLive([query], ct);
 
         IReadOnlyList<InUseNow> live =

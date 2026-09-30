@@ -4327,7 +4327,7 @@ tool costs a slower next use. Removing a build directory under a live editor or 
 breaks the work you are doing at that moment, and nothing re-downloads the afternoon.
 
 So before anything is offered, Deguffer asks whether each project is in use, and holds back
-the ones that are. It needs no administrator rights to ask. Three signals, each of them positive
+the ones that are. It needs no administrator rights to ask. Four signals, each of them positive
 evidence rather than a guess:
 
 - **The tool's own lock file is held open.** Unity writes `Library\UnityLockfile` when the editor
@@ -4337,8 +4337,14 @@ evidence rather than a guess:
 - **A running program lives inside the directory.** An activated virtual environment runs
   `.venv\Scripts\python.exe`, and a Rust binary you started runs out of `target\debug`.
 - **A running program is working inside the project.** A build in flight, a terminal sitting in the
-  folder, or an editor with the solution open. Visual Studio's working directory is the solution's
-  own folder, which is how a solution you have open is recognised.
+  folder, or an editor with the solution open.
+- **A running program is working beside a solution that names the project.** Visual Studio's working
+  directory is the solution's own folder, and in the usual layout that folder is above each project
+  rather than inside it. A terminal at the top of a repository sits in the same kind of place and is
+  using none of the projects below it, so the folder alone is not the test: a `.sln` or `.slnx` in it
+  has to name the project. A solution Deguffer cannot read counts for every project below it, because
+  it could name any of them. This applies to .NET's `obj`, the one build directory here whose editor
+  opens its projects from above.
 
 A held-back project is listed as something left alone, with what is using it named, so you can close
 it and scan again. The same question is asked again when you press Clean, immediately before each
@@ -4346,23 +4352,25 @@ directory is removed, so a project you open or build after the scan keeps its bu
 result says what is using it.
 
 **The Unreal Editor is found by its log.** It works in the engine's folder rather than the
-project's, so the second and third signals do not see it. It does hold its log in the project's
+project's, so the three signals after the first do not see it. It does hold its log in the project's
 `Saved\Logs` open for the whole session, and Deguffer asks about every log there, so a project the
 editor has open is held back like any other. A switch on the editor's command line can move the log
 out of the project, so a plan made while an Unreal editor, a commandlet or Unreal Build Tool runs
 also says so by name. Explore does not find a project by its log, as it does not find a Unity
 project by its lockfile.
 
-**It can miss, and it never fires wrongly.** Three things it does not see, all of them stated here
-because a safeguard whose limits are unwritten gets trusted past them:
+**It can miss, and it holds back only on evidence.** Four things it does not see, all of them stated
+here because a safeguard whose limits are unwritten gets trusted past them:
 
 - A compiler holding a file deep inside a tree that is neither its own program nor its working
   folder. Nothing can ask that question about a directory without administrator rights.
 - **A program running as administrator, or as another user.** Deguffer runs unelevated, and Windows
   will not let it inspect those at all — so a build started from an elevated terminal is invisible.
+- **A solution outside every folder you approved.** Deguffer reads nothing outside them, so Visual
+  Studio open on such a solution holds back only a project in the solution's own folder.
 - A project whose path is longer than 260 characters, for the lock-file signal only. Windows'
   Restart Manager refuses a path that long, so Unity's lockfile cannot be asked about there. The
-  other two signals are unaffected, and the scan says the check could not run rather than
+  other signals are unaffected, and the scan says the check could not run rather than
   reporting the project idle.
 
 Where a check cannot run at all, the scan says so rather than staying quiet — "could not tell"
