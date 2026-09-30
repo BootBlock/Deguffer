@@ -31,9 +31,9 @@
         </Border>
 
         <!--
-            A rail with permanent labels rather than a collapsible pane: there are five
+            A rail with permanent labels rather than a collapsible pane: there are six
             destinations and they will not grow much, so nothing has to be opened to find out what
-            is here. The pane toggle is hidden for the same reason — collapsing five items saves no
+            is here. The pane toggle is hidden for the same reason — collapsing six items saves no
             meaningful width and costs the user the labels.
         -->
         <NavigationView x:Name="Navigation"
@@ -71,6 +71,14 @@
                 <NavigationViewItem x:Name="MemoryItem" Content="Memory" Tag="Memory">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE964;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <!-- Installed apps answers "what does Windows list that is not there", and runs a
+                     program's own uninstaller for one that is (§7.3). -->
+                <NavigationViewItem x:Name="InstalledAppsItem" Content="Installed apps" Tag="InstalledApps">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE71D;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

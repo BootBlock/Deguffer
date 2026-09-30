@@ -14,6 +14,18 @@ public sealed record EntryRemovalReport(IReadOnlyList<EntryRemovalOutcome> Items
 
     public IReadOnlyList<EntryRemovalOutcome> NotRemoved => [.. Items.Where(i => !i.Removed)];
 
+    /// <summary>Whether everything chosen went and the §5.6 check passed.</summary>
+    public bool IsComplete => NotRemoved.Count == 0 && Verification.Passed;
+
+    /// <summary>One line for each entry left, and for each §5.6 check that did not pass.</summary>
+    public IReadOnlyList<string> Details =>
+    [
+        .. NotRemoved.Select(i => $"{i.Entry.Name}: {i.Message}"),
+        .. Verification.Checks
+            .Where(c => c.Outcome is not (VerificationOutcome.Survived or VerificationOutcome.NotPresentBefore))
+            .Select(c => $"{c.Subject}: {c.Detail}"),
+    ];
+
     public string Summary =>
         (Removed.Count, NotRemoved.Count) switch
         {

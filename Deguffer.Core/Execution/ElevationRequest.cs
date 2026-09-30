@@ -24,6 +24,9 @@ public abstract record ElevationRequest
     /// </summary>
     public static ElevationRequest Preview { get; } = new PreviewRequest();
 
+    /// <summary>Open on the Installed apps page and read the entries again. Stateless, as <see cref="Preview"/> is.</summary>
+    public static ElevationRequest InstalledApps { get; } = new InstalledAppsRequest();
+
     /// <summary>The arguments that ask a replacement instance to do this.</summary>
     public abstract IReadOnlyList<string> ToArguments();
 
@@ -39,6 +42,7 @@ public abstract record ElevationRequest
     {
         var explore = false;
         var preview = false;
+        var installedApps = false;
         string? drive = null;
         string? folder = null;
 
@@ -52,6 +56,10 @@ public abstract record ElevationRequest
             {
                 preview = true;
             }
+            else if (argument.Equals(InstalledAppsSwitch, StringComparison.OrdinalIgnoreCase))
+            {
+                installedApps = true;
+            }
             else if (argument.StartsWith(DrivePrefix, StringComparison.OrdinalIgnoreCase))
             {
                 drive = ValueOf(argument, DrivePrefix);
@@ -64,8 +72,9 @@ public abstract record ElevationRequest
 
         // Explore wins where both are somehow present: it is the more specific request, and nothing
         // writes the two together. The alternative silently starts a whole-machine preview the user
-        // did not ask for.
+        // did not ask for. Installed apps comes before a preview for the same reason.
         return explore ? new ExploreRequest(drive, folder)
+            : installedApps ? InstalledApps
             : preview ? Preview
             : null;
     }
@@ -78,6 +87,8 @@ public abstract record ElevationRequest
     private protected const string ExploreSwitch = "--explore";
 
     private protected const string PreviewSwitch = "--rescan";
+
+    private protected const string InstalledAppsSwitch = "--installed-apps";
 
     private protected const string DrivePrefix = "--explore-drive=";
 
@@ -96,6 +107,12 @@ public abstract record ElevationRequest
     /// </summary>
     private static string? ValueOf(string argument, string prefix) =>
         argument[prefix.Length..] is var value && !string.IsNullOrWhiteSpace(value) ? value : null;
+}
+
+/// <summary>Open on the Installed apps page. See <see cref="ElevationRequest.InstalledApps"/>.</summary>
+public sealed record InstalledAppsRequest : ElevationRequest
+{
+    public override IReadOnlyList<string> ToArguments() => [InstalledAppsSwitch];
 }
 
 /// <summary>Open on the Storage page and preview again. See <see cref="ElevationRequest.Preview"/>.</summary>

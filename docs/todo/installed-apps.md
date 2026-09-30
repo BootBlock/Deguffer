@@ -56,3 +56,5 @@ Each stage lands on `main` with its tests before the next starts.
   with a real `reg.exe` export, delete and import round trip on a scratch key.
 - 2026-09-30: stage 3 landed on the branch: `UninstallPolicy`, `ProgramUninstaller` and the
   `IUninstallLauncher` seam over the shell.
+- 2026-09-30: stage 4 landed on the branch: the Installed apps page, its navigation item, the
+  `--installed-apps` elevated reopen and the `BackUpInstalledAppEntries` preference.

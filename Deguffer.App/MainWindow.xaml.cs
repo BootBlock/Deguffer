@@ -46,8 +46,8 @@ public sealed partial class MainWindow : Window
     public void RememberPlacement() => _sizing.Remember();
 
     /// <summary>
-    /// Open on the destination this instance was started for: Storage ordinarily, and Explore where
-    /// an elevated replacement was told to resume there.
+    /// Open on the destination this instance was started for: Storage ordinarily, and Explore or
+    /// Installed apps where an elevated replacement was told to resume there.
     ///
     /// <para>An elevated instance always replaces one the user was already using, because §6.3 does
     /// not elevate at startup. Opening it at the default destination throws away where they were,
@@ -63,15 +63,20 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OpenWhereTheLaunchAsked()
     {
-        var explore = ElevatedRelaunch.Requested is ExploreRequest;
+        var (page, item) = ElevatedRelaunch.Requested switch
+        {
+            ExploreRequest => (typeof(ExplorePage), ExploreItem),
+            InstalledAppsRequest => (typeof(InstalledAppsPage), InstalledAppsItem),
+            _ => (typeof(CleanPage), StorageItem),
+        };
 
-        ContentFrame.Navigate(explore ? typeof(ExplorePage) : typeof(CleanPage));
+        ContentFrame.Navigate(page);
 
         // The rail second. Assigning it raises OnDestinationChanged, which finds the frame already
         // where it is going and does nothing further. The selection is what the user reads as "where
         // am I", and a frame showing Explore under a rail highlighting Storage is worse than either
         // of them alone.
-        Navigation.SelectedItem = explore ? ExploreItem : StorageItem;
+        Navigation.SelectedItem = item;
     }
 
     /// <summary>
@@ -109,6 +114,7 @@ public sealed partial class MainWindow : Window
             "About" => typeof(AboutPage),
             "Explore" => typeof(ExplorePage),
             "Memory" => typeof(MemoryPage),
+            "InstalledApps" => typeof(InstalledAppsPage),
             _ => typeof(CleanPage),
         };
 

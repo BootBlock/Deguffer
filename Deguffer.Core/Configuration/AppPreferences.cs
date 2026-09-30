@@ -308,6 +308,10 @@ public enum ExploreScheme
 /// two protects more wins, so setting this to zero does not defeat a guard the user set, and the
 /// guard cannot loosen this one either.</para>
 /// </param>
+/// <param name="BackUpInstalledAppEntries">
+/// Whether Installed apps exports an entry with <c>reg.exe</c> before removing it (§7.3). On by
+/// default, and an entry whose backup fails is not removed while it is on.
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Compact,
@@ -326,7 +330,8 @@ public sealed record AppPreferences(
     bool EmptyRecycleBinsDirectly = false,
     int KeepFilesChangedWithinHours = 0,
     int FileHistoryRetentionDays = 365,
-    int MinimumTemporaryFileAgeDays = 7)
+    int MinimumTemporaryFileAgeDays = 7,
+    bool BackUpInstalledAppEntries = true)
 {
     public static readonly AppPreferences Default = new();
 }
