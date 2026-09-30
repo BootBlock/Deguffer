@@ -173,6 +173,48 @@ public sealed class BundleRuleTests
     }
 
     /// <summary>
+    /// A shell marked only by the packages naming it cannot be told apart from any other entry
+    /// where a registration was hidden, so its missing uninstaller proves nothing.
+    /// </summary>
+    [Fact]
+    public void AnEntryWhoseRegistrationsWindowsWouldNotAllShowIsNotProvenByItsUninstaller()
+    {
+        _dependencies.Refusing();
+
+        var verdict = Decide(BundleEntry(("DisplayName", "Tool")), Setup(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+        Assert.Contains("would not show every package registration", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>Each value Burn writes marks a bundle alone, with no package naming it.</summary>
+    [Theory]
+    [InlineData("BundleProviderKey")]
+    [InlineData("BundleCachePath")]
+    [InlineData("BundleUpgradeCode")]
+    [InlineData("BundleVersion")]
+    [InlineData("EngineVersion")]
+    public void EachBurnValueMarksABundle(string name)
+    {
+        var verdict = Decide(BundleEntry(("DisplayName", "Tool"), (name, "x")), Setup(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+        Assert.Contains("No package registration names this bundle", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnEntryNameWindowsWouldNotLookUpProvesNothing()
+    {
+        BothPackages();
+        _registry.Refusing(UninstallScope.CurrentUser);
+
+        var verdict = Decide(Registered(), Setup(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+        Assert.Contains("would not say whether an entry is named", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A bundle registers a provider of its own, which names the bundle rather than a package. Both
     /// the key its entry names and a provider whose code is the bundle's own are left out.
     /// </summary>

@@ -141,10 +141,26 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         }
 
         var copy = Path.Combine(folder, $".restoring-{Guid.NewGuid():N}.reg");
+        FileStream? held = null;
 
         try
         {
-            await File.WriteAllBytesAsync(LongPath.Extended(copy), bytes, ct).ConfigureAwait(false);
+            await using (var written = new FileStream(LongPath.Extended(copy), FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await written.WriteAsync(bytes, ct).ConfigureAwait(false);
+            }
+
+            // Held open until reg.exe has read it, sharing reading only, so nothing can rewrite or
+            // replace the copy in the moment between the check and the import. Measured on
+            // 2026-09-30: reg.exe imports a file held this way, and a write or a delete is refused.
+            // Read back through the held handle, because the copy was briefly closed.
+            held = new FileStream(LongPath.Extended(copy), FileMode.Open, FileAccess.Read, FileShare.Read);
+
+            if (!await HoldsExactly(held, bytes, ct).ConfigureAwait(false))
+            {
+                return new BackupOutcome(false, backup.Path,
+                    "The copy of the backup changed before it was imported, so Deguffer did not import it.");
+            }
 
             var outcome = await runner.RunAsync(regExe, $"import \"{copy}\" /reg:64", ct).ConfigureAwait(false);
 
@@ -158,6 +174,11 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         }
         finally
         {
+            if (held is not null)
+            {
+                await held.DisposeAsync().ConfigureAwait(false);
+            }
+
             try
             {
                 File.Delete(LongPath.Extended(copy));
@@ -168,6 +189,19 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
                 // only what was just checked.
             }
         }
+    }
+
+    private static async Task<bool> HoldsExactly(FileStream file, byte[] expected, CancellationToken ct)
+    {
+        if (file.Length != expected.Length)
+        {
+            return false;
+        }
+
+        var actual = new byte[expected.Length];
+        await file.ReadExactlyAsync(actual, ct).ConfigureAwait(false);
+
+        return actual.AsSpan().SequenceEqual(expected);
     }
 
     /// <summary>Every backup in the folder that names a key, newest first.</summary>

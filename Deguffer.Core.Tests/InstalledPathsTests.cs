@@ -113,6 +113,25 @@ public sealed class InstalledPathsTests
         Assert.Contains(@"is on \\server.test\apps", Paths().WhyAbsenceProvesNothing(@"\\server.test\apps\Tool\unins000.exe"), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A value written as <c>REG_SZ</c> is not expanded, so the probe asks about a folder literally
+    /// named <c>%USERNAME%</c>, which is absent wherever the program is.
+    /// </summary>
+    [Fact]
+    public void APathThatStillNamesAVariableMakesAbsenceProveNothing()
+    {
+        Assert.Contains(
+            "names %USERNAME%, which Windows did not expand",
+            Paths().WhyAbsenceProvesNothing(@"C:\Users\%USERNAME%\AppData\Local\Programs\Tool\unins000.exe"),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ALonePercentSignIsNotAVariable()
+    {
+        Assert.Null(Paths().WhyAbsenceProvesNothing(@"C:\Tools\100% Tool\unins000.exe"));
+    }
+
     /// <summary>Every view is walked: the one this process would not look through may be the link.</summary>
     [Fact]
     public void ALinkInAnotherViewMakesAbsenceProveNothing()

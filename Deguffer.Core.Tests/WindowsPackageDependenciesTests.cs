@@ -65,7 +65,10 @@ public sealed class WindowsPackageDependenciesTests : IDisposable
         Provider(_machine, "Tool.Exe", null, Bundle);
         Provider(_machine, "Tool.Odd", 5, Bundle);
 
-        Assert.All(Read().ProvidersOf(Bundle), provider => Assert.Null(provider.Code));
+        var providers = Read().ProvidersOf(Bundle);
+
+        Assert.Equal(["Tool.Exe", "Tool.Odd"], providers.Select(p => p.Key).Order());
+        Assert.All(providers, provider => Assert.Null(provider.Code));
     }
 
     [Fact]

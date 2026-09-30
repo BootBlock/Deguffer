@@ -75,6 +75,50 @@ public sealed class RegistryBackupsTests : IDisposable
         Assert.Empty(runner.Invocations);
     }
 
+    /// <summary>
+    /// The backup folder is writable by anything running as the user. A copy that could be
+    /// rewritten between the check and the import would let an elevated restore write whatever
+    /// that process put there.
+    /// </summary>
+    [Fact]
+    public async Task TheCopyBeingImportedCannotBeRewrittenOrReplaced()
+    {
+        Directory.CreateDirectory(Folder);
+        File.WriteAllText(
+            Path.Combine(Folder, "tool.reg"),
+            "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Tool]\r\n\"DisplayName\"=\"Tool\"\r\n",
+            Encoding.Unicode);
+        var runner = new FakeProcessRunner();
+        var backups = new RegistryBackups(runner, Folder, RegExe, TimeProvider.System);
+        var attempts = new List<string>();
+        runner.Replying(arguments =>
+        {
+            var copy = arguments.Split('"')[1];
+            attempts.Add(Refused(() => File.WriteAllText(copy, "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Other]")) ? "write refused" : "write allowed");
+            attempts.Add(Refused(() => File.Delete(copy)) ? "delete refused" : "delete allowed");
+            return null;
+        });
+
+        var imported = await backups.ImportAsync(Assert.Single(backups.List()), CancellationToken.None);
+
+        Assert.True(imported.Succeeded, imported.Message);
+        Assert.Equal(["write refused", "delete refused"], attempts);
+        Assert.Single(Directory.EnumerateFiles(Folder));
+    }
+
+    private static bool Refused(Action change)
+    {
+        try
+        {
+            change();
+            return false;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+    }
+
     [Fact]
     public async Task TwoBackupsInOneSecondGetTwoFiles()
     {

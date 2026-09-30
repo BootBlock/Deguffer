@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.InstalledApps;
@@ -11,7 +12,7 @@ namespace Deguffer.Core.InstalledApps;
 /// expands a 32-bit entry's <c>%ProgramFiles%</c> to the 64-bit folder. Absence in one view proves
 /// nothing, so a path counts as absent only where every view of it is absent.</para>
 /// </summary>
-public sealed class InstalledPaths(IPathProbe probe, ISystemDirectories system)
+public sealed partial class InstalledPaths(IPathProbe probe, ISystemDirectories system)
 {
     /// <summary>The three names of the Windows system folder: native, 32-bit, and native as a 32-bit process reaches it.</summary>
     private readonly IReadOnlyList<string> _systemFolders = Named(
@@ -34,9 +35,18 @@ public sealed class InstalledPaths(IPathProbe probe, ISystemDirectories system)
     /// path through a link to one: <c>C:\Games</c> a junction to an unplugged <c>E:\</c> reads as
     /// absent while <c>C:\</c> answers. So each view's drive or share must answer, and no folder on
     /// the way down may be a link or refuse to say what it is.</para>
+    ///
+    /// <para>Nor is a path that still names an environment variable. A value written as
+    /// <c>REG_SZ</c> is not expanded, so <c>%USERNAME%</c> reaches the probe as a folder of that
+    /// name, which is absent whether or not the program is where the variable leads.</para>
     /// </summary>
     public string? WhyAbsenceProvesNothing(string path)
     {
+        if (UnexpandedVariable().Match(path) is { Success: true } variable)
+        {
+            return $"{path} names {variable.Value}, which Windows did not expand, so Deguffer cannot tell whether the program is gone.";
+        }
+
         foreach (var view in ViewsOf(path))
         {
             var root = Path.GetPathRoot(view);
@@ -76,7 +86,7 @@ public sealed class InstalledPaths(IPathProbe probe, ISystemDirectories system)
 
     private static void AddViews(List<string> views, string path, IReadOnlyList<string> folders)
     {
-        if (folders.FirstOrDefault(folder => IsUnder(path, folder)) is not { } under)
+        if (folders.FirstOrDefault(folder => LongPath.Contains(folder, path)) is not { } under)
         {
             return;
         }
@@ -93,10 +103,6 @@ public sealed class InstalledPaths(IPathProbe probe, ISystemDirectories system)
             }
         }
     }
-
-    private static bool IsUnder(string path, string folder) =>
-        path.StartsWith(folder, StringComparison.OrdinalIgnoreCase)
-        && (path.Length == folder.Length || path[folder.Length] is '\\' or '/');
 
     /// <summary>Present where any view is, then refused where any view is, and absent only where every view is.</summary>
     private PathPresence InAnyView(string path, Func<string, PathPresence> ask)
@@ -118,4 +124,8 @@ public sealed class InstalledPaths(IPathProbe probe, ISystemDirectories system)
 
         return answer;
     }
+
+    /// <summary>A name between two percent signs, as Windows writes a variable it would expand.</summary>
+    [GeneratedRegex(@"%[^%\\/]+%", RegexOptions.CultureInvariant)]
+    private static partial Regex UnexpandedVariable();
 }

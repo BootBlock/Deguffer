@@ -239,6 +239,22 @@ public sealed class StaleRuleTests
     }
 
     [Fact]
+    public void AnUninstallerNamedThroughAnUnexpandedVariableIsNotProofOfAbsence()
+    {
+        var verdict = Decide(Record("Tool"), new ProgramCommand("x", @"C:\Users\%USERNAME%\Tool\unins000.exe", string.Empty, PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+    }
+
+    [Fact]
+    public void AnInstallFolderNamedThroughAnUnexpandedVariableIsNotProofOfAbsence()
+    {
+        var verdict = Decide(Record("Tool", ("InstallLocation", @"C:\Users\%USERNAME%\AppData\Local\Tool")), Uninstaller(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+    }
+
+    [Fact]
     public void AnInstallFolderThroughALinkIsNotProofOfAbsence()
     {
         _paths.Directory(@"C:\Games", isLink: true);

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Deguffer.Core.InstalledApps;
 
 /// <summary>
@@ -14,7 +16,7 @@ namespace Deguffer.Core.InstalledApps;
 /// Whether every section writes <see cref="FirstKey"/> or a key below it, and nothing is deleted.
 /// Only such a file is a backup of one entry.
 /// </param>
-public sealed record RegistryFileContent(string FirstKey, string? DisplayName, bool IsConfined)
+public sealed partial record RegistryFileContent(string FirstKey, string? DisplayName, bool IsConfined)
 {
     private const string Header = "Windows Registry Editor Version 5.00";
 
@@ -50,9 +52,12 @@ public sealed record RegistryFileContent(string FirstKey, string? DisplayName, b
 
             if (continued)
             {
-                // A value's data carried onto the next line: hex digits and commas, nothing that
-                // opens a section or names a value.
-                continued = line.EndsWith('\\');
+                // A hex value's data carried onto the next line. reg.exe joins the next line to the
+                // value whatever it holds, so one that is not hex digits and commas is not data this
+                // can vouch for.
+                var more = HexContinuation().Match(line);
+                confined &= more.Success;
+                continued = more.Success && more.Groups["more"].Success;
                 continue;
             }
 
@@ -97,18 +102,24 @@ public sealed record RegistryFileContent(string FirstKey, string? DisplayName, b
 
             var data = line[value.End..];
 
-            if (data.StartsWith('-'))
+            // Only the forms reg.exe writes, and a deletion (=-) is never one. Anything else is
+            // data whose reading this cannot vouch for: a string value ending in a backslash is
+            // not continued by reg.exe, so a section on the next line would be imported unseen.
+            if (StringData(data) is { } stringValue)
+            {
+                if (inFirstSection && value.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase))
+                {
+                    displayName = stringValue;
+                }
+            }
+            else if (HexData().Match(data) is { Success: true } hex)
+            {
+                continued = hex.Groups["more"].Success;
+            }
+            else if (!DwordData().IsMatch(data))
             {
                 confined = false;
             }
-
-            if (inFirstSection && value.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase)
-                && StringData(data) is { } name)
-            {
-                displayName = name;
-            }
-
-            continued = line.EndsWith('\\');
         }
 
         return firstKey is null ? null : new RegistryFileContent(firstKey, displayName, confined);
@@ -147,9 +158,47 @@ public sealed record RegistryFileContent(string FirstKey, string? DisplayName, b
         return null;
     }
 
-    /// <summary>A string value's text, or null where the data is not a quoted string.</summary>
-    private static string? StringData(string data) =>
-        data.Length >= 2 && data[0] == '"' && data[^1] == '"' ? Unescape(data[1..^1]) : null;
+    /// <summary>
+    /// A string value's text, or null where the data is not exactly one quoted string: its closing
+    /// quote unescaped and the last character on the line.
+    /// </summary>
+    private static string? StringData(string data)
+    {
+        if (data.Length < 2 || data[0] != '"')
+        {
+            return null;
+        }
+
+        for (var at = 1; at < data.Length; at++)
+        {
+            if (data[at] == '\\')
+            {
+                at++;
+            }
+            else if (data[at] == '"')
+            {
+                return at == data.Length - 1 ? Unescape(data[1..at]) : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary><c>dword:</c> and eight hex digits.</summary>
+    [GeneratedRegex("^dword:[0-9a-f]{8}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DwordData();
+
+    /// <summary>
+    /// <c>hex:</c> or <c>hex(type):</c> and comma-separated bytes, with <c>more</c> where a trailing
+    /// backslash carries the data onto the next line.
+    /// </summary>
+    [GeneratedRegex(@"^hex(?:\([0-9a-f]{1,8}\))?:(?:[0-9a-f]{2}(?:,[0-9a-f]{2})*)?(?<more>,?\\)?$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HexData();
+
+    /// <summary>A continued line of hex data: indented bytes, with <c>more</c> where it continues again.</summary>
+    [GeneratedRegex(@"^\s*[0-9a-f]{2}(?:,[0-9a-f]{2})*(?<more>,\\)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HexContinuation();
 
     /// <summary>One pass, left to right, as reg.exe writes the escapes: <c>\\</c> and <c>\"</c>.</summary>
     private static string Unescape(string value)

@@ -41,6 +41,55 @@ public sealed class RegistryFileContentTests
         Assert.False(Parse($"[{Key}]", line)!.IsConfined);
     }
 
+    /// <summary>
+    /// reg.exe continues only hex data onto the next line. Measured on 2026-09-30: a string value
+    /// ending in a backslash, with a section on the next line, imported that section, so a check
+    /// that skipped the line as a continuation vouched for a file that wrote another key.
+    /// </summary>
+    [Theory]
+    [InlineData("\"x\"=\"y\"\\")]
+    [InlineData("\"x\"=dword:00000001\\")]
+    [InlineData("\"x\"=\"y\\\"")]
+    [InlineData("\"x\"=\"y\" trailing")]
+    public void ADataLineReadExeDoesNotContinueHidesNothing(string line)
+    {
+        var content = Parse($"[{Key}]", line, @"[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Run]", "\"evil\"=\"1\"");
+
+        Assert.False(content!.IsConfined);
+    }
+
+    [Theory]
+    [InlineData("\"x\"=dword:1")]
+    [InlineData("\"x\"=qword:0000000000000001")]
+    [InlineData("\"x\"=hex:1")]
+    [InlineData("\"x\"=")]
+    public void DataInAnyFormReadExeDoesNotWriteIsNotConfined(string line)
+    {
+        Assert.False(Parse($"[{Key}]", line)!.IsConfined);
+    }
+
+    [Fact]
+    public void AContinuationThatIsNotHexIsNotConfined()
+    {
+        Assert.False(Parse($"[{Key}]", "\"Blob\"=hex:01,\\", @"  [HKEY_CURRENT_USER\SOFTWARE\Other]")!.IsConfined);
+    }
+
+    [Fact]
+    public void EveryTypeReadExeExportsIsConfined()
+    {
+        var content = Parse(
+            $"[{Key}]",
+            "@=\"\"",
+            "\"Empty\"=hex:",
+            "\"Expand\"=hex(2):25,00,00,00",
+            "\"Multi\"=hex(7):61,00,00,00,\\",
+            "  00,00",
+            "\"Qword\"=hex(b):01,00,00,00,00,00,00,00",
+            "\"None\"=hex(0):");
+
+        Assert.True(content!.IsConfined);
+    }
+
     /// <summary>The line that once sliced out of range and took the whole backup list with it.</summary>
     [Fact]
     public void ADisplayNameLineWithNoClosingQuoteIsNotAName()

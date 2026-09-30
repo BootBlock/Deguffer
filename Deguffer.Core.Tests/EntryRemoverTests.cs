@@ -125,11 +125,16 @@ public sealed partial class EntryRemoverTests : IDisposable
     public async Task WithBackupsOffNothingRunsAndTheEntryGoes()
     {
         var gone = Stale(UninstallScope.CurrentUser, "Gone");
+        var neighbour = _registry.With(UninstallScope.CurrentUser, "Neighbour", ("DisplayName", "Neighbour"));
 
         var report = await Remove(backUp: false, isElevated: false, gone);
 
         Assert.Empty(_runner.Invocations);
         Assert.Null(Assert.Single(report.Removed).BackupPath);
+        Assert.Equal([gone], _registry.Deleted);
+        Assert.Equal(PathPresence.Present, _registry.ReadOne(neighbour).Presence);
+        Assert.True(report.Verification.Passed);
+        Assert.Contains(report.Verification.Checks, c => c.Outcome == VerificationOutcome.Survived && c.Subject == neighbour.PhysicalPath);
     }
 
     [Fact]

@@ -39,7 +39,7 @@ public static class StaleRule
 
         var gone = ProductCodeOf(record, command) is { } code ? AskInstaller(evidence.Installer.QueryProductState(code))
             : BundleRule.IsBundle(record, evidence.Dependencies.Read()) ? WithBundleUninstaller(BundleRule.Judge(record, evidence), command, evidence.Paths)
-            : AskUninstaller(command, evidence.Paths);
+            : UnlessAnUnseenBundle(AskUninstaller(command, evidence.Paths), evidence.Dependencies.Read());
 
         return gone.Verdict ?? WithInstallLocation(gone.Evidence!, InstallLocation.Of(record.Values), evidence.Paths);
     }
@@ -107,6 +107,16 @@ public static class StaleRule
             ? uninstaller
             : Gone.Proven($"{packages.Evidence}, and the uninstaller {program.Executable} is gone");
     }
+
+    /// <summary>
+    /// A shell Burn left behind is marked as a bundle only by the packages that name it. Where
+    /// Windows would not show every registration, one it hid may name this entry, and a bundle's
+    /// missing uninstaller proves nothing about the programs it installed.
+    /// </summary>
+    private static Gone UnlessAnUnseenBundle(Gone uninstaller, PackageDependencies dependencies) =>
+        uninstaller.Verdict is null && dependencies.Presence is not PathPresence.Present
+            ? Gone.Unproven($"{uninstaller.Evidence}, but Windows would not show every package registration, so Deguffer cannot tell whether this entry stands for programs a bundle installed.")
+            : uninstaller;
 
     private static StandingVerdict WithInstallLocation(string evidence, InstallLocation location, InstalledPaths paths)
     {
