@@ -66,11 +66,19 @@ branch lands on `main` once stage 5 has passed.
   disconnected drive would read as stale, that the §5.6 summary counted one aggregate check, and
   that the restore note went stale after a restore; all three are fixed with tests. An elevated run
   is not yet done.
+- 2026-09-30: the five findings below are resolved. `StaleRule` asks through `InstalledPaths` (every
+  view of a path, the drive, and each folder on the way down through an `IPathProbe` seam), reads
+  `InstallLocation` as not set, a path, or uncheckable, and judges a bundle through `BundleRule`
+  over an `IPackageDependencies` seam and the installer's patch listing. `MsiEnumPatchesEx`,
+  measured unelevated, listed this account's and the machine's patches and refused every account's
+  with `ERROR_ACCESS_DENIED`, so it is asked for this account only. Each rule has a test that a
+  mutation of the code makes fail.
 
-## Open before landing
+## Found before landing
 
 A review of the branch found four ways an installed program can still read as stale, and a ruling
-on Burn bundles is taken. Each is a change to `StaleRule` with tests that fail without it.
+on Burn bundles is taken. Each is a change to `StaleRule` with tests that fail without it. All five
+are resolved on the branch; see the status log.
 
 1. **An `InstallLocation` that is set but is not a full path**, or is not a string, reads as "names
    no install folder" and leads to stale. Keep "not set" apart from "set but not checkable"; the

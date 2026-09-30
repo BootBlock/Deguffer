@@ -803,13 +803,33 @@ break something.
   unquoted path with spaces resolves as Windows would read it. A bare name such as `rundll32.exe`
   resolves to a Windows tool that proves nothing about the program, and so does a command Deguffer
   cannot parse. Only an executable Windows says is not there counts toward stale.
-- **`InstallLocation`, where one is set, must be absent too.** A missing uninstaller beside a
-  standing install folder is an install someone broke, not one that is gone.
+- **A Burn bundle is asked about by the packages it installed.** An entry is a bundle's where it
+  carries a value only the WiX Burn engine writes (`BundleProviderKey`, `BundleCachePath`,
+  `BundleUpgradeCode`, `BundleVersion`, `EngineVersion`), or where a package names it. Each package
+  registers a provider under `Software\Classes\Installer\Dependencies` in `HKEY_LOCAL_MACHINE` or
+  `HKEY_CURRENT_USER`, names the bundle under `Dependents` by its `Uninstall` key name, and holds its
+  product code, a patch code or nothing as its default value. The bundle's own provider is left out.
+  A bundle counts toward stale only where at least one package names it, every such package holds a
+  product code, and Windows Installer knows none of them. A package with no code or a code that is
+  not a braced GUID, a patch Windows Installer still holds, a code that names another entry, and a
+  registration Windows would not show all leave it installed. Where its command names an uninstaller,
+  that must be gone too. A cleaner that empties the package cache removes a bundle's uninstaller
+  while its programs stay, often hidden because the bundle stood for them, so the uninstaller alone
+  proves nothing about a bundle.
+- **`InstallLocation`, where one is set, must be absent too**, as a file or as a folder: some
+  installers name the program's executable there. A missing uninstaller beside a standing install
+  folder is an install someone broke, not one that is gone. A value that is set but is not a full
+  path, or is not text, cannot be checked, and it proves nothing.
 - **A refusal is never absence.** Every probe keeps `PathPresence`'s three answers, and a path
   Windows would not describe is not proof of anything, so the entry stays installed.
-- **Nor is a drive that is not there.** Windows answers "absent" for every path on a drive that is
-  not connected, and a program on an unplugged drive is not gone, so absence counts only where the
-  path's own drive or share answers.
+- **Nor is a drive that is not there, or a link on the way to one.** Windows answers "absent" for
+  every path on a drive that is not connected and for every path through a link to one, and a
+  program on an unplugged drive is not gone. So absence counts only where the path's own drive or
+  share answers, and no folder between it and the path is a link or refuses to say what it is.
+- **Every view of a path is asked.** A 32-bit Deguffer reaches `System32` through the redirection to
+  `SysWOW64`, and a 64-bit Deguffer expands a 32-bit entry's `%ProgramFiles%` to the 64-bit folder.
+  A path under `System32`, `SysWOW64` or `Sysnative`, or under either `Program Files` folder, is
+  absent only where it is absent under every one of them.
 - **Every row says why it is in its list**, in the words the evidence supports: "The uninstaller
   `C:\...\unins000.exe` and the install folder are both gone", or "Windows Installer does not know
   this product". An installed row whose presence nothing could prove says that instead, so the list
