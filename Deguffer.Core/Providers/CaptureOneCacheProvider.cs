@@ -169,7 +169,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         var live = LiveTreeVeto.Apply(
             _liveTrees,
             [.. examination.Candidates.Select(c => new RecognisedBuildDirectory(c.Cache, c.Owner))],
-            (candidate, _) => new LiveTreeQuery(candidate.Path, candidate.Project, examination.LockFiles[candidate.Project]),
+            _ => LiveTreeQuestion.ForLockFiles(candidate => examination.LockFiles[candidate.Project]),
             ct);
 
         if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"the previews for '{examination.OwnerOf(vetoed.Directory)}'") is { } held)

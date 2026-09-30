@@ -16,8 +16,9 @@ namespace Deguffer.Core.Providers;
 internal static partial class SolutionFile
 {
     /// <summary>
-    /// A ceiling on what is read. A solution of a thousand projects is well under a megabyte, so a
-    /// file past this is not the solution it is named for, and it is answered as unreadable.
+    /// A ceiling on what is read, so that a file named like a solution is never held in memory
+    /// whatever its size. One past it is answered as unreadable, which holds back every project below
+    /// it rather than offering one.
     /// </summary>
     private const int MaximumBytes = 16 * 1024 * 1024;
 
@@ -78,7 +79,9 @@ internal static partial class SolutionFile
             return null;
         }
 
-        var text = Encoding.UTF8.GetString(content.Span);
+        // One line ending, because the pattern anchors each line and a file written with bare
+        // carriage returns would otherwise read as a solution naming nothing.
+        var text = Encoding.UTF8.GetString(content.Span).ReplaceLineEndings("\n");
 
         if (!text.Contains("Microsoft Visual Studio Solution File", StringComparison.Ordinal))
         {

@@ -21,6 +21,32 @@ public readonly record struct RecognisedBuildDirectory(string Path, string Proje
 /// </param>
 public sealed record ClearedBuildDirectory(string Path, string Project, IUseCheck StillUnused);
 
+/// <summary>
+/// What a provider asks the veto about each directory, built from one reading of the machine.
+///
+/// <para>Built again for every reading rather than kept, because what it holds is read from the
+/// machine as well as from the project: the check at the clean reads the process table afresh, and a
+/// question built from the preview's reading would ask about the preview's machine. A provider hands
+/// the veto the rule that builds one, never one already built.</para>
+/// </summary>
+/// <param name="Ask">The query for one directory.</param>
+public sealed record LiveTreeQuestion(Func<RecognisedBuildDirectory, LiveTreeQuery> Ask)
+{
+    /// <summary>
+    /// Project folders this reading found named somewhere a program is, which Explore takes as
+    /// candidates because walking up from where a program is never reaches them. See
+    /// <see cref="InUseBuildDirectories"/>.
+    /// </summary>
+    public IReadOnlyList<string> NamedProjects { get; init; } = [];
+
+    /// <summary>
+    /// A question about a directory's project and the files its tool holds open, which is every
+    /// provider's but <c>obj</c>'s.
+    /// </summary>
+    public static LiveTreeQuestion ForLockFiles(Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf) =>
+        new(candidate => new LiveTreeQuery(candidate.Path, candidate.Project, lockFilesOf(candidate)));
+}
+
 /// <param name="Cleared">The directories a plan may go on to target.</param>
 /// <param name="Vetoed">The directories something is using, and what is using each.</param>
 /// <param name="Complete">
@@ -52,13 +78,13 @@ internal static class LiveTreeVeto
         IReadOnlyList<string> lockFiles,
         CancellationToken ct = default,
         string? unknown = null) =>
-        Apply(inspector, candidates, (c, _) => new LiveTreeQuery(c.Path, c.Project, lockFiles), ct, unknown);
+        Apply(inspector, candidates, _ => LiveTreeQuestion.ForLockFiles(_ => lockFiles), ct, unknown);
 
-    /// <param name="question">
-    /// What to ask about each candidate, for a provider whose evidence is found in the project rather
-    /// than named in advance: lock files a tool names after the project (see
-    /// <see cref="BuildDirectoryKind.ProjectLockFiles"/>), or the solutions that open it (see
-    /// <see cref="LiveTreeQuery.Workspaces"/>).
+    /// <param name="questions">
+    /// The rule that builds the question for one reading of the machine, for a provider whose evidence
+    /// is found in the project or on the machine rather than named in advance: lock files a tool names
+    /// after the project (see <see cref="BuildDirectoryKind.ProjectLockFiles"/>), or the solutions that
+    /// open it (see <see cref="LiveTreeQuery.Workspaces"/>).
     /// </param>
     /// <param name="unknown">
     /// Why a cleared directory is held back at the clean where the inspector cannot tell then, for a
@@ -68,7 +94,23 @@ internal static class LiveTreeVeto
     public static LiveTreeVetoResult Apply(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
-        Func<RecognisedBuildDirectory, CancellationToken, LiveTreeQuery> question,
+        Func<CancellationToken, LiveTreeQuestion> questions,
+        CancellationToken ct = default,
+        string? unknown = null) =>
+        candidates.Count == 0
+            ? new LiveTreeVetoResult([], [], Complete: true)
+            : Apply(inspector, candidates, questions(ct), questions, ct, unknown);
+
+    /// <param name="question">
+    /// The question for this reading, for a caller that has built it already to read something else
+    /// from the same reading.
+    /// </param>
+    /// <param name="questions">The rule that built it, which each check at the clean applies again.</param>
+    public static LiveTreeVetoResult Apply(
+        ILiveTreeInspector inspector,
+        IReadOnlyList<RecognisedBuildDirectory> candidates,
+        LiveTreeQuestion question,
+        Func<CancellationToken, LiveTreeQuestion> questions,
         CancellationToken ct = default,
         string? unknown = null)
     {
@@ -77,16 +119,16 @@ internal static class LiveTreeVeto
             return new LiveTreeVetoResult([], [], Complete: true);
         }
 
-        var findings = inspector.FindLive([.. candidates.Select(c => question(c, ct))], ct);
+        var findings = inspector.FindLive([.. candidates.Select(question.Ask)], ct);
 
-        // The same rule for the question, not the query it produced, because the query is read from
-        // the project and the machine, and an editor opened after the preview changes both.
+        // The same rule for the question, not the question it produced, because the question is read
+        // from the project and the machine, and an editor opened after the preview changes both.
         return new LiveTreeVetoResult(
             [
                 .. candidates.Where(c => !findings.IsLive(c.Path)).Select(c => new ClearedBuildDirectory(
                     c.Path,
                     c.Project,
-                    new LiveTreeCheck(inspector, c, question, unknown))),
+                    new LiveTreeCheck(inspector, c, questions, unknown))),
             ],
             findings.Live,
             findings.Complete);

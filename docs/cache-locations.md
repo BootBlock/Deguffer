@@ -4328,7 +4328,7 @@ breaks the work you are doing at that moment, and nothing re-downloads the after
 
 So before anything is offered, Deguffer asks whether each project is in use, and holds back
 the ones that are. It needs no administrator rights to ask. Four signals, each of them positive
-evidence rather than a guess:
+evidence rather than a guess, with one cautious exception in the fourth:
 
 - **The tool's own lock file is held open.** Unity writes `Library\UnityLockfile` when the editor
   opens a project and removes it when the editor closes, and Windows will say which process is
@@ -4342,9 +4342,11 @@ evidence rather than a guess:
   directory is the solution's own folder, and in the usual layout that folder is above each project
   rather than inside it. A terminal at the top of a repository sits in the same kind of place and is
   using none of the projects below it, so the folder alone is not the test: a `.sln` or `.slnx` in it
-  has to name the project. A solution Deguffer cannot read counts for every project below it, because
-  it could name any of them. This applies to .NET's `obj`, the one build directory here whose editor
-  opens its projects from above.
+  has to name the project. The exception: a solution Deguffer cannot read, or a folder it cannot
+  list, counts for every project below it, because it could name any of them. This applies to .NET's
+  `obj`, the one build directory here whose editor opens its projects from above. Explore finds a
+  project by the solution that names it, so it does not refuse one that only such an unreadable
+  solution could name.
 
 A held-back project is listed as something left alone, with what is using it named, so you can close
 it and scan again. The same question is asked again when you press Clean, immediately before each
@@ -4359,7 +4361,7 @@ out of the project, so a plan made while an Unreal editor, a commandlet or Unrea
 also says so by name. Explore does not find a project by its log, as it does not find a Unity
 project by its lockfile.
 
-**It can miss, and it holds back only on evidence.** Four things it does not see, all of them stated
+**It can miss.** Four things it does not see, all of them stated
 here because a safeguard whose limits are unwritten gets trusted past them:
 
 - A compiler holding a file deep inside a tree that is neither its own program nor its working

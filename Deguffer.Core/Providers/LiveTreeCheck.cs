@@ -22,11 +22,12 @@ namespace Deguffer.Core.Providers;
 /// finds holds back the step that removes the build.</para>
 /// </summary>
 /// <param name="directory">The directory the veto asked about, and the project it belongs to.</param>
-/// <param name="question">
+/// <param name="questions">
 /// The veto's own rule for what to ask, applied again rather than its answer remembered. Unreal's
 /// logs are found by listing the project's <c>Saved\Logs</c>, and an editor opened on the project
 /// after the preview may have written the first one there. A solution's folder is a workspace only
-/// while a program is in it, and Visual Studio opened after the preview is the one this is for.
+/// while a program is in it and only for the projects the solution names now, and Visual Studio
+/// opened after the preview, or a project added to its solution since, is the one this is for.
 /// </param>
 /// <param name="unknown">
 /// Why the step is held back where the inspector could not tell, as an <see cref="InUseNow.Reason"/>,
@@ -35,7 +36,7 @@ namespace Deguffer.Core.Providers;
 internal sealed class LiveTreeCheck(
     ILiveTreeInspector inspector,
     RecognisedBuildDirectory directory,
-    Func<RecognisedBuildDirectory, CancellationToken, LiveTreeQuery> question,
+    Func<CancellationToken, LiveTreeQuestion> questions,
     string? unknown = null) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
@@ -44,7 +45,7 @@ internal sealed class LiveTreeCheck(
         // and it is dropped before the question is built, because building it can read the table.
         inspector.Invalidate();
 
-        var query = question(directory, ct);
+        var query = questions(ct).Ask(directory);
         var findings = inspector.FindLive([query], ct);
 
         IReadOnlyList<InUseNow> live =

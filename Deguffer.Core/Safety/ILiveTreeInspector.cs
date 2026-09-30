@@ -96,9 +96,12 @@ public sealed record LiveTreeFindings(IReadOnlyList<LiveTree> Live, bool Complet
 /// the thing the user is working on at that moment, and nothing re-downloads the afternoon.</para>
 ///
 /// <para><b>It can miss, and it must never fire wrongly.</b> Every signal here is positive evidence
-/// that something is using the directory, so a directory reported live is one. The reverse does not
-/// follow, and it misses in two known ways. A compiler holding a file deep inside a tree that is
-/// neither its own executable nor its working directory is invisible to all three signals, and
+/// that something is using the directory, so a directory reported live is one. The one judgement
+/// that is not this inspector's is which folders a query names as
+/// <see cref="LiveTreeQuery.Workspaces"/>, and a provider that names one on a file it could not read
+/// says so where it does. The reverse does not follow, and it misses in two known ways. A compiler
+/// holding a file deep inside a tree that is neither its own executable nor its working directory is
+/// invisible to every signal, and
 /// nothing unelevated answers that at directory granularity. And a program running as another
 /// account or as administrator cannot be inspected from an ordinary Deguffer at all, so an elevated
 /// build is not seen. Neither gap closes without elevation, and §6.3 makes unelevated the ordinary

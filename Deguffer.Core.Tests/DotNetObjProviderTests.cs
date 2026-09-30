@@ -742,8 +742,9 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The veto never fires wrongly. A terminal in a folder above a project, with no solution there,
-    /// is where a shell at the root of a repository sits, and it is using none of the projects below.
+    /// A folder above a project is not evidence on its own. A terminal there, with no solution beside
+    /// it, is where a shell at the root of a repository sits, and it is using none of the projects
+    /// below.
     /// </summary>
     [Fact]
     public async Task AProgramAboveAProjectWithNoSolutionNamingItIsNotEvidence()
@@ -759,8 +760,10 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A solution folder counts only for a program working exactly there. A build in one project of
-    /// the solution is below that folder too, and it is using its own project, not its sibling.
+    /// Only the folder a program is in is read for solutions, never the folders above it. A build in
+    /// one project of a solution is below the solution's folder, and it is using its own project, not
+    /// its sibling. The inspector's own tests pin that a workspace counts only for a program working
+    /// exactly there.
     /// </summary>
     [Fact]
     public async Task AProgramInOneProjectOfASolutionDoesNotHoldBackAnother()

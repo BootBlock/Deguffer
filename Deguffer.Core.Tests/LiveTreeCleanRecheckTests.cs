@@ -213,6 +213,49 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     }
 
     /// <summary>
+    /// A project added to a solution that was already open at the preview. The preview read the
+    /// solution, because the editor was in its folder, and found only the other project in it. The
+    /// clean reads it again, so the project added since keeps its <c>obj</c>.
+    /// </summary>
+    [Fact]
+    public async Task AnObjWhoseProjectIsAddedToAnOpenSolutionAfterThePreviewSurvivesTheClean()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var open = ProjectFixture.CreateProject(Path.Combine(solution, "Open"), "Open");
+        var added = ProjectFixture.CreateProject(Path.Combine(solution, "Added"), "Added");
+        var openProject = Path.Combine(solution, "Open", "Open.csproj");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, openProject);
+
+        _liveTrees.WithProgram("devenv", workingDirectory: solution);
+
+        var scanner = new FakeDirectoryScanner();
+        var provider = new DotNetObjProvider(
+            _roots,
+            new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
+            _liveTrees,
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            scanner);
+
+        var plan = await provider.PlanAsync();
+
+        // The premise: the solution was read at the preview, and named only the open project.
+        Assert.Equal([added], plan.TargetedPaths);
+
+        ProjectFixture.CreateSolution(
+            solution, "Solution", xml: false, openProject, Path.Combine(solution, "Added", "Added.csproj"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(added), "an obj whose project was added to the open solution after the preview was removed");
+        Assert.True(Directory.Exists(open), "an obj the plan held back was removed");
+        Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: devenv is working in Solution.");
+        AssertProvedStanding(result, added);
+    }
+
+    /// <summary>
     /// Every Squirrel application shares the staging folder, which is why the plan refuses a directory
     /// an install is running from. One that starts running from a directory the preview offered keeps
     /// it, and the other leftover still goes.

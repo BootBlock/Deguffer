@@ -47,19 +47,17 @@ internal static class InUseBuildDirectories
     /// The provider's identification of a candidate, answering with its project folder or null. The
     /// same call its plan makes, so a directory the plan declines is never declared as in use.
     /// </param>
-    /// <param name="projectsNamedIn">
-    /// The project folders a file in a place names, for a provider whose editor works above its
-    /// projects. See <see cref="LiveTreeQuery.Workspaces"/>.
+    /// <param name="questions">
+    /// The rule that builds what the plan asks the veto, whose
+    /// <see cref="LiveTreeQuestion.NamedProjects"/> are candidates as well.
     /// </param>
-    /// <param name="question">What the plan asks the veto about each directory.</param>
     public static IReadOnlyList<ToolRoot> Declare(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
         IReadOnlyList<SourceRoot> roots,
         IReadOnlyList<string> names,
         Func<string, string?> recognise,
-        Func<string, IReadOnlyList<string>> projectsNamedIn,
-        Func<RecognisedBuildDirectory, CancellationToken, LiveTreeQuery> question,
+        Func<CancellationToken, LiveTreeQuestion> questions,
         CancellationToken ct)
     {
         if (roots.Count == 0)
@@ -68,7 +66,9 @@ internal static class InUseBuildDirectories
         }
 
         var occupied = inspector.FindOccupiedDirectories(ct).Live;
-        var named = NamedProjects(roots, occupied, projectsNamedIn, ct);
+
+        // Built once, so the projects it names and the question the veto asks come from one reading.
+        var question = questions(ct);
 
         // A set, because approved roots may nest, and a directory below both would otherwise be
         // asked about twice and declared twice.
@@ -92,7 +92,7 @@ internal static class InUseBuildDirectories
 
                     // Only those below this root, because the boundary is asked of a candidate
                     // already known to be inside it, and a named project may be anywhere.
-                    .. named
+                    .. question.NamedProjects
                         .Where(project => LongPath.Contains(root.Path, project))
                         .SelectMany(project => names.Select(name => Path.Combine(project, name))),
                 ],
@@ -116,7 +116,7 @@ internal static class InUseBuildDirectories
             }
         }
 
-        var live = LiveTreeVeto.Apply(inspector, recognised, question, ct);
+        var live = LiveTreeVeto.Apply(inspector, recognised, question, questions, ct);
 
         return [.. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false))];
     }
@@ -169,34 +169,6 @@ internal static class InUseBuildDirectories
         }
 
         return candidates;
-    }
-
-    /// <summary>
-    /// Every project a file names in a place a program is, where that place is inside one of
-    /// <paramref name="roots"/>, the consent the plan asks before it reads one. The projects
-    /// themselves may lie anywhere, since a solution may name one beside its own folder, and each
-    /// root takes the ones below it.
-    /// </summary>
-    private static HashSet<string> NamedProjects(
-        IReadOnlyList<SourceRoot> roots,
-        IReadOnlyList<LiveTree> occupied,
-        Func<string, IReadOnlyList<string>> projectsNamedIn,
-        CancellationToken ct)
-    {
-        var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var place in occupied)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            if (LongPath.Configured(place.Directory) is { } directory
-                && roots.Any(root => LongPath.Contains(root.Path, directory)))
-            {
-                named.UnionWith(projectsNamedIn(directory));
-            }
-        }
-
-        return named;
     }
 
     /// <summary>Why Explore refuses it, naming what the user would have to close.</summary>

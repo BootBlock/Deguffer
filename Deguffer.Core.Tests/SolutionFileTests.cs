@@ -57,6 +57,20 @@ public sealed class SolutionFileTests : IDisposable
         Assert.Null(SolutionFile.ProjectFolders(solution));
     }
 
+    /// <summary>
+    /// Lines ended with bare carriage returns name their projects as any other ending does, rather
+    /// than reading as a solution that names none.
+    /// </summary>
+    [Fact]
+    public void ReadsASolutionWhoseLinesEndInCarriageReturnsAlone()
+    {
+        var folder = _temp.CreateDirectory("App");
+        var solution = ProjectFixture.CreateSolution(folder, "App", xml: false, Path.Combine(folder, "Lib", "Lib.csproj"));
+        File.WriteAllText(solution, File.ReadAllText(solution).Replace('\n', '\r'));
+
+        Assert.Equal([Path.Combine(folder, "Lib")], SolutionFile.ProjectFolders(solution)!, StringComparer.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ASolutionThatIsNotThereIsUnreadable() =>
         Assert.Null(SolutionFile.ProjectFolders(Path.Combine(_temp.Path, "Missing.sln")));
