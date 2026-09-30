@@ -1,8 +1,9 @@
 # Installed apps — build plan
 
-> **Status:** 🟢 ACTIVE — the build plan for [_spec.md §7.3](_spec.md#73-installed-apps--the-entries-windows-lists).
-> The spec decides what is built; this file records the order it is built in and what each stage
-> has landed. Stages 1 to 5 are done: the page is driven unelevated and elevated.
+> **Status:** ✅ COMPLETE — the build plan for [_spec.md §7.3](../_spec.md#73-installed-apps--the-entries-windows-lists),
+> landed on 2026-09-30. The spec decides what is built; this file records the order it was built in
+> and what each stage landed. All five stages are done, and the page was driven unelevated and
+> elevated.
 
 The page lists the entries under the `Uninstall` keys, splits them into stale and installed by
 evidence, removes stale entries (with a `reg.exe` backup by default), restores a backup, and runs an
