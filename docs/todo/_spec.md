@@ -10,7 +10,8 @@
 wasted disk space, with a safety model good enough to trust unattended. It recognises what specific
 locations on a disk actually are, reports what each one costs to lose, and leaves the decision with
 the user. It also shows where the machine's memory goes, and its one action there is to ask a program
-to close itself (§7.2).
+to close itself (§7.2), and it clears Windows' list of installed programs of entries for programs that
+are gone (§7.3).
 
 ## The name
 
@@ -72,7 +73,9 @@ in a few minutes, without touching a single piece of user data.
 
 **Non-goals**
 
-- Not a duplicate finder or an uninstaller.
+- Not a duplicate finder or an uninstaller. Installed apps (§7.3) removes entries Windows lists for
+  programs that are gone, and for a program that is still there it runs that program's own
+  uninstaller. Deguffer itself removes no program's files.
 - Not a general file manager. Explore (§7.1) opens, reveals and removes an individual file or
   folder the user has picked out of the picture, because that is the action a size view leads to.
   It does not browse, move, rename or copy, and it does not aim to replace Explorer.
@@ -292,7 +295,8 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
   and a trimmed build dies at startup inside the XAML runtime — see
   [the evaluation](aot-and-single-file-evaluation.md) for what was measured and tried.
 - MFT reading requires **administrator**; the app should run unelevated by default, scan what it
-  can, and request elevation only for the fast scanner and for `C:\Windows\Temp`.
+  can, and request elevation only for the fast scanner, for `C:\Windows\Temp`, and for changing a
+  machine-wide entry in Installed apps (§7.3).
 - Enable **long path** support (`\\?\` prefixes or the manifest opt-in). Node and NuGet trees
   routinely exceed `MAX_PATH`, and this is the most likely source of silent partial deletions.
 - Deletion should be genuinely parallel — these trees are hundreds of thousands of small files, and
@@ -746,6 +750,127 @@ a watch in which it checked two things.
 - No elevation asked for in order to close something an unelevated Deguffer may not. A refusal here
   is an answer, not an obstacle.
 - No bulk close, no pre-selection, and no ordering of anything by how closable it is (§7.2).
+
+### 7.3 Installed apps — the entries Windows lists
+
+Windows lists what is installed from the entries installers write under the `Uninstall` keys, and
+an installer that fails, or a program removed by deleting its folder, leaves an entry that names
+nothing. Such an entry cannot be removed through Windows: its uninstaller is gone, so the one button
+Windows offers fails. **Installed apps finds those entries and removes them from the registry, and
+it runs a program's own uninstaller for a program that is still there.** It never deletes a file,
+and removing an entry never uninstalls anything, which is why §2 can say Deguffer is not an
+uninstaller: where a program is uninstalled here, the program's own uninstaller does it (§5.1).
+
+As with the rest of this document, what follows is the target rather than a description of the
+code.
+
+**What is read**
+
+- **The `Uninstall` key under `HKEY_LOCAL_MACHINE`, in both registry views, and under
+  `HKEY_CURRENT_USER`.** A 32-bit installer writes the machine-wide key in the 32-bit view
+  (`WOW6432Node`), which a 64-bit process reads only by asking for that view, so both views are asked
+  for by name and neither is reached through a literal `WOW6432Node` path. Other accounts' hives and
+  packaged (MSIX) applications are not read: the second are not registry entries, and the first are
+  not this user's to change.
+- **Every value is read as the type it is.** A value of an unexpected type is a value that says
+  nothing, never a reason to drop the entry. An entry that disappears because one of its values was
+  written as a string where a number was expected is the one state nothing downstream can correct.
+- **An entry is listed as Windows lists it**: it has a `DisplayName`, `SystemComponent` is not 1,
+  and it names no `ParentKeyName` and no update `ReleaseType`, which mark an update of another
+  program rather than a program. Every other entry is **hidden**, and a switch on the page shows the
+  hidden entries too, each with the sentence that says why Windows does not list it. The switch
+  shows; it never offers anything the rules below would refuse.
+
+**Stale or installed: proven absent, or it stays**
+
+Every entry is in one of two lists, and an entry is **stale** only when the machine proves that what
+it describes is gone. Anything short of proof is **installed**, because an entry wrongly called stale
+is removed, and removing the entry of a program that is still there is the one way this page can
+break something.
+
+- **A Windows Installer product is asked about by product code.** Its entry's key name is a braced
+  product code and it sets `WindowsInstaller` to 1, or its uninstall command is `MsiExec.exe` naming
+  the code. `MsiQueryProductState` answers without elevation for per-machine and per-user products
+  alike. Only *neither advertised nor installed* (`INSTALLSTATE_UNKNOWN`) counts toward stale.
+  *Installed for a different user* (`INSTALLSTATE_ABSENT`) is **another account's program**: Windows
+  files a per-user product's entry under the machine-wide key and shows it only to the account that
+  installed it, so the entry is hidden, and it is refused both actions whatever else is true of it.
+  WMI's `Win32_Product` is never asked, because asking it runs a consistency check that repairs
+  products.
+- **Any other entry is asked about by its uninstaller.** The executable is taken from
+  `UninstallString`, expanded where the value is `REG_EXPAND_SZ`: the quoted span where the command
+  starts with a quote, and otherwise the shortest prefix ending in `.exe` that is a file, so an
+  unquoted path with spaces resolves as Windows would read it. A bare name such as `rundll32.exe`
+  resolves to a Windows tool that proves nothing about the program, and so does a command Deguffer
+  cannot parse. Only an executable Windows says is not there counts toward stale.
+- **`InstallLocation`, where one is set, must be absent too.** A missing uninstaller beside a
+  standing install folder is an install someone broke, not one that is gone.
+- **A refusal is never absence.** Every probe keeps `PathPresence`'s three answers, and a path
+  Windows would not describe is not proof of anything, so the entry stays installed.
+- **Every row says why it is in its list**, in the words the evidence supports: "The uninstaller
+  `C:\...\unins000.exe` and the install folder are both gone", or "Windows Installer does not know
+  this product". An installed row whose presence nothing could prove says that instead, so the list
+  never implies a check it did not make.
+
+**Removing a stale entry**
+
+- **Only a stale entry is removable**, and the selection is the user's, by hand. Nothing is
+  pre-selected, and the installed list has no remove action at all. More than one entry may be
+  selected, because the user picked each of them.
+- **Every removal is decided twice.** The page decides when an entry is selected, so a refusal is on
+  screen before the user tries anything, and the remover reads the key and its evidence again
+  immediately before deleting. An entry whose values changed, or which is no longer stale, is refused
+  and says so.
+- **A machine-wide entry needs administrator rights**, which an unelevated Deguffer has not got
+  (§6.3). Its row says so, and the page offers to reopen Deguffer elevated on this page, as Storage
+  and Explore do. An entry under `HKEY_CURRENT_USER` needs nothing.
+- **Only the entry's own key goes**, with the keys below it. The `Uninstall` key, every other entry,
+  the Windows Installer registration and every file stay as they were.
+- **A backup is taken first, by default.** A switch on the page, remembered between runs and on until
+  the user turns it off, exports each entry with `reg.exe export` (§5.1: Windows' own tool writes
+  the format Windows' own tool reads) to `%LOCALAPPDATA%\Deguffer\registry-backups`. The export
+  names the key by its physical path in the 64-bit view, so the file restores what it says whether
+  it is imported here or opened by hand. **An entry whose backup fails is not removed.** With the
+  switch off, the confirmation says the removal cannot be undone from Deguffer.
+- **The confirmation is not a preference.** It names every entry, says that nothing is uninstalled
+  and no file is touched, and says whether a backup will be kept and where. Its words live in Core.
+- **§5.6: after removing, Deguffer asserts that the entry's key is gone, that the `Uninstall` key
+  still stands, and that every other entry present before the removal is still present.** An entry
+  that went missing beside the one removed fails the run and is named.
+
+**Restoring a backup**
+
+The page lists the backups it kept, newest first. Restoring imports the file with `reg.exe import`,
+refuses where the entry already exists (an import merges, and a merge into a live entry is not a
+restore), needs administrator rights for a machine-wide entry as removing does, and asserts
+afterwards that the entry is back. The file is kept after a restore: it is the record of what was
+removed.
+
+**Uninstalling an installed program**
+
+- **One program at a time, with its own uninstaller, shown to the user.** A Windows Installer product
+  is removed by `msiexec.exe /x` with its product code rather than by the command its entry
+  records, because `/I` opens a maintenance dialog and Windows itself drives such an entry through
+  Windows Installer. Any other program's command runs as Windows would run it, through the shell, so
+  an uninstaller that needs administrator rights asks for them itself. `QuietUninstallString` is
+  never used: an uninstaller's questions are the user's to answer.
+- **Refused, with the reason on the row:** an entry that sets `NoRemove`, an entry with no
+  uninstaller Deguffer can resolve, another account's program, and a program whose uninstaller
+  Windows says is not there, which is stale rather than installed.
+- **Confirmed every time**, by a dialog that names the program and the command Deguffer will run.
+- **Watched with no deadline, and reported without a claim.** Many uninstallers copy themselves
+  elsewhere and exit at once, so the process exiting does not mean the program has gone. When it
+  exits, Deguffer reads the entry again and reports what the registry now says: the entry is gone,
+  the entry is still there, or the entry is now stale. That is the §5.6 evidence this action can
+  honestly give, because what the uninstaller removed is the uninstaller's business.
+
+**What this section does not authorise**
+
+- No file deletion, in any form, including an entry's `InstallLocation`.
+- No change to Windows Installer's own registration, and nothing in `Windows\Installer` (§9).
+- No silent or unattended uninstall, and no uninstall of more than one program per action.
+- No other account's hive, and no packaged application.
+- No removal of an entry the evidence did not prove stale, under any preference.
 
 ---
 
