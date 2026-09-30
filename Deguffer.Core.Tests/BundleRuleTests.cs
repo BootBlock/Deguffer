@@ -116,6 +116,69 @@ public sealed class BundleRuleTests
         Assert.Contains("Tool.Runtime names no product code", verdict.Reason, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Older WiX packages register their provider under their product code with no default value,
+    /// as the measured Unreal Engine prerequisite bundles do. A key Windows Installer knows is the
+    /// package standing.
+    /// </summary>
+    [Theory]
+    [InlineData(InstallerProductState.Installed)]
+    [InlineData(InstallerProductState.Advertised)]
+    [InlineData(InstallerProductState.OtherAccount)]
+    public void AProviderNamedByAProductWindowsInstallerKnowsKeepsTheBundle(InstallerProductState state)
+    {
+        _dependencies.Provider(CoreCode, null, Bundle);
+        _installer.With(Core, state);
+
+        var verdict = Decide(Registered(), Setup(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Installed, verdict.Standing);
+        Assert.Contains(CoreCode, verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A key Windows Installer does not know may be an executable package's, so it never counts as
+    /// a product gone, even beside packages that are.
+    /// </summary>
+    [Theory]
+    [InlineData(InstallerProductState.Unknown)]
+    [InlineData(InstallerProductState.Unanswered)]
+    public void AProviderNamedByACodeWindowsInstallerDoesNotKnowProvesNothing(InstallerProductState state)
+    {
+        _dependencies.Provider("Tool.Extras", ExtrasCode, Bundle).Provider(CoreCode, null, Bundle);
+        _installer.With(Core, state);
+
+        var verdict = Decide(Registered(), Setup(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+        Assert.Contains($"{CoreCode} names no product code", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Two of the measured prerequisite bundles named a key Windows Installer did not know, and
+    /// their cached setup was there. The setup standing is proof, and the row says so.
+    /// </summary>
+    [Fact]
+    public void ABundleWhosePackagesCannotBeJudgedButWhoseSetupStandsIsInstalled()
+    {
+        _dependencies.Provider(CoreCode, null, Bundle);
+
+        var verdict = Decide(Registered(), Setup(PathPresence.Present));
+
+        Assert.Equal(EntryStanding.Installed, verdict.Standing);
+        Assert.Contains($"The uninstaller {CachedSetup} is there", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>One package still installed decides it, whatever another package's registration lacks.</summary>
+    [Fact]
+    public void AnInstalledPackageOutweighsOneThatNamesNoCode()
+    {
+        _dependencies.Provider("Tool.Runtime", null, Bundle).Provider("Tool.Core", CoreCode, Bundle);
+        _installer.With(Core, InstallerProductState.Installed);
+
+        Assert.Equal(EntryStanding.Installed, Decide(Registered(), Setup(PathPresence.Absent)).Standing);
+    }
+
     /// <summary>A patch code is unknown to <c>MsiQueryProductState</c> whether or not the patch is there.</summary>
     [Fact]
     public void APatchWindowsInstallerStillHoldsKeepsTheBundle()

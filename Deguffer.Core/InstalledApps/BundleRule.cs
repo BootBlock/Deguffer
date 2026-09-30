@@ -14,8 +14,9 @@ namespace Deguffer.Core.InstalledApps;
 /// <para>Each package's provider names the bundle under <c>Dependents</c> by its <c>Uninstall</c>
 /// key name, and its default value is the package's product code, a patch code, or nothing. Only a
 /// product code can be proved gone: a patch code is unknown to <c>MsiQueryProductState</c> whether
-/// or not the patch is there, a missing code names nothing to ask about, and a code that names
-/// another bundle names something Windows Installer never knew.</para>
+/// or not the patch is there, a missing code leaves only the provider's key name (proof the package
+/// is there where Windows Installer knows it as a product, and nothing otherwise), and a code that
+/// names another bundle names something Windows Installer never knew.</para>
 /// </summary>
 internal static class BundleRule
 {
@@ -49,28 +50,49 @@ internal static class BundleRule
         }
 
         var codes = new List<Guid>(packages.Count);
+        var answers = new List<Gone>(packages.Count);
 
         foreach (var package in packages)
         {
             if (!Guid.TryParseExact(package.Code, "B", out var code))
             {
-                return Gone.Unproven(
-                    $"The package registration {package.Key} names no product code, so Deguffer cannot tell whether what this bundle installed is still there.");
+                answers.Add(AskByKey(package, evidence));
             }
-
-            if (!codes.Contains(code))
+            else if (!codes.Contains(code))
             {
                 codes.Add(code);
+                answers.Add(Ask(code, evidence));
             }
         }
-
-        var answers = codes.Select(code => Ask(code, evidence)).ToList();
 
         return answers.FirstOrDefault(a => a.Verdict?.Standing is EntryStanding.Installed) is { Verdict: not null } installed ? installed
             : answers.FirstOrDefault(a => a.Verdict is not null) is { Verdict: not null } unproven ? unproven
             : Gone.Proven(codes.Count == 1
                 ? "Windows Installer does not know the product this bundle installed"
                 : $"Windows Installer knows none of the {codes.Count} products this bundle installed");
+    }
+
+    /// <summary>
+    /// A package whose provider holds no code. Older WiX packages register their provider under
+    /// their product code and write no default value: measured on 2026-09-30, three Unreal Engine
+    /// prerequisite bundles each named one such provider, and Windows Installer knew one of the
+    /// three keys as an installed product. A key it knows is proof the package is there. A key it
+    /// does not know proves nothing, because an executable package's provider may be named by a
+    /// code too.
+    /// </summary>
+    private static Gone AskByKey(PackageProvider package, StaleEvidence evidence)
+    {
+        if (Guid.TryParseExact(package.Key, "B", out var key)
+            && evidence.Installer.QueryProductState(key) is InstallerProductState.Installed
+                or InstallerProductState.Advertised
+                or InstallerProductState.OtherAccount)
+        {
+            return Gone.Installed(
+                $"Windows Installer reports the product {key.ToString("B").ToUpperInvariant()} this bundle installed as still there.");
+        }
+
+        return Gone.Unproven(
+            $"The package registration {package.Key} names no product code, so Deguffer cannot tell whether what this bundle installed is still there.");
     }
 
     private static Gone Ask(Guid code, StaleEvidence evidence)
