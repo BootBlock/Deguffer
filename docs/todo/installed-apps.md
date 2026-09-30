@@ -32,7 +32,8 @@ them against a very different build.
 
 ## Stages
 
-Each stage lands on `main` with its tests before the next starts.
+Each stage is committed on the feature branch with its tests before the next starts, and the
+branch lands on `main` once stage 5 has passed.
 
 1. **Reading and evidence (Core).** An `IUninstallRegistry` seam that reads the three sources by
    view, values typed as they are; the listing rules; an `IWindowsInstaller` seam over
@@ -58,10 +59,46 @@ Each stage lands on `main` with its tests before the next starts.
   `IUninstallLauncher` seam over the shell.
 - 2026-09-30: stage 4 landed on the branch: the Installed apps page, its navigation item, the
   `--installed-apps` elevated reopen and the `BackUpInstalledAppEntries` preference.
-- 2026-09-30: stage 5, driven unelevated with Drive.NET against the worktree build: the rail item
+- 2026-09-30: stage 5, driven unelevated against a build of the branch: the rail item
   opens the page, both lists fill, the filter narrows them, a scratch per-user stale entry was
   removed with a backup and restored from the Backups list, a machine-wide stale entry states that
   it needs administrator rights, and the backup switch persists. The run found that a program on a
   disconnected drive would read as stale, that the §5.6 summary counted one aggregate check, and
   that the restore note went stale after a restore; all three are fixed with tests. An elevated run
   is not yet done.
+
+## Open before landing
+
+A review of the branch found four ways an installed program can still read as stale, and a ruling
+on Burn bundles is taken. Each is a change to `StaleRule` with tests that fail without it.
+
+1. **An `InstallLocation` that is set but is not a full path**, or is not a string, reads as "names
+   no install folder" and leads to stale. Keep "not set" apart from "set but not checkable"; the
+   second is unproven.
+2. **An `InstallLocation` that names a file** is probed as a directory and reads as absent. Probe it
+   as either kind (`LongPath.ProbeEntry`).
+3. **A link on the way to an unplugged drive** (`C:\Games` a junction to a removed `E:\`) reads as
+   absent while the drive check passes on `C:\`. Walk the segments below the root, as
+   `DerivedPath.FirstObstacleBetween` does, and treat a link or a refused segment as unproven.
+4. **32-bit and 64-bit folder views.** The x86 build probes `System32` through redirection, and a
+   32-bit entry's `%ProgramFiles%` expands to the 64-bit folder in the x64 build. Count an
+   uninstaller or folder absent only when every view of it is absent: `System32`, `SysWOW64` and
+   `Sysnative`, and `Program Files` and `Program Files (x86)`, from `ISystemDirectories`.
+
+Items 2 to 4 want a path-probe seam (file, entry, directory with its link answer) so the rule is
+tested without the real machine; the reader's per-reading cache implements it.
+
+**Burn bundles (ruling: judge a bundle by the products it installed).** Measured on the same
+workstation, from the WiX engine source (`src/burn/engine/registration.h`, `dependency.cpp`):
+
+- A bundle's entry carries `BundleProviderKey`, `BundleCachePath`, `BundleUpgradeCode`,
+  `EngineVersion` and others, but a leftover shell may carry only `Resume` and `Installed`.
+- Packages register under `Software\Classes\Installer\Dependencies\<providerKey>` in HKLM for a
+  per-machine package and HKCU for a per-user one; the key is shared across registry views and
+  readable unelevated. A package provider lists the bundle under `Dependents\<bundle id>`, where the
+  bundle id is the `Uninstall` key name, never `BundleProviderKey`. The provider's default value is
+  the package's ProductCode (MSI), a PatchCode (MSP), or nothing (EXE, MSU, and WiX 3.6 and 3.8).
+- A bundle is stale only when at least one package provider lists it, every such provider's default
+  value is a product code, and Windows Installer knows none of them. A provider with no default
+  value, a non-GUID value, a patch code (recognise it rather than read its `-1`), or no provider at
+  all leaves the bundle unproven. The bundle's own provider is excluded, and codes are deduplicated.

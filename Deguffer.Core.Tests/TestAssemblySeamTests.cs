@@ -72,7 +72,7 @@ public sealed partial class TestAssemblySeamTests
         file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
         || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
-    [GeneratedRegex(@"\b(?:(?:ShellRecycleBinEmptier|DiskCleanupHandlers|CloudFiles)\s*\.\s*Default|ShellNative\s*\.\s*SHEmptyRecycleBin)\b")]
+    [GeneratedRegex(@"\b(?:(?:ShellRecycleBinEmptier|DiskCleanupHandlers|CloudFiles|WindowsUninstallRegistry|ShellUninstallLauncher)\s*\.\s*Default|ShellNative\s*\.\s*SHEmptyRecycleBin)\b")]
     private static partial Regex RealRoute();
 
     [GeneratedRegex(@"\s+")]

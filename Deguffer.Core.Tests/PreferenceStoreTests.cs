@@ -34,7 +34,8 @@ public class PreferenceStoreTests
             EmptyRecycleBinsDirectly: true,
             KeepFilesChangedWithinHours: 8,
             FileHistoryRetentionDays: 30,
-            MinimumTemporaryFileAgeDays: 2)));
+            MinimumTemporaryFileAgeDays: 2,
+            BackUpInstalledAppEntries: false)));
 
         var loaded = store.Load();
 
@@ -85,6 +86,10 @@ public class PreferenceStoreTests
         // Not the default, on the same reasoning again, and this one is the second with teeth: zero
         // is a real and deliberate value here, meaning no age limit on the temporary folders at all.
         Assert.Equal(2, loaded.MinimumTemporaryFileAgeDays);
+
+        // Not the default: off is the value a missing key would also read back as, so only a
+        // round trip of false shows the value was written and read rather than defaulted.
+        Assert.False(loaded.BackUpInstalledAppEntries);
     }
 
     /// <summary>
@@ -151,6 +156,10 @@ public class PreferenceStoreTests
         // Landing on default(int) would take §5.3's floor off every machine that upgrades, without
         // anybody choosing it and without anything on screen having changed.
         Assert.Equal(7, loaded.MinimumTemporaryFileAgeDays);
+
+        // On. A missing key deserialises to false, and false would remove Installed apps entries
+        // with no backup on every machine that upgrades, without anybody choosing it (§7.3).
+        Assert.True(loaded.BackUpInstalledAppEntries);
     }
 
     /// <summary>
