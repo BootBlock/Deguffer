@@ -67,7 +67,8 @@ public sealed partial class EntryRemoverTests : IDisposable
         Assert.Equal([gone], _registry.Deleted);
         Assert.Equal(PathPresence.Present, _registry.ReadOne(neighbour).Presence);
         Assert.True(report.Verification.Passed);
-        Assert.Contains(report.Verification.Checks, c => c.Outcome == VerificationOutcome.Survived && c.Detail == "1 entry is still there.");
+        Assert.Contains(report.Verification.Checks, c => c.Outcome == VerificationOutcome.Survived && c.Subject == neighbour.PhysicalPath);
+        Assert.Equal(2, report.Verification.Checks.Count);
     }
 
     [Fact]

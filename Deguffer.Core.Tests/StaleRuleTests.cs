@@ -25,7 +25,9 @@ public sealed class StaleRuleTests
             record,
             command,
             code => _products.GetValueOrDefault(code, InstallerProductState.Unanswered),
-            path => _directories.GetValueOrDefault(path, PathPresence.Absent));
+            path => _directories.TryGetValue(path, out var presence) ? presence
+                : Path.GetPathRoot(path) == path ? PathPresence.Present
+                : PathPresence.Absent);
 
     private static UninstallRecord Record(string name, params (string Name, object Value)[] values) =>
         new(new UninstallKey(UninstallScope.Machine64, name), new UninstallValues(values.ToDictionary(v => v.Name, v => v.Value)));
@@ -115,6 +117,29 @@ public sealed class StaleRuleTests
         _directories[Folder] = PathPresence.Refused;
 
         var verdict = Decide(Record("Tool", ("InstallLocation", Folder)), Uninstaller(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+    }
+
+    /// <summary>Windows answers "absent" for a path on an unplugged drive, and the program on it is not gone.</summary>
+    [Fact]
+    public void AnUninstallerOnADriveThatIsNotConnectedIsNotProofOfAbsence()
+    {
+        _directories[@"C:\"] = PathPresence.Absent;
+
+        var verdict = Decide(Record("Tool"), Uninstaller(PathPresence.Absent));
+
+        Assert.Equal(EntryStanding.Unproven, verdict.Standing);
+        Assert.Contains("not connected", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnInstallFolderOnADriveThatIsNotConnectedIsNotProofOfAbsence()
+    {
+        _products[Product] = InstallerProductState.Unknown;
+        _directories[@"G:\"] = PathPresence.Absent;
+
+        var verdict = Decide(Record(ProductKey, ("WindowsInstaller", 1), ("InstallLocation", @"G:\Games\Tool")), MissingCommand.Instance);
 
         Assert.Equal(EntryStanding.Unproven, verdict.Standing);
     }

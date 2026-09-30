@@ -49,7 +49,7 @@ public static class StaleRule
 
         var gone = ProductCodeOf(record, command) is { } code
             ? AskInstaller(askInstaller(code))
-            : AskUninstaller(command);
+            : AskUninstaller(command, probeDirectory);
 
         return gone.Verdict ?? WithInstallFolder(gone.Evidence!, InstallLocationOf(record.Values), probeDirectory);
     }
@@ -102,12 +102,13 @@ public static class StaleRule
             "Windows Installer did not answer for this product, so Deguffer cannot tell whether it is still there."), null),
     };
 
-    private static Gone AskUninstaller(UninstallCommand command) => command switch
+    private static Gone AskUninstaller(UninstallCommand command, Func<string, PathPresence> probeDirectory) => command switch
     {
         ProgramCommand { Presence: PathPresence.Present } program => new(new StandingVerdict(EntryStanding.Installed,
             $"The uninstaller {program.Executable} is there."), null),
-        ProgramCommand { Presence: PathPresence.Absent } program => new(null,
-            $"The uninstaller {program.Executable} is gone"),
+        ProgramCommand { Presence: PathPresence.Absent } program => UnreachableRoot(program.Executable, probeDirectory) is { } unreachable
+            ? new(new StandingVerdict(EntryStanding.Unproven, unreachable), null)
+            : new(null, $"The uninstaller {program.Executable} is gone"),
         ProgramCommand program => new(new StandingVerdict(EntryStanding.Unproven,
             $"Windows would not say whether the uninstaller {program.Executable} is there."), null),
         NamedCommand named => new(new StandingVerdict(EntryStanding.Unproven,
@@ -117,6 +118,16 @@ public static class StaleRule
         _ => new(new StandingVerdict(EntryStanding.Unproven,
             "This entry has no uninstall command, so there is no uninstaller to look for."), null),
     };
+
+    /// <summary>
+    /// Why an absent path proves nothing, or null where it does. Windows answers "absent" for a
+    /// path on a drive that is not connected, and a program on an unplugged drive is not gone, so
+    /// absence counts only where the path's own drive or share answers.
+    /// </summary>
+    private static string? UnreachableRoot(string path, Func<string, PathPresence> probeDirectory) =>
+        Path.GetPathRoot(path) is { Length: > 0 } root && probeDirectory(root) is not PathPresence.Present
+            ? $"{path} is on {root}, which is not connected or will not answer, so Deguffer cannot tell whether the program is gone."
+            : null;
 
     private static StandingVerdict WithInstallFolder(
         string evidence,
@@ -130,6 +141,8 @@ public static class StaleRule
 
         return probeDirectory(location) switch
         {
+            PathPresence.Absent when UnreachableRoot(location, probeDirectory) is { } unreachable =>
+                new StandingVerdict(EntryStanding.Unproven, $"{evidence}, but {unreachable}"),
             PathPresence.Absent => new StandingVerdict(EntryStanding.Stale,
                 $"{evidence}, and the install folder {location} is gone too."),
             PathPresence.Present => new StandingVerdict(EntryStanding.Installed,

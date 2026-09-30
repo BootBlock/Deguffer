@@ -255,6 +255,9 @@ public sealed partial class InstalledAppsActions : ObservableObject
             IsActing = false;
         }
 
+        // The same backup now meets an entry that is there, so its note says so.
+        OnSelectedBackupChanged(SelectedBackup);
+
         EntriesChanged?.Invoke(this, EventArgs.Empty);
     }
 

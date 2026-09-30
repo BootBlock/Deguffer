@@ -170,22 +170,17 @@ public sealed class EntryRemover(IUninstallRegistry registry, IWindowsInstaller 
             var standing = after.Records.Select(r => r.Key).ToHashSet();
             var expected = read.Records.Select(r => r.Key).Where(k => !removed.Contains(k)).ToList();
 
-            foreach (var key in expected.Where(k => !standing.Contains(k)))
+            foreach (var key in expected)
             {
                 // A chosen entry that was not removed and is gone went some other way; anything
-                // else missing is the alarm §5.6 exists to raise.
-                checks.Add(chosen.Contains(key)
-                    ? new VerificationCheck(key.PhysicalPath, "A chosen entry Deguffer did not remove", VerificationOutcome.RemovedFromOutside,
-                        "It is gone, and Deguffer did not delete it.")
-                    : new VerificationCheck(key.PhysicalPath, "An entry beside the removed ones", VerificationOutcome.Failed, "It is gone."));
-            }
-
-            var survivors = expected.Count(standing.Contains);
-
-            if (survivors > 0)
-            {
-                checks.Add(new VerificationCheck($@"{parent}\*", "Every other entry", VerificationOutcome.Survived,
-                    survivors == 1 ? "1 entry is still there." : $"{survivors} entries are still there."));
+                // else missing is the alarm §5.6 exists to raise. One check per entry, so the
+                // summary counts what was asserted.
+                checks.Add(standing.Contains(key)
+                    ? new VerificationCheck(key.PhysicalPath, "An entry beside the removed ones", VerificationOutcome.Survived, "Still there.")
+                    : chosen.Contains(key)
+                        ? new VerificationCheck(key.PhysicalPath, "A chosen entry Deguffer did not remove", VerificationOutcome.RemovedFromOutside,
+                            "It is gone, and Deguffer did not delete it.")
+                        : new VerificationCheck(key.PhysicalPath, "An entry beside the removed ones", VerificationOutcome.Failed, "It is gone."));
             }
         }
 

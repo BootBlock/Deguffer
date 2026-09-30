@@ -2,7 +2,7 @@
 
 > **Status:** 🟢 ACTIVE — the build plan for [_spec.md §7.3](_spec.md#73-installed-apps--the-entries-windows-lists).
 > The spec decides what is built; this file records the order it is built in and what each stage
-> has landed. Stages 1 to 5 are open.
+> has landed. Stages 1 to 4 are built; stage 5 is driven unelevated, and the elevated run is open.
 
 The page lists the entries under the `Uninstall` keys, splits them into stale and installed by
 evidence, removes stale entries (with a `reg.exe` backup by default), restores a backup, and runs an
@@ -58,3 +58,10 @@ Each stage lands on `main` with its tests before the next starts.
   `IUninstallLauncher` seam over the shell.
 - 2026-09-30: stage 4 landed on the branch: the Installed apps page, its navigation item, the
   `--installed-apps` elevated reopen and the `BackUpInstalledAppEntries` preference.
+- 2026-09-30: stage 5, driven unelevated with Drive.NET against the worktree build: the rail item
+  opens the page, both lists fill, the filter narrows them, a scratch per-user stale entry was
+  removed with a backup and restored from the Backups list, a machine-wide stale entry states that
+  it needs administrator rights, and the backup switch persists. The run found that a program on a
+  disconnected drive would read as stale, that the §5.6 summary counted one aggregate check, and
+  that the restore note went stale after a restore; all three are fixed with tests. An elevated run
+  is not yet done.

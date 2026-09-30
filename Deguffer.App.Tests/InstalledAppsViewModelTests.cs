@@ -140,6 +140,24 @@ public sealed class InstalledAppsViewModelTests : IDisposable
     });
 
     [Fact]
+    public void ARestoredBackupSaysItsEntryIsBack() => UiThread.Run(async () =>
+    {
+        var key = new UninstallKey(UninstallScope.CurrentUser, "Tool");
+        _runner.Replying(_ =>
+        {
+            _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"));
+            return null;
+        });
+        var page = Page();
+        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile("tool.reg", key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch));
+
+        await page.Actions.RestoreCommand.ExecuteAsync(null);
+
+        Assert.Equal("Restored. The entry is back in the list.", page.Actions.Report);
+        Assert.Contains("already in the list", page.Actions.RestoreNote, StringComparison.Ordinal);
+    });
+
+    [Fact]
     public void TheBackupSwitchIsRemembered()
     {
         var page = Page();

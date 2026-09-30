@@ -807,6 +807,9 @@ break something.
   standing install folder is an install someone broke, not one that is gone.
 - **A refusal is never absence.** Every probe keeps `PathPresence`'s three answers, and a path
   Windows would not describe is not proof of anything, so the entry stays installed.
+- **Nor is a drive that is not there.** Windows answers "absent" for every path on a drive that is
+  not connected, and a program on an unplugged drive is not gone, so absence counts only where the
+  path's own drive or share answers.
 - **Every row says why it is in its list**, in the words the evidence supports: "The uninstaller
   `C:\...\unins000.exe` and the install folder are both gone", or "Windows Installer does not know
   this product". An installed row whose presence nothing could prove says that instead, so the list
