@@ -30,20 +30,9 @@ public static class ThrownExceptions
         }
         finally
         {
-            // A synchronous method's change to an AsyncLocal outlives it, unlike an async one's.
+            // A synchronous method's change to an AsyncLocal outlives it.
             Recording.Value = null;
         }
-
-        return [.. seen];
-    }
-
-    /// <summary>Run <paramref name="action"/> to completion and return what it threw.</summary>
-    public static async Task<IReadOnlyList<Exception>> DuringAsync(Func<Task> action)
-    {
-        var seen = new ConcurrentQueue<Exception>();
-        Recording.Value = seen;
-
-        await action();
 
         return [.. seen];
     }
