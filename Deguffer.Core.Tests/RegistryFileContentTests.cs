@@ -63,6 +63,8 @@ public sealed class RegistryFileContentTests
     [InlineData("\"x\"=qword:0000000000000001")]
     [InlineData("\"x\"=hex:1")]
     [InlineData("\"x\"=")]
+    [InlineData("\"x\"=\"y\" trailing")]
+    [InlineData("\"x\"=\"y\"\"z\"")]
     public void DataInAnyFormReadExeDoesNotWriteIsNotConfined(string line)
     {
         Assert.False(Parse($"[{Key}]", line)!.IsConfined);

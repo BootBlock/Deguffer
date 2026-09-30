@@ -2,7 +2,7 @@
 
 > **Status:** 🟢 ACTIVE — the build plan for [_spec.md §7.3](_spec.md#73-installed-apps--the-entries-windows-lists).
 > The spec decides what is built; this file records the order it is built in and what each stage
-> has landed. Stages 1 to 4 are built; stage 5 is driven unelevated, and the elevated run is open.
+> has landed. Stages 1 to 5 are done: the page is driven unelevated and elevated.
 
 The page lists the entries under the `Uninstall` keys, splits them into stale and installed by
 evidence, removes stale entries (with a `reg.exe` backup by default), restores a backup, and runs an
@@ -73,10 +73,24 @@ branch lands on `main` once stage 5 has passed.
   measured unelevated, listed this account's and the machine's patches and refused every account's
   with `ERROR_ACCESS_DENIED`, so it is asked for this account only. Each rule has a test that a
   mutation of the code makes fail.
+- 2026-09-30: stage 5, driven again with the entry above built, unelevated and elevated. Unelevated, a
+  scratch per-user bundle with a scratch package registration read as stale by its package, and as
+  installed ("No package registration names this bundle") once the registration was removed; a
+  scratch stale entry was removed with a backup and restored. Elevated, the page offered no reopen,
+  a machine-wide stale entry enabled Remove when selected (it was not removed), and the scratch
+  entry was removed with every one of the 20 checked entries surviving, then restored. Every
+  scratch key and backup was removed afterwards.
+- 2026-09-30: further fixes before landing. A restore holds its private copy open, sharing reading
+  only, until `reg.exe` has read it (measured: `reg.exe` imports a file held so, and a write or a
+  delete is refused); the real `reg.exe` round trip in the tests runs through it. The confinement
+  check reads data only in the forms `reg.exe` writes, since `reg.exe` was measured importing a
+  section placed after a string value ending in a backslash. A refused package registration, or a
+  path still naming an unexpanded variable, leaves an entry unproven. Each has a test that a
+  mutation of the code makes fail.
 
 ## Found before landing
 
-A review of the branch found four ways an installed program can still read as stale, and a ruling
+Four ways an installed program could still read as stale were found before landing, and a ruling
 on Burn bundles is taken. Each is a change to `StaleRule` with tests that fail without it. All five
 are resolved on the branch; see the status log.
 

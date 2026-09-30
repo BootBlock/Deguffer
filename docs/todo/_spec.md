@@ -825,7 +825,9 @@ break something.
 - **Nor is a drive that is not there, or a link on the way to one.** Windows answers "absent" for
   every path on a drive that is not connected and for every path through a link to one, and a
   program on an unplugged drive is not gone. So absence counts only where the path's own drive or
-  share answers, and no folder between it and the path is a link or refuses to say what it is.
+  share answers, and no folder between it and the path is a link or refuses to say what it is. A
+  path that still names an environment variable, as a value written as `REG_SZ` can, proves
+  nothing either.
 - **Every view of a path is asked.** A 32-bit Deguffer reaches `System32` through the redirection to
   `SysWOW64`, and a 64-bit Deguffer expands a 32-bit entry's `%ProgramFiles%` to the 64-bit folder.
   A path under `System32`, `SysWOW64` or `Sysnative`, or under either `Program Files` folder, is
@@ -867,7 +869,10 @@ The page lists the backups it kept, newest first. Restoring imports the file wit
 refuses where the entry already exists (an import merges, and a merge into a live entry is not a
 restore), needs administrator rights for a machine-wide entry as removing does, and asserts
 afterwards that the entry is back. The file is kept after a restore: it is the record of what was
-removed.
+removed. The backup folder is writable by anything running as the user, so a file is imported only
+where every section writes the entry or a key below it, nothing is deleted, and every value is in
+a form `reg.exe` writes; and what is imported is a copy of exactly the bytes checked, held open
+against writing and deletion until `reg.exe` has read it.
 
 **Uninstalling an installed program**
 
