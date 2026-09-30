@@ -12,9 +12,20 @@ public sealed class EmulatorFolderStoreTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>
+    /// No file means no folder, and reading that throws nothing: every emulator provider reads the
+    /// store on every scan, and most users never declare a folder.
+    /// </summary>
     [Fact]
-    public void NothingIsDeclaredBeforeAnythingIsSaved() =>
-        Assert.Empty(new EmulatorFolderStore(_environment).Load());
+    public void NothingIsDeclaredBeforeAnythingIsSaved()
+    {
+        IReadOnlyList<string>? folders = null;
+
+        var thrown = ThrownExceptions.During(() => folders = new EmulatorFolderStore(_environment).Load());
+
+        Assert.Empty(folders!);
+        Assert.Empty(thrown);
+    }
 
     [Fact]
     public void KeepsFullPathsOnceEachInTheOrderGiven()

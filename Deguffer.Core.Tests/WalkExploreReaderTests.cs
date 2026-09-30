@@ -81,6 +81,29 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
+    /// The refusal the test above counts is reported, not thrown. A whole volume holds hundreds of
+    /// folders an unelevated account may not list, and a walk that raised and caught one exception
+    /// for each filled a debugger's output with them while giving the same answer.
+    /// </summary>
+    [Fact]
+    public void WalksPastARefusedDirectoryWithoutThrowing()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(4096, "cache", "readable.bin");
+        var refused = _temp.CreateDirectory("cache", "refused");
+        _temp.CreateFile(65536, "cache", "refused", "unreachable.bin");
+
+        using var denied = new DeniedDirectory(refused);
+
+        ExploreTree? tree = null;
+        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, onLevel: null, default));
+
+        Assert.Empty(thrown);
+        Assert.Equal(4096, tree!.TotalBytes);
+        Assert.True(tree.HasUnknownSizeBelow(ByPath(tree)[refused]));
+    }
+
+    /// <summary>
     /// A junction is shown and holds nothing. Its target keeps its own place in the tree, so
     /// counting through one would report the same bytes twice and draw a subtree the walk never
     /// classified — while hiding it altogether makes a directory the user can plainly see in
@@ -121,9 +144,9 @@ public sealed class WalkExploreReaderTests : IDisposable
     /// it hands back is one a person reads or a shell opens. Only the second half of that is
     /// discriminating here — a tree of leaf names has no other observable that changes when the
     /// prefix is dropped on the way in, and CLAUDE.md's G8 says to name that rather than write a
-    /// deep-tree test that cannot fail. The propagation of the prefix <em>through</em> the walk is
-    /// asserted where it is observable, in
-    /// <see cref="BoundedFileWalkTests.CarriesTheFormOfTheRootDownToEveryFileItVisits"/>.</para>
+    /// deep-tree test that cannot fail. The prefix on every path the walk hands back is asserted
+    /// where it is observable, in
+    /// <see cref="BoundedFileWalkTests.HandsBackEveryFileInTheExtendedLengthFormWhicheverFormTheRootHad"/>.</para>
     /// </summary>
     [Fact]
     public void KeepsTheDisplayFormOfARootItWasGivenInExtendedForm()

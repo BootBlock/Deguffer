@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
 
@@ -58,9 +59,8 @@ internal static class BoundedFileWalk
     /// marshalling them would cost more than the enumeration.
     /// </summary>
     /// <param name="root">
-    /// The directory to walk, in the extended-length form §6.3 requires. Every path handed to
-    /// <paramref name="onFile"/> then carries the prefix too, because .NET builds each child from
-    /// the parent it was given.
+    /// The directory to walk. Every directory is listed in the extended-length form §6.3 requires,
+    /// so every path handed to <paramref name="onFile"/> carries the prefix.
     /// </param>
     /// <param name="onReparseFile">
     /// Called, concurrently, for each file carrying a reparse point, which <paramref name="onFile"/>
@@ -183,30 +183,29 @@ internal static class BoundedFileWalk
         var links = new List<DirectoryInfo>();
         var reparseFiles = new List<FileInfo>();
 
-        try
+        using var listing = DirectoryListing.Of(directory);
+
+        while (listing.MoveNext())
         {
-            foreach (var info in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+            var info = listing.Current;
+
+            if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
-                if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    entries.Add(info);
-                }
-                else if (info is DirectoryInfo link)
-                {
-                    links.Add(link);
-                }
-                else if (info is FileInfo marked)
-                {
-                    reparseFiles.Add(marked);
-                }
+                entries.Add(info);
+            }
+            else if (info is DirectoryInfo link)
+            {
+                links.Add(link);
+            }
+            else if (info is FileInfo marked)
+            {
+                reparseFiles.Add(marked);
             }
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Expected on a live machine. Skip, and say that we did.
-            return new DirectoryContents(entries, links, reparseFiles, WasRefused: true);
-        }
 
-        return new DirectoryContents(entries, links, reparseFiles, WasRefused: false);
+        // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
+        // A directory gone since its parent was listed counts as refused too: its bytes were never
+        // read, so the totals above it are lower bounds either way.
+        return new DirectoryContents(entries, links, reparseFiles, WasRefused: listing.Outcome is not PathPresence.Present);
     }
 }

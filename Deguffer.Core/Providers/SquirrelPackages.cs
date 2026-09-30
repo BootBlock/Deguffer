@@ -105,6 +105,9 @@ internal static partial class SquirrelPackages
     /// </summary>
     public const string StagedIdentifierName = ".betaId";
 
+    /// <summary>What a package file is named with. The listing reads nothing else.</summary>
+    private const string PackageExtension = ".nupkg";
+
     private const string SupersededReason =
         "An update package this application's own index no longer refers to. Squirrel's clean-up "
         + "was supposed to remove it after the update that replaced it.";
@@ -331,23 +334,31 @@ internal static partial class SquirrelPackages
             return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: true);
         }
 
-        List<FileInfo> files;
+        var files = new List<FileInfo>();
 
-        try
+        using (var listing = new DirectoryListing<FileInfo>(
+            packagesDirectory,
+            static (ref System.IO.Enumeration.FileSystemEntry entry) => (FileInfo)entry.ToFileSystemInfo(),
+            static (ref System.IO.Enumeration.FileSystemEntry entry) =>
+                !entry.IsDirectory && entry.FileName.EndsWith(PackageExtension, StringComparison.OrdinalIgnoreCase)))
         {
-            files = [.. new DirectoryInfo(LongPath.Extended(packagesDirectory)).EnumerateFiles("*.nupkg")];
-        }
-        catch (DirectoryNotFoundException)
-        {
-            // Not there is a complete answer: a folder that does not exist holds no packages. The
-            // caller checked existence, so this is the folder having gone since.
-            return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: false);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
-            // Nothing rather than a partial view, on ChildDirectories' reasoning: half a listing
-            // invites a plan that describes a folder nobody fully read.
-            return new SquirrelPackageReading([], [], [], DirectoryUnreadable: true, IndexUnreadable: false);
+            while (listing.MoveNext())
+            {
+                files.Add(listing.Current);
+            }
+
+            switch (listing.Outcome)
+            {
+                case PathPresence.Absent:
+                    // Not there is a complete answer: a folder that does not exist holds no packages.
+                    // The caller checked existence, so this is the folder having gone since.
+                    return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: false);
+
+                case PathPresence.Refused:
+                    // Nothing rather than a partial view, on ChildDirectories' reasoning: half a
+                    // listing invites a plan that describes a folder nobody fully read.
+                    return new SquirrelPackageReading([], [], [], DirectoryUnreadable: true, IndexUnreadable: false);
+            }
         }
 
         var superseded = new List<(string Path, DateTime? LastWritten)>();

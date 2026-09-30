@@ -86,6 +86,25 @@ public sealed class ChildDirectoriesTests : IDisposable
     }
 
     /// <summary>
+    /// Both answers above are given without throwing. Every provider asks this of the places its
+    /// tool may keep things, on every scan, and most of those places are not there.
+    /// </summary>
+    [Fact]
+    public void AMissingOrRefusedRootIsReportedWithoutThrowing()
+    {
+        var refused = _temp.CreateDirectory("refused");
+        using var denied = new DeniedDirectory(refused);
+
+        var thrown = ThrownExceptions.During(() =>
+        {
+            Assert.False(ChildDirectories.Under(Path.Combine(_temp.Path, "never-created")).Unreadable);
+            Assert.True(ChildDirectories.Under(refused).Unreadable);
+        });
+
+        Assert.Empty(thrown);
+    }
+
+    /// <summary>
     /// §6.3, at the one seam where the prefix is observable without a test double.
     ///
     /// <para>An outcome-based long-path test cannot fail. .NET prepends <c>\\?\</c> itself to any

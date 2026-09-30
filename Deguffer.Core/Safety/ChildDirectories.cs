@@ -1,5 +1,3 @@
-using System.IO.Enumeration;
-
 namespace Deguffer.Core.Safety;
 
 /// <summary>Whether a child directory's name is one a caller wants.</summary>
@@ -41,17 +39,6 @@ public readonly record struct ChildDirectoryScan(
 public static class ChildDirectories
 {
     /// <summary>
-    /// What <see cref="DirectoryInfo.EnumerateDirectories()"/> uses: hidden and system children
-    /// included, and a refusal thrown rather than skipped, since a skipped child is a partial view.
-    /// </summary>
-    private static readonly EnumerationOptions AllChildren = new()
-    {
-        AttributesToSkip = 0,
-        IgnoreInaccessible = false,
-        RecurseSubdirectories = false,
-    };
-
-    /// <summary>
     /// The child directories of <paramref name="root"/>, with links separated out rather than
     /// followed.
     ///
@@ -76,48 +63,41 @@ public static class ChildDirectories
         var directories = new List<DirectoryInfo>();
         var links = new List<DirectoryInfo>();
 
-        try
-        {
-            // Constructed inside the try, because the enumerator opens the directory as it is built.
-            var children = new FileSystemEnumerable<DirectoryInfo>(
-                LongPath.Extended(root),
-                static (ref System.IO.Enumeration.FileSystemEntry entry) => (DirectoryInfo)entry.ToFileSystemInfo(),
-                AllChildren)
-            {
-                ShouldIncludePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) =>
-                    entry.IsDirectory && (named is null || named(entry.FileName)),
-            };
+        using var children = new DirectoryListing<DirectoryInfo>(
+            root,
+            static (ref System.IO.Enumeration.FileSystemEntry entry) => (DirectoryInfo)entry.ToFileSystemInfo(),
+            (ref System.IO.Enumeration.FileSystemEntry entry) => entry.IsDirectory && (named is null || named(entry.FileName)));
 
-            foreach (var child in children)
+        while (children.MoveNext())
+        {
+            var child = children.Current;
+
+            if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
-                if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    links.Add(child);
-                }
-                else
-                {
-                    directories.Add(child);
-                }
+                links.Add(child);
+            }
+            else
+            {
+                directories.Add(child);
             }
         }
-        catch (DirectoryNotFoundException)
+
+        return children.Outcome switch
         {
+            PathPresence.Present => new ChildDirectoryScan(directories, links, Unreadable: false),
+
             // Not there is an answer, and a complete one: a directory that does not exist holds
             // nothing, so a caller reading this as empty is reading it correctly. Every caller but
             // two checks existence first, and for those two — the walk popping a path a build has
             // since removed, and the sweep of the application-data roots — "gone" must not be
             // reported as "Deguffer could not list this", which is a sentence about permissions.
-            return new ChildDirectoryScan([], [], Unreadable: false);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
+            PathPresence.Absent => new ChildDirectoryScan([], [], Unreadable: false),
+
             // Nothing rather than a partial view. A caller decides what a root holds from what it is
             // handed, so half a listing invites a plan that describes a folder nobody fully read.
             // Unlike the case above this is not an answer at all, and saying so is the difference
             // between a plan that is quiet about a folder and one that is wrong about it.
-            return new ChildDirectoryScan([], [], Unreadable: true);
-        }
-
-        return new ChildDirectoryScan(directories, links, Unreadable: false);
+            _ => new ChildDirectoryScan([], [], Unreadable: true),
+        };
     }
 }

@@ -89,7 +89,7 @@ public class ParallelEnumerationScannerTests
     /// Whether <c>LongPath</c> is what got the walk there is not observable from a total. .NET
     /// prefixes past 260 characters itself, so this stays green with the prefixing deleted; the
     /// property that does discriminate for this walk is asserted in
-    /// <see cref="BoundedFileWalkTests.CarriesTheFormOfTheRootDownToEveryFileItVisits"/>.
+    /// <see cref="BoundedFileWalkTests.HandsBackEveryFileInTheExtendedLengthFormWhicheverFormTheRootHad"/>.
     /// </summary>
     [Fact]
     public async Task CountsFilesBeyondMaxPath()
