@@ -92,19 +92,21 @@ public static class StaleRule
     /// <summary>
     /// A bundle whose packages are gone, and whose command names an uninstaller, needs that
     /// uninstaller gone too: a bundle that can still run its own uninstaller is not one Windows
-    /// cannot remove.
+    /// cannot remove. Either one standing is proof: a bundle whose packages cannot be judged but
+    /// whose uninstaller is there is installed, and says so rather than that nothing could tell.
     /// </summary>
     private static Gone WithBundleUninstaller(Gone packages, UninstallCommand command, InstalledPaths paths)
     {
-        if (packages.Verdict is not null || command is not ProgramCommand program)
+        if (packages.Verdict?.Standing is EntryStanding.Installed || command is not ProgramCommand program)
         {
             return packages;
         }
 
         var uninstaller = AskProgram(program, paths);
 
-        return uninstaller.Verdict is not null
-            ? uninstaller
+        return uninstaller.Verdict?.Standing is EntryStanding.Installed ? uninstaller
+            : packages.Verdict is not null ? packages
+            : uninstaller.Verdict is not null ? uninstaller
             : Gone.Proven($"{packages.Evidence}, and the uninstaller {program.Executable} is gone");
     }
 

@@ -88,6 +88,14 @@ branch lands on `main` once stage 5 has passed.
   section placed after a string value ending in a backslash. A refused package registration, or a
   path still naming an unexpanded variable, leaves an entry unproven. Each has a test that a
   mutation of the code makes fail.
+- 2026-09-30, after landing: every stale entry on the workstation was checked by hand. The reader
+  took 261 ms for 800 entries and called 13 stale: six GOG games, whose folders GOG's own
+  `GOG.com\Games` records also named and which no drive held within two folders of its root; six
+  other programs whose uninstallers, and install folders where named, were gone on drives that
+  answered; and a PowerShell 7.4.7 bundle shell whose one package
+  Windows Installer no longer knew. All 13 were gone. The check found three Unreal Engine
+  prerequisite bundles read as unproven though one package key was a product Windows Installer
+  knew and two bundles' cached setup stood; the bundle rule now proves all three installed.
 
 ## Found before landing
 
