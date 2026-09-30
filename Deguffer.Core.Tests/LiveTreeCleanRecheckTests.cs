@@ -176,6 +176,122 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     }
 
     /// <summary>
+    /// The same for Visual Studio opened after the preview on a solution kept above its projects. The
+    /// solution's folder is read again at the clean, because the editor is in it only now.
+    /// </summary>
+    [Fact]
+    public async Task AnObjWhoseSolutionIsOpenedAfterThePreviewSurvivesTheClean()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var busy = ProjectFixture.CreateProject(Path.Combine(solution, "Busy"), "Busy");
+        var idle = ProjectFixture.CreateProject(Path.Combine(solution, "Idle"), "Idle");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(solution, "Busy", "Busy.csproj"));
+
+        var scanner = new FakeDirectoryScanner();
+        var provider = new DotNetObjProvider(
+            _roots,
+            new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
+            new SnapshottingLiveTrees(_liveTrees),
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            scanner);
+
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, busy, idle);
+
+        _liveTrees.WithProgram("devenv", workingDirectory: solution);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "an obj whose solution was opened after the preview was removed");
+        Assert.False(Directory.Exists(idle), "an obj the solution does not name was kept");
+        Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: devenv is working in Solution.");
+        AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
+    /// The check drops the preview's reading of the machine before it reads where programs are. The
+    /// inspector here keeps that reading until invalidated, as the real one keeps its process table,
+    /// and the plan has one step, so the first check of the clean is the one that decides: an earlier
+    /// step's check would otherwise have dropped the reading for it.
+    /// </summary>
+    [Fact]
+    public async Task TheCheckAtTheCleanReadsWhereProgramsAreAfterDroppingThePreviewsReading()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var busy = ProjectFixture.CreateProject(Path.Combine(solution, "Busy"), "Busy");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(solution, "Busy", "Busy.csproj"));
+
+        var scanner = new FakeDirectoryScanner();
+        var provider = new DotNetObjProvider(
+            _roots,
+            new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
+            new SnapshottingLiveTrees(_liveTrees),
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            scanner);
+
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, busy);
+
+        _liveTrees.WithProgram("devenv", workingDirectory: solution);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "the check read the preview's machine, where nothing had the solution open");
+        AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
+    /// A project added to a solution that was already open at the preview. The preview read the
+    /// solution, because the editor was in its folder, and found only the other project in it. The
+    /// clean reads it again, so the project added since keeps its <c>obj</c>.
+    /// </summary>
+    [Fact]
+    public async Task AnObjWhoseProjectIsAddedToAnOpenSolutionAfterThePreviewSurvivesTheClean()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var open = ProjectFixture.CreateProject(Path.Combine(solution, "Open"), "Open");
+        var added = ProjectFixture.CreateProject(Path.Combine(solution, "Added"), "Added");
+        var openProject = Path.Combine(solution, "Open", "Open.csproj");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, openProject);
+
+        _liveTrees.WithProgram("devenv", workingDirectory: solution);
+
+        var scanner = new FakeDirectoryScanner();
+        var provider = new DotNetObjProvider(
+            _roots,
+            new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
+            new SnapshottingLiveTrees(_liveTrees),
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            scanner);
+
+        var plan = await provider.PlanAsync();
+
+        // The premise: the solution was read at the preview, and named only the open project.
+        Assert.Equal([added], plan.TargetedPaths);
+
+        ProjectFixture.CreateSolution(
+            solution, "Solution", xml: false, openProject, Path.Combine(solution, "Added", "Added.csproj"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(added), "an obj whose project was added to the open solution after the preview was removed");
+        Assert.True(Directory.Exists(open), "an obj the plan held back was removed");
+        Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: devenv is working in Solution.");
+        AssertProvedStanding(result, added);
+    }
+
+    /// <summary>
     /// Every Squirrel application shares the staging folder, which is why the plan refuses a directory
     /// an install is running from. One that starts running from a directory the preview offered keeps
     /// it, and the other leftover still goes.
@@ -238,6 +354,31 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         Assert.False(Directory.Exists(idle), "the old build of an application that stayed closed was kept");
         Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: Chatterbox is running from inside it.");
         AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
+    /// <see cref="FakeLiveTreeInspector"/> with the one property of the real inspector it lacks: where
+    /// programs are is read once and kept until <see cref="Invalidate"/>, as the real inspector keeps
+    /// its process table. A check that read before invalidating would see the preview's machine.
+    /// </summary>
+    private sealed class SnapshottingLiveTrees(FakeLiveTreeInspector live) : ILiveTreeInspector
+    {
+        private LiveTreeFindings? _occupied;
+
+        public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default) =>
+            live.FindLive(candidates, ct);
+
+        public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
+            _occupied ??= live.FindOccupiedDirectories(ct);
+
+        public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default) =>
+            live.FindLiveChildren(directories, ct);
+
+        public void Invalidate()
+        {
+            _occupied = null;
+            live.Invalidate();
+        }
     }
 
     private static void AssertOffered(CleanupPlan plan, params string[] paths)

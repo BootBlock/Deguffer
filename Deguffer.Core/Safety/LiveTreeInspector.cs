@@ -42,9 +42,19 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
                     Add(holders, $"{process.Name} is running from inside it");
                 }
 
-                if (process.CurrentDirectory is { } working && LongPath.Contains(candidate.Project, working))
+                if (process.CurrentDirectory is not { } working)
+                {
+                    continue;
+                }
+
+                if (LongPath.Contains(candidate.Project, working))
                 {
                     Add(holders, $"{process.Name} is working in {Path.GetFileName(candidate.Project)}");
+                }
+
+                if (WorkspaceAt(candidate, working) is { } workspace)
+                {
+                    Add(holders, $"{process.Name} is working in {Path.GetFileName(workspace)}");
                 }
             }
 
@@ -284,6 +294,18 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         }
 
         return present;
+    }
+
+    /// <summary>
+    /// The one of <paramref name="candidate"/>'s workspaces that <paramref name="working"/> is, or
+    /// null. Compared without a trailing separator, because a working directory is read with one.
+    /// </summary>
+    internal static string? WorkspaceAt(LiveTreeQuery candidate, string working)
+    {
+        var place = Path.TrimEndingDirectorySeparator(working);
+
+        return candidate.Workspaces.FirstOrDefault(workspace =>
+            Path.TrimEndingDirectorySeparator(workspace).Equals(place, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void Add(List<string> holders, string holder)

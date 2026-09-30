@@ -96,6 +96,34 @@ public static class ProjectFixture
         return obj;
     }
 
+    /// <summary>
+    /// Create a Visual Studio solution in <paramref name="solutionDirectory"/> naming
+    /// <paramref name="projectFiles"/>, each written as Visual Studio writes it, relative to the
+    /// solution, and return the solution's path.
+    /// </summary>
+    /// <param name="xml">True for a <c>.slnx</c>, false for a <c>.sln</c>.</param>
+    public static string CreateSolution(string solutionDirectory, string name, bool xml, params string[] projectFiles)
+    {
+        Directory.CreateDirectory(LongPath.Extended(solutionDirectory));
+
+        var relative = projectFiles.Select(project => Path.GetRelativePath(solutionDirectory, project)).ToList();
+        var solution = Path.Combine(solutionDirectory, name + (xml ? ".slnx" : ".sln"));
+
+        WriteText(
+            solution,
+            xml
+                ? "<Solution>\n  <Folder Name=\"/src/\">\n"
+                    + string.Concat(relative.Select(r => $"    <Project Path=\"{r.Replace('\\', '/')}\" />\n"))
+                    + "  </Folder>\n</Solution>\n"
+                : "\nMicrosoft Visual Studio Solution File, Format Version 12.00\n# Visual Studio Version 17\n"
+                    + "Project(\"{2150E333-8FDC-42A3-9474-1A3956D46DE8}\") = \"src\", \"src\", \"{0C1A4E36-5E2B-4F5A-9A8C-1D7E3F2B6A01}\"\nEndProject\n"
+                    + string.Concat(relative.Select((r, i) =>
+                        $"Project(\"{{9A19103F-16F7-4668-BE54-9A1E7A4F7556}}\") = \"{Path.GetFileNameWithoutExtension(r)}\", \"{r}\", \"{{00000000-0000-0000-0000-{i:D12}}}\"\nEndProject\n"))
+                    + "Global\nEndGlobal\n");
+
+        return solution;
+    }
+
     private static string Manifest(int version, string projectPath, string projectName) =>
         JsonSerializer.Serialize(new
         {

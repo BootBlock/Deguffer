@@ -273,6 +273,51 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A program working in one of the query's workspaces is using the project, though the folder is
+    /// above it: Visual Studio in the folder of a solution kept above its projects. The working
+    /// directory is read with a trailing separator, which the comparison has to ignore. Asked without
+    /// the workspace, the same program is no evidence, which is a shell at a repository's root.
+    /// </summary>
+    [Fact]
+    public void AProgramWorkingInAWorkspaceAboveTheProjectMakesItLive()
+    {
+        var solution = _temp.CreateDirectory("Solution");
+        var project = _temp.CreateDirectory("Solution", "ProjectA");
+        var target = _temp.CreateDirectory("Solution", "ProjectA", "obj");
+        var opened = new LiveTreeQuery(target, project) { Workspaces = [solution] };
+
+        using var busy = StartWaiting(solution, opened);
+
+        var findings = new LiveTreeInspector().FindLive([opened]);
+
+        Assert.True(findings.Complete);
+        Assert.Contains(
+            Assert.Single(findings.Live).Holders,
+            h => h.EndsWith("is working in Solution", StringComparison.Ordinal));
+        Assert.False(new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
+    }
+
+    /// <summary>
+    /// A workspace counts only for a program working exactly there. One working in a sibling project
+    /// is below the solution's folder too, and it is using the sibling.
+    /// </summary>
+    [Fact]
+    public void AProgramBelowAWorkspaceButOutsideTheProjectDoesNotMakeItLive()
+    {
+        var solution = _temp.CreateDirectory("Solution");
+        var project = _temp.CreateDirectory("Solution", "ProjectA");
+        var target = _temp.CreateDirectory("Solution", "ProjectA", "obj");
+        var sibling = _temp.CreateDirectory("Solution", "ProjectB");
+
+        using var busy = StartWaiting(sibling, new LiveTreeQuery(sibling, sibling));
+
+        var findings = new LiveTreeInspector().FindLive(
+            [new LiveTreeQuery(target, project) { Workspaces = [solution] }]);
+
+        Assert.False(findings.IsLive(target));
+    }
+
+    /// <summary>
     /// §6.3, and the answer here is a limit rather than a success. The Restart Manager refuses a path
     /// past <c>MAX_PATH</c> in both the plain and the extended-length form — established against a
     /// real file held open at 437 characters — so the lock-file signal genuinely cannot run that

@@ -5,7 +5,8 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// <see cref="LiveTreeVeto"/> asked again immediately before the directory it cleared is removed: a
-/// program running from inside it, a program working in its project, or a declared lock file held open.
+/// program running from inside it, a program working in its project or beside a solution that names
+/// it, or a declared lock file held open.
 ///
 /// <para><b>This is the case the question exists for.</b> A preview found nothing using a project, and
 /// the user opened it in an editor, or started a build, before pressing Clean. A build directory
@@ -22,10 +23,12 @@ namespace Deguffer.Core.Providers;
 /// finds holds back the step that removes the build.</para>
 /// </summary>
 /// <param name="directory">The directory the veto asked about, and the project it belongs to.</param>
-/// <param name="lockFilesOf">
-/// The veto's own rule for the files to ask about, applied again rather than its answer remembered.
-/// Unreal's logs are found by listing the project's <c>Saved\Logs</c>, and an editor opened on the
-/// project after the preview may have written the first one there.
+/// <param name="questions">
+/// The veto's own rule for what to ask, applied again rather than its answer remembered. Unreal's
+/// logs are found by listing the project's <c>Saved\Logs</c>, and an editor opened on the project
+/// after the preview may have written the first one there. A solution's folder is a workspace only
+/// while a program is in it and only for the projects the solution names now, and Visual Studio
+/// opened after the preview, or a project added to its solution since, is the one this is for.
 /// </param>
 /// <param name="unknown">
 /// Why the step is held back where the inspector could not tell, as an <see cref="InUseNow.Reason"/>,
@@ -34,15 +37,16 @@ namespace Deguffer.Core.Providers;
 internal sealed class LiveTreeCheck(
     ILiveTreeInspector inspector,
     RecognisedBuildDirectory directory,
-    Func<RecognisedBuildDirectory, IReadOnlyList<string>> lockFilesOf,
+    Func<CancellationToken, LiveTreeQuestion> questions,
     string? unknown = null) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
-        // The inspector keeps one process table for a planning pass. That table is the preview's.
+        // The inspector keeps one process table for a planning pass. That table is the preview's,
+        // and it is dropped before the question is built, because building it can read the table.
         inspector.Invalidate();
 
-        var query = new LiveTreeQuery(directory.Path, directory.Project, lockFilesOf(directory));
+        var query = questions(ct).Ask(directory);
         var findings = inspector.FindLive([query], ct);
 
         IReadOnlyList<InUseNow> live =

@@ -133,8 +133,23 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             ApprovedRoots,
             Kind.DirectoryNames,
             candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct)?.Project,
-            candidate => Kind.LockFilesFor(candidate.Project),
+            Questions,
             ct));
+
+    /// <summary>
+    /// What the veto asks about a directory: its project, and the files its tool holds open.
+    ///
+    /// <para>No <see cref="LiveTreeQuery.Workspaces"/>, because none of these toolchains has a file
+    /// above a project that is evidence of an editor using it, as a .NET solution is. A Cargo or uv
+    /// workspace keeps its one build directory at its own root, where a program working there is
+    /// already working in the project. A package manager's workspace keeps its one lock file at the
+    /// root by default, so a member's <c>node_modules</c> has none beside it and is not recognised.
+    /// Where a member does keep its own, as pnpm allows, nothing above it says an editor is using it
+    /// either. And a terminal at the root of a repository of unrelated projects is using none of
+    /// them.</para>
+    /// </summary>
+    private LiveTreeQuestion Questions(CancellationToken ct) =>
+        LiveTreeQuestion.ForLockFiles(candidate => Kind.LockFilesFor(candidate.Project));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -164,7 +179,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             }
         }
 
-        var live = LiveTreeVeto.Apply(LiveTrees, recognised, candidate => Kind.LockFilesFor(candidate.Project), ct);
+        var live = LiveTreeVeto.Apply(LiveTrees, recognised, Questions, ct);
 
         var (steps, measured) = await PlanDeletionsAsync(
             [

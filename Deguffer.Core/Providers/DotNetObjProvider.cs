@@ -145,7 +145,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             candidate => DotNetIntermediateSignature.TryRecognise(candidate, ct) is { } project
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
-            static _ => [],
+            Questions,
             ct));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -220,7 +220,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             [.. targets.Select(t => new RecognisedBuildDirectory(
                 t.Path,
                 Path.GetDirectoryName(t.Project.ProjectFilePath)!))],
-            [],
+            Questions,
             ct);
 
         var stillUnused = live.Cleared.ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
@@ -262,6 +262,25 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             // See BuildDirectoryProvider: a row whose only approved folder sits on a refused mount
             // must not render as "Already clear".
             WasNotExamined = steps.Count == 0 && discovered.RefusedRoots.Count > 0,
+        };
+    }
+
+    /// <summary>
+    /// What the veto asks about an <c>obj</c>: its project, and every place a program is whose
+    /// solution names that project. Visual Studio works in the solution's folder, and in the common
+    /// layout that folder is above the project, where a program working in the project alone would
+    /// never see it.
+    /// </summary>
+    private LiveTreeQuestion Questions(CancellationToken ct)
+    {
+        var solutions = SolutionWorkspaces.Read(_liveTrees.FindOccupiedDirectories(ct).Live, ApprovedRoots, ct);
+
+        return new LiveTreeQuestion(candidate => new LiveTreeQuery(candidate.Path, candidate.Project)
+        {
+            Workspaces = solutions.Naming(candidate.Project),
+        })
+        {
+            NamedProjects = solutions.NamedProjects,
         };
     }
 

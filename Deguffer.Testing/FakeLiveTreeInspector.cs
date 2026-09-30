@@ -53,7 +53,8 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// <para>Declared as a program rather than as a live directory, and answered on both sides by
     /// the real inspector's containment rule: <see cref="FindOccupiedDirectories"/> reports where it
     /// is, and <see cref="FindLive"/> counts it against a candidate whose directory holds the
-    /// executable or whose project holds the working directory. A provider that finds candidates
+    /// executable, whose project holds the working directory, or one of whose
+    /// <see cref="LiveTreeQuery.Workspaces"/> is the working directory. A provider that finds candidates
     /// from the first and confirms them with the second is then tested on the pair, which is the
     /// only thing that tells a program in a project's build directory from one merely below the
     /// project.</para>
@@ -135,9 +136,19 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                 holders.Add($"{program.Name} is running from inside it");
             }
 
-            if (program.WorkingDirectory is { } working && LongPath.Contains(candidate.Project, working))
+            if (program.WorkingDirectory is not { } working)
+            {
+                continue;
+            }
+
+            if (LongPath.Contains(candidate.Project, working))
             {
                 holders.Add($"{program.Name} is working in {Path.GetFileName(candidate.Project)}");
+            }
+
+            if (LiveTreeInspector.WorkspaceAt(candidate, working) is { } workspace)
+            {
+                holders.Add($"{program.Name} is working in {Path.GetFileName(workspace)}");
             }
         }
 
