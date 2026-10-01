@@ -89,6 +89,17 @@ public sealed class InstalledAppsListsTests
         Assert.StartsWith("'Machine' will be left.", selection.Note, StringComparison.Ordinal);
     }
 
+    /// <summary>Worded as the installed list words it: with nothing else selected, the refusal alone.</summary>
+    [Fact]
+    public void ALoneRefusedSelectionSaysTheRefusalAlone()
+    {
+        var machine = Entry("Machine", EntryStanding.Stale, scope: UninstallScope.Machine64);
+
+        var selection = RemovalSelection.For([machine], isElevated: false);
+
+        Assert.Equal(EntryRemovalPolicy.MayRemove(machine, isElevated: false).Reason, selection.Note);
+    }
+
     [Fact]
     public void ASelectionThatMayAllGoHasNoNote()
     {

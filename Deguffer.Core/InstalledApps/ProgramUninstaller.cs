@@ -73,6 +73,14 @@ public sealed class ProgramUninstaller(InstalledAppsReader reader, IUninstallLau
                 "The entry's uninstall command changed after you confirmed it, so Deguffer did not run it.");
         }
 
+        // The last moment a cancel can still keep the uninstaller from starting: the launcher sees
+        // the token only once the process is running.
+        if (ct.IsCancellationRequested)
+        {
+            return new UninstallReport(confirmed.Entry, AfterUninstall.NotRun,
+                $"The uninstaller of '{confirmed.Entry.Name}' was cancelled before it started, so Deguffer did not run it.");
+        }
+
         var outcome = await launcher.RunAsync(launch, ct).ConfigureAwait(false);
 
         if (!outcome.Started)

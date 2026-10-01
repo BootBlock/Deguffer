@@ -838,9 +838,10 @@ break something.
 - **Every row says why it is in its list**, in the words the evidence supports: "The uninstaller
   `C:\...\unins000.exe` and the install folder are both gone", or "Windows Installer does not know
   this product". An installed row whose presence nothing could prove says that instead, so the list
-  never implies a check it did not make. The sentence is the tooltip of a badge beside the name
-  that names the standing in a word, and the row's help text for a screen reader, so a row stays
-  two lines high.
+  never implies a check it did not make. A badge beside the name names the standing in a word and
+  is the row's disclosure (§7): a click, a tap or the keyboard opens the sentence, with every other
+  sentence about the row, a pointer gets it as the badge's tooltip, and a screen reader as the
+  row's help text. So a row stays two lines high.
 - **An installed row shows the size its installer recorded** in `EstimatedSize`, as Windows
   Settings does, and says it is an estimate. A stale row shows none: its program is proven gone, so
   the figure describes nothing on the disk.

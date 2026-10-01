@@ -183,6 +183,22 @@ public sealed class ProgramUninstallerTests : IDisposable
         Assert.Empty(_launcher.Started);
     }
 
+    /// <summary>A cancel that comes while the entry is read again keeps the uninstaller from starting.</summary>
+    [Fact]
+    public async Task ACancelBeforeTheLaunchStartsNothing()
+    {
+        var key = Installed("Tool");
+        var prepared = Uninstaller.Prepare(Current(key)).Prepared!;
+        using var cancel = new CancellationTokenSource();
+        await cancel.CancelAsync();
+
+        var report = await Uninstaller.UninstallAsync(prepared, cancel.Token);
+
+        Assert.Equal(AfterUninstall.NotRun, report.After);
+        Assert.Empty(_launcher.Started);
+        Assert.Contains("cancelled before it started", report.Summary, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AnUninstallerThatDidNotStartReportsWhy()
     {

@@ -50,13 +50,20 @@ public sealed partial class InstalledAppRow : ObservableObject
     [ObservableProperty]
     public partial bool HasShield { get; private set; }
 
+    /// <summary>Why the program cannot be uninstalled, or empty where it can.</summary>
+    [ObservableProperty]
+    public partial string Refusal { get; private set; }
+
+    [ObservableProperty]
+    public partial bool HasRefusal { get; private set; }
+
     [ObservableProperty]
     public partial string Size { get; private set; }
 
     [ObservableProperty]
     public partial bool HasSize { get; private set; }
 
-    /// <summary>Everything the badges say, for a screen reader, which reads no tooltip.</summary>
+    /// <summary>Everything the row's marks say, for a screen reader.</summary>
     [ObservableProperty]
     public partial string Description { get; private set; }
 
@@ -72,8 +79,10 @@ public sealed partial class InstalledAppRow : ObservableObject
         IsHidden = marks.Hidden is not null;
         Shield = marks.Shield ?? string.Empty;
         HasShield = marks.Shield is not null;
+        Refusal = marks.Refusal ?? string.Empty;
+        HasRefusal = marks.Refusal is not null;
         Size = marks.Size is { } bytes ? FreeSpace.Format(bytes) : string.Empty;
         HasSize = marks.Size is not null;
-        Description = string.Join(" ", new[] { $"{marks.Standing}.", marks.Reason, marks.Hidden, marks.Shield, HasSize ? $"Its installer estimated {Size}." : null }.Where(p => p is not null));
+        Description = string.Join(" ", new[] { $"{marks.Standing}.", marks.Reason, marks.Hidden, marks.Shield, marks.Refusal, HasSize ? $"Its installer estimated {Size}." : null }.Where(p => p is not null));
     }
 }

@@ -55,7 +55,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
             new InstalledAppsActions(
                 new EntryRemover(_registry, reader, backups),
                 new BackupRestorer(_registry, backups),
-                new ProgramUninstaller(reader, _launcher,@"C:\Windows\System32\msiexec.exe"),
+                new ProgramUninstaller(reader, _launcher, @"C:\Windows\System32\msiexec.exe"),
                 backups,
                 () => _prompt,
                 _preferences,

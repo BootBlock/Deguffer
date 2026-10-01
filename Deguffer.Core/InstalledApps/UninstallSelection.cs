@@ -21,7 +21,7 @@ public sealed record UninstallSelection(IReadOnlyList<PreparedUninstall> Runnabl
     {
         var judged = selected.Select(e => (Entry: e, Judgement: judge(e))).ToList();
         var runnable = judged.Select(j => j.Judgement.Prepared).OfType<PreparedUninstall>().ToList();
-        var refused = judged.Where(j => j.Judgement.Prepared is null).ToList();
+        var refused = judged.Where(j => j.Judgement.Prepared is null).Select(j => (j.Entry, j.Judgement.Verdict)).ToList();
 
         var runs = runnable switch
         {
@@ -31,13 +31,7 @@ public sealed record UninstallSelection(IReadOnlyList<PreparedUninstall> Runnabl
             _ => $"Runs {runnable.Count} uninstallers, one at a time, and asks before starting each one after the first.",
         };
 
-        var left = refused switch
-        {
-            [] => null,
-            [var only] when runnable.Count == 0 => only.Judgement.Verdict.Reason,
-            [var only] => $"'{only.Entry.Name}' will be left. {only.Judgement.Verdict.Reason}",
-            _ => $"{refused.Count} of the selected programs will be left. '{refused[0].Entry.Name}': {refused[0].Judgement.Verdict.Reason}",
-        };
+        var left = LeftNote.For(refused, runnable.Count, "programs");
 
         return new UninstallSelection(runnable, string.Join(" ", new[] { runs, left }.OfType<string>()));
     }

@@ -8,12 +8,15 @@
 
     <Page.Resources>
         <!-- One row for both lists, two lines high: the name with its badges, then who and what it
-             is, with the installer's size beside both. §7.3 puts the reason on every row: it is the
-             standing badge's tooltip, and the row's help text for a screen reader. -->
+             is, with the installer's size beside both. §7.3 puts the reason on every row: the
+             standing badge opens it, and the row's help text carries it for a screen reader. -->
         <DataTemplate x:Key="EntryTemplate" x:DataType="vm:InstalledAppRow">
             <!-- The size sits outside the two lines, so it cannot make one row taller than the rest,
-                 and its column keeps its width where a row has no size, so the badges line up. -->
+                 and its column keeps its width where a row has no size, so the badges line up. The
+                 hairline under each row, as between findings, keeps neighbouring rows apart; the
+                 item presenter draws no border of its own. -->
             <Grid Padding="0,8" ColumnSpacing="12"
+                  BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                   AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
                   AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
                 <Grid.ColumnDefinitions>
@@ -34,10 +37,29 @@
                                         Visibility="{x:Bind IsHidden, Mode=OneWay}"
                                         ToolTipService.ToolTip="{x:Bind Hidden, Mode=OneWay}"
                                         AutomationProperties.Name="Hidden" />
-                        <ContentControl Content="{x:Bind Standing, Mode=OneWay}"
-                                        Style="{x:Bind StandingKind, Mode=OneWay, Converter={StaticResource StandingChipStyle}}"
-                                        ToolTipService.ToolTip="{x:Bind Reason, Mode=OneWay}"
-                                        AutomationProperties.Name="{x:Bind Standing, Mode=OneWay}" />
+                        <!-- The row's disclosure (§7): a button, so a keyboard reaches it with Tab and a
+                             finger with a tap, opening every sentence about the row. A pointer also
+                             gets the reason as the tooltip. -->
+                        <Button Padding="0" MinWidth="0" MinHeight="0" Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="{x:Bind Reason, Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind Standing, Mode=OneWay}"
+                                AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
+                            <ContentControl Content="{x:Bind Standing, Mode=OneWay}"
+                                            Style="{x:Bind StandingKind, Mode=OneWay, Converter={StaticResource StandingChipStyle}}" />
+                            <Button.Flyout>
+                                <Flyout>
+                                    <StackPanel MaxWidth="420" Spacing="8">
+                                        <TextBlock Text="{x:Bind Reason, Mode=OneWay}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{x:Bind Hidden, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Visibility="{x:Bind IsHidden, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind Shield, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Visibility="{x:Bind HasShield, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind Refusal, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Visibility="{x:Bind HasRefusal, Mode=OneWay}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
 
                     <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{x:Bind Detail, Mode=OneWay}"
@@ -55,12 +77,11 @@
             </Grid>
         </DataTemplate>
 
-        <!-- A hairline under each row, as between findings, so neighbouring rows read apart. -->
-        <Style x:Key="EntryContainer" TargetType="ListViewItem">
+        <!-- Based on the list's own item style, which draws the selection checkboxes in the theme's
+             colours: a style without it falls back to one whose unchecked box and tick barely show. -->
+        <Style x:Key="EntryContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="MinHeight" Value="0" />
-            <Setter Property="BorderThickness" Value="0,0,0,1" />
-            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         </Style>
     </Page.Resources>
 

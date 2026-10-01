@@ -1,5 +1,4 @@
 using Deguffer.Core.InstalledApps;
-using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -100,6 +99,6 @@ public sealed class UninstallSelectionTests : IDisposable
         var selection = UninstallSelection.For([entry], Uninstaller.Prepare);
 
         Assert.Empty(selection.Runnable);
-        Assert.Equal(PathPresence.Absent, ((ProgramCommand)Reader.ReadAgain(entry.Key)!.Command).Presence);
+        Assert.StartsWith("The program is already gone", selection.Note, StringComparison.Ordinal);
     }
 }

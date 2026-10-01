@@ -95,12 +95,12 @@ public sealed class UninstallQueueTests : IDisposable
         Assert.Contains("It may still be running.", report.Summary, StringComparison.Ordinal);
     }
 
+    /// <summary>The question was going to be answered yes, so only the cancel can stop the queue.</summary>
     [Fact]
     public async Task CancellingWhileAskingStartsNoMore()
     {
         using var cancel = new CancellationTokenSource();
         _prompt.WhileAsking = _ => cancel.Cancel();
-        _prompt.Answer = false;
 
         var report = await Queue.RunAsync([Installed("A"), Installed("B")], new CallbackProgress<UninstallStep>(_ => { }), cancel.Token);
 

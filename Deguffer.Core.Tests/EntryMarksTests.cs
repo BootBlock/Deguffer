@@ -89,6 +89,19 @@ public sealed class EntryMarksTests : IDisposable
     public void AProgramThatCannotBeUninstalledWearsNoShield() =>
         Assert.Null(EntryMarks.For(Installed(UninstallScope.Machine64), Refused, isElevated: false).Shield);
 
+    /// <summary>§7.3: a program that will not be uninstalled says why on its own row.</summary>
+    [Fact]
+    public void ARefusedProgramCarriesItsRefusal()
+    {
+        Assert.Equal("No.", EntryMarks.For(Installed(UninstallScope.CurrentUser), Refused, isElevated: false).Refusal);
+        Assert.Null(EntryMarks.For(Installed(UninstallScope.CurrentUser), Allowed, isElevated: false).Refusal);
+    }
+
+    /// <summary>A stale entry's uninstall is always refused, and saying so on its row would only repeat its standing.</summary>
+    [Fact]
+    public void AStaleEntryCarriesNoUninstallRefusal() =>
+        Assert.Null(EntryMarks.For(Stale(UninstallScope.CurrentUser), Refused, isElevated: false).Refusal);
+
     [Fact]
     public void APerUserProgramWearsNoShield() =>
         Assert.Null(EntryMarks.For(Installed(UninstallScope.CurrentUser), Allowed, isElevated: false).Shield);
