@@ -130,7 +130,7 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             ProtectedPaths = Protect(
-                [.. scan.Protected.Concat(layout.Survivors).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+                [.. scan.Protected.Concat(layout.Survivors)]),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || layout.LeftSomethingUnexamined),

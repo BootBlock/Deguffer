@@ -47,6 +47,8 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RecognisedChild();
 
+    private const string UnrecognisedReason = "Not a recognised Playwright browser download.";
+
     public PlaywrightBrowsersProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
@@ -186,6 +188,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>();
         var targets = new List<DeletionTarget>();
+        var spared = new List<(string Path, string Reason)>();
 
         var scan = ChildDirectories.Under(root);
 
@@ -199,10 +202,13 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
         // A link is a child the user can see, so it is named rather than dropped. It is never
         // followed: what it points at was never classified.
-        notes.AddRange(scan.Links.Select(link => new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
-            + "delete through a link.")));
+        foreach (var link in scan.Links)
+        {
+            var path = LongPath.Display(link.FullName);
+
+            notes.Add(CacheLevelWalk.Note(path));
+            spared.Add((path, CacheLevelWalk.LinkReason));
+        }
 
         foreach (var child in scan.Directories)
         {
@@ -212,9 +218,10 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             {
                 // §5.2: unrecognised means untouched, and the user is told rather than left to
                 // wonder why the total is smaller than the folder.
-                notes.Add(new PlanNote(
-                    PlanNoteSeverity.Information,
-                    $"Leaving '{child.Name}' alone: not a recognised Playwright browser download."));
+                var survivor = (LongPath.Display(child.FullName), UnrecognisedReason);
+
+                notes.Add(CacheLevelWalk.SparedNote(survivor));
+                spared.Add(survivor);
                 continue;
             }
 
@@ -254,7 +261,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(root),
+            ProtectedPaths = BuildProtectedPaths(root, spared),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
@@ -268,8 +275,16 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     /// reads it to decide when a browser version has no users left and may be removed. Deleting the
     /// browsers is a reclaim Playwright recovers from; deleting the registry that tracks them
     /// breaks its own housekeeping, and it looks exactly like a cache while doing so.
+    ///
+    /// <para>Every other child left standing is named too, links included. Each is a sibling of a
+    /// targeted build, which is exactly where an over-broad rule takes one with the other.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string root) => Protect(
+    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        string root,
+        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
+    [
         (root, "The browser cache root itself must survive — only recognised browser builds are removed."),
-        (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."));
+        (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."),
+        .. spared,
+    ]);
 }

@@ -141,6 +141,14 @@ public static class CacheLevelWalk
         PlanNoteSeverity.Information,
         $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not delete "
         + "through a link.");
+
+    /// <summary>
+    /// The sentence for a child the walk spared. A provider whose user is shown each spared child by
+    /// name says it with this, so the reason they read is the one §5.6 records against the same path.
+    /// </summary>
+    public static PlanNote SparedNote((string Path, string Reason) survivor) => new(
+        PlanNoteSeverity.Information,
+        $"Leaving '{Path.GetFileName(survivor.Path)}' alone: {survivor.Reason}");
 }
 
 /// <summary>What one root's levels came to, for the plan the caller builds from it.</summary>

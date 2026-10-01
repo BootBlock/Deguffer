@@ -197,8 +197,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             ProtectedPaths = Protect(
             [
                 .. held.Select(path => (Path: path, Reason: HeldReason))
-                    .Concat(scan.Protected)
-                    .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase),
+                    .Concat(scan.Protected),
             ]),
             Notes = notes,
             Fallback = measured.Fallback,

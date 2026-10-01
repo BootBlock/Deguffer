@@ -353,7 +353,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             ProtectedPaths = Protect(
-                [.. survivors.DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+                [.. survivors]),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

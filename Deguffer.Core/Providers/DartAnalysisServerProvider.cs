@@ -38,6 +38,8 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             + "them again when it next needs them."),
     ]);
 
+    private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, DisposableChildren)];
+
     private readonly string _root;
 
     public DartAnalysisServerProvider(
@@ -111,9 +113,9 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
         }
 
         // Moving the store onto another drive with a junction is how a developer keeps 3 GB off a
-        // small system disk, and the enumeration below never classifies the directory it is handed:
-        // it would return the far side's ordinary children, target the recognised ones, and pass
-        // every §5.6 assertion, because each survivor named here resolves through the same link.
+        // small system disk. The walk below would decline it too, but this says so about the whole
+        // store in one sentence, and makes no claim about a .prompts that only resolves through the
+        // link.
         if (LongPath.IsReparsePoint(_root))
         {
             return UnexaminedPlan(
@@ -121,49 +123,11 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
                 + "through a link.");
         }
 
-        var notes = new List<PlanNote>();
-        var targets = new List<DeletionTarget>();
+        var walk = CacheLevelWalk.Under(Levels, _root, ct);
 
-        var scan = ChildDirectories.Under(_root);
+        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors.Select(CacheLevelWalk.SparedNote)];
 
-        // The root was found on disk by name above, and a listing right is separate from a traverse
-        // right — so a refusal here leaves a plan with no steps and, without this, nothing said. The
-        // shell renders that as "Already clear", which is a claim about a folder nobody read.
-        if (scan.Unreadable)
-        {
-            notes.Add(UnreadableRoot.Note(_root));
-        }
-
-        // A link is a child the user can see, so it is named rather than dropped. It is never
-        // followed: what it points at was never classified.
-        notes.AddRange(scan.Links.Select(link => new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
-            + "delete through a link.")));
-
-        foreach (var child in scan.Directories)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var classification = DisposableChildren.Classify(child.Name);
-
-            if (!classification.Tier.IsOfferable())
-            {
-                // §5.2: unrecognised means untouched, and the user is told why rather than
-                // silently having it omitted.
-                notes.Add(new PlanNote(
-                    PlanNoteSeverity.Information,
-                    $"Leaving '{child.Name}' alone: {classification.Reason}"));
-                continue;
-            }
-
-            // Enumeration runs in extended form; a plan always holds display paths, and I/O
-            // re-extends at the point of use. Keeping the prefix out of the plan means it never
-            // reaches the UI, a log, or a comparison.
-            targets.Add(new DeletionTarget(LongPath.Display(child.FullName), classification.Reason));
-        }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -182,11 +146,11 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = BuildProtectedPaths(walk),
             Notes = notes,
             Fallback = measured.Fallback,
-            HasUnreadableRoot = scan.Unreadable,
-            WasNotExamined = targets.Count == 0 && scan.Links.Count > 0,
+            HasUnreadableRoot = walk.Unreadable,
+            WasNotExamined = walk.Targets.Count == 0 && walk.Declined.Count > 0,
         };
     }
 
@@ -194,8 +158,10 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     /// §5.6. The three unrecognised children are named rather than left to the Tier 4 default,
     /// because they are dot-named directories sitting directly beside the two that are removed —
     /// indistinguishable in shape from them, and so exactly what an over-broad rule takes along.
+    /// Every other child the walk spared or declined is named for the same reason.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(LevelWalk walk) => Protect(
+        walk,
         (_root, "The .dartServer root itself must survive — only its known-disposable children are removed."),
         (Path.Combine(_root, ".prompts"), "The user's answers to the analysis server's prompts — a preference, not a cache."),
         (Path.Combine(_root, ".plugin_manager"), "State for the analyzer plugins the server loads."),

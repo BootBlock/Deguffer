@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -66,6 +67,60 @@ public sealed class NuGetCacheProviderTests : IDisposable
             p.Path.Equals(Path.Combine(_environment.RoamingAppData, "NuGet", "NuGet.Config"), StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Path.Combine(_environment.UserProfile, ".nuget", "NuGet.Config"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.6 for both folders NuGet's command clears inside. Each child that is not one of its caches
+    /// is a sibling of one the command empties, which is where an over-broad rule takes one with the
+    /// other, so the run has to prove it survived. The caches themselves are not named: the command
+    /// is meant to empty them.
+    /// </summary>
+    [Fact]
+    public async Task ProtectsBothNuGetFoldersAndEverythingInThemThatIsNotACache()
+    {
+        var local = Path.Combine(_environment.LocalAppData, "NuGet");
+        var profile = Path.Combine(_environment.UserProfile, ".nuget");
+
+        var legacy = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "Cache");
+        _temp.CreateDirectory("profile", ".nuget", "plugins", "netcore", "CredentialProvider");
+        var unknown = _temp.CreateDirectory("profile", ".nuget", "something-nuget-added-later");
+
+        var linked = Path.Combine(local, "linked");
+        SymbolicLink.ToDirectory(linked, _temp.CreateDirectory("far-side"));
+
+        var (plan, locations) = await PlanWithLocals();
+
+        string[] spared = [local, legacy, linked, Path.Combine(profile, "plugins"), unknown];
+
+        Assert.All(spared, path => Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present));
+
+        Assert.All(locations, cache => Assert.DoesNotContain(plan.ProtectedPaths, p =>
+            p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// NUGET_HTTP_CACHE_PATH can put the cache in any folder, and the command then empties it. A
+    /// folder holding it is not asserted unchanged, or every successful run would fail verification.
+    /// NuGet reports the location as its own process sees it, so the short form is the one used.
+    ///
+    /// <para>On a volume that creates no 8.3 aliases the fixture falls back to the long form. The
+    /// folder name is longer than eight characters so that every volume that does create them gives
+    /// it one.</para>
+    /// </summary>
+    [Fact]
+    public async Task DoesNotProtectAFolderHoldingACacheNuGetWasPointedAt()
+    {
+        var holder = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches");
+        _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches", "http");
+        var beside = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "something-else");
+
+        var asReported = Path.Combine(ShortPath.Of(holder) ?? holder, "http");
+
+        var plan = await PlanReporting($"http-cache: {asReported}");
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(holder, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(beside, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

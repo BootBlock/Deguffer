@@ -30,6 +30,8 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             "Downloaded Gradle distributions. The wrapper re-fetches the version a project asks for."),
     ]);
 
+    private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, DisposableChildren)];
+
     private readonly string _root;
 
     public GradleCacheProvider(
@@ -90,9 +92,6 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var notes = new List<PlanNote>();
-        var targets = new List<DeletionTarget>();
-
         if (NothingToPlanFor(
                 _root,
                 "Gradle is not installed for this user — no .gradle directory.") is { } nothing)
@@ -100,10 +99,9 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             return nothing;
         }
 
-        // Moving .gradle onto another drive with a junction is common, and the enumeration below
-        // never classifies the directory it is handed: it would return the far side's ordinary
-        // children, target the recognised ones, and pass every §5.6 assertion, because each survivor
-        // named here resolves through the same link.
+        // Moving .gradle onto another drive with a junction is common. The walk below would decline
+        // it too, but this says so about the whole folder in one sentence, and makes no claim about
+        // a gradle.properties that only resolves through the link.
         if (LongPath.IsReparsePoint(_root))
         {
             return UnexaminedPlan(
@@ -111,46 +109,11 @@ public sealed class GradleCacheProvider : CleanupProviderBase
                 + "through a link.");
         }
 
-        var scan = ChildDirectories.Under(_root);
+        var walk = CacheLevelWalk.Under(Levels, _root, ct);
 
-        // The root was found on disk by name above, and a listing right is separate from a traverse
-        // right — so a refusal here leaves a plan with no steps and, without this, nothing said. The
-        // shell renders that as "Already clear", which is a claim about a folder nobody read.
-        if (scan.Unreadable)
-        {
-            notes.Add(UnreadableRoot.Note(_root));
-        }
+        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors.Select(CacheLevelWalk.SparedNote)];
 
-        // A link is a child the user can see, so it is named rather than dropped. It is never
-        // followed: what it points at was never classified.
-        notes.AddRange(scan.Links.Select(link => new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
-            + "delete through a link.")));
-
-        foreach (var child in scan.Directories)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var classification = DisposableChildren.Classify(child.Name);
-
-            if (!classification.Tier.IsOfferable())
-            {
-                // §5.2: unrecognised means untouched, and the user is told why rather than
-                // silently having it omitted.
-                notes.Add(new PlanNote(
-                    PlanNoteSeverity.Information,
-                    $"Leaving '{child.Name}' alone: {classification.Reason}"));
-                continue;
-            }
-
-            // Enumeration runs in extended form; a plan always holds display paths, and I/O
-            // re-extends at the point of use. Keeping the prefix out of the plan means it never
-            // reaches the UI, a log, or a comparison.
-            targets.Add(new DeletionTarget(LongPath.Display(child.FullName), classification.Reason));
-        }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+        var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -169,19 +132,22 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = BuildProtectedPaths(walk),
             Notes = notes,
             Fallback = measured.Fallback,
-            HasUnreadableRoot = scan.Unreadable,
-            WasNotExamined = targets.Count == 0 && scan.Links.Count > 0,
+            HasUnreadableRoot = walk.Unreadable,
+            WasNotExamined = walk.Targets.Count == 0 && walk.Declined.Count > 0,
         };
     }
 
     /// <summary>
     /// §5.6. The root itself and the config beside it are the whole reason this provider is
-    /// path-based rather than a recursive delete, so they are what the run has to prove.
+    /// path-based rather than a recursive delete, so they are what the run has to prove. Every child
+    /// the walk spared or declined is named as well: <c>jdks</c>, <c>native</c> and <c>daemon</c> are
+    /// siblings of the two targets, which is exactly where an over-broad rule takes one with the other.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(LevelWalk walk) => Protect(
+        walk,
         (_root, "The .gradle root itself must survive — only its known-disposable children are removed."),
         (Path.Combine(_root, "gradle.properties"), "User configuration, which may hold signing keys and credentials."),
         (Path.Combine(_root, "init.d"), "User init scripts."),

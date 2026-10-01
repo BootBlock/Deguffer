@@ -187,7 +187,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             ProtectedPaths = Protect(
-                [.. survey.Survivors.Concat(survey.Declined).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+                [.. survey.Survivors.Concat(survey.Declined)]),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = survey.Unreadable,
