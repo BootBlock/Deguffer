@@ -37,7 +37,7 @@ public enum ChromiumProfileRule
 /// <param name="IdentifyingFile">
 /// The file the engine writes into the user-data folder it owns. It holds the settings that span
 /// every profile and, on Windows, the DPAPI-wrapped key that decrypts the cookies and saved
-/// passwords beside it, which is why <see cref="ChromiumCacheProvider"/> asserts it survived.
+/// passwords beside it, which is why <see cref="ChromiumUserDataProvider"/> asserts it survived.
 /// </param>
 /// <param name="Profiles">How the profiles inside the folder are recognised.</param>
 public sealed record ChromiumLayout(string IdentifyingFile, ChromiumProfileRule Profiles)

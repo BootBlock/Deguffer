@@ -407,7 +407,7 @@ public sealed class CleanupPlannerTests
                 "dotnet-obj", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "maven", "vcpkg", "gpu-shader-cache",
-                "chromium-app-cache", "vscode-cache", "firefox", "epic-launcher-webcache",
+                "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache",
                 "squirrel-staging",
@@ -423,7 +423,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "conda", "maven", "vcpkg", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes",
+                "conda", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
                 "windows-update-leftovers", "driver-store", "component-store",

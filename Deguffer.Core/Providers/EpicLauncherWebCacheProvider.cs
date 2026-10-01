@@ -48,8 +48,9 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     /// are installed for which pages, and removing that is not a cache eviction. So the register's
     /// parent becomes a level of its own and only the two caches inside it are named.</para>
     ///
-    /// <para>Both containers are declared Tier 4 rather than left out, on
-    /// <see cref="ChromiumCacheProvider"/>'s reasoning: the generic "not recognised" sentence would
+    /// <para>Both containers are declared Tier 4 rather than left out, on the reasoning of
+    /// <see cref="ChromiumCacheProvider"/> and <see cref="ChromiumServiceWorkerStorageProvider"/>:
+    /// the generic "not recognised" sentence would
     /// be actively false about a directory that really is left standing while something inside it
     /// really is being removed.</para>
     ///

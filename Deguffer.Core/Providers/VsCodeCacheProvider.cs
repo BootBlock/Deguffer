@@ -10,8 +10,8 @@ namespace Deguffer.Core.Providers;
 /// folder).
 ///
 /// <para><b>Why this is not the Chromium provider.</b> A VS Code user-data folder holds
-/// <c>Local State</c>, so <see cref="ChromiumCacheProvider"/> already reaches the ten engine caches
-/// inside it. Those ten are the small part. <c>CachedData</c>, <c>CachedExtensionVSIXs</c>,
+/// <c>Local State</c>, so <see cref="ChromiumCacheProvider"/> already reaches the nine engine caches
+/// inside it. Those nine are the small part. <c>CachedData</c>, <c>CachedExtensionVSIXs</c>,
 /// <c>CachedExtensions</c>, <c>CachedProfilesData</c> and <c>WebStorage</c> are the editor's own,
 /// under names that belong to Code - OSS rather than to Chromium, and a rule about Chromium has no
 /// business knowing them. So they are a second declaration over the same folder, and the two
@@ -55,7 +55,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     /// holding the editor's entire stored state.
     ///
     /// <para><see cref="VsCodeWebStorage.DirectoryName"/> appears as a Tier 4 entry rather than as
-    /// an omission, on the reasoning <see cref="ChromiumCacheProvider"/> settled for <c>Cache</c> and
+    /// an omission, on the reasoning the Chromium rows settled for <c>Cache</c> and
     /// <c>Service Worker</c>: it is the one case where the unrecognised-child wording would be
     /// actively misleading, because the directory really is left standing and something inside it
     /// really is being removed.</para>
@@ -194,7 +194,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     /// the reason this declaration exists.</para>
     ///
     /// <para><b>This folder is declared twice, by two providers, and that is correct.</b>
-    /// <see cref="ChromiumCacheProvider"/> declares the same path with the ten engine cache names,
+    /// <see cref="ChromiumCacheProvider"/> declares the same path with the nine engine cache names,
     /// and this one declares it with the editor's own. §7.1 reads the union of every declaration
     /// covering a path, so each provider states only what it knows and neither has to carry the
     /// other's table.</para>

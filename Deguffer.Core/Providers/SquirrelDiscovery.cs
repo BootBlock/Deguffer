@@ -192,7 +192,7 @@ public sealed partial class SquirrelDiscovery
     /// providers, their presence probes and their §5.2 declarations all ask this same question of
     /// the same directory, and this is the one sweep behind all of them.
     ///
-    /// <para>A method rather than a property, on <see cref="ChromiumCacheProvider.Applications"/>'s
+    /// <para>A method rather than a property, on <see cref="ChromiumUserDataProvider.Applications"/>'s
     /// pattern, because the memoisation must not cost the cancellation: what it does on a miss is a
     /// child listing of a root holding hundreds of directories, plus a listing per candidate below
     /// it, and G4 requires a scan the user can abandon.</para>

@@ -775,7 +775,7 @@ measured in seconds and there is no path by which anything is lost.
 | | |
 | --- | --- |
 | **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, any WebView2 user-data folder (`EBWebView`) up to six levels under them, each Chromium-based browser's own user-data folder, and the Battle.net launcher's built-in browser |
-| **Method** | Delete the ten cache directories Chromium writes, per profile |
+| **Method** | Delete the nine cache directories Chromium writes, per profile |
 | **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB. One browser's `Code Cache` alone came to 194 MB on the same workstation |
 
 ### What it is
@@ -785,8 +785,8 @@ around it — chat clients, editors, note-takers, package-manager front ends. Ea
 browser inside itself, and each one therefore keeps a full browser's caches: downloaded web content,
 compiled JavaScript, and compiled graphics pipelines.
 
-Because the engine is the same in all of them, the cache directories have the same ten names in all
-of them, sitting in whatever data folder the vendor chose. That is what Deguffer recognises. It does
+Because the engine is the same in all of them, the cache directories have the same nine names in
+all of them, sitting in whatever data folder the vendor chose. That is what Deguffer recognises. It does
 not need to know the application.
 
 | Directory | What it holds |
@@ -798,9 +798,12 @@ not need to know the application.
 | `GraphiteDawnCache` | Compiled graphics pipelines, in a directory of its own beside `DawnGraphiteCache` |
 | `DawnGraphiteCache`, `DawnWebGPUCache` | Compiled WebGPU pipelines |
 | `DawnCache` | Compiled WebGPU pipelines, under the name older builds of the engine gave that cache. Battle.net's engine still writes it |
-| `Service Worker\CacheStorage` | Responses a service worker stored for offline use |
 
-The browsers built on Chromium keep the same ten directories, but further down: under a vendor
+What sites' service workers stored for offline use, in `Service Worker\CacheStorage`, is in the same
+folders and is not one of the nine. Removing it costs more than a slower start, so it is a Tier 2 row
+of its own: [Chromium offline site storage](#chromium-offline-site-storage).
+
+The browsers built on Chromium keep the same nine directories, but further down: under a vendor
 folder and a product folder rather than directly in `%APPDATA%` or `%LOCALAPPDATA%`. Deguffer knows
 where each of these keeps its folder, including the beta, developer and nightly builds:
 
@@ -859,7 +862,7 @@ application of any kind might give its settings that name. A partition is any di
 folder that holds its own `LocalPrefs.json`, so the launcher's choice of name never has to be
 guessed, and a directory without the file is not looked inside.
 
-Within such a folder it removes exactly the ten directories above and nothing else, one step each,
+Within such a folder it removes exactly the nine directories above and nothing else, one step each,
 so you can clear one application and keep another. Where an application keeps several profiles —
 `Default`, `Profile 1` and so on — each profile's caches are their own steps too, so you can clear a
 dormant profile and leave the one you use signed in and warm. In a WebView2 folder, a profile the
@@ -867,11 +870,10 @@ application named for itself sits in a `WV2Profile_<name>` directory beside `Def
 treated exactly as `Default` is. Teams keeps all of its cache, and all of its sign-in state, in one
 of those.
 
-`Cache` and `Service Worker` are **not** removed, only the one directory inside each. `Service
-Worker` keeps its registrations and scripts next to the responses they cached, and `Cache` is left
-standing for the same reason any unrecognised folder is: Deguffer takes the directory it recognises,
-never the one holding it. The plan says so, so you are not left wondering why those two folders are
-still there afterwards.
+`Cache` is **not** removed, only `Cache_Data` inside it. It is left standing for the same reason
+any unrecognised folder is: Deguffer takes the directory it recognises, never the one holding it. The
+plan says so, so you are not left wondering why the folder is still there afterwards. This row
+leaves `Service Worker` alone whole.
 
 ### What is protected
 
@@ -882,12 +884,13 @@ beside the caches, in the same naming style, are:
 | --- | --- |
 | `Local Storage`, `Session Storage` | Application state and drafts |
 | `IndexedDB` | Offline application data |
+| `Service Worker` | Each site's service worker, and what it stored to work offline, which is [a row of its own](#chromium-offline-site-storage) |
 | `Cookies`, `Network\Cookies` | Your sign-in cookies |
 | `Login Data` | Saved usernames and passwords |
 | `Web Data` | Saved addresses and payment cards |
 | `Local State`, or `LocalPrefs.json` in Battle.net's folder and each of its partitions | Application settings, and the key that decrypts the three above |
 
-Nothing outside the ten names is ever a candidate, whatever it is called — a directory named
+Nothing outside the nine names is ever a candidate, whatever it is called — a directory named
 `SuperCache` stays exactly where it is. Deguffer asserts afterwards that every one of these
 survived, the ones that are files rather than folders included — those would otherwise never be
 checked at all, because the rule that classifies a folder never sees a file.
@@ -902,9 +905,8 @@ another drive with a link, Deguffer names the link and leaves Edge alone.
 Each application starts more slowly once. It fetches the web content it had cached, recompiles its
 scripts, and then behaves exactly as before.
 
-**You stay signed in.** Sign-ins, saved passwords, settings and offline data are all in the
-neighbouring directories, not in the ten. An application that works offline needs to be online once
-to refill what its service worker had stored.
+**You stay signed in, and nothing that works offline stops doing so.** Sign-ins, saved passwords,
+settings and offline data are all in the neighbouring directories, not in the nine.
 
 Close the applications first if you can. A running one keeps its cache files open, and anything held
 open is left in place rather than removed. Edge can keep running in the background after its last
@@ -919,7 +921,7 @@ usually left alone.
 
 ### Why Tier 1
 
-Every one of the ten is derived content with an authoritative source elsewhere: web content the
+Every one of the nine is derived content with an authoritative source elsewhere: web content the
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
@@ -946,7 +948,71 @@ either of them costs, so both stay in place.
 
 Opera keeps its web cache in `%LOCALAPPDATA%\Opera Software\Opera Stable`, apart from its settings.
 That folder holds no `Local State`, so Deguffer does not identify it, and Opera's web cache stays in
-place. Any of the ten that Opera keeps beside its settings in `%APPDATA%` is reached.
+place. Any of the nine that Opera keeps beside its settings in `%APPDATA%` is reached.
+
+---
+
+## Chromium offline site storage
+
+**Tier 2 — regenerable, with cost.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `Service Worker\CacheStorage` in every profile of every Chromium user-data folder that [Chromium application caches](#chromium-application-caches) reaches |
+| **Method** | Delete that one directory, per profile |
+| **Typical size** | Not measured separately. Sites that work offline, and web applications installed from the browser, keep the most |
+
+### What it is
+
+A site can install a *service worker*: a script the browser keeps for it, which can answer the
+site's requests without the network. The service worker stores pages, scripts, pictures and data in
+Cache Storage, so the site loads quickly and works without a connection. A web application you
+installed from the browser usually depends on it to work offline.
+
+Chromium counts this storage as site data. Its own "Clear browsing data" removes it with "Cookies and
+other site data", not with "Cached images and files". The browser removes it by itself only when the
+disk runs short, and then a whole site at a time.
+
+### What Deguffer does
+
+It finds the folders exactly as [Chromium application caches](#chromium-application-caches) does,
+and removes only `CacheStorage` from inside each `Service Worker` directory, one step per profile.
+
+### What is protected
+
+Everything that row protects, and the rest of `Service Worker`:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Service Worker\Database` | Which service worker is registered for which site |
+| `Service Worker\ScriptCache` | The service workers' own scripts |
+
+Both stay, so every service worker stays registered and can fetch what it had stored again. The
+nine engine caches beside `Service Worker` belong to the other row. This row leaves them in place,
+and does not report them as left alone, because a clean with both rows ticked removes them.
+
+### What it costs you
+
+**A web application that worked offline does not work offline until you next open it online.** It
+then fetches what its service worker had stored. Sites that do not work offline only load more
+slowly once.
+
+What the server still has comes back. A site can also keep things in this storage that exist nowhere
+else, and those do not come back.
+
+Close the browsers and applications first if you can. The in-use rules are the same as for
+[Chromium application caches](#chromium-application-caches).
+
+### Why Tier 2
+
+Tier 1 promises a slower next use and nothing else. Here the cost is offline use, until each site is
+next opened online, and occasionally something a site kept only here. That is a real cost to someone
+who relies on a web application offline, so the row is offered and never selected for you.
+
+VS Code's webview storage and the Epic Games launcher's store keep a `CacheStorage` of their own,
+and their rows remove it at Tier 1. There it holds what an editor view or the store's own pages
+fetched. Losing it costs those pages a slower load, not a web application you rely on offline: an
+editor view loads its content from the editor, and the store sells nothing without a connection.
 
 ---
 
@@ -963,8 +1029,8 @@ place. Any of the ten that Opera keeps beside its settings in `%APPDATA%` is rea
 ### What it is
 
 Visual Studio Code is a Chromium application, so [Chromium application
-caches](#chromium-application-caches) above already reaches the ten engine cache directories inside
-its folder. Those ten are the small part. The editor keeps four more caches of its own, under names
+caches](#chromium-application-caches) above already reaches the nine engine cache directories inside
+its folder. Those nine are the small part. The editor keeps four more caches of its own, under names
 that belong to VS Code rather than to Chromium. On the measured machine the engine caches came to about
 15 MB and these four to 2.0 GB.
 
@@ -973,7 +1039,7 @@ that belong to VS Code rather than to Chromium. On the measured machine the engi
 | `CachedData` | The editor's own code, compiled ahead of time, in one folder per build. Sixteen builds were present on the measured machine, of which at most one is installed |
 | `CachedExtensionVSIXs` | The installer package of every extension the editor downloaded, kept after it installed it. 775.6 MB across 22 files, two of them successive builds of the same extension at 103 MB each |
 | `CachedExtensions`, `CachedProfilesData` | The result of the last extension scan, once overall and once per editor profile |
-| `WebStorage\<n>\CacheStorage` | Web content one webview saved so it would not fetch the same thing twice. This is the same kind of content as `Service Worker\CacheStorage`, which the Chromium rules already recognise, under a different parent |
+| `WebStorage\<n>\CacheStorage` | Web content one webview saved so it would not fetch the same thing twice. It is the same format as `Service Worker\CacheStorage`, under a different parent, but it holds only what an editor view fetched, so it stays Tier 1 where [a site's offline storage](#chromium-offline-site-storage) is Tier 2 |
 
 Because every editor built on the Code - OSS base writes the same names into its own `%APPDATA%`
 folder, one set of rules reaches all of them. Deguffer does not need to know the editor.
