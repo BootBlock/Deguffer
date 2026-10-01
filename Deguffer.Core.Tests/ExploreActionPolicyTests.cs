@@ -1393,6 +1393,55 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// The same declarations, read for what a recognised name is on disk (§7.1). Each plan lists only
+    /// folders, or declines links, so a file or a link that carries a name the provider recognises is
+    /// something nobody classified, and Explore refuses it and everything through it.
+    ///
+    /// <para>The premise is asserted first: a real folder with that name is allowed, so the name is
+    /// one the declaration recognises and only the kind can refuse what follows. Without it, a name
+    /// the provider never recognised would make every refusal below pass for the wrong reason.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("gradle", "caches")]
+    [InlineData("cargo", @"registry\cache")]
+    [InlineData("nuget", "packages")]
+    [InlineData("maven", "repository")]
+    [InlineData("platformio", ".cache")]
+    [InlineData("uv", "cache")]
+    [InlineData("pip", "Cache")]
+    [InlineData("poetry", "artifacts")]
+    [InlineData("go", @"pkg\mod")]
+    [InlineData("zig", "h")]
+    [InlineData("vscode-cpptools", "ipch")]
+    [InlineData("dart-analysis-server", ".analysis-driver")]
+    [InlineData("playwright", "chromium-1091")]
+    [InlineData("gpu-shader-cache", "DXCache")]
+    [InlineData("epic-launcher-webcache", "Logs")]
+    [InlineData("epic-launcher-logs", "Crashes")]
+    [InlineData("steam", "htmlcache")]
+    [InlineData("spotify", "Data")]
+    public void EveryDeclaredRootRefusesAFileOrALinkWithARecognisedName(string providerId, string relative)
+    {
+        var provider = Providers().Single(p => p.Id == providerId);
+        var entry = Path.Combine(provider.ToolRoots[0].Path, relative);
+        Directory.CreateDirectory(entry);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.True(policy.MayRemove(entry).IsAllowed);
+
+        Directory.Delete(entry);
+        File.WriteAllBytes(entry, new byte[64]);
+
+        Assert.False(policy.MayRemove(entry).IsAllowed);
+
+        File.Delete(entry);
+        SymbolicLink.ToDirectory(entry, _temp.CreateDirectory("elsewhere", providerId));
+
+        Assert.False(policy.MayRemove(entry).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(entry, "data.bin")).IsAllowed);
+    }
+
+    /// <summary>
     /// §5.2 over Roslyn's indexes, where the inner level recognises a program's set by what it holds
     /// rather than by its name. A directory shaped like a set that holds something else is refused, as the
     /// plan declines it, so Explore cannot remove what the Storage page calls Tier 4 — and the premise is
@@ -1588,7 +1637,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var home = new ToolRoot(
             volume,
             "A tool's own folder, at the top of the drive.",
-            static name => name.Equals("registry", StringComparison.OrdinalIgnoreCase));
+            static child => child.Name.Equals("registry", StringComparison.OrdinalIgnoreCase));
 
         var policy = Policy(home);
 
@@ -1608,7 +1657,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var probed = new ToolRoot(
             GradleRoot,
             "A setting that names the file.",
-            static name => name.Equals("gradle.properties", StringComparison.OrdinalIgnoreCase));
+            static child => child.Name.Equals("gradle.properties", StringComparison.OrdinalIgnoreCase));
 
         var policy = new ExploreActionPolicy(
             ProtectedRegions.For(_system, _environment), [Gradle()], new FakeVolumeInventory(), probedRoots: [probed]);
@@ -1676,7 +1725,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
                 new ToolRoot(
                     clone,
                     "The clone.",
-                    static name => name.Equals("buildtrees", StringComparison.OrdinalIgnoreCase)),
+                    static child => child.Name.Equals("buildtrees", StringComparison.OrdinalIgnoreCase)),
                 new ToolRoot(clone, "The folder holding a cache.", static _ => true),
             ]);
 
@@ -1728,6 +1777,119 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(inside.IsAllowed);
         Assert.Contains(reason, inside.Reason, StringComparison.Ordinal);
         Assert.Equal(reason, policy.MayRemove(live).Reason);
+    }
+
+    /// <summary>
+    /// A recognised name with nothing standing under it is judged by its name. Nothing there can be
+    /// removed, so the kind decides nothing, and a row that vanished is reported the way a vanished
+    /// row anywhere else is, rather than as a refusal.
+    /// </summary>
+    [Fact]
+    public void ARecognisedNameWithNothingThereIsJudgedByItsName()
+    {
+        Directory.CreateDirectory(GradleRoot);
+
+        var policy = Policy(Gradle());
+
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "init.d")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A child Windows will not describe could be a link as easily as a folder, and the plan
+    /// classified neither, so it is refused whatever its name, and the reason says why.
+    /// </summary>
+    [Fact]
+    public void AToolRootChildWindowsWillNotDescribeIsRefused()
+    {
+        var caches = _temp.CreateDirectory("profile", ".gradle", "caches");
+        var policy = new ExploreActionPolicy(
+            [], [Gradle()], new FakeVolumeInventory(), new UndescribableDirectoryFileSystem(WindowsFileSystem.Default, caches));
+
+        var verdict = policy.MayRemove(caches);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("would not say", verdict.Reason, StringComparison.Ordinal);
+        Assert.False(policy.MayRemove(Path.Combine(caches, "modules-2")).IsAllowed);
+    }
+
+    /// <summary>
+    /// §6.3 for the child a tool root is asked about. The answer is a kind, so a deep tree would
+    /// prove nothing; the form of the path handed to the filesystem is what discriminates. The
+    /// child is read once however many declarations own its folder (G4): the first one here
+    /// refuses it, so the second is asked as well.
+    /// </summary>
+    [Fact]
+    public void AsksTheDiskWhatAToolRootChildIsOnceAndInExtendedLengthForm()
+    {
+        var caches = _temp.CreateDirectory("profile", ".gradle", "caches");
+        var recording = new RecordingFileSystem(WindowsFileSystem.Default);
+        var policy = new ExploreActionPolicy(
+            [],
+            [new ToolRoot(GradleRoot, "Another tool's view of the folder.", static _ => false), Gradle()],
+            new FakeVolumeInventory(),
+            recording);
+
+        Assert.True(policy.MayRemove(Path.Combine(caches, "modules-2")).IsAllowed);
+        Assert.Single(recording.Paths, path => LongPath.Display(path).Equals(caches, StringComparison.OrdinalIgnoreCase));
+        Assert.All(recording.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The child is asked about by the name the removal acts on. Normalising the whole path drops a
+    /// trailing space from its last segment, which would read the sibling without the space instead.
+    /// </summary>
+    [Fact]
+    public void AsksTheDiskAboutAToolRootChildByItsExactName()
+    {
+        var root = _temp.CreateDirectory("profile", "AppData", "Local", "Vendor", "Tool");
+        var recording = new RecordingFileSystem(WindowsFileSystem.Default);
+        var policy = new ExploreActionPolicy(
+            [], [ToolRoot.Folders(root, "A vendor tool's own folder.", static _ => true)], new FakeVolumeInventory(), recording);
+
+        policy.MayRemove(Path.Combine(root, "cache ", "data.bin"));
+
+        Assert.Contains(LongPath.Extended(root) + @"\cache ", recording.Paths);
+    }
+
+    /// <summary>
+    /// The browser caches are judged level by level, so the kind is asked at each level: a file named
+    /// as the profile's GPU cache and a link named as the cache inside <c>Cache</c> are both refused.
+    /// </summary>
+    [Fact]
+    public void AChromiumProfileRefusesAFileOrALinkNamedAsACache()
+    {
+        var browser = _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser");
+        _temp.CreateFile(1, "profile", "AppData", "Local", "TestBrowser", "Local State");
+        var gpuCache = _temp.CreateFile(64, "profile", "AppData", "Local", "TestBrowser", "Default", "GPUCache");
+        var cacheData = Path.Combine(_temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default", "Cache"), "Cache_Data");
+        SymbolicLink.ToDirectory(cacheData, _temp.CreateDirectory("elsewhere", "Cache_Data"));
+        _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default", "Code Cache");
+
+        var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
+
+        Assert.True(policy.MayRemove(Path.Combine(browser, "Default", "Code Cache")).IsAllowed);
+        Assert.False(policy.MayRemove(gpuCache).IsAllowed);
+        Assert.False(policy.MayRemove(cacheData).IsAllowed);
+    }
+
+    /// <summary>The same for a Firefox profile's local half.</summary>
+    [Fact]
+    public void AFirefoxProfileRefusesAFileOrALinkNamedAsACache()
+    {
+        RegisterFirefoxProfile();
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var local = Assert.Single(provider.Profiles()).LocalPath;
+        Directory.CreateDirectory(Path.Combine(local, "startupCache"));
+        File.WriteAllBytes(Path.Combine(local, "cache2"), new byte[64]);
+        SymbolicLink.ToDirectory(Path.Combine(local, "thumbnails"), _temp.CreateDirectory("elsewhere", "thumbnails"));
+
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.True(policy.MayRemove(Path.Combine(local, "startupCache")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(local, "cache2")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(local, "thumbnails")).IsAllowed);
     }
 
     private string GradleRoot => Path.Combine(_environment.UserProfile, ".gradle");

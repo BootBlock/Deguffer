@@ -383,7 +383,7 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         var refused = Assert.Single(await provider.DiscoverToolRootsAsync());
 
         Assert.Equal(running, refused.Path, StringComparer.OrdinalIgnoreCase);
-        Assert.False(refused.Recognises("Setup.exe"));
+        Assert.False(refused.RecognisesFolder("Setup.exe"));
     }
 
     /// <summary>A system drive Windows cannot locate reaches nothing, rather than a folder below the working directory.</summary>
@@ -419,12 +419,12 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         var root = Assert.Single(CreateProvider().ToolRoots);
 
         Assert.Equal(Autodesk, root.Path, StringComparer.OrdinalIgnoreCase);
-        Assert.True(root.Recognises("AutoCAD_2024_English_Win_64bit_dlm"));
-        Assert.True(root.Recognises("WI"));
-        Assert.True(root.Recognises("IM"));
-        Assert.False(root.Recognises("Network License Manager"));
-        Assert.False(root.Recognises("Deployments"));
-        Assert.False(root.Recognises("Access"));
-        Assert.False(root.Recognises("My Drawings"));
+        Assert.True(root.RecognisesFolder("AutoCAD_2024_English_Win_64bit_dlm"));
+        Assert.True(root.RecognisesFolder("WI"));
+        Assert.True(root.RecognisesFolder("IM"));
+        Assert.False(root.RecognisesFolder("Network License Manager"));
+        Assert.False(root.RecognisesFolder("Deployments"));
+        Assert.False(root.RecognisesFolder("Access"));
+        Assert.False(root.RecognisesFolder("My Drawings"));
     }
 }

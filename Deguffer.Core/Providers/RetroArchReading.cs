@@ -7,10 +7,18 @@ namespace Deguffer.Core.Providers;
 internal sealed record RetroArchTarget(string Path, string Reason, TargetKind Kind, string Group);
 
 /// <summary>
-/// A folder a RetroArch row listed, the names in it the row recognised, and the folder it was reached
-/// from, which is the program's folder where the folder is inside it.
+/// A folder a RetroArch row listed, the names in it the row recognised, the kind of entry each of them
+/// was, and the folder it was reached from, which is the program's folder where the folder is inside
+/// it. A row offers folders or files from one folder, never both.
 /// </summary>
-internal sealed record RetroArchFolderReading(string Top, string Path, IReadOnlySet<string> Recognised);
+internal sealed record RetroArchFolderReading(string Top, string Path, IReadOnlySet<string> Recognised, ChildKind Kind)
+{
+    /// <summary>
+    /// Whether <paramref name="child"/> is an entry the row offered. A link was declined, and an entry
+    /// of the other kind was kept, so the name alone answers neither.
+    /// </summary>
+    public bool Recognises(ToolRootChild child) => child.Kind == Kind && Recognised.Contains(child.Name);
+}
 
 /// <summary>
 /// What one pass over RetroArch found: what is offered, what survives and why, and what the plan has

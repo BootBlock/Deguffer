@@ -26,17 +26,36 @@ namespace Deguffer.Core.Providers;
 /// §7.1 requires a refusal to say what it is rather than to grey a menu item out.
 /// </param>
 /// <param name="Recognises">
-/// Whether a child of <paramref name="Path"/>, given by name, is one this provider recognises as
-/// disposable. Anything else is Tier 4 by construction.
+/// Whether a child of <paramref name="Path"/>, given by its name and by what it is on disk, is one
+/// this provider's plan would offer. Anything else is Tier 4 by construction.
+///
+/// <para>The kind is part of the question because a plan's answer depends on it. A plan that lists
+/// only folders never sees a file, and one that declines links never offers one, so a file or a
+/// link carrying a recognised folder's name is something nobody classified, and Tier 4.</para>
 /// </param>
-public sealed record ToolRoot(string Path, string Reason, Predicate<string> Recognises)
+public sealed record ToolRoot(string Path, string Reason, Predicate<ToolRootChild> Recognises)
 {
-    /// <summary>The usual case: the provider already holds its rule as a child set.</summary>
+    /// <summary>
+    /// The usual case: the provider already holds its rule as a child set, and its plan lists only
+    /// folders.
+    /// </summary>
     public static ToolRoot Of(string path, string reason, DisposableChildSet children)
     {
         ArgumentNullException.ThrowIfNull(children);
 
-        return new ToolRoot(path, reason, children.IsDisposable);
+        return Folders(path, reason, children.IsDisposable);
+    }
+
+    /// <summary>
+    /// A root whose plan offers folders only, and recognises them by name. A file or a link with a
+    /// recognised name is refused, because the plan's own listing never sees the one and declines
+    /// the other.
+    /// </summary>
+    public static ToolRoot Folders(string path, string reason, Predicate<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        return new ToolRoot(path, reason, child => child.Kind == ChildKind.Folder && names(child.Name));
     }
 
     /// <summary>
@@ -68,6 +87,6 @@ public sealed record ToolRoot(string Path, string Reason, Predicate<string> Reco
             }
         }
 
-        return next.Select(level => new ToolRoot(level.Key, reason, level.Value.Contains));
+        return next.Select(level => Folders(level.Key, reason, level.Value.Contains));
     }
 }

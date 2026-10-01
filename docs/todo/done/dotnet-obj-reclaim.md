@@ -1,6 +1,7 @@
 # Reclaiming .NET `obj` directories
 
-> **Status:** 🟢 ACTIVE — specified and ready to implement; no code written yet.
+> **Status:** ✅ COMPLETE — landed in 9b0b770 on 2026-07-19, and
+> [issue #10](https://github.com/BootBlock/Deguffer/issues/10) is the record of what was decided.
 > **The specification lives in [issue #10](https://github.com/BootBlock/Deguffer/issues/10), not
 > here.** This file is a pointer so the effort is discoverable from `docs/todo/`; copying the spec
 > would give it two homes and one of them would go stale.

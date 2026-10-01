@@ -641,7 +641,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         var policy = await ExploreActionPolicy.ForAsync(
             new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
-        Assert.Contains(provider.ToolRoots, r => r.Recognises("tempa"));
+        Assert.Contains(provider.ToolRoots, r => r.RecognisesFolder("tempa"));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == busy);
 
         var refusal = policy.MayRemove(busy);

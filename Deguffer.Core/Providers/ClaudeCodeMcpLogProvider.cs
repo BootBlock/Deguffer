@@ -208,7 +208,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
         [
             new ToolRoot(Path.GetDirectoryName(CacheFolder)!, ToolFolderReason, static _ => false),
             new ToolRoot(CacheFolder, CacheFolderReason, static _ => false),
-            .. (survey?.ProjectFolders ?? []).Select(folder => new ToolRoot(folder, ProjectFolderReason, IsLogFolderName)),
+            .. (survey?.ProjectFolders ?? []).Select(folder => ToolRoot.Folders(folder, ProjectFolderReason, IsLogFolderName)),
         ];
     }
 

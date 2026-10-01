@@ -317,16 +317,16 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
         var root = Assert.Single(CreateProvider().ToolRoots);
 
         Assert.Equal(Saved, root.Path, StringComparer.OrdinalIgnoreCase);
-        Assert.True(root.Recognises("Crashes"));
-        Assert.True(root.Recognises("Logs"));
-        Assert.False(root.Recognises("Config"));
-        Assert.False(root.Recognises("webcache_4430"));
+        Assert.True(root.RecognisesFolder("Crashes"));
+        Assert.True(root.RecognisesFolder("Logs"));
+        Assert.False(root.RecognisesFolder("Config"));
+        Assert.False(root.RecognisesFolder("webcache_4430"));
 
         var fromWebCache = new EpicLauncherWebCacheProvider(_environment).ToolRoots.Single(r =>
             r.Path.Equals(Saved, StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(root.Reason, fromWebCache.Reason, StringComparer.Ordinal);
-        Assert.Equal(root.Recognises("Crashes"), fromWebCache.Recognises("Crashes"));
-        Assert.Equal(root.Recognises("webcache_4430"), fromWebCache.Recognises("webcache_4430"));
+        Assert.Equal(root.RecognisesFolder("Crashes"), fromWebCache.RecognisesFolder("Crashes"));
+        Assert.Equal(root.RecognisesFolder("webcache_4430"), fromWebCache.RecognisesFolder("webcache_4430"));
     }
 }

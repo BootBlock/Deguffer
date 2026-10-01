@@ -140,7 +140,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             + "the tag records beside them are how the tooling knows what it already has.",
             _ => false),
 
-        new ToolRoot(
+        ToolRoot.Folders(
             _releases,
             "This is where the Azure Functions tooling keeps every release it has downloaded. "
             + "Deguffer removes whole releases from it, never the folder itself.",

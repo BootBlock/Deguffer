@@ -108,7 +108,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var findings = TempMarkerSurvey.Examine(PlacesIn(AccountFolders), Inspector, _liveTrees, ct);
-        var taken = new HashSet<string>(findings.Targets.Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
+        var taken = new TargetedEntries(findings.Targets);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
@@ -116,7 +116,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
                 place.Directory,
                 $"This folder belongs to {place.Owner}. Deguffer removes only what it recognises in it "
                 + "as left behind, and leaves the rest alone.",
-                name => taken.Contains(Path.Combine(place.Directory, name)))),
+                child => taken.Recognises(place.Directory, child))),
             .. findings.HeldBack.Select(held => new ToolRoot(
                 held,
                 "The tool that left this in the temporary folder may still be using it, so Deguffer "

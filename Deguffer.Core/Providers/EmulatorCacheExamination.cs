@@ -6,8 +6,18 @@ namespace Deguffer.Core.Providers;
 /// <summary>One cache entry the examination recognised, and the emulator whose cache it is.</summary>
 internal sealed record EmulatorCacheTarget(EmulatorLayout Layout, string Path, string Reason, TargetKind Kind);
 
-/// <summary>A cache folder the examination read, and the names in it that it recognised.</summary>
-internal sealed record EmulatorCacheFolderReading(string Path, IReadOnlySet<string> Recognised);
+/// <summary>
+/// A cache folder the examination read, the names in it that it recognised, and the kind of entry
+/// each of them was: a layout keeps its cache as folders or as files, never both in one folder.
+/// </summary>
+internal sealed record EmulatorCacheFolderReading(string Path, IReadOnlySet<string> Recognised, ChildKind Kind)
+{
+    /// <summary>
+    /// Whether <paramref name="child"/> is an entry the plan offered. A link was declined, and an
+    /// entry of the other kind was left alone, so the name alone answers neither.
+    /// </summary>
+    public bool Recognises(ToolRootChild child) => child.Kind == Kind && Recognised.Contains(child.Name);
+}
 
 /// <summary>A root proven to be <paramref name="Layout"/>'s, and the cache folders read in it.</summary>
 internal sealed record EmulatorRoot(EmulatorLayout Layout, string Path, IReadOnlyList<EmulatorCacheFolderReading> CacheFolders);
@@ -185,7 +195,10 @@ internal sealed class EmulatorCacheExamination
 
             if (ReadFolder(layout, folder, ct) is { } recognised)
             {
-                readings.Add(new EmulatorCacheFolderReading(folder.Path, recognised));
+                readings.Add(new EmulatorCacheFolderReading(
+                    folder.Path,
+                    recognised,
+                    folder.Kind is TargetKind.Directory ? ChildKind.Folder : ChildKind.File));
             }
         }
 

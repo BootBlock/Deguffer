@@ -53,9 +53,9 @@ app's assemblies cannot reach them.
 
 ## If this is reopened
 
-- Application code has its own AOT work outstanding, independent of the above: `PreferenceStore`
-  and `ScanEstimateCache` use reflection-based `System.Text.Json` and raise IL2026/IL3050. Both
-  want a `JsonSerializerContext` source-generator. That is worth doing on its own merits and is a
+- Application code has its own AOT work outstanding, independent of the above: every
+  reflection-based `JsonSerializer` call in Core raises IL2026/IL3050, and each wants a
+  `JsonSerializerContext` source-generator. That is worth doing on its own merits and is a
   prerequisite, not a fix for the startup crash.
 - The remaining unknown is which Windows App SDK types the trimmer removes. Answering it needs a
   trim-analysis pass over the SDK assemblies and the trimmer roots to match, which is a larger

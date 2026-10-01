@@ -88,7 +88,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        new ToolRoot(
+        ToolRoot.Folders(
             LocalRoot,
             "This is pip's own folder. Deguffer clears the cache inside it and nothing else, because "
             + "the pip.ini beside it may hold private index URLs and credentials.",

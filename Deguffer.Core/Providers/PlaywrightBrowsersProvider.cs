@@ -142,7 +142,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         ResolveRoot() is { } root
             ?
             [
-                new ToolRoot(
+                ToolRoot.Folders(
                     root,
                     "This is Playwright's browser cache. Deguffer removes whole browser builds from "
                     + "it and nothing else, because the links and metadata beside them are what "

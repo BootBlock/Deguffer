@@ -113,7 +113,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                 installation.Superseded.Where(v => !v.IsLink).Select(v => v.Name),
                 StringComparer.OrdinalIgnoreCase);
 
-            return new ToolRoot(
+            return ToolRoot.Folders(
                 installation.Root,
                 $"This is where {installation.Name} is installed. The build it runs, the updater "
                 + "that keeps it current and the packages it updates from are all in here, and "

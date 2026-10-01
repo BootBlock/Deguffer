@@ -114,7 +114,7 @@ public sealed class RetroArchThumbnailProvider : RetroArchProviderBase
             }
         }
 
-        reading.Folders.Add(new RetroArchFolderReading(top, folder, recognised));
+        reading.Folders.Add(new RetroArchFolderReading(top, folder, recognised, ChildKind.Folder));
     }
 
     /// <returns>Whether anything was offered from the system's folder.</returns>
@@ -165,7 +165,7 @@ public sealed class RetroArchThumbnailProvider : RetroArchProviderBase
             return false;
         }
 
-        reading.Folders.Add(new RetroArchFolderReading(top, folder, recognised));
+        reading.Folders.Add(new RetroArchFolderReading(top, folder, recognised, ChildKind.Folder));
         return true;
     }
 }
