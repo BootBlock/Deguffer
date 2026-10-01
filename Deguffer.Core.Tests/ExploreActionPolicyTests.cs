@@ -1631,6 +1631,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
             _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
 
         Assert.False(policy.MayRemove(@"Q:\gradle.properties").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\init.gradle.kts").IsAllowed);
         Assert.False(policy.MayRemove(@"Q:\init.d\company.gradle").IsAllowed);
         Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
@@ -1651,6 +1652,29 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "bin", "ripgrep.exe")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "git", "db")).IsAllowed);
         Assert.True(policy.MayRemove(Path.Combine(_environment.UserProfile, "notes.txt")).IsAllowed);
+    }
+
+    /// <summary>
+    /// Both variables naming one declined folder, as on a drive kept for development. Each declaration
+    /// recognises everything but its own tool's configuration, so pooled together each would open the
+    /// other's: Gradle's would allow Cargo's tokens, and Cargo's would allow <c>gradle.properties</c>.
+    /// </summary>
+    [Fact]
+    public async Task TwoToolsDeclinedAtOneFolderEachKeepTheirConfigurationRefused()
+    {
+        _volumes.With(@"Q:\");
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, @"Q:\");
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            _volumes,
+            [new GradleCacheProvider(_environment, system: _system), new CargoCacheProvider(_environment, system: _system)]);
+
+        Assert.False(policy.MayRemove(@"Q:\gradle.properties").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\credentials.toml").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\bin\ripgrep.exe").IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
     }
 
     /// <summary>

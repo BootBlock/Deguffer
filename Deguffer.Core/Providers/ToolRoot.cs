@@ -63,6 +63,11 @@ public sealed record ToolRoot(string Path, string Reason, Predicate<ToolRootChil
     /// the profile or a drive root. The tool still writes its configuration there, so Explore refuses
     /// those entries, and nothing else: everything beside them is the user's, and refusing it would
     /// read the whole folder as the tool's.
+    ///
+    /// <para>Declared only through <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>, which only ever
+    /// adds a refusal. Declared roots at one folder are pooled, and a child any of them recognises is
+    /// allowed, so a root recognising nearly everything would lift every other declaration's refusals
+    /// there: two variables naming the same drive root would each open the other tool's credentials.</para>
     /// </summary>
     public static ToolRoot Sparing(string path, string reason, IEnumerable<string> configuration)
     {

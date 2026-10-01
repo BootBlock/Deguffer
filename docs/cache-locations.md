@@ -281,7 +281,8 @@ home is a link to somewhere else, Deguffer says so and leaves it alone.
 ### What is protected
 
 **`gradle.properties`** can hold signing keys and repository credentials, and it sits in the same
-folder as the caches. Deguffer asserts that it survived the run, along with **`init.d`**,
+folder as the caches. Deguffer asserts that it survived the run, along with the init scripts
+Gradle runs before every build (**`init.d`**, **`init.gradle`** and **`init.gradle.kts`**),
 **`gradle.encrypted.properties`** and the home itself. Anything else in the home stays in Tier 4 and
 is reported as left alone.
 
@@ -289,7 +290,7 @@ In Explore, Deguffer refuses everything in the home except `caches` and `wrapper
 `GRADLE_USER_HOME` moved the home, it refuses the same things in the `.gradle` left in your profile
 too, because a `gradle.properties` written before the move is still there. Where Deguffer declines
 the folder the variable names, Gradle still writes its configuration there, so Explore refuses
-`gradle.properties`, `init.d` and `gradle.encrypted.properties` in that folder and nothing else.
+that configuration in that folder and nothing else.
 
 ### What it costs you
 

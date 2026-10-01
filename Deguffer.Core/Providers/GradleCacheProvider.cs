@@ -56,6 +56,8 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     [
         ("gradle.properties", "User configuration, which may hold signing keys and credentials."),
         ("init.d", "User init scripts."),
+        ("init.gradle", "A user init script, which Gradle runs before every build."),
+        ("init.gradle.kts", "A user init script, which Gradle runs before every build."),
         ("gradle.encrypted.properties", "Encrypted user configuration."),
     ];
 
@@ -118,31 +120,29 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// <summary>
     /// The home Gradle uses, and the default one as well where the variable moved it. A
     /// <c>.gradle</c> left behind in the profile still holds whatever <c>gradle.properties</c> was
-    /// written before the move, so Explore refuses it there exactly as it does in the home in use.
-    ///
-    /// <para>A home the variable names but this declines is still where Gradle writes its
-    /// configuration, so it is declared as well, refusing that configuration and nothing else. Refusing
-    /// everything but <c>caches</c> and <c>wrapper</c> there would read a whole drive or the user's
-    /// Documents as Gradle's.</para>
+    /// written before the move, so Explore refuses it there exactly as it does in the home in use. A
+    /// home the variable names but this declines is declared in <see cref="DiscoverToolRootsAsync"/>.
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots
-    {
-        get
-        {
-            var setting = Resolve();
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        .. new[] { ResolveHome(), DefaultHome }
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(home => ToolRoot.Of(home, ToolRootReason, DisposableChildren)),
+    ];
 
-            return
-            [
-                .. new[] { setting.Folder, DefaultHome }
-                    .OfType<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Select(home => ToolRoot.Of(home, ToolRootReason, DisposableChildren)),
-                .. setting.DeclinedFolder is { } declined
-                    ? [ToolRoot.Sparing(declined, DeclinedRootReason, Configuration.Select(file => file.Name))]
-                    : Array.Empty<ToolRoot>(),
-            ];
-        }
-    }
+    /// <summary>
+    /// A home the variable names but this declines is still where Gradle writes its configuration, so
+    /// Explore refuses that configuration there and nothing else: refusing everything but
+    /// <c>caches</c> and <c>wrapper</c> would read a whole drive or the user's Documents as Gradle's.
+    /// Declared here rather than in <see cref="ToolRoots"/> because a declaration made here only ever
+    /// adds a refusal. See <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+            Resolve().DeclinedFolder is { } declined
+                ? [ToolRoot.Sparing(declined, DeclinedRootReason, Configuration.Select(file => file.Name))]
+                : []);
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveHome() is { } home && LongPath.DirectoryMayExist(home));

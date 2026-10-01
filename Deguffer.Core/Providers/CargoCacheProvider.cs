@@ -203,42 +203,40 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     ///
     /// <para>For the home Cargo uses, and the default one as well where the variable moved it: a
     /// <c>.cargo</c> left behind in the profile still holds whatever <c>credentials.toml</c> was
-    /// written before the move.</para>
-    ///
-    /// <para>A home the variable names but this declines is still where Cargo writes its tokens and
-    /// installs its binaries, so it is declared as well, refusing those and nothing else. Refusing
-    /// everything Cargo does not recognise there would read a whole drive or the profile as
-    /// Cargo's.</para>
+    /// written before the move. A home the variable names but this declines is declared in
+    /// <see cref="DiscoverToolRootsAsync"/>.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots
-    {
-        get
-        {
-            var setting = Resolve();
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+    [
+        .. new[] { ResolveHome(), DefaultHome }
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .SelectMany(home => Levels.Select(level => ToolRoot.Of(
+                level.Resolve(home),
+                "This is inside Cargo's own folder. Deguffer removes the downloaded archives, "
+                + "the sources unpacked from them and the git checkouts, and nothing else — the "
+                + "registry index, the bare clones and the credentials beside them all stay.",
+                level.Children))),
+    ];
 
-            return
-            [
-                .. new[] { setting.Folder, DefaultHome }
-                    .OfType<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .SelectMany(home => Levels.Select(level => ToolRoot.Of(
-                        level.Resolve(home),
-                        "This is inside Cargo's own folder. Deguffer removes the downloaded archives, "
-                        + "the sources unpacked from them and the git checkouts, and nothing else — the "
-                        + "registry index, the bare clones and the credentials beside them all stay.",
-                        level.Children))),
-                .. setting.DeclinedFolder is { } declined
-                    ?
-                    [
-                        ToolRoot.Sparing(
-                            declined,
-                            DeclinedRootReason,
-                            [.. ProtectedFiles.Select(file => file.Name), .. Levels[0].Children.KeptNames]),
-                    ]
-                    : Array.Empty<ToolRoot>(),
-            ];
-        }
-    }
+    /// <summary>
+    /// A home the variable names but this declines is still where Cargo writes its tokens and installs
+    /// its binaries, so Explore refuses those there and nothing else: refusing everything Cargo does not
+    /// recognise would read a whole drive or the profile as Cargo's. Declared here rather than in
+    /// <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See
+    /// <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+            Resolve().DeclinedFolder is { } declined
+                ?
+                [
+                    ToolRoot.Sparing(
+                        declined,
+                        DeclinedRootReason,
+                        [.. ProtectedFiles.Select(file => file.Name), .. Levels[0].Children.KeptNames]),
+                ]
+                : []);
 
     /// <summary>
     /// Presence is a cache actually on disk, never the home existing. Installing rustup creates
