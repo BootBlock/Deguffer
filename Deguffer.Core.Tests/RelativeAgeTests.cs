@@ -60,12 +60,28 @@ public sealed class RelativeAgeTests
         Assert.Equal("2 years ago", RelativeAge.Describe(Now.AddDays(-730), Now));
     }
 
-    /// <summary>A local timestamp must not read as several hours older than it is.</summary>
+    /// <summary>
+    /// A local timestamp must be converted, not read as though it were already UTC. Read unconverted
+    /// it is out by the zone's offset: hours older than it is behind UTC, and hours newer ahead of it.
+    ///
+    /// <para>The day count truncates, so the gap is chosen from the sign of the offset to put that
+    /// error across a day boundary whichever side of UTC the machine is on. Ahead, three days and
+    /// half the offset reads unconverted as two. Behind, four days less half the offset reads as
+    /// four. The instant comes from <see cref="LocalZone"/>, so a machine set to UTC says that it
+    /// could not discriminate rather than passing as though it had.</para>
+    /// </summary>
     [Fact]
     public void ComparesInUtcRegardlessOfTheKindItIsGiven()
     {
-        var local = Now.AddDays(-3).ToLocalTime();
+        var offsetAt = LocalZone.OffsetInstant(Now.Year);
+        var written = offsetAt ?? Now;
+        var offset = TimeZoneInfo.Local.GetUtcOffset(written);
+        var gap = TimeSpan.FromDays(offset < TimeSpan.Zero ? 4 : 3) + offset / 2;
+        var local = written.ToLocalTime();
 
-        Assert.Equal("3 days ago", RelativeAge.Describe(local, Now));
+        Assert.Equal("3 days ago", RelativeAge.Describe(local, written + gap));
+
+        // What was actually proved: on UTC an unconverted reading is the same reading.
+        Assert.Equal(offsetAt is not null, local.Ticks != written.Ticks);
     }
 }

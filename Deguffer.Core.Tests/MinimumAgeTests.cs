@@ -211,12 +211,19 @@ public class MinimumAgeTests
         Assert.Equal(kept, guard.Protects(Now.AddMinutes(minutesAfter).ToFileTimeUtc()));
     }
 
+    /// <summary>
+    /// The instant comes from <see cref="LocalZone"/>: the fixed June date proved nothing on a
+    /// machine whose zone is not offset in June.
+    /// </summary>
     [Fact]
     public void SinceNormalisesALocalClock()
     {
-        var local = Now.ToLocalTime();
+        var offsetAt = LocalZone.OffsetInstant(Now.Year);
+        var looked = offsetAt ?? Now;
+        var local = looked.ToLocalTime();
 
-        Assert.Equal(Now, MinimumAge.Since(local).KeepFromUtc);
+        Assert.Equal(looked, MinimumAge.Since(local).KeepFromUtc);
+        Assert.Equal(offsetAt is not null, local.Ticks != looked.Ticks);
     }
 
     /// <summary>
