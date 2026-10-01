@@ -95,6 +95,63 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Assert.False(await CreateProvider().IsPresentAsync());
     }
 
+    /// <summary>
+    /// A settings file Windows will not describe may move the repository somewhere else. Read as
+    /// absent, it was "no override": the row was not drawn, or the default was offered with nothing
+    /// said about the repository the settings name. The sentence must not say the file could not be
+    /// read, because nothing established that it is there.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SettingsWindowsWillNotDescribeAreSaidToBeUnreached(bool defaultRepositoryOnDisk)
+    {
+        if (defaultRepositoryOnDisk)
+        {
+            PopulateRepository(DefaultRepository);
+        }
+
+        var settings = WriteSettings(Path.Combine(_temp.Path, "elsewhere", "repository"));
+
+        using var denied = DeniedDirectory.WithUnreadableFile(settings);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(defaultRepositoryOnDisk ? [DefaultRepository] : [], plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.StartsWith($"Windows would not say whether your Maven settings file is at '{settings}'", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("has not downloaded anything", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A settings file that is there and will not be read may move the repository just as well, so it
+    /// is said by name. Read as "no override", the plan said Maven had downloaded nothing.
+    /// </summary>
+    [Fact]
+    public async Task SettingsThatWillNotBeReadAreSaidToBeUnread()
+    {
+        var settings = WriteSettings(Path.Combine(_temp.Path, "elsewhere", "repository"));
+
+        using var held = new FileStream(settings, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.StartsWith($"Deguffer could not read your Maven settings file at '{settings}'", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("has not downloaded anything", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task PlansTheRepositoryAndNeverTheRootThatHoldsIt()
     {

@@ -32,12 +32,18 @@ namespace Deguffer.Core.Providers;
 /// not a clone. This one is not, and it is still treated as vcpkg's own directory wherever that
 /// keeps something out of a plan, because a refusal is not evidence that it is not one.
 /// </param>
+/// <param name="UnreadIntegrationFile">
+/// The integration file, where the search for the clone came to it and could not read it. It may name
+/// a clone no other route reaches, so the plan says so rather than reading as though no clone was
+/// ever integrated.
+/// </param>
 public sealed record VcpkgLocations(
     string? BinaryCache,
     string? Root,
     string? RelocatedDownloads,
     string? UnmarkedRoot = null,
-    string? UnreachedRoot = null)
+    string? UnreachedRoot = null,
+    UnreadFile? UnreadIntegrationFile = null)
 {
     /// <summary>
     /// Folders a variable moved <see cref="BinaryCache"/> or <see cref="RelocatedDownloads"/> to that
@@ -105,11 +111,11 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
 
     public VcpkgLocations Discover()
     {
-        var (root, unmarked, unreached) = FindRoot();
+        var (root, unmarked, unreached, unread) = FindRoot();
         var binaryCache = FindBinaryCache();
         var downloads = FindRelocatedDownloads(root);
 
-        return new VcpkgLocations(binaryCache, root, downloads, unmarked, unreached)
+        return new VcpkgLocations(binaryCache, root, downloads, unmarked, unreached, unread)
         {
             Declined =
             [
@@ -199,13 +205,16 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     /// name under it and simply will not be there.</item>
     /// </list>
     /// </summary>
-    private (string? Root, string? Unmarked, string? Unreached) FindRoot()
+    private (string? Root, string? Unmarked, string? Unreached, UnreadFile? UnreadIntegrationFile) FindRoot()
     {
         string? unmarked = null;
         string? unreached = null;
+        UnreadFile? unread = null;
 
-        foreach (var candidate in Candidates())
+        foreach (var (candidate, unreadFile) in Candidates())
         {
+            unread ??= unreadFile;
+
             if (candidate is null)
             {
                 continue;
@@ -215,7 +224,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
             // clone is there. The marker is, so it gates all three rather than only the weakest.
             if (LongPath.FileExists(Path.Combine(candidate, RootMarker)))
             {
-                return (candidate, null, null);
+                return (candidate, null, null, unread);
             }
 
             // The first directory that was named and declined, so the provider can say which one it
@@ -235,20 +244,24 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
             }
         }
 
-        return (null, unmarked, unreached);
+        return (null, unmarked, unreached, unread);
     }
 
-    private IEnumerable<string?> Candidates()
+    /// <summary>
+    /// Each route's clone, in the order <see cref="FindRoot"/> tries them, with the integration file
+    /// where that route could not be read. Lazy, so a route after the clone is found is never taken.
+    /// </summary>
+    private IEnumerable<(string? Candidate, UnreadFile? Unread)> Candidates()
     {
-        yield return FullyQualified(environment.GetEnvironmentVariable(RootVariable));
+        yield return (FullyQualified(environment.GetEnvironmentVariable(RootVariable)), null);
         yield return ReadIntegrationFile();
 
         // Normalised like the other two. PATH is not filtered for fully-qualified entries, so a
         // relative one yields a relative directory here — and every probe under it would then
         // resolve against Deguffer's own working directory, which is the guess §5.2 forbids.
-        yield return environment.FindExecutable("vcpkg") is { } executable
-            ? FullyQualified(Path.GetDirectoryName(executable))
-            : null;
+        yield return (
+            environment.FindExecutable("vcpkg") is { } executable ? FullyQualified(Path.GetDirectoryName(executable)) : null,
+            null);
     }
 
     private string? FindRelocatedDownloads(string? root)
@@ -267,25 +280,32 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
                 : configured;
     }
 
-    private string? ReadIntegrationFile()
+    /// <summary>
+    /// The clone the integration file names, or the file as unread where it could not be read or
+    /// Windows would not say whether it is there. Either way the next route is tried.
+    /// </summary>
+    private (string? Candidate, UnreadFile? Unread) ReadIntegrationFile()
     {
         var file = Path.Combine(ProfileDirectories[0], IntegrationFile);
 
-        if (!LongPath.FileExists(file))
+        switch (LongPath.ProbeFile(file))
         {
-            return null;
+            case PathPresence.Absent:
+                return (null, null);
+
+            case PathPresence.Refused:
+                return (null, new UnreadFile(file, Unreached: true));
         }
 
         try
         {
-            return FullyQualified(File.ReadAllText(LongPath.Extended(file)));
+            return (FullyQualified(File.ReadAllText(LongPath.Extended(file))), null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // The file vcpkg wrote is unreadable. That is one probe failing, not an error: the next
-            // one is tried, and a clone nobody can locate is a sentence the plan already knows how
-            // to say.
-            return null;
+            // One route failing rather than an error: the next one is tried, and the plan says this
+            // one could not be read.
+            return (null, new UnreadFile(file, Unreached: false));
         }
     }
 

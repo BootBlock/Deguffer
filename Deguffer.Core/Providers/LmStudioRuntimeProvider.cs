@@ -138,18 +138,33 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     /// <summary>
     /// Read from the disk rather than asked of LM Studio, because asking would start it. Present where
     /// some line holds two or more versions: one version is a working install with nothing to reclaim.
+    ///
+    /// <para>Present as well where Windows would not describe the runtimes' folder or would not list
+    /// it, because the plan is the only place the user is told so. Read as absent, the row said LM
+    /// Studio is not installed. See <see cref="PathPresence"/>.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(HoldsSupersededVersions());
 
     private bool HoldsSupersededVersions()
     {
-        if (!LongPath.DirectoryExists(Backends))
+        switch (LongPath.ProbeDirectory(Backends))
         {
-            return false;
+            case PathPresence.Absent:
+                return false;
+
+            case PathPresence.Refused:
+                return true;
         }
 
-        var lines = ChildDirectories.Under(Backends).Directories
+        var listing = ChildDirectories.Under(Backends);
+
+        if (listing.Unreadable)
+        {
+            return true;
+        }
+
+        var lines = listing.Directories
             .Select(child => (Match: RuntimeFolder().Match(child.Name), child.FullName))
             .Where(folder => folder.Match.Success && !LongPath.FileExists(Path.Combine(folder.FullName, Marker)))
             .GroupBy(folder => folder.Match.Groups["line"].Value, StringComparer.OrdinalIgnoreCase);
@@ -164,11 +179,27 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             return nothing;
         }
 
-        if (!LongPath.FileExists(Lms))
+        // §5.6 asserts every runtime folder beside the ones offered, read from this listing. A folder
+        // that will not be listed leaves nothing to assert, so nothing is offered from it.
+        var listing = ChildDirectories.Under(Backends);
+
+        if (listing.Unreadable)
         {
-            return UnexaminedPlan(
-                $"LM Studio's command-line tool is not at {Lms}, so Deguffer cannot ask LM Studio which "
-                + "runtimes it uses.");
+            return EmptyPlan(UnreadableRoot.WhyNothingWasPlanned(Backends)) with { HasUnreadableRoot = true };
+        }
+
+        switch (LongPath.ProbeFile(Lms))
+        {
+            case PathPresence.Absent:
+                return UnexaminedPlan(
+                    $"LM Studio's command-line tool is not at {Lms}, so Deguffer cannot ask LM Studio which "
+                    + "runtimes it uses.");
+
+            // Not "is not at": nothing established that it is missing.
+            case PathPresence.Refused:
+                return UnexaminedPlan(
+                    $"Windows would not say whether LM Studio's command-line tool is at {Lms}, so Deguffer "
+                    + "cannot ask LM Studio which runtimes it uses.") with { HasUnreadableRoot = true };
         }
 
         if (Inspector.FindRunning(LmStudio).Count == 0)
@@ -266,7 +297,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(kept, offered.Select(item => item.Runtime.Folder)),
+            ProtectedPaths = BuildProtectedPaths(listing, kept, offered.Select(item => item.Runtime.Folder)),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -326,12 +357,16 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     /// LM Studio deletes it the moment it next starts, which can be between the preview and the clean,
     /// and its going is not this run's doing.</para>
     /// </summary>
+    /// <param name="listing">
+    /// The runtimes folder as the plan read it, so the folders asserted are the ones the plan checked
+    /// it could list.
+    /// </param>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        ChildDirectoryScan listing,
         IReadOnlyDictionary<string, string> kept,
         IEnumerable<string> offered)
     {
         var excluded = new HashSet<string>(offered, StringComparer.OrdinalIgnoreCase) { Vendor };
-        var listing = ChildDirectories.Under(Backends);
 
         var siblings = listing.Directories.Select(child => child.Name)
             .Concat(listing.Links.Select(link => link.Name))

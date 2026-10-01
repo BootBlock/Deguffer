@@ -608,6 +608,39 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A build directory Windows will not describe, in a project a program is working in, can be
+    /// neither recognised nor checked for use. Read as absent, it was not declared and Explore allowed
+    /// it. The same machine with the directory readable declares it as in use, which is the premise
+    /// that the refusal below is this rule and not a fixture that declares it either way.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesABuildDirectoryWindowsWillNotDescribeBesideAWorkingProgram()
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Busy");
+        var busy = BuildDirectoryFixture.CreateUnityProject(project);
+        var notes = Directory.CreateDirectory(Path.Combine(project, "docs", "notes")).FullName;
+
+        var live = new FakeLiveTreeInspector()
+            .WithProgram("editor", Path.Combine(_temp.Path, "tools", "editor.exe"), notes);
+
+        Assert.Equal([busy], [.. (await Unity(live: live).DiscoverToolRootsAsync()).Select(declared => declared.Path)]);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(busy);
+
+        var provider = Unity(live: live);
+        var declared = Assert.Single(await provider.DiscoverToolRootsAsync());
+
+        Assert.Equal(busy, declared.Path);
+        Assert.StartsWith("Windows would not say what is here", declared.Reason, StringComparison.Ordinal);
+
+        var refusal = (await ExplorePolicy(provider)).MayRemove(busy);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("Windows would not say what is here", refusal.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The veto's other evidence: a program started from inside the build directory, working
     /// somewhere else entirely — a binary run out of <c>target\debug</c>, or an environment's own
     /// interpreter. Walking up from where the program is reaches the project, and the build

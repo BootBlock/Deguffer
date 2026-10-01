@@ -216,6 +216,32 @@ public sealed class TrackedFileCheckTests : IDisposable
             && !i.Arguments.Contains("src/", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A <c>.git</c> Windows will not describe may be the candidate's own repository. Read as absent,
+    /// the walk went on to the outer repository, which answered "nothing tracked" about a candidate it
+    /// does not hold, and the candidate was never declined. A candidate beside it in the outer
+    /// repository is still asked about.
+    /// </summary>
+    [Fact]
+    public async Task DeclinesTheCandidatesUnderAGitFolderWindowsWillNotDescribe()
+    {
+        var inner = Path.Combine(_repository, "external", "Library");
+        var innerGit = Directory.CreateDirectory(Path.Combine(inner, ".git")).FullName;
+        var underInner = Path.Combine(inner, "src", "A", "obj");
+        var outer = Path.Combine(_repository, "external", "B", "obj");
+        var runner = new FakeProcessRunner();
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(innerGit);
+
+        var findings = await Create(runner).FindTrackedAsync([underInner, outer]);
+
+        Assert.Equal([underInner], findings.Unanswered);
+        var asked = Assert.Single(runner.Invocations);
+        Assert.Contains($"-C \"{_repository}\"", asked.Arguments, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"external/B/obj\"", asked.Arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/A/obj", asked.Arguments, StringComparison.Ordinal);
+    }
+
     /// <summary>Git installed and asked leaves nothing unasked, whatever it answered.</summary>
     [Fact]
     public async Task ReportsNothingUnaskedWhenGitIsInstalled()

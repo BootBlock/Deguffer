@@ -16,13 +16,24 @@ namespace Deguffer.Core.Safety;
 /// <para><b>Null is the answer to every failure, and that is the contract.</b> A configuration file
 /// a tool was part-way through writing, one somebody replaced, and one this account may not read are
 /// all the same thing to a caller: nothing was learned, so nothing is offered. §5.3 makes the
-/// refusal ordinary rather than an error.</para>
+/// refusal ordinary rather than an error. A caller that falls back to a default rather than offering
+/// nothing asks the overload that also says whether the file was refused.</para>
 /// </summary>
 public static class XmlFile
 {
     /// <summary>The document at <paramref name="path"/>, or null where it could not be read.</summary>
-    public static XDocument? TryLoad(string path)
+    public static XDocument? TryLoad(string path) => TryLoad(path, out _);
+
+    /// <summary>
+    /// The document at <paramref name="path"/>, or null where it could not be read, with
+    /// <paramref name="unreadable"/> saying whether that was because the file would not be read
+    /// rather than because it is not XML. A caller that falls back to a default on a malformed file
+    /// may still owe the user a sentence about one it was refused.
+    /// </summary>
+    public static XDocument? TryLoad(string path, out bool unreadable)
     {
+        unreadable = false;
+
         try
         {
             // FileShare.ReadWrite because a tool may hold its own configuration open while Deguffer
@@ -34,8 +45,13 @@ public static class XmlFile
             // pull in an external entity.
             return XDocument.Load(stream);
         }
-        catch (Exception ex) when (ex is XmlException or IOException or UnauthorizedAccessException)
+        catch (XmlException)
         {
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            unreadable = true;
             return null;
         }
     }

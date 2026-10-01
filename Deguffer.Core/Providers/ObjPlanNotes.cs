@@ -38,9 +38,9 @@ internal static class ObjPlanNotes
     /// <summary>
     /// Said out loud for the same reason §5.5 makes the discovery fallback observable: a plan
     /// smaller than expected should carry its own explanation rather than leave the user to infer
-    /// one. Git was installed and asked, and did not answer — so the directories in question were
-    /// left alone, and saying nothing would make a safeguard that could not run look like a
-    /// safeguard that found nothing.
+    /// one. Git was installed and did not answer, or the repository holding a directory could not be
+    /// reached to ask it — so the directories in question were left alone, and saying nothing would
+    /// make a safeguard that could not run look like a safeguard that found nothing.
     /// </summary>
     private static string Unchecked(int count) => count == 1
         ? "1 directory could not be checked against git, so it was left alone."

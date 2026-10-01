@@ -224,6 +224,44 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An integration file Windows will not describe, or will not let be read, may name the only clone
+    /// on the machine. Read as absent, the row was not drawn and nothing said the clone was not looked
+    /// for, and the plan said vcpkg had cached nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnIntegrationFileThatCannotBeReadIsSaid(bool refused)
+    {
+        var root = CreateClone();
+        Directory.CreateDirectory(ProfileDirectory);
+        var file = Path.Combine(ProfileDirectory, VcpkgDiscovery.IntegrationFile);
+        File.WriteAllText(file, root + "\r\n");
+
+        using IDisposable denied = refused
+            ? DeniedDirectory.WithUnreadableFile(file)
+            : new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var provider = CreateProvider();
+        Assert.Equal(new UnreadFile(file, Unreached: refused), provider.Locate().UnreadIntegrationFile);
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        // A refused probe did not establish that the file is there, so only a failed read says
+        // "could not read".
+        var opening = refused
+            ? $"Windows would not say whether vcpkg's record of the clone it integrated with Visual Studio is at '{file}'"
+            : $"Deguffer could not read vcpkg's record of the clone it integrated with Visual Studio at '{file}'";
+
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.StartsWith(opening, StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("cached nothing", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The third and weakest route: the ordinary bootstrap builds the executable into the clone, so
     /// the directory holding it is the root.
     /// </summary>
