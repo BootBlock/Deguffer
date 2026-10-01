@@ -13,8 +13,7 @@ internal static class LocalZone
 {
     /// <summary>
     /// The first mid-month noon of <paramref name="year"/> at which this machine's zone is offset
-    /// from UTC, or null on a machine that is set to UTC all year. Noon keeps the instant clear of
-    /// the small hours, where a summer-time change makes a local time ambiguous.
+    /// from UTC, or null on a machine that is set to UTC all year.
     /// </summary>
     public static DateTime? OffsetInstant(int year)
     {
