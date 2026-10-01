@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -158,6 +159,62 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         }
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// §5.2 and §5.6: another computer's cache alone in its version's folder, as on a shared drive, is
+    /// protected and refused in Explore with the folders above it, though nothing here is offered.
+    /// </summary>
+    [Fact]
+    public async Task ProtectsAnotherComputersCacheWhereThisComputerHasNone()
+    {
+        Preferences(Version, Chosen);
+        var otherComputer = Cache(Chosen, Version, AfterEffectsDiskCacheLayout.CacheName("RENDERNODE"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        await AssertProtectedAndRefusedAsync(provider, plan, otherComputer);
+    }
+
+    /// <summary>
+    /// The same once a run has removed this computer's cache: the next scan finds another computer's
+    /// alone, and it stays protected until After Effects here makes a cache of its own again.
+    /// </summary>
+    [Fact]
+    public async Task StillProtectsAnotherComputersCacheAfterThisComputersIsRemoved()
+    {
+        Preferences(Version, Chosen);
+        var current = Cache(Chosen, Version, CacheName);
+        var otherComputer = Cache(Chosen, Version, AfterEffectsDiskCacheLayout.CacheName("RENDERNODE"));
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.False(Directory.Exists(current));
+
+        provider.InvalidateCaches();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        await AssertProtectedAndRefusedAsync(provider, plan, otherComputer);
+    }
+
+    /// <summary>Another computer's cache, its version's folder and <c>Adobe\After Effects</c> are each named and refused.</summary>
+    private static async Task AssertProtectedAndRefusedAsync(AfterEffectsDiskCacheProvider provider, CleanupPlan plan, string otherComputer)
+    {
+        var version = Path.GetDirectoryName(otherComputer)!;
+        var policy = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: await provider.DiscoverToolRootsAsync());
+
+        foreach (var survivor in new[] { otherComputer, version, Path.GetDirectoryName(version)! })
+        {
+            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase));
+            Assert.False(policy.MayRemove(survivor).IsAllowed, $"Explore would remove '{survivor}'");
+        }
+
+        Assert.False(policy.MayRemove(Path.Combine(otherComputer, "0a")).IsAllowed);
     }
 
     /// <summary>

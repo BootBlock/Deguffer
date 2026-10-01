@@ -116,55 +116,49 @@ internal sealed class AfterEffectsDiskCacheExamination
             DeclineLink(LongPath.Display(link.FullName));
         }
 
-        var offered = false;
+        Survive(versions, "After Effects' folder for its disk cache. Only this computer's cache inside it is removed.");
 
         foreach (var version in children.Directories)
         {
             ct.ThrowIfCancellationRequested();
-            offered |= CollectVersion(LongPath.Display(version.FullName));
-        }
-
-        if (offered)
-        {
-            Survive(versions, "After Effects' folder for its disk cache. Only this computer's cache inside it is removed.");
+            CollectVersion(LongPath.Display(version.FullName));
         }
     }
 
     /// <summary>
-    /// One version's folder: this computer's cache, if it is there, and everything beside it named.
-    /// Whether it held a cache to offer.
+    /// One version's folder: this computer's cache, if it is there, and everything else in it named,
+    /// whether or not it is. Another computer's cache is most often found alone, on a shared drive or
+    /// after this computer's was removed, and that is when it most needs protecting.
     /// </summary>
-    private bool CollectVersion(string version)
+    private void CollectVersion(string version)
     {
         if (FolderEntries.Of(version) is not { } entries)
         {
             Unlisted(version);
-            return false;
+            return;
         }
+
+        Survive(version, $"The folder After Effects {Path.GetFileName(version)} keeps its disk cache in. Only this computer's cache inside it is removed.");
 
         var cache = entries.FirstOrDefault(entry => entry.Name.Equals(CacheName, StringComparison.OrdinalIgnoreCase));
 
-        if (cache is null)
+        if (cache is not null)
         {
-            return false;
+            var path = LongPath.Display(cache.FullName);
+
+            if (cache.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                DeclineLink(path);
+            }
+            else if (cache is not DirectoryInfo)
+            {
+                Survive(path, $"'{cache.Name}' is named like After Effects' disk cache but is a file, so it is left alone.");
+            }
+            else
+            {
+                Caches.Add(new AfterEffectsDiskCache(path, version));
+            }
         }
-
-        var path = LongPath.Display(cache.FullName);
-
-        if (cache.Attributes.HasFlag(FileAttributes.ReparsePoint))
-        {
-            DeclineLink(path);
-            return false;
-        }
-
-        if (cache is not DirectoryInfo)
-        {
-            Survive(path, $"'{cache.Name}' is named like After Effects' disk cache but is a file, so it is left alone.");
-            return false;
-        }
-
-        Caches.Add(new AfterEffectsDiskCache(path, version));
-        Survive(version, $"The folder After Effects {Path.GetFileName(version)} keeps its disk cache in. Only the cache inside it is removed.");
 
         foreach (var entry in entries.Where(entry => entry != cache))
         {
@@ -174,8 +168,6 @@ internal sealed class AfterEffectsDiskCacheExamination
                     ? $"'{entry.Name}' is the disk cache of an After Effects on another computer, which may be using it, so it is left alone."
                     : $"'{entry.Name}' sits beside After Effects' disk cache and is not part of it, so it is left alone.");
         }
-
-        return true;
     }
 
     private void Survive(string path, string reason)
