@@ -160,7 +160,7 @@ public sealed class ZigCacheProvider : CleanupProviderBase
         ResolveRoot() is { } root
             ?
             [
-                new ToolRoot(
+                ToolRoot.Folders(
                     root,
                     "This is Zig's build cache. Deguffer removes what Zig compiled from inside it, and leaves "
                     + "the packages Zig fetched. The build outputs go only together with the records that "

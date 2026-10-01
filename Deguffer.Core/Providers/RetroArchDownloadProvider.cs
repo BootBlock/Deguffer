@@ -128,7 +128,7 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
             }
         }
 
-        reading.Folders.Add(new RetroArchFolderReading(TopOf(install, folder), folder, recognised));
+        reading.Folders.Add(new RetroArchFolderReading(TopOf(install, folder), folder, recognised, ChildKind.Folder));
     }
 
     private static void ReadDatabase(RetroArchInstall install, string folder, RetroArchReading reading, CancellationToken ct)
@@ -172,6 +172,6 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
             }
         }
 
-        reading.Folders.Add(new RetroArchFolderReading(TopOf(install, folder), folder, recognised));
+        reading.Folders.Add(new RetroArchFolderReading(TopOf(install, folder), folder, recognised, ChildKind.File));
     }
 }

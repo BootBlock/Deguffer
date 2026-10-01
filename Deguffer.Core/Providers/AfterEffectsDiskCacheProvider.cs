@@ -126,7 +126,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
         [
             .. examination.Caches.Select(cache => running
                 ? new ToolRoot(cache.VersionFolder, HeldReason, static _ => false)
-                : new ToolRoot(
+                : ToolRoot.Folders(
                     cache.VersionFolder,
                     "This is After Effects' folder for one version's disk cache. Deguffer removes only the "
                     + "cache named for this computer.",

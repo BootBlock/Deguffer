@@ -74,7 +74,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     /// <inheritdoc />
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        .. _roots.Select(root => new ToolRoot(
+        .. _roots.Select(root => ToolRoot.Folders(
             root.Path,
             $"This is the {root.Label} folder. Deguffer removes the {Payloads} it recognises inside "
             + "it and nothing else, because anything else in it may be something another program needs.",

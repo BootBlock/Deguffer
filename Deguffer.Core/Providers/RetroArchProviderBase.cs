@@ -222,7 +222,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             declared = folders
                 .GroupBy(folder => folder.Top, StringComparer.OrdinalIgnoreCase)
                 .SelectMany(top => ToolRoot.WayDown(top.Key, top.Select(folder => folder.Path), ProgramReason))
-                .Concat(folders.Select(folder => new ToolRoot(folder.Path, FolderReason, folder.Recognised.Contains)));
+                .Concat(folders.Select(folder => new ToolRoot(folder.Path, FolderReason, folder.Recognises)));
         }
 
         var roots = declared
@@ -254,7 +254,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
 
         return roots is [var only]
             ? only
-            : new ToolRoot(folder.Key, roots[0].Reason, name => roots.Exists(root => root.Recognises(name)));
+            : new ToolRoot(folder.Key, roots[0].Reason, child => roots.Exists(root => root.Recognises(child)));
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)

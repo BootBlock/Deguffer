@@ -327,9 +327,9 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
         var roots = await provider.DiscoverToolRootsAsync();
 
         Assert.False(Assert.Single(roots, r => r.Path.Equals(Common, StringComparison.OrdinalIgnoreCase))
-            .Recognises(AdobeMediaCacheLayout.FilesFolder));
+            .RecognisesFolder(AdobeMediaCacheLayout.FilesFolder));
         Assert.False(Assert.Single(roots, r => r.Path.Equals(Files, StringComparison.OrdinalIgnoreCase))
-            .Recognises("interview.wav 48000.cfa"));
+            .RecognisesFolder("interview.wav 48000.cfa"));
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
         Assert.All(cached, path => Assert.True(File.Exists(path)));
@@ -392,7 +392,7 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
             await CreateProvider().DiscoverToolRootsAsync(),
             r => r.Path.Equals(Common, StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(recognised, root.Recognises(child));
+        Assert.Equal(recognised, root.RecognisesFolder(child));
     }
 
     /// <summary>

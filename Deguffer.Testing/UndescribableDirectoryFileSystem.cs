@@ -54,9 +54,19 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
 
     public void ClearAttributes(string path) => inner.ClearAttributes(path);
 
-    public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
+    /// <summary>
+    /// Null for the refused directory, as <see cref="WindowsFileSystem"/> answers when the read of
+    /// the attributes fails. Delegating would describe the real directory underneath.
+    /// </summary>
+    public FileAttributes? TryGetAttributes(string path)
+    {
+        Probed.Add(path);
 
-    public bool MayExist(string path) => inner.MayExist(path);
+        return IsRefused(path) ? null : inner.TryGetAttributes(path);
+    }
+
+    /// <summary>True for the refused directory, because a path that could not be asked about may exist.</summary>
+    public bool MayExist(string path) => IsRefused(path) || inner.MayExist(path);
 
     private bool IsRefused(string path) =>
         LongPath.Display(path).Equals(refused, StringComparison.OrdinalIgnoreCase);

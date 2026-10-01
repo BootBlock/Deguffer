@@ -479,9 +479,9 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
         var root = CreateProvider().ToolRoots.Single(r =>
             r.Path.Equals(Saved, StringComparison.OrdinalIgnoreCase));
 
-        Assert.False(root.Recognises("webcache_4430"));
-        Assert.False(root.Recognises("Config"));
-        Assert.False(root.Recognises("UserVaultSettings"));
+        Assert.False(root.RecognisesFolder("webcache_4430"));
+        Assert.False(root.RecognisesFolder("Config"));
+        Assert.False(root.RecognisesFolder("UserVaultSettings"));
     }
 
     /// <summary>

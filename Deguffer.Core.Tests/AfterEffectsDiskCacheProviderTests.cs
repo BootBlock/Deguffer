@@ -229,7 +229,7 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
 
         var root = Assert.Single(await provider.DiscoverToolRootsAsync(), r => r.Path == Path.GetDirectoryName(cache));
-        Assert.False(root.Recognises(CacheName));
+        Assert.False(root.RecognisesFolder(CacheName));
     }
 
     /// <summary>§7.1: Explore may remove this computer's cache from a version's folder and nothing else there.</summary>
@@ -243,9 +243,9 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         var roots = await CreateProvider().DiscoverToolRootsAsync();
 
         var version = Assert.Single(roots, r => r.Path == Path.GetDirectoryName(cache));
-        Assert.True(version.Recognises(CacheName));
-        Assert.False(version.Recognises(Path.GetFileName(otherComputer)));
-        Assert.Contains(roots, r => r.Path == AfterEffectsDiskCacheLayout.VersionsUnder(Chosen) && !r.Recognises(Version));
+        Assert.True(version.RecognisesFolder(CacheName));
+        Assert.False(version.RecognisesFolder(Path.GetFileName(otherComputer)));
+        Assert.Contains(roots, r => r.Path == AfterEffectsDiskCacheLayout.VersionsUnder(Chosen) && !r.RecognisesFolder(Version));
         Assert.DoesNotContain(roots, r => r.Path == Chosen);
     }
 

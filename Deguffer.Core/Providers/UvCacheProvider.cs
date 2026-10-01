@@ -76,7 +76,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        new ToolRoot(
+        ToolRoot.Folders(
             StateRoot,
             "This is uv's own folder. Deguffer clears the cache inside it and nothing else, because "
             + "the tools you installed with 'uv tool install' and the Python interpreters uv manages "

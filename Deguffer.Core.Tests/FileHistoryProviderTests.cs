@@ -516,7 +516,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var root = Assert.Single(
             provider.ToolRoots,
             r => r.Path.Equals(Path.Combine(drive, "FileHistory"), StringComparison.Ordinal));
-        Assert.False(root.Recognises(FakeUserEnvironment.Account));
+        Assert.False(root.RecognisesFolder(FakeUserEnvironment.Account));
         Assert.Contains(provider.ToolRoots, r => r.Path.Equals(
             Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration"),
             StringComparison.Ordinal));
@@ -549,7 +549,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         {
             var root = Assert.Single(
                 roots, r => r.Path.Equals(Path.Combine(drive, "FileHistory"), StringComparison.Ordinal));
-            Assert.False(root.Recognises(FakeUserEnvironment.Account));
+            Assert.False(root.RecognisesFolder(FakeUserEnvironment.Account));
         }
     }
 
@@ -591,7 +591,7 @@ public sealed class FileHistoryProviderTests : IDisposable
             CreateProvider().ToolRoots,
             r => r.Path.Equals(Path.Combine(drive, "FileHistory"), StringComparison.Ordinal));
 
-        Assert.False(root.Recognises("Data"));
+        Assert.False(root.RecognisesFolder("Data"));
 
         // The settings folder beside it, which the plan names as a path that must survive and §7.1
         // therefore refuses in Explore.
@@ -601,8 +601,8 @@ public sealed class FileHistoryProviderTests : IDisposable
                 Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration"),
                 StringComparison.Ordinal));
 
-        Assert.False(settings.Recognises("Config1.xml"));
-        Assert.False(root.Recognises(FakeUserEnvironment.Account));
+        Assert.False(settings.RecognisesFolder("Config1.xml"));
+        Assert.False(root.RecognisesFolder(FakeUserEnvironment.Account));
     }
 
     /// <summary>

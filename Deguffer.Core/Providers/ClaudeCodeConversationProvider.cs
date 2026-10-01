@@ -295,9 +295,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                     : [];
         }
 
-        var offered = new HashSet<string>(
-            survey.Conversations.Targets.Select(target => target.Path),
-            StringComparer.OrdinalIgnoreCase);
+        var offered = new TargetedEntries(survey.Conversations.Targets);
 
         return
         [
@@ -308,7 +306,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                 .Select(folder => new ToolRoot(
                     folder,
                     ProjectsReason,
-                    name => offered.Contains(Path.Combine(folder, name)))),
+                    child => offered.Recognises(folder, child))),
         ];
     }
 

@@ -163,7 +163,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
         PackageRoot(workspace),
     ];
 
-    private static ToolRoot PackageRoot(string workspace) => new(
+    private static ToolRoot PackageRoot(string workspace) => ToolRoot.Folders(
         Path.Combine(workspace, "pkg"),
         "This is inside your Go workspace. Deguffer clears the module cache in there and "
         + "nothing else, and leaves whatever Go keeps beside it alone.",

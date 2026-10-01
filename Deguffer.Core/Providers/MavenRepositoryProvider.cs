@@ -189,7 +189,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        new ToolRoot(
+        ToolRoot.Folders(
             Home,
             "This is Maven's own folder. Deguffer removes the local repository inside it and "
             + "nothing else, because your settings, the master password that decrypts your stored "

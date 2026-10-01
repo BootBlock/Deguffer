@@ -123,8 +123,8 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
     /// nothing else. <c>appcache</c> and the install directory above it are declared by
     /// <see cref="SteamCacheProvider"/>, which already refuses them.
     ///
-    /// <para>The child is looked at rather than judged by its name, because the plan's answer
-    /// depends on what it is: <c>440</c> is a game's artwork as a folder and unrecognised as a file,
+    /// <para>The child's kind decides as well as its name, because the plan's answer depends on what
+    /// it is: <c>440</c> is a game's artwork as a folder and unrecognised as a file,
     /// <c>440_header.jpg</c> the reverse, and a game's folder that is a link is never offered.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??=
@@ -133,7 +133,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
                 Path.Combine(install, LibraryCacheDirectory),
                 "This is the folder Steam keeps every game's library artwork in, with its index of that "
                 + "artwork. Deguffer removes what belongs to single games inside it and nothing else.",
-                name => IsOffered(Path.Combine(install, LibraryCacheDirectory, name)))]
+                IsOffered)]
             : [];
 
     public override void InvalidateCaches()
@@ -260,17 +260,13 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
         FlatArtwork,
     }
 
-    /// <summary>
-    /// Whether the child at <paramref name="path"/> is one the plan would target. Something Windows
-    /// will not describe is neither a folder nor a file here, so it is refused.
-    /// </summary>
-    private static bool IsOffered(string path)
+    /// <summary>Whether a child of the container is one the plan would target, as <see cref="Classify"/> reads it.</summary>
+    private static bool IsOffered(ToolRootChild child) => child.Kind switch
     {
-        var extended = LongPath.Extended(path);
-        FileSystemInfo entry = Directory.Exists(extended) ? new DirectoryInfo(extended) : new FileInfo(extended);
-
-        return entry.Exists && Classify(entry) is Kind.GameFolder or Kind.FlatArtwork;
-    }
+        ChildKind.Folder => SteamAppId.IsAppId(child.Name),
+        ChildKind.File => FlatArtworkAppId(child.Name) is not null,
+        _ => false,
+    };
 
     private static Kind Classify(FileSystemInfo entry) => entry switch
     {

@@ -276,8 +276,8 @@ public sealed class SteamCacheProviderTests : IDisposable
 
         var declared = Assert.Single(
             provider.ToolRoots, r => r.Path.Equals(install, StringComparison.OrdinalIgnoreCase));
-        Assert.False(declared.Recognises("steamapps"));
-        Assert.False(declared.Recognises("appcache"));
+        Assert.False(declared.RecognisesFolder("steamapps"));
+        Assert.False(declared.RecognisesFolder("appcache"));
     }
 
     /// <summary>

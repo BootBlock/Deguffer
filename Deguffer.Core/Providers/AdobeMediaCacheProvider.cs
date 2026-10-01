@@ -142,7 +142,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
         [
             running
                 ? new ToolRoot(common, HeldReason, static _ => false)
-                : new ToolRoot(common, ExploreReason, recognised.Contains),
+                : ToolRoot.Folders(common, ExploreReason, recognised.Contains),
             .. CacheFolders()
                 .Where(_ => running)
                 .Select(folder => new ToolRoot(folder, HeldReason, static _ => false)),

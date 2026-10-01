@@ -174,16 +174,16 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
 
         var roots = await CreateProvider().DiscoverToolRootsAsync();
 
-        Assert.Contains(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.Recognises("thumbnails"));
-        Assert.DoesNotContain(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.Recognises("saves"));
+        Assert.Contains(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("thumbnails"));
+        Assert.DoesNotContain(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("saves"));
 
         var thumbnails = roots.Where(r => r.Path.Equals(_retroArch.Thumbnails, StringComparison.OrdinalIgnoreCase)).ToList();
-        Assert.Contains(thumbnails, r => r.Recognises(Nes));
-        Assert.DoesNotContain(thumbnails, r => r.Recognises("Sega - Saturn") || r.Recognises("discord"));
+        Assert.Contains(thumbnails, r => r.RecognisesFolder(Nes));
+        Assert.DoesNotContain(thumbnails, r => r.RecognisesFolder("Sega - Saturn") || r.RecognisesFolder("discord"));
 
         var system = roots.Where(r => r.Path.Equals(Path.Combine(_retroArch.Thumbnails, Nes), StringComparison.OrdinalIgnoreCase)).ToList();
-        Assert.Contains(system, r => r.Recognises("Named_Boxarts"));
-        Assert.DoesNotContain(system, r => r.Recognises("Custom"));
+        Assert.Contains(system, r => r.RecognisesFolder("Named_Boxarts"));
+        Assert.DoesNotContain(system, r => r.RecognisesFolder("Custom"));
     }
 
     /// <summary>§5.3: RetroArch writes a thumbnail as each game is shown.</summary>

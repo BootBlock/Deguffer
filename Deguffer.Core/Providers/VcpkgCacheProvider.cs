@@ -166,7 +166,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        .. _discovery.ProfileDirectories.Select(profile => new ToolRoot(
+        .. _discovery.ProfileDirectories.Select(profile => ToolRoot.Folders(
             profile,
             "This is your vcpkg folder. Deguffer removes the binary cache inside it and nothing "
             + "else, because the record of which vcpkg clone is integrated and the registry clones "
@@ -196,7 +196,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             // the folder left behind under that name is then no longer vcpkg's to refill.
             var disposable = located.RelocatedDownloads is null ? CloneScratch : CloneScratchWithoutDownloads;
 
-            roots.Add(new ToolRoot(
+            roots.Add(ToolRoot.Folders(
                 root,
                 "This is the vcpkg clone itself. Deguffer removes the build output inside it and "
                 + "nothing else, because the libraries you have installed, the port and triplet "

@@ -629,6 +629,31 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §7.1 asks what the child is as well as what it is called, because the plan does. It lists the
+    /// container's folders and declines its links, so a file or a link named as a game is something
+    /// it never offered, and Explore refuses it and everything through it. A game's real folder
+    /// beside them is still allowed.
+    /// </summary>
+    [Theory]
+    [InlineData("440", true)]               // a game's cache
+    [InlineData(@"440\data.bin", true)]
+    [InlineData("570", false)]              // a file named as a game
+    [InlineData("730", false)]              // a link named as a game
+    [InlineData(@"730\data.bin", false)]
+    public void ExploreRefusesAFileOrALinkNamedAsAGame(string relative, bool allowed)
+    {
+        var install = RegisterInstall();
+        var container = Path.Combine(install, "steamapps", "shadercache");
+        Populate(Path.Combine(container, "440"));
+        File.WriteAllBytes(Path.Combine(container, "570"), new byte[64]);
+        SymbolicLink.ToDirectory(Path.Combine(container, "730"), Populate(Path.Combine(_temp.Path, "elsewhere", "730")));
+
+        var policy = new ExploreActionPolicy([], CreateProvider().ToolRoots, new FakeVolumeInventory());
+
+        Assert.Equal(allowed, policy.MayRemove(Path.Combine(container, relative)).IsAllowed);
+    }
+
+    /// <summary>
     /// G4: Steam's list is read once per planning pass however many questions are put to the
     /// provider, and again after an invalidation, so a library added while the app was open is seen.
     /// </summary>

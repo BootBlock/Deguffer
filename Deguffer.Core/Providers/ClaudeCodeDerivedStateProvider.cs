@@ -382,9 +382,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                     : [];
         }
 
-        var offered = new HashSet<string>(
-            survey.Kinds.SelectMany(kind => kind.Targets).Select(target => target.Path),
-            StringComparer.OrdinalIgnoreCase);
+        var offered = new TargetedEntries(survey.Kinds.SelectMany(kind => kind.Targets));
 
         return
         [
@@ -396,7 +394,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                 .Select(folder => new ToolRoot(
                     folder,
                     DeclaredFolderReason,
-                    name => offered.Contains(Path.Combine(folder, name)))),
+                    child => offered.Recognises(folder, child))),
         ];
     }
 

@@ -428,7 +428,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
                 + "none of them.",
                 static _ => false));
 
-            roots.Add(new ToolRoot(
+            roots.Add(ToolRoot.Folders(
                 Path.Combine(library, ShaderCacheDirectory),
                 "This is the folder Steam keeps every game's shader cache in. Deguffer removes the "
                 + "folders for single games inside it and nothing else.",
