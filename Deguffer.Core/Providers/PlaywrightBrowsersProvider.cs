@@ -283,12 +283,8 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         string root,
         IReadOnlyList<(string Path, string Reason)> spared) => Protect(
     [
-        .. new (string Path, string Reason)[]
-        {
-            (root, "The browser cache root itself must survive — only recognised browser builds are removed."),
-            (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."),
-        }
-        .Concat(spared)
-        .DistinctBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase),
+        (root, "The browser cache root itself must survive — only recognised browser builds are removed."),
+        (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."),
+        .. spared,
     ]);
 }

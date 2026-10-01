@@ -333,7 +333,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             ProtectedPaths = Protect(
-                [.. survivors.DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+                [.. survivors]),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

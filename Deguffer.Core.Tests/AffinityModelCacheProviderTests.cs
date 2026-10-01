@@ -404,7 +404,8 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
 
         // The root is both protected and declined, and the plan names it once, under the reason it
         // was protected for.
-        Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(RoamingRoot, StringComparison.OrdinalIgnoreCase));
+        var root = Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(RoamingRoot, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Affinity's own folder must survive", root.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>The same decline one level in, where only the shared folder was moved.</summary>

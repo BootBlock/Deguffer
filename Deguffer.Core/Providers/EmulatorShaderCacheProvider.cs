@@ -224,8 +224,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             [
                 .. held.SelectMany(root => new[] { root.Path }.Concat(root.CacheFolders.Select(folder => folder.Path))
                         .Select(path => (Path: path, Reason: HeldReason(root.Layout))))
-                    .Concat(examination.Survivors)
-                    .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase),
+                    .Concat(examination.Survivors),
             ]),
             Notes = notes,
             Fallback = measured.Fallback,

@@ -234,22 +234,18 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
 
         return Protect(
         [
-            .. new (string Path, string Reason)[]
-            {
-                (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
-                    "User NuGet configuration, which may hold private feed credentials."),
-                (Path.Combine(profile, "NuGet.Config"),
-                    "The alternative NuGet.Config location — §5.2 says probe both."),
-                (profile,
-                    "The .nuget root itself must survive; only its cache contents are cleared."),
-                (Path.Combine(profile, "plugins"),
-                    "The credential-provider plugins NuGet runs to sign in to private feeds."),
-                (local,
-                    "NuGet's folder in your local profile must survive; only the caches inside it are cleared."),
-            }
-            .Concat(Spared(profile, ProfileCacheNames, locals))
-            .Concat(Spared(local, LocalCacheNames, locals))
-            .DistinctBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase),
+            (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
+                "User NuGet configuration, which may hold private feed credentials."),
+            (Path.Combine(profile, "NuGet.Config"),
+                "The alternative NuGet.Config location — §5.2 says probe both."),
+            (profile,
+                "The .nuget root itself must survive; only its cache contents are cleared."),
+            (Path.Combine(profile, "plugins"),
+                "The credential-provider plugins NuGet runs to sign in to private feeds."),
+            (local,
+                "NuGet's folder in your local profile must survive; only the caches inside it are cleared."),
+            .. Spared(profile, ProfileCacheNames, locals),
+            .. Spared(local, LocalCacheNames, locals),
         ]);
     }
 

@@ -82,7 +82,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var profile = Path.Combine(_environment.UserProfile, ".nuget");
 
         var legacy = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "Cache");
-        var plugins = _temp.CreateDirectory("profile", ".nuget", "plugins", "netcore", "CredentialProvider");
+        _temp.CreateDirectory("profile", ".nuget", "plugins", "netcore", "CredentialProvider");
         var unknown = _temp.CreateDirectory("profile", ".nuget", "something-nuget-added-later");
 
         var linked = Path.Combine(local, "linked");
@@ -95,7 +95,6 @@ public sealed class NuGetCacheProviderTests : IDisposable
         Assert.All(spared, path => Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present));
 
-        Assert.True(Directory.Exists(plugins));
         Assert.All(locations, cache => Assert.DoesNotContain(plan.ProtectedPaths, p =>
             p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase)));
     }
@@ -113,14 +112,13 @@ public sealed class NuGetCacheProviderTests : IDisposable
     public async Task DoesNotProtectAFolderHoldingACacheNuGetWasPointedAt()
     {
         var holder = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches");
-        var http = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches", "http");
+        _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches", "http");
         var beside = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "something-else");
 
         var asReported = Path.Combine(ShortPath.Of(holder) ?? holder, "http");
 
         var plan = await PlanReporting($"http-cache: {asReported}");
 
-        Assert.True(Directory.Exists(http));
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(holder, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(beside, StringComparison.OrdinalIgnoreCase));
     }

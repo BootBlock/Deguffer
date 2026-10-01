@@ -308,14 +308,20 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <para>The content question stops at the first content it finds, so it costs a listing or two
     /// per protected path rather than a walk of everything the path holds (G4). See
     /// <see cref="DirectoryContent"/>.</para>
+    ///
+    /// <para>Each path is named once, under the first reason given for it. A provider builds this
+    /// list from what it names itself and from what it spared, and the two overlap wherever a named
+    /// path is also a spared child, so the provider's own names go first.</para>
     /// </summary>
     protected static IReadOnlyList<ProtectedPath> Protect(params (string Path, string Reason)[] candidates) =>
     [
-        .. candidates.Select(c => new ProtectedPath(
-            c.Path,
-            c.Reason,
-            LongPath.ProbeEntry(c.Path),
-            DirectoryContent.IsPresent(c.Path))),
+        .. candidates
+            .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new ProtectedPath(
+                c.Path,
+                c.Reason,
+                LongPath.ProbeEntry(c.Path),
+                DirectoryContent.IsPresent(c.Path))),
     ];
 
     /// <summary>
@@ -324,19 +330,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     ///
     /// <para>The walk's own lists are the ones that must not be left out. A spared child is a sibling
     /// of a targeted one under the same parent, so a plan that only notes it gives §5.6 nothing to
-    /// check when a later rule turns out too broad. The provider's own names come first so their
-    /// reasons win where a named path is also one the walk spared.</para>
+    /// check when a later rule turns out too broad.</para>
     /// </summary>
     private protected static IReadOnlyList<ProtectedPath> Protect(
         LevelWalk walk,
         params (string Path, string Reason)[] named) =>
-        Protect(
-        [
-            .. named
-                .Concat(walk.Survivors)
-                .Concat(walk.Declined)
-                .DistinctBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase),
-        ]);
+        Protect([.. named, .. walk.Survivors, .. walk.Declined]);
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
     protected PlanNote? BuildRunningProcessNote() =>

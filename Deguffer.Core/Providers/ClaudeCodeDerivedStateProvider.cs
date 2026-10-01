@@ -288,7 +288,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths =
             [
-                .. Protect([.. Survivors(survey).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+                .. Protect([.. Survivors(survey)]),
 
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.

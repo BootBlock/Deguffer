@@ -141,7 +141,8 @@ being offered anywhere in the app, and separately by their **resolved path**. Bo
 pointed anywhere, so a `virtualenvs.path` inside a folder Deguffer would otherwise clear takes that
 folder off the plan, with the reason shown.
 
-Anything else inside the cache folder that Deguffer does not recognise is left alone and named.
+Anything else inside the cache folder that Deguffer does not recognise is left alone, named, and
+asserted to have survived the run. So is a folder in there that is a link to somewhere else.
 
 ### What it costs you
 
@@ -3451,8 +3452,9 @@ wrong while looking correct:
 | `.instrumentation` | The server's instrumentation log and the identifier it is keyed to. |
 
 Deguffer names all three explicitly and asserts they survived the run, the same treatment
-`gradle.properties` gets. Anything else that turns up in there is unrecognised, so it is left alone
-and Deguffer says so.
+`gradle.properties` gets. Anything else that turns up in there is unrecognised, so it is left alone,
+Deguffer says so, and the run asserts it survived. A folder in there that is a link to somewhere else
+gets the same treatment.
 
 **An analysis server may be running.** One is started by whichever editor has a Dart or Flutter
 project open, and it holds this store while it runs, so Deguffer warns you when it sees one. An
@@ -3604,6 +3606,9 @@ but it is Playwright's record of which installations still reference which brows
 Playwright reads it to decide when a version has no users left and may be removed. Deleting the
 browsers is something Playwright recovers from cleanly. Deleting the registry that tracks them
 breaks its own housekeeping.
+
+Every other folder in there that Deguffer leaves alone, including one that is a link to somewhere
+else, is asserted to have survived the run too.
 
 ### What it costs you
 

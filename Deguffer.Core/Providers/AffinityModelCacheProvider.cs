@@ -287,7 +287,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. found.Protect.DistinctBy(p => p.Path, StringComparer.OrdinalIgnoreCase)]),
+            ProtectedPaths = Protect([.. found.Protect]),
             Notes = found.Notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.Unreadable,

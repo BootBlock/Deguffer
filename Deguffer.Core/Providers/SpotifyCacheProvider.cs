@@ -250,7 +250,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. survivors.DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+            ProtectedPaths = Protect([.. survivors]),
             Notes = notes,
             Fallback = measured.Fallback,
 
